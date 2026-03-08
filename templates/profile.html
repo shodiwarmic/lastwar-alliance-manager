@@ -1,0 +1,36 @@
+{{define "content"}}
+            <section class="form-section">
+                <h3>🔐 Change Password</h3>
+                <form id="password-form">
+                    <div class="form-group">
+                        <label for="current-password">Current Password:</label>
+                        <input type="password" id="current-password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password">New Password:</label>
+                        <input type="password" id="new-password" minlength="6" required>
+                        <span class="help-text">Minimum 6 characters</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-password">Confirm New Password:</label>
+                        <input type="password" id="confirm-password" minlength="6" required>
+                    </div>
+                    <div class="button-group">
+                        <button type="submit" class="primary-btn">🔒 Change Password</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="info-section">
+                <h3>ℹ️ Account Information</h3>
+                <div class="info-card">
+                    <p><strong>Username:</strong> <span id="profile-username">-</span></p>
+                    <p><strong>Role:</strong> <span id="profile-role">-</span></p>
+                    <p id="profile-member-info" style="display: none;"><strong>Linked Member:</strong> <span id="profile-member">-</span></p>
+                </div>
+            </section>
+{{end}}
+
+{{define "scripts"}}
+    <script src="profile.js"></script>
+{{end}}

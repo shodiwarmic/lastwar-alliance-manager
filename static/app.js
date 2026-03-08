@@ -5,111 +5,97 @@ let currentUsername = '';
 let canManageRanks = false;
 let isR5OrAdmin = false;
 let isAdmin = false;
-let allMembers = []; // Store all members for search filtering
+let allMembers = []; 
 
-// Modal Elements
-const memberModal = document.getElementById('member-modal');
-const closeMemberModal = document.getElementById('close-member-modal');
-const addMemberBtn = document.getElementById('add-member-btn');
-const cancelBtn = document.getElementById('cancel-btn');
-const importCsvTriggerBtn = document.getElementById('import-csv-trigger-btn');
-const csvImportSection = document.getElementById('csv-import-section');
-const cancelImportBtn = document.getElementById('cancel-import-btn');
-
-// Check authentication on page load
-async function checkAuth() {
+// Fetch permissions to determine if Edit/Delete buttons should render
+async function fetchPermissions() {
     try {
         const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        
-        if (!data.authenticated) {
-            window.location.href = '/login.html';
-            return false;
+        if (response.ok) {
+            const data = await response.json();
+            currentUsername = data.username;
+            canManageRanks = data.can_manage_ranks || false;
+            isR5OrAdmin = data.is_r5_or_admin || false;
+            isAdmin = data.is_admin || false;
         }
-        
-        currentUsername = data.username;
-        canManageRanks = data.can_manage_ranks || false;
-        isR5OrAdmin = data.is_r5_or_admin || false;
-        isAdmin = data.is_admin || false;
-        
-        let displayText = `👤 ${currentUsername}`;
-        if (data.rank) {
-            displayText += ` (${data.rank})`;
-        }
-        
-        const usernameDisplay = document.getElementById('username-display');
-        if (usernameDisplay) {
-            usernameDisplay.textContent = displayText;
-            
-            // Setup dropdown toggle
-            usernameDisplay.addEventListener('click', toggleUserDropdown);
-        }
-        
-        // Show admin link in dropdown if user is admin
-        const adminDropdownLink = document.getElementById('admin-dropdown-link');
-        if (adminDropdownLink && isAdmin) {
-            adminDropdownLink.style.display = 'block';
-        }
-        
-        // Show/hide management controls based on permissions
-        updateUIPermissions();
-        
-        return true;
     } catch (error) {
         console.error('Auth check error:', error);
-        window.location.href = '/login.html';
-        return false;
     }
 }
 
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}
-
-// Close dropdown when clicking outside
-document.addEventListener('click', (event) => {
-    const dropdown = document.getElementById('user-dropdown-menu');
-    const usernameBtn = document.getElementById('username-display');
+document.addEventListener('DOMContentLoaded', async () => {
+    await fetchPermissions();
     
-    if (dropdown && !usernameBtn?.contains(event.target) && !dropdown.contains(event.target)) {
-        dropdown.classList.remove('show');
-    }
-});
-
-// Update UI based on user permissions
-function updateUIPermissions() {
+    // Hide action bar if user lacks permissions
     const actionBar = document.querySelector('.action-bar');
-    
     if (!canManageRanks && actionBar) {
-        // Hide the action bar for users without permission
         actionBar.style.display = 'none';
-        
-        // Add notice message
         const notice = document.createElement('div');
         notice.className = 'permission-notice';
         notice.innerHTML = '<p>ℹ️ Only R4 and R5 members can add or manage member ranks.</p>';
         document.querySelector('main').insertBefore(notice, document.querySelector('.members-section'));
     }
+
+    setupModalListeners();
+    setupCSVImport();
+    setupSearch();
+    loadMembers();
+});
+
+function setupModalListeners() {
+    const memberModal = document.getElementById('member-modal');
+    const closeMemberModal = document.getElementById('close-member-modal');
+    const addMemberBtn = document.getElementById('add-member-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const importCsvTriggerBtn = document.getElementById('import-csv-trigger-btn');
+    const csvImportSection = document.getElementById('csv-import-section');
+    const cancelImportBtn = document.getElementById('cancel-import-btn');
+    const memberForm = document.getElementById('member-form');
+
+    if (addMemberBtn) addMemberBtn.addEventListener('click', () => openMemberModal(false));
+    if (closeMemberModal) closeMemberModal.addEventListener('click', closeMemberModalFunc);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeMemberModalFunc);
+
+    if (importCsvTriggerBtn && csvImportSection) {
+        importCsvTriggerBtn.addEventListener('click', () => {
+            csvImportSection.style.display = 'block';
+            csvImportSection.scrollIntoView({ behavior: 'smooth' });
+        });
+    }
+
+    if (cancelImportBtn && csvImportSection) {
+        cancelImportBtn.addEventListener('click', () => {
+            csvImportSection.style.display = 'none';
+            document.getElementById('csv-file').value = '';
+            document.getElementById('import-result').style.display = 'none';
+        });
+    }
+
+    window.addEventListener('click', (event) => {
+        if (event.target === memberModal) closeMemberModalFunc();
+    });
+
+    if (memberForm) memberForm.addEventListener('submit', handleMemberFormSubmit);
 }
 
-// Modal Functions
 function openMemberModal(editing = false) {
     if (!canManageRanks) {
         alert('You do not have permission to manage members. Only R4 and R5 can do this.');
         return;
     }
-    memberModal.style.display = 'flex';
-    document.getElementById('member-name').focus();
+    const memberModal = document.getElementById('member-modal');
+    if (memberModal) {
+        memberModal.style.display = 'flex';
+        document.getElementById('member-name').focus();
+    }
 }
 
 function closeMemberModalFunc() {
-    memberModal.style.display = 'none';
-    resetMemberForm();
+    const memberModal = document.getElementById('member-modal');
+    if (memberModal) {
+        memberModal.style.display = 'none';
+        resetMemberForm();
+    }
 }
 
 function resetMemberForm() {
@@ -120,59 +106,23 @@ function resetMemberForm() {
     document.getElementById('submit-btn').textContent = 'Add Member';
 }
 
-// Event Listeners for Modal
-if (addMemberBtn) {
-    addMemberBtn.addEventListener('click', () => openMemberModal(false));
-}
-
-if (closeMemberModal) {
-    closeMemberModal.addEventListener('click', closeMemberModalFunc);
-}
-
-if (cancelBtn) {
-    cancelBtn.addEventListener('click', closeMemberModalFunc);
-}
-
-if (importCsvTriggerBtn && csvImportSection) {
-    importCsvTriggerBtn.addEventListener('click', () => {
-        csvImportSection.style.display = 'block';
-        csvImportSection.scrollIntoView({ behavior: 'smooth' });
-    });
-}
-
-if (cancelImportBtn && csvImportSection) {
-    cancelImportBtn.addEventListener('click', () => {
-        csvImportSection.style.display = 'none';
-        document.getElementById('csv-file').value = '';
-        document.getElementById('import-result').style.display = 'none';
-    });
-}
-
-// Close modal when clicking outside
-window.addEventListener('click', (event) => {
-    if (event.target === memberModal) {
-        closeMemberModalFunc();
-    }
-});
-
-// Load all members
 async function loadMembers() {
     try {
         const response = await fetch(API_URL);
         const members = await response.json();
-        allMembers = members; // Store for search
+        allMembers = members; 
         displayMembers(members);
         updateMemberCount(members.length);
     } catch (error) {
         console.error('Error loading members:', error);
-        document.getElementById('members-list').innerHTML = 
-            '<p class="empty">Error loading members. Please try again.</p>';
+        const membersList = document.getElementById('members-list');
+        if (membersList) membersList.innerHTML = '<p class="empty">Error loading members. Please try again.</p>';
     }
 }
 
-// Display members in the list
 function displayMembers(members) {
     const membersList = document.getElementById('members-list');
+    if (!membersList) return;
     
     if (!members || members.length === 0) {
         membersList.innerHTML = '<p class="empty">No members yet. Add your first alliance member!</p>';
@@ -183,7 +133,6 @@ function displayMembers(members) {
         const eligibleStatus = member.eligible !== false ? '✓ Eligible' : '✗ Not Eligible';
         const eligibleClass = member.eligible !== false ? 'eligible' : 'not-eligible';
         
-        // Format power display
         let powerDisplay = '';
         if (member.power) {
             powerDisplay = `<span class="member-power" title="${member.power.toLocaleString()}">${formatPower(member.power)}</span>`;
@@ -215,33 +164,8 @@ function displayMembers(members) {
     }).join('');
 }
 
-// Format power value with K/M/B suffixes
-function formatPower(power) {
-    if (!power) return '';
-    
-    if (power >= 1000000000) {
-        return '⚡ ' + (power / 1000000000).toFixed(2) + 'B';
-    } else if (power >= 1000000) {
-        return '⚡ ' + (power / 1000000).toFixed(2) + 'M';
-    } else if (power >= 1000) {
-        return '⚡ ' + (power / 1000).toFixed(1) + 'K';
-    } else {
-        return '⚡ ' + power.toString();
-    }
-}
-
-// Update member count
-function updateMemberCount(count) {
-    const heading = document.querySelector('.members-section h3');
-    if (heading) {
-        heading.textContent = `Alliance Members (${count})`;
-    }
-}
-
-// Handle form submission
-document.getElementById('member-form').addEventListener('submit', async (e) => {
+async function handleMemberFormSubmit(e) {
     e.preventDefault();
-    
     if (!canManageRanks) {
         alert('You do not have permission to manage members. Only R4 and R5 can do this.');
         return;
@@ -258,159 +182,138 @@ document.getElementById('member-form').addEventListener('submit', async (e) => {
 
     try {
         if (editingMemberId) {
-            // Update existing member
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, rank, eligible }),
             });
-
             if (!response.ok) throw new Error('Failed to update member');
-            
             editingMemberId = null;
         } else {
-            // Add new member
             const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, rank, eligible }),
             });
-
             if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('Permission denied: Only R4/R5 members can manage ranks');
-                }
+                if (response.status === 403) throw new Error('Permission denied: Only R4/R5 members can manage ranks');
                 throw new Error('Failed to add member');
             }
         }
-
-        // Close modal, reset form and reload members
         closeMemberModalFunc();
         await loadMembers();
     } catch (error) {
         console.error('Error saving member:', error);
         alert('Failed to save member. Please try again.');
     }
-});
+}
 
-// Edit a member
-function editMember(id, name, rank, eligible) {
+window.editMember = function(id, name, rank, eligible) {
     if (!canManageRanks) {
-        alert('You do not have permission to edit members. Only R4 and R5 can do this.');
+        alert('You do not have permission to edit members.');
         return;
     }
-    
     editingMemberId = id;
     document.getElementById('member-name').value = name;
     document.getElementById('member-rank').value = rank;
     document.getElementById('member-eligible').checked = eligible;
     document.getElementById('modal-form-title').textContent = 'Edit Member';
     document.getElementById('submit-btn').textContent = 'Update Member';
-    
-    // Open modal
     openMemberModal(true);
-}
+};
 
-// Delete a member
-async function deleteMember(id, name) {
+window.deleteMember = async function(id, name) {
     if (!canManageRanks) {
-        alert('You do not have permission to delete members. Only R4 and R5 can do this.');
+        alert('You do not have permission to delete members.');
         return;
     }
-    
-    if (!confirm(`Are you sure you want to remove ${name} from the alliance?`)) {
-        return;
-    }
+    if (!confirm(`Are you sure you want to remove ${name} from the alliance?`)) return;
 
     try {
-        const response = await fetch(`${API_URL}/${id}`, {
-            method: 'DELETE',
-        });
-
+        const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
         if (!response.ok) {
-            if (response.status === 403) {
-                throw new Error('Permission denied: Only R4/R5 members can manage members');
-            }
+            if (response.status === 403) throw new Error('Permission denied.');
             throw new Error('Failed to delete member');
         }
-        
         await loadMembers();
     } catch (error) {
         console.error('Error deleting member:', error);
         alert('Failed to delete member. Please try again.');
     }
+};
+
+window.toggleEligible = async function(id, currentStatus) {
+    if (!canManageRanks) {
+        alert('You do not have permission to manage members.');
+        return;
+    }
+    const newStatus = !currentStatus;
+    const statusText = newStatus ? 'eligible' : 'not eligible';
+    if (!confirm(`Mark this member as ${statusText} for train scheduling?`)) return;
+    
+    try {
+        const response = await fetch(`${API_URL}`);
+        if (!response.ok) throw new Error('Failed to fetch members');
+        const members = await response.json();
+        const member = members.find(m => m.id === id);
+        if (!member) throw new Error('Member not found');
+        
+        const updateResponse = await fetch(`${API_URL}/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: member.name, rank: member.rank, eligible: newStatus }),
+        });
+        
+        if (!updateResponse.ok) throw new Error('Failed to update member');
+        loadMembers();
+    } catch (error) {
+        console.error('Error toggling eligibility:', error);
+        alert('Failed to update member eligibility: ' + error.message);
+    }
+};
+
+window.createUserForMember = async function(memberId, memberName) {
+    if (!confirm(`Create a user account for ${memberName}? A random password will be generated.`)) return;
+    try {
+        const response = await fetch(`${API_URL}/${memberId}/create-user`, { method: 'POST' });
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error);
+        }
+        const result = await response.json();
+        alert(`User created successfully!\n\nUsername: ${result.username}\nPassword: ${result.password}\n\n⚠️ IMPORTANT: Save this password now! It won't be shown again.`);
+    } catch (error) {
+        console.error('Error creating user:', error);
+        alert('Failed to create user: ' + error.message);
+    }
+};
+
+function formatPower(power) {
+    if (!power) return '';
+    if (power >= 1000000000) return '⚡ ' + (power / 1000000000).toFixed(2) + 'B';
+    if (power >= 1000000) return '⚡ ' + (power / 1000000).toFixed(2) + 'M';
+    if (power >= 1000) return '⚡ ' + (power / 1000).toFixed(1) + 'K';
+    return '⚡ ' + power.toString();
 }
 
-// Escape HTML to prevent XSS
+function updateMemberCount(count) {
+    const heading = document.querySelector('.members-section h3');
+    if (heading) heading.textContent = `Alliance Members (${count})`;
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-// Logout handler
-async function handleLogout() {
-    if (!confirm('Are you sure you want to logout?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/logout', {
-            method: 'POST'
-        });
-        
-        if (response.ok) {
-            window.location.href = '/login.html';
-        }
-    } catch (error) {
-        console.error('Logout error:', error);
-        window.location.href = '/login.html';
-    }
-}
-
-// Load members when page loads
-document.addEventListener('DOMContentLoaded', async () => {
-    const isAuthenticated = await checkAuth();
-    if (isAuthenticated) {
-        loadMembers();
-        setupCSVImport();
-        setupSearch();
-        setupLogoutButtons();
-    }
-});
-
-// Setup logout buttons
-function setupLogoutButtons() {
-    // Old logout button (if exists)
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Dropdown logout button
-    const dropdownLogoutBtn = document.getElementById('dropdown-logout-btn');
-    if (dropdownLogoutBtn) {
-        dropdownLogoutBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            handleLogout();
-        });
-    }
-}
-
-// Setup search functionality
 function setupSearch() {
     const searchInput = document.getElementById('search-input');
     const clearBtn = document.getElementById('clear-search');
-    
     if (!searchInput) return;
     
     searchInput.addEventListener('input', (e) => {
         const searchTerm = e.target.value.toLowerCase().trim();
-        
         if (searchTerm) {
             clearBtn.style.display = 'flex';
             const filtered = allMembers.filter(member => 
@@ -435,7 +338,7 @@ function setupSearch() {
     });
 }
 
-// Setup CSV import functionality
+// --- CSV Import ---
 let detectedCSVMembers = [];
 let selectedCSVMembers = new Set();
 let membersToRemove = [];
@@ -451,61 +354,43 @@ function setupCSVImport() {
     
     if (!importBtn || !fileInput) return;
     
-    // Preview CSV button
     importBtn.addEventListener('click', async () => {
         if (!canManageRanks) {
             alert('You do not have permission to import members. Only R4 and R5 can do this.');
             return;
         }
-        
         const file = fileInput.files[0];
-        if (!file) {
-            alert('Please select a CSV file to import');
-            return;
-        }
-        
-        if (!file.name.endsWith('.csv')) {
+        if (!file || !file.name.endsWith('.csv')) {
             alert('Please select a valid CSV file');
             return;
         }
         
         const formData = new FormData();
         formData.append('file', file);
-        
         importBtn.disabled = true;
         importBtn.textContent = 'Loading...';
         
         try {
-            const response = await fetch('/api/members/import', {
-                method: 'POST',
-                body: formData,
-            });
-            
+            const response = await fetch('/api/members/import', { method: 'POST', body: formData });
             if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('Permission denied: Only R4/R5 members can import members');
-                }
+                if (response.status === 403) throw new Error('Permission denied: Only R4/R5 members can import members');
                 const errorText = await response.text();
                 throw new Error(errorText || 'Failed to read CSV');
             }
             
             const result = await response.json();
-            
-            if (result.errors && result.errors.length > 0) {
-                displayImportError('CSV contains errors:\n' + result.errors.join('\n'));
-            }
+            if (result.errors && result.errors.length > 0) displayImportError('CSV contains errors:\n' + result.errors.join('\n'));
             
             if (result.detected_members && result.detected_members.length > 0) {
                 detectedCSVMembers = result.detected_members;
-                selectedCSVMembers = new Set(result.detected_members.map((m, i) => i)); // Select all by default
+                selectedCSVMembers = new Set(result.detected_members.map((m, i) => i));
                 membersToRemove = result.members_to_remove || [];
-                selectedRemoveMembers = new Set(); // Don't select any for removal by default
+                selectedRemoveMembers = new Set();
                 showCSVPreview(result);
                 modal.style.display = 'block';
             } else {
                 displayImportError('No valid members found in CSV file');
             }
-            
         } catch (error) {
             console.error('Import error:', error);
             displayImportError(error.message);
@@ -515,49 +400,24 @@ function setupCSVImport() {
         }
     });
     
-    // Close modal
-    closeModal.addEventListener('click', () => {
-        modal.style.display = 'none';
-    });
+    closeModal.addEventListener('click', () => modal.style.display = 'none');
+    cancelBtn.addEventListener('click', () => modal.style.display = 'none');
     
-    cancelBtn.addEventListener('click', () => {
-        modal.style.display = 'none';
-    });
-    
-    // Confirm import
     confirmBtn.addEventListener('click', async () => {
         const selectedMembers = detectedCSVMembers.filter((_, i) => selectedCSVMembers.has(i));
-        
         if (selectedMembers.length === 0) {
             alert('Please select at least one member to import');
             return;
         }
         
-        // Collect renames from dropdown selections
         const renames = [];
-        const renameSelects = document.querySelectorAll('.rename-select');
-        renameSelects.forEach(select => {
-            const oldName = select.value;
-            if (oldName) { // If a rename option was selected
-                const newName = select.dataset.newName;
-                renames.push({ old_name: oldName, new_name: newName });
-            }
+        document.querySelectorAll('.rename-select').forEach(select => {
+            if (select.value) renames.push({ old_name: select.value, new_name: select.dataset.newName });
         });
         
-        // Collect selected member IDs to remove
         const removeMemberIDs = Array.from(selectedRemoveMembers);
-        
         if (removeMemberIDs.length > 0) {
-            const memberNames = removeMemberIDs.map(id => {
-                const member = membersToRemove.find(m => m.id === id);
-                return member ? member.name : 'Unknown';
-            }).join(', ');
-            const confirmMsg = `⚠️ WARNING: You are about to delete ${removeMemberIDs.length} member(s)!\n\n` +
-                             `Members: ${memberNames}\n\n` +
-                             `Are you sure you want to continue?`;
-            if (!confirm(confirmMsg)) {
-                return;
-            }
+            if (!confirm(`⚠️ WARNING: You are about to delete ${removeMemberIDs.length} member(s)!\n\nAre you sure you want to continue?`)) return;
         }
         
         confirmBtn.disabled = true;
@@ -566,44 +426,21 @@ function setupCSVImport() {
         try {
             const response = await fetch('/api/members/import/confirm', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    members: selectedMembers,
-                    remove_member_ids: removeMemberIDs,
-                    renames: renames
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ members: selectedMembers, remove_member_ids: removeMemberIDs, renames: renames })
             });
             
-            if (!response.ok) {
-                throw new Error('Failed to import members');
-            }
-            
+            if (!response.ok) throw new Error('Failed to import members');
             const result = await response.json();
             modal.style.display = 'none';
             
-            let message = `✓ Successfully imported ${result.added + result.updated} member(s)`;
-            if (result.removed > 0) {
-                message += `\n🗑️ Removed ${result.removed} member(s) not in CSV`;
-            }
-            if (result.unchanged > 0) {
-                message += `\n→ ${result.unchanged} unchanged`;
-            }
+            const resultDiv = document.getElementById('import-result');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'import-result success';
+            resultDiv.innerHTML = `<strong>✓ Successfully imported ${result.added + result.updated} member(s)</strong>`;
             
-            displayImportResult({
-                imported: result.added + result.updated,
-                skipped: result.unchanged,
-                removed: result.removed,
-                errors: []
-            });
-            
-            // Reload members list
             await loadMembers();
-            
-            // Clear file input
             fileInput.value = '';
-            
         } catch (error) {
             console.error('Confirm error:', error);
             alert('Error importing members: ' + error.message);
@@ -614,7 +451,6 @@ function setupCSVImport() {
     });
 }
 
-// Show CSV preview in modal
 function showCSVPreview(result) {
     const summaryDiv = document.getElementById('csv-summary');
     const previewDiv = document.getElementById('csv-members-preview');
@@ -622,32 +458,13 @@ function showCSVPreview(result) {
     const newCount = result.detected_members.filter(m => m.is_new).length;
     const changedCount = result.detected_members.filter(m => m.rank_changed).length;
     const unchangedCount = result.detected_members.length - newCount - changedCount;
-    const similarCount = result.detected_members.filter(m => m.similar_match && m.similar_match.length > 0).length;
     
     summaryDiv.innerHTML = `
         <div class="summary-stats">
-            <div class="stat-item">
-                <span class="stat-label">Total Members:</span>
-                <span class="stat-value">${result.detected_members.length}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label new">New Members:</span>
-                <span class="stat-value new">${newCount}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label change">Rank Changes:</span>
-                <span class="stat-value change">${changedCount}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">No Changes:</span>
-                <span class="stat-value">${unchangedCount}</span>
-            </div>
-            ${similarCount > 0 ? `
-            <div class="stat-item">
-                <span class="stat-label warning">Similar Names:</span>
-                <span class="stat-value warning">${similarCount}</span>
-            </div>
-            ` : ''}
+            <div class="stat-item"><span class="stat-label">Total Members:</span><span class="stat-value">${result.detected_members.length}</span></div>
+            <div class="stat-item"><span class="stat-label new">New Members:</span><span class="stat-value new">${newCount}</span></div>
+            <div class="stat-item"><span class="stat-label change">Rank Changes:</span><span class="stat-value change">${changedCount}</span></div>
+            <div class="stat-item"><span class="stat-label">No Changes:</span><span class="stat-value">${unchangedCount}</span></div>
         </div>
     `;
     
@@ -668,12 +485,10 @@ function showCSVPreview(result) {
                 ${member.similar_match && member.similar_match.length > 0 ? `
                     <div class="similar-match-notice">
                         <span class="warning-icon">⚠️</span>
-                        <span>Similar name(s) found: ${member.similar_match.map(n => escapeHtml(n)).join(', ')}</span>
+                        <span>Similar name(s) found.</span>
                         <select class="rename-select" data-index="${index}" data-new-name="${escapeHtml(member.name)}">
                             <option value="">Add as new member</option>
-                            ${member.similar_match.map(oldName => 
-                                `<option value="${escapeHtml(oldName)}">Rename "${escapeHtml(oldName)}" to "${escapeHtml(member.name)}"</option>`
-                            ).join('')}
+                            ${member.similar_match.map(oldName => `<option value="${escapeHtml(oldName)}">Rename "${escapeHtml(oldName)}"</option>`).join('')}
                         </select>
                     </div>
                 ` : ''}
@@ -681,28 +496,20 @@ function showCSVPreview(result) {
         `;
     });
     html += '</div>';
-    
     previewDiv.innerHTML = html;
     
-    // Add checkbox event listeners
     previewDiv.querySelectorAll('.member-checkbox').forEach(checkbox => {
         checkbox.addEventListener('change', (e) => {
             const index = parseInt(e.target.dataset.index);
-            if (e.target.checked) {
-                selectedCSVMembers.add(index);
-            } else {
-                selectedCSVMembers.delete(index);
-            }
+            e.target.checked ? selectedCSVMembers.add(index) : selectedCSVMembers.delete(index);
         });
     });
     
-    // Show members to remove section if there are any
     const removeSection = document.getElementById('remove-members-section');
     const removeList = document.getElementById('members-to-remove-list');
     
     if (membersToRemove && membersToRemove.length > 0) {
         removeSection.style.display = 'block';
-        
         let removeHtml = '<div class="members-to-remove-grid">';
         membersToRemove.forEach(member => {
             removeHtml += `
@@ -716,18 +523,12 @@ function showCSVPreview(result) {
             `;
         });
         removeHtml += '</div>';
-        
         removeList.innerHTML = removeHtml;
         
-        // Add checkbox event listeners for remove members
         removeList.querySelectorAll('.remove-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', (e) => {
                 const memberId = parseInt(e.target.dataset.memberId);
-                if (e.target.checked) {
-                    selectedRemoveMembers.add(memberId);
-                } else {
-                    selectedRemoveMembers.delete(memberId);
-                }
+                e.target.checked ? selectedRemoveMembers.add(memberId) : selectedRemoveMembers.delete(memberId);
             });
         });
     } else {
@@ -735,132 +536,9 @@ function showCSVPreview(result) {
     }
 }
 
-// Display import results
-function displayImportResult(result) {
-    const resultDiv = document.getElementById('import-result');
-    resultDiv.style.display = 'block';
-    
-    let className = 'success';
-    let message = '';
-    
-    if (result.imported > 0 && result.skipped === 0) {
-        className = 'success';
-        message = `✓ Successfully imported ${result.imported} member${result.imported > 1 ? 's' : ''}!`;
-    } else if (result.imported > 0 && result.skipped > 0) {
-        className = 'warning';
-        message = `⚠ Imported ${result.imported} member${result.imported > 1 ? 's' : ''}, skipped ${result.skipped} row${result.skipped > 1 ? 's' : ''}.`;
-    } else if (result.imported === 0 && result.skipped > 0) {
-        className = 'error';
-        message = `✗ No members imported. ${result.skipped} row${result.skipped > 1 ? 's' : ''} skipped.`;
-    }
-    
-    resultDiv.className = `import-result ${className}`;
-    
-    let html = `<strong>${message}</strong>`;
-    
-    if (result.errors && result.errors.length > 0) {
-        html += '<ul>';
-        result.errors.forEach(error => {
-            html += `<li>${escapeHtml(error)}</li>`;
-        });
-        html += '</ul>';
-    }
-    
-    resultDiv.innerHTML = html;
-    
-    // Auto-hide after 10 seconds if no errors
-    if (result.errors.length === 0) {
-        setTimeout(() => {
-            resultDiv.style.display = 'none';
-        }, 10000);
-    }
-}
-
-// Display import error
 function displayImportError(message) {
     const resultDiv = document.getElementById('import-result');
     resultDiv.style.display = 'block';
     resultDiv.className = 'import-result error';
     resultDiv.innerHTML = `<strong>✗ Import failed:</strong> ${escapeHtml(message)}`;
-}
-
-// Create user for member
-async function createUserForMember(memberId, memberName) {
-    if (!confirm(`Create a user account for ${memberName}? A random password will be generated.`)) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_URL}/${memberId}/create-user`, {
-            method: 'POST'
-        });
-        
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
-        }
-        
-        const result = await response.json();
-        
-        // Display the username and password in a popup
-        const message = `User created successfully!\n\nUsername: ${result.username}\nPassword: ${result.password}\n\n⚠️ IMPORTANT: Save this password now! It won't be shown again.`;
-        alert(message);
-        
-        // Also log to console for easy copying
-        console.log('=== NEW USER CREDENTIALS ===');
-        console.log('Username:', result.username);
-        console.log('Password:', result.password);
-        console.log('============================');
-        
-    } catch (error) {
-        console.error('Error creating user:', error);
-        alert('Failed to create user: ' + error.message);
-    }
-}
-
-// Toggle member eligibility for train
-async function toggleEligible(id, currentStatus) {
-    if (!canManageRanks) {
-        alert('You do not have permission to manage members. Only R4 and R5 can do this.');
-        return;
-    }
-    
-    const newStatus = !currentStatus;
-    const statusText = newStatus ? 'eligible' : 'not eligible';
-    
-    if (!confirm(`Mark this member as ${statusText} for train scheduling?`)) {
-        return;
-    }
-    
-    try {
-        // Get current member data
-        const response = await fetch(`${API_URL}`);
-        if (!response.ok) throw new Error('Failed to fetch members');
-        
-        const members = await response.json();
-        const member = members.find(m => m.id === id);
-        
-        if (!member) throw new Error('Member not found');
-        
-        // Update member with new eligible status
-        const updateResponse = await fetch(`${API_URL}/${id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                name: member.name, 
-                rank: member.rank,
-                eligible: newStatus 
-            }),
-        });
-        
-        if (!updateResponse.ok) throw new Error('Failed to update member');
-        
-        // Reload members list
-        loadMembers();
-    } catch (error) {
-        console.error('Error toggling eligibility:', error);
-        alert('Failed to update member eligibility: ' + error.message);
-    }
 }

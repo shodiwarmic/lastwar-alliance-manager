@@ -1,131 +1,80 @@
+// static/profile.js
 const API_BASE = '/api';
 
-// Check authentication
-async function checkAuth() {
+// Fetch user data to populate the profile card
+async function loadProfileInfo() {
     try {
         const response = await fetch(`${API_BASE}/check-auth`);
-        if (!response.ok) {
-            window.location.href = '/login.html';
-            return false;
-        }
-        const data = await response.json();
-        document.getElementById('username-display').textContent = `👤 ${data.username}`;
-        
-        // Display profile info
-        document.getElementById('profile-username').textContent = data.username;
-        document.getElementById('profile-role').textContent = data.is_admin ? 'Administrator' : 'Member';
-        
-        if (data.rank) {
-            document.getElementById('profile-member').textContent = data.rank;
-            document.getElementById('profile-member-info').style.display = 'block';
-        }
-        
-        return data;
-    } catch (error) {
-        console.error('Auth check failed:', error);
-        window.location.href = '/login.html';
-        return false;
-    }
-}
-
-// Setup event listeners after auth check
-async function setupEventListeners() {
-    const usernameDisplay = document.getElementById('username-display');
-    const logoutBtn = document.getElementById('dropdown-logout-btn');
-    const adminLink = document.getElementById('admin-dropdown-link');
-    
-    if (usernameDisplay) {
-        usernameDisplay.addEventListener('click', toggleUserDropdown);
-    }
-    
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Check if user is admin to show admin link
-    try {
-        const response = await fetch(`${API_BASE}/check-auth`);
-        const data = await response.json();
-        if (data.is_admin && adminLink) {
-            adminLink.style.display = 'block';
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Display profile info
+            const profileUsername = document.getElementById('profile-username');
+            if (profileUsername) profileUsername.textContent = data.username;
+            
+            const profileRole = document.getElementById('profile-role');
+            if (profileRole) profileRole.textContent = data.is_admin ? 'Administrator' : 'Member';
+            
+            const profileMember = document.getElementById('profile-member');
+            const profileMemberInfo = document.getElementById('profile-member-info');
+            
+            if (data.rank && profileMember && profileMemberInfo) {
+                profileMember.textContent = data.rank;
+                profileMemberInfo.style.display = 'block';
+            }
         }
     } catch (error) {
-        console.error('Error checking admin status:', error);
-    }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (event) => {
-        const dropdown = document.getElementById('user-dropdown-menu');
-        const usernameBtn = document.getElementById('username-display');
-        if (dropdown && usernameBtn && !usernameBtn.contains(event.target) && !dropdown.contains(event.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
+        console.error('Failed to load profile info:', error);
     }
 }
-
-// Logout handler
-async function handleLogout(event) {
-    event.preventDefault();
-    try {
-        await fetch(`${API_BASE}/logout`, { method: 'POST' });
-        window.location.href = '/login.html';
-    } catch (error) {
-        console.error('Logout failed:', error);
-    }
-}
-
-// Change password
-document.getElementById('password-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const currentPassword = document.getElementById('current-password').value;
-    const newPassword = document.getElementById('new-password').value;
-    const confirmPassword = document.getElementById('confirm-password').value;
-    
-    if (newPassword !== confirmPassword) {
-        alert('❌ New passwords do not match!');
-        return;
-    }
-    
-    if (newPassword.length < 6) {
-        alert('❌ New password must be at least 6 characters!');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_BASE}/change-password`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                current_password: currentPassword,
-                new_password: newPassword
-            })
-        });
-        
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
-        }
-        
-        alert('✅ Password changed successfully!');
-        document.getElementById('password-form').reset();
-    } catch (error) {
-        console.error('Error changing password:', error);
-        alert('❌ Failed to change password: ' + error.message);
-    }
-});
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    await checkAuth();
-    await setupEventListeners();
+    const passwordForm = document.getElementById('password-form');
+    
+    // Guard: Only run if we are actually on the Profile page
+    if (passwordForm) {
+        await loadProfileInfo();
+        
+        // Change password form submission
+        passwordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const currentPassword = document.getElementById('current-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            
+            if (newPassword !== confirmPassword) {
+                alert('❌ New passwords do not match!');
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                alert('❌ New password must be at least 6 characters!');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/change-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error);
+                }
+                
+                alert('✅ Password changed successfully!');
+                passwordForm.reset();
+            } catch (error) {
+                console.error('Error changing password:', error);
+                alert('❌ Failed to change password: ' + error.message);
+            }
+        });
+    }
 });

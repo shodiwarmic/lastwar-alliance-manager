@@ -1,53 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Member Rankings - Last War: Survival</title>
-    <link rel="stylesheet" href="styles.css">
+{{define "head_tags"}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>🎮 Last War: Survival</h1>
-            <h2>Member Rankings & Scoring System</h2>
-            <div class="user-info">
-                <div class="user-dropdown">
-                    <button id="username-display" class="username-btn"></button>
-                    <div id="user-dropdown-menu" class="dropdown-menu">
-                        <a href="/profile.html" class="dropdown-item">👤 Profile</a>
-                        <a href="/admin.html" class="dropdown-item admin-only" id="admin-dropdown-link" style="display: none;">🔐 Admin Panel</a>
-                        <div class="dropdown-divider"></div>
-                        <div class="theme-section">
-                            <div class="theme-section-label">Theme</div>
-                            <a href="#" class="dropdown-item theme-option" data-theme="auto">● Auto (System)</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="light">○ Light</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="dark">○ Dark</a>
-                        </div>
-                        <div class="dropdown-divider"></div>
-                        <a href="#" class="dropdown-item" id="dropdown-logout-btn">🚪 Logout</a>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <nav class="nav-menu">
-            <a href="/" class="nav-link">👥 Members</a>
-            <a href="/train.html" class="nav-link">🚂 Train</a>
-            <a href="/awards.html" class="nav-link">🏆 Awards</a>
-            <a href="/recommendations.html" class="nav-link">⭐ Recs</a>
-            <a href="/dyno.html" class="nav-link">💬 Dyno</a>
-            <a href="/rankings.html" class="nav-link active">📊 Rankings</a>
-            <a href="/storm.html" class="nav-link">🏜️ Storm</a>
-            <a href="/vs.html" class="nav-link">⚔️ VS Points</a>
-            <a href="/upload.html" class="nav-link">📸 Upload</a>
-            <a href="/settings.html" class="nav-link">⚙️ Settings</a>
-        </nav>
-
-        <main>
+{{end}}
+{{define "content"}}
             <section class="info-section">
                 <h3>📈 Current Ranking System</h3>
                 <div id="system-info" class="system-info-card">
@@ -106,10 +62,8 @@
                     <p class="loading">Loading rankings...</p>
                 </div>
             </section>
-        </main>
-    </div>
+{{end}}
 
-    <script src="theme.js"></script>
+{{define "scripts"}}
     <script src="rankings.js"></script>
-</body>
-</html>
+{{end}}

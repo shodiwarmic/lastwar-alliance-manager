@@ -1,3 +1,4 @@
+// static/train.js
 const API_URL = '/api/train-schedules';
 const MEMBERS_URL = '/api/members';
 const MEMBER_STATS_URL = '/api/members/stats';
@@ -8,102 +9,26 @@ let memberStats = {};
 let backupMembers = [];
 let schedules = {};
 let allHistory = [];
-let currentUsername = '';
 let currentUserRank = '';
 let isAdmin = false;
 
-// Check authentication on page load
-async function checkAuth() {
+// Fetch permissions to determine scheduling access
+async function fetchPermissions() {
     try {
         const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        
-        if (!data.authenticated) {
-            window.location.href = '/login.html';
-            return false;
+        if (response.ok) {
+            const data = await response.json();
+            currentUserRank = data.rank || '';
+            isAdmin = data.is_admin || false;
         }
-        
-        currentUsername = data.username;
-        currentUserRank = data.rank || '';
-        isAdmin = data.is_admin || false;
-        
-        let displayText = `👤 ${currentUsername}`;
-        if (data.rank) {
-            displayText += ` (${data.rank})`;
-        }
-        document.getElementById('username-display').textContent = displayText;
-        
-        return true;
     } catch (error) {
         console.error('Auth check error:', error);
-        window.location.href = '/login.html';
-        return false;
     }
 }
 
 // Check if user can edit train schedules (R4, R5, or admin)
 function canEditSchedule() {
     return isAdmin || currentUserRank === 'R4' || currentUserRank === 'R5';
-}
-
-// Setup event listeners after auth check
-async function setupEventListeners() {
-    const usernameDisplay = document.getElementById('username-display');
-    const logoutBtn = document.getElementById('dropdown-logout-btn');
-    const adminLink = document.getElementById('admin-dropdown-link');
-    
-    if (usernameDisplay) {
-        usernameDisplay.addEventListener('click', toggleUserDropdown);
-    }
-    
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Check if user is admin to show admin link
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        if (data.is_admin && adminLink) {
-            adminLink.style.display = 'block';
-        }
-    } catch (error) {
-        console.error('Error checking admin status:', error);
-    }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (event) => {
-        const dropdown = document.getElementById('user-dropdown-menu');
-        const usernameBtn = document.getElementById('username-display');
-        if (dropdown && usernameBtn && !usernameBtn.contains(event.target) && !dropdown.contains(event.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}
-
-// Logout handler
-async function handleLogout(event) {
-    event.preventDefault();
-    if (!confirm('Are you sure you want to logout?')) {
-        return;
-    }
-    
-    try {
-        await fetch('/api/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-    } catch (error) {
-        console.error('Logout error:', error);
-        alert('Error logging out. Please try again.');
-    }
 }
 
 // Get Monday of current week
@@ -158,27 +83,12 @@ function updateWeekDisplay() {
     document.getElementById('week-display').textContent = displayText;
 }
 
-// Navigate weeks
-document.getElementById('prev-week').addEventListener('click', () => {
-    currentWeekStart.setDate(currentWeekStart.getDate() - 7);
-    updateWeekDisplay();
-    loadSchedules();
-    hideWeeklyMessage();
-});
-
-document.getElementById('next-week').addEventListener('click', () => {
-    currentWeekStart.setDate(currentWeekStart.getDate() + 7);
-    updateWeekDisplay();
-    loadSchedules();
-    hideWeeklyMessage();
-});
-
 // Hide weekly message section
 function hideWeeklyMessage() {
     document.getElementById('weekly-message-section').style.display = 'none';
 }
 
-// Generate weekly message (will be setup in init if user has permission)
+// Generate weekly message
 async function generateWeeklyMessage() {
     const startDate = formatDate(currentWeekStart);
     
@@ -198,24 +108,8 @@ async function generateWeeklyMessage() {
     }
 }
 
-// Copy message to clipboard
-document.getElementById('copy-message-btn').addEventListener('click', () => {
-    const messageText = document.getElementById('weekly-message');
-    messageText.select();
-    document.execCommand('copy');
-    
-    // Visual feedback
-    const btn = document.getElementById('copy-message-btn');
-    const originalText = btn.textContent;
-    btn.textContent = '✅ Copied!';
-    setTimeout(() => {
-        btn.textContent = originalText;
-    }, 2000);
-});
-
-// Generate daily message (will be setup in init if user has permission)
+// Show daily message section
 function showDailyMessageSection() {
-    // Show the daily message section with date picker
     document.getElementById('daily-message-section').style.display = 'block';
     
     // Set default date to today
@@ -226,49 +120,7 @@ function showDailyMessageSection() {
     document.getElementById('daily-message-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// Load daily message for selected date
-document.getElementById('load-daily-message-btn').addEventListener('click', async () => {
-    const dateInput = document.getElementById('daily-message-date').value;
-    if (!dateInput) {
-        alert('Please select a date');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/train-schedules/daily-message?date=${dateInput}`);
-        if (!response.ok) {
-            if (response.status === 404) {
-                alert('No schedule found for this date. Please create a schedule first.');
-            } else {
-                throw new Error('Failed to generate message');
-            }
-            return;
-        }
-        
-        const data = await response.json();
-        document.getElementById('daily-message').value = data.message;
-    } catch (error) {
-        console.error('Error generating daily message:', error);
-        alert('Failed to generate daily message');
-    }
-});
-
-// Copy daily message to clipboard
-document.getElementById('copy-daily-message-btn').addEventListener('click', () => {
-    const messageText = document.getElementById('daily-message');
-    messageText.select();
-    document.execCommand('copy');
-    
-    // Visual feedback
-    const btn = document.getElementById('copy-daily-message-btn');
-    const originalText = btn.textContent;
-    btn.textContent = '✅ Copied!';
-    setTimeout(() => {
-        btn.textContent = originalText;
-    }, 2000);
-});
-
-// Generate conductor reminder messages (will be setup in init if user has permission)
+// Generate conductor reminder messages
 async function generateConductorMessages() {
     const startDate = formatDate(currentWeekStart);
     
@@ -297,10 +149,7 @@ async function generateConductorMessages() {
             messagesContainer.appendChild(messageCard);
         });
         
-        // Show section
         document.getElementById('conductor-messages-section').style.display = 'block';
-        
-        // Scroll to messages
         document.getElementById('conductor-messages-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         
         // Add event listeners to copy buttons
@@ -451,8 +300,8 @@ function renderScheduleGrid() {
     grid.innerHTML = html;
 }
 
-// Open schedule modal
-function openScheduleModal(dateStr) {
+// Make globally accessible since they are called via inline onclick
+window.openScheduleModal = function(dateStr) {
     if (!canEditSchedule()) {
         alert('Only R4, R5 ranks and admins can edit the train schedule.');
         return;
@@ -503,7 +352,42 @@ function openScheduleModal(dateStr) {
     
     document.getElementById('modal-title').textContent = schedule ? 'Edit Schedule' : 'Schedule Train';
     modal.style.display = 'flex';
-}
+};
+
+window.editSchedule = function(dateStr) {
+    if (!canEditSchedule()) {
+        alert('Only R4, R5 ranks and admins can edit the train schedule.');
+        return;
+    }
+    openScheduleModal(dateStr);
+};
+
+window.clearSchedule = async function(scheduleId, dateStr) {
+    if (!canEditSchedule()) {
+        alert('Only R4, R5 ranks and admins can edit the train schedule.');
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to clear this schedule?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_URL}/${scheduleId}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok && response.status !== 204) {
+            throw new Error('Failed to clear schedule');
+        }
+        
+        await loadSchedules();
+        await loadHistory();
+    } catch (error) {
+        console.error('Error clearing schedule:', error);
+        alert('Failed to clear schedule: ' + error.message);
+    }
+};
 
 // Populate conductor select
 function populateConductorSelect(members, schedule) {
@@ -624,106 +508,6 @@ function filterSelectOptions(selectElement, searchTerm) {
     }
 }
 
-// Edit schedule
-function editSchedule(dateStr) {
-    if (!canEditSchedule()) {
-        alert('Only R4, R5 ranks and admins can edit the train schedule.');
-        return;
-    }
-    openScheduleModal(dateStr);
-}
-
-// Close modal
-document.querySelector('.close').addEventListener('click', () => {
-    document.getElementById('schedule-modal').style.display = 'none';
-});
-
-document.getElementById('modal-cancel').addEventListener('click', () => {
-    document.getElementById('schedule-modal').style.display = 'none';
-});
-
-// Handle form submission
-document.getElementById('schedule-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const id = document.getElementById('schedule-id').value;
-    const date = document.getElementById('schedule-date').value;
-    const conductorId = parseInt(document.getElementById('conductor-select').value);
-    const backupId = parseInt(document.getElementById('backup-select').value);
-    const notes = document.getElementById('notes').value.trim() || null;
-    
-    const attendanceRadio = document.querySelector('input[name="attendance"]:checked');
-    let conductorShowedUp = null;
-    if (attendanceRadio) {
-        conductorShowedUp = attendanceRadio.value === 'yes';
-    }
-    
-    const data = {
-        date,
-        conductor_id: conductorId,
-        backup_id: backupId,
-        conductor_showed_up: conductorShowedUp,
-        notes
-    };
-    
-    try {
-        let response;
-        if (id) {
-            response = await fetch(`${API_URL}/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-        } else {
-            response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-        }
-        
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
-        }
-        
-        document.getElementById('schedule-modal').style.display = 'none';
-        await loadSchedules();
-        await loadHistory();
-    } catch (error) {
-        console.error('Error saving schedule:', error);
-        alert('Failed to save schedule: ' + error.message);
-    }
-});
-
-// Clear schedule for a day
-async function clearSchedule(scheduleId, dateStr) {
-    if (!canEditSchedule()) {
-        alert('Only R4, R5 ranks and admins can edit the train schedule.');
-        return;
-    }
-    
-    if (!confirm('Are you sure you want to clear this schedule?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_URL}/${scheduleId}`, {
-            method: 'DELETE'
-        });
-        
-        if (!response.ok && response.status !== 204) {
-            throw new Error('Failed to clear schedule');
-        }
-        
-        await loadSchedules();
-        await loadHistory();
-    } catch (error) {
-        console.error('Error clearing schedule:', error);
-        alert('Failed to clear schedule: ' + error.message);
-    }
-}
-
 // Load history
 async function loadHistory() {
     try {
@@ -787,25 +571,6 @@ function renderHistory(filter) {
     list.innerHTML = html;
 }
 
-// History filter buttons
-document.getElementById('show-all-history').addEventListener('click', function() {
-    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-    this.classList.add('active');
-    renderHistory('all');
-});
-
-document.getElementById('show-completed').addEventListener('click', function() {
-    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-    this.classList.add('active');
-    renderHistory('completed');
-});
-
-document.getElementById('show-backup-used').addEventListener('click', function() {
-    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-    this.classList.add('active');
-    renderHistory('backup');
-});
-
 // Auto-schedule entire week
 async function autoScheduleWeek() {
     // Check if any schedules exist for the current week
@@ -847,14 +612,153 @@ function escapeHtml(text) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    const isAuthenticated = await checkAuth();
-    if (isAuthenticated) {
-        await setupEventListeners();
+    // Guard: Only initialize if we are on the Train page
+    const scheduleGrid = document.getElementById('schedule-grid');
+    if (scheduleGrid) {
+        await fetchPermissions();
         await loadMembers();
         initializeWeek();
         await loadSchedules();
         await loadHistory();
         
+        // --- Static Event Listeners ---
+        document.getElementById('prev-week').addEventListener('click', () => {
+            currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+            updateWeekDisplay();
+            loadSchedules();
+            hideWeeklyMessage();
+        });
+
+        document.getElementById('next-week').addEventListener('click', () => {
+            currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+            updateWeekDisplay();
+            loadSchedules();
+            hideWeeklyMessage();
+        });
+
+        document.getElementById('copy-message-btn').addEventListener('click', () => {
+            const messageText = document.getElementById('weekly-message');
+            messageText.select();
+            document.execCommand('copy');
+            
+            const btn = document.getElementById('copy-message-btn');
+            const originalText = btn.textContent;
+            btn.textContent = '✅ Copied!';
+            setTimeout(() => { btn.textContent = originalText; }, 2000);
+        });
+
+        document.getElementById('load-daily-message-btn').addEventListener('click', async () => {
+            const dateInput = document.getElementById('daily-message-date').value;
+            if (!dateInput) {
+                alert('Please select a date');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/train-schedules/daily-message?date=${dateInput}`);
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        alert('No schedule found for this date. Please create a schedule first.');
+                    } else {
+                        throw new Error('Failed to generate message');
+                    }
+                    return;
+                }
+                
+                const data = await response.json();
+                document.getElementById('daily-message').value = data.message;
+            } catch (error) {
+                console.error('Error generating daily message:', error);
+                alert('Failed to generate daily message');
+            }
+        });
+
+        document.getElementById('copy-daily-message-btn').addEventListener('click', () => {
+            const messageText = document.getElementById('daily-message');
+            messageText.select();
+            document.execCommand('copy');
+            
+            const btn = document.getElementById('copy-daily-message-btn');
+            const originalText = btn.textContent;
+            btn.textContent = '✅ Copied!';
+            setTimeout(() => { btn.textContent = originalText; }, 2000);
+        });
+        
+        document.querySelector('.close').addEventListener('click', () => {
+            document.getElementById('schedule-modal').style.display = 'none';
+        });
+
+        document.getElementById('modal-cancel').addEventListener('click', () => {
+            document.getElementById('schedule-modal').style.display = 'none';
+        });
+
+        // Form submission
+        document.getElementById('schedule-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const id = document.getElementById('schedule-id').value;
+            const date = document.getElementById('schedule-date').value;
+            const conductorId = parseInt(document.getElementById('conductor-select').value);
+            const backupId = parseInt(document.getElementById('backup-select').value);
+            const notes = document.getElementById('notes').value.trim() || null;
+            
+            const attendanceRadio = document.querySelector('input[name="attendance"]:checked');
+            let conductorShowedUp = null;
+            if (attendanceRadio) {
+                conductorShowedUp = attendanceRadio.value === 'yes';
+            }
+            
+            const data = { date, conductor_id: conductorId, backup_id: backupId, conductor_showed_up: conductorShowedUp, notes };
+            
+            try {
+                let response;
+                if (id) {
+                    response = await fetch(`${API_URL}/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                } else {
+                    response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                }
+                
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error);
+                }
+                
+                document.getElementById('schedule-modal').style.display = 'none';
+                await loadSchedules();
+                await loadHistory();
+            } catch (error) {
+                console.error('Error saving schedule:', error);
+                alert('Failed to save schedule: ' + error.message);
+            }
+        });
+
+        // History Filters
+        document.getElementById('show-all-history').addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            renderHistory('all');
+        });
+
+        document.getElementById('show-completed').addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            renderHistory('completed');
+        });
+
+        document.getElementById('show-backup-used').addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            renderHistory('backup');
+        });
+
         // Setup editing controls based on permissions
         if (canEditSchedule()) {
             document.getElementById('auto-schedule-week-btn').addEventListener('click', autoScheduleWeek);

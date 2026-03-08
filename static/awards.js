@@ -1,3 +1,4 @@
+// static/awards.js
 const API_URL = '/api/awards';
 const AWARD_TYPES_URL = '/api/award-types';
 const MEMBERS_URL = '/api/members';
@@ -7,94 +8,8 @@ let currentWeekDate = null;
 let allMembers = [];
 let currentAwards = {};
 let allHistory = [];
-let currentUsername = '';
 let activeAwardTypes = new Set(); // All active awards
-
-// Check authentication
-async function checkAuth() {
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        
-        if (!data.authenticated) {
-            window.location.href = '/login.html';
-            return false;
-        }
-        
-        currentUsername = data.username;
-        let displayText = `👤 ${currentUsername}`;
-        if (data.rank) {
-            displayText += ` (${data.rank})`;
-        }
-        document.getElementById('username-display').textContent = displayText;
-        
-        return true;
-    } catch (error) {
-        console.error('Auth check error:', error);
-        window.location.href = '/login.html';
-        return false;
-    }
-}
-
-// Setup event listeners after auth check
-async function setupEventListeners() {
-    const usernameDisplay = document.getElementById('username-display');
-    const logoutBtn = document.getElementById('dropdown-logout-btn');
-    const adminLink = document.getElementById('admin-dropdown-link');
-    
-    if (usernameDisplay) {
-        usernameDisplay.addEventListener('click', toggleUserDropdown);
-    }
-    
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Check if user is admin to show admin link
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        if (data.is_admin && adminLink) {
-            adminLink.style.display = 'block';
-        }
-    } catch (error) {
-        console.error('Error checking admin status:', error);
-    }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (event) => {
-        const dropdown = document.getElementById('user-dropdown-menu');
-        const usernameBtn = document.getElementById('username-display');
-        if (dropdown && usernameBtn && !usernameBtn.contains(event.target) && !dropdown.contains(event.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}
-
-// Logout handler
-async function handleLogout(event) {
-    event.preventDefault();
-    if (!confirm('Are you sure you want to logout?')) {
-        return;
-    }
-    
-    try {
-        await fetch('/api/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-    } catch (error) {
-        console.error('Logout error:', error);
-        alert('Error logging out. Please try again.');
-    }
-}
+let allAwardTypesData = []; // Store full award type objects
 
 // Get most recent Monday
 function getMostRecentMonday(date = new Date()) {
@@ -167,8 +82,6 @@ function fuzzyMatch(str, pattern) {
 }
 
 // Load award types from database
-let allAwardTypesData = []; // Store full award type objects
-
 async function loadAwardTypes() {
     try {
         const response = await fetch(AWARD_TYPES_URL);
@@ -270,6 +183,7 @@ function restoreFormState(formState) {
 // Render awards form
 function renderAwardsForm(preserveFormState = false) {
     const grid = document.getElementById('awards-grid');
+    if (!grid) return;
     
     // Save current form state before re-rendering (only if preserving)
     const formState = preserveFormState ? saveFormState() : null;
@@ -373,6 +287,7 @@ function setupSearchFilters() {
 
 // Filter select options
 function filterSelectOptions(selectElement, searchTerm) {
+    if (!selectElement) return;
     const options = selectElement.options;
     let visibleCount = 0;
     
@@ -500,26 +415,36 @@ async function loadHistory() {
         
         // Populate week filter
         const weekFilter = document.getElementById('week-filter');
-        weekFilter.innerHTML = '<option value="">All Weeks</option>';
-        weeks.forEach(week => {
-            const option = document.createElement('option');
-            option.value = week;
-            option.textContent = formatDisplayDate(week);
-            weekFilter.appendChild(option);
-        });
+        if (weekFilter) {
+            weekFilter.innerHTML = '<option value="">All Weeks</option>';
+            weeks.forEach(week => {
+                const option = document.createElement('option');
+                option.value = week;
+                option.textContent = formatDisplayDate(week);
+                weekFilter.appendChild(option);
+            });
+        }
         
         renderHistory();
     } catch (error) {
         console.error('Error loading history:', error);
-        document.getElementById('history-content').innerHTML = 
-            '<p class="empty">Error loading history.</p>';
+        const historyContent = document.getElementById('history-content');
+        if(historyContent) {
+            historyContent.innerHTML = '<p class="empty">Error loading history.</p>';
+        }
     }
 }
 
 // Render history
 function renderHistory() {
-    const searchTerm = document.getElementById('history-search').value.toLowerCase().trim();
-    const weekFilter = document.getElementById('week-filter').value;
+    const searchInput = document.getElementById('history-search');
+    const weekFilterSelect = document.getElementById('week-filter');
+    const content = document.getElementById('history-content');
+    
+    if(!content) return;
+
+    const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    const weekFilter = weekFilterSelect ? weekFilterSelect.value : '';
     
     let filtered = allHistory;
     
@@ -530,8 +455,6 @@ function renderHistory() {
     if (searchTerm) {
         filtered = filtered.filter(a => a.member_name.toLowerCase().includes(searchTerm));
     }
-    
-    const content = document.getElementById('history-content');
     
     if (filtered.length === 0) {
         content.innerHTML = '<p class="empty">No awards found.</p>';
@@ -637,7 +560,7 @@ function setupAwardSearch() {
     const addBtn = document.getElementById('add-award-btn');
     const suggestionsDiv = document.getElementById('award-suggestions');
     
-    if (!searchInput || !addBtn) return;
+    if (!searchInput || !addBtn || !suggestionsDiv) return;
     
     // Instant search with fuzzy matching
     searchInput.addEventListener('input', (e) => {
@@ -762,7 +685,7 @@ function setupAwardSearch() {
                     const button = e.target.closest('button');
                     const awardName = button.dataset.award;
                     
-                    if (!confirm(`Are you sure you want to completely delete "${awardName}"?\\n\\nThis will remove it and all its history permanently!`)) {
+                    if (!confirm(`Are you sure you want to completely delete "${awardName}"?\n\nThis will remove it and all its history permanently!`)) {
                         return;
                     }
                     
@@ -848,11 +771,25 @@ function setupAwardSearch() {
     });
 }
 
+// Update toggle button text
+function updateToggleButton() {
+    const btn = document.getElementById('toggle-all-awards-btn');
+    if (btn) {
+        if (activeAwardTypes.size === AWARD_TYPES.length) {
+            btn.textContent = '⚙️ Hide All Awards';
+        } else if (activeAwardTypes.size === 0) {
+            btn.textContent = '⚙️ Show All Awards';
+        } else {
+            btn.textContent = `⚙️ Show All (${activeAwardTypes.size}/${AWARD_TYPES.length})`;
+        }
+    }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    const isAuthenticated = await checkAuth();
-    if (isAuthenticated) {
-        await setupEventListeners();
+    // Guard: Only initialize if we are on the Awards page
+    const saveAwardsBtn = document.getElementById('save-awards-btn');
+    if (saveAwardsBtn) {
         await loadAwardTypes(); // Load award types first
         await loadMembers();
         initializeWeek();
@@ -862,10 +799,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Set up award search
         setupAwardSearch();
         
-        // Set up event listeners after DOM is ready
+        // Set up event listeners
         document.getElementById('prev-week').addEventListener('click', navigatePrevWeek);
         document.getElementById('next-week').addEventListener('click', navigateNextWeek);
-        document.getElementById('save-awards-btn').addEventListener('click', saveAwards);
+        saveAwardsBtn.addEventListener('click', saveAwards);
         document.getElementById('clear-awards-btn').addEventListener('click', clearAwards);
         document.getElementById('history-search').addEventListener('input', renderHistory);
         document.getElementById('week-filter').addEventListener('change', renderHistory);
@@ -884,17 +821,3 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 });
-
-// Update toggle button text
-function updateToggleButton() {
-    const btn = document.getElementById('toggle-all-awards-btn');
-    if (btn) {
-        if (activeAwardTypes.size === AWARD_TYPES.length) {
-            btn.textContent = '⚙️ Hide All Awards';
-        } else if (activeAwardTypes.size === 0) {
-            btn.textContent = '⚙️ Show All Awards';
-        } else {
-            btn.textContent = `⚙️ Show All (${activeAwardTypes.size}/${AWARD_TYPES.length})`;
-        }
-    }
-}

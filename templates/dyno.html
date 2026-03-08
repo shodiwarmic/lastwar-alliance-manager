@@ -1,51 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dyno Recommendations - Last War Alliance</title>
-    <link rel="stylesheet" href="styles.css">
+{{define "head_tags"}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>🚂 Last War: Survival</h1>
-            <h2>Dyno Recommendations</h2>
-            <div class="user-info">
-                <div class="user-dropdown">
-                    <button id="username-display" class="username-btn"></button>
-                    <div id="user-dropdown-menu" class="dropdown-menu">
-                        <a href="/profile.html" class="dropdown-item">👤 Profile</a>
-                        <a href="/admin.html" class="dropdown-item admin-only" id="admin-dropdown-link" style="display: none;">🔐 Admin Panel</a>
-                        <div class="dropdown-divider"></div>
-                        <div class="theme-section">
-                            <div class="theme-section-label">Theme</div>
-                            <a href="#" class="dropdown-item theme-option" data-theme="auto">● Auto (System)</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="light">○ Light</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="dark">○ Dark</a>
-                        </div>
-                        <div class="dropdown-divider"></div>
-                        <a href="#" class="dropdown-item" id="dropdown-logout-btn">🚪 Logout</a>
-                    </div>
-                </div>
-            </div>
-        </header>
+{{end}}
 
-        <nav class="nav-menu">
-            <a href="/" class="nav-link">👥 Members</a>
-            <a href="/train.html" class="nav-link">🚂 Train</a>
-            <a href="/awards.html" class="nav-link">🏆 Awards</a>
-            <a href="/recommendations.html" class="nav-link">⭐ Recs</a>
-            <a href="/dyno.html" class="nav-link active">💬 Dyno</a>
-            <a href="/rankings.html" class="nav-link">📊 Rankings</a>
-            <a href="/storm.html" class="nav-link">🏜️ Storm</a>
-            <a href="/vs.html" class="nav-link">⚔️ VS Points</a>
-            <a href="/upload.html" class="nav-link">📸 Upload</a>
-            <a href="/settings.html" class="nav-link">⚙️ Settings</a>
-        </nav>
-
-        <main>
+{{define "content"}}
             <section class="info-banner">
                 <div class="info-content">
                     <div class="info-icon">ℹ️</div>
@@ -154,10 +111,8 @@
                     <!-- Dyno recommendations will be loaded here -->
                 </div>
             </section>
-        </main>
-    </div>
+{{end}}
 
-    <script src="theme.js"></script>
+{{define "scripts"}}
     <script src="dyno.js"></script>
-</body>
-</html>
+{{end}}

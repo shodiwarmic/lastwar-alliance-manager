@@ -1,51 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Train Schedule - Last War Alliance</title>
+{{define "head_tags"}}
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚂</text></svg>">
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>🚂 Last War: Survival</h1>
-            <h2>Train Schedule</h2>
-            <div class="user-info">
-                <div class="user-dropdown">
-                    <button id="username-display" class="username-btn"></button>
-                    <div id="user-dropdown-menu" class="dropdown-menu">
-                        <a href="/profile.html" class="dropdown-item">👤 Profile</a>
-                        <a href="/admin.html" class="dropdown-item admin-only" id="admin-dropdown-link" style="display: none;">🔐 Admin Panel</a>
-                        <div class="dropdown-divider"></div>
-                        <div class="theme-section">
-                            <div class="theme-section-label">Theme</div>
-                            <a href="#" class="dropdown-item theme-option" data-theme="auto">● Auto (System)</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="light">○ Light</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="dark">○ Dark</a>
-                        </div>
-                        <div class="dropdown-divider"></div>
-                        <a href="#" class="dropdown-item" id="dropdown-logout-btn">🚪 Logout</a>
-                    </div>
-                </div>
-            </div>
-        </header>
+{{end}}
 
-        <nav class="nav-menu">
-            <a href="/" class="nav-link">👥 Members</a>
-            <a href="/train.html" class="nav-link active">🚂 Train</a>
-            <a href="/awards.html" class="nav-link">🏆 Awards</a>
-            <a href="/recommendations.html" class="nav-link">⭐ Recs</a>
-            <a href="/dyno.html" class="nav-link">💬 Dyno</a>
-            <a href="/rankings.html" class="nav-link">📊 Rankings</a>
-            <a href="/storm.html" class="nav-link">🏜️ Storm</a>
-            <a href="/vs.html" class="nav-link">⚔️ VS Points</a>
-            <a href="/upload.html" class="nav-link">📸 Upload</a>
-            <a href="/settings.html" class="nav-link">⚙️ Settings</a>
-        </nav>
-
-        <main>
+{{define "content"}}
             <div id="read-only-notice" class="info-banner" style="display: none; background: #fff3cd; border-color: #ffc107;">
                 <div class="info-content">
                     <div class="info-icon">🔒</div>
@@ -115,9 +72,8 @@
                     <p class="loading">Loading history...</p>
                 </div>
             </section>
-        </main>
-    </div>
-
+{{end}}
+{{define "modals"}}
     <!-- Schedule Modal -->
     <div id="schedule-modal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -172,8 +128,8 @@
             </form>
         </div>
     </div>
+{{end}}
 
-    <script src="theme.js"></script>
+{{define "scripts"}}
     <script src="train.js"></script>
-</body>
-</html>
+{{end}}

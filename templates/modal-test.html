@@ -1,10 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modal Test - Last War Alliance Manager</title>
-    <link rel="stylesheet" href="styles.css">
+{{define "head_tags"}}
     <style>
         body {
             min-height: 100vh;
@@ -35,15 +29,8 @@
             margin-top: 0;
         }
     </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>🎮 Last War: Survival</h1>
-            <h2>Modal Functionality Test Page</h2>
-        </header>
-
-        <main>
+{{end}}
+{{define "content"}}
             <div class="test-container">
                 <div class="demo-note">
                     <h3>✨ Modal Demo</h3>
@@ -147,10 +134,9 @@
                     </div>
                 </div>
             </div>
-        </main>
-    </div>
+{{end}}
 
-    <script src="theme.js"></script>
+{{define "scripts"}}
     <script>
         // Modal Elements
         const memberModal = document.getElementById('member-modal');
@@ -234,5 +220,4 @@
             }
         });
     </script>
-</body>
-</html>
+{{end}}

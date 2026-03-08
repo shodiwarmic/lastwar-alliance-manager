@@ -1,3 +1,4 @@
+// static/storm.js
 const API_URL = '/api/storm-assignments';
 const MEMBERS_URL = '/api/members';
 
@@ -21,100 +22,6 @@ const BUILDINGS = [
 let allMembers = [];
 let currentTaskForce = 'A';
 let assignments = {};
-let currentUsername = '';
-
-// Check authentication
-async function checkAuth() {
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        
-        if (!data.authenticated) {
-            window.location.href = '/login.html';
-            return false;
-        }
-        
-        currentUsername = data.username;
-        let displayText = `👤 ${currentUsername}`;
-        if (data.rank) {
-            displayText += ` (${data.rank})`;
-        }
-        document.getElementById('username-display').textContent = displayText;
-        
-        // Check if user is R4, R5, or admin
-        if (data.rank !== 'R4' && data.rank !== 'R5' && !data.is_admin) {
-            alert('Only R4, R5, and admin members can manage Desert Storm assignments.');
-            window.location.href = 'index.html';
-            return false;
-        }
-        
-        return true;
-    } catch (error) {
-        console.error('Auth check error:', error);
-        window.location.href = '/login.html';
-        return false;
-    }
-}
-
-// Setup event listeners after auth check
-async function setupEventListeners() {
-    const usernameDisplay = document.getElementById('username-display');
-    const logoutBtn = document.getElementById('dropdown-logout-btn');
-    const adminLink = document.getElementById('admin-dropdown-link');
-    
-    if (usernameDisplay) {
-        usernameDisplay.addEventListener('click', toggleUserDropdown);
-    }
-    
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Check if user is admin to show admin link
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        if (data.is_admin && adminLink) {
-            adminLink.style.display = 'block';
-        }
-    } catch (error) {
-        console.error('Error checking admin status:', error);
-    }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (event) => {
-        const dropdown = document.getElementById('user-dropdown-menu');
-        const usernameBtn = document.getElementById('username-display');
-        if (dropdown && usernameBtn && !usernameBtn.contains(event.target) && !dropdown.contains(event.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}
-
-// Logout handler
-async function handleLogout(event) {
-    event.preventDefault();
-    if (!confirm('Are you sure you want to logout?')) {
-        return;
-    }
-    
-    try {
-        await fetch('/api/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-    } catch (error) {
-        console.error('Logout error:', error);
-        alert('Error logging out. Please try again.');
-    }
-}
 
 // Load members
 async function loadMembers() {
@@ -164,7 +71,7 @@ function getAssignedMembersInStage(stage, excludeBuildingId, excludeSlot) {
     const assignedIds = new Set();
     BUILDINGS.filter(b => b.stage === stage).forEach(building => {
         if (building.id !== excludeBuildingId && assignments[building.id]) {
-            assignments[building.id].forEach((memberId, slotIndex) => {
+            assignments[building.id].forEach((memberId) => {
                 if (memberId) {
                     assignedIds.add(memberId);
                 }
@@ -185,6 +92,8 @@ function getAssignedMembersInStage(stage, excludeBuildingId, excludeSlot) {
 // Render buildings
 function renderBuildings() {
     const grid = document.getElementById('buildings-grid');
+    if (!grid) return;
+
     let html = '';
     
     // Group buildings by stage
@@ -248,9 +157,6 @@ function initSearchableSelect(container) {
     const searchInput = container.querySelector('.search-input');
     const dropdownList = container.querySelector('.dropdown-list');
     const hiddenInput = container.querySelector('.selected-member-id');
-    const buildingId = container.dataset.building;
-    const slot = parseInt(container.dataset.slot);
-    const stage = parseInt(container.dataset.stage);
     
     // Get currently selected member
     const currentMemberId = parseInt(hiddenInput.value) || null;
@@ -344,7 +250,6 @@ function updateDropdownList(container, searchTerm) {
     });
 }
 
-// Save assignments
 // Generate mail
 function generateMail() {
     // Check if there are any assignments
@@ -361,7 +266,7 @@ function generateMail() {
     }
     
     // Get battle time
-    const battleTime = document.getElementById('battleTime').value;
+    const battleTime = document.getElementById('battleTime')?.value;
     
     let mail = `🏜️ DESERT STORM - TASK FORCE ${currentTaskForce}\n`;
     mail += `═══════════════════════════════════════\n\n`;
@@ -462,14 +367,22 @@ function generateMail() {
     mail += `═══════════════════════════════════════\n`;
     
     // Display mail
-    document.getElementById('mail-content').textContent = mail;
-    document.getElementById('mail-output').style.display = 'block';
-    document.getElementById('mail-output').scrollIntoView({ behavior: 'smooth' });
+    const mailContent = document.getElementById('mail-content');
+    const mailOutput = document.getElementById('mail-output');
+    
+    if (mailContent && mailOutput) {
+        mailContent.textContent = mail;
+        mailOutput.style.display = 'block';
+        mailOutput.scrollIntoView({ behavior: 'smooth' });
+    }
 }
 
 // Copy mail to clipboard
 async function copyMail() {
-    const mailText = document.getElementById('mail-content').textContent;
+    const mailContent = document.getElementById('mail-content');
+    if (!mailContent) return;
+    
+    const mailText = mailContent.textContent;
     
     try {
         await navigator.clipboard.writeText(mailText);
@@ -516,7 +429,8 @@ async function clearAssignments() {
         });
         
         renderBuildings();
-        document.getElementById('mail-output').style.display = 'none';
+        const mailOutput = document.getElementById('mail-output');
+        if (mailOutput) mailOutput.style.display = 'none';
         alert('✓ Assignments cleared!');
     } catch (error) {
         console.error('Error clearing assignments:', error);
@@ -531,26 +445,32 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Event listeners
-document.getElementById('generate-mail-btn').addEventListener('click', generateMail);
-document.getElementById('clear-assignments-btn').addEventListener('click', clearAssignments);
-document.getElementById('copy-mail-btn').addEventListener('click', copyMail);
-
-// Task force switcher
-document.querySelectorAll('input[name="taskForce"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        currentTaskForce = e.target.value;
-        loadAssignments();
-        document.getElementById('mail-output').style.display = 'none';
-    });
-});
-
 // Initialize
-(async () => {
-    const authenticated = await checkAuth();
-    if (authenticated) {
-        await setupEventListeners();
+document.addEventListener('DOMContentLoaded', async () => {
+    // Guard: Only initialize if we are on the Storm Assignments page
+    const buildingsGrid = document.getElementById('buildings-grid');
+    if (buildingsGrid) {
         await loadMembers();
         await loadAssignments();
+        
+        // Event listeners
+        const generateMailBtn = document.getElementById('generate-mail-btn');
+        if (generateMailBtn) generateMailBtn.addEventListener('click', generateMail);
+        
+        const clearAssignmentsBtn = document.getElementById('clear-assignments-btn');
+        if (clearAssignmentsBtn) clearAssignmentsBtn.addEventListener('click', clearAssignments);
+        
+        const copyMailBtn = document.getElementById('copy-mail-btn');
+        if (copyMailBtn) copyMailBtn.addEventListener('click', copyMail);
+
+        // Task force switcher
+        document.querySelectorAll('input[name="taskForce"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                currentTaskForce = e.target.value;
+                loadAssignments();
+                const mailOutput = document.getElementById('mail-output');
+                if (mailOutput) mailOutput.style.display = 'none';
+            });
+        });
     }
-})();
+});

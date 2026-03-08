@@ -1,10 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VS Points - Last War Alliance</title>
-    <link rel="stylesheet" href="styles.css">
+{{define "head_tags"}}
     <style>
         .vs-table {
             width: 100%;
@@ -177,46 +171,8 @@
             }
         }
     </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>⚔️ Last War: Survival</h1>
-            <h2>VS Points Tracking</h2>
-            <div class="user-info">
-                <div class="user-dropdown">
-                    <button id="username-display" class="username-btn"></button>
-                    <div id="user-dropdown-menu" class="dropdown-menu">
-                        <a href="/profile.html" class="dropdown-item">👤 Profile</a>
-                        <a href="/admin.html" class="dropdown-item admin-only" id="admin-dropdown-link" style="display: none;">🔐 Admin Panel</a>
-                        <div class="dropdown-divider"></div>
-                        <div class="theme-section">
-                            <div class="theme-section-label">Theme</div>
-                            <a href="#" class="dropdown-item theme-option" data-theme="auto">● Auto (System)</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="light">○ Light</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="dark">○ Dark</a>
-                        </div>
-                        <div class="dropdown-divider"></div>
-                        <a href="#" class="dropdown-item" id="dropdown-logout-btn">🚪 Logout</a>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <nav class="nav-menu">
-            <a href="/" class="nav-link">👥 Members</a>
-            <a href="/train.html" class="nav-link">🚂 Train</a>
-            <a href="/awards.html" class="nav-link">🏆 Awards</a>
-            <a href="/recommendations.html" class="nav-link">⭐ Recs</a>
-            <a href="/dyno.html" class="nav-link">💬 Dyno</a>
-            <a href="/rankings.html" class="nav-link">📊 Rankings</a>
-            <a href="/storm.html" class="nav-link">🏜️ Storm</a>
-            <a href="/vs.html" class="nav-link active">⚔️ VS Points</a>
-            <a href="/upload.html" class="nav-link">📸 Upload</a>
-            <a href="/settings.html" class="nav-link">⚙️ Settings</a>
-        </nav>
-
-        <main>
+{{end}}
+{{define "content"}}
             <section class="controls">
                 <div class="week-selector">
                     <button id="prev-week" class="week-nav-btn">← Previous Week</button>
@@ -257,10 +213,7 @@
                     </tbody>
                 </table>
             </section>
-        </main>
-    </div>
-
-    <script src="theme.js"></script>
+{{end}}
+{{define "scripts"}}
     <script src="vs.js"></script>
-</body>
-</html>
+{{end}}

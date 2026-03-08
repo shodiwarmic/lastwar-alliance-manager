@@ -1,96 +1,10 @@
+// static/vs.js
 const API_URL = '/api/vs-points';
 const MEMBERS_URL = '/api/members';
 
 let currentWeekDate = null;
 let allMembers = [];
 let currentVSPoints = {};
-let currentUsername = '';
-
-// Check authentication
-async function checkAuth() {
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        
-        if (!data.authenticated) {
-            window.location.href = '/login.html';
-            return false;
-        }
-        
-        currentUsername = data.username;
-        let displayText = `👤 ${currentUsername}`;
-        if (data.rank) {
-            displayText += ` (${data.rank})`;
-        }
-        document.getElementById('username-display').textContent = displayText;
-        
-        return true;
-    } catch (error) {
-        console.error('Auth check error:', error);
-        window.location.href = '/login.html';
-        return false;
-    }
-}
-
-// Setup event listeners after auth check
-async function setupEventListeners() {
-    const usernameDisplay = document.getElementById('username-display');
-    const logoutBtn = document.getElementById('dropdown-logout-btn');
-    const adminLink = document.getElementById('admin-dropdown-link');
-    
-    if (usernameDisplay) {
-        usernameDisplay.addEventListener('click', toggleUserDropdown);
-    }
-    
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Check if user is admin to show admin link
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        if (data.is_admin && adminLink) {
-            adminLink.style.display = 'block';
-        }
-    } catch (error) {
-        console.error('Error checking admin status:', error);
-    }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (event) => {
-        const dropdown = document.getElementById('user-dropdown-menu');
-        const usernameBtn = document.getElementById('username-display');
-        if (dropdown && usernameBtn && !usernameBtn.contains(event.target) && !dropdown.contains(event.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}
-
-// Logout handler
-async function handleLogout(event) {
-    event.preventDefault();
-    if (!confirm('Are you sure you want to logout?')) {
-        return;
-    }
-    
-    try {
-        await fetch('/api/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-    } catch (error) {
-        console.error('Logout error:', error);
-        alert('Error logging out. Please try again.');
-    }
-}
 
 // Get most recent Monday
 function getMostRecentMonday(date = new Date()) {
@@ -127,7 +41,10 @@ function initializeWeek() {
 
 // Update week display
 function updateWeekDisplay() {
-    document.getElementById('week-display').textContent = formatDisplayDate(formatDate(currentWeekDate));
+    const weekDisplay = document.getElementById('week-display');
+    if (weekDisplay) {
+        weekDisplay.textContent = formatDisplayDate(formatDate(currentWeekDate));
+    }
 }
 
 // Navigate weeks functions
@@ -191,7 +108,10 @@ function calculateTotal(memberId) {
 // Render table
 function renderTable() {
     const tbody = document.getElementById('vs-tbody');
-    const searchTerm = document.getElementById('search-box').value.toLowerCase().trim();
+    if (!tbody) return;
+    
+    const searchBox = document.getElementById('search-box');
+    const searchTerm = searchBox ? searchBox.value.toLowerCase().trim() : '';
     
     let html = '';
     
@@ -205,12 +125,7 @@ function renderTable() {
     } else {
         filteredMembers.forEach(member => {
             const points = currentVSPoints[member.id] || {
-                monday: 0,
-                tuesday: 0,
-                wednesday: 0,
-                thursday: 0,
-                friday: 0,
-                saturday: 0
+                monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0
             };
             
             const total = calculateTotal(member.id);
@@ -239,8 +154,8 @@ function renderTable() {
     document.querySelectorAll('.vs-input').forEach(input => {
         input.addEventListener('input', (e) => {
             const memberId = parseInt(e.target.dataset.member);
-            updateTotal(memberId);
             updateCurrentVSPoints(memberId, e.target.dataset.day, parseInt(e.target.value) || 0);
+            updateTotal(memberId);
         });
     });
 }
@@ -250,12 +165,7 @@ function updateCurrentVSPoints(memberId, day, value) {
     if (!currentVSPoints[memberId]) {
         currentVSPoints[memberId] = {
             member_id: memberId,
-            monday: 0,
-            tuesday: 0,
-            wednesday: 0,
-            thursday: 0,
-            friday: 0,
-            saturday: 0
+            monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0
         };
     }
     currentVSPoints[memberId][day] = value;
@@ -348,18 +258,27 @@ function escapeHtml(text) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    const isAuthenticated = await checkAuth();
-    if (isAuthenticated) {
-        await setupEventListeners();
+    // Guard: Only initialize if we are on the VS Points page
+    const vsTbody = document.getElementById('vs-tbody');
+    if (vsTbody) {
         await loadMembers();
         initializeWeek();
         await loadVSPoints();
         
         // Set up event listeners
-        document.getElementById('prev-week').addEventListener('click', navigatePrevWeek);
-        document.getElementById('next-week').addEventListener('click', navigateNextWeek);
-        document.getElementById('save-btn').addEventListener('click', saveVSPoints);
-        document.getElementById('clear-btn').addEventListener('click', clearVSPoints);
-        document.getElementById('search-box').addEventListener('input', renderTable);
+        const prevWeekBtn = document.getElementById('prev-week');
+        if (prevWeekBtn) prevWeekBtn.addEventListener('click', navigatePrevWeek);
+        
+        const nextWeekBtn = document.getElementById('next-week');
+        if (nextWeekBtn) nextWeekBtn.addEventListener('click', navigateNextWeek);
+        
+        const saveBtn = document.getElementById('save-btn');
+        if (saveBtn) saveBtn.addEventListener('click', saveVSPoints);
+        
+        const clearBtn = document.getElementById('clear-btn');
+        if (clearBtn) clearBtn.addEventListener('click', clearVSPoints);
+        
+        const searchBox = document.getElementById('search-box');
+        if (searchBox) searchBox.addEventListener('input', renderTable);
     }
 });

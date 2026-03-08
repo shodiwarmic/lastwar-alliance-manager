@@ -1,3 +1,4 @@
+// static/recommendations.js
 const API_URL = '/api/recommendations';
 const MEMBERS_URL = '/api/members';
 
@@ -8,90 +9,17 @@ let currentUserId = 0;
 let currentView = 'list'; // 'list' or 'grouped'
 let currentFilter = 'all'; // 'all', 'active', 'assigned', 'mine'
 
-// Check authentication
-async function checkAuth() {
+// Fetch permissions to get the username for Delete button rendering
+async function fetchPermissions() {
     try {
         const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        
-        if (!data.authenticated) {
-            window.location.href = '/login.html';
-            return false;
+        if (response.ok) {
+            const data = await response.json();
+            currentUsername = data.username;
+            currentUserId = data.user_id || 0;
         }
-        
-        currentUsername = data.username;
-        currentUserId = data.user_id || 0;
-        let displayText = `👤 ${currentUsername}`;
-        if (data.rank) {
-            displayText += ` (${data.rank})`;
-        }
-        document.getElementById('username-display').textContent = displayText;
-        
-        return true;
     } catch (error) {
         console.error('Auth check error:', error);
-        window.location.href = '/login.html';
-        return false;
-    }
-}
-
-// Setup event listeners after auth check
-async function setupEventListeners() {
-    const usernameDisplay = document.getElementById('username-display');
-    const logoutBtn = document.getElementById('dropdown-logout-btn');
-    const adminLink = document.getElementById('admin-dropdown-link');
-    
-    if (usernameDisplay) {
-        usernameDisplay.addEventListener('click', toggleUserDropdown);
-    }
-    
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Check if user is admin to show admin link
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        if (data.is_admin && adminLink) {
-            adminLink.style.display = 'block';
-        }
-    } catch (error) {
-        console.error('Error checking admin status:', error);
-    }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (event) => {
-        const dropdown = document.getElementById('user-dropdown-menu');
-        const usernameBtn = document.getElementById('username-display');
-        if (dropdown && usernameBtn && !usernameBtn.contains(event.target) && !dropdown.contains(event.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}
-
-// Logout handler
-async function handleLogout(event) {
-    event.preventDefault();
-    if (!confirm('Are you sure you want to logout?')) {
-        return;
-    }
-    
-    try {
-        await fetch('/api/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-    } catch (error) {
-        console.error('Logout error:', error);
-        alert('Error logging out. Please try again.');
     }
 }
 
@@ -111,6 +39,8 @@ async function loadMembers() {
 // Populate member select dropdown
 function populateMemberSelect() {
     const select = document.getElementById('member-select');
+    if (!select) return;
+    
     select.innerHTML = '<option value="">Select a member...</option>';
     
     allMembers.forEach(member => {
@@ -125,6 +55,8 @@ function populateMemberSelect() {
 function setupMemberSearch() {
     const searchInput = document.getElementById('member-search');
     const selectElement = document.getElementById('member-select');
+    
+    if (!searchInput || !selectElement) return;
     
     searchInput.addEventListener('input', () => {
         const searchTerm = searchInput.value.toLowerCase().trim();
@@ -162,7 +94,8 @@ async function loadRecommendations() {
         renderRecommendations();
     } catch (error) {
         console.error('Error loading recommendations:', error);
-        alert('Failed to load recommendations.');
+        const list = document.getElementById('recommendations-list');
+        if (list) list.innerHTML = '<p class="no-data">Failed to load recommendations.</p>';
     }
 }
 
@@ -183,16 +116,26 @@ function updateStatistics() {
     const topMember = Object.entries(memberCounts).sort((a, b) => b[1] - a[1])[0];
     const topMemberText = topMember ? `${topMember[0]} (${topMember[1]})` : '-';
     
-    document.getElementById('total-recommendations').textContent = active.length;
-    document.getElementById('members-recommended').textContent = uniqueMembers.size;
-    document.getElementById('top-recommended').textContent = topMemberText;
-    document.getElementById('assigned-count').textContent = assigned.length;
+    const totalEl = document.getElementById('total-recommendations');
+    if (totalEl) totalEl.textContent = active.length;
+    
+    const membersRecEl = document.getElementById('members-recommended');
+    if (membersRecEl) membersRecEl.textContent = uniqueMembers.size;
+    
+    const topRecEl = document.getElementById('top-recommended');
+    if (topRecEl) topRecEl.textContent = topMemberText;
+    
+    const assignedCountEl = document.getElementById('assigned-count');
+    if (assignedCountEl) assignedCountEl.textContent = assigned.length;
 }
 
 // Render recommendations
 function renderRecommendations() {
     const container = document.getElementById('recommendations-list');
-    const filterSearch = document.getElementById('filter-search').value.toLowerCase();
+    if (!container) return;
+    
+    const searchInput = document.getElementById('filter-search');
+    const filterSearch = searchInput ? searchInput.value.toLowerCase() : '';
     
     // Apply filter
     let filtered = allRecommendations.filter(rec => {
@@ -362,8 +305,8 @@ async function submitRecommendation() {
     }
 }
 
-// Delete recommendation
-async function deleteRecommendation(id) {
+// Make globally accessible since it's called via inline onclick attribute
+window.deleteRecommendation = async function(id) {
     if (!confirm('Delete this recommendation?')) {
         return;
     }
@@ -384,7 +327,7 @@ async function deleteRecommendation(id) {
         console.error('Error deleting recommendation:', error);
         alert('Failed to delete recommendation: ' + error.message);
     }
-}
+};
 
 // Escape HTML
 function escapeHtml(text) {
@@ -396,16 +339,21 @@ function escapeHtml(text) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    const isAuthenticated = await checkAuth();
-    if (isAuthenticated) {
-        await setupEventListeners();
+    // Guard: Only initialize if we are on the Recommendations page
+    const recommendationsList = document.getElementById('recommendations-list');
+    
+    if (recommendationsList) {
+        await fetchPermissions();
         await loadMembers();
         await loadRecommendations();
         setupMemberSearch();
         
         // Set up event listeners
-        document.getElementById('submit-recommendation-btn').addEventListener('click', submitRecommendation);
-        document.getElementById('filter-search').addEventListener('input', renderRecommendations);
+        const submitBtn = document.getElementById('submit-recommendation-btn');
+        if (submitBtn) submitBtn.addEventListener('click', submitRecommendation);
+        
+        const filterSearch = document.getElementById('filter-search');
+        if (filterSearch) filterSearch.addEventListener('input', renderRecommendations);
         
         // View toggle buttons
         document.querySelectorAll('.toggle-btn').forEach(btn => {

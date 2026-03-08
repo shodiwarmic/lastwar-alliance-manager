@@ -1,3 +1,4 @@
+// static/rankings.js
 const API_BASE = '/api';
 const RANKINGS_URL = `${API_BASE}/rankings`;
 
@@ -9,79 +10,6 @@ let charts = {
     conductor: null,
     pointsBreakdown: null
 };
-
-// Check authentication
-async function checkAuth() {
-    try {
-        const response = await fetch(`${API_BASE}/check-auth`);
-        if (!response.ok) {
-            window.location.href = '/login.html';
-            return false;
-        }
-        const data = await response.json();
-        document.getElementById('username-display').textContent = `👤 ${data.username}`;
-        return data;
-    } catch (error) {
-        console.error('Auth check failed:', error);
-        window.location.href = '/login.html';
-        return false;
-    }
-}
-
-// Setup event listeners after auth check
-async function setupEventListeners() {
-    const usernameDisplay = document.getElementById('username-display');
-    const logoutBtn = document.getElementById('dropdown-logout-btn');
-    const adminLink = document.getElementById('admin-dropdown-link');
-    
-    if (usernameDisplay) {
-        usernameDisplay.addEventListener('click', toggleUserDropdown);
-    }
-    
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Check if user is admin to show admin link
-    try {
-        const response = await fetch(`${API_BASE}/check-auth`);
-        const data = await response.json();
-        if (data.is_admin && adminLink) {
-            adminLink.style.display = 'block';
-        }
-    } catch (error) {
-        console.error('Error checking admin status:', error);
-    }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (event) => {
-        const dropdown = document.getElementById('user-dropdown-menu');
-        const usernameBtn = document.getElementById('username-display');
-        if (dropdown && usernameBtn && !usernameBtn.contains(event.target) && !dropdown.contains(event.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}
-
-// Logout handler
-async function handleLogout(event) {
-    event.preventDefault();
-    try {
-        await fetch(`${API_BASE}/logout`, { method: 'POST' });
-        window.location.href = '/login.html';
-    } catch (error) {
-        console.error('Logout failed:', error);
-    }
-}
 
 // Format date to dd/mm/yyyy
 function formatDate(dateStr) {
@@ -103,17 +31,24 @@ async function loadRankings() {
         displayCharts(currentData);
         displayRankings(filteredRankings);
         
-        document.getElementById('avg-count').textContent = 
-            currentData.average_conductor_count.toFixed(2);
+        const avgCountEl = document.getElementById('avg-count');
+        if (avgCountEl) {
+            avgCountEl.textContent = currentData.average_conductor_count.toFixed(2);
+        }
     } catch (error) {
         console.error('Error loading rankings:', error);
-        document.getElementById('rankings-list').innerHTML = 
-            '<p class="error">Failed to load rankings. Please try again.</p>';
+        const rankingsList = document.getElementById('rankings-list');
+        if (rankingsList) {
+            rankingsList.innerHTML = '<p class="error">Failed to load rankings. Please try again.</p>';
+        }
     }
 }
 
 // Display system info
 function displaySystemInfo(settings, avgCount) {
+    const systemInfoEl = document.getElementById('system-info');
+    if (!systemInfoEl) return;
+    
     const html = `
         <div class="system-info-grid">
             <div class="system-info-item">
@@ -156,7 +91,7 @@ function displaySystemInfo(settings, avgCount) {
             <br><strong>R4/R5 Boost:</strong> Base × 2^(days/7) - doubles every week (Day 0: 1×, Day 7: 2×, Day 14: 4×, Day 21: 8×)
         </p>
     `;
-    document.getElementById('system-info').innerHTML = html;
+    systemInfoEl.innerHTML = html;
 }
 
 // Display charts
@@ -173,134 +108,140 @@ function displayCharts(data) {
     const scoreData = rankings.map(r => r.total_score);
     
     const scoreCanvas = document.getElementById('scoreChart');
-    const existingScoreChart = Chart.getChart(scoreCanvas);
-    if (existingScoreChart) existingScoreChart.destroy();
-    
-    const scoreCtx = scoreCanvas.getContext('2d');
-    charts.score = new Chart(scoreCtx, {
-        type: 'bar',
-        data: {
-            labels: scoreLabels.slice(0, 15),
-            datasets: [{
-                label: 'Total Score',
-                data: scoreData.slice(0, 15),
-                backgroundColor: 'rgba(102, 126, 234, 0.8)',
-                borderColor: 'rgba(102, 126, 234, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: { display: false },
-                title: { display: false }
+    if (scoreCanvas) {
+        const existingScoreChart = Chart.getChart(scoreCanvas);
+        if (existingScoreChart) existingScoreChart.destroy();
+        
+        const scoreCtx = scoreCanvas.getContext('2d');
+        charts.score = new Chart(scoreCtx, {
+            type: 'bar',
+            data: {
+                labels: scoreLabels.slice(0, 15),
+                datasets: [{
+                    label: 'Total Score',
+                    data: scoreData.slice(0, 15),
+                    backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                    borderColor: 'rgba(102, 126, 234, 1)',
+                    borderWidth: 1
+                }]
             },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: { display: true, text: 'Points' }
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false },
+                    title: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Points' }
+                    }
                 }
             }
-        }
-    });
+        });
+    }
     
     // 2. Conductor Frequency Chart
     const conductorCounts = rankings.map(r => ({ name: r.member.name, count: r.conductor_count }));
     conductorCounts.sort((a, b) => b.count - a.count);
     
     const conductorCanvas = document.getElementById('conductorChart');
-    const existingConductorChart = Chart.getChart(conductorCanvas);
-    if (existingConductorChart) existingConductorChart.destroy();
-    
-    const conductorCtx = conductorCanvas.getContext('2d');
-    charts.conductor = new Chart(conductorCtx, {
-        type: 'bar',
-        data: {
-            labels: conductorCounts.slice(0, 15).map(c => c.name),
-            datasets: [{
-                label: 'Conductor Count',
-                data: conductorCounts.slice(0, 15).map(c => c.count),
-                backgroundColor: 'rgba(255, 159, 64, 0.8)',
-                borderColor: 'rgba(255, 159, 64, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: { display: false }
+    if (conductorCanvas) {
+        const existingConductorChart = Chart.getChart(conductorCanvas);
+        if (existingConductorChart) existingConductorChart.destroy();
+        
+        const conductorCtx = conductorCanvas.getContext('2d');
+        charts.conductor = new Chart(conductorCtx, {
+            type: 'bar',
+            data: {
+                labels: conductorCounts.slice(0, 15).map(c => c.name),
+                datasets: [{
+                    label: 'Conductor Count',
+                    data: conductorCounts.slice(0, 15).map(c => c.count),
+                    backgroundColor: 'rgba(255, 159, 64, 0.8)',
+                    borderColor: 'rgba(255, 159, 64, 1)',
+                    borderWidth: 1
+                }]
             },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { stepSize: 1 },
-                    title: { display: true, text: 'Times as Conductor' }
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 },
+                        title: { display: true, text: 'Times as Conductor' }
+                    }
                 }
             }
-        }
-    });
+        });
+    }
     
     // 3. Points Breakdown Chart (Top 10)
     const top10 = rankings.slice(0, 10);
     const pointsBreakdownCanvas = document.getElementById('pointsBreakdownChart');
-    const existingPointsChart = Chart.getChart(pointsBreakdownCanvas);
-    if (existingPointsChart) existingPointsChart.destroy();
-    
-    const pointsBreakdownCtx = pointsBreakdownCanvas.getContext('2d');
-    charts.pointsBreakdown = new Chart(pointsBreakdownCtx, {
-        type: 'bar',
-        data: {
-            labels: top10.map(r => r.member.name),
-            datasets: [
-                {
-                    label: 'Awards',
-                    data: top10.map(r => r.award_points),
-                    backgroundColor: 'rgba(255, 205, 86, 0.8)'
-                },
-                {
-                    label: 'Recommendations',
-                    data: top10.map(r => r.recommendation_points),
-                    backgroundColor: 'rgba(75, 192, 192, 0.8)'
-                },
-                {
-                    label: 'Rank Boost',
-                    data: top10.map(r => r.rank_boost),
-                    backgroundColor: 'rgba(153, 102, 255, 0.8)'
-                },
-                {
-                    label: 'First Timer',
-                    data: top10.map(r => r.first_time_conductor_boost),
-                    backgroundColor: 'rgba(54, 162, 235, 0.8)'
-                },
-                {
-                    label: 'Recent Penalty',
-                    data: top10.map(r => -r.recent_conductor_penalty),
-                    backgroundColor: 'rgba(255, 99, 132, 0.8)'
-                },
-                {
-                    label: 'Above Avg Penalty',
-                    data: top10.map(r => -r.above_average_penalty),
-                    backgroundColor: 'rgba(255, 159, 64, 0.8)'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: { display: true, position: 'bottom' }
+    if (pointsBreakdownCanvas) {
+        const existingPointsChart = Chart.getChart(pointsBreakdownCanvas);
+        if (existingPointsChart) existingPointsChart.destroy();
+        
+        const pointsBreakdownCtx = pointsBreakdownCanvas.getContext('2d');
+        charts.pointsBreakdown = new Chart(pointsBreakdownCtx, {
+            type: 'bar',
+            data: {
+                labels: top10.map(r => r.member.name),
+                datasets: [
+                    {
+                        label: 'Awards',
+                        data: top10.map(r => r.award_points),
+                        backgroundColor: 'rgba(255, 205, 86, 0.8)'
+                    },
+                    {
+                        label: 'Recommendations',
+                        data: top10.map(r => r.recommendation_points),
+                        backgroundColor: 'rgba(75, 192, 192, 0.8)'
+                    },
+                    {
+                        label: 'Rank Boost',
+                        data: top10.map(r => r.rank_boost),
+                        backgroundColor: 'rgba(153, 102, 255, 0.8)'
+                    },
+                    {
+                        label: 'First Timer',
+                        data: top10.map(r => r.first_time_conductor_boost),
+                        backgroundColor: 'rgba(54, 162, 235, 0.8)'
+                    },
+                    {
+                        label: 'Recent Penalty',
+                        data: top10.map(r => -r.recent_conductor_penalty),
+                        backgroundColor: 'rgba(255, 99, 132, 0.8)'
+                    },
+                    {
+                        label: 'Above Avg Penalty',
+                        data: top10.map(r => -r.above_average_penalty),
+                        backgroundColor: 'rgba(255, 159, 64, 0.8)'
+                    }
+                ]
             },
-            scales: {
-                x: { stacked: true },
-                y: { 
-                    stacked: true,
-                    title: { display: true, text: 'Points' }
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: true, position: 'bottom' }
+                },
+                scales: {
+                    x: { stacked: true },
+                    y: { 
+                        stacked: true,
+                        title: { display: true, text: 'Points' }
+                    }
                 }
             }
-        }
-    });
+        });
+    }
     
     // Create member timeline charts
     createMemberTimelineCharts(rankings);
@@ -513,7 +454,7 @@ async function createMemberTimelineCharts(rankings) {
                 });
             }
             
-            if (datasets.length === 0) return;
+            if (datasets.length === 0) continue;
             
             // Create annotations for conductor assignments (vertical lines)
             const annotations = {};
@@ -644,17 +585,22 @@ function filterRankings() {
 
 // Clear filters
 function clearFilters() {
-    document.getElementById('filter-name').value = '';
-    document.getElementById('filter-rank').value = '';
+    const filterName = document.getElementById('filter-name');
+    const filterRank = document.getElementById('filter-rank');
+    if (filterName) filterName.value = '';
+    if (filterRank) filterRank.value = '';
+    
     filteredRankings = currentData.rankings;
     displayRankings(filteredRankings);
 }
 
 // Display rankings
 function displayRankings(rankings) {
+    const rankingsList = document.getElementById('rankings-list');
+    if (!rankingsList) return;
+
     if (rankings.length === 0) {
-        document.getElementById('rankings-list').innerHTML = 
-            '<p class="empty">No members match the current filters.</p>';
+        rankingsList.innerHTML = '<p class="empty">No members match the current filters.</p>';
         return;
     }
 
@@ -791,7 +737,7 @@ function displayRankings(rankings) {
         `;
     });
     
-    document.getElementById('rankings-list').innerHTML = html;
+    rankingsList.innerHTML = html;
     
     // Add event listeners for timeline options (per member)
     document.querySelectorAll('.timeline-option').forEach(element => {
@@ -846,8 +792,6 @@ function toggleInactiveAwards(memberId, showInactive) {
         `).join('');
     }
 }
-
-// Event listeners for chart options (removed global listeners, now per-member)
 
 // Get rank emoji
 function getRankEmoji(rank) {
@@ -905,19 +849,25 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Refresh rankings
-document.getElementById('refresh-btn').addEventListener('click', loadRankings);
-
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    const auth = await checkAuth();
-    if (auth) {
-        await setupEventListeners();
+    const rankingsList = document.getElementById('rankings-list');
+    
+    // Guard: Only initialize if we are on the Rankings page
+    if (rankingsList) {
         await loadRankings();
         
-        // Add filter event listeners
-        document.getElementById('filter-name').addEventListener('input', filterRankings);
-        document.getElementById('filter-rank').addEventListener('change', filterRankings);
-        document.getElementById('clear-filters-btn').addEventListener('click', clearFilters);
+        // Add event listeners for this specific page
+        const refreshBtn = document.getElementById('refresh-btn');
+        if (refreshBtn) refreshBtn.addEventListener('click', loadRankings);
+        
+        const filterName = document.getElementById('filter-name');
+        if (filterName) filterName.addEventListener('input', filterRankings);
+        
+        const filterRank = document.getElementById('filter-rank');
+        if (filterRank) filterRank.addEventListener('change', filterRankings);
+        
+        const clearFiltersBtn = document.getElementById('clear-filters-btn');
+        if (clearFiltersBtn) clearFiltersBtn.addEventListener('click', clearFilters);
     }
 });

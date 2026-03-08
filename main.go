@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"image"
 	"image/color"
 	"image/draw"
@@ -1656,9 +1657,9 @@ func checkAuth(w http.ResponseWriter, r *http.Request) {
 func getAdminUsers(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT u.id, u.username, u.member_id, u.is_admin, 
-			   m.name as member_name,
-			   (SELECT login_time FROM login_sessions WHERE user_id = u.id AND success = 1 ORDER BY login_time DESC LIMIT 1) as last_login,
-			   (SELECT COUNT(*) FROM login_sessions WHERE user_id = u.id AND success = 1) as login_count
+		   m.name as member_name,
+		   (SELECT login_time FROM login_sessions WHERE user_id = u.id AND success = 1 ORDER BY login_time DESC LIMIT 1) as last_login,
+		   (SELECT COUNT(*) FROM login_sessions WHERE user_id = u.id AND success = 1) as login_count
 		FROM users u
 		LEFT JOIN members m ON u.member_id = m.id
 		ORDER BY u.is_admin DESC, u.username ASC
@@ -2691,8 +2692,78 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-// Confirm CSV import (reuses the same confirmMemberUpdates function)
-// The route will be /api/members/import/confirm
+// Confirm CSV import
+func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
+	var request ConfirmRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	result := ConfirmResult{}
+
+	// Process renames first
+	for _, rename := range request.Renames {
+		_, err := db.Exec("UPDATE members SET name = ? WHERE name = ?", rename.NewName, rename.OldName)
+		if err != nil {
+			log.Printf("Error renaming member %s to %s: %v", rename.OldName, rename.NewName, err)
+			continue
+		}
+		log.Printf("Renamed member %s to %s", rename.OldName, rename.NewName)
+	}
+
+	// Create a set of member names from the request
+	memberNames := make(map[string]bool)
+	for _, member := range request.Members {
+		memberNames[member.Name] = true
+	}
+
+	for _, member := range request.Members {
+		// Check if member exists
+		var existingID int
+		var existingRank string
+		err := db.QueryRow("SELECT id, rank FROM members WHERE name = ?", member.Name).Scan(&existingID, &existingRank)
+
+		if err == sql.ErrNoRows {
+			// Add new member
+			_, err = db.Exec("INSERT INTO members (name, rank) VALUES (?, ?)", member.Name, member.Rank)
+			if err != nil {
+				log.Printf("Error adding member %s: %v", member.Name, err)
+				continue
+			}
+			result.Added++
+		} else if err == nil {
+			// Update existing member if rank changed
+			if existingRank != member.Rank {
+				_, err = db.Exec("UPDATE members SET rank = ? WHERE id = ?", member.Rank, existingID)
+				if err != nil {
+					log.Printf("Error updating member %s: %v", member.Name, err)
+					continue
+				}
+				result.Updated++
+			} else {
+				result.Unchanged++
+			}
+		}
+	}
+
+	// Remove specific members by ID if requested
+	if len(request.RemoveMemberIDs) > 0 {
+		for _, id := range request.RemoveMemberIDs {
+			_, err := db.Exec("DELETE FROM members WHERE id = ?", id)
+			if err != nil {
+				log.Printf("Error removing member with id %d: %v", id, err)
+				continue
+			}
+			result.Removed++
+		}
+		log.Printf("Removed %d selected members", result.Removed)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
 
 // Get awards for a specific week or all weeks
 func getAwards(w http.ResponseWriter, r *http.Request) {
@@ -4350,7 +4421,7 @@ func generateConductorMessages(w http.ResponseWriter, r *http.Request) {
 // R4/R5/Admin middleware - checks if user has R4, R5 rank or is admin
 func r4r5Middleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		session, _ := store.Get(r, "session-name")
+		session, _ := store.Get(r, "session")
 		memberID, ok := session.Values["member_id"].(int)
 		if !ok {
 			http.Error(w, "Not authenticated", http.StatusUnauthorized)
@@ -4493,79 +4564,6 @@ func deleteStormAssignments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// Confirm and update members in database
-func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
-	var request ConfirmRequest
-
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	result := ConfirmResult{}
-
-	// Process renames first
-	for _, rename := range request.Renames {
-		_, err := db.Exec("UPDATE members SET name = ? WHERE name = ?", rename.NewName, rename.OldName)
-		if err != nil {
-			log.Printf("Error renaming member %s to %s: %v", rename.OldName, rename.NewName, err)
-			continue
-		}
-		log.Printf("Renamed member %s to %s", rename.OldName, rename.NewName)
-	}
-
-	// Create a set of member names from the request
-	memberNames := make(map[string]bool)
-	for _, member := range request.Members {
-		memberNames[member.Name] = true
-	}
-
-	for _, member := range request.Members {
-		// Check if member exists
-		var existingID int
-		var existingRank string
-		err := db.QueryRow("SELECT id, rank FROM members WHERE name = ?", member.Name).Scan(&existingID, &existingRank)
-
-		if err == sql.ErrNoRows {
-			// Add new member
-			_, err = db.Exec("INSERT INTO members (name, rank) VALUES (?, ?)", member.Name, member.Rank)
-			if err != nil {
-				log.Printf("Error adding member %s: %v", member.Name, err)
-				continue
-			}
-			result.Added++
-		} else if err == nil {
-			// Update existing member if rank changed
-			if existingRank != member.Rank {
-				_, err = db.Exec("UPDATE members SET rank = ? WHERE id = ?", member.Rank, existingID)
-				if err != nil {
-					log.Printf("Error updating member %s: %v", member.Name, err)
-					continue
-				}
-				result.Updated++
-			} else {
-				result.Unchanged++
-			}
-		}
-	}
-
-	// Remove specific members by ID if requested
-	if len(request.RemoveMemberIDs) > 0 {
-		for _, id := range request.RemoveMemberIDs {
-			_, err := db.Exec("DELETE FROM members WHERE id = ?", id)
-			if err != nil {
-				log.Printf("Error removing member with id %d: %v", id, err)
-				continue
-			}
-			result.Removed++
-		}
-		log.Printf("Removed %d selected members", result.Removed)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
 }
 
 // Get power history for a specific member or all members
@@ -5212,6 +5210,7 @@ func detectDayByColor(img image.Image) string {
 
 		// Count white/light pixels in this region
 		// Selected tab has white/cream background (high RGB values)
+		// Unselected tabs are gray/dark (RGB < 180)
 		lightCount := 0
 		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 			for x := sampleStartX; x < sampleEndX; x++ {
@@ -5220,8 +5219,6 @@ func detectDayByColor(img image.Image) string {
 				r8, g8, b8 := uint8(r>>8), uint8(g>>8), uint8(b>>8)
 
 				// White/cream/light background detection
-				// Selected tab has light background (RGB > 200)
-				// Unselected tabs are gray/dark (RGB < 180)
 				if r8 > 200 && g8 > 200 && b8 > 200 {
 					lightCount++
 				}
@@ -6182,6 +6179,75 @@ func processPowerScreenshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// --- NEW TEMPLATE LOGIC ---
+
+// PageData holds all the information we want to pass into our HTML templates
+type PageData struct {
+	Title           string
+	ActivePage      string
+	IsAuthenticated bool
+	Username        string
+	IsAdmin         bool
+	Rank            string
+	CanManageRanks  bool
+	IsR5OrAdmin     bool
+}
+
+// getPageData extracts the current user's session data and permissions
+func getPageData(r *http.Request, title, activePage string) PageData {
+	data := PageData{
+		Title:      title,
+		ActivePage: activePage,
+	}
+
+	session, _ := store.Get(r, "session")
+	if auth, ok := session.Values["authenticated"].(bool); ok && auth {
+		data.IsAuthenticated = true
+		data.Username = session.Values["username"].(string)
+
+		// Set admin permissions FIRST (so default admin gets access)
+		if adminVal, ok := session.Values["is_admin"].(bool); ok {
+			data.IsAdmin = adminVal
+			data.IsR5OrAdmin = adminVal
+			data.CanManageRanks = adminVal
+		}
+
+		// Then layer on member-specific permissions if they are linked to a player
+		if memberID, ok := session.Values["member_id"].(int); ok {
+			var rank string
+			// We check their rank from the database to ensure it's up to date
+			err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
+			if err == nil {
+				data.Rank = rank
+
+				// If they are NOT an admin, we grant access based on their game rank
+				if !data.IsAdmin {
+					data.CanManageRanks = (rank == "R4" || rank == "R5")
+					data.IsR5OrAdmin = (rank == "R5")
+				}
+			}
+		}
+	}
+	return data
+}
+
+// renderTemplate parses the shared layout and the specific page together
+func renderTemplate(w http.ResponseWriter, r *http.Request, tmplName string, data PageData) {
+	// We parse layout.html FIRST, then the specific page content
+	t, err := template.ParseFiles("templates/layout.html", "templates/"+tmplName)
+	if err != nil {
+		log.Printf("Template parsing error: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	err = t.ExecuteTemplate(w, "layout.html", data)
+	if err != nil {
+		log.Printf("Template execution error: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 func main() {
 	// Initialize session store first
 	initSessionStore()
@@ -6272,7 +6338,93 @@ func main() {
 	router.HandleFunc("/api/power-history", authMiddleware(addPowerRecord)).Methods("POST")
 	router.HandleFunc("/api/power-history/process-screenshot", authMiddleware(processPowerScreenshot)).Methods("POST")
 
-	// Serve static files
+	// Home Page
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		data := getPageData(r, "Members - Alliance Manager", "index")
+
+		// Redirect to login if not authenticated
+		if !data.IsAuthenticated {
+			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+			return
+		}
+
+		renderTemplate(w, r, "index.html", data)
+	}).Methods("GET")
+
+	// Custom Login Route (No Layout)
+	router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		// 1. Check if they are already logged in
+		session, _ := store.Get(r, "session")
+		if auth, ok := session.Values["authenticated"].(bool); ok && auth {
+			// If logged in, instantly redirect to the home page
+			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			return
+		}
+
+		// 2. Parse ONLY the login.html file (no layout.html)
+		t, err := template.ParseFiles("templates/login.html")
+		if err != nil {
+			log.Printf("Template parsing error: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		// 3. Serve the standalone page
+		err = t.Execute(w, nil)
+		if err != nil {
+			log.Printf("Template execution error: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}).Methods("GET")
+
+	// Map out the rest of your pages
+	pages := map[string]string{
+		"/train":           "train",
+		"/awards":          "awards",
+		"/recommendations": "recommendations",
+		"/dyno":            "dyno",
+		"/rankings":        "rankings",
+		"/storm":           "storm",
+		"/vs":              "vs",
+		"/upload":          "upload",
+		"/settings":        "settings",
+		"/admin":           "admin",
+		"/profile":         "profile",
+	}
+
+	for path, templateName := range pages {
+		p := path
+		tmpl := templateName
+		router.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {
+			data := getPageData(r, strings.Title(tmpl)+" - Alliance Manager", tmpl)
+
+			// --- SERVER-SIDE SECURITY ---
+			// 1. Redirect to login if not authenticated
+			if !data.IsAuthenticated {
+				http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+				return
+			}
+
+			// 2. Don't even render the page if they lack permissions
+			if tmpl == "admin" && !data.IsAdmin {
+				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+				return
+			}
+			if tmpl == "settings" && !data.IsR5OrAdmin {
+				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+				return
+			}
+
+			renderTemplate(w, r, tmpl+".html", data)
+		}).Methods("GET")
+
+		// Redirect old .html links to the clean URLs
+		router.HandleFunc(p+".html", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, p, http.StatusMovedPermanently)
+		}).Methods("GET")
+	}
+
+	// Serve CSS, JS, and Images from static/
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./static")))
 
 	log.Println("Server starting on http://localhost:8080")

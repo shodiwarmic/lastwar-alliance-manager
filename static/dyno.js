@@ -1,3 +1,4 @@
+// static/dyno.js
 const API_URL = '/api/dyno-recommendations';
 const MEMBERS_URL = '/api/members';
 
@@ -13,90 +14,17 @@ let pointsChart = null;
 let membersChart = null;
 let timelineChart = null;
 
-// Check authentication
-async function checkAuth() {
+// Fetch permissions to get the user ID for Delete button rendering
+async function fetchPermissions() {
     try {
         const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        
-        if (!data.authenticated) {
-            window.location.href = '/login.html';
-            return false;
+        if (response.ok) {
+            const data = await response.json();
+            currentUsername = data.username;
+            currentUserId = data.user_id || 0;
         }
-        
-        currentUsername = data.username;
-        currentUserId = data.user_id || 0;
-        let displayText = `👤 ${currentUsername}`;
-        if (data.rank) {
-            displayText += ` (${data.rank})`;
-        }
-        document.getElementById('username-display').textContent = displayText;
-        
-        return true;
     } catch (error) {
         console.error('Auth check error:', error);
-        window.location.href = '/login.html';
-        return false;
-    }
-}
-
-// Setup event listeners after auth check
-async function setupEventListeners() {
-    const usernameDisplay = document.getElementById('username-display');
-    const logoutBtn = document.getElementById('dropdown-logout-btn');
-    const adminLink = document.getElementById('admin-dropdown-link');
-    
-    if (usernameDisplay) {
-        usernameDisplay.addEventListener('click', toggleUserDropdown);
-    }
-    
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Check if user is admin to show admin link
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        if (data.is_admin && adminLink) {
-            adminLink.style.display = 'block';
-        }
-    } catch (error) {
-        console.error('Error checking admin status:', error);
-    }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (event) => {
-        const dropdown = document.getElementById('user-dropdown-menu');
-        const usernameBtn = document.getElementById('username-display');
-        if (dropdown && usernameBtn && !usernameBtn.contains(event.target) && !dropdown.contains(event.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}
-
-// Logout handler
-async function handleLogout(event) {
-    event.preventDefault();
-    if (!confirm('Are you sure you want to logout?')) {
-        return;
-    }
-    
-    try {
-        await fetch('/api/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-    } catch (error) {
-        console.error('Logout error:', error);
-        alert('Error logging out. Please try again.');
     }
 }
 
@@ -116,6 +44,8 @@ async function loadMembers() {
 // Populate member select dropdown
 function populateMemberSelect() {
     const select = document.getElementById('member-select');
+    if (!select) return;
+    
     select.innerHTML = '<option value="">Select a member...</option>';
     
     allMembers.forEach(member => {
@@ -130,6 +60,8 @@ function populateMemberSelect() {
 function setupMemberSearch() {
     const searchInput = document.getElementById('member-search');
     const selectElement = document.getElementById('member-select');
+    
+    if (!searchInput || !selectElement) return;
     
     searchInput.addEventListener('input', () => {
         const searchTerm = searchInput.value.toLowerCase().trim();
@@ -168,7 +100,8 @@ async function loadDynoRecommendations() {
         renderDynoRecommendations();
     } catch (error) {
         console.error('Error loading dyno recommendations:', error);
-        alert('Failed to load dyno recommendations.');
+        const list = document.getElementById('dyno-list');
+        if (list) list.innerHTML = '<p class="error-message">Failed to load dyno recommendations.</p>';
     }
 }
 
@@ -179,10 +112,13 @@ function updateStatistics() {
     const positive = active.filter(r => r.points > 0);
     const negative = active.filter(r => r.points < 0);
     
-    document.getElementById('total-dyno').textContent = active.length;
-    document.getElementById('positive-dyno').textContent = positive.length;
-    document.getElementById('negative-dyno').textContent = negative.length;
-    document.getElementById('expired-dyno').textContent = expired.length;
+    const totalEl = document.getElementById('total-dyno');
+    if (totalEl) {
+        totalEl.textContent = active.length;
+        document.getElementById('positive-dyno').textContent = positive.length;
+        document.getElementById('negative-dyno').textContent = negative.length;
+        document.getElementById('expired-dyno').textContent = expired.length;
+    }
 }
 
 // Update all charts
@@ -443,7 +379,10 @@ function formatDateOnly(date) {
 // Render dyno recommendations
 function renderDynoRecommendations() {
     const container = document.getElementById('dyno-list');
-    const filterSearch = document.getElementById('filter-search').value.toLowerCase();
+    if (!container) return;
+    
+    const searchInput = document.getElementById('filter-search');
+    const filterSearch = searchInput ? searchInput.value.toLowerCase() : '';
     
     // Apply filter
     let filtered = allDynoRecs.filter(rec => {
@@ -628,8 +567,8 @@ async function submitDynoRecommendation() {
     }
 }
 
-// Delete dyno recommendation
-async function deleteDynoRecommendation(id) {
+// Make globally accessible since it's called via inline onclick attribute
+window.deleteDynoRecommendation = async function(id) {
     if (!confirm('Are you sure you want to delete this dyno recommendation?')) {
         return;
     }
@@ -648,7 +587,7 @@ async function deleteDynoRecommendation(id) {
         console.error('Error deleting dyno recommendation:', error);
         alert('Failed to delete dyno recommendation.');
     }
-}
+};
 
 // Format date
 function formatDate(dateStr) {
@@ -671,6 +610,8 @@ function formatDate(dateStr) {
 function setupViewToggle() {
     const listBtn = document.getElementById('list-view-btn');
     const groupedBtn = document.getElementById('grouped-view-btn');
+    
+    if (!listBtn || !groupedBtn) return;
     
     listBtn.addEventListener('click', () => {
         currentView = 'list';
@@ -702,17 +643,20 @@ function setupFilters() {
     
     // Search filter
     const searchInput = document.getElementById('filter-search');
-    searchInput.addEventListener('input', () => {
-        renderDynoRecommendations();
-    });
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            renderDynoRecommendations();
+        });
+    }
 }
 
-// Initialize
-async function init() {
-    const authenticated = await checkAuth();
-    if (!authenticated) return;
+// Run on page load
+document.addEventListener('DOMContentLoaded', async () => {
+    // Guard: Only run if we are actually on the Dyno page
+    const dynoList = document.getElementById('dyno-list');
+    if (!dynoList) return;
     
-    await setupEventListeners();
+    await fetchPermissions();
     await loadMembers();
     await loadDynoRecommendations();
     
@@ -721,8 +665,8 @@ async function init() {
     setupFilters();
     
     // Submit button
-    document.getElementById('submit-dyno-btn').addEventListener('click', submitDynoRecommendation);
-}
-
-// Run on page load
-document.addEventListener('DOMContentLoaded', init);
+    const submitBtn = document.getElementById('submit-dyno-btn');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', submitDynoRecommendation);
+    }
+});

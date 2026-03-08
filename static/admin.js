@@ -1,5 +1,3 @@
-// Admin Panel JavaScript
-
 let allUsers = [];
 let allMembers = [];
 let allLogins = [];
@@ -8,97 +6,14 @@ let currentResetUserId = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    // Check if user is admin
-    await checkAdminAccess();
-    
-    // Load initial data
-    await loadUsers();
-    await loadMembers();
-    
-    // Setup dropdown logout button
-    const dropdownLogoutBtn = document.getElementById('dropdown-logout-btn');
-    if (dropdownLogoutBtn) {
-        dropdownLogoutBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            logout();
-        });
+    // Check if we are actually on the admin page
+    const usersList = document.getElementById('users-list');
+    if (usersList) {
+        // Load initial data
+        await loadUsers();
+        await loadMembers();
     }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (event) => {
-        const dropdown = document.getElementById('user-dropdown-menu');
-        const usernameBtn = document.getElementById('username-display');
-        
-        if (dropdown && !usernameBtn?.contains(event.target) && !dropdown.contains(event.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
 });
-
-// Logout function
-async function logout() {
-    if (!confirm('Are you sure you want to logout?')) {
-        return;
-    }
-    
-    try {
-        await fetch('/api/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-    } catch (error) {
-        console.error('Logout error:', error);
-        window.location.href = '/login.html';
-    }
-}
-
-// Check admin access
-async function checkAdminAccess() {
-    try {
-        const response = await fetch('/api/check-auth');
-        const data = await response.json();
-        
-        if (!data.authenticated) {
-            window.location.href = 'login.html';
-            return;
-        }
-        
-        if (!data.is_admin) {
-            alert('Access Denied: Admin privileges required');
-            window.location.href = 'index.html';
-            return;
-        }
-        
-        // Display username
-        let displayText = `👤 ${data.username}`;
-        if (data.rank) {
-            displayText += ` (${data.rank})`;
-        }
-        const usernameDisplay = document.getElementById('username-display');
-        if (usernameDisplay) {
-            usernameDisplay.textContent = displayText;
-            
-            // Setup dropdown toggle
-            usernameDisplay.addEventListener('click', toggleUserDropdown);
-        }
-        
-        // Show admin link since user is admin
-        const adminLink = document.getElementById('admin-dropdown-link');
-        if (adminLink && data.is_admin) {
-            adminLink.style.display = 'block';
-        }
-    } catch (error) {
-        console.error('Auth check failed:', error);
-        window.location.href = 'login.html';
-    }
-}
-
-// Toggle user dropdown menu
-function toggleUserDropdown(event) {
-    event.stopPropagation();
-    const dropdown = document.getElementById('user-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}
 
 // Tab Switching
 function switchTab(tabName) {
@@ -223,8 +138,10 @@ async function loadMembers() {
 // Populate member dropdown
 function populateMemberDropdown() {
     const select = document.getElementById('member-id');
-    select.innerHTML = '<option value="">No member linked</option>' + 
-        allMembers.map(m => `<option value="${m.id}">${m.name} (${m.rank})</option>`).join('');
+    if(select) {
+        select.innerHTML = '<option value="">No member linked</option>' + 
+            allMembers.map(m => `<option value="${m.id}">${m.name} (${m.rank})</option>`).join('');
+    }
 }
 
 // Show Create User Modal
@@ -434,7 +351,8 @@ function populateLoginFilter() {
 // Display Login Stats
 function displayLoginStats(logins) {
     const statsDiv = document.getElementById('login-stats');
-    
+    if(!statsDiv) return;
+
     const successLogins = logins.filter(l => l.success).length;
     const failedLogins = logins.filter(l => !l.success).length;
     const uniqueUsers = new Set(logins.map(l => l.user_id)).size;
@@ -475,6 +393,7 @@ function displayLoginStats(logins) {
 // Display Login History
 function displayLoginHistory(logins) {
     const loginsList = document.getElementById('logins-list');
+    if(!loginsList) return;
     
     if (logins.length === 0) {
         loginsList.innerHTML = '<div class="empty-state">No login history found</div>';

@@ -257,21 +257,6 @@
                 loginBtn.textContent = 'Login';
             }
         });
-
-        // Check if already logged in
-        async function checkAuth() {
-            try {
-                const response = await fetch('/api/check-auth');
-                const data = await response.json();
-                if (data.authenticated) {
-                    window.location.href = '/';
-                }
-            } catch (error) {
-                console.error('Auth check error:', error);
-            }
-        }
-
-        checkAuth();
     </script>
 </body>
 </html>
