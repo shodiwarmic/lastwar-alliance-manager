@@ -115,8 +115,9 @@ button,
 }
 
 .container {
-    max-width: 1000px;
-    margin: 0 auto;
+    width: 95%;          /* Takes up 95% of the screen */
+    max-width: 1600px;   /* Caps out at 1600px to prevent ultra-wide stretching */
+    margin: 0 auto;      /* Keeps it centered */
     background: var(--container-bg);
     border-radius: 15px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
