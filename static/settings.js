@@ -34,6 +34,20 @@ async function loadSettings() {
         document.getElementById('first-time-boost').value = settings.first_time_conductor_boost || 5;
         document.getElementById('schedule-message-template').value = settings.schedule_message_template || 'Train Schedule - Week {WEEK}\n\n{SCHEDULES}\n\nNext in line:\n{NEXT_3}';
         document.getElementById('daily-message-template').value = settings.daily_message_template || 'ALL ABOARD! Daily Train Assignment\n\nDate: {DATE}\n\nToday\'s Conductor: {CONDUCTOR_NAME} ({CONDUCTOR_RANK})\nBackup Engineer: {BACKUP_NAME} ({BACKUP_RANK})\n\nDEPARTURE SCHEDULE:\n- 15:00 ST (17:00 UK) - Conductor {CONDUCTOR_NAME}, please request train assignment in alliance chat\n- 16:30 ST (18:30 UK) - If conductor hasn\'t shown up, Backup {BACKUP_NAME} takes over and assigns train to themselves\n\nRemember: Communication is key! Let the alliance know if you can\'t make it.\n\nAll aboard for another successful run!';
+
+        // Load Storm Timezones
+        if (settings.storm_timezones) {
+            const activeZones = settings.storm_timezones.split(',');
+            document.querySelectorAll('.tz-checkbox').forEach(cb => {
+                cb.checked = activeZones.includes(cb.value);
+            });
+        }
+
+        // Load DST Preference
+        const dstCheckbox = document.getElementById('storm_respect_dst');
+        if (dstCheckbox && settings.storm_respect_dst !== undefined) {
+            dstCheckbox.checked = settings.storm_respect_dst;
+        }
         
         // Power tracking
         const powerTrackingEnabled = settings.power_tracking_enabled || false;
@@ -74,7 +88,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             
+            // Gather checked timezones
+            const selectedZones = Array.from(document.querySelectorAll('.tz-checkbox:checked'))
+                .map(cb => cb.value)
+                .join(',');
+    
             const settings = {
+                storm_timezones: selectedZones,
+                storm_respect_dst: document.getElementById('storm_respect_dst').checked,    
                 award_first_points: parseInt(document.getElementById('award-first').value),
                 award_second_points: parseInt(document.getElementById('award-second').value),
                 award_third_points: parseInt(document.getElementById('award-third').value),
@@ -84,7 +105,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 first_time_conductor_boost: parseInt(document.getElementById('first-time-boost').value),
                 schedule_message_template: document.getElementById('schedule-message-template').value,
                 daily_message_template: document.getElementById('daily-message-template').value,
-                power_tracking_enabled: document.getElementById('power-tracking-enabled').checked
+                power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
+                storm_timezones: selectedZones,
+                storm_respect_dst: document.getElementById('storm_respect_dst').checked
             };
             
             try {

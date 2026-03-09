@@ -23,6 +23,79 @@ let allMembers = [];
 let currentTaskForce = 'A';
 let assignments = {};
 
+// The game server is UTC-2 (0:00 Server = 02:00 UTC = 22:00 EDT)
+const SERVER_UTC_OFFSET = -2;
+
+// Timezone mapping with strict Standard Time offsets
+const TIMEZONE_MAP = {
+    "America/New_York": { label: "US Eastern", stdOffset: -5, stdName: "EST" }, 
+    "America/Los_Angeles": { label: "US Pacific", stdOffset: -8, stdName: "PST" }, 
+    "Europe/London": { label: "UK", stdOffset: 0, stdName: "GMT" },
+    "Europe/Berlin": { label: "CET", stdOffset: 1, stdName: "CET" },
+    "Australia/Perth": { label: "AWST", stdOffset: 8, stdName: "AWST" }
+};
+
+// The three server time slots
+const STORM_SLOTS = [
+    { id: 1, start: "09:00", end: "09:30" },
+    { id: 2, start: "18:00", end: "18:30" },
+    { id: 3, start: "23:00", end: "23:30" } 
+];
+
+function formatStormTimes(selectedZonesStr, respectDST) {
+    const selectedZones = selectedZonesStr ? selectedZonesStr.split(',') : ["America/New_York"];
+    const dropdown = document.getElementById('storm-time-select'); // Ensure your HTML select has this ID
+    if (!dropdown) return;
+
+    dropdown.innerHTML = ''; 
+    const refDate = new Date();
+
+    STORM_SLOTS.forEach(slot => {
+        let labelParts = [`${slot.start} Server Time`];
+
+        selectedZones.forEach(zoneKey => {
+            const tzInfo = TIMEZONE_MAP[zoneKey];
+            if (!tzInfo) return;
+
+            const [hours, minutes] = slot.start.split(':');
+            
+            // Convert Server Time (UTC-2) backward to true UTC
+            const utcDate = new Date(Date.UTC(
+                refDate.getUTCFullYear(), 
+                refDate.getUTCMonth(), 
+                refDate.getUTCDate(), 
+                parseInt(hours) - SERVER_UTC_OFFSET, 
+                parseInt(minutes)
+            ));
+
+            let timeString = '';
+
+            if (respectDST) {
+                const formatter = new Intl.DateTimeFormat('en-US', {
+                    timeZone: zoneKey,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                    timeZoneName: 'short'
+                });
+                timeString = formatter.format(utcDate);
+            } else {
+                const stdDate = new Date(utcDate.getTime() + (tzInfo.stdOffset * 3600000));
+                const formattedHour = String(stdDate.getUTCHours()).padStart(2, '0');
+                const formattedMin = String(stdDate.getUTCMinutes()).padStart(2, '0');
+                timeString = `${formattedHour}:${formattedMin} ${tzInfo.stdName}`;
+            }
+
+            labelParts.push(timeString);
+        });
+
+        const option = document.createElement('option');
+        option.value = slot.id;
+        option.textContent = labelParts.join(' | ');
+        dropdown.appendChild(option);
+    });
+}
+
 // Load members
 async function loadMembers() {
     try {
@@ -265,15 +338,18 @@ function generateMail() {
         return;
     }
     
-    // Get battle time
-    const battleTime = document.getElementById('battleTime')?.value;
+// Get the dynamically generated battle time text directly from the dropdown
+    const timeSelect = document.getElementById('storm-time-select');
+    let timeText = "";
+    if (timeSelect && timeSelect.selectedIndex !== -1) {
+        timeText = timeSelect.options[timeSelect.selectedIndex].text;
+    }
     
     let mail = `🏜️ DESERT STORM - TASK FORCE ${currentTaskForce}\n`;
     mail += `═══════════════════════════════════════\n\n`;
     
-    if (battleTime) {
-        const timeText = battleTime === '18:00' ? '18:00-18:30 ST (20:00 UK / 21:00 CET)' : '09:00-09:30 ST (11:00 UK / 12:00 CET)';
-        mail += `⏰ BATTLE TIME: ${timeText}\n\n`;
+    if (timeText) {
+        mail += `⏰ BATTLE TIME:\n${timeText}\n\n`;
     }
     
     mail += `BATTLE STRATEGY:\n\n`;
@@ -450,6 +526,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Guard: Only initialize if we are on the Storm Assignments page
     const buildingsGrid = document.getElementById('buildings-grid');
     if (buildingsGrid) {
+        
+        // --- NEW: Fetch settings and initialize timezones ---
+        try {
+            const settingsRes = await fetch('/api/settings');
+            if (settingsRes.ok) {
+                const settings = await settingsRes.json();
+                formatStormTimes(settings.storm_timezones, settings.storm_respect_dst);
+            }
+        } catch (error) {
+            console.error('Error loading settings for timezones:', error);
+            // Fallback to defaults if settings fail to load
+            formatStormTimes("America/New_York", true); 
+        }
+        // ----------------------------------------------------
+
         await loadMembers();
         await loadAssignments();
         

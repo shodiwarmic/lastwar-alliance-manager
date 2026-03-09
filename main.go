@@ -197,6 +197,8 @@ type Settings struct {
 	ScheduleMessageTemplate      string `json:"schedule_message_template"`
 	DailyMessageTemplate         string `json:"daily_message_template"`
 	PowerTrackingEnabled         bool   `json:"power_tracking_enabled"`
+	StormTimezones               string `json:"storm_timezones"`
+	StormRespectDST              bool   `json:"storm_respect_dst"`
 }
 
 type MemberRanking struct {
@@ -1023,6 +1025,13 @@ func initDB() error {
 		first_time_conductor_boost INTEGER NOT NULL DEFAULT 5,
 		schedule_message_template TEXT NOT NULL DEFAULT 'Train Schedule - Week {WEEK}\n\n{SCHEDULES}\n\nNext in line:\n{NEXT_3}'
 	);`
+
+	// Add new columns if they don't exist
+	_, err = db.Exec(`ALTER TABLE settings ADD COLUMN storm_timezones TEXT DEFAULT 'America/New_York,Europe/London'`)
+	// Ignore error if column already exists
+
+	_, err = db.Exec(`ALTER TABLE settings ADD COLUMN storm_respect_dst BOOLEAN DEFAULT 1`)
+	// Ignore error if column already exists
 
 	_, err = db.Exec(createSettingsSQL)
 	if err != nil {
@@ -3499,7 +3508,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow(`SELECT id, award_first_points, award_second_points, award_third_points, 
 		recommendation_points, recent_conductor_penalty_days, above_average_conductor_penalty, r4r5_rank_boost,
 		first_time_conductor_boost, schedule_message_template, daily_message_template, 
-		COALESCE(power_tracking_enabled, 0) as power_tracking_enabled
+		COALESCE(power_tracking_enabled, 0) as power_tracking_enabled, storm_timezones, storm_respect_dst
 		FROM settings WHERE id = 1`).Scan(
 		&settings.ID,
 		&settings.AwardFirstPoints,
@@ -3513,6 +3522,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&settings.ScheduleMessageTemplate,
 		&settings.DailyMessageTemplate,
 		&settings.PowerTrackingEnabled,
+		&settings.StormTimezones,
+		&settings.StormRespectDST,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -3542,7 +3553,9 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		first_time_conductor_boost = ?,
 		schedule_message_template = ?,
 		daily_message_template = ?,
-		power_tracking_enabled = ?
+		power_tracking_enabled = ?,
+		storm_timezones = ?,
+		storm_respect_dst = ?
 		WHERE id = 1`,
 		settings.AwardFirstPoints,
 		settings.AwardSecondPoints,
@@ -3555,6 +3568,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate,
 		settings.PowerTrackingEnabled,
+		settings.StormTimezones,
+		settings.StormRespectDST,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -121,6 +121,27 @@
                         </div>
                     </div>
 
+                    <div class="settings-group">
+                        <h4>🕒 Desert Storm Timezone Display</h4>
+                        <p class="help-text">Select which local times are shown on the Storm page dropdown to help international members coordinate.</p>
+                        
+                        <div class="checkbox-group" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 15px;">
+                            <label><input type="checkbox" class="tz-checkbox" value="America/New_York"> US Eastern (EST/EDT)</label>
+                            <label><input type="checkbox" class="tz-checkbox" value="America/Los_Angeles"> US Pacific (PST/PDT)</label>
+                            <label><input type="checkbox" class="tz-checkbox" value="Europe/London"> UK (GMT/BST)</label>
+                            <label><input type="checkbox" class="tz-checkbox" value="Europe/Berlin"> Central Europe (CET/CEST)</label>
+                            <label><input type="checkbox" class="tz-checkbox" value="Australia/Perth"> Western Australia (AWST)</label>
+                        </div>
+
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 15px;">
+                            <label style="display: flex; align-items: center; gap: 10px; font-weight: bold; cursor: pointer;">
+                                <input type="checkbox" id="storm_respect_dst" style="width: 20px; height: 20px;">
+                                Automatically respect Daylight Saving Time (DST)
+                            </label>
+                            <p class="help-text" style="margin-left: 30px;">If disabled, times will be locked to Standard Time all year round.</p>
+                        </div>
+                    </div>
+
                     <div class="button-group">
                         <button type="submit" class="primary-btn">💾 Save Settings</button>
                         <button type="button" id="reset-btn" class="secondary-btn">🔄 Reset to Defaults</button>
