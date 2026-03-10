@@ -85,7 +85,7 @@
             transform: none;
         }
 
-        .default-creds {
+        .login-banner {
             margin-top: 20px;
             padding: 15px;
             background: #e7f3ff;
@@ -95,13 +95,13 @@
             border: 1px solid #b8daff;
         }
 
-        .default-creds strong {
+        .login-banner strong {
             display: block;
             margin-bottom: 8px;
             font-size: 1.1em;
         }
 
-        .default-creds code {
+        .login-banner code {
             background: #fff;
             padding: 2px 6px;
             border-radius: 4px;
@@ -141,12 +141,12 @@
                 font-size: 16px;
             }
 
-            .default-creds {
+            .login-banner {
                 font-size: 0.85em;
                 padding: 12px;
             }
 
-            .default-creds strong {
+            .login-banner strong {
                 font-size: 1em;
             }
         }
@@ -194,11 +194,12 @@
                     <button type="submit" class="login-btn" id="login-btn">Login</button>
                 </form>
 
-                <div class="default-creds">
-                    <strong>Default Credentials:</strong>
-                    Username: <code>admin</code><br>
-                    Password: <code>admin123</code>
+                {{ if .LoginMessage }}
+                <div class="login-banner">
+                    {{ .LoginMessage }}
                 </div>
+                {{ end }}
+                
             </div>
         </div>
     </div>

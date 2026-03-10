@@ -201,6 +201,7 @@ type Settings struct {
 	PowerTrackingEnabled         bool   `json:"power_tracking_enabled"`
 	StormTimezones               string `json:"storm_timezones"`
 	StormRespectDST              bool   `json:"storm_respect_dst"`
+	LoginMessage                 string `json:"login_message"`
 }
 
 type MemberRanking struct {
@@ -1227,6 +1228,37 @@ All aboard for another successful run!`
 			return err
 		}
 		log.Println("Database migration: Added daily_message_template column to settings table")
+	}
+
+	// Migrate settings table to add login_message column if missing
+	var loginMessageColumnExists bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('settings')
+		WHERE name = 'login_message'
+	`).Scan(&loginMessageColumnExists)
+	if err != nil {
+		return err
+	}
+
+	if !loginMessageColumnExists {
+		defaultLoginHTML := `<strong>Default Credentials:</strong>
+Username: <code>admin</code><br>
+Password: <code>admin123</code>`
+
+		// Add column without a hardcoded default first
+		_, err = db.Exec(`ALTER TABLE settings ADD COLUMN login_message TEXT`)
+		if err != nil {
+			return err
+		}
+
+		// Update existing row with the default HTML value
+		_, err = db.Exec(`UPDATE settings SET login_message = ? WHERE id = 1`, defaultLoginHTML)
+		if err != nil {
+			return err
+		}
+
+		log.Println("Database migration: Added login_message column to settings table")
 	}
 
 	// Migrate settings table to add power_tracking_enabled column if missing
@@ -3549,7 +3581,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow(`SELECT id, award_first_points, award_second_points, award_third_points, 
 		recommendation_points, recent_conductor_penalty_days, above_average_conductor_penalty, r4r5_rank_boost,
 		first_time_conductor_boost, schedule_message_template, daily_message_template, 
-		COALESCE(power_tracking_enabled, 0) as power_tracking_enabled, storm_timezones, storm_respect_dst
+		COALESCE(power_tracking_enabled, 0) as power_tracking_enabled, storm_timezones, storm_respect_dst,
+		COALESCE(login_message, '') as login_message
 		FROM settings WHERE id = 1`).Scan(
 		&settings.ID,
 		&settings.AwardFirstPoints,
@@ -3565,6 +3598,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&settings.PowerTrackingEnabled,
 		&settings.StormTimezones,
 		&settings.StormRespectDST,
+		&settings.LoginMessage, // NEW
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -3596,7 +3630,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		daily_message_template = ?,
 		power_tracking_enabled = ?,
 		storm_timezones = ?,
-		storm_respect_dst = ?
+		storm_respect_dst = ?,
+		login_message = ?
 		WHERE id = 1`,
 		settings.AwardFirstPoints,
 		settings.AwardSecondPoints,
@@ -3611,6 +3646,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.PowerTrackingEnabled,
 		settings.StormTimezones,
 		settings.StormRespectDST,
+		settings.LoginMessage, // NEW
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -6417,7 +6453,22 @@ func main() {
 			return
 		}
 
-		// 2. Parse ONLY the login.html file (no layout.html)
+		// 2. Fetch the custom login message from the database
+		var rawMessage string
+		err := db.QueryRow("SELECT COALESCE(login_message, '') FROM settings WHERE id = 1").Scan(&rawMessage)
+		if err != nil {
+			rawMessage = "" // Fallback if db is unavailable
+		}
+
+		// Wrap in a struct so the template can access it.
+		// template.HTML allows safe rendering of links/tags from the database.
+		data := struct {
+			LoginMessage template.HTML
+		}{
+			LoginMessage: template.HTML(rawMessage),
+		}
+
+		// 3. Parse ONLY the login.html file (no layout.html)
 		t, err := template.ParseFiles("templates/login.html")
 		if err != nil {
 			log.Printf("Template parsing error: %v", err)
@@ -6425,8 +6476,8 @@ func main() {
 			return
 		}
 
-		// 3. Serve the standalone page
-		err = t.Execute(w, nil)
+		// 4. Serve the standalone page, passing the data struct instead of nil
+		err = t.Execute(w, data)
 		if err != nil {
 			log.Printf("Template execution error: %v", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
