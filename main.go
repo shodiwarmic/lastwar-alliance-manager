@@ -41,6 +41,7 @@ type Member struct {
 	Eligible       bool   `json:"eligible"`
 	Power          *int64 `json:"power"`
 	PowerUpdatedAt string `json:"power_updated_at"`
+	HasUser        bool   `json:"has_user"`
 }
 
 type MemberStats struct {
@@ -2009,7 +2010,8 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 	query := `
         SELECT m.id, m.name, m.rank, COALESCE(m.eligible, 1),
                COALESCE((SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_power,
-               COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date
+               COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date,
+               EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user
         FROM members m
         ORDER BY m.name
     `
@@ -2023,8 +2025,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 	members := []Member{}
 	for rows.Next() {
 		var m Member
-		// Add &m.PowerUpdatedAt to the Scan
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Power, &m.PowerUpdatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Power, &m.PowerUpdatedAt, &m.HasUser); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -2166,6 +2167,19 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Clean up linked user accounts so they can no longer log in
+	_, err = db.Exec("DELETE FROM users WHERE member_id = ?", id)
+	if err != nil {
+		log.Printf("Warning: Failed to delete linked user for member %d: %v", id, err)
+	}
+
+	// 2. Clean up linked power history so it doesn't clutter the database
+	_, err = db.Exec("DELETE FROM power_history WHERE member_id = ?", id)
+	if err != nil {
+		log.Printf("Warning: Failed to delete power history for member %d: %v", id, err)
+	}
+
+	// 3. Delete the actual member
 	_, err = db.Exec("DELETE FROM members WHERE id = ?", id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

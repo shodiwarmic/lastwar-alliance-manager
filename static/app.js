@@ -226,8 +226,9 @@ function displayMembers(members) {
         if (canManageRanks) {
             actionsHtml = `
                 <div class="member-actions">
-                    <button class="edit-btn" onclick="editMember(${member.id}, '${escapeHtml(member.name)}', '${escapeHtml(member.rank)}', ${member.eligible !== false}, ${member.power || 0}, '${member.power_updated_at || ''}')">Edit</button>                    <button class="delete-btn" onclick="deleteMember(${member.id}, '${escapeHtml(member.name)}')">Delete</button>
-                    ${isR5OrAdmin ? `<button class="create-user-btn" onclick="createUserForMember(${member.id}, '${escapeHtml(member.name)}')">Create User</button>` : ''}
+                    <button class="edit-btn" onclick="editMember(${member.id}, '${escapeHtml(member.name)}', '${escapeHtml(member.rank)}', ${member.eligible !== false}, ${member.power || 0}, '${member.power_updated_at || ''}')">Edit</button>
+                    <button class="delete-btn" onclick="deleteMember(${member.id}, '${escapeHtml(member.name)}', ${member.has_user})">Delete</button>
+                    ${(isR5OrAdmin && !member.has_user) ? `<button class="create-user-btn" onclick="createUserForMember(${member.id}, '${escapeHtml(member.name)}')">Create User</button>` : ''}
                     <button class="toggle-eligible-btn ${eligibleClass}" onclick="toggleEligible(${member.id}, ${member.eligible !== false})">${eligibleStatus}</button>
                 </div>
             `;
@@ -338,22 +339,23 @@ window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt
     openMemberModal(true);
 };
 
-window.deleteMember = async function(id, name) {
-    if (!canManageRanks) {
-        alert('You do not have permission to delete members.');
-        return;
+window.deleteMember = async function(id, name, hasUser = false) {
+    // Build the confirmation message dynamically
+    let confirmMessage = `Are you sure you want to delete ${name} from the roster?`;
+    if (hasUser) {
+        confirmMessage += `\n\n⚠️ WARNING: This will also permanently delete their login account!`;
     }
-    if (!confirm(`Are you sure you want to remove ${name} from the alliance?`)) return;
+
+    if (!confirm(confirmMessage)) return;
 
     try {
-        const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
-        if (!response.ok) {
-            if (response.status === 403) throw new Error('Permission denied.');
-            throw new Error('Failed to delete member');
-        }
+        const response = await fetch(`${API_URL}/${id}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error('Failed to delete member');
         await loadMembers();
     } catch (error) {
-        console.error('Error deleting member:', error);
+        console.error('Error:', error);
         alert('Failed to delete member. Please try again.');
     }
 };
@@ -398,6 +400,9 @@ window.createUserForMember = async function(memberId, memberName) {
         }
         const result = await response.json();
         alert(`User created successfully!\n\nUsername: ${result.username}\nPassword: ${result.password}\n\n⚠️ IMPORTANT: Save this password now! It won't be shown again.`);
+        
+        await loadMembers(); 
+
     } catch (error) {
         console.error('Error creating user:', error);
         alert('Failed to create user: ' + error.message);
