@@ -1,3 +1,27 @@
+{{define "head_tags"}}
+<style>
+    .rank-chip {
+        padding: 6px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        background: transparent;
+        color: var(--text-color);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.85em;
+        font-weight: 500;
+    }
+    .rank-chip:hover {
+        background: var(--bg-secondary);
+    }
+    .rank-chip.active {
+        background: var(--primary-color, #007bff); /* Fallback to blue if primary-color isn't set */
+        color: white;
+        border-color: var(--primary-color, #007bff);
+    }
+</style>
+{{end}}
+
 {{define "header_text"}}
     <h1>🎮 Last War: Survival</h1>
     <h2>Alliance Member Manager</h2>
@@ -95,9 +119,38 @@
 
             <section class="members-section">
                 <h3>Alliance Members</h3>
-                <div class="search-box">
-                    <input type="text" id="search-input" placeholder="🔍 Search by name or rank..." />
-                    <button type="button" id="clear-search" class="clear-search" style="display: none;">✕</button>
+                <div class="filter-sort-controls" style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 25px; background: var(--bg-secondary); padding: 15px 20px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                        <div class="search-container" style="flex: 1; min-width: 200px; position: relative;">
+                            <input type="text" id="search-input" class="form-input" placeholder="Search by name..." style="width: 100%; padding: 10px 35px 10px 15px; border-radius: 20px;">
+                            <button id="clear-search" style="display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-secondary);">✖</button>
+                        </div>
+                        <select id="sort-by" class="form-input" style="padding: 10px 15px; border-radius: 20px; min-width: 160px; cursor: pointer;">
+                            <option value="name-asc">Name (A-Z)</option>
+                            <option value="name-desc">Name (Z-A)</option>
+                            <option value="rank-desc">Rank (High to Low)</option>
+                            <option value="power-desc" class="power-sort-option">Power (Highest First)</option>
+                            <option value="power-asc" class="power-sort-option">Power (Lowest First)</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+                        <div id="rank-filters" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                            <span style="font-size: 0.85em; color: var(--text-secondary); margin-right: 5px; text-transform: uppercase; letter-spacing: 0.5px;">Filter Rank:</span>
+                            <button class="rank-chip active" data-rank="all">All</button>
+                            <button class="rank-chip" data-rank="R5">R5</button>
+                            <button class="rank-chip" data-rank="R4">R4</button>
+                            <button class="rank-chip" data-rank="R3">R3</button>
+                            <button class="rank-chip" data-rank="R2">R2</button>
+                            <button class="rank-chip" data-rank="R1">R1</button>
+                        </div>
+                        
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 0.9em; color: var(--text-secondary);">
+                            <input type="checkbox" id="filter-eligible" style="width: 16px; height: 16px; cursor: pointer;">
+                            Eligible Only
+                        </label>
+                    </div>
                 </div>
                 <div id="members-list" class="members-list">
                     <p class="loading">Loading members...</p>

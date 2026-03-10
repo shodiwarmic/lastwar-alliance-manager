@@ -36,10 +36,66 @@ async function fetchSettings() {
     }
 }
 
+function updateDisplayedMembers() {
+    // 1. Grab current values from all inputs
+    const searchTerm = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
+    const eligibleOnly = document.getElementById('filter-eligible')?.checked || false;
+    const sortBy = document.getElementById('sort-by')?.value || 'name-asc';
+
+    // NEW: Grab an array of the 'data-rank' values from all active chips
+    const activeRankChips = Array.from(document.querySelectorAll('.rank-chip.active')).map(chip => chip.dataset.rank);
+
+    // 2. Apply Filters
+    let filtered = allMembers.filter(member => {
+        const matchesSearch = member.name.toLowerCase().includes(searchTerm) || member.rank.toLowerCase().includes(searchTerm);
+        
+        // Match if "all" is active, OR if the member's rank is in our list of active chips
+        const matchesRank = activeRankChips.includes('all') || activeRankChips.includes(member.rank);
+        
+        const matchesEligible = !eligibleOnly || member.eligible !== false; 
+
+        return matchesSearch && matchesRank && matchesEligible;
+    });
+
+    // 3. Apply Sorting
+    filtered.sort((a, b) => {
+        if (sortBy === 'name-asc') {
+            return a.name.localeCompare(b.name);
+        } else if (sortBy === 'name-desc') {
+            return b.name.localeCompare(a.name);
+        } else if (sortBy === 'power-desc') {
+            return (b.power || 0) - (a.power || 0);
+        } else if (sortBy === 'power-asc') {
+            return (a.power || 0) - (b.power || 0);
+        } else if (sortBy === 'rank-desc') {
+            // Map ranks to numeric values for correct Last War sorting
+            const rankOrder = { 'R5': 5, 'R4': 4, 'R3': 3, 'R2': 2, 'R1': 1 };
+            const rankA = rankOrder[a.rank] || 0;
+            const rankB = rankOrder[b.rank] || 0;
+            if (rankA !== rankB) return rankB - rankA;
+            return a.name.localeCompare(b.name); // Tie-breaker: Name
+        }
+        return 0;
+    });
+
+    // 4. Update the UI
+    displayMembers(filtered);
+    updateMemberCount(filtered.length);
+
+    // Toggle the clear search 'X' button
+    const clearBtn = document.getElementById('clear-search');
+    if (clearBtn) clearBtn.style.display = searchTerm ? 'flex' : 'none';
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchPermissions();
     await fetchSettings();
 
+    // Hide power sorting options if power tracking is disabled
+    document.querySelectorAll('.power-sort-option').forEach(el => {
+        el.style.display = isPowerTrackingEnabled ? 'block' : 'none';
+    });
+    
     // Hide action bar if user lacks permissions
     const actionBar = document.querySelector('.action-bar');
     if (!canManageRanks && actionBar) {
@@ -137,8 +193,10 @@ async function loadMembers() {
         const response = await fetch(API_URL);
         const members = await response.json();
         allMembers = members; 
-        displayMembers(members);
-        updateMemberCount(members.length);
+        
+        // REPLACED: displayMembers(members) and updateMemberCount(members.length)
+        // Calling our new master function ensures filters/sorts stay active after saving!
+        updateDisplayedMembers();
     } catch (error) {
         console.error('Error loading members:', error);
         const membersList = document.getElementById('members-list');
@@ -368,32 +426,54 @@ function escapeHtml(text) {
 function setupSearch() {
     const searchInput = document.getElementById('search-input');
     const clearBtn = document.getElementById('clear-search');
-    if (!searchInput) return;
+    const eligibleFilter = document.getElementById('filter-eligible');
+    const sortDropdown = document.getElementById('sort-by');
+    const rankChips = document.querySelectorAll('.rank-chip');
+
+    // Search Input Listener
+    if (searchInput) {
+        searchInput.addEventListener('input', updateDisplayedMembers);
+    }
     
-    searchInput.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.toLowerCase().trim();
-        if (searchTerm) {
-            clearBtn.style.display = 'flex';
-            const filtered = allMembers.filter(member => 
-                member.name.toLowerCase().includes(searchTerm) ||
-                member.rank.toLowerCase().includes(searchTerm)
-            );
-            displayMembers(filtered);
-            updateMemberCount(filtered.length);
-        } else {
-            clearBtn.style.display = 'none';
-            displayMembers(allMembers);
-            updateMemberCount(allMembers.length);
-        }
+    // Clear Search Listener
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            updateDisplayedMembers();
+            searchInput.focus();
+        });
+    }
+
+    // NEW: Rank Chip Listeners for multi-select
+    rankChips.forEach(chip => {
+        chip.addEventListener('click', (e) => {
+            const clickedRank = e.target.dataset.rank;
+            
+            if (clickedRank === 'all') {
+                // If "All" is clicked, turn everything else off and turn "All" on
+                rankChips.forEach(c => c.classList.remove('active'));
+                e.target.classList.add('active');
+            } else {
+                // If a specific rank is clicked, turn "All" off
+                document.querySelector('.rank-chip[data-rank="all"]').classList.remove('active');
+                
+                // Toggle the clicked chip on/off
+                e.target.classList.toggle('active');
+                
+                // Safety net: If they unclick everything, automatically turn "All" back on
+                const activeRanks = document.querySelectorAll('.rank-chip.active');
+                if (activeRanks.length === 0) {
+                    document.querySelector('.rank-chip[data-rank="all"]').classList.add('active');
+                }
+            }
+            // Trigger the UI update
+            updateDisplayedMembers();
+        });
     });
-    
-    clearBtn.addEventListener('click', () => {
-        searchInput.value = '';
-        clearBtn.style.display = 'none';
-        displayMembers(allMembers);
-        updateMemberCount(allMembers.length);
-        searchInput.focus();
-    });
+
+    // Dropdown and Checkbox Listeners
+    if (eligibleFilter) eligibleFilter.addEventListener('change', updateDisplayedMembers);
+    if (sortDropdown) sortDropdown.addEventListener('change', updateDisplayedMembers);
 }
 
 // --- CSV Import ---
