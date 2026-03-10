@@ -61,7 +61,7 @@ if [ "$1" = "--setup-git" ]; then
     # Backup current installation
     echo "Backing up current installation..."
     sudo mkdir -p $BACKUP_DIR
-    sudo tar -czf $BACKUP_DIR/app_before_git_$TIMESTAMP.tar.gz -C $APP_DIR .
+    sudo tar -czf $BACKUP_DIR/app_before_git_$TIMESTAMP.tar.gz -C $APP_DIR --exclude='.git' .
     
     # Initialize git
     cd $APP_DIR
@@ -78,7 +78,8 @@ fi
 echo ""
 echo -e "${YELLOW}[1/8] Creating backup...${NC}"
 sudo mkdir -p $BACKUP_DIR
-sudo tar -czf $BACKUP_DIR/app_$TIMESTAMP.tar.gz -C $APP_DIR alliance-manager static
+# Backup the entire app directory (excluding .git) so source code and binaries stay synced
+sudo tar -czf $BACKUP_DIR/app_$TIMESTAMP.tar.gz -C $APP_DIR --exclude='.git' .
 sudo sqlite3 $DATA_DIR/alliance.db ".backup '$BACKUP_DIR/db_$TIMESTAMP.db'"
 echo -e "${GREEN}Backup created:${NC}"
 echo "  - $BACKUP_DIR/app_$TIMESTAMP.tar.gz"
@@ -92,13 +93,14 @@ echo "Application stopped"
 # Store current working directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+echo ""
+echo -e "${YELLOW}[3/8] Updating system dependencies...${NC}"
+sudo apt update
+# Added sqlite3 to ensure the database backup command always works
+sudo apt install -y sqlite3 tesseract-ocr tesseract-ocr-all libtesseract-dev libleptonica-dev
+echo "System and OCR dependencies updated"
+
 if [ "$UPDATE_METHOD" = "git" ]; then
-    echo ""
-    echo -e "${YELLOW}[3/8] Updating system dependencies...${NC}"
-    sudo apt update
-    sudo apt install -y tesseract-ocr tesseract-ocr-all libtesseract-dev libleptonica-dev
-    echo "OCR dependencies updated"
-    
     echo ""
     echo -e "${YELLOW}[4/8] Pulling latest changes from git...${NC}"
     cd $APP_DIR
@@ -118,12 +120,6 @@ if [ "$UPDATE_METHOD" = "git" ]; then
     
 else
     echo ""
-    echo -e "${YELLOW}[3/8] Updating system dependencies...${NC}"
-    sudo apt update
-    sudo apt install -y tesseract-ocr tesseract-ocr-all libtesseract-dev libleptonica-dev
-    echo "OCR dependencies updated"
-    
-    echo ""
     echo -e "${YELLOW}[4/8] Copying new files...${NC}"
     
     # Check if we're running from the source directory
@@ -132,18 +128,30 @@ else
         echo "Please run this script from the project directory or upload files first"
         echo ""
         echo -e "${YELLOW}To upload files from local machine:${NC}"
-        echo "  scp -r main.go go.mod static/ user@server:/tmp/lastwar-update/"
+        echo "  scp -r *.go *.html static/ templates/ go.mod user@server:/tmp/lastwar-update/"
         echo "  ssh user@server"
         echo "  cd /tmp/lastwar-update && sudo ./update.sh"
         exit 1
     fi
     
-    # Copy new files
-    sudo cp "$SCRIPT_DIR/main.go" $APP_DIR/
+    # Copy all Go source files
+    sudo cp "$SCRIPT_DIR/"*.go $APP_DIR/
     sudo cp "$SCRIPT_DIR/go.mod" $APP_DIR/ 2>/dev/null || true
+    sudo cp "$SCRIPT_DIR/go.sum" $APP_DIR/ 2>/dev/null || true
     
+    # Copy any root HTML files (like index.html)
+    sudo cp "$SCRIPT_DIR/"*.html $APP_DIR/ 2>/dev/null || true
+
+    # Copy static assets (CSS, JS, Images)
     if [ -d "$SCRIPT_DIR/static" ]; then
+        sudo mkdir -p $APP_DIR/static
         sudo cp -r "$SCRIPT_DIR/static/"* $APP_DIR/static/
+    fi
+
+    # Copy templates directory (if you use one)
+    if [ -d "$SCRIPT_DIR/templates" ]; then
+        sudo mkdir -p $APP_DIR/templates
+        sudo cp -r "$SCRIPT_DIR/templates/"* $APP_DIR/templates/
     fi
     
     # Preserve .env file
@@ -156,8 +164,10 @@ fi
 
 echo ""
 echo -e "${YELLOW}[5/8] Checking Go installation...${NC}"
+# Use explicit path to avoid sudo stripping the environment variables
+export PATH=$PATH:/usr/local/go/bin
 if ! command -v go &> /dev/null; then
-    echo -e "${RED}Go is not installed!${NC}"
+    echo -e "${RED}Go is not installed or not in PATH!${NC}"
     exit 1
 fi
 echo "Go version: $(go version)"
@@ -166,13 +176,13 @@ echo ""
 echo -e "${YELLOW}[6/8] Building application...${NC}"
 cd $APP_DIR
 
-# Download dependencies if needed
+# Download dependencies if needed using explicit path
 if [ -f "go.mod" ]; then
-    sudo -u $APP_USER go mod download
+    sudo -u $APP_USER env PATH=$PATH:/usr/local/go/bin go mod download
 fi
 
-# Build
-sudo -u $APP_USER go build -o alliance-manager main.go
+# Build using '.' to capture all .go files, with explicit path
+sudo -u $APP_USER env PATH=$PATH:/usr/local/go/bin go build -o alliance-manager .
 
 if [ ! -f "alliance-manager" ]; then
     echo -e "${RED}Build failed!${NC}"
@@ -190,7 +200,8 @@ echo -e "${GREEN}Build successful${NC}"
 echo ""
 echo -e "${YELLOW}[7/8] Setting permissions...${NC}"
 sudo chown -R $APP_USER:$APP_USER $APP_DIR/alliance-manager
-sudo chown -R $APP_USER:$APP_USER $APP_DIR/static
+sudo chown -R $APP_USER:$APP_USER $APP_DIR/static 2>/dev/null || true
+sudo chown -R $APP_USER:$APP_USER $APP_DIR/templates 2>/dev/null || true
 sudo chmod +x $APP_DIR/alliance-manager
 
 echo ""
