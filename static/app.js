@@ -6,6 +6,7 @@ let canManageRanks = false;
 let isR5OrAdmin = false;
 let isAdmin = false;
 let allMembers = []; 
+let isPowerTrackingEnabled = false; 
 
 // Fetch permissions to determine if Edit/Delete buttons should render
 async function fetchPermissions() {
@@ -23,9 +24,22 @@ async function fetchPermissions() {
     }
 }
 
+async function fetchSettings() {
+    try {
+        const response = await fetch('/api/settings');
+        if (response.ok) {
+            const settings = await response.json();
+            isPowerTrackingEnabled = settings.power_tracking_enabled === true;
+        }
+    } catch (error) {
+        console.error('Error fetching settings:', error);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchPermissions();
-    
+    await fetchSettings();
+
     // Hide action bar if user lacks permissions
     const actionBar = document.querySelector('.action-bar');
     if (!canManageRanks && actionBar) {
@@ -102,6 +116,18 @@ function resetMemberForm() {
     editingMemberId = null;
     document.getElementById('member-form').reset();
     document.getElementById('member-eligible').checked = true;
+    
+    // Clear the power input and timestamp
+    const powerInput = document.getElementById('modal-member-power');
+    if (powerInput) powerInput.value = '';
+    const timestampText = document.getElementById('modal-power-timestamp');
+    if (timestampText) timestampText.textContent = '';
+
+    const powerSection = document.getElementById('modal-power-section');
+    if (powerSection) {
+        powerSection.style.display = isPowerTrackingEnabled ? 'block' : 'none';
+    }
+    
     document.getElementById('modal-form-title').textContent = 'Add New Member';
     document.getElementById('submit-btn').textContent = 'Add Member';
 }
@@ -134,16 +160,15 @@ function displayMembers(members) {
         const eligibleClass = member.eligible !== false ? 'eligible' : 'not-eligible';
         
         let powerDisplay = '';
-        if (member.power) {
+        if (isPowerTrackingEnabled && member.power) {
             powerDisplay = `<span class="member-power" title="${member.power.toLocaleString()}">${formatPower(member.power)}</span>`;
         }
-        
+
         let actionsHtml = '';
         if (canManageRanks) {
             actionsHtml = `
                 <div class="member-actions">
-                    <button class="edit-btn" onclick="editMember(${member.id}, '${escapeHtml(member.name)}', '${escapeHtml(member.rank)}', ${member.eligible !== false})">Edit</button>
-                    <button class="delete-btn" onclick="deleteMember(${member.id}, '${escapeHtml(member.name)}')">Delete</button>
+                    <button class="edit-btn" onclick="editMember(${member.id}, '${escapeHtml(member.name)}', '${escapeHtml(member.rank)}', ${member.eligible !== false}, ${member.power || 0}, '${member.power_updated_at || ''}')">Edit</button>                    <button class="delete-btn" onclick="deleteMember(${member.id}, '${escapeHtml(member.name)}')">Delete</button>
                     ${isR5OrAdmin ? `<button class="create-user-btn" onclick="createUserForMember(${member.id}, '${escapeHtml(member.name)}')">Create User</button>` : ''}
                     <button class="toggle-eligible-btn ${eligibleClass}" onclick="toggleEligible(${member.id}, ${member.eligible !== false})">${eligibleStatus}</button>
                 </div>
@@ -175,17 +200,22 @@ async function handleMemberFormSubmit(e) {
     const rank = document.getElementById('member-rank').value;
     const eligible = document.getElementById('member-eligible').checked;
     
+    // Grab the power value. If the box is empty, explicitly set it to 0 to clear it out.
+    const powerInput = document.getElementById('modal-member-power');
+    const power = (powerInput && powerInput.value !== '') ? parseInt(powerInput.value, 10) : 0;
+
     if (!name || !rank) {
         alert('Please fill in all fields');
         return;
     }
 
     try {
+        // NEW: Include power in both the PUT and POST body payloads
         if (editingMemberId) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, eligible }),
+                body: JSON.stringify({ name, rank, eligible, power }),
             });
             if (!response.ok) throw new Error('Failed to update member');
             editingMemberId = null;
@@ -193,7 +223,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, eligible }),
+                body: JSON.stringify({ name, rank, eligible, power }),
             });
             if (!response.ok) {
                 if (response.status === 403) throw new Error('Permission denied: Only R4/R5 members can manage ranks');
@@ -208,7 +238,8 @@ async function handleMemberFormSubmit(e) {
     }
 }
 
-window.editMember = function(id, name, rank, eligible) {
+// NEW: Added power and powerUpdatedAt to the function parameters
+window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt = '') {
     if (!canManageRanks) {
         alert('You do not have permission to edit members.');
         return;
@@ -217,6 +248,33 @@ window.editMember = function(id, name, rank, eligible) {
     document.getElementById('member-name').value = name;
     document.getElementById('member-rank').value = rank;
     document.getElementById('member-eligible').checked = eligible;
+    
+    const powerSection = document.getElementById('modal-power-section');
+    if (powerSection) {
+        powerSection.style.display = isPowerTrackingEnabled ? 'block' : 'none';
+    }
+    
+    // Populate Power Input
+    const powerInput = document.getElementById('modal-member-power');
+    if (powerInput) {
+        // If power is 0, leave the box blank for a cleaner UI
+        powerInput.value = (power && power > 0) ? power : '';
+    }
+
+    // Format and display the timestamp
+    const timestampText = document.getElementById('modal-power-timestamp');
+    if (timestampText) {
+        if (powerUpdatedAt) {
+            // Replace space with T and append Z to force JS to read SQLite's CURRENT_TIMESTAMP as UTC
+            const formattedDateStr = powerUpdatedAt.replace(' ', 'T') + "Z";
+            const updatedDate = new Date(formattedDateStr);
+            const options = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' };
+            timestampText.textContent = `Last updated: ${updatedDate.toLocaleDateString(undefined, options)}`;
+        } else {
+            timestampText.textContent = "Last updated: Never";
+        }
+    }
+
     document.getElementById('modal-form-title').textContent = 'Edit Member';
     document.getElementById('submit-btn').textContent = 'Update Member';
     openMemberModal(true);

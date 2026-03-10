@@ -35,11 +35,12 @@ import (
 )
 
 type Member struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	Rank     string `json:"rank"`
-	Eligible bool   `json:"eligible"`
-	Power    *int64 `json:"power,omitempty"`
+	ID             int    `json:"id"`
+	Name           string `json:"name"`
+	Rank           string `json:"rank"`
+	Eligible       bool   `json:"eligible"`
+	Power          *int64 `json:"power"`
+	PowerUpdatedAt string `json:"power_updated_at"`
 }
 
 type MemberStats struct {
@@ -2006,15 +2007,12 @@ func getLoginHistory(w http.ResponseWriter, r *http.Request) {
 // Get all members
 func getMembers(w http.ResponseWriter, r *http.Request) {
 	query := `
-		SELECT m.id, m.name, m.rank, COALESCE(m.eligible, 1),
-		       (SELECT ph.power 
-		        FROM power_history ph 
-		        WHERE ph.member_id = m.id 
-		        ORDER BY ph.recorded_at DESC 
-		        LIMIT 1) as latest_power
-		FROM members m
-		ORDER BY m.name
-	`
+        SELECT m.id, m.name, m.rank, COALESCE(m.eligible, 1),
+               COALESCE((SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_power,
+               COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date
+        FROM members m
+        ORDER BY m.name
+    `
 	rows, err := db.Query(query)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2025,7 +2023,8 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 	members := []Member{}
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Power); err != nil {
+		// Add &m.PowerUpdatedAt to the Scan
+		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Power, &m.PowerUpdatedAt); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -2099,6 +2098,14 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 	id, _ := result.LastInsertId()
 	m.ID = int(id)
 
+	// Simplified for New Members: If power was sent (including 0), log it.
+	if m.Power != nil {
+		_, insertErr := db.Exec(`INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.Power)
+		if insertErr != nil {
+			log.Printf("Warning: Failed to log initial power history for member %d: %v", m.ID, insertErr)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(m)
@@ -2115,14 +2122,34 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 
 	var m Member
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		log.Printf("JSON Decode Error: %v", err) // <--- ADD THIS
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	// 1. Update the base member details
 	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, eligible = ? WHERE id = ?", m.Name, m.Rank, m.Eligible, id)
 	if err != nil {
+		log.Printf("DB Update Error: %v", err) // <--- ADD THIS
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// 2. Handle the Power History insertion using pointer dereferencing
+	// We only check if m.Power is NOT nil (meaning the field was in the JSON)
+	if m.Power != nil {
+		var currentPower int64 = -1 // Default to -1 so that 0 is seen as a change
+
+		// Check their most recent recorded power - using _ to ignore the "no rows" error
+		_ = db.QueryRow(`SELECT power FROM power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentPower)
+
+		// Compare the dereferenced pointer value (*m.Power) to the database value
+		if currentPower != *m.Power {
+			_, insertErr := db.Exec(`INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.Power)
+			if insertErr != nil {
+				log.Printf("Warning: Failed to log power history for member %d: %v", id, insertErr)
+			}
+		}
 	}
 
 	m.ID = id
