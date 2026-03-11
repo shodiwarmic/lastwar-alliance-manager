@@ -1415,6 +1415,10 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+
+		// Refresh the session cookie expiration (Rolling Session)
+		session.Save(r, w)
+
 		next(w, r)
 	}
 }
