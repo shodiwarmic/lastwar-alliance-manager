@@ -41,6 +41,25 @@
             padding: 40px 30px;
         }
 
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
         .error-message {
             background: #f8d7da;
             color: #721c24;
@@ -106,6 +125,46 @@
             padding: 2px 6px;
             border-radius: 4px;
             font-family: monospace;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content h3 {
+            color: #333;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .password-rules {
+            font-size: 0.85em;
+            margin-bottom: 15px;
+            padding-left: 20px;
+            color: #666;
+            background: #f8f9fa;
+            padding: 10px 10px 10px 30px;
+            border-radius: 6px;
+            border: 1px solid #eee;
         }
 
         /* Mobile responsive styles */
@@ -204,7 +263,105 @@
         </div>
     </div>
 
+    <div id="force-password-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>🔒 Password Update Required</h3>
+            <p style="margin-bottom: 15px; font-size: 0.9em; color: #666;">Your password has expired or an admin requires you to update it.</p>
+            
+            <ul id="password-rules" class="password-rules" style="list-style: none;">
+                <li style="color: #666;">⚪ Loading requirements...</li>
+            </ul>
+
+            <form id="force-password-form">
+                <div class="form-group">
+                    <label>New Password</label>
+                    <input type="password" id="force-new-password" required autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label>Confirm New Password</label>
+                    <input type="password" id="force-confirm-password" required autocomplete="new-password">
+                    <div id="force-match-status" style="margin-top: 5px; font-size: 0.85em; font-weight: bold; display: none;"></div>
+                </div>
+                <div id="force-password-error" class="error-message" style="font-size: 0.9em; padding: 8px;"></div>
+                <button type="submit" class="login-btn" id="force-submit-btn" disabled style="opacity: 0.6; cursor: not-allowed;">Update & Login</button>
+            </form>
+        </div>
+    </div>
+
     <script>
+        let currentPolicy = null;
+
+        // Reactive UI logic for real-time validation on the Login Modal
+        function checkForcePasswordRequirements() {
+            if (!currentPolicy) return;
+            
+            const newPwd = document.getElementById('force-new-password').value;
+            const confirmPwd = document.getElementById('force-confirm-password').value;
+            const submitBtn = document.getElementById('force-submit-btn');
+            const matchStatus = document.getElementById('force-match-status');
+            
+            let allRulesMet = true;
+
+            function toggleRule(id, isMet) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const baseText = el.getAttribute('data-text');
+                if (isMet) {
+                    el.innerHTML = `✅ ${baseText}`;
+                    el.style.color = '#28a745';
+                } else {
+                    el.innerHTML = `❌ ${baseText}`;
+                    el.style.color = '#dc3545';
+                    allRulesMet = false;
+                }
+            }
+
+            if (newPwd.length > 0) {
+                toggleRule('rule-length', newPwd.length >= currentPolicy.min_length);
+                if (currentPolicy.require_upper) toggleRule('rule-upper', /[A-Z]/.test(newPwd));
+                if (currentPolicy.require_lower) toggleRule('rule-lower', /[a-z]/.test(newPwd));
+                if (currentPolicy.require_number) toggleRule('rule-number', /[0-9]/.test(newPwd));
+                if (currentPolicy.require_special) toggleRule('rule-special', /[^a-zA-Z0-9]/.test(newPwd));
+            } else {
+                allRulesMet = false;
+                const rulesList = document.getElementById('password-rules');
+                const listItems = rulesList.getElementsByTagName('li');
+                for (let li of listItems) {
+                    li.innerHTML = `⚪ ${li.getAttribute('data-text')}`;
+                    li.style.color = '#666';
+                }
+            }
+
+            let passwordsMatch = false;
+            if (confirmPwd.length > 0) {
+                matchStatus.style.display = 'block';
+                if (newPwd === confirmPwd) {
+                    matchStatus.innerHTML = '✅ Passwords match';
+                    matchStatus.style.color = '#28a745';
+                    passwordsMatch = true;
+                } else {
+                    matchStatus.innerHTML = '❌ Passwords do not match';
+                    matchStatus.style.color = '#dc3545';
+                }
+            } else {
+                matchStatus.style.display = 'none';
+            }
+
+            if (allRulesMet && passwordsMatch && newPwd.length > 0) {
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+                submitBtn.style.cursor = 'pointer';
+            } else {
+                submitBtn.disabled = true;
+                submitBtn.style.opacity = '0.6';
+                submitBtn.style.cursor = 'not-allowed';
+            }
+        }
+
+        // Attach the real-time input listeners
+        document.getElementById('force-new-password').addEventListener('input', checkForcePasswordRequirements);
+        document.getElementById('force-confirm-password').addEventListener('input', checkForcePasswordRequirements);
+
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -237,12 +394,30 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    successDiv.textContent = 'Login successful! Redirecting...';
-                    successDiv.style.display = 'block';
                     
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 1000);
+                    if (data.requires_password_change) {
+                        currentPolicy = data.policy;
+                        
+                        // Dynamically build the reactive data-text list
+                        const rulesList = document.getElementById('password-rules');
+                        rulesList.innerHTML = `<li id="rule-length" data-text="Minimum ${currentPolicy.min_length} characters" style="color: #666; transition: color 0.3s;">⚪ Minimum ${currentPolicy.min_length} characters</li>`;
+                        if (currentPolicy.require_upper) rulesList.innerHTML += `<li id="rule-upper" data-text="At least one uppercase letter" style="color: #666; transition: color 0.3s;">⚪ At least one uppercase letter</li>`;
+                        if (currentPolicy.require_lower) rulesList.innerHTML += `<li id="rule-lower" data-text="At least one lowercase letter" style="color: #666; transition: color 0.3s;">⚪ At least one lowercase letter</li>`;
+                        if (currentPolicy.require_number) rulesList.innerHTML += `<li id="rule-number" data-text="At least one number" style="color: #666; transition: color 0.3s;">⚪ At least one number</li>`;
+                        if (currentPolicy.require_special) rulesList.innerHTML += `<li id="rule-special" data-text="At least one special character" style="color: #666; transition: color 0.3s;">⚪ At least one special character</li>`;
+
+                        // Evaluate immediately in case browser auto-filled it
+                        checkForcePasswordRequirements();
+
+                        document.getElementById('force-password-modal').style.display = 'flex';
+                        
+                        loginBtn.disabled = false;
+                        loginBtn.textContent = 'Login';
+                    } else {
+                        successDiv.textContent = 'Login successful! Redirecting...';
+                        successDiv.style.display = 'block';
+                        setTimeout(() => { window.location.href = '/'; }, 1000);
+                    }
                 } else {
                     const error = await response.text();
                     errorDiv.textContent = 'Invalid username or password';
@@ -256,6 +431,46 @@
                 errorDiv.style.display = 'block';
                 loginBtn.disabled = false;
                 loginBtn.textContent = 'Login';
+            }
+        });
+
+        // Handle the Force Password Change Form Submission
+        document.getElementById('force-password-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newPassword = document.getElementById('force-new-password').value;
+            const errorDiv = document.getElementById('force-password-error');
+            const submitBtn = document.getElementById('force-submit-btn');
+            
+            // Since the button is disabled until all rules pass, we don't need heavy client-side alerts anymore,
+            // but we keep the network request wrapped in a try/catch.
+            errorDiv.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Updating...';
+
+            try {
+                const response = await fetch('/api/force-change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_password: newPassword })
+                });
+                
+                if (response.ok) {
+                    submitBtn.textContent = 'Success!';
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 500);
+                } else {
+                    const errorData = await response.json();
+                    errorDiv.textContent = errorData.message || 'Failed to change password.';
+                    errorDiv.style.display = 'block';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Update & Login';
+                }
+            } catch (error) {
+                errorDiv.textContent = 'A network error occurred. Please try again.';
+                errorDiv.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Update & Login';
             }
         });
     </script>

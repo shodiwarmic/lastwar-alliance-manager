@@ -13,15 +13,18 @@
                     </div>
                     <div class="form-group">
                         <label for="new-password">New Password:</label>
-                        <input type="password" id="new-password" minlength="6" required>
-                        <span class="help-text">Minimum 6 characters</span>
+                        <input type="password" id="new-password" required>
+                        <ul id="password-rules" style="margin-top: 8px; padding-left: 0; list-style: none; font-size: 0.85em; line-height: 1.6;">
+                            <li style="color: #666;">⚪ Loading requirements...</li>
+                        </ul>
                     </div>
                     <div class="form-group">
                         <label for="confirm-password">Confirm New Password:</label>
-                        <input type="password" id="confirm-password" minlength="6" required>
+                        <input type="password" id="confirm-password" required>
+                        <div id="match-status" style="margin-top: 5px; font-size: 0.85em; font-weight: bold; display: none;"></div>
                     </div>
                     <div class="button-group">
-                        <button type="submit" class="primary-btn">🔒 Change Password</button>
+                        <button type="submit" id="submit-pwd-btn" class="primary-btn" disabled style="opacity: 0.6; cursor: not-allowed;">🔒 Change Password</button>
                     </div>
                 </form>
             </section>

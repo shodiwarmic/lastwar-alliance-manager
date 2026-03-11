@@ -35,8 +35,19 @@ async function loadSettings() {
         document.getElementById('schedule-message-template').value = settings.schedule_message_template || 'Train Schedule - Week {WEEK}\n\n{SCHEDULES}\n\nNext in line:\n{NEXT_3}';
         document.getElementById('daily-message-template').value = settings.daily_message_template || 'ALL ABOARD! Daily Train Assignment\n\nDate: {DATE}\n\nToday\'s Conductor: {CONDUCTOR_NAME} ({CONDUCTOR_RANK})\nBackup Engineer: {BACKUP_NAME} ({BACKUP_RANK})\n\nDEPARTURE SCHEDULE:\n- 15:00 ST (17:00 UK) - Conductor {CONDUCTOR_NAME}, please request train assignment in alliance chat\n- 16:30 ST (18:30 UK) - If conductor hasn\'t shown up, Backup {BACKUP_NAME} takes over and assigns train to themselves\n\nRemember: Communication is key! Let the alliance know if you can\'t make it.\n\nAll aboard for another successful run!';
         
-        // NEW: Load Login Message
         document.getElementById('settings-login-message').value = settings.login_message || '';
+
+        // Load Password Policy Settings (Admin Only)
+        const minLen = document.getElementById('pwd-min-length');
+        if (minLen) {
+            minLen.value = settings.pwd_min_length || 12;
+            document.getElementById('pwd-history-count').value = settings.pwd_history_count !== undefined ? settings.pwd_history_count : 4;
+            document.getElementById('pwd-validity-days').value = settings.pwd_validity_days !== undefined ? settings.pwd_validity_days : 180;
+            document.getElementById('pwd-require-special').checked = settings.pwd_require_special;
+            document.getElementById('pwd-require-upper').checked = settings.pwd_require_upper;
+            document.getElementById('pwd-require-lower').checked = settings.pwd_require_lower;
+            document.getElementById('pwd-require-number').checked = settings.pwd_require_number;
+        }
 
         // Load Storm Timezones
         if (settings.storm_timezones) {
@@ -106,12 +117,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                 first_time_conductor_boost: parseInt(document.getElementById('first-time-boost').value),
                 schedule_message_template: document.getElementById('schedule-message-template').value,
                 daily_message_template: document.getElementById('daily-message-template').value,
-                login_message: document.getElementById('settings-login-message').value, // NEW
+                login_message: document.getElementById('settings-login-message').value,
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
                 storm_timezones: selectedZones,
                 storm_respect_dst: document.getElementById('storm_respect_dst').checked
             };
-            
+
+            // Append Admin-only Password Policy Settings
+            const minLen = document.getElementById('pwd-min-length');
+            if (minLen) {
+                settings.pwd_min_length = parseInt(minLen.value);
+                settings.pwd_history_count = parseInt(document.getElementById('pwd-history-count').value);
+                settings.pwd_validity_days = parseInt(document.getElementById('pwd-validity-days').value);
+                settings.pwd_require_special = document.getElementById('pwd-require-special').checked;
+                settings.pwd_require_upper = document.getElementById('pwd-require-upper').checked;
+                settings.pwd_require_lower = document.getElementById('pwd-require-lower').checked;
+                settings.pwd_require_number = document.getElementById('pwd-require-number').checked;
+            }
+
             try {
                 const response = await fetch(SETTINGS_URL, {
                     method: 'PUT',
@@ -150,8 +173,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                     document.getElementById('schedule-message-template').value = 'Train Schedule - Week {WEEK}\n\n{SCHEDULES}\n\nNext in line:\n{NEXT_3}';
                     document.getElementById('daily-message-template').value = 'ALL ABOARD! Daily Train Assignment\n\nDate: {DATE}\n\nToday\'s Conductor: {CONDUCTOR_NAME} ({CONDUCTOR_RANK})\nBackup Engineer: {BACKUP_NAME} ({BACKUP_RANK})\n\nDEPARTURE SCHEDULE:\n- 15:00 ST (17:00 UK) - Conductor {CONDUCTOR_NAME}, please request train assignment in alliance chat\n- 16:30 ST (18:30 UK) - If conductor hasn\'t shown up, Backup {BACKUP_NAME} takes over and assigns train to themselves\n\nRemember: Communication is key! Let the alliance know if you can\'t make it.\n\nAll aboard for another successful run!';
                     
-                    // NEW: Reset Login Message to default HTML
                     document.getElementById('settings-login-message').value = `<strong>Default Credentials:</strong>\nUsername: <code>admin</code><br>\nPassword: <code>admin123</code>`;
+
+                    // Reset Password Policy Defaults (Admin Only)
+                    const minLen = document.getElementById('pwd-min-length');
+                    if (minLen) {
+                        minLen.value = 12;
+                        document.getElementById('pwd-history-count').value = 4;
+                        document.getElementById('pwd-validity-days').value = 180;
+                        document.getElementById('pwd-require-special').checked = false;
+                        document.getElementById('pwd-require-upper').checked = false;
+                        document.getElementById('pwd-require-lower').checked = false;
+                        document.getElementById('pwd-require-number').checked = false;
+                    }
 
                     const powerToggle = document.getElementById('power-tracking-enabled');
                     if (powerToggle) powerToggle.checked = false;
@@ -160,7 +194,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             });
         }
-        
+
         // Power tracking toggle listener
         const powerToggle = document.getElementById('power-tracking-enabled');
         if (powerToggle) {

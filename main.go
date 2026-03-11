@@ -168,22 +168,24 @@ type IPGeolocation struct {
 }
 
 type AdminUserRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password,omitempty"`
-	MemberID *int   `json:"member_id,omitempty"`
-	IsAdmin  bool   `json:"is_admin"`
+	Username            string `json:"username"`
+	Password            string `json:"password,omitempty"`
+	MemberID            *int   `json:"member_id,omitempty"`
+	IsAdmin             bool   `json:"is_admin"`
+	ForcePasswordChange bool   `json:"force_password_change"`
 }
 
 type AdminUserResponse struct {
-	ID           int            `json:"id"`
-	Username     string         `json:"username"`
-	MemberID     *int           `json:"member_id,omitempty"`
-	MemberName   *string        `json:"member_name,omitempty"`
-	IsAdmin      bool           `json:"is_admin"`
-	CreatedAt    string         `json:"created_at,omitempty"`
-	LastLogin    *string        `json:"last_login,omitempty"`
-	LoginCount   int            `json:"login_count"`
-	RecentLogins []LoginSession `json:"recent_logins,omitempty"`
+	ID                  int            `json:"id"`
+	Username            string         `json:"username"`
+	MemberID            *int           `json:"member_id,omitempty"`
+	MemberName          *string        `json:"member_name,omitempty"`
+	IsAdmin             bool           `json:"is_admin"`
+	CreatedAt           string         `json:"created_at,omitempty"`
+	LastLogin           *string        `json:"last_login,omitempty"`
+	LoginCount          int            `json:"login_count"`
+	RecentLogins        []LoginSession `json:"recent_logins,omitempty"`
+	ForcePasswordChange bool           `json:"force_password_change"`
 }
 
 type Settings struct {
@@ -202,6 +204,14 @@ type Settings struct {
 	StormTimezones               string `json:"storm_timezones"`
 	StormRespectDST              bool   `json:"storm_respect_dst"`
 	LoginMessage                 string `json:"login_message"`
+	// Password Policy Settings
+	PwdMinLength      int  `json:"pwd_min_length"`
+	PwdRequireSpecial bool `json:"pwd_require_special"`
+	PwdRequireUpper   bool `json:"pwd_require_upper"`
+	PwdRequireLower   bool `json:"pwd_require_lower"`
+	PwdRequireNumber  bool `json:"pwd_require_number"`
+	PwdHistoryCount   int  `json:"pwd_history_count"`
+	PwdValidityDays   int  `json:"pwd_validity_days"`
 }
 
 type MemberRanking struct {
@@ -1275,6 +1285,60 @@ Password: <code>admin123</code>`
 		log.Println("Database migration: Added power_tracking_enabled column to settings table")
 	}
 
+	// Migrate settings table for password policies
+	pwdColumns := []struct{ name, typeDef string }{
+		{"pwd_min_length", "INTEGER NOT NULL DEFAULT 12"},
+		{"pwd_require_special", "BOOLEAN NOT NULL DEFAULT 0"},
+		{"pwd_require_upper", "BOOLEAN NOT NULL DEFAULT 0"},
+		{"pwd_require_lower", "BOOLEAN NOT NULL DEFAULT 0"},
+		{"pwd_require_number", "BOOLEAN NOT NULL DEFAULT 0"},
+		{"pwd_history_count", "INTEGER NOT NULL DEFAULT 4"},
+		{"pwd_validity_days", "INTEGER NOT NULL DEFAULT 180"},
+	}
+	for _, col := range pwdColumns {
+		var exists bool
+		err = db.QueryRow(fmt.Sprintf(`SELECT COUNT(*) > 0 FROM pragma_table_info('settings') WHERE name = '%s'`, col.name)).Scan(&exists)
+		if err == nil && !exists {
+			_, err = db.Exec(fmt.Sprintf(`ALTER TABLE settings ADD COLUMN %s %s`, col.name, col.typeDef))
+			if err != nil {
+				return err
+			}
+			log.Printf("Database migration: Added %s column to settings table", col.name)
+		}
+	}
+
+	// SELF-HEALING: Fix any 0 values that got saved accidentally
+	db.Exec(`UPDATE settings SET pwd_min_length = 12, pwd_history_count = 4, pwd_validity_days = 180 WHERE pwd_min_length = 0 OR pwd_min_length IS NULL`)
+
+	// Migrate users table for password expiration
+	userPwdCols := []struct{ name, typeDef string }{
+		{"force_password_change", "BOOLEAN NOT NULL DEFAULT 1"},
+		{"password_changed_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"},
+	}
+	for _, col := range userPwdCols {
+		var exists bool
+		err = db.QueryRow(fmt.Sprintf(`SELECT COUNT(*) > 0 FROM pragma_table_info('users') WHERE name = '%s'`, col.name)).Scan(&exists)
+		if err == nil && !exists {
+			_, err = db.Exec(fmt.Sprintf(`ALTER TABLE users ADD COLUMN %s %s`, col.name, col.typeDef))
+			if err != nil {
+				return err
+			}
+			log.Printf("Database migration: Added %s column to users table", col.name)
+		}
+	}
+
+	// Create password_history table
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS password_history (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		password_hash TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	)`)
+	if err != nil {
+		return err
+	}
+
 	// Create default admin user if no users exist
 	var userCount int
 	err = db.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount)
@@ -1295,6 +1359,48 @@ Password: <code>admin123</code>`
 		log.Println("Default admin user created - Username: admin, Password: admin123")
 	}
 
+	return nil
+}
+
+func validatePasswordPolicy(password string, userID int) error {
+	var s Settings
+	// Updated query to include pwd_require_lower
+	err := db.QueryRow("SELECT pwd_min_length, pwd_require_special, pwd_require_upper, pwd_require_lower, pwd_require_number, pwd_history_count FROM settings WHERE id = 1").Scan(
+		&s.PwdMinLength, &s.PwdRequireSpecial, &s.PwdRequireUpper, &s.PwdRequireLower, &s.PwdRequireNumber, &s.PwdHistoryCount,
+	)
+	if err != nil {
+		return err
+	}
+
+	if len(password) < s.PwdMinLength {
+		return fmt.Errorf("password must be at least %d characters", s.PwdMinLength)
+	}
+	if s.PwdRequireUpper && !regexp.MustCompile(`[A-Z]`).MatchString(password) {
+		return fmt.Errorf("password must contain an uppercase letter")
+	}
+	if s.PwdRequireLower && !regexp.MustCompile(`[a-z]`).MatchString(password) { // NEW
+		return fmt.Errorf("password must contain a lowercase letter")
+	}
+	if s.PwdRequireNumber && !regexp.MustCompile(`[0-9]`).MatchString(password) {
+		return fmt.Errorf("password must contain a number")
+	}
+	if s.PwdRequireSpecial && !regexp.MustCompile(`[^a-zA-Z0-9]`).MatchString(password) {
+		return fmt.Errorf("password must contain a special character")
+	}
+
+	if s.PwdHistoryCount > 0 && userID > 0 {
+		rows, err := db.Query("SELECT password_hash FROM password_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", userID, s.PwdHistoryCount)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var hash string
+				rows.Scan(&hash)
+				if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil {
+					return fmt.Errorf("password has been used recently and cannot be reused")
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -1385,9 +1491,24 @@ func login(w http.ResponseWriter, r *http.Request) {
 	var user User
 	var memberID sql.NullInt64
 	var isAdmin sql.NullBool
-	err := db.QueryRow("SELECT id, username, password, member_id, is_admin FROM users WHERE username = ?", creds.Username).Scan(&user.ID, &user.Username, &user.Password, &memberID, &isAdmin)
+
+	// Variables for password policy and enforcement
+	var forcePasswordChange bool
+	var isExpired bool
+	var minLen int
+	var reqSpecial, reqUpper, reqLower, reqNumber bool
+
+	// Updated query to fetch user data along with settings and expiration status
+	err := db.QueryRow(`
+		SELECT u.id, u.username, u.password, u.member_id, u.is_admin, u.force_password_change,
+		       CASE WHEN s.pwd_validity_days > 0 AND (julianday('now') - julianday(u.password_changed_at)) > s.pwd_validity_days THEN 1 ELSE 0 END as expired,
+		       s.pwd_min_length, s.pwd_require_special, s.pwd_require_upper, s.pwd_require_lower, s.pwd_require_number
+		FROM users u CROSS JOIN settings s WHERE s.id = 1 AND u.username = ?`, creds.Username).Scan(
+		&user.ID, &user.Username, &user.Password, &memberID, &isAdmin, &forcePasswordChange, &isExpired,
+		&minLen, &reqSpecial, &reqUpper, &reqLower, &reqNumber)
+
 	if err != nil {
-		// Track failed login attempt
+		// Track failed login attempt (0 because user not found)
 		trackLogin(0, creds.Username, r, false)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
@@ -1408,11 +1529,33 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Track successful login
+	// Track successful authentication
 	trackLogin(user.ID, user.Username, r, true)
 
-	// Create session
+	// Intercept the login flow if a password change is required
+	if forcePasswordChange || isExpired {
+		session, _ := store.Get(r, "session")
+		session.Values["force_change_user_id"] = user.ID
+		session.Save(r, w)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"requires_password_change": true,
+			"message":                  "You must change your password to continue.",
+			"policy": map[string]interface{}{
+				"min_length":      minLen,
+				"require_special": reqSpecial,
+				"require_upper":   reqUpper,
+				"require_lower":   reqLower,
+				"require_number":  reqNumber,
+			},
+		})
+		return
+	}
+
+	// Normal Login - Clear any stale temp tokens and create full session
 	session, _ := store.Get(r, "session")
+	delete(session.Values, "force_change_user_id")
 	session.Values["authenticated"] = true
 	session.Values["username"] = user.Username
 	session.Values["user_id"] = user.ID
@@ -1423,7 +1566,61 @@ func login(w http.ResponseWriter, r *http.Request) {
 	session.Save(r, w)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"message": "Login successful", "username": user.Username})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":  "Login successful",
+		"username": user.Username,
+	})
+}
+
+func forceChangePassword(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID, ok := session.Values["force_change_user_id"].(int)
+	if !ok {
+		http.Error(w, `{"message": "Unauthorized or session expired"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"message": "Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Server-side validation (Step 1C) happens here
+	if err := validatePasswordPolicy(req.NewPassword, userID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+		return
+	}
+
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+
+	_, err := db.Exec("UPDATE users SET password = ?, force_password_change = 0, password_changed_at = CURRENT_TIMESTAMP WHERE id = ?", string(hashedPassword), userID)
+	if err != nil {
+		http.Error(w, `{"message": "Failed to update password"}`, http.StatusInternalServerError)
+		return
+	}
+	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", userID, string(hashedPassword))
+
+	var user User
+	db.QueryRow("SELECT username, member_id, is_admin FROM users WHERE id = ?", userID).Scan(&user.Username, &user.MemberID, &user.IsAdmin)
+
+	// Promote the temporary session to a full authenticated session
+	delete(session.Values, "force_change_user_id")
+	session.Values["authenticated"] = true
+	session.Values["user_id"] = userID
+	session.Values["username"] = user.Username
+	session.Values["is_admin"] = user.IsAdmin
+	if user.MemberID != nil {
+		session.Values["member_id"] = *user.MemberID
+	}
+	session.Save(r, w)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Password changed and logged in successfully"})
 }
 
 // Logout handler
@@ -1456,11 +1653,6 @@ func changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(input.NewPassword) < 6 {
-		http.Error(w, "New password must be at least 6 characters", http.StatusBadRequest)
-		return
-	}
-
 	// Get current password hash
 	var currentHash string
 	err := db.QueryRow("SELECT password FROM users WHERE id = ?", userID).Scan(&currentHash)
@@ -1476,6 +1668,12 @@ func changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate against the configurable database policy
+	if err := validatePasswordPolicy(input.NewPassword, userID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	// Hash new password
 	newHash, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
@@ -1483,12 +1681,15 @@ func changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update password
-	_, err = db.Exec("UPDATE users SET password = ? WHERE id = ?", string(newHash), userID)
+	// Update password, clear force_change flag, and set new changed_at timestamp
+	_, err = db.Exec("UPDATE users SET password = ?, force_password_change = 0, password_changed_at = CURRENT_TIMESTAMP WHERE id = ?", string(newHash), userID)
 	if err != nil {
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
+
+	// Insert into password history
+	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", userID, string(newHash))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Password changed successfully"})
@@ -1699,7 +1900,7 @@ func checkAuth(w http.ResponseWriter, r *http.Request) {
 // Admin: Get all users with login information
 func getAdminUsers(w http.ResponseWriter, r *http.Request) {
 	query := `
-		SELECT u.id, u.username, u.member_id, u.is_admin, 
+		SELECT u.id, u.username, u.member_id, u.is_admin, u.force_password_change, 
 		   m.name as member_name,
 		   (SELECT login_time FROM login_sessions WHERE user_id = u.id AND success = 1 ORDER BY login_time DESC LIMIT 1) as last_login,
 		   (SELECT COUNT(*) FROM login_sessions WHERE user_id = u.id AND success = 1) as login_count
@@ -1722,7 +1923,8 @@ func getAdminUsers(w http.ResponseWriter, r *http.Request) {
 		var memberName sql.NullString
 		var lastLogin sql.NullString
 
-		err := rows.Scan(&user.ID, &user.Username, &memberID, &user.IsAdmin,
+		// Added &user.ForcePasswordChange to the scan
+		err := rows.Scan(&user.ID, &user.Username, &memberID, &user.IsAdmin, &user.ForcePasswordChange,
 			&memberName, &lastLogin, &user.LoginCount)
 		if err != nil {
 			continue
@@ -1800,8 +2002,10 @@ func createAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(req.Password) < 6 {
-		http.Error(w, "Password must be at least 6 characters", http.StatusBadRequest)
+	// Validate against the configurable database policy
+	// Passing 0 for userID because the user doesn't exist yet (no history to check)
+	if err := validatePasswordPolicy(req.Password, 0); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -1820,15 +2024,18 @@ func createAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Insert user
-	result, err := db.Exec("INSERT INTO users (username, password, member_id, is_admin) VALUES (?, ?, ?, ?)",
-		req.Username, string(hashedPassword), req.MemberID, req.IsAdmin)
+	// Insert user, explicitly including the force_password_change flag
+	result, err := db.Exec("INSERT INTO users (username, password, member_id, is_admin, force_password_change) VALUES (?, ?, ?, ?, ?)",
+		req.Username, string(hashedPassword), req.MemberID, req.IsAdmin, req.ForcePasswordChange)
 	if err != nil {
 		http.Error(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	id, _ := result.LastInsertId()
+
+	// Add this initial password to the history tracking table
+	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", id, string(hashedPassword))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1870,13 +2077,13 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build update query
+	// Build update query - Now includes force_password_change
 	if req.Username != "" {
-		_, err = db.Exec("UPDATE users SET username = ?, member_id = ?, is_admin = ? WHERE id = ?",
-			req.Username, req.MemberID, req.IsAdmin, userID)
+		_, err = db.Exec("UPDATE users SET username = ?, member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
+			req.Username, req.MemberID, req.IsAdmin, req.ForcePasswordChange, userID)
 	} else {
-		_, err = db.Exec("UPDATE users SET member_id = ?, is_admin = ? WHERE id = ?",
-			req.MemberID, req.IsAdmin, userID)
+		_, err = db.Exec("UPDATE users SET member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
+			req.MemberID, req.IsAdmin, req.ForcePasswordChange, userID)
 	}
 
 	if err != nil {
@@ -1959,12 +2166,15 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update password
-	_, err = db.Exec("UPDATE users SET password = ? WHERE id = ?", string(hashedPassword), userID)
+	// Update password, set force_change flag to 1, and set new changed_at timestamp
+	_, err = db.Exec("UPDATE users SET password = ?, force_password_change = 1, password_changed_at = CURRENT_TIMESTAMP WHERE id = ?", string(hashedPassword), userID)
 	if err != nil {
 		http.Error(w, "Failed to reset password: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Insert into password history
+	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", userID, string(hashedPassword))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -3577,36 +3787,37 @@ func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 
 // Get settings
 func getSettings(w http.ResponseWriter, r *http.Request) {
-	var settings Settings
-	err := db.QueryRow(`SELECT id, award_first_points, award_second_points, award_third_points, 
-		recommendation_points, recent_conductor_penalty_days, above_average_conductor_penalty, r4r5_rank_boost,
-		first_time_conductor_boost, schedule_message_template, daily_message_template, 
-		COALESCE(power_tracking_enabled, 0) as power_tracking_enabled, storm_timezones, storm_respect_dst,
-		COALESCE(login_message, '') as login_message
+	var s Settings
+
+	err := db.QueryRow(`SELECT 
+		id, award_first_points, award_second_points, award_third_points, 
+		recommendation_points, recent_conductor_penalty_days, 
+		above_average_conductor_penalty, r4r5_rank_boost, 
+		first_time_conductor_boost, schedule_message_template, 
+		daily_message_template, power_tracking_enabled,
+		COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''),
+		COALESCE(pwd_min_length, 12), COALESCE(pwd_require_special, 0), 
+		COALESCE(pwd_require_upper, 0), COALESCE(pwd_require_lower, 0), 
+		COALESCE(pwd_require_number, 0), COALESCE(pwd_history_count, 4), 
+		COALESCE(pwd_validity_days, 180)
 		FROM settings WHERE id = 1`).Scan(
-		&settings.ID,
-		&settings.AwardFirstPoints,
-		&settings.AwardSecondPoints,
-		&settings.AwardThirdPoints,
-		&settings.RecommendationPoints,
-		&settings.RecentConductorPenaltyDays,
-		&settings.AboveAverageConductorPenalty,
-		&settings.R4R5RankBoost,
-		&settings.FirstTimeConductorBoost,
-		&settings.ScheduleMessageTemplate,
-		&settings.DailyMessageTemplate,
-		&settings.PowerTrackingEnabled,
-		&settings.StormTimezones,
-		&settings.StormRespectDST,
-		&settings.LoginMessage, // NEW
+		&s.ID, &s.AwardFirstPoints, &s.AwardSecondPoints, &s.AwardThirdPoints,
+		&s.RecommendationPoints, &s.RecentConductorPenaltyDays,
+		&s.AboveAverageConductorPenalty, &s.R4R5RankBoost,
+		&s.FirstTimeConductorBoost, &s.ScheduleMessageTemplate,
+		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
+		&s.StormTimezones, &s.StormRespectDST, &s.LoginMessage,
+		&s.PwdMinLength, &s.PwdRequireSpecial, &s.PwdRequireUpper,
+		&s.PwdRequireLower, &s.PwdRequireNumber, &s.PwdHistoryCount, &s.PwdValidityDays,
 	)
+
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to load settings", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(settings)
+	json.NewEncoder(w).Encode(s)
 }
 
 // Update settings (admin only)
@@ -3617,6 +3828,11 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Extract session to check for Admin privileges
+	session, _ := store.Get(r, "session")
+	isAdmin, _ := session.Values["is_admin"].(bool)
+
+	// 1. Update general settings (R5 and Admin)
 	_, err := db.Exec(`UPDATE settings SET 
 		award_first_points = ?, 
 		award_second_points = ?, 
@@ -3646,11 +3862,36 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.PowerTrackingEnabled,
 		settings.StormTimezones,
 		settings.StormRespectDST,
-		settings.LoginMessage, // NEW
+		settings.LoginMessage,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// 2. Update password policy settings (Admin Only)
+	if isAdmin && settings.PwdMinLength >= 6 {
+		_, err = db.Exec(`UPDATE settings SET 
+			pwd_min_length = ?, 
+			pwd_require_special = ?, 
+			pwd_require_upper = ?, 
+			pwd_require_lower = ?, 
+			pwd_require_number = ?, 
+			pwd_history_count = ?, 
+			pwd_validity_days = ? 
+			WHERE id = 1`,
+			settings.PwdMinLength,
+			settings.PwdRequireSpecial,
+			settings.PwdRequireUpper,
+			settings.PwdRequireLower,
+			settings.PwdRequireNumber,
+			settings.PwdHistoryCount,
+			settings.PwdValidityDays,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -6353,6 +6594,7 @@ func main() {
 
 	// Auth routes (public)
 	router.HandleFunc("/api/login", login).Methods("POST")
+	router.HandleFunc("/api/force-change-password", forceChangePassword).Methods("POST")
 	router.HandleFunc("/api/logout", logout).Methods("POST")
 	router.HandleFunc("/api/check-auth", checkAuth).Methods("GET")
 	router.HandleFunc("/api/change-password", authMiddleware(changePassword)).Methods("POST")

@@ -150,6 +150,10 @@ function showCreateUserModal() {
     document.getElementById('modal-title').textContent = 'Create New User';
     document.getElementById('user-form').reset();
     document.getElementById('user-id').value = '';
+    
+    // Default to true for new users
+    document.getElementById('force-password-change').checked = true; 
+
     document.getElementById('password-group').style.display = 'block';
     document.getElementById('password').required = true;
     document.getElementById('user-modal').style.display = 'block';
@@ -166,6 +170,10 @@ function editUser(userId) {
     document.getElementById('username').value = user.username;
     document.getElementById('member-id').value = user.member_id || '';
     document.getElementById('is-admin').checked = user.is_admin;
+    
+    // Check the box if the user is currently flagged in the DB
+    document.getElementById('force-password-change').checked = user.force_password_change; 
+
     document.getElementById('password-group').style.display = 'none';
     document.getElementById('password').required = false;
     document.getElementById('user-modal').style.display = 'block';
@@ -186,11 +194,13 @@ async function saveUser(event) {
     const password = document.getElementById('password').value;
     const memberIdValue = document.getElementById('member-id').value;
     const isAdmin = document.getElementById('is-admin').checked;
+    const forcePasswordChange = document.getElementById('force-password-change').checked; // Grab the new value
     
     const userData = {
         username,
         member_id: memberIdValue ? parseInt(memberIdValue) : null,
-        is_admin: isAdmin
+        is_admin: isAdmin,
+        force_password_change: forcePasswordChange // Append to payload
     };
     
     // Add password for new users
@@ -229,6 +239,7 @@ async function saveUser(event) {
         alert('Error: ' + error.message);
     }
 }
+
 
 // Delete User
 async function deleteUser(userId, username) {

@@ -99,6 +99,14 @@
                     <small>Admins have full access to all features</small>
                 </div>
 
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="force-password-change" checked>
+                        Force Password Change
+                    </label>
+                    <small>User must change their password upon next login</small>
+                </div>
+
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary">Save User</button>
                     <button type="button" class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
@@ -106,7 +114,7 @@
             </form>
         </div>
     </div>
-
+    
     <!-- Reset Password Modal -->
     <div id="reset-password-modal" class="modal">
         <div class="modal-content">

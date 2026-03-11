@@ -1932,7 +1932,14 @@ button {
     width: 90%;
     max-height: 90vh;
     overflow-y: auto;
-    position: relative;
+    
+    /* Absolute Centering Fix */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
 
@@ -4660,10 +4667,15 @@ button {
     .modal-content {
         width: 95%;
         max-width: 95%;
-        margin: 10px;
         padding: 20px 15px;
         max-height: 90vh;
         overflow-y: auto;
+        
+        /* Ensure mobile doesn't override the centering */
+        margin: 0;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
     }
 
     .modal-header {
