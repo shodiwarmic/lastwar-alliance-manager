@@ -1313,7 +1313,7 @@ Password: <code>admin123</code>`
 	// Migrate users table for password expiration
 	userPwdCols := []struct{ name, typeDef string }{
 		{"force_password_change", "BOOLEAN NOT NULL DEFAULT 1"},
-		{"password_changed_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"},
+		{"password_changed_at", "TIMESTAMP"}, // Removed the non-constant default
 	}
 	for _, col := range userPwdCols {
 		var exists bool
@@ -1326,6 +1326,9 @@ Password: <code>admin123</code>`
 			log.Printf("Database migration: Added %s column to users table", col.name)
 		}
 	}
+
+	// Backfill the timestamp for any existing users so our expiration math doesn't break on NULLs
+	db.Exec(`UPDATE users SET password_changed_at = CURRENT_TIMESTAMP WHERE password_changed_at IS NULL`)
 
 	// Create password_history table
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS password_history (
