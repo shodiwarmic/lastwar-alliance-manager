@@ -510,19 +510,37 @@ For high traffic, consider:
 
 ## Update Procedure
 
+We strongly recommend using the included `update.sh` script, which automatically handles full application backups, database backups, dependency checks, and safe fallbacks if compilation fails.
+
+```bash
+cd /opt/lastwar
+
+# If uploading files manually via SCP:
+sudo ./update.sh
+
+# If pulling from a Git repository:
+sudo ./update.sh --git
+```
+
+### Manual Update Procedure (Fallback)
+
+If you need to update manually without the script:
+
 ```bash
 # Stop service
 sudo systemctl stop lastwar
 
-# Backup database
+# Backup database and application
 sudo cp /var/lib/lastwar/alliance.db /var/lib/lastwar/alliance.db.backup
+sudo tar -czf /var/backups/lastwar/app_backup.tar.gz -C /opt/lastwar --exclude='.git' .
 
 # Update code
 cd /opt/lastwar
 git pull  # or upload new files
 
 # Rebuild
-go build -o alliance-manager main.go
+export PATH=$PATH:/usr/local/go/bin
+go build -o alliance-manager .
 
 # Restart service
 sudo systemctl start lastwar

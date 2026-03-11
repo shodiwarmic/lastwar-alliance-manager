@@ -5,57 +5,60 @@ A comprehensive Go web application for managing your alliance in the online game
 ## Features
 
 ### Core Management
-- **Authentication System**: Secure login/logout with session management and password management
-- **Role-Based Permissions**: Different access levels for Admin, R5, R4, and lower ranks
-- **User-Member Linking**: Users are linked to alliance members with role inheritance
-- **Member Management**: Add, edit, delete alliance members, and create user accounts
-- **Rank System**: Pre-configured with 5 ranks (R5, R4, R3, R2, R1)
+- **Advanced Authentication**: Secure login/logout with rolling session management to keep active users logged in while expiring idle sessions.
+- **Configurable Password Policies**: Admin-controlled password complexity requirements (minimum length, uppercase, lowercase, numbers, special characters).
+- **Password Security Lifecycle**: Enforce password expiration dates, track password history to prevent reuse, and trigger forced password resets for specific users.
+- **Customizable Login Banner**: Server-Side Rendered (SSR) login screen messaging configurable by Admins/R5s.
+- **Role-Based Permissions**: Different access levels for Admin, R5, R4, and lower ranks.
+- **User-Member Linking**: Users are linked to alliance members with role inheritance.
+- **Member Management**: Add, edit, delete alliance members, with safe cascading deletions for linked user accounts and historical data.
+- **Rank System**: Pre-configured with 5 ranks (R5, R4, R3, R2, R1).
 
 ### Train Schedule System
-- **Weekly Schedule Management**: Organize and track train conductors and backups
-- **Auto-Schedule**: Automatically assign conductors for the week based on performance rankings
-- **Performance Tracking**: Track conductor scores and show-up history
-- **Weekly Message Generator**: Create formatted messages for alliance chat with schedules
-- **Daily Message Generator**: Generate daily reminders for conductors and backups with specific times (15:00 ST/17:00 UK for conductor, 16:30 ST/18:30 UK for backup)
+- **Weekly Schedule Management**: Organize and track train conductors and backups.
+- **Auto-Schedule**: Automatically assign conductors for the week based on performance rankings.
+- **Performance Tracking**: Track conductor scores and show-up history.
+- **Weekly Message Generator**: Create formatted messages for alliance chat with schedules.
+- **Daily Message Generator**: Generate daily reminders for conductors and backups with specific times (15:00 ST/17:00 UK for conductor, 16:30 ST/18:30 UK for backup).
 
 ### Awards & Recommendations
-- **Weekly Awards**: Track 1st, 2nd, and 3rd place winners across multiple categories
-- **Recommendations**: Member recommendation system to boost rankings
-- **Performance Rankings**: Real-time leaderboard with detailed score breakdown
+- **Weekly Awards**: Track 1st, 2nd, and 3rd place winners across multiple categories.
+- **Recommendations**: Member recommendation system to boost rankings.
+- **Performance Rankings**: Real-time leaderboard with detailed score breakdown.
 
 ### Ranking & Auto-Schedule System
-- **Configurable Point System**: Customize points for awards, recommendations, and penalties
-- **Smart Conductor Selection**: Automatically selects top 7 performers as conductors
-- **Fair Distribution**: Penalties for recent conductors and above-average usage
-- **Rank Boosts**: Special bonuses for R4/R5 members and first-time conductors
-- **Backup System**: Smart backup assignment from R4/R5 members not in conductor pool
+- **Configurable Point System**: Customize points for awards, recommendations, and penalties.
+- **Smart Conductor Selection**: Automatically selects top 7 performers as conductors.
+- **Fair Distribution**: Penalties for recent conductors and above-average usage.
+- **Rank Boosts**: Special bonuses for R4/R5 members and first-time conductors.
+- **Backup System**: Smart backup assignment from R4/R5 members not in conductor pool.
 
 ### Communication Tools
-- **Customizable Templates**: Configure weekly and daily message templates
-- **Train-Themed Messaging**: Fun, themed messages using train lingo ("ALL ABOARD", "Conductor", "Backup Engineer")
-- **Placeholder System**: Dynamic message generation with member names, ranks, dates, and times
-- **Copy-to-Clipboard**: Easy copying of generated messages for in-game chat
+- **Customizable Templates**: Configure weekly and daily message templates.
+- **Train-Themed Messaging**: Fun, themed messages using train lingo ("ALL ABOARD", "Conductor", "Backup Engineer").
+- **Placeholder System**: Dynamic message generation with member names, ranks, dates, and times.
+- **Copy-to-Clipboard**: Easy copying of generated messages for in-game chat.
 
 ### Screenshot Upload with Image Recognition
-- **OCR Processing**: Upload game screenshots for automatic data extraction using Tesseract OCR
-- **Intelligent Image Preprocessing**: AI-powered region detection and enhancement
-  - Automatically detects and crops data regions (removes headers, tabs, buttons)
-  - Enhances contrast and applies scaling for better text recognition
-  - Filters out UI elements to focus only on relevant data
-- **Smart Parsing**: Advanced pattern matching for names and numeric values
-- **Fuzzy Member Matching**: Automatically matches OCR text to database members
-- **Manual Entry**: Alternative text-based input for manual data entry
-- **Power History Tracking**: Track member power progression over time
-- **Mobile-Friendly Interface**: Dedicated upload page optimized for mobile devices
+- **OCR Processing**: Upload game screenshots for automatic data extraction using Tesseract OCR.
+- **Intelligent Image Preprocessing**: AI-powered region detection and enhancement.
+  - Automatically detects and crops data regions (removes headers, tabs, buttons).
+  - Enhances contrast and applies scaling for better text recognition.
+  - Filters out UI elements to focus only on relevant data.
+- **Smart Parsing**: Advanced pattern matching for names and numeric values.
+- **Fuzzy Member Matching**: Automatically matches OCR text to database members.
+- **Manual Entry**: Alternative text-based input for manual data entry.
+- **Power History Tracking**: Track member power progression over time.
+- **Mobile-Friendly Interface**: Dedicated upload page optimized for mobile devices.
 
 See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md) for detailed technical documentation on the image analysis system.
 
 ### Additional Features
-- **Profile Management**: Users can change passwords and view account information
-- **Settings Page**: R5/Admin-only configuration for ranking system and message templates
-- **Responsive UI**: Clean, modern interface that works on desktop and mobile
-- **Real-time Filtering**: Filter rankings and schedules by name and rank
-- **SQLite Database**: Lightweight, file-based storage for easy deployment
+- **Profile Management**: Users can securely change passwords with real-time, reactive UI feedback enforcing active policy rules.
+- **Settings Page**: R5/Admin-only configuration for ranking systems, message templates, login banners, and strict password security rules.
+- **Responsive UI**: Clean, modern interface that works seamlessly on desktop and mobile.
+- **Advanced Filtering & Sorting**: Multi-select rank chips, eligibility toggles, and multi-criteria sorting (Name, Rank, Power).
+- **SQLite Database**: Lightweight, file-based storage for easy deployment.
 
 ## Prerequisites
 
@@ -151,35 +154,53 @@ Or use the systemd service (see [DEPLOYMENT.md](DEPLOYMENT.md)).
 
 ## Project Structure
 
-```
+```text
 LastWar/
 ├── main.go             # Go server and API routes
 ├── go.mod              # Go module dependencies
+├── go.sum              # Go module checksums
 ├── Dockerfile          # Docker container configuration
 ├── alliance.db         # SQLite database (created automatically)
 ├── install.sh          # Automated Debian installation script
+├── update.sh           # Automated application update script
 ├── lastwar.service     # Systemd service configuration
 ├── Caddyfile           # Caddy reverse proxy configuration
 ├── .env.example        # Environment variables example
 ├── DEPLOYMENT.md       # Production deployment guide
-├── static/             # Frontend files
+├── QUICKSTART.md       # Quick setup instructions
+├── IMAGE_RECOGNITION.md# Technical docs for OCR implementation
+├── templates/          # Server-Side Rendered (SSR) HTML files
+│   ├── layout.html     # Shared UI shell and navigation
 │   ├── index.html      # Member management page
-│   ├── login.html      # Login page
+│   ├── login.html      # Login page (standalone)
 │   ├── profile.html    # User profile & password management
 │   ├── train.html      # Train schedule management
 │   ├── awards.html     # Awards tracking
-│   ├── recommendations.html  # Recommendation system
+│   ├── recommendations.html # Recommendation system
+│   ├── dyno.html       # Dyno recommendation system
 │   ├── rankings.html   # Performance rankings
-│   ├── settings.html   # Configuration (R5/Admin only)
-│   ├── styles.css      # Styling
-│   ├── app.js          # Member management JS
-│   ├── profile.js      # Profile page JS
-│   ├── train.js        # Train schedule JS
-│   ├── awards.js       # Awards tracking JS
-│   ├── recommendations.js   # Recommendations JS
-│   ├── rankings.js     # Rankings display JS
-│   └── settings.js     # Settings configuration JS
-└── README.md           # This file
+│   ├── storm.html      # Desert Storm assignment management
+│   ├── vs.html         # VS Points tracking
+│   ├── upload.html     # OCR Screenshot upload & processing
+│   ├── admin.html      # Admin dashboard & user management
+│   └── settings.html   # Configuration (R5/Admin only)
+└── static/             # Client-side assets
+    ├── styles.css      # Application styling
+    ├── favicon.ico     # Site icon
+    ├── global.js       # Shared utility functions
+    ├── theme.js        # Light/Dark mode toggling
+    ├── app.js          # Member management logic
+    ├── profile.js      # Profile page logic
+    ├── train.js        # Train schedule logic
+    ├── awards.js       # Awards tracking logic
+    ├── recommendations.js # Recommendations logic
+    ├── dyno.js         # Dyno recommendations logic
+    ├── rankings.js     # Rankings display logic
+    ├── storm.js        # Desert Storm assignment logic
+    ├── vs.js           # VS Points tracking logic
+    ├── upload.js       # Upload and OCR processing logic
+    ├── admin.js        # Admin user management logic
+    └── settings.js     # Settings configuration logic
 ```
 
 ## Ranks
@@ -202,6 +223,7 @@ LastWar/
 - Create user accounts for members
 - Update ranking system configuration
 - Modify message templates
+- Configurable password complexity, history, and expiration rules
 - Change all system settings
 
 ### Upload Features (R3+)
@@ -219,7 +241,8 @@ LastWar/
 ## API Endpoints
 
 ### Authentication
-- `POST /api/login` - User login
+- `POST /api/login` - User login (detects forced resets/expirations)
+- `POST /api/force-change-password` - Intercept endpoint for forced password updates
 - `POST /api/logout` - User logout
 - `GET /api/check-auth` - Check authentication status
 - `POST /api/change-password` - Change user password
@@ -258,18 +281,18 @@ LastWar/
 
 ## Notes
 
-- The database file `alliance.db` will be created automatically on first run
-- Make sure port 8080 is available (or set PORT environment variable)
-- All data is stored locally in the SQLite database
-- Default admin user is created automatically on first run
-- Session cookies are used for authentication
-- Passwords are hashed using bcrypt for security
-- User creation generates secure random 10-character alphanumeric passwords
-- Auto-schedule uses a sophisticated ranking algorithm to ensure fair distribution
-- Message templates are fully customizable in the Settings page
-- Daily messages include specific times: 15:00 ST (17:00 UK) for conductor, 16:30 ST (18:30 UK) for backup
-- The application can be containerized using the provided Dockerfile
-- Set DATABASE_PATH environment variable for custom database location (useful for Docker volumes)
+- The database file `alliance.db` will be created automatically on first run.
+- Make sure port 8080 is available (or set PORT environment variable).
+- All data is stored locally in the SQLite database.
+- Default admin user is created automatically on first run.
+- Session cookies are used for authentication with a 7-day rolling expiration to keep active users seamlessly logged in.
+- Passwords are hashed using bcrypt. The application actively tracks password history to prevent reuse and enforces admin-defined complexity requirements.
+- User creation generates secure random 10-character alphanumeric passwords.
+- Auto-schedule uses a sophisticated ranking algorithm to ensure fair distribution.
+- Message templates are fully customizable in the Settings page.
+- Daily messages include specific times: 15:00 ST (17:00 UK) for conductor, 16:30 ST (18:30 UK) for backup.
+- The application can be containerized using the provided Dockerfile.
+- Set DATABASE_PATH environment variable for custom database location (useful for Docker volumes).
 
 ## How Auto-Schedule Works
 
@@ -300,8 +323,10 @@ The top 7 members are selected as conductors for the week. Backups are selected 
 
 ## Security
 
-- Passwords are hashed with bcrypt before storage
-- Session-based authentication with secure cookies
-- Role-based access control for all sensitive operations
-- SQL injection prevention through parameterized queries
-- R5/Admin-only restrictions on critical settings
+- Passwords are exclusively hashed with bcrypt before storage.
+- Strict server-side and real-time client-side password complexity enforcement.
+- Built-in password history tracking and configurable expiration intervals.
+- Rolling session expiration keeps active users logged in while automatically dropping idle sessions.
+- Role-based access control for all sensitive operations.
+- SQL injection prevention through parameterized queries.
+- R5/Admin-only restrictions on critical system and security settings.
