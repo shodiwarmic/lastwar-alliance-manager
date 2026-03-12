@@ -36,3 +36,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Fix Theme Dropdown State
+    const themeDropdown = document.getElementById('theme-selector'); // Update ID if different
+    if (themeDropdown) {
+        // Read the saved theme (fallback to 'dark' or 'light' as your default)
+        const currentTheme = localStorage.getItem('theme') || 'dark'; 
+        themeDropdown.value = currentTheme;
+    }
+});

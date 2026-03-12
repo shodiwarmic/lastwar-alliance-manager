@@ -24,9 +24,21 @@ async function fetchPermissions() {
             currentUsername = data.username;
             isAdmin = data.is_admin || false;
             permissions = data.permissions || {};
-            // For backward compatibility until all pages are updated:
+            
+            // Backwards compatibility
             canManageRanks = permissions.manage_members || false; 
             isR5OrAdmin = permissions.manage_settings || false;
+
+            // Hide Train Eligibility Filters and Modal Inputs based on matrix
+            const filterEligibleWrapper = document.getElementById('filter-eligible-wrapper');
+            if (filterEligibleWrapper) {
+                filterEligibleWrapper.style.display = permissions.view_train ? 'flex' : 'none';
+            }
+
+            const modalEligibleWrapper = document.getElementById('modal-eligible-wrapper');
+            if (modalEligibleWrapper) {
+                modalEligibleWrapper.style.display = permissions.manage_train ? 'flex' : 'none';
+            }
         }
     } catch (error) {
         console.error('Auth check error:', error);
@@ -334,6 +346,11 @@ function displayMembers(members) {
             squadDisplay = `<span class="member-power" style="margin-left: 10px; color: var(--accent-color);" title="Squad Power: ${member.squad_power ? member.squad_power.toLocaleString() : 0}">${typeIcon}${formatPower(member.squad_power)}</span>`;
         }
 
+        let toggleEligibleBtn = '';
+        if (permissions.manage_train) {
+            toggleEligibleBtn = `<button class="toggle-eligible-btn ${eligibleClass}" onclick="toggleEligible(${member.id}, ${member.eligible !== false})">${eligibleStatus}</button>`;
+        }
+
         let actionsHtml = '';
         if (canManageRanks) {
             actionsHtml = `
@@ -341,7 +358,7 @@ function displayMembers(members) {
                     <button class="edit-btn" onclick="editMember(${member.id}, '${escapeHtml(member.name)}', '${escapeHtml(member.rank)}', ${member.eligible !== false}, ${member.power || 0}, '${member.power_updated_at || ''}', ${member.level || 0}, '${escapeHtml(member.squad_type || '')}', ${member.squad_power || 0}, '${member.squad_power_updated_at || ''}', ${member.troop_level || 0}, '${escapeHtml(member.profession || '')}')">Edit</button>
                     <button class="delete-btn" onclick="deleteMember(${member.id}, '${escapeHtml(member.name)}', ${member.has_user})">Delete</button>
                     ${(isR5OrAdmin && !member.has_user) ? `<button class="create-user-btn" onclick="createUserForMember(${member.id}, '${escapeHtml(member.name)}')">Create User</button>` : ''}
-                    <button class="toggle-eligible-btn ${eligibleClass}" onclick="toggleEligible(${member.id}, ${member.eligible !== false})">${eligibleStatus}</button>
+                    ${toggleEligibleBtn}
                 </div>
             `;
         }
@@ -356,7 +373,7 @@ function displayMembers(members) {
                     ${professionBadge}
                     ${powerDisplay}
                     ${squadDisplay}
-                    <span class="member-eligible ${eligibleClass}">${eligibleStatus}</span>
+                    ${permissions.view_train ? `<span class="member-eligible ${eligibleClass}">${eligibleStatus}</span>` : ''}
                 </div>
                 ${actionsHtml}
             </div>
@@ -523,10 +540,11 @@ window.deleteMember = async function(id, name, hasUser = false) {
 };
 
 window.toggleEligible = async function(id, currentStatus) {
-    if (!canManageRanks) {
-        alert('You do not have permission to manage members.');
+    if (!permissions.manage_train) {
+        alert('You do not have permission to manage the train schedule.');
         return;
     }
+
     const newStatus = !currentStatus;
     const statusText = newStatus ? 'eligible' : 'not eligible';
     if (!confirm(`Mark this member as ${statusText} for train scheduling?`)) return;
