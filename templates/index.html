@@ -90,6 +90,37 @@
                             <input type="number" id="modal-member-power" class="form-input" style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px;" min="0">
                             <small id="modal-power-timestamp" style="color: var(--text-secondary); font-size: 0.85em; display: block; margin-top: 5px; font-style: italic;"></small>
                         </div>
+                        <div class="form-group">
+                            <label for="member-profession">Profession:</label>
+                            <select id="member-profession">
+                                <option value="">None</option>
+                                <option value="Engineer">Engineer</option>
+                                <option value="War Leader">War Leader</option>
+                                <option value="Diplomat">Diplomat</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="member-troop-level">Troop Level:</label>
+                            <select id="member-troop-level">
+                                <option value="">Select Tier</option>
+                                </select>
+                        </div>
+                        <div id="modal-squad-section" style="display: none; padding-top: 10px; border-top: 1px solid var(--border-color);">
+                            <div class="form-group">
+                                <label for="member-squad-type">Primary Squad Type:</label>
+                                <select id="member-squad-type">
+                                    <option value="">Unknown</option>
+                                    <option value="Tank">🛡️ Tank</option>
+                                    <option value="Aircraft">✈️ Aircraft</option>
+                                    <option value="Missile">🚀 Missile</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="member-squad-power">Squad Power:</label>
+                                <input type="number" id="member-squad-power" class="form-input" min="0">
+                                <span id="modal-squad-power-timestamp" class="help-text" style="display: block; margin-top: 4px; font-size: 0.8em; color: var(--text-muted);"></span>
+                            </div>
+                        </div>
                         <div class="button-group modal-buttons">
                             <button type="submit" id="submit-btn" class="primary-btn">Add Member</button>
                             <button type="button" id="cancel-btn" class="secondary-btn">Cancel</button>

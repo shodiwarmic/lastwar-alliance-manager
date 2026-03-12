@@ -268,6 +268,11 @@ async function handleMemberFormSubmit(e) {
     const rank = document.getElementById('member-rank').value;
     const eligible = document.getElementById('member-eligible').checked;
     const level = parseInt(document.getElementById('member-level').value, 10) || 0;
+    const profession = document.getElementById('member-profession').value;
+    const squad_type = document.getElementById('member-squad-type').value;
+    const troop_level = parseInt(document.getElementById('member-troop-level').value, 10) || 0;
+    const sqPowerInput = document.getElementById('member-squad-power');
+    const squad_power = (sqPowerInput && sqPowerInput.value !== '') ? parseInt(sqPowerInput.value, 10) : 0;
 
     // Enforce HQ level limits
     if (level > currentMaxHQ) {
@@ -293,7 +298,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power }), 
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power }), 
             });
             if (!response.ok) throw new Error('Failed to update member');
             editingMemberId = null;
@@ -301,7 +306,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power}),
             });
             if (!response.ok) {
                 if (response.status === 403) throw new Error('Permission denied: Only R4/R5 members can manage ranks');
@@ -326,6 +331,27 @@ window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt
     document.getElementById('member-rank').value = rank;
     document.getElementById('member-eligible').checked = eligible;
     document.getElementById('member-level').value = (level > 0) ? level : '';
+    document.getElementById('member-profession').value = profession;
+    document.getElementById('member-troop-level').value = troopLevel > 0 ? troopLevel : '';
+    document.getElementById('member-squad-type').value = squadType;
+    
+    const sqPowerInput = document.getElementById('member-squad-power');
+    if (sqPowerInput) sqPowerInput.value = (squadPower && squadPower > 0) ? squadPower : '';
+
+    // Handle Squad Power Timestamp
+    const sqTimestampText = document.getElementById('modal-squad-power-timestamp');
+    if (sqTimestampText) {
+        if (squadPowerUpdatedAt) {
+            const formattedDateStr = squadPowerUpdatedAt.replace(' ', 'T') + "Z";
+            const updatedDate = new Date(formattedDateStr);
+            sqTimestampText.textContent = `Last updated: ${updatedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+        } else {
+            sqTimestampText.textContent = "Last updated: Never";
+        }
+    }
+
+    // Call your updateTroopLevelOptions() here to enforce the HQ limits dynamically!
+    updateTroopLevelOptions();
     
     const powerSection = document.getElementById('modal-power-section');
     if (powerSection) {

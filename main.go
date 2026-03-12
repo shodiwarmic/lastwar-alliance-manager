@@ -35,14 +35,26 @@ import (
 )
 
 type Member struct {
-	ID             int    `json:"id"`
-	Name           string `json:"name"`
-	Rank           string `json:"rank"`
-	Level          int    `json:"level"`
-	Eligible       bool   `json:"eligible"`
-	Power          *int64 `json:"power"`
-	PowerUpdatedAt string `json:"power_updated_at"`
-	HasUser        bool   `json:"has_user"`
+	ID                  int    `json:"id"`
+	Name                string `json:"name"`
+	Rank                string `json:"rank"`
+	Level               int    `json:"level"`
+	Eligible            bool   `json:"eligible"`
+	Power               *int64 `json:"power"`
+	PowerUpdatedAt      string `json:"power_updated_at"`
+	HasUser             bool   `json:"has_user"`
+	SquadType           string `json:"squad_type"`
+	SquadPower          *int64 `json:"squad_power"`
+	SquadPowerUpdatedAt string `json:"squad_power_updated_at"`
+	TroopLevel          int    `json:"troop_level"`
+	Profession          string `json:"profession"`
+}
+
+type SquadPowerHistory struct {
+	ID         int    `json:"id"`
+	MemberID   int    `json:"member_id"`
+	Power      int64  `json:"power"`
+	RecordedAt string `json:"recorded_at"`
 }
 
 type MemberStats struct {
@@ -206,6 +218,7 @@ type Settings struct {
 	StormRespectDST              bool   `json:"storm_respect_dst"`
 	LoginMessage                 string `json:"login_message"`
 	MaxHQLevel                   int    `json:"max_hq_level"`
+	SquadTrackingEnabled         bool   `json:"squad_tracking_enabled"`
 	// Password Policy Settings
 	PwdMinLength      int  `json:"pwd_min_length"`
 	PwdRequireSpecial bool `json:"pwd_require_special"`
@@ -257,6 +270,10 @@ type DetectedMember struct {
 	RankChanged  bool     `json:"rank_changed"`
 	OldRank      string   `json:"old_rank,omitempty"`
 	SimilarMatch []string `json:"similar_match,omitempty"`
+	SquadType    string   `json:"squad_type,omitempty"`
+	SquadPower   int64    `json:"squad_power,omitempty"`
+	TroopLevel   int      `json:"troop_level,omitempty"`
+	Profession   string   `json:"profession,omitempty"`
 }
 
 type RenameInfo struct {
@@ -810,6 +827,42 @@ func initDB() error {
 			return err
 		}
 		log.Println("Database migration: Added level column to members table")
+	}
+
+	// 1. Add static fields to members table
+	newMemberCols := map[string]string{
+		"squad_type":  "TEXT DEFAULT ''",
+		"troop_level": "INTEGER DEFAULT 0",
+		"profession":  "TEXT DEFAULT ''",
+	}
+	for col, def := range newMemberCols {
+		var exists bool
+		db.QueryRow(`SELECT COUNT(*) > 0 FROM pragma_table_info('members') WHERE name = ?`, col).Scan(&exists)
+		if !exists {
+			db.Exec(`ALTER TABLE members ADD COLUMN ` + col + ` ` + def)
+			log.Printf("Database migration: Added %s column to members table\n", col)
+		}
+	}
+
+	// 2. Create squad_power_history table and index
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS squad_power_history (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		member_id INTEGER NOT NULL,
+		power INTEGER NOT NULL,
+		recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+	);`)
+	if err != nil {
+		return err
+	}
+
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_squad_power_history_member ON squad_power_history(member_id, recorded_at DESC)")
+
+	// 3. Add squad tracking toggle to settings table
+	var squadTrackExists bool
+	db.QueryRow(`SELECT COUNT(*) > 0 FROM pragma_table_info('settings') WHERE name = 'squad_tracking_enabled'`).Scan(&squadTrackExists)
+	if !squadTrackExists {
+		db.Exec(`ALTER TABLE settings ADD COLUMN squad_tracking_enabled BOOLEAN DEFAULT 0`)
 	}
 
 	// Create users table
@@ -2292,8 +2345,11 @@ func getLoginHistory(w http.ResponseWriter, r *http.Request) {
 func getMembers(w http.ResponseWriter, r *http.Request) {
 	query := `
         SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
+			   COALESCE(m.squad_type, ''), COALESCE(m.troop_level, 0), COALESCE(m.profession, ''),
                COALESCE((SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_power,
                COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date,
+			   COALESCE((SELECT power FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_squad_power,
+               COALESCE((SELECT recorded_at FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_squad_power_date,
                EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user
         FROM members m
         ORDER BY m.name
@@ -2308,7 +2364,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 	members := []Member{}
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.Power, &m.PowerUpdatedAt, &m.HasUser); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.SquadType, &m.TroopLevel, &m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.HasUser); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -2373,7 +2429,7 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 		m.Eligible = true
 	}
 
-	result, err := db.Exec("INSERT INTO members (name, rank, level, eligible) VALUES (?, ?, ?, ?)", m.Name, m.Rank, m.Level, m.Eligible)
+	result, err := db.Exec("INSERT INTO members (name, rank, level, eligible, squad_type, troop_level, profession) VALUES (?, ?, ?, ?, ?, ?, ?)", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -2388,6 +2444,10 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 		if insertErr != nil {
 			log.Printf("Warning: Failed to log initial power history for member %d: %v", m.ID, insertErr)
 		}
+	}
+
+	if m.SquadPower != nil {
+		db.Exec(`INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.SquadPower)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2412,7 +2472,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Update the base member details
-	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, id)
+	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, id)
 	if err != nil {
 		log.Printf("DB Update Error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2433,6 +2493,14 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 			if insertErr != nil {
 				log.Printf("Warning: Failed to log power history for member %d: %v", id, insertErr)
 			}
+		}
+	}
+
+	if m.SquadPower != nil {
+		var currentSquadPower int64 = -1
+		_ = db.QueryRow(`SELECT power FROM squad_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentSquadPower)
+		if currentSquadPower != *m.SquadPower {
+			db.Exec(`INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.SquadPower)
 		}
 	}
 
@@ -2460,6 +2528,11 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 	_, err = db.Exec("DELETE FROM power_history WHERE member_id = ?", id)
 	if err != nil {
 		log.Printf("Warning: Failed to delete power history for member %d: %v", id, err)
+	}
+
+	_, err = db.Exec("DELETE FROM squad_power_history WHERE member_id = ?", id)
+	if err != nil {
+		log.Printf("Warning: Failed to delete squad power history for member %d: %v", id, err)
 	}
 
 	// 3. Delete the actual member
@@ -3109,6 +3182,15 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 				db.Exec("INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)", existingID, member.Power)
 			}
 		}
+
+		// Inside the loop where existingID > 0
+		if member.SquadPower > 0 && existingID > 0 {
+			var currentSquadPower int64 = -1
+			db.QueryRow("SELECT power FROM squad_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1", existingID).Scan(&currentSquadPower)
+			if currentSquadPower != member.SquadPower {
+				db.Exec("INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)", existingID, member.SquadPower)
+			}
+		}
 	}
 
 	// Process removals
@@ -3117,6 +3199,7 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 			// Clean up user and power history to prevent orphans
 			db.Exec("DELETE FROM users WHERE member_id = ?", id)
 			db.Exec("DELETE FROM power_history WHERE member_id = ?", id)
+			db.Exec("DELETE FROM squad_power_history WHERE member_id = ?", id)
 			db.Exec("DELETE FROM members WHERE id = ?", id)
 			result.Removed++
 		}
@@ -3868,7 +3951,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		COALESCE(pwd_min_length, 12), COALESCE(pwd_require_special, 0), 
 		COALESCE(pwd_require_upper, 0), COALESCE(pwd_require_lower, 0), 
 		COALESCE(pwd_require_number, 0), COALESCE(pwd_history_count, 4), 
-		COALESCE(pwd_validity_days, 180)
+		COALESCE(pwd_validity_days, 180), COALESCE(squad_tracking_enabled, 0)
 		FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.AwardFirstPoints, &s.AwardSecondPoints, &s.AwardThirdPoints,
 		&s.RecommendationPoints, &s.RecentConductorPenaltyDays,
@@ -3878,6 +3961,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.StormTimezones, &s.StormRespectDST, &s.LoginMessage, &s.MaxHQLevel,
 		&s.PwdMinLength, &s.PwdRequireSpecial, &s.PwdRequireUpper,
 		&s.PwdRequireLower, &s.PwdRequireNumber, &s.PwdHistoryCount, &s.PwdValidityDays,
+		&s.SquadTrackingEnabled,
 	)
 
 	if err != nil {
@@ -3917,7 +4001,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		storm_timezones = ?,
 		storm_respect_dst = ?,
 		login_message = ?,
-		max_hq_level = ?
+		max_hq_level = ?,
+		squad_tracking_enabled = ?
 		WHERE id = 1`,
 		settings.AwardFirstPoints,
 		settings.AwardSecondPoints,
@@ -3934,6 +4019,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.StormRespectDST,
 		settings.LoginMessage,
 		settings.MaxHQLevel,
+		settings.SquadTrackingEnabled,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

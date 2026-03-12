@@ -70,6 +70,9 @@ async function loadSettings() {
             powerTrackingCheckbox.checked = powerTrackingEnabled;
         }
         togglePowerUploadSection(powerTrackingEnabled);
+
+        const squadCheckbox = document.getElementById('squad-tracking-enabled');
+        if (squadCheckbox) squadCheckbox.checked = settings.squad_tracking_enabled === true;
     } catch (error) {
         console.error('Error loading settings:', error);
         alert('Failed to load settings');
@@ -120,6 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 login_message: document.getElementById('settings-login-message').value,
                 max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
+                squad_tracking_enabled: document.getElementById('squad-tracking-enabled').checked,
                 storm_timezones: selectedZones,
                 storm_respect_dst: document.getElementById('storm_respect_dst').checked
             };
@@ -190,6 +194,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     const powerToggle = document.getElementById('power-tracking-enabled');
                     if (powerToggle) powerToggle.checked = false;
+                    document.getElementById('squad-tracking-enabled').checked = false;
                     
                     togglePowerUploadSection(false);
                 }

@@ -15,6 +15,8 @@ A comprehensive Go web application for managing your alliance in the online game
 - **Rank System**: Pre-configured with 5 ranks (R5, R4, R3, R2, R1).
 - **HQ Level Tracking**: Track member HQ levels with admin-configurable server caps to support future game updates.
 - **Dynamic CSV Import**: Upload roster CSVs with any column order. Automatically maps Username, Rank, Power, and Level. Ignores garbage columns and safely applies default ranks to missing data.
+- **Advanced Player Stats**: Track optional fields including Player Profession and Troop Levels (dynamically validated against configurable HQ Level caps).
+- **Squad Tracking**: Admin-toggleable tracking for Hero Squad Types (Tank/Aircraft/Missile) and Squad Power. Squad Power utilizes historical tracking tables (identical to overall Power) to prevent data loss and allow for progression tracking over time. Fully integrated into sorting, filtering, and the dynamic CSV importer.
 
 ### Train Schedule System
 - **Weekly Schedule Management**: Organize and track train conductors and backups.
