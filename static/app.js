@@ -13,16 +13,20 @@ let currentMaxHQ = 35;
 // Define the HQ requirements for each Troop Tier
 const TROOP_HQ_REQ = { 1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35 };
 
-// Fetch permissions to determine if Edit/Delete buttons should render
+// Change let canManageRanks = false; to:
+let permissions = {};
+
 async function fetchPermissions() {
     try {
         const response = await fetch('/api/check-auth');
         if (response.ok) {
             const data = await response.json();
             currentUsername = data.username;
-            canManageRanks = data.can_manage_ranks || false;
-            isR5OrAdmin = data.is_r5_or_admin || false;
             isAdmin = data.is_admin || false;
+            permissions = data.permissions || {};
+            // For backward compatibility until all pages are updated:
+            canManageRanks = permissions.manage_members || false; 
+            isR5OrAdmin = permissions.manage_settings || false;
         }
     } catch (error) {
         console.error('Auth check error:', error);

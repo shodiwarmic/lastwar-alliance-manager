@@ -1,16 +1,30 @@
 // static/settings.js
 const API_BASE = '/api';
 const SETTINGS_URL = `${API_BASE}/settings`;
+const PERM_ROWS = [
+    { key: 'manage_members', label: 'Manage Roster (Home)' },
+    { key: 'view_train', label: 'View Train Schedule' }, { key: 'manage_train', label: 'Manage Train Schedule' },
+    { key: 'view_awards', label: 'View Awards' }, { key: 'manage_awards', label: 'Manage Awards' },
+    { key: 'view_recs', label: 'View Recommendations' }, { key: 'manage_recs', label: 'Manage Recommendations' },
+    { key: 'view_dyno', label: 'View Dyno' }, { key: 'manage_dyno', label: 'Manage Dyno' },
+    { key: 'view_rankings', label: 'View Rankings' },
+    { key: 'view_storm', label: 'View Desert Storm' }, { key: 'manage_storm', label: 'Manage Desert Storm' },
+    { key: 'view_vs_points', label: 'View VS Points' }, { key: 'manage_vs_points', label: 'Manage VS Points' },
+    { key: 'view_upload', label: 'Access OCR Upload Tool' },
+    { key: 'manage_settings', label: 'Access Settings Tab' }
+];
 
 let isR5OrAdmin = false;
 
-// Fetch permissions
+let permissions = {};
+
 async function fetchPermissions() {
     try {
         const response = await fetch(`${API_BASE}/check-auth`);
         if (response.ok) {
             const data = await response.json();
-            isR5OrAdmin = data.is_r5_or_admin || false;
+            permissions = data.permissions || {};
+            isR5OrAdmin = permissions.manage_settings || false;
         }
     } catch (error) {
         console.error('Auth check error:', error);
@@ -73,6 +87,28 @@ async function loadSettings() {
 
         const squadCheckbox = document.getElementById('squad-tracking-enabled');
         if (squadCheckbox) squadCheckbox.checked = settings.squad_tracking_enabled === true;
+
+        // --- Fetch and Build RBAC Matrix ---
+        const matrixRes = await fetch(`${API_BASE}/permissions`);
+        if (matrixRes.ok) {
+            const matrix = await matrixRes.json();
+            const tbody = document.querySelector('#permissions-matrix tbody');
+            tbody.innerHTML = '';
+            
+            PERM_ROWS.forEach((row, index) => {
+                const bgClass = index % 2 === 0 ? '' : 'background: var(--bg-secondary);';
+                let tr = `<tr style="border-bottom: 1px solid var(--border-color); ${bgClass}">
+                            <td style="text-align: left; padding: 10px 12px; font-weight: 500;">${row.label}</td>`;
+                
+                ['R5', 'R4', 'R3', 'R2', 'R1'].forEach(rank => {
+                    const rankData = matrix.find(m => m.rank === rank) || {};
+                    const checked = rankData[row.key] ? 'checked' : '';
+                    tr += `<td style="padding: 10px;"><input type="checkbox" class="perm-checkbox" data-rank="${rank}" data-key="${row.key}" ${checked} style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary-color);"></td>`;
+                });
+                tr += '</tr>';
+                tbody.innerHTML += tr;
+            });
+        }
     } catch (error) {
         console.error('Error loading settings:', error);
         alert('Failed to load settings');
@@ -128,6 +164,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                 storm_respect_dst: document.getElementById('storm_respect_dst').checked
             };
 
+            // Gather and Save RBAC Matrix Data
+            const newMatrix = ['R5', 'R4', 'R3', 'R2', 'R1'].map(rank => {
+                const obj = { rank: rank };
+                document.querySelectorAll(`.perm-checkbox[data-rank="${rank}"]`).forEach(cb => {
+                    obj[cb.dataset.key] = cb.checked;
+                });
+                return obj;
+            });
+            
+            try {
+                await fetch(`${API_BASE}/permissions`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newMatrix)
+                });
+            } catch (matrixErr) {
+                console.error("Failed to save permissions matrix:", matrixErr);
+            }
+            
             // Append Admin-only Password Policy Settings
             const minLen = document.getElementById('pwd-min-length');
             if (minLen) {

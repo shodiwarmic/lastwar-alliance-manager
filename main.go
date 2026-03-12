@@ -320,6 +320,26 @@ type VSPointsWithMember struct {
 	MemberRank string `json:"member_rank"`
 }
 
+type RankPermissions struct {
+	Rank           string `json:"rank"`
+	ViewTrain      bool   `json:"view_train"`
+	ManageTrain    bool   `json:"manage_train"`
+	ViewAwards     bool   `json:"view_awards"`
+	ManageAwards   bool   `json:"manage_awards"`
+	ViewRecs       bool   `json:"view_recs"`
+	ManageRecs     bool   `json:"manage_recs"`
+	ViewDyno       bool   `json:"view_dyno"`
+	ManageDyno     bool   `json:"manage_dyno"`
+	ViewRankings   bool   `json:"view_rankings"`
+	ViewStorm      bool   `json:"view_storm"`
+	ManageStorm    bool   `json:"manage_storm"`
+	ViewVSPoints   bool   `json:"view_vs_points"`
+	ManageVSPoints bool   `json:"manage_vs_points"`
+	ViewUpload     bool   `json:"view_upload"`
+	ManageMembers  bool   `json:"manage_members"`
+	ManageSettings bool   `json:"manage_settings"`
+}
+
 var db *sql.DB
 var store *sessions.CookieStore
 
@@ -1449,6 +1469,46 @@ Password: <code>admin123</code>`
 		log.Println("Default admin user created - Username: admin, Password: admin123")
 	}
 
+	// Create rank_permissions table
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS rank_permissions (
+		rank TEXT PRIMARY KEY,
+		view_train BOOLEAN DEFAULT 0, manage_train BOOLEAN DEFAULT 0,
+		view_awards BOOLEAN DEFAULT 0, manage_awards BOOLEAN DEFAULT 0,
+		view_recs BOOLEAN DEFAULT 0, manage_recs BOOLEAN DEFAULT 0,
+		view_dyno BOOLEAN DEFAULT 0, manage_dyno BOOLEAN DEFAULT 0,
+		view_rankings BOOLEAN DEFAULT 0,
+		view_storm BOOLEAN DEFAULT 0, manage_storm BOOLEAN DEFAULT 0,
+		view_vs_points BOOLEAN DEFAULT 0, manage_vs_points BOOLEAN DEFAULT 0,
+		view_upload BOOLEAN DEFAULT 0,
+		manage_members BOOLEAN DEFAULT 0,
+		manage_settings BOOLEAN DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
+
+	// Seed default permissions if table is empty
+	var permCount int
+	db.QueryRow("SELECT COUNT(*) FROM rank_permissions").Scan(&permCount)
+	if permCount == 0 {
+		defaultPerms := []struct {
+			Rank string
+			P    RankPermissions
+		}{
+			{"R5", RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true}},
+			{"R4", RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: false}},
+			{"R3", RankPermissions{ViewTrain: true, ManageTrain: false, ViewAwards: true, ManageAwards: false, ViewRecs: true, ManageRecs: false, ViewDyno: true, ManageDyno: false, ViewRankings: true, ViewStorm: true, ManageStorm: false, ViewVSPoints: true, ManageVSPoints: false, ViewUpload: false, ManageMembers: false, ManageSettings: false}},
+			{"R2", RankPermissions{ViewTrain: true, ManageTrain: false, ViewAwards: true, ManageAwards: false, ViewRecs: true, ManageRecs: false, ViewDyno: true, ManageDyno: false, ViewRankings: true, ViewStorm: true, ManageStorm: false, ViewVSPoints: true, ManageVSPoints: false, ViewUpload: false, ManageMembers: false, ManageSettings: false}},
+			{"R1", RankPermissions{ViewTrain: true, ManageTrain: false, ViewAwards: true, ManageAwards: false, ViewRecs: true, ManageRecs: false, ViewDyno: true, ManageDyno: false, ViewRankings: true, ViewStorm: true, ManageStorm: false, ViewVSPoints: true, ManageVSPoints: false, ViewUpload: false, ManageMembers: false, ManageSettings: false}},
+		}
+
+		stmt, _ := db.Prepare(`INSERT INTO rank_permissions (rank, view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		for _, v := range defaultPerms {
+			stmt.Exec(v.Rank, v.P.ViewTrain, v.P.ManageTrain, v.P.ViewAwards, v.P.ManageAwards, v.P.ViewRecs, v.P.ManageRecs, v.P.ViewDyno, v.P.ManageDyno, v.P.ViewRankings, v.P.ViewStorm, v.P.ManageStorm, v.P.ViewVSPoints, v.P.ManageVSPoints, v.P.ViewUpload, v.P.ManageMembers, v.P.ManageSettings)
+		}
+		stmt.Close()
+	}
+
 	return nil
 }
 
@@ -1510,54 +1570,67 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// Permission middleware - only R4/R5 or admin can manage ranks
-func rankManagementMiddleware(next http.HandlerFunc) http.HandlerFunc {
+func getRankPermissions(rank string) RankPermissions {
+	var p RankPermissions
+	p.Rank = rank
+	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings FROM rank_permissions WHERE rank = ?`, rank).Scan(
+		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings,
+	)
+	return p
+}
+
+func requirePermission(permColumn string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		session, _ := store.Get(r, "session")
 
-		// Check if admin
 		if isAdmin, ok := session.Values["is_admin"].(bool); ok && isAdmin {
 			next(w, r)
 			return
 		}
 
-		// Check if member has R4 or R5 rank
 		if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
-			err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
-			if err == nil && (rank == "R4" || rank == "R5") {
-				next(w, r)
-				return
+			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
+				var hasPerm bool
+				query := fmt.Sprintf("SELECT %s FROM rank_permissions WHERE rank = ?", permColumn)
+				if err := db.QueryRow(query, rank).Scan(&hasPerm); err == nil && hasPerm {
+					next(w, r)
+					return
+				}
 			}
 		}
 
-		http.Error(w, "Forbidden: Only R4/R5 members can manage ranks", http.StatusForbidden)
+		http.Error(w, "Forbidden: You do not have permission to access this feature.", http.StatusForbidden)
 	}
 }
 
-// Permission middleware - only R5 or admin
-func adminR5Middleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		session, _ := store.Get(r, "session")
-
-		// Check if admin
-		if isAdmin, ok := session.Values["is_admin"].(bool); ok && isAdmin {
-			next(w, r)
-			return
-		}
-
-		// Check if member has R5 rank
-		if memberID, ok := session.Values["member_id"].(int); ok {
-			var rank string
-			err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
-			if err == nil && rank == "R5" {
-				next(w, r)
-				return
-			}
-		}
-
-		http.Error(w, "Forbidden: Only R5 members and admins can perform this action", http.StatusForbidden)
+func getPermissionsMatrix(w http.ResponseWriter, r *http.Request) {
+	ranks := []string{"R5", "R4", "R3", "R2", "R1"}
+	var matrix []RankPermissions
+	for _, rank := range ranks {
+		matrix = append(matrix, getRankPermissions(rank))
 	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(matrix)
+}
+
+func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
+	var matrix []RankPermissions
+	if err := json.NewDecoder(r.Body).Decode(&matrix); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tx, _ := db.Begin()
+	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=? WHERE rank=?`)
+	for _, p := range matrix {
+		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.Rank)
+	}
+	stmt.Close()
+	tx.Commit()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Permissions updated"})
 }
 
 // Admin-only middleware
@@ -1957,33 +2030,25 @@ func checkAuth(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var rank string
-		var canManageRanks bool
+		var perms RankPermissions
 
 		if isAdmin {
 			rank = "Admin"
-			canManageRanks = true
+			perms = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true}
 		} else if memberID, ok := session.Values["member_id"].(int); ok {
-			// Get member's rank
 			err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
 			if err == nil {
-				canManageRanks = (rank == "R4" || rank == "R5")
+				perms = getRankPermissions(rank)
 			}
-		}
-
-		// Check if user is R5 or admin (for more sensitive operations)
-		isR5OrAdmin := isAdmin
-		if !isR5OrAdmin && rank == "R5" {
-			isR5OrAdmin = true
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"authenticated":    true,
-			"username":         username,
-			"rank":             rank,
-			"is_admin":         isAdmin,
-			"can_manage_ranks": canManageRanks,
-			"is_r5_or_admin":   isR5OrAdmin,
+			"authenticated": true,
+			"username":      username,
+			"rank":          rank,
+			"is_admin":      isAdmin,
+			"permissions":   perms,
 		})
 	} else {
 		w.Header().Set("Content-Type", "application/json")
@@ -4908,41 +4973,6 @@ func generateConductorMessages(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// R4/R5/Admin middleware - checks if user has R4, R5 rank or is admin
-func r4r5Middleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		session, _ := store.Get(r, "session")
-		memberID, ok := session.Values["member_id"].(int)
-		if !ok {
-			http.Error(w, "Not authenticated", http.StatusUnauthorized)
-			return
-		}
-
-		// Check if user is admin
-		var isAdmin bool
-		err := db.QueryRow("SELECT is_admin FROM users WHERE member_id = ?", memberID).Scan(&isAdmin)
-		if err == nil && isAdmin {
-			next(w, r)
-			return
-		}
-
-		// Get member rank
-		var rank string
-		err = db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
-		if err != nil {
-			http.Error(w, "Member not found", http.StatusNotFound)
-			return
-		}
-
-		if rank != "R4" && rank != "R5" {
-			http.Error(w, "Access denied - R4, R5 rank or admin privileges required", http.StatusForbidden)
-			return
-		}
-
-		next(w, r)
-	}
-}
-
 // Get storm assignments
 func getStormAssignments(w http.ResponseWriter, r *http.Request) {
 	taskForce := r.URL.Query().Get("task_force")
@@ -6679,8 +6709,7 @@ type PageData struct {
 	Username        string
 	IsAdmin         bool
 	Rank            string
-	CanManageRanks  bool
-	IsR5OrAdmin     bool
+	Permissions     RankPermissions
 }
 
 // getPageData extracts the current user's session data and permissions
@@ -6695,26 +6724,14 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 		data.IsAuthenticated = true
 		data.Username = session.Values["username"].(string)
 
-		// Set admin permissions FIRST (so default admin gets access)
-		if adminVal, ok := session.Values["is_admin"].(bool); ok {
-			data.IsAdmin = adminVal
-			data.IsR5OrAdmin = adminVal
-			data.CanManageRanks = adminVal
-		}
-
-		// Then layer on member-specific permissions if they are linked to a player
-		if memberID, ok := session.Values["member_id"].(int); ok {
+		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
+			data.IsAdmin = true
+			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true}
+		} else if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
-			// We check their rank from the database to ensure it's up to date
-			err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
-			if err == nil {
+			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
 				data.Rank = rank
-
-				// If they are NOT an admin, we grant access based on their game rank
-				if !data.IsAdmin {
-					data.CanManageRanks = (rank == "R4" || rank == "R5")
-					data.IsR5OrAdmin = (rank == "R5")
-				}
+				data.Permissions = getRankPermissions(rank)
 			}
 		}
 	}
@@ -6755,7 +6772,7 @@ func main() {
 	router.HandleFunc("/api/logout", logout).Methods("POST")
 	router.HandleFunc("/api/check-auth", checkAuth).Methods("GET")
 	router.HandleFunc("/api/change-password", authMiddleware(changePassword)).Methods("POST")
-	router.HandleFunc("/api/members/{id}/create-user", authMiddleware(adminR5Middleware(createUserForMember))).Methods("POST")
+	router.HandleFunc("/api/members/{id}/create-user", authMiddleware(requirePermission("manage_settings", createUserForMember))).Methods("POST")
 
 	// Admin routes (admin only)
 	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(getAdminUsers))).Methods("GET")
@@ -6765,69 +6782,73 @@ func main() {
 	router.HandleFunc("/api/admin/users/{id}/reset-password", authMiddleware(adminMiddleware(resetUserPassword))).Methods("POST")
 	router.HandleFunc("/api/admin/login-history", authMiddleware(adminMiddleware(getLoginHistory))).Methods("GET")
 
-	// API routes (protected)
+	// Permission Matrix routes
+	router.HandleFunc("/api/permissions", authMiddleware(requirePermission("manage_settings", getPermissionsMatrix))).Methods("GET")
+	router.HandleFunc("/api/permissions", authMiddleware(requirePermission("manage_settings", updatePermissionsMatrix))).Methods("PUT")
+
+	// Members API
 	router.HandleFunc("/api/members", authMiddleware(getMembers)).Methods("GET")
 	router.HandleFunc("/api/members/stats", authMiddleware(getMemberStats)).Methods("GET")
-	router.HandleFunc("/api/members", authMiddleware(rankManagementMiddleware(createMember))).Methods("POST")
-	router.HandleFunc("/api/members/{id}", authMiddleware(rankManagementMiddleware(updateMember))).Methods("PUT")
-	router.HandleFunc("/api/members/{id}", authMiddleware(rankManagementMiddleware(deleteMember))).Methods("DELETE")
-	router.HandleFunc("/api/members/import", authMiddleware(rankManagementMiddleware(importCSV))).Methods("POST")
-	router.HandleFunc("/api/members/import/confirm", authMiddleware(rankManagementMiddleware(confirmMemberUpdates))).Methods("POST")
+	router.HandleFunc("/api/members", authMiddleware(requirePermission("manage_members", createMember))).Methods("POST")
+	router.HandleFunc("/api/members/{id}", authMiddleware(requirePermission("manage_members", updateMember))).Methods("PUT")
+	router.HandleFunc("/api/members/{id}", authMiddleware(requirePermission("manage_members", deleteMember))).Methods("DELETE")
+	router.HandleFunc("/api/members/import", authMiddleware(requirePermission("manage_members", importCSV))).Methods("POST")
+	router.HandleFunc("/api/members/import/confirm", authMiddleware(requirePermission("manage_members", confirmMemberUpdates))).Methods("POST")
 
-	// Train schedule routes (protected)
+	// Train schedule
 	router.HandleFunc("/api/train-schedules", authMiddleware(getTrainSchedules)).Methods("GET")
 	router.HandleFunc("/api/train-schedules/weekly-message", authMiddleware(generateWeeklyMessage)).Methods("GET")
 	router.HandleFunc("/api/train-schedules/daily-message", authMiddleware(generateDailyMessage)).Methods("GET")
 	router.HandleFunc("/api/train-schedules/conductor-messages", authMiddleware(generateConductorMessages)).Methods("GET")
-	router.HandleFunc("/api/train-schedules/auto-schedule", authMiddleware(autoSchedule)).Methods("POST")
-	router.HandleFunc("/api/train-schedules", authMiddleware(createTrainSchedule)).Methods("POST")
-	router.HandleFunc("/api/train-schedules/{id}", authMiddleware(updateTrainSchedule)).Methods("PUT")
-	router.HandleFunc("/api/train-schedules/{id}", authMiddleware(deleteTrainSchedule)).Methods("DELETE")
+	router.HandleFunc("/api/train-schedules/auto-schedule", authMiddleware(requirePermission("manage_train", autoSchedule))).Methods("POST")
+	router.HandleFunc("/api/train-schedules", authMiddleware(requirePermission("manage_train", createTrainSchedule))).Methods("POST")
+	router.HandleFunc("/api/train-schedules/{id}", authMiddleware(requirePermission("manage_train", updateTrainSchedule))).Methods("PUT")
+	router.HandleFunc("/api/train-schedules/{id}", authMiddleware(requirePermission("manage_train", deleteTrainSchedule))).Methods("DELETE")
 
-	// Awards routes (protected)
+	// Awards
 	router.HandleFunc("/api/awards", authMiddleware(getAwards)).Methods("GET")
-	router.HandleFunc("/api/awards", authMiddleware(saveAwards)).Methods("POST")
-	router.HandleFunc("/api/awards/{week}", authMiddleware(deleteWeekAwards)).Methods("DELETE")
+	router.HandleFunc("/api/awards", authMiddleware(requirePermission("manage_awards", saveAwards))).Methods("POST")
+	router.HandleFunc("/api/awards/{week}", authMiddleware(requirePermission("manage_awards", deleteWeekAwards))).Methods("DELETE")
 
-	// Award types routes
+	// Award types
 	router.HandleFunc("/api/award-types", authMiddleware(getAwardTypes)).Methods("GET")
-	router.HandleFunc("/api/award-types", authMiddleware(createAwardType)).Methods("POST")
-	router.HandleFunc("/api/award-types/{id}", authMiddleware(updateAwardType)).Methods("PUT")
-	router.HandleFunc("/api/award-types/{id}", authMiddleware(deleteAwardType)).Methods("DELETE")
+	router.HandleFunc("/api/award-types", authMiddleware(requirePermission("manage_awards", createAwardType))).Methods("POST")
+	router.HandleFunc("/api/award-types/{id}", authMiddleware(requirePermission("manage_awards", updateAwardType))).Methods("PUT")
+	router.HandleFunc("/api/award-types/{id}", authMiddleware(requirePermission("manage_awards", deleteAwardType))).Methods("DELETE")
 
-	// VS points routes (protected)
+	// VS points
 	router.HandleFunc("/api/vs-points", authMiddleware(getVSPoints)).Methods("GET")
-	router.HandleFunc("/api/vs-points", authMiddleware(saveVSPoints)).Methods("POST")
-	router.HandleFunc("/api/vs-points/{week}", authMiddleware(deleteWeekVSPoints)).Methods("DELETE")
-	router.HandleFunc("/api/vs-points/process-screenshot", authMiddleware(processVSPointsScreenshot)).Methods("POST")
+	router.HandleFunc("/api/vs-points", authMiddleware(requirePermission("manage_vs_points", saveVSPoints))).Methods("POST")
+	router.HandleFunc("/api/vs-points/{week}", authMiddleware(requirePermission("manage_vs_points", deleteWeekVSPoints))).Methods("DELETE")
+	router.HandleFunc("/api/vs-points/process-screenshot", authMiddleware(requirePermission("manage_vs_points", processVSPointsScreenshot))).Methods("POST")
 
-	// Recommendations routes (protected)
+	// Recommendations
 	router.HandleFunc("/api/recommendations", authMiddleware(getRecommendations)).Methods("GET")
-	router.HandleFunc("/api/recommendations", authMiddleware(createRecommendation)).Methods("POST")
-	router.HandleFunc("/api/recommendations/{id}", authMiddleware(deleteRecommendation)).Methods("DELETE")
+	router.HandleFunc("/api/recommendations", authMiddleware(createRecommendation)).Methods("POST")        // Anyone can create a rec
+	router.HandleFunc("/api/recommendations/{id}", authMiddleware(deleteRecommendation)).Methods("DELETE") // Handler has internal logic for own recs vs admin
 
-	// Dyno Recommendations routes (protected)
+	// Dyno Recommendations
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(getDynoRecommendations)).Methods("GET")
-	router.HandleFunc("/api/dyno-recommendations", authMiddleware(createDynoRecommendation)).Methods("POST")
+	router.HandleFunc("/api/dyno-recommendations", authMiddleware(createDynoRecommendation)).Methods("POST") // Anyone can create
 	router.HandleFunc("/api/dyno-recommendations/{id}", authMiddleware(deleteDynoRecommendation)).Methods("DELETE")
 
-	// Settings routes (protected)
+	// Settings
 	router.HandleFunc("/api/settings", authMiddleware(getSettings)).Methods("GET")
-	router.HandleFunc("/api/settings", authMiddleware(adminR5Middleware(updateSettings))).Methods("PUT")
+	router.HandleFunc("/api/settings", authMiddleware(requirePermission("manage_settings", updateSettings))).Methods("PUT")
 
-	// Rankings routes (protected)
+	// Rankings & Timelines
 	router.HandleFunc("/api/rankings", authMiddleware(getMemberRankings)).Methods("GET")
 	router.HandleFunc("/api/member-timelines", authMiddleware(getMemberTimelines)).Methods("GET")
 
-	// Storm assignments routes (protected, R4/R5 only)
+	// Storm assignments
 	router.HandleFunc("/api/storm-assignments", authMiddleware(getStormAssignments)).Methods("GET")
-	router.HandleFunc("/api/storm-assignments", authMiddleware(r4r5Middleware(saveStormAssignments))).Methods("POST")
-	router.HandleFunc("/api/storm-assignments/{taskForce}", authMiddleware(r4r5Middleware(deleteStormAssignments))).Methods("DELETE")
+	router.HandleFunc("/api/storm-assignments", authMiddleware(requirePermission("manage_storm", saveStormAssignments))).Methods("POST")
+	router.HandleFunc("/api/storm-assignments/{taskForce}", authMiddleware(requirePermission("manage_storm", deleteStormAssignments))).Methods("DELETE")
 
-	// Power history routes (protected)
+	// Power history
 	router.HandleFunc("/api/power-history", authMiddleware(getPowerHistory)).Methods("GET")
-	router.HandleFunc("/api/power-history", authMiddleware(addPowerRecord)).Methods("POST")
-	router.HandleFunc("/api/power-history/process-screenshot", authMiddleware(processPowerScreenshot)).Methods("POST")
+	router.HandleFunc("/api/power-history", authMiddleware(requirePermission("manage_members", addPowerRecord))).Methods("POST")
+	router.HandleFunc("/api/power-history/process-screenshot", authMiddleware(requirePermission("manage_members", processPowerScreenshot))).Methods("POST")
 
 	// Home Page
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -6905,18 +6926,27 @@ func main() {
 			data := getPageData(r, strings.Title(tmpl)+" - Alliance Manager", tmpl)
 
 			// --- SERVER-SIDE SECURITY ---
-			// 1. Redirect to login if not authenticated
 			if !data.IsAuthenticated {
 				http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
 				return
 			}
 
-			// 2. Don't even render the page if they lack permissions
-			if tmpl == "admin" && !data.IsAdmin {
-				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-				return
+			// Map pages to their required view permission
+			pagePermissions := map[string]bool{
+				"train":           data.Permissions.ViewTrain,
+				"awards":          data.Permissions.ViewAwards,
+				"recommendations": data.Permissions.ViewRecs,
+				"dyno":            data.Permissions.ViewDyno,
+				"rankings":        data.Permissions.ViewRankings,
+				"storm":           data.Permissions.ViewStorm,
+				"vs":              data.Permissions.ViewVSPoints,
+				"upload":          data.Permissions.ViewUpload,
+				"settings":        data.Permissions.ManageSettings,
+				"admin":           data.IsAdmin, // Admin panel remains strict Admin-only
 			}
-			if tmpl == "settings" && !data.IsR5OrAdmin {
+
+			// If the page requires a specific permission and they don't have it, redirect
+			if hasAccess, exists := pagePermissions[tmpl]; exists && !hasAccess {
 				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 				return
 			}

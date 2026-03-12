@@ -48,16 +48,40 @@
 
         <nav class="nav-menu">
             <a href="/" class="nav-link {{if eq .ActivePage "index"}}active{{end}}">👥 Members</a>
-            <a href="/train" class="nav-link {{if eq .ActivePage "train"}}active{{end}}">🚂 Train</a>
-            <a href="/awards" class="nav-link {{if eq .ActivePage "awards"}}active{{end}}">🏆 Awards</a>
-            <a href="/recommendations" class="nav-link {{if eq .ActivePage "recommendations"}}active{{end}}">⭐ Recs</a>
-            <a href="/dyno" class="nav-link {{if eq .ActivePage "dyno"}}active{{end}}">💬 Dyno</a>
-            <a href="/rankings" class="nav-link {{if eq .ActivePage "rankings"}}active{{end}}">📊 Rankings</a>
-            <a href="/storm" class="nav-link {{if eq .ActivePage "storm"}}active{{end}}">🏜️ Storm</a>
-            <a href="/vs" class="nav-link {{if eq .ActivePage "vs"}}active{{end}}">⚔️ VS Points</a>
-            <a href="/upload" class="nav-link {{if eq .ActivePage "upload"}}active{{end}}">📸 Upload</a>
             
-            {{if .IsR5OrAdmin}}
+            {{if .Permissions.ViewTrain}}
+            <a href="/train" class="nav-link {{if eq .ActivePage "train"}}active{{end}}">🚂 Train</a>
+            {{end}}
+            
+            {{if .Permissions.ViewAwards}}
+            <a href="/awards" class="nav-link {{if eq .ActivePage "awards"}}active{{end}}">🏆 Awards</a>
+            {{end}}
+            
+            {{if .Permissions.ViewRecs}}
+            <a href="/recommendations" class="nav-link {{if eq .ActivePage "recommendations"}}active{{end}}">⭐ Recs</a>
+            {{end}}
+            
+            {{if .Permissions.ViewDyno}}
+            <a href="/dyno" class="nav-link {{if eq .ActivePage "dyno"}}active{{end}}">💬 Dyno</a>
+            {{end}}
+            
+            {{if .Permissions.ViewRankings}}
+            <a href="/rankings" class="nav-link {{if eq .ActivePage "rankings"}}active{{end}}">📊 Rankings</a>
+            {{end}}
+            
+            {{if .Permissions.ViewStorm}}
+            <a href="/storm" class="nav-link {{if eq .ActivePage "storm"}}active{{end}}">🏜️ Storm</a>
+            {{end}}
+            
+            {{if .Permissions.ViewVSPoints}}
+            <a href="/vs" class="nav-link {{if eq .ActivePage "vs"}}active{{end}}">⚔️ VS Points</a>
+            {{end}}
+            
+            {{if .Permissions.ViewUpload}}
+            <a href="/upload" class="nav-link {{if eq .ActivePage "upload"}}active{{end}}">📸 Upload</a>
+            {{end}}
+            
+            {{if .Permissions.ManageSettings}}
             <a href="/settings" class="nav-link {{if eq .ActivePage "settings"}}active{{end}}">⚙️ Settings</a>
             {{end}}
 
