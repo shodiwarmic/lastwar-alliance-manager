@@ -6,8 +6,12 @@ let canManageRanks = false;
 let isR5OrAdmin = false;
 let isAdmin = false;
 let allMembers = []; 
-let isPowerTrackingEnabled = false; 
+let isPowerTrackingEnabled = false;
+let isSquadTrackingEnabled = false; 
 let currentMaxHQ = 35; 
+
+// Define the HQ requirements for each Troop Tier
+const TROOP_HQ_REQ = { 1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35 };
 
 // Fetch permissions to determine if Edit/Delete buttons should render
 async function fetchPermissions() {
@@ -31,40 +35,96 @@ async function fetchSettings() {
         if (response.ok) {
             const settings = await response.json();
             isPowerTrackingEnabled = settings.power_tracking_enabled === true;
+            isSquadTrackingEnabled = settings.squad_tracking_enabled === true;
+            
             currentMaxHQ = settings.max_hq_level || 35;
             const hqInput = document.getElementById('member-level');
             if (hqInput) {
                 hqInput.max = currentMaxHQ;
             }
 
+            // Hide/Show squad sorting and filtering options globally
+            document.querySelectorAll('.squad-sort-option').forEach(el => {
+                el.style.display = isSquadTrackingEnabled ? 'block' : 'none';
+            });
+
+            // NEW: Dynamically hide ANY troop tier that exceeds the server's Max HQ setting
+            Object.entries(TROOP_HQ_REQ).forEach(([tier, reqHQ]) => {
+                const chip = document.querySelector(`.troop-chip[data-troop="${tier}"]`);
+                const option = document.querySelector(`#member-troop-level option[value="${tier}"]`);
+                
+                if (currentMaxHQ < reqHQ) {
+                    if (chip) chip.style.display = 'none';
+                    if (option) option.style.display = 'none';
+                } else {
+                    if (chip) chip.style.display = ''; // Reset to default
+                    if (option) option.style.display = ''; 
+                }
+            });
         }
     } catch (error) {
         console.error('Error fetching settings:', error);
     }
 }
 
+// Function to dynamically disable/enable troop options based on HQ level
+window.updateTroopLevelOptions = function() {
+    const hqLevel = parseInt(document.getElementById('member-level').value, 10) || 0;
+    const troopSelect = document.getElementById('member-troop-level');
+    
+    if (!troopSelect) return;
+
+    Array.from(troopSelect.options).forEach(option => {
+        if (!option.value) return; // Skip the "None / Unknown" default option
+        
+        const tier = parseInt(option.value, 10);
+        
+        if (hqLevel >= TROOP_HQ_REQ[tier]) {
+            option.disabled = false;
+        } else {
+            option.disabled = true;
+            if (troopSelect.value == tier) {
+                troopSelect.value = ""; 
+            }
+        }
+    });
+};
+
 function updateDisplayedMembers() {
-    // 1. Grab current values from all inputs
+    // Grab current values from all inputs
     const searchTerm = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
     const eligibleOnly = document.getElementById('filter-eligible')?.checked || false;
     const sortBy = document.getElementById('sort-by')?.value || 'name-asc';
 
-    // NEW: Grab an array of the 'data-rank' values from all active chips
-    const activeRankChips = Array.from(document.querySelectorAll('.rank-chip.active')).map(chip => chip.dataset.rank);
+    // Grab arrays of the active attributes
+    const activeRanks = Array.from(document.querySelectorAll('.rank-chip.active')).map(c => c.dataset.rank);
+    const activeProfs = Array.from(document.querySelectorAll('.prof-chip.active')).map(c => c.dataset.prof);
+    const activeSquads = Array.from(document.querySelectorAll('.squad-chip.active')).map(c => c.dataset.squad);
+    const activeTroops = Array.from(document.querySelectorAll('.troop-chip.active')).map(c => c.dataset.troop);
 
-    // 2. Apply Filters
+    // Apply Filters
     let filtered = allMembers.filter(member => {
         const matchesSearch = member.name.toLowerCase().includes(searchTerm) || member.rank.toLowerCase().includes(searchTerm);
-        
-        // Match if "all" is active, OR if the member's rank is in our list of active chips
-        const matchesRank = activeRankChips.includes('all') || activeRankChips.includes(member.rank);
-        
         const matchesEligible = !eligibleOnly || member.eligible !== false; 
 
-        return matchesSearch && matchesRank && matchesEligible;
+        const matchesRank = activeRanks.includes('all') || activeRanks.includes(member.rank);
+        
+        // Match Professions (Treat empty string or null as 'none')
+        const memProf = member.profession || 'none';
+        const matchesProf = activeProfs.includes('all') || activeProfs.includes(memProf);
+
+        // Match Squads (Treat empty string as 'none')
+        const memSquad = member.squad_type || 'none';
+        const matchesSquad = activeSquads.includes('all') || activeSquads.includes(memSquad);
+
+        // Match Troops
+        const memTroop = (member.troop_level || 0).toString();
+        const matchesTroop = activeTroops.includes('all') || activeTroops.includes(memTroop);
+
+        return matchesSearch && matchesEligible && matchesRank && matchesProf && matchesSquad && matchesTroop;
     });
 
-    // 3. Apply Sorting
+    // Apply Sorting
     filtered.sort((a, b) => {
         if (sortBy === 'name-asc') {
             return a.name.localeCompare(b.name);
@@ -74,6 +134,10 @@ function updateDisplayedMembers() {
             return (b.power || 0) - (a.power || 0);
         } else if (sortBy === 'power-asc') {
             return (a.power || 0) - (b.power || 0);
+        } else if (sortBy === 'squad-power-desc') {
+            return (b.squad_power || 0) - (a.squad_power || 0);
+        } else if (sortBy === 'squad-power-asc') {
+            return (a.squad_power || 0) - (b.squad_power || 0);
         } else if (sortBy === 'rank-desc') {
             // Map ranks to numeric values for correct Last War sorting
             const rankOrder = { 'R5': 5, 'R4': 4, 'R3': 3, 'R2': 2, 'R1': 1 };
@@ -85,7 +149,7 @@ function updateDisplayedMembers() {
         return 0;
     });
 
-    // 4. Update the UI
+    // Update the UI
     displayMembers(filtered);
     updateMemberCount(filtered.length);
 
@@ -112,6 +176,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         notice.innerHTML = '<p>ℹ️ Only R4 and R5 members can add or manage member ranks.</p>';
         document.querySelector('main').insertBefore(notice, document.querySelector('.members-section'));
     }
+
+    // Attach HQ Level listener for dynamic Troop Tier validation
+    const hqInput = document.getElementById('member-level');
+    if (hqInput) hqInput.addEventListener('input', updateTroopLevelOptions);
 
     setupModalListeners();
     setupCSVImport();
@@ -179,9 +247,29 @@ function resetMemberForm() {
     editingMemberId = null;
     document.getElementById('member-form').reset();
     document.getElementById('member-eligible').checked = true;
-    document.getElementById('member-level').value = '';
     
-    // Clear the power input and timestamp
+    // Core and Advanced fields
+    const levelInput = document.getElementById('member-level');
+    if (levelInput) levelInput.value = '';
+    const profInput = document.getElementById('member-profession');
+    if (profInput) profInput.value = '';
+    const troopInput = document.getElementById('member-troop-level');
+    if (troopInput) troopInput.value = '';
+    
+    // Squad tracking section
+    const squadTypeInput = document.getElementById('member-squad-type');
+    if (squadTypeInput) squadTypeInput.value = '';
+    const sqPowerInput = document.getElementById('member-squad-power');
+    if (sqPowerInput) sqPowerInput.value = '';
+    const sqTimestampText = document.getElementById('modal-squad-power-timestamp');
+    if (sqTimestampText) sqTimestampText.textContent = '';
+    
+    const squadSection = document.getElementById('modal-squad-section');
+    if (squadSection) {
+        squadSection.style.display = isSquadTrackingEnabled ? 'block' : 'none';
+    }
+    
+    // Clear the overall power input and timestamp
     const powerInput = document.getElementById('modal-member-power');
     if (powerInput) powerInput.value = '';
     const timestampText = document.getElementById('modal-power-timestamp');
@@ -191,6 +279,8 @@ function resetMemberForm() {
     if (powerSection) {
         powerSection.style.display = isPowerTrackingEnabled ? 'block' : 'none';
     }
+    
+    if (typeof updateTroopLevelOptions === 'function') updateTroopLevelOptions();
     
     document.getElementById('modal-form-title').textContent = 'Add New Member';
     document.getElementById('submit-btn').textContent = 'Add Member';
@@ -202,8 +292,6 @@ async function loadMembers() {
         const members = await response.json();
         allMembers = members; 
         
-        // REPLACED: displayMembers(members) and updateMemberCount(members.length)
-        // Calling our new master function ensures filters/sorts stay active after saving!
         updateDisplayedMembers();
     } catch (error) {
         console.error('Error loading members:', error);
@@ -227,14 +315,26 @@ function displayMembers(members) {
         
         let powerDisplay = '';
         if (isPowerTrackingEnabled && member.power) {
-            powerDisplay = `<span class="member-power" title="${member.power.toLocaleString()}">${formatPower(member.power)}</span>`;
+            powerDisplay = `<span class="member-power" title="Overall Power: ${member.power.toLocaleString()}">${formatPower(member.power)}</span>`;
+        }
+
+        let professionBadge = member.profession ? `<span class="member-rank" style="background: #805ad5; margin-left: 5px;">${escapeHtml(member.profession)}</span>` : '';
+        let troopBadge = member.troop_level ? `<span class="member-rank" style="background: #dd6b20; margin-left: 5px;">T${member.troop_level}</span>` : '';
+        
+        let squadDisplay = '';
+        if (isSquadTrackingEnabled && (member.squad_type || member.squad_power)) {
+            let typeIcon = '';
+            if (member.squad_type === 'Tank') typeIcon = '🛡️ ';
+            else if (member.squad_type === 'Aircraft') typeIcon = '✈️ ';
+            else if (member.squad_type === 'Missile') typeIcon = '🚀 ';
+            squadDisplay = `<span class="member-power" style="margin-left: 10px; color: var(--accent-color);" title="Squad Power: ${member.squad_power ? member.squad_power.toLocaleString() : 0}">${typeIcon}${formatPower(member.squad_power)}</span>`;
         }
 
         let actionsHtml = '';
         if (canManageRanks) {
             actionsHtml = `
                 <div class="member-actions">
-                    <button class="edit-btn" onclick="editMember(${member.id}, '${escapeHtml(member.name)}', '${escapeHtml(member.rank)}', ${member.eligible !== false}, ${member.power || 0}, '${member.power_updated_at || ''}', ${member.level || 0})">Edit</button>
+                    <button class="edit-btn" onclick="editMember(${member.id}, '${escapeHtml(member.name)}', '${escapeHtml(member.rank)}', ${member.eligible !== false}, ${member.power || 0}, '${member.power_updated_at || ''}', ${member.level || 0}, '${escapeHtml(member.squad_type || '')}', ${member.squad_power || 0}, '${member.squad_power_updated_at || ''}', ${member.troop_level || 0}, '${escapeHtml(member.profession || '')}')">Edit</button>
                     <button class="delete-btn" onclick="deleteMember(${member.id}, '${escapeHtml(member.name)}', ${member.has_user})">Delete</button>
                     ${(isR5OrAdmin && !member.has_user) ? `<button class="create-user-btn" onclick="createUserForMember(${member.id}, '${escapeHtml(member.name)}')">Create User</button>` : ''}
                     <button class="toggle-eligible-btn ${eligibleClass}" onclick="toggleEligible(${member.id}, ${member.eligible !== false})">${eligibleStatus}</button>
@@ -248,7 +348,10 @@ function displayMembers(members) {
                     <div class="member-name">${escapeHtml(member.name)}</div>
                     <span class="member-rank rank-${member.rank.replace(/\s+/g, '-')}">${escapeHtml(member.rank)}</span>
                     ${member.level ? `<span class="member-rank" style="background: #4a5568; margin-left: 5px;">HQ ${member.level}</span>` : ''}
+                    ${troopBadge}
+                    ${professionBadge}
                     ${powerDisplay}
+                    ${squadDisplay}
                     <span class="member-eligible ${eligibleClass}">${eligibleStatus}</span>
                 </div>
                 ${actionsHtml}
@@ -267,10 +370,12 @@ async function handleMemberFormSubmit(e) {
     const name = document.getElementById('member-name').value.trim();
     const rank = document.getElementById('member-rank').value;
     const eligible = document.getElementById('member-eligible').checked;
+    
     const level = parseInt(document.getElementById('member-level').value, 10) || 0;
     const profession = document.getElementById('member-profession').value;
     const squad_type = document.getElementById('member-squad-type').value;
     const troop_level = parseInt(document.getElementById('member-troop-level').value, 10) || 0;
+    
     const sqPowerInput = document.getElementById('member-squad-power');
     const squad_power = (sqPowerInput && sqPowerInput.value !== '') ? parseInt(sqPowerInput.value, 10) : 0;
 
@@ -284,7 +389,7 @@ async function handleMemberFormSubmit(e) {
         return;
     }
     
-    // Grab the power value. If the box is empty, explicitly set it to 0 to clear it out.
+    // Grab the overall power value.
     const powerInput = document.getElementById('modal-member-power');
     const power = (powerInput && powerInput.value !== '') ? parseInt(powerInput.value, 10) : 0;
 
@@ -321,24 +426,56 @@ async function handleMemberFormSubmit(e) {
     }
 }
 
-window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0) {
+window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0, squadType = '', squadPower = 0, squadPowerUpdatedAt = '', troopLevel = 0, profession = '') {
     if (!canManageRanks) {
         alert('You do not have permission to edit members.');
         return;
     }
     editingMemberId = id;
+    
+    // Core fields
     document.getElementById('member-name').value = name;
     document.getElementById('member-rank').value = rank;
     document.getElementById('member-eligible').checked = eligible;
-    document.getElementById('member-level').value = (level > 0) ? level : '';
-    document.getElementById('member-profession').value = profession;
-    document.getElementById('member-troop-level').value = troopLevel > 0 ? troopLevel : '';
-    document.getElementById('member-squad-type').value = squadType;
+    
+    const levelInput = document.getElementById('member-level');
+    if (levelInput) levelInput.value = (level > 0) ? level : '';
+    
+    // Power fields
+    const powerSection = document.getElementById('modal-power-section');
+    if (powerSection) powerSection.style.display = isPowerTrackingEnabled ? 'block' : 'none';
+    
+    const powerInput = document.getElementById('modal-member-power');
+    if (powerInput) powerInput.value = (power && power > 0) ? power : '';
+
+    const timestampText = document.getElementById('modal-power-timestamp');
+    if (timestampText) {
+        if (powerUpdatedAt) {
+            const formattedDateStr = powerUpdatedAt.replace(' ', 'T') + "Z";
+            const updatedDate = new Date(formattedDateStr);
+            timestampText.textContent = `Last updated: ${updatedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+        } else {
+            timestampText.textContent = "Last updated: Never";
+        }
+    }
+
+    // Safely populate Squad and Advanced fields
+    const profInput = document.getElementById('member-profession');
+    if (profInput) profInput.value = profession;
+
+    const troopInput = document.getElementById('member-troop-level');
+    if (troopInput) troopInput.value = (troopLevel > 0) ? troopLevel : '';
+
+    // Handle Squad Tracking Section visibility
+    const squadSection = document.getElementById('modal-squad-section');
+    if (squadSection) squadSection.style.display = isSquadTrackingEnabled ? 'block' : 'none';
+
+    const squadTypeInput = document.getElementById('member-squad-type');
+    if (squadTypeInput) squadTypeInput.value = squadType;
     
     const sqPowerInput = document.getElementById('member-squad-power');
     if (sqPowerInput) sqPowerInput.value = (squadPower && squadPower > 0) ? squadPower : '';
 
-    // Handle Squad Power Timestamp
     const sqTimestampText = document.getElementById('modal-squad-power-timestamp');
     if (sqTimestampText) {
         if (squadPowerUpdatedAt) {
@@ -350,33 +487,9 @@ window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt
         }
     }
 
-    // Call your updateTroopLevelOptions() here to enforce the HQ limits dynamically!
-    updateTroopLevelOptions();
-    
-    const powerSection = document.getElementById('modal-power-section');
-    if (powerSection) {
-        powerSection.style.display = isPowerTrackingEnabled ? 'block' : 'none';
-    }
-    
-    // Populate Power Input
-    const powerInput = document.getElementById('modal-member-power');
-    if (powerInput) {
-        // If power is 0, leave the box blank for a cleaner UI
-        powerInput.value = (power && power > 0) ? power : '';
-    }
-
-    // Format and display the timestamp
-    const timestampText = document.getElementById('modal-power-timestamp');
-    if (timestampText) {
-        if (powerUpdatedAt) {
-            // Replace space with T and append Z to force JS to read SQLite's CURRENT_TIMESTAMP as UTC
-            const formattedDateStr = powerUpdatedAt.replace(' ', 'T') + "Z";
-            const updatedDate = new Date(formattedDateStr);
-            const options = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' };
-            timestampText.textContent = `Last updated: ${updatedDate.toLocaleDateString(undefined, options)}`;
-        } else {
-            timestampText.textContent = "Last updated: Never";
-        }
+    // Safely call the Troop Level updater so options lock correctly
+    if (typeof updateTroopLevelOptions === 'function') {
+        updateTroopLevelOptions();
     }
 
     document.getElementById('modal-form-title').textContent = 'Edit Member';
@@ -421,7 +534,7 @@ window.toggleEligible = async function(id, currentStatus) {
         const member = members.find(m => m.id === id);
         if (!member) throw new Error('Member not found');
         
-        // FIX: Copy all existing member data (including level and power), then overwrite 'eligible'
+        // Copy all existing member data (including level and power), then overwrite 'eligible'
         const updatedMemberData = {
             ...member,
             eligible: newStatus
@@ -462,10 +575,10 @@ window.createUserForMember = async function(memberId, memberName) {
 
 function formatPower(power) {
     if (!power) return '';
-    if (power >= 1000000000) return '⚡ ' + (power / 1000000000).toFixed(2) + 'B';
-    if (power >= 1000000) return '⚡ ' + (power / 1000000).toFixed(2) + 'M';
-    if (power >= 1000) return '⚡ ' + (power / 1000).toFixed(1) + 'K';
-    return '⚡ ' + power.toString();
+    if (power >= 1000000000) return (power / 1000000000).toFixed(2) + 'B';
+    if (power >= 1000000) return (power / 1000000).toFixed(2) + 'M';
+    if (power >= 1000) return (power / 1000).toFixed(1) + 'K';
+    return power.toString();
 }
 
 function updateMemberCount(count) {
@@ -484,14 +597,9 @@ function setupSearch() {
     const clearBtn = document.getElementById('clear-search');
     const eligibleFilter = document.getElementById('filter-eligible');
     const sortDropdown = document.getElementById('sort-by');
-    const rankChips = document.querySelectorAll('.rank-chip');
 
-    // Search Input Listener
-    if (searchInput) {
-        searchInput.addEventListener('input', updateDisplayedMembers);
-    }
+    if (searchInput) searchInput.addEventListener('input', updateDisplayedMembers);
     
-    // Clear Search Listener
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
             searchInput.value = '';
@@ -500,34 +608,39 @@ function setupSearch() {
         });
     }
 
-    // NEW: Rank Chip Listeners for multi-select
-    rankChips.forEach(chip => {
-        chip.addEventListener('click', (e) => {
-            const clickedRank = e.target.dataset.rank;
-            
-            if (clickedRank === 'all') {
-                // If "All" is clicked, turn everything else off and turn "All" on
-                rankChips.forEach(c => c.classList.remove('active'));
-                e.target.classList.add('active');
-            } else {
-                // If a specific rank is clicked, turn "All" off
-                document.querySelector('.rank-chip[data-rank="all"]').classList.remove('active');
+    // Helper function to manage chip toggle states
+    function setupChipGroup(chipSelector, dataAttribute) {
+        const chips = document.querySelectorAll(chipSelector);
+        chips.forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                const clickedValue = e.target.getAttribute(`data-${dataAttribute}`);
                 
-                // Toggle the clicked chip on/off
-                e.target.classList.toggle('active');
-                
-                // Safety net: If they unclick everything, automatically turn "All" back on
-                const activeRanks = document.querySelectorAll('.rank-chip.active');
-                if (activeRanks.length === 0) {
-                    document.querySelector('.rank-chip[data-rank="all"]').classList.add('active');
+                if (clickedValue === 'all') {
+                    // Turn off everything else, turn on 'All'
+                    chips.forEach(c => c.classList.remove('active'));
+                    e.target.classList.add('active');
+                } else {
+                    // Turn off 'All'
+                    document.querySelector(`${chipSelector}[data-${dataAttribute}="all"]`).classList.remove('active');
+                    e.target.classList.toggle('active');
+                    
+                    // If they unclicked everything, turn 'All' back on automatically
+                    const activeChips = document.querySelectorAll(`${chipSelector}.active`);
+                    if (activeChips.length === 0) {
+                        document.querySelector(`${chipSelector}[data-${dataAttribute}="all"]`).classList.add('active');
+                    }
                 }
-            }
-            // Trigger the UI update
-            updateDisplayedMembers();
+                updateDisplayedMembers();
+            });
         });
-    });
+    }
 
-    // Dropdown and Checkbox Listeners
+    // Wire up all 4 rows of chips instantly
+    setupChipGroup('.rank-chip', 'rank');
+    setupChipGroup('.prof-chip', 'prof');
+    setupChipGroup('.squad-chip', 'squad');
+    setupChipGroup('.troop-chip', 'troop');
+
     if (eligibleFilter) eligibleFilter.addEventListener('change', updateDisplayedMembers);
     if (sortDropdown) sortDropdown.addEventListener('change', updateDisplayedMembers);
 }
@@ -675,7 +788,11 @@ function showCSVPreview(result) {
                     <span class="member-name">${escapeHtml(member.name)}</span>
                     <span class="member-rank rank-${member.rank}">${member.rank}</span>
                     ${member.level ? `<span class="member-rank" style="background: #4a5568; margin-left: 5px;">HQ ${member.level}</span>` : ''}
+                    ${member.troop_level ? `<span class="member-rank" style="background: #dd6b20; margin-left: 5px;">T${member.troop_level}</span>` : ''}
+                    ${member.squad_type ? `<span class="member-rank" style="background: #2b6cb0; margin-left: 5px;">${escapeHtml(member.squad_type)}</span>` : ''}
+                    ${member.profession ? `<span class="member-rank" style="background: #805ad5; margin-left: 5px;">${escapeHtml(member.profession)}</span>` : ''}
                     ${member.power ? `<span class="member-power" style="margin-left: 10px; font-size: 0.85em;">⚡ ${(member.power / 1000000).toFixed(1)}M</span>` : ''}
+                    ${member.squad_power ? `<span class="member-power" style="margin-left: 10px; font-size: 0.85em; color: var(--accent-color);">🛡️ ${(member.squad_power / 1000000).toFixed(1)}M</span>` : ''}
                     <span class="member-status">${statusText}</span>
                 </div>
                 ${member.similar_match && member.similar_match.length > 0 ? `
