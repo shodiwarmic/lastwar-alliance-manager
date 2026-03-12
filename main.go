@@ -38,6 +38,7 @@ type Member struct {
 	ID             int    `json:"id"`
 	Name           string `json:"name"`
 	Rank           string `json:"rank"`
+	Level          int    `json:"level"`
 	Eligible       bool   `json:"eligible"`
 	Power          *int64 `json:"power"`
 	PowerUpdatedAt string `json:"power_updated_at"`
@@ -204,6 +205,7 @@ type Settings struct {
 	StormTimezones               string `json:"storm_timezones"`
 	StormRespectDST              bool   `json:"storm_respect_dst"`
 	LoginMessage                 string `json:"login_message"`
+	MaxHQLevel                   int    `json:"max_hq_level"`
 	// Password Policy Settings
 	PwdMinLength      int  `json:"pwd_min_length"`
 	PwdRequireSpecial bool `json:"pwd_require_special"`
@@ -249,6 +251,8 @@ type StormAssignment struct {
 type DetectedMember struct {
 	Name         string   `json:"name"`
 	Rank         string   `json:"rank"`
+	Level        int      `json:"level,omitempty"`
+	Power        int64    `json:"power,omitempty"`
 	IsNew        bool     `json:"is_new"`
 	RankChanged  bool     `json:"rank_changed"`
 	OldRank      string   `json:"old_rank,omitempty"`
@@ -793,6 +797,21 @@ func initDB() error {
 		log.Println("Database migration: Added eligible column to members table")
 	}
 
+	// Migrate existing members table to add level column if missing
+	var levelColumnExists bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('members')
+		WHERE name = 'level'
+	`).Scan(&levelColumnExists)
+	if err == nil && !levelColumnExists {
+		_, err = db.Exec(`ALTER TABLE members ADD COLUMN level INTEGER DEFAULT 0`)
+		if err != nil {
+			return err
+		}
+		log.Println("Database migration: Added level column to members table")
+	}
+
 	// Create users table
 	createUsersTableSQL := `CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1038,6 +1057,21 @@ func initDB() error {
 		first_time_conductor_boost INTEGER NOT NULL DEFAULT 5,
 		schedule_message_template TEXT NOT NULL DEFAULT 'Train Schedule - Week {WEEK}\n\n{SCHEDULES}\n\nNext in line:\n{NEXT_3}'
 	);`
+
+	// Migrate settings table to add max_hq_level column if missing
+	var maxHqColumnExists bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('settings')
+		WHERE name = 'max_hq_level'
+	`).Scan(&maxHqColumnExists)
+	if err == nil && !maxHqColumnExists {
+		_, err = db.Exec(`ALTER TABLE settings ADD COLUMN max_hq_level INTEGER NOT NULL DEFAULT 35`)
+		if err != nil {
+			return err
+		}
+		log.Println("Database migration: Added max_hq_level column to settings table")
+	}
 
 	// Add new columns if they don't exist
 	_, err = db.Exec(`ALTER TABLE settings ADD COLUMN storm_timezones TEXT DEFAULT 'America/New_York,Europe/London'`)
@@ -2257,7 +2291,7 @@ func getLoginHistory(w http.ResponseWriter, r *http.Request) {
 // Get all members
 func getMembers(w http.ResponseWriter, r *http.Request) {
 	query := `
-        SELECT m.id, m.name, m.rank, COALESCE(m.eligible, 1),
+        SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
                COALESCE((SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_power,
                COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date,
                EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user
@@ -2274,7 +2308,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 	members := []Member{}
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Power, &m.PowerUpdatedAt, &m.HasUser); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.Power, &m.PowerUpdatedAt, &m.HasUser); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -2339,7 +2373,7 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 		m.Eligible = true
 	}
 
-	result, err := db.Exec("INSERT INTO members (name, rank, eligible) VALUES (?, ?, ?)", m.Name, m.Rank, m.Eligible)
+	result, err := db.Exec("INSERT INTO members (name, rank, level, eligible) VALUES (?, ?, ?, ?)", m.Name, m.Rank, m.Level, m.Eligible)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -2372,15 +2406,15 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 
 	var m Member
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		log.Printf("JSON Decode Error: %v", err) // <--- ADD THIS
+		log.Printf("JSON Decode Error: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// 1. Update the base member details
-	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, eligible = ? WHERE id = ?", m.Name, m.Rank, m.Eligible, id)
+	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, id)
 	if err != nil {
-		log.Printf("DB Update Error: %v", err) // <--- ADD THIS
+		log.Printf("DB Update Error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2850,9 +2884,8 @@ func getMondayOfWeek(date time.Time) time.Time {
 	return date.AddDate(0, 0, offset)
 }
 
-// Import members from CSV
+// // Import members from CSV (Dynamic Column Mapping)
 func importCSV(w http.ResponseWriter, r *http.Request) {
-	// Parse multipart form (10MB max)
 	err := r.ParseMultipartForm(10 << 20)
 	if err != nil {
 		http.Error(w, "Failed to parse form data", http.StatusBadRequest)
@@ -2866,40 +2899,58 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Parse CSV
 	reader := csv.NewReader(file)
 	reader.TrimLeadingSpace = true
-	reader.FieldsPerRecord = -1 // Allow variable number of fields
+	reader.FieldsPerRecord = -1 // Allow variable columns
 
 	records, err := reader.ReadAll()
-	if err != nil {
-		http.Error(w, "Failed to parse CSV: "+err.Error(), http.StatusBadRequest)
+	if err != nil || len(records) == 0 {
+		http.Error(w, "Failed to parse or empty CSV", http.StatusBadRequest)
 		return
 	}
 
-	if len(records) == 0 {
-		http.Error(w, "CSV file is empty", http.StatusBadRequest)
-		return
-	}
-
-	// Skip header row if it looks like a header
 	startIndex := 0
-	if len(records) > 0 {
-		firstRow := records[0]
-		if len(firstRow) > 0 {
-			firstCell := strings.ToLower(strings.TrimSpace(firstRow[0]))
-			// Check if first row is a header
-			if firstCell == "username" || firstCell == "name" || firstCell == "member" {
-				startIndex = 1
-			}
+	headerMap := make(map[string]int)
+
+	// Dynamically map headers based on keywords
+	for i, col := range records[0] {
+		lowerCol := strings.ToLower(strings.TrimSpace(col))
+		if strings.Contains(lowerCol, "name") || strings.Contains(lowerCol, "user") {
+			headerMap["name"] = i
+		} else if strings.Contains(lowerCol, "rank") {
+			headerMap["rank"] = i
+		} else if strings.Contains(lowerCol, "power") {
+			headerMap["power"] = i
+		} else if strings.Contains(lowerCol, "level") || strings.Contains(lowerCol, "hq") {
+			headerMap["level"] = i
 		}
 	}
+
+	if len(headerMap) > 0 {
+		startIndex = 1 // Headers found, skip row 1
+	} else {
+		// Fallback for old format (just Name, Rank without headers)
+		headerMap["name"] = 0
+		if len(records[0]) > 1 {
+			headerMap["rank"] = 1
+		}
+	}
+
+	nameIdx, nameOk := headerMap["name"]
+	if !nameOk {
+		http.Error(w, "CSV must contain a 'Username' or 'Name' column", http.StatusBadRequest)
+		return
+	}
+
+	rankIdx, hasRank := headerMap["rank"]
+	powerIdx, hasPower := headerMap["power"]
+	levelIdx, hasLevel := headerMap["level"]
 
 	validRanks := map[string]bool{"R1": true, "R2": true, "R3": true, "R4": true, "R5": true}
 	detectedMembers := []DetectedMember{}
 	errors := []string{}
 
-	// Get existing members
+	// Get existing members for comparison
 	existingMembers := make(map[string]Member)
 	rows, err := db.Query("SELECT id, name, rank FROM members")
 	if err == nil {
@@ -2913,25 +2964,21 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 
 	for i := startIndex; i < len(records); i++ {
 		record := records[i]
-
-		// New format: Username,Rank,Power,Level,Status,Last_Active
-		// We only care about Username (index 0) and Rank (index 1)
-		if len(record) < 2 {
-			errors = append(errors, fmt.Sprintf("Line %d: Insufficient columns (need at least Username and Rank)", i+1))
-			continue
+		if len(record) <= nameIdx {
+			continue // Skip malformed rows
 		}
 
-		name := strings.TrimSpace(record[0])
-		rank := strings.TrimSpace(record[1])
-
+		name := strings.TrimSpace(record[nameIdx])
 		if name == "" {
-			errors = append(errors, fmt.Sprintf("Line %d: Empty username", i+1))
 			continue
 		}
 
-		if !validRanks[rank] {
-			errors = append(errors, fmt.Sprintf("Line %d: Invalid rank '%s' (must be R1-R5)", i+1, rank))
-			continue
+		rank := "R1" // Default rank if not provided
+		if hasRank && len(record) > rankIdx {
+			parsedRank := strings.ToUpper(strings.TrimSpace(record[rankIdx]))
+			if validRanks[parsedRank] {
+				rank = parsedRank
+			}
 		}
 
 		detected := DetectedMember{
@@ -2939,15 +2986,30 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 			Rank: rank,
 		}
 
+		if hasPower && len(record) > powerIdx {
+			powerStr := regexp.MustCompile(`[^0-9]`).ReplaceAllString(record[powerIdx], "")
+			if p, err := strconv.ParseInt(powerStr, 10, 64); err == nil {
+				detected.Power = p
+			}
+		}
+
+		if hasLevel && len(record) > levelIdx {
+			levelStr := regexp.MustCompile(`[^0-9]`).ReplaceAllString(record[levelIdx], "")
+			if l, err := strconv.Atoi(levelStr); err == nil {
+				detected.Level = l
+			}
+		}
+
 		// Check if member exists
 		if existing, found := existingMembers[name]; found {
-			// Existing member - check for rank change
-			if existing.Rank != rank {
+			// Don't overwrite existing rank if the CSV didn't provide one
+			if !hasRank {
+				detected.Rank = existing.Rank
+			} else if existing.Rank != rank {
 				detected.RankChanged = true
 				detected.OldRank = existing.Rank
 			}
 		} else {
-			// New member - check for similar names in existing members
 			detected.IsNew = true
 			similarNames := []string{}
 			for existingName := range existingMembers {
@@ -2963,7 +3025,7 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 		detectedMembers = append(detectedMembers, detected)
 	}
 
-	// Find members that would be removed (in database but not in CSV)
+	// Calculate members to remove (in db but not in CSV)
 	membersToRemove := []MemberToRemove{}
 	csvNames := make(map[string]bool)
 	for _, m := range detectedMembers {
@@ -2979,7 +3041,6 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Return preview data
 	result := map[string]interface{}{
 		"detected_members":  detectedMembers,
 		"members_to_remove": membersToRemove,
@@ -2994,7 +3055,6 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 // Confirm CSV import
 func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 	var request ConfirmRequest
-
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -3004,60 +3064,62 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 
 	// Process renames first
 	for _, rename := range request.Renames {
-		_, err := db.Exec("UPDATE members SET name = ? WHERE name = ?", rename.NewName, rename.OldName)
-		if err != nil {
-			log.Printf("Error renaming member %s to %s: %v", rename.OldName, rename.NewName, err)
-			continue
-		}
-		log.Printf("Renamed member %s to %s", rename.OldName, rename.NewName)
-	}
-
-	// Create a set of member names from the request
-	memberNames := make(map[string]bool)
-	for _, member := range request.Members {
-		memberNames[member.Name] = true
+		db.Exec("UPDATE members SET name = ? WHERE name = ?", rename.NewName, rename.OldName)
 	}
 
 	for _, member := range request.Members {
-		// Check if member exists
 		var existingID int
 		var existingRank string
 		err := db.QueryRow("SELECT id, rank FROM members WHERE name = ?", member.Name).Scan(&existingID, &existingRank)
 
 		if err == sql.ErrNoRows {
 			// Add new member
-			_, err = db.Exec("INSERT INTO members (name, rank) VALUES (?, ?)", member.Name, member.Rank)
-			if err != nil {
-				log.Printf("Error adding member %s: %v", member.Name, err)
-				continue
+			res, err := db.Exec("INSERT INTO members (name, rank, level) VALUES (?, ?, ?)", member.Name, member.Rank, member.Level)
+			if err == nil {
+				id, _ := res.LastInsertId()
+				existingID = int(id)
+				result.Added++
 			}
-			result.Added++
 		} else if err == nil {
-			// Update existing member if rank changed
+			// Update existing member (Only updates level if > 0 so we don't overwrite with blanks)
+			query := "UPDATE members SET rank = ?"
+			args := []interface{}{member.Rank}
+
+			if member.Level > 0 {
+				query += ", level = ?"
+				args = append(args, member.Level)
+			}
+			query += " WHERE id = ?"
+			args = append(args, existingID)
+
+			db.Exec(query, args...)
+
 			if existingRank != member.Rank {
-				_, err = db.Exec("UPDATE members SET rank = ? WHERE id = ?", member.Rank, existingID)
-				if err != nil {
-					log.Printf("Error updating member %s: %v", member.Name, err)
-					continue
-				}
 				result.Updated++
 			} else {
 				result.Unchanged++
 			}
 		}
+
+		// Insert power history if > 0
+		if member.Power > 0 && existingID > 0 {
+			var currentPower int64 = -1
+			db.QueryRow("SELECT power FROM power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1", existingID).Scan(&currentPower)
+			if currentPower != member.Power {
+				db.Exec("INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)", existingID, member.Power)
+			}
+		}
 	}
 
-	// Remove specific members by ID if requested
+	// Process removals
 	if len(request.RemoveMemberIDs) > 0 {
 		for _, id := range request.RemoveMemberIDs {
-			_, err := db.Exec("DELETE FROM members WHERE id = ?", id)
-			if err != nil {
-				log.Printf("Error removing member with id %d: %v", id, err)
-				continue
-			}
+			// Clean up user and power history to prevent orphans
+			db.Exec("DELETE FROM users WHERE member_id = ?", id)
+			db.Exec("DELETE FROM power_history WHERE member_id = ?", id)
+			db.Exec("DELETE FROM members WHERE id = ?", id)
 			result.Removed++
 		}
-		log.Printf("Removed %d selected members", result.Removed)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -3802,7 +3864,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		above_average_conductor_penalty, r4r5_rank_boost, 
 		first_time_conductor_boost, schedule_message_template, 
 		daily_message_template, power_tracking_enabled,
-		COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''),
+		COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''), COALESCE(max_hq_level, 35) as max_hq_level,
 		COALESCE(pwd_min_length, 12), COALESCE(pwd_require_special, 0), 
 		COALESCE(pwd_require_upper, 0), COALESCE(pwd_require_lower, 0), 
 		COALESCE(pwd_require_number, 0), COALESCE(pwd_history_count, 4), 
@@ -3813,7 +3875,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.AboveAverageConductorPenalty, &s.R4R5RankBoost,
 		&s.FirstTimeConductorBoost, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
-		&s.StormTimezones, &s.StormRespectDST, &s.LoginMessage,
+		&s.StormTimezones, &s.StormRespectDST, &s.LoginMessage, &s.MaxHQLevel,
 		&s.PwdMinLength, &s.PwdRequireSpecial, &s.PwdRequireUpper,
 		&s.PwdRequireLower, &s.PwdRequireNumber, &s.PwdHistoryCount, &s.PwdValidityDays,
 	)
@@ -3854,7 +3916,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		power_tracking_enabled = ?,
 		storm_timezones = ?,
 		storm_respect_dst = ?,
-		login_message = ?
+		login_message = ?,
+		max_hq_level = ?
 		WHERE id = 1`,
 		settings.AwardFirstPoints,
 		settings.AwardSecondPoints,
@@ -3870,6 +3933,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.StormTimezones,
 		settings.StormRespectDST,
 		settings.LoginMessage,
+		settings.MaxHQLevel,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

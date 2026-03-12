@@ -34,7 +34,7 @@ async function loadSettings() {
         document.getElementById('first-time-boost').value = settings.first_time_conductor_boost || 5;
         document.getElementById('schedule-message-template').value = settings.schedule_message_template || 'Train Schedule - Week {WEEK}\n\n{SCHEDULES}\n\nNext in line:\n{NEXT_3}';
         document.getElementById('daily-message-template').value = settings.daily_message_template || 'ALL ABOARD! Daily Train Assignment\n\nDate: {DATE}\n\nToday\'s Conductor: {CONDUCTOR_NAME} ({CONDUCTOR_RANK})\nBackup Engineer: {BACKUP_NAME} ({BACKUP_RANK})\n\nDEPARTURE SCHEDULE:\n- 15:00 ST (17:00 UK) - Conductor {CONDUCTOR_NAME}, please request train assignment in alliance chat\n- 16:30 ST (18:30 UK) - If conductor hasn\'t shown up, Backup {BACKUP_NAME} takes over and assigns train to themselves\n\nRemember: Communication is key! Let the alliance know if you can\'t make it.\n\nAll aboard for another successful run!';
-        
+        document.getElementById('max-hq-level').value = settings.max_hq_level || 35;
         document.getElementById('settings-login-message').value = settings.login_message || '';
 
         // Load Password Policy Settings (Admin Only)
@@ -118,6 +118,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 schedule_message_template: document.getElementById('schedule-message-template').value,
                 daily_message_template: document.getElementById('daily-message-template').value,
                 login_message: document.getElementById('settings-login-message').value,
+                max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
                 storm_timezones: selectedZones,
                 storm_respect_dst: document.getElementById('storm_respect_dst').checked
@@ -172,7 +173,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     document.getElementById('first-time-boost').value = 5;
                     document.getElementById('schedule-message-template').value = 'Train Schedule - Week {WEEK}\n\n{SCHEDULES}\n\nNext in line:\n{NEXT_3}';
                     document.getElementById('daily-message-template').value = 'ALL ABOARD! Daily Train Assignment\n\nDate: {DATE}\n\nToday\'s Conductor: {CONDUCTOR_NAME} ({CONDUCTOR_RANK})\nBackup Engineer: {BACKUP_NAME} ({BACKUP_RANK})\n\nDEPARTURE SCHEDULE:\n- 15:00 ST (17:00 UK) - Conductor {CONDUCTOR_NAME}, please request train assignment in alliance chat\n- 16:30 ST (18:30 UK) - If conductor hasn\'t shown up, Backup {BACKUP_NAME} takes over and assigns train to themselves\n\nRemember: Communication is key! Let the alliance know if you can\'t make it.\n\nAll aboard for another successful run!';
-                    
+                    document.getElementById('max-hq-level').value = 35;
                     document.getElementById('settings-login-message').value = `<strong>Default Credentials:</strong>\nUsername: <code>admin</code><br>\nPassword: <code>admin123</code>`;
 
                     // Reset Password Policy Defaults (Admin Only)

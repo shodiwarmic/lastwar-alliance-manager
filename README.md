@@ -13,6 +13,8 @@ A comprehensive Go web application for managing your alliance in the online game
 - **User-Member Linking**: Users are linked to alliance members with role inheritance.
 - **Member Management**: Add, edit, delete alliance members, with safe cascading deletions for linked user accounts and historical data.
 - **Rank System**: Pre-configured with 5 ranks (R5, R4, R3, R2, R1).
+- **HQ Level Tracking**: Track member HQ levels with admin-configurable server caps to support future game updates.
+- **Dynamic CSV Import**: Upload roster CSVs with any column order. Automatically maps Username, Rank, Power, and Level. Ignores garbage columns and safely applies default ranks to missing data.
 
 ### Train Schedule System
 - **Weekly Schedule Management**: Organize and track train conductors and backups.

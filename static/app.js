@@ -7,6 +7,7 @@ let isR5OrAdmin = false;
 let isAdmin = false;
 let allMembers = []; 
 let isPowerTrackingEnabled = false; 
+let currentMaxHQ = 35; 
 
 // Fetch permissions to determine if Edit/Delete buttons should render
 async function fetchPermissions() {
@@ -30,6 +31,12 @@ async function fetchSettings() {
         if (response.ok) {
             const settings = await response.json();
             isPowerTrackingEnabled = settings.power_tracking_enabled === true;
+            currentMaxHQ = settings.max_hq_level || 35;
+            const hqInput = document.getElementById('member-level');
+            if (hqInput) {
+                hqInput.max = currentMaxHQ;
+            }
+
         }
     } catch (error) {
         console.error('Error fetching settings:', error);
@@ -172,6 +179,7 @@ function resetMemberForm() {
     editingMemberId = null;
     document.getElementById('member-form').reset();
     document.getElementById('member-eligible').checked = true;
+    document.getElementById('member-level').value = '';
     
     // Clear the power input and timestamp
     const powerInput = document.getElementById('modal-member-power');
@@ -226,7 +234,7 @@ function displayMembers(members) {
         if (canManageRanks) {
             actionsHtml = `
                 <div class="member-actions">
-                    <button class="edit-btn" onclick="editMember(${member.id}, '${escapeHtml(member.name)}', '${escapeHtml(member.rank)}', ${member.eligible !== false}, ${member.power || 0}, '${member.power_updated_at || ''}')">Edit</button>
+                    <button class="edit-btn" onclick="editMember(${member.id}, '${escapeHtml(member.name)}', '${escapeHtml(member.rank)}', ${member.eligible !== false}, ${member.power || 0}, '${member.power_updated_at || ''}', ${member.level || 0})">Edit</button>
                     <button class="delete-btn" onclick="deleteMember(${member.id}, '${escapeHtml(member.name)}', ${member.has_user})">Delete</button>
                     ${(isR5OrAdmin && !member.has_user) ? `<button class="create-user-btn" onclick="createUserForMember(${member.id}, '${escapeHtml(member.name)}')">Create User</button>` : ''}
                     <button class="toggle-eligible-btn ${eligibleClass}" onclick="toggleEligible(${member.id}, ${member.eligible !== false})">${eligibleStatus}</button>
@@ -239,6 +247,7 @@ function displayMembers(members) {
                 <div class="member-info">
                     <div class="member-name">${escapeHtml(member.name)}</div>
                     <span class="member-rank rank-${member.rank.replace(/\s+/g, '-')}">${escapeHtml(member.rank)}</span>
+                    ${member.level ? `<span class="member-rank" style="background: #4a5568; margin-left: 5px;">HQ ${member.level}</span>` : ''}
                     ${powerDisplay}
                     <span class="member-eligible ${eligibleClass}">${eligibleStatus}</span>
                 </div>
@@ -258,6 +267,17 @@ async function handleMemberFormSubmit(e) {
     const name = document.getElementById('member-name').value.trim();
     const rank = document.getElementById('member-rank').value;
     const eligible = document.getElementById('member-eligible').checked;
+    const level = parseInt(document.getElementById('member-level').value, 10) || 0;
+
+    // Enforce HQ level limits
+    if (level > currentMaxHQ) {
+        alert(`HQ Level cannot exceed the current server maximum of ${currentMaxHQ}.`);
+        return;
+    }
+    if (level < 0) {
+        alert('HQ Level cannot be negative.');
+        return;
+    }
     
     // Grab the power value. If the box is empty, explicitly set it to 0 to clear it out.
     const powerInput = document.getElementById('modal-member-power');
@@ -269,12 +289,11 @@ async function handleMemberFormSubmit(e) {
     }
 
     try {
-        // NEW: Include power in both the PUT and POST body payloads
         if (editingMemberId) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, eligible, power }),
+                body: JSON.stringify({ name, rank, level, eligible, power }), 
             });
             if (!response.ok) throw new Error('Failed to update member');
             editingMemberId = null;
@@ -282,7 +301,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, eligible, power }),
+                body: JSON.stringify({ name, rank, level, eligible, power }),
             });
             if (!response.ok) {
                 if (response.status === 403) throw new Error('Permission denied: Only R4/R5 members can manage ranks');
@@ -297,8 +316,7 @@ async function handleMemberFormSubmit(e) {
     }
 }
 
-// NEW: Added power and powerUpdatedAt to the function parameters
-window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt = '') {
+window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0) {
     if (!canManageRanks) {
         alert('You do not have permission to edit members.');
         return;
@@ -307,6 +325,7 @@ window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt
     document.getElementById('member-name').value = name;
     document.getElementById('member-rank').value = rank;
     document.getElementById('member-eligible').checked = eligible;
+    document.getElementById('member-level').value = (level > 0) ? level : '';
     
     const powerSection = document.getElementById('modal-power-section');
     if (powerSection) {
@@ -376,10 +395,16 @@ window.toggleEligible = async function(id, currentStatus) {
         const member = members.find(m => m.id === id);
         if (!member) throw new Error('Member not found');
         
+        // FIX: Copy all existing member data (including level and power), then overwrite 'eligible'
+        const updatedMemberData = {
+            ...member,
+            eligible: newStatus
+        };
+
         const updateResponse = await fetch(`${API_URL}/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: member.name, rank: member.rank, eligible: newStatus }),
+            body: JSON.stringify(updatedMemberData),
         });
         
         if (!updateResponse.ok) throw new Error('Failed to update member');
@@ -620,9 +645,11 @@ function showCSVPreview(result) {
         html += `
             <div class="csv-member-item ${statusClass}">
                 <input type="checkbox" class="member-checkbox" data-index="${index}" ${checked}>
-                <div class="member-info">
+                 <div class="member-info">
                     <span class="member-name">${escapeHtml(member.name)}</span>
                     <span class="member-rank rank-${member.rank}">${member.rank}</span>
+                    ${member.level ? `<span class="member-rank" style="background: #4a5568; margin-left: 5px;">HQ ${member.level}</span>` : ''}
+                    ${member.power ? `<span class="member-power" style="margin-left: 10px; font-size: 0.85em;">⚡ ${(member.power / 1000000).toFixed(1)}M</span>` : ''}
                     <span class="member-status">${statusText}</span>
                 </div>
                 ${member.similar_match && member.similar_match.length > 0 ? `
