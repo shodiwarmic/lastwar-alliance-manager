@@ -42,9 +42,9 @@ if [ ! -d "$APP_DIR" ]; then
 fi
 
 # Upgrade legacy environments
-if [ -f "$APP_DIR/.env" ]; then
+if sudo test -f "$APP_DIR/.env"; then
     set -a
-    source $APP_DIR/.env
+    source /dev/stdin <<< "$(sudo cat $APP_DIR/.env)"
     set +a
 fi
 
