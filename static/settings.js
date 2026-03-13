@@ -11,6 +11,9 @@ const PERM_ROWS = [
     { key: 'view_storm', label: 'View Desert Storm' }, { key: 'manage_storm', label: 'Manage Desert Storm' },
     { key: 'view_vs_points', label: 'View VS Points' }, { key: 'manage_vs_points', label: 'Manage VS Points' },
     { key: 'view_upload', label: 'Access OCR Upload Tool' },
+    { key: 'view_files', label: 'View Alliance Files' },
+    { key: 'upload_files', label: 'Upload Alliance Files' },
+    { key: 'manage_files', label: 'Manage Alliance Files' },
     { key: 'manage_settings', label: 'Access Settings Tab' }
 ];
 

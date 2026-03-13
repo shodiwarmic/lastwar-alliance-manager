@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/csv"
@@ -21,12 +22,14 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	gosseract "github.com/otiai10/gosseract/v2"
@@ -338,6 +341,30 @@ type RankPermissions struct {
 	ViewUpload     bool   `json:"view_upload"`
 	ManageMembers  bool   `json:"manage_members"`
 	ManageSettings bool   `json:"manage_settings"`
+	ViewFiles      bool   `json:"view_files"`
+	UploadFiles    bool   `json:"upload_files"`
+	ManageFiles    bool   `json:"manage_files"`
+}
+
+type AllianceFile struct {
+	ID          int    `json:"id"`
+	Title       string `json:"title"`
+	FileName    string `json:"file_name"`
+	FileType    string `json:"file_type"` // 'image', 'spreadsheet', 'document'
+	MinRank     string `json:"min_rank"`
+	MinEditRank string `json:"min_edit_rank"`
+	OwnerUserID int    `json:"owner_user_id"`
+	OwnerName   string `json:"owner_name"`
+	CreatedAt   string `json:"created_at"`
+	IsOwner     bool   `json:"is_owner"`
+}
+
+type WOPIClaims struct {
+	UserID   int    `json:"user_id"`
+	Username string `json:"username"`
+	FileID   int    `json:"file_id"`
+	CanEdit  bool   `json:"can_edit"`
+	jwt.RegisteredClaims
 }
 
 var db *sql.DB
@@ -1174,6 +1201,34 @@ func initDB() error {
 		return err
 	}
 
+	// Create files table
+	createFilesTableSQL := `CREATE TABLE IF NOT EXISTS files (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		title TEXT NOT NULL,
+		file_name TEXT NOT NULL,
+		file_type TEXT NOT NULL,
+		min_rank TEXT NOT NULL DEFAULT 'R1',
+		min_edit_rank TEXT NOT NULL DEFAULT 'R4',
+		owner_user_id INTEGER NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT
+	);`
+
+	_, err = db.Exec(createFilesTableSQL)
+	if err != nil {
+		return err
+	}
+
+	// Auto-migrate min_edit_rank for existing databases
+	var hasMinEdit bool
+	db.QueryRow(`SELECT COUNT(*) > 0 FROM pragma_table_info('files') WHERE name = 'min_edit_rank'`).Scan(&hasMinEdit)
+	if !hasMinEdit {
+		db.Exec(`ALTER TABLE files ADD COLUMN min_edit_rank TEXT NOT NULL DEFAULT 'R4'`)
+	}
+
+	// Create physical directory for files securely outside the static folder
+	os.MkdirAll(getStoragePath(), 0755)
+
 	// Create login_sessions table for tracking login history
 	createLoginSessionsSQL := `CREATE TABLE IF NOT EXISTS login_sessions (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1481,10 +1536,30 @@ Password: <code>admin123</code>`
 		view_vs_points BOOLEAN DEFAULT 0, manage_vs_points BOOLEAN DEFAULT 0,
 		view_upload BOOLEAN DEFAULT 0,
 		manage_members BOOLEAN DEFAULT 0,
-		manage_settings BOOLEAN DEFAULT 0
+		manage_settings BOOLEAN DEFAULT 0,
+		view_files BOOLEAN DEFAULT 0,
+		manage_files BOOLEAN DEFAULT 0
 	)`)
 	if err != nil {
 		return err
+	}
+
+	// Migrate new columns if missing
+	filePermCols := []string{"view_files", "manage_files", "upload_files"}
+	for _, col := range filePermCols {
+		var exists bool
+		db.QueryRow(fmt.Sprintf(`SELECT COUNT(*) > 0 FROM pragma_table_info('rank_permissions') WHERE name = '%s'`, col)).Scan(&exists)
+		if !exists {
+			db.Exec(fmt.Sprintf(`ALTER TABLE rank_permissions ADD COLUMN %s BOOLEAN DEFAULT 0`, col))
+			log.Printf("Database migration: Added %s column to rank_permissions table", col)
+
+			// Custom auto-grants based on the column
+			if col == "upload_files" {
+				db.Exec(`UPDATE rank_permissions SET upload_files = 1 WHERE rank IN ('R3', 'R4', 'R5')`)
+			} else {
+				db.Exec(fmt.Sprintf(`UPDATE rank_permissions SET %s = 1 WHERE rank IN ('R4', 'R5')`, col))
+			}
+		}
 	}
 
 	// Seed default permissions if table is empty
@@ -1495,16 +1570,16 @@ Password: <code>admin123</code>`
 			Rank string
 			P    RankPermissions
 		}{
-			{"R5", RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true}},
-			{"R4", RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: false}},
-			{"R3", RankPermissions{ViewTrain: true, ManageTrain: false, ViewAwards: true, ManageAwards: false, ViewRecs: true, ManageRecs: false, ViewDyno: true, ManageDyno: false, ViewRankings: true, ViewStorm: true, ManageStorm: false, ViewVSPoints: true, ManageVSPoints: false, ViewUpload: false, ManageMembers: false, ManageSettings: false}},
-			{"R2", RankPermissions{ViewTrain: true, ManageTrain: false, ViewAwards: true, ManageAwards: false, ViewRecs: true, ManageRecs: false, ViewDyno: true, ManageDyno: false, ViewRankings: true, ViewStorm: true, ManageStorm: false, ViewVSPoints: true, ManageVSPoints: false, ViewUpload: false, ManageMembers: false, ManageSettings: false}},
-			{"R1", RankPermissions{ViewTrain: true, ManageTrain: false, ViewAwards: true, ManageAwards: false, ViewRecs: true, ManageRecs: false, ViewDyno: true, ManageDyno: false, ViewRankings: true, ViewStorm: true, ManageStorm: false, ViewVSPoints: true, ManageVSPoints: false, ViewUpload: false, ManageMembers: false, ManageSettings: false}},
+			{"R5", RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, UploadFiles: true, ManageFiles: true}},
+			{"R4", RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: false, ViewFiles: true, UploadFiles: true, ManageFiles: true}},
+			{"R3", RankPermissions{ViewTrain: true, ManageTrain: false, ViewAwards: true, ManageAwards: false, ViewRecs: true, ManageRecs: false, ViewDyno: true, ManageDyno: false, ViewRankings: true, ViewStorm: true, ManageStorm: false, ViewVSPoints: true, ManageVSPoints: false, ViewUpload: false, ManageMembers: false, ManageSettings: false, ViewFiles: true, UploadFiles: true, ManageFiles: false}},
+			{"R2", RankPermissions{ViewTrain: true, ManageTrain: false, ViewAwards: true, ManageAwards: false, ViewRecs: true, ManageRecs: false, ViewDyno: true, ManageDyno: false, ViewRankings: true, ViewStorm: true, ManageStorm: false, ViewVSPoints: true, ManageVSPoints: false, ViewUpload: false, ManageMembers: false, ManageSettings: false, ViewFiles: true, UploadFiles: false, ManageFiles: false}},
+			{"R1", RankPermissions{ViewTrain: true, ManageTrain: false, ViewAwards: true, ManageAwards: false, ViewRecs: true, ManageRecs: false, ViewDyno: true, ManageDyno: false, ViewRankings: true, ViewStorm: true, ManageStorm: false, ViewVSPoints: true, ManageVSPoints: false, ViewUpload: false, ManageMembers: false, ManageSettings: false, ViewFiles: true, UploadFiles: false, ManageFiles: false}},
 		}
 
-		stmt, _ := db.Prepare(`INSERT INTO rank_permissions (rank, view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		stmt, _ := db.Prepare(`INSERT INTO rank_permissions (rank, view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings, view_files, upload_files, manage_files) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		for _, v := range defaultPerms {
-			stmt.Exec(v.Rank, v.P.ViewTrain, v.P.ManageTrain, v.P.ViewAwards, v.P.ManageAwards, v.P.ViewRecs, v.P.ManageRecs, v.P.ViewDyno, v.P.ManageDyno, v.P.ViewRankings, v.P.ViewStorm, v.P.ManageStorm, v.P.ViewVSPoints, v.P.ManageVSPoints, v.P.ViewUpload, v.P.ManageMembers, v.P.ManageSettings)
+			stmt.Exec(v.Rank, v.P.ViewTrain, v.P.ManageTrain, v.P.ViewAwards, v.P.ManageAwards, v.P.ViewRecs, v.P.ManageRecs, v.P.ViewDyno, v.P.ManageDyno, v.P.ViewRankings, v.P.ViewStorm, v.P.ManageStorm, v.P.ViewVSPoints, v.P.ManageVSPoints, v.P.ViewUpload, v.P.ManageMembers, v.P.ManageSettings, v.P.ViewFiles, v.P.UploadFiles, v.P.ManageFiles)
 		}
 		stmt.Close()
 	}
@@ -1573,8 +1648,8 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func getRankPermissions(rank string) RankPermissions {
 	var p RankPermissions
 	p.Rank = rank
-	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings FROM rank_permissions WHERE rank = ?`, rank).Scan(
-		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings,
+	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings, view_files, upload_files, manage_files FROM rank_permissions WHERE rank = ?`, rank).Scan(
+		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings, &p.ViewFiles, &p.UploadFiles, &p.ManageFiles,
 	)
 	return p
 }
@@ -1622,9 +1697,9 @@ func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tx, _ := db.Begin()
-	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=? WHERE rank=?`)
+	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=?, view_files=?, upload_files=?, manage_files=? WHERE rank=?`)
 	for _, p := range matrix {
-		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.Rank)
+		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.ViewFiles, p.UploadFiles, p.ManageFiles, p.Rank)
 	}
 	stmt.Close()
 	tx.Commit()
@@ -6699,6 +6774,447 @@ func processPowerScreenshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// --- USER DELETION SAFEGUARDS ---
+func getUserFileCount(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM files WHERE owner_user_id = ?", userID).Scan(&count)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"count": count})
+}
+
+func transferUserFiles(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	oldOwnerID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		NewOwnerID int `json:"new_owner_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.NewOwnerID == 0 {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	_, err = db.Exec("UPDATE files SET owner_user_id = ? WHERE owner_user_id = ?", req.NewOwnerID, oldOwnerID)
+	if err != nil {
+		http.Error(w, "Failed to transfer files", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Files transferred successfully"})
+}
+
+// --- WOPI & FILES IMPLEMENTATION ---
+func getStoragePath() string {
+	path := os.Getenv("STORAGE_PATH")
+	if path == "" {
+		return "/var/lib/lastwar/files"
+	}
+	return path
+}
+
+func hasSufficientRank(userRank, requiredRank string) bool {
+	ranks := map[string]int{"R1": 1, "R2": 2, "R3": 3, "R4": 4, "R5": 5, "Admin": 6}
+	userVal, ok1 := ranks[userRank]
+	reqVal, ok2 := ranks[requiredRank]
+	if !ok1 || !ok2 {
+		return false
+	}
+	return userVal >= reqVal
+}
+
+func getFilesList(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+	isAdmin := session.Values["is_admin"].(bool)
+	var userRank string
+
+	if isAdmin {
+		userRank = "Admin"
+	} else if memberID, ok := session.Values["member_id"].(int); ok {
+		db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&userRank)
+	} else {
+		userRank = "R1"
+	}
+
+	rows, err := db.Query(`
+		SELECT f.id, f.title, f.file_name, f.file_type, f.min_rank, f.min_edit_rank, f.created_at, u.username as owner_name, f.owner_user_id 
+		FROM files f 
+		JOIN users u ON f.owner_user_id = u.id 
+		ORDER BY f.created_at DESC`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var files []AllianceFile
+	for rows.Next() {
+		var f AllianceFile
+		rows.Scan(&f.ID, &f.Title, &f.FileName, &f.FileType, &f.MinRank, &f.MinEditRank, &f.CreatedAt, &f.OwnerName, &f.OwnerUserID)
+
+		f.IsOwner = (f.OwnerUserID == userID)
+
+		// Owner and Admins bypass rank visibility restrictions
+		if isAdmin || f.IsOwner || hasSufficientRank(userRank, f.MinRank) {
+			files = append(files, f)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(files)
+}
+
+func uploadFile(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+
+	err := r.ParseMultipartForm(50 << 20) // 50MB max
+	if err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	title := r.FormValue("title")
+	minRank := r.FormValue("min_rank")
+	minEditRank := r.FormValue("min_edit_rank")
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "No file provided", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	fileType := "document"
+	if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp" {
+		fileType = "image"
+	} else if ext == ".xlsx" || ext == ".csv" || ext == ".ods" {
+		fileType = "spreadsheet"
+	}
+
+	internalName := fmt.Sprintf("%d_%d%s", time.Now().Unix(), userID, ext)
+	outPath := filepath.Join(getStoragePath(), internalName)
+
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		log.Printf("Save File Error: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to save file: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer outFile.Close()
+	io.Copy(outFile, file)
+
+	_, err = db.Exec("INSERT INTO files (title, file_name, file_type, min_rank, min_edit_rank, owner_user_id) VALUES (?, ?, ?, ?, ?, ?)",
+		title, internalName, fileType, minRank, minEditRank, userID)
+	if err != nil {
+		log.Printf("Database Insert Error: %v", err)
+		http.Error(w, fmt.Sprintf("DB error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func updateFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	fileID := vars["id"]
+
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+	isAdmin := session.Values["is_admin"].(bool)
+
+	// Validate Ownership or Global Manage Rights
+	var ownerID int
+	err := db.QueryRow("SELECT owner_user_id FROM files WHERE id = ?", fileID).Scan(&ownerID)
+	if err != nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+
+	canManage := isAdmin || userID == ownerID
+	if !canManage {
+		if memberID, ok := session.Values["member_id"].(int); ok {
+			var rank string
+			db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
+			perms := getRankPermissions(rank)
+			canManage = perms.ManageFiles
+		}
+	}
+
+	if !canManage {
+		http.Error(w, "Forbidden: You do not have permission to edit this file.", http.StatusForbidden)
+		return
+	}
+
+	var req struct {
+		Title       string `json:"title"`
+		MinRank     string `json:"min_rank"`
+		MinEditRank string `json:"min_edit_rank"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	_, err = db.Exec("UPDATE files SET title = ?, min_rank = ?, min_edit_rank = ? WHERE id = ?",
+		req.Title, req.MinRank, req.MinEditRank, fileID)
+	if err != nil {
+		log.Printf("Database Update Error: %v", err)
+		http.Error(w, "Failed to update database", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func deleteFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	fileID := vars["id"]
+
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+	isAdmin := session.Values["is_admin"].(bool)
+
+	var fileName string
+	var ownerID int
+	err := db.QueryRow("SELECT file_name, owner_user_id FROM files WHERE id = ?", fileID).Scan(&fileName, &ownerID)
+	if err != nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+
+	canManage := isAdmin || userID == ownerID
+	if !canManage {
+		if memberID, ok := session.Values["member_id"].(int); ok {
+			var rank string
+			db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
+			perms := getRankPermissions(rank)
+			canManage = perms.ManageFiles
+		}
+	}
+
+	if !canManage {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	os.Remove(filepath.Join(getStoragePath(), fileName))
+	db.Exec("DELETE FROM files WHERE id = ?", fileID)
+	w.WriteHeader(http.StatusOK)
+}
+
+func downloadFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+	isAdmin := session.Values["is_admin"].(bool)
+
+	var fileName, minRank string
+	var ownerID int
+	err := db.QueryRow("SELECT file_name, min_rank, owner_user_id FROM files WHERE id = ?", vars["id"]).Scan(&fileName, &minRank, &ownerID)
+	if err != nil {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	// Owner and Admins bypass view restrictions
+	if !isAdmin && ownerID != userID {
+		var userRank string
+		if memberID, ok := session.Values["member_id"].(int); ok {
+			db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&userRank)
+		} else {
+			userRank = "R1"
+		}
+		if !hasSufficientRank(userRank, minRank) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
+	http.ServeFile(w, r, filepath.Join(getStoragePath(), fileName))
+}
+
+func generateWOPIToken(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	fileID, _ := strconv.Atoi(vars["id"])
+
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+	username := session.Values["username"].(string)
+	isAdmin := session.Values["is_admin"].(bool)
+
+	var minRank, minEditRank string
+	var ownerID int
+	err := db.QueryRow("SELECT min_rank, min_edit_rank, owner_user_id FROM files WHERE id = ?", fileID).Scan(&minRank, &minEditRank, &ownerID)
+	if err != nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+
+	canView := false
+	canEdit := false
+
+	// Owners have absolute rights
+	if isAdmin || userID == ownerID {
+		canView = true
+		canEdit = true
+	} else if memberID, ok := session.Values["member_id"].(int); ok {
+		var userRank string
+		db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&userRank)
+		canView = hasSufficientRank(userRank, minRank)
+		canEdit = hasSufficientRank(userRank, minEditRank)
+	}
+
+	if !canView {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	claims := WOPIClaims{
+		UserID:   userID,
+		Username: username,
+		FileID:   fileID,
+		CanEdit:  canEdit,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(10 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	secretKey := os.Getenv("SESSION_KEY")
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte(secretKey))
+
+	collaboraDomain := os.Getenv("COLLABORA_DOMAIN")
+	if collaboraDomain == "" {
+		collaboraDomain = "collabora." + strings.Split(r.Host, ":")[0]
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"token":            tokenString,
+		"collabora_domain": collaboraDomain,
+	})
+}
+
+func wopiAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tokenStr := r.URL.Query().Get("access_token")
+		if tokenStr == "" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		claims := &WOPIClaims{}
+		secretKey := os.Getenv("SESSION_KEY")
+
+		token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+			return []byte(secretKey), nil
+		})
+
+		if err != nil || !token.Valid {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), "wopi_claims", claims)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+func wopiCheckFileInfo(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	claims := r.Context().Value("wopi_claims").(*WOPIClaims)
+
+	var title, fileName string
+	var ownerID int
+	err := db.QueryRow("SELECT title, file_name, owner_user_id FROM files WHERE id = ?", vars["id"]).Scan(&title, &fileName, &ownerID)
+	if err != nil {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	fileInfo, err := os.Stat(filepath.Join(getStoragePath(), fileName))
+	if err != nil {
+		http.Error(w, "File missing", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"BaseFileName":     title,
+		"OwnerId":          fmt.Sprintf("%d", ownerID),
+		"Size":             fileInfo.Size(),
+		"UserId":           fmt.Sprintf("%d", claims.UserID),
+		"UserFriendlyName": claims.Username,
+		"UserCanWrite":     claims.CanEdit,
+		"SupportsUpdate":   true,
+		"SupportsLocks":    true,
+	})
+}
+
+func wopiGetFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	var fileName string
+	db.QueryRow("SELECT file_name FROM files WHERE id = ?", vars["id"]).Scan(&fileName)
+	http.ServeFile(w, r, filepath.Join(getStoragePath(), fileName))
+}
+
+func wopiPutFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	claims := r.Context().Value("wopi_claims").(*WOPIClaims)
+
+	if !claims.CanEdit {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	var fileName string
+	db.QueryRow("SELECT file_name FROM files WHERE id = ?", vars["id"]).Scan(&fileName)
+	filePath := filepath.Join(getStoragePath(), fileName)
+
+	fileData, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read body", http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close()
+
+	os.WriteFile(filePath, fileData, 0644)
+	w.WriteHeader(http.StatusOK)
+}
+
+// wopiActionHandler handles mandatory WOPI LOCK, UNLOCK, and REFRESH_LOCK requests
+func wopiActionHandler(w http.ResponseWriter, r *http.Request) {
+	override := r.Header.Get("X-WOPI-Override")
+	lockToken := r.Header.Get("X-WOPI-Lock")
+
+	// The WOPI standard requires echoing the lock token back in the response header
+	if override == "LOCK" || override == "UNLOCK" || override == "REFRESH_LOCK" {
+		w.Header().Set("X-WOPI-Lock", lockToken)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 // --- NEW TEMPLATE LOGIC ---
 
 // PageData holds all the information we want to pass into our HTML templates
@@ -6726,7 +7242,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 
 		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
 			data.IsAdmin = true
-			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true}
+			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true}
 		} else if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
 			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
@@ -6781,6 +7297,29 @@ func main() {
 	router.HandleFunc("/api/admin/users/{id}", authMiddleware(adminMiddleware(deleteAdminUser))).Methods("DELETE")
 	router.HandleFunc("/api/admin/users/{id}/reset-password", authMiddleware(adminMiddleware(resetUserPassword))).Methods("POST")
 	router.HandleFunc("/api/admin/login-history", authMiddleware(adminMiddleware(getLoginHistory))).Methods("GET")
+
+	// Admin User Safeguard Routes
+	router.HandleFunc("/api/admin/users/{id}/file-count", authMiddleware(adminMiddleware(getUserFileCount))).Methods("GET")
+	router.HandleFunc("/api/admin/users/{id}/transfer-files", authMiddleware(adminMiddleware(transferUserFiles))).Methods("POST")
+
+	// Files Implementation API
+	router.HandleFunc("/api/files", authMiddleware(requirePermission("view_files", getFilesList))).Methods("GET")
+	router.HandleFunc("/api/files/upload", authMiddleware(requirePermission("upload_files", uploadFile))).Methods("POST")
+	router.HandleFunc("/api/files/{id}", authMiddleware(updateFile)).Methods("PUT")
+	router.HandleFunc("/api/files/{id}", authMiddleware(deleteFile)).Methods("DELETE")
+	router.HandleFunc("/api/files/download/{id}", authMiddleware(downloadFile)).Methods("GET")
+	router.HandleFunc("/api/files/{id}/wopi-token", authMiddleware(generateWOPIToken)).Methods("GET")
+
+	// WOPI Collabora API
+	wopiRouter := router.PathPrefix("/wopi").Subrouter()
+
+	// Handles metadata (GET) and locking (POST)
+	wopiRouter.HandleFunc("/files/{id}", wopiAuthMiddleware(wopiCheckFileInfo)).Methods("GET")
+	wopiRouter.HandleFunc("/files/{id}", wopiAuthMiddleware(wopiActionHandler)).Methods("POST")
+
+	// Handles downloading (GET) and saving (POST)
+	wopiRouter.HandleFunc("/files/{id}/contents", wopiAuthMiddleware(wopiGetFile)).Methods("GET")
+	wopiRouter.HandleFunc("/files/{id}/contents", wopiAuthMiddleware(wopiPutFile)).Methods("POST")
 
 	// Permission Matrix routes
 	router.HandleFunc("/api/permissions", authMiddleware(requirePermission("manage_settings", getPermissionsMatrix))).Methods("GET")
@@ -6917,6 +7456,7 @@ func main() {
 		"/settings":        "settings",
 		"/admin":           "admin",
 		"/profile":         "profile",
+		"/files":           "files",
 	}
 
 	for path, templateName := range pages {

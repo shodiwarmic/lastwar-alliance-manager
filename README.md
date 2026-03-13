@@ -1,6 +1,6 @@
 # Last War: Survival - Alliance Manager
 
-A comprehensive Go web application for managing your alliance in the online game Last War: Survival. Track members, manage train schedules, award achievements, and generate communication messages.
+A comprehensive Go web application for managing your alliance in the online game Last War: Survival. Track members, manage train schedules, award achievements, host alliance documents, and generate communication messages.
 
 ## Features
 
@@ -17,6 +17,15 @@ A comprehensive Go web application for managing your alliance in the online game
 - **Dynamic CSV Import**: Upload roster CSVs with any column order. Automatically maps Username, Rank, Power, and Level. Ignores garbage columns and safely applies default ranks to missing data.
 - **Advanced Player Stats**: Track optional fields including Player Profession and Troop Levels (dynamically validated against configurable HQ Level caps).
 - **Squad Tracking**: Admin-toggleable tracking for Hero Squad Types (Tank/Aircraft/Missile) and Squad Power. Squad Power utilizes historical tracking tables (identical to overall Power) to prevent data loss and allow for progression tracking over time. Fully integrated into sorting, filtering, and the dynamic CSV importer.
+
+### 📁 Alliance Files & Document Management
+The Alliance Manager includes a fully integrated, self-hosted document management system. Powered by the WOPI protocol and **Collabora Online**, it provides a Google Drive-like experience without ever leaving the application.
+
+- **Live Document Editing**: Full browser-based collaborative editing for spreadsheets (`.xlsx`, `.csv`), text documents (`.docx`), and presentations.
+- **Native Image Hosting**: Fast, secure distribution of alliance cheat sheets, war infographics, and maps (PNG, JPG, WEBP) utilizing native browser rendering.
+- **Mobile-Ready**: The Collabora integration automatically serves a highly optimized mobile UI for members editing spreadsheets on their phones.
+- **Theme Synchronization**: The document editor dynamically reads your application's state, matching your Light or Dark mode preference automatically.
+- **Ownership & Safekeeping**: The user who uploads a file retains absolute permanent view, edit, and delete rights. Account deletion is blocked until an Admin transfers a member's files to a new owner to prevent data loss.
 
 ### Train Schedule System
 - **Weekly Schedule Management**: Organize and track train conductors and backups.
@@ -76,12 +85,15 @@ See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md) for detailed technical document
   - Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki
   - Linux: `sudo apt-get install tesseract-ocr tesseract-ocr-all libtesseract-dev libleptonica-dev`
   - macOS: `brew install tesseract`
+- **Docker Desktop**: Required to run the local Collabora document server for testing WOPI integrations.
 
 **Note**: CGO must be enabled for OCR features (`go env CGO_ENABLED` should return `1`). On Windows without MinGW/TDM-GCC, the application can compile but OCR features won't work. Deploy to Linux for full functionality.
 
 ### Production (Debian/Ubuntu Server)
 See [DEPLOYMENT.md](DEPLOYMENT.md) for comprehensive production deployment guide with:
 - Automated installation script
+- **Docker Engine**: Required for the Collabora CODE container.
+- **DNS Records**: A dedicated subdomain (e.g., `collabora.yourdomain.com`) is required for document editing.
 - Let's Encrypt SSL setup (Caddy or Nginx)
 - Security hardening
 - Systemd service configuration
@@ -133,6 +145,8 @@ export SESSION_KEY=$(openssl rand -hex 32)
 export DATABASE_PATH=/var/lib/lastwar/alliance.db
 export PRODUCTION=true
 export HTTPS=true
+export APP_DOMAIN=app.example.com
+export COLLABORA_DOMAIN=collabora.example.com
 
 # Build and run
 go build -o alliance-manager main.go
@@ -148,6 +162,8 @@ Or use the systemd service (see [DEPLOYMENT.md](DEPLOYMENT.md)).
 - `PRODUCTION` - Set to `true` for production mode (enables secure cookies)
 - `HTTPS` - Set to `true` when using HTTPS (enables secure cookie flag)
 - `PORT` - Server port (default: `8080`)
+- `APP_DOMAIN` - The main domain of the application (e.g., `app.example.com`)
+- `COLLABORA_DOMAIN` - The subdomain for the document server (e.g., `collabora.example.com`)
 
 ## Default Login Credentials
 
@@ -187,7 +203,8 @@ LastWar/
 │   ├── vs.html         # VS Points tracking
 │   ├── upload.html     # OCR Screenshot upload & processing
 │   ├── admin.html      # Admin dashboard & user management
-│   └── settings.html   # Configuration (R5/Admin only)
+│   ├── settings.html   # Configuration (R5/Admin only)
+│   └── files.html      # Alliance document management UI
 └── static/             # Client-side assets
     ├── styles.css      # Application styling
     ├── favicon.ico     # Site icon
@@ -204,7 +221,8 @@ LastWar/
     ├── vs.js           # VS Points tracking logic
     ├── upload.js       # Upload and OCR processing logic
     ├── admin.js        # Admin user management logic
-    └── settings.js     # Settings configuration logic
+    ├── settings.js     # Settings configuration logic
+    └── files.js        # Alliance document handling and WOPI integration logic
 ```
 
 ## Ranks
@@ -217,11 +235,13 @@ LastWar/
 
 ## Permissions
 
-- **Admin**: Full access to all features, R5/Admin-only settings (not linked to a member)
-- **R5 Members**: Can manage members, create user accounts, update settings, manage all schedules, upload screenshots
-- **R4 Members**: Can manage members and schedules, upload screenshots (cannot update settings or create users)
-- **R3 Members**: Can upload screenshots and view all information (cannot modify members or schedules)
-- **R2/R1 Members**: Can view all information but cannot modify or upload
+Access is controlled via the **Settings** tab by Admins/R5s. Default permissions are:
+
+- **Admin**: Full system access, including password policy and user creation.
+- **R5 Members**: Full alliance management, including settings and RBAC configuration.
+- **R4 Members**: Can manage members, schedules, and **manage alliance files**.
+- **R3 Members**: Can upload screenshots and **upload alliance files**.
+- **R2/R1 Members**: Can view all information (including permitted files) but cannot modify data.
 
 ### R5/Admin-Only Features
 - Create user accounts for members
@@ -234,11 +254,20 @@ LastWar/
 - Upload power ranking screenshots
 - Upload VS Points screenshots  
 - Manual data entry for power/VS points
+- Upload new alliance documents and images
+
+### File Permission Specifics
+Visibility and editability are defined granularly per-file:
+- **View Rank**: Minimum rank required to see a file in the grid and open it.
+- **Edit Rank**: Minimum rank required to modify a document's contents (distinct from view rank).
+- **Owner Bypass**: The user who originally uploads a file retains absolute view, edit, and deletion rights over that file regardless of their current alliance rank or global settings.
 
 ## Technologies Used
 
 - **Backend**: Go, Gorilla Mux
 - **Database**: SQLite3 with go-sqlite3 driver
+- **Document Engine**: Collabora Online (CODE) via WOPI Protocol
+- **OCR**: Tesseract OCR
 - **Frontend**: Vanilla HTML/CSS/JavaScript
 - **Styling**: Modern gradient design with responsive layout
 
@@ -257,6 +286,15 @@ LastWar/
 - `PUT /api/members/{id}` - Update a member (R4/R5 only)
 - `DELETE /api/members/{id}` - Delete a member (R4/R5 only)
 - `POST /api/members/{id}/create-user` - Create user account for member (R5/Admin only)
+
+### Alliance Files & Documents (Protected)
+- `GET /api/files` - Get permitted alliance files
+- `POST /api/files/upload` - Upload new document or image
+- `PUT /api/files/{id}` - Modify file title and permissions
+- `DELETE /api/files/{id}` - Delete a file permanently
+- `GET /api/files/download/{id}` - Direct download for native images
+- `GET /api/files/{id}/wopi-token` - Generate short-lived JWT for Collabora iframe
+- `GET/POST /wopi/files/...` - Standard WOPI host endpoints for Collabora communication
 
 ### Train Schedule (Protected)
 - `GET /api/train-schedules` - Get all schedules
@@ -334,3 +372,5 @@ The top 7 members are selected as conductors for the week. Backups are selected 
 - Role-based access control for all sensitive operations.
 - SQL injection prevention through parameterized queries.
 - R5/Admin-only restrictions on critical system and security settings.
+- **WOPI JWT**: Document editing sessions are secured with short-lived JSON Web Tokens.
+- **File Isolation**: Files are stored securely outside the public web root and served exclusively via authenticated Go handlers.

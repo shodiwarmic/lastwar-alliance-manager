@@ -241,21 +241,70 @@ async function saveUser(event) {
 }
 
 
-// Delete User
+// Delete User (With Safeguards)
+let pendingDeleteUserId = null;
+let pendingDeleteUsername = null;
+
 async function deleteUser(userId, username) {
-    if (!confirm(`Are you sure you want to delete user "${username}"?\n\nThis action cannot be undone.`)) {
+    try {
+        const checkRes = await fetch(`/api/admin/users/${userId}/file-count`);
+        if (!checkRes.ok) throw new Error('Failed to check user files');
+        const data = await checkRes.json();
+
+        if (data.count > 0) {
+            pendingDeleteUserId = userId;
+            pendingDeleteUsername = username;
+            document.getElementById('transfer-username').textContent = username;
+            document.getElementById('transfer-file-count').textContent = data.count;
+            
+            const select = document.getElementById('new-owner-select');
+            select.innerHTML = '';
+            allUsers.forEach(u => {
+                if (u.id !== userId) {
+                    select.innerHTML += `<option value="${u.id}">${u.username}</option>`;
+                }
+            });
+
+            document.getElementById('transfer-files-modal').style.display = 'block';
+            return;
+        }
+    } catch (error) {
+        console.error('File check error:', error);
         return;
     }
-    
+
+    if (!confirm(`Are you sure you want to delete user "${username}"?\n\nThis action cannot be undone.`)) return;
+    executeUserDelete(userId);
+}
+
+function closeTransferFilesModal() {
+    document.getElementById('transfer-files-modal').style.display = 'none';
+    pendingDeleteUserId = null;
+}
+
+async function confirmTransferFiles() {
+    const newOwnerId = document.getElementById('new-owner-select').value;
+    if (!newOwnerId) return alert('Select a new owner');
+
     try {
-        const response = await fetch(`/api/admin/users/${userId}`, {
-            method: 'DELETE'
+        const res = await fetch(`/api/admin/users/${pendingDeleteUserId}/transfer-files`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_owner_id: parseInt(newOwnerId) })
         });
+        if (!res.ok) throw new Error('Failed to transfer files');
         
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
-        }
+        closeTransferFilesModal();
+        executeUserDelete(pendingDeleteUserId);
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function executeUserDelete(userId) {
+    try {
+        const response = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error(await response.text());
         
         const result = await response.json();
         alert(result.message);

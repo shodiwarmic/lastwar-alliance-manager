@@ -49,6 +49,10 @@
         <nav class="nav-menu">
             <a href="/" class="nav-link {{if eq .ActivePage "index"}}active{{end}}">👥 Members</a>
             
+            {{if .Permissions.ViewFiles}}
+            <a href="/files" class="nav-link {{if eq .ActivePage "files"}}active{{end}}">📁 Files</a>
+            {{end}}
+            
             {{if .Permissions.ViewTrain}}
             <a href="/train" class="nav-link {{if eq .ActivePage "train"}}active{{end}}">🚂 Train</a>
             {{end}}

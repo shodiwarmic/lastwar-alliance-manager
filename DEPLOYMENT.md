@@ -1,28 +1,70 @@
 # Debian Server Deployment Guide
 
+This guide covers the manual deployment of the Last War Alliance Manager. If you prefer an automated setup, use the included `install.sh` script.
+
+## DNS Configuration (Pre-Requisite)
+
+Before beginning the deployment, you **must** configure your domain's DNS. The document management system requires a dedicated subdomain to route WOPI WebSocket traffic correctly.
+
+Create two A-Records pointing to your server's IP address:
+1. **Main App:** `your-domain.com` → `your.server.ip.address`
+2. **Collabora:** `collabora.your-domain.com` → `your.server.ip.address`
+
+Wait for DNS propagation (5-60 minutes) before proceeding to the reverse proxy steps, or SSL certificate generation will fail.
+
+---
+
 ## Quick Setup with Caddy (Recommended - Automatic HTTPS)
 
-Caddy automatically handles Let's Encrypt certificates with zero configuration.
+Caddy automatically handles Let's Encrypt certificates with zero configuration and natively supports WebSockets without complex routing rules.
 
 ### 1. Install Go on Debian
 
 ```bash
 # Install Go 1.21 or higher
-wget https://go.dev/dl/go1.21.6.linux-amd64.tar.gz
+wget [https://go.dev/dl/go1.21.6.linux-amd64.tar.gz](https://go.dev/dl/go1.21.6.linux-amd64.tar.gz)
 sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.21.6.linux-amd64.tar.gz
 echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
 source ~/.bashrc
 go version
 ```
 
-### 2. Install Build Dependencies
+### 2. Install Build & OCR Dependencies
 
 ```bash
 sudo apt update
-sudo apt install -y gcc build-essential
+sudo apt install -y gcc build-essential curl wget git ufw fail2ban sqlite3
+
+# Install Tesseract OCR dependencies for image recognition
+sudo apt install -y tesseract-ocr tesseract-ocr-all libtesseract-dev libleptonica-dev
 ```
 
-### 3. Deploy Application
+### 3. Install Docker & Start Collabora
+
+The document editing features require the Collabora CODE engine running in a local Docker container.
+
+```bash
+# Install Docker Engine
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL [https://download.docker.com/linux/debian/gpg](https://download.docker.com/linux/debian/gpg) -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] [https://download.docker.com/linux/debian](https://download.docker.com/linux/debian) $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Start the Collabora container
+# NOTE: Replace 'your-domain.com' with your actual main application domain.
+sudo docker run -t -d -p 9980:9980 \
+    -e "domain=your-domain.com" \
+    -e "aliasgroup1=[https://your-domain.com:443](https://your-domain.com:443)" \
+    -e "extra_params=--o:ssl.enable=false --o:ssl.termination=true" \
+    --restart always \
+    --cap-add MKNOD \
+    collabora/code
+```
+
+### 4. Deploy Application
 
 ```bash
 # Create application directory
@@ -34,17 +76,18 @@ sudo chown $USER:$USER /opt/lastwar
 
 cd /opt/lastwar
 
-# Build the application
+# Download Go modules and build the application
+go mod download
 go build -o alliance-manager main.go
 
-# Create data directory
-sudo mkdir -p /var/lib/lastwar
-sudo chown $USER:$USER /var/lib/lastwar
+# Create data directories
+sudo mkdir -p /var/lib/lastwar/files
+sudo chown -R $USER:$USER /var/lib/lastwar
 ```
 
-### 4. Create Systemd Service
+### 5. Create Systemd Service
 
-Create `/etc/systemd/system/lastwar.service`:
+Create `/etc/systemd/system/lastwar.service`. Be sure to replace the domain placeholder values.
 
 ```ini
 [Unit]
@@ -58,6 +101,8 @@ Group=lastwar
 WorkingDirectory=/opt/lastwar
 Environment="DATABASE_PATH=/var/lib/lastwar/alliance.db"
 Environment="PORT=8080"
+Environment="APP_DOMAIN=your-domain.com"
+Environment="COLLABORA_DOMAIN=collabora.your-domain.com"
 ExecStart=/opt/lastwar/alliance-manager
 Restart=always
 RestartSec=5
@@ -77,7 +122,7 @@ SystemCallErrorNumber=EPERM
 WantedBy=multi-user.target
 ```
 
-### 5. Create Dedicated User
+### 6. Create Dedicated User
 
 ```bash
 sudo useradd -r -s /bin/false -d /opt/lastwar lastwar
@@ -85,24 +130,25 @@ sudo chown -R lastwar:lastwar /opt/lastwar
 sudo chown -R lastwar:lastwar /var/lib/lastwar
 ```
 
-### 6. Install Caddy
+
+
+### 7. Install & Configure Caddy Reverse Proxy
 
 ```bash
 # Install Caddy
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf '[https://dl.cloudsmith.io/public/caddy/stable/gpg.key](https://dl.cloudsmith.io/public/caddy/stable/gpg.key)' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf '[https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt](https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt)' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update
 sudo apt install caddy
 ```
 
-### 7. Configure Caddy
-
 Create `/etc/caddy/Caddyfile`:
 
-```
+```caddyfile
 your-domain.com {
     reverse_proxy localhost:8080
+    encode gzip
     
     # Security headers
     header {
@@ -111,16 +157,8 @@ your-domain.com {
         X-XSS-Protection "1; mode=block"
         Referrer-Policy "strict-origin-when-cross-origin"
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
     }
-    
-    # Rate limiting (requires caddy-rate-limit plugin)
-    # rate_limit {
-    #     zone dynamic {
-    #         key {remote_host}
-    #         events 100
-    #         window 1m
-    #     }
-    # }
     
     # Logging
     log {
@@ -130,9 +168,13 @@ your-domain.com {
         }
     }
 }
-```
 
-Replace `your-domain.com` with your actual domain.
+# Collabora Document Server Subdomain
+collabora.your-domain.com {
+    encode gzip
+    reverse_proxy localhost:9980
+}
+```
 
 ### 8. Configure Firewall
 
@@ -161,19 +203,17 @@ sudo systemctl enable lastwar
 sudo systemctl start lastwar
 sudo systemctl status lastwar
 
-# Start Caddy (automatically gets Let's Encrypt cert)
+# Start Caddy (automatically gets Let's Encrypt certs for both domains)
 sudo systemctl enable caddy
 sudo systemctl restart caddy
 sudo systemctl status caddy
 ```
 
-That's it! Caddy will automatically obtain and renew Let's Encrypt certificates.
-
 ---
 
 ## Alternative: Nginx with Certbot
 
-If you prefer Nginx:
+If you prefer Nginx, follow steps 1-6 above, then proceed here:
 
 ### 1. Install Nginx and Certbot
 
@@ -186,39 +226,28 @@ sudo apt install -y nginx certbot python3-certbot-nginx
 Create `/etc/nginx/sites-available/lastwar`:
 
 ```nginx
-# Redirect HTTP to HTTPS
+# Redirect HTTP to HTTPS for both domains
 server {
     listen 80;
     listen [::]:80;
-    server_name your-domain.com;
+    server_name your-domain.com collabora.your-domain.com;
     
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
     
     location / {
-        return 301 https://$server_name$request_uri;
+        return 301 https://$host$request_uri;
     }
 }
 
-# HTTPS server
+# HTTPS Server: Main Go Application
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name your-domain.com;
     
-    # SSL certificates (will be configured by certbot)
-    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-    
-    # SSL configuration
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
-    ssl_stapling on;
-    ssl_stapling_verify on;
+    # SSL config will be injected here by certbot
     
     # Security headers
     add_header X-Frame-Options "DENY" always;
@@ -227,18 +256,8 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
     
-    # Rate limiting
-    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
-    limit_req_status 429;
-    
-    # Logging
-    access_log /var/log/nginx/lastwar-access.log;
-    error_log /var/log/nginx/lastwar-error.log;
-    
     # Proxy to Go application
     location / {
-        limit_req zone=api_limit burst=20 nodelay;
-        
         proxy_pass http://localhost:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -247,43 +266,63 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+    }
+}
+
+# HTTPS Server: Collabora Document Server
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name collabora.your-domain.com;
+    
+    # SSL config will be injected here by certbot
+
+    # Standard location
+    location / {
+        proxy_pass http://localhost:9980;
+        proxy_set_header Host $host;
+    }
+
+    # WebSockets for Collabora Document Editing
+    location ~ ^/cool/(.*)/ws$ {
+        proxy_pass http://localhost:9980;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 36000s;
     }
     
-    # Deny access to hidden files
-    location ~ /\. {
-        deny all;
-        access_log off;
-        log_not_found off;
+    location ^~ /cool/adminws {
+        proxy_pass http://localhost:9980;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 36000s;
     }
 }
 ```
 
-### 3. Enable Site and Get Certificate
+### 3. Enable Site and Get Certificates
 
 ```bash
 # Enable site
-sudo ln -s /etc/nginx/sites-available/lastwar /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/lastwar /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl enable nginx
+sudo systemctl restart nginx
 
-# Get Let's Encrypt certificate
-sudo certbot --nginx -d your-domain.com
+# Get Let's Encrypt certificates for BOTH domains
+sudo certbot --nginx -d your-domain.com -d collabora.your-domain.com
 
 # Test auto-renewal
 sudo certbot renew --dry-run
 ```
 
-### 4. Start Services
+### 4. Start Application Services
 
 ```bash
 sudo systemctl start lastwar
-sudo systemctl restart nginx
 ```
 
 ---
@@ -304,33 +343,21 @@ sudo apt update && sudo apt upgrade -y
 ### 2. Configure Fail2ban
 
 ```bash
-sudo apt install -y fail2ban
-
-# Create custom jail for nginx
+# Create custom jail
 sudo tee /etc/fail2ban/jail.local << 'EOF'
-[nginx-http-auth]
-enabled = true
-port = http,https
-logpath = /var/log/nginx/lastwar-error.log
-
-[nginx-limit-req]
-enabled = true
-port = http,https
-logpath = /var/log/nginx/lastwar-error.log
-maxretry = 10
+[DEFAULT]
+bantime = 3600
 findtime = 600
+maxretry = 5
 
 [sshd]
 enabled = true
 port = ssh
 logpath = /var/log/auth.log
-maxretry = 5
-bantime = 3600
 EOF
 
 sudo systemctl enable fail2ban
 sudo systemctl start fail2ban
-sudo fail2ban-client status
 ```
 
 ### 3. Secure SSH
@@ -344,12 +371,6 @@ PermitRootLogin no
 # Disable password authentication (use SSH keys)
 PasswordAuthentication no
 PubkeyAuthentication yes
-
-# Change default port (optional)
-Port 2222
-
-# Limit users
-AllowUsers yourusername
 ```
 
 Then restart SSH:
@@ -380,131 +401,28 @@ sudo chmod +x /usr/local/bin/backup-lastwar.sh
 echo "0 2 * * * /usr/local/bin/backup-lastwar.sh" | sudo crontab -
 ```
 
-### 5. Application-Level Security Updates
-
-Update `main.go` to use secure cookies:
-
-```go
-// In your login handler, set secure cookie flags
-cookie := &http.Cookie{
-    Name:     "session_token",
-    Value:    token,
-    HttpOnly: true,
-    Secure:   true,  // Only send over HTTPS
-    SameSite: http.SameSiteStrictMode,
-    MaxAge:   86400,
-    Path:     "/",
-}
-http.SetCookie(w, cookie)
-```
-
-### 6. Monitor Logs
-
-```bash
-# View application logs
-sudo journalctl -u lastwar -f
-
-# View Caddy logs
-sudo journalctl -u caddy -f
-
-# View Nginx logs (if using nginx)
-sudo tail -f /var/log/nginx/lastwar-access.log
-sudo tail -f /var/log/nginx/lastwar-error.log
-```
-
-### 7. System Resource Limits
-
-Add to `/etc/security/limits.conf`:
-
-```
-lastwar soft nofile 65535
-lastwar hard nofile 65535
-lastwar soft nproc 4096
-lastwar hard nproc 4096
-```
-
----
-
-## DNS Configuration
-
-Before deploying, configure your domain's DNS:
-
-```
-A Record: your-domain.com → your.server.ip.address
-```
-
-Wait for DNS propagation (5-60 minutes) before running Certbot.
-
----
-
-## Monitoring (Optional)
-
-### Simple Monitoring Script
-
-```bash
-sudo tee /usr/local/bin/monitor-lastwar.sh << 'EOF'
-#!/bin/bash
-if ! systemctl is-active --quiet lastwar; then
-    systemctl start lastwar
-    echo "Last War service was down, restarted at $(date)" >> /var/log/lastwar-monitor.log
-fi
-EOF
-
-sudo chmod +x /usr/local/bin/monitor-lastwar.sh
-echo "*/5 * * * * /usr/local/bin/monitor-lastwar.sh" | sudo crontab -
-```
-
 ---
 
 ## Quick Troubleshooting
 
 ```bash
-# Check if application is running
+# Check if Go application is running
 sudo systemctl status lastwar
+
+# Check if Collabora container is running
+sudo docker ps | grep collabora
 
 # Check application logs
 sudo journalctl -u lastwar -n 50
 
-# Check if port 8080 is listening
-sudo ss -tlnp | grep 8080
-
-# Test reverse proxy
-curl http://localhost:8080
-
-# Check SSL certificate
-echo | openssl s_client -servername your-domain.com -connect your-domain.com:443 2>/dev/null | openssl x509 -noout -dates
+# Check if port 8080 and 9980 are listening
+sudo ss -tlnp | grep -E '8080|9980'
 
 # Restart everything
 sudo systemctl restart lastwar
+sudo docker restart $(sudo docker ps -q --filter ancestor=collabora/code)
 sudo systemctl restart caddy  # or nginx
 ```
-
----
-
-## Performance Tuning
-
-For high traffic, consider:
-
-1. **Connection pooling**: Already handled by SQLite driver
-2. **Response caching**: Add caching headers in Caddy/Nginx
-3. **Database optimization**: Regular VACUUM and ANALYZE
-4. **Load balancing**: Run multiple instances behind load balancer
-
----
-
-## Security Checklist
-
-- [x] Application runs as non-root user
-- [x] Firewall configured (UFW)
-- [x] HTTPS with Let's Encrypt
-- [x] Security headers configured
-- [x] Rate limiting enabled
-- [x] Fail2ban configured
-- [x] SSH hardened
-- [x] Automatic security updates
-- [x] Database backups configured
-- [x] Logs monitored
-- [x] Secure session cookies
 
 ---
 
@@ -514,9 +432,6 @@ We strongly recommend using the included `update.sh` script, which automatically
 
 ```bash
 cd /opt/lastwar
-
-# If uploading files manually via SCP:
-sudo ./update.sh
 
 # If pulling from a Git repository:
 sudo ./update.sh --git
@@ -536,10 +451,11 @@ sudo tar -czf /var/backups/lastwar/app_backup.tar.gz -C /opt/lastwar --exclude='
 
 # Update code
 cd /opt/lastwar
-git pull  # or upload new files
+git pull
 
 # Rebuild
 export PATH=$PATH:/usr/local/go/bin
+go mod download
 go build -o alliance-manager .
 
 # Restart service

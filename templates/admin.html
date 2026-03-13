@@ -142,6 +142,28 @@
             </div>
         </div>
     </div>
+
+    <div id="transfer-files-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeTransferFilesModal()">&times;</span>
+            <h2>⚠️ Files Detected</h2>
+            
+            <div class="warning-message" style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; border-radius: 4px; margin-bottom: 20px;">
+                <p>User <strong id="transfer-username"></strong> owns <strong id="transfer-file-count"></strong> file(s).</p>
+                <p>You cannot delete this user until their files are transferred to another user.</p>
+            </div>
+
+            <div class="form-group">
+                <label for="new-owner-select">Select New Owner:</label>
+                <select id="new-owner-select" class="form-input"></select>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-primary" onclick="confirmTransferFiles()">Transfer & Continue Deletion</button>
+                <button type="button" class="btn btn-secondary" onclick="closeTransferFilesModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
 {{end}}
 
 {{define "scripts"}}

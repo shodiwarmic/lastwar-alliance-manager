@@ -1,0 +1,123 @@
+{{define "header_text"}}
+    <h1>🎮 Last War: Survival</h1>
+    <h2>Alliance Files & Documents</h2>
+{{end}}
+
+{{define "content"}}
+    <div class="action-bar">
+        {{if .Permissions.UploadFiles}}
+        <button class="primary-action-btn" onclick="showUploadModal()">
+            <span class="btn-icon">📤</span><span class="btn-text">Upload File</span>
+        </button>
+        {{end}}
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>📁 Alliance Documents</h2>
+        </div>
+        <div id="files-grid" class="members-grid" style="display: grid; gap: 15px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
+            <div class="loading">Loading files...</div>
+        </div>
+    </div>
+{{end}}
+
+{{define "modals"}}
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditModal()">&times;</span>
+            <h2>Edit File Details</h2>
+            <form id="edit-form" onsubmit="handleEdit(event)">
+                <div class="form-group">
+                    <label>Document Title:</label>
+                    <input type="text" id="edit-file-title" required class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Minimum Rank Required to View:</label>
+                    <select id="edit-file-min-rank" class="form-input">
+                        <option value="R1">R1 (Everyone)</option>
+                        <option value="R2">R2</option>
+                        <option value="R3">R3</option>
+                        <option value="R4">R4 & R5 Only</option>
+                        <option value="R5">R5 Only</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Minimum Rank Required to Edit (Docs/Sheets only):</label>
+                    <select id="edit-file-min-edit-rank" class="form-input">
+                        <option value="R1">R1 (Everyone)</option>
+                        <option value="R2">R2</option>
+                        <option value="R3">R3</option>
+                        <option value="R4">R4 & R5 Only</option>
+                        <option value="R5">R5 Only</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary" id="edit-submit-btn">Save Changes</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="upload-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeUploadModal()">&times;</span>
+            <h2>Upload File</h2>
+            <form id="upload-form" onsubmit="handleUpload(event)">
+                <div class="form-group">
+                    <label>Document Title:</label>
+                    <input type="text" id="file-title" required class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Select File (Images, Spreadsheets, Docs):</label>
+                    <input type="file" id="file-input" required class="form-input" style="padding: 10px;">
+                </div>
+                <div class="form-group">
+                    <label>Minimum Rank Required to View:</label>
+                    <select id="file-min-rank" class="form-input">
+                        <option value="R1">R1 (Everyone)</option>
+                        <option value="R2">R2</option>
+                        <option value="R3">R3</option>
+                        <option value="R4">R4 & R5 Only</option>
+                        <option value="R5">R5 Only</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Minimum Rank Required to Edit (Docs/Sheets only):</label>
+                    <select id="file-min-edit-rank" class="form-input">
+                        <option value="R1">R1 (Everyone)</option>
+                        <option value="R2">R2</option>
+                        <option value="R3">R3</option>
+                        <option value="R4" selected>R4 & R5 Only</option>
+                        <option value="R5">R5 Only</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary" id="upload-submit-btn">Upload</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="image-modal" class="modal" style="z-index: 1001;">
+        <div class="modal-content" style="max-width: 90%; text-align: center;">
+            <span class="close" onclick="document.getElementById('image-modal').style.display='none'">&times;</span>
+            <h2 id="image-modal-title"></h2>
+            <img id="image-modal-img" src="" style="max-width: 100%; height: auto; border-radius: 8px; margin-top: 15px;">
+        </div>
+    </div>
+
+    <div id="document-modal" class="modal" style="z-index: 1001;">
+        <div class="modal-content" style="max-width: 95%; width: 95%; height: 95vh; padding: 10px;">
+            <span class="close" onclick="document.getElementById('document-modal').style.display='none'" style="position: absolute; right: 15px; top: 10px; z-index: 1002;">&times;</span>
+            <div id="document-modal-body" style="height: 100%; width: 100%; padding-top: 30px;">
+                </div>
+        </div>
+    </div>
+{{end}}
+
+{{define "scripts"}}
+    <script src="/files.js"></script>
+{{end}}
