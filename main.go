@@ -32,6 +32,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
+	"github.com/microcosm-cc/bluemonday"
 	gosseract "github.com/otiai10/gosseract/v2"
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
@@ -828,6 +829,16 @@ func initDB() error {
 	if err != nil {
 		return err
 	}
+
+	// Enable Write-Ahead Logging to allow concurrent read/writes
+	_, err = db.Exec("PRAGMA journal_mode=WAL;")
+	if err != nil {
+		log.Printf("Warning: Failed to enable WAL mode: %v", err)
+	}
+
+	// Restrict connection pool to prevent SQLite locking under heavy WOPI load
+	db.SetMaxOpenConns(1)
+	// --------------------------------
 
 	// Create members table
 	createMembersTableSQL := `CREATE TABLE IF NOT EXISTS members (
@@ -7419,13 +7430,18 @@ func main() {
 			rawMessage = "" // Fallback if db is unavailable
 		}
 
+		// Sanitize the raw HTML from the database to prevent Stored XSS
+		p := bluemonday.UGCPolicy()
+		safeMessage := p.Sanitize(rawMessage)
+
 		// Wrap in a struct so the template can access it.
 		// template.HTML allows safe rendering of links/tags from the database.
 		data := struct {
 			LoginMessage template.HTML
 		}{
-			LoginMessage: template.HTML(rawMessage),
+			LoginMessage: template.HTML(safeMessage), // Now using the sanitized string
 		}
+		// -----------------------------
 
 		// 3. Parse ONLY the login.html file (no layout.html)
 		t, err := template.ParseFiles("templates/login.html")
