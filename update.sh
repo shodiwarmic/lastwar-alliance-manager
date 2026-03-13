@@ -133,6 +133,12 @@ if ! command -v docker &> /dev/null; then
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
 
+# Ensure Docker daemon is running before querying it
+if ! sudo systemctl is-active --quiet docker; then
+    echo "Starting Docker service..."
+    sudo systemctl enable --now docker
+fi
+
 if ! sudo docker ps | grep -q "collabora/code"; then
     echo "Starting Collabora container..."
     sudo docker run -t -d -p 9980:9980 \
