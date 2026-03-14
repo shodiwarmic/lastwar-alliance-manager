@@ -1,5 +1,14 @@
 // static/global.js
 document.addEventListener('DOMContentLoaded', () => {
+    // Mobile Menu Toggle
+    const menuBtn = document.getElementById("mobile-menu-btn");
+    const navMenu = document.getElementById("main-nav");
+    if(menuBtn && navMenu) {
+        menuBtn.addEventListener("click", () => {
+            navMenu.classList.toggle("show");
+        });
+    }
+
     const usernameDisplay = document.getElementById('username-display');
     const logoutBtn = document.getElementById('dropdown-logout-btn');
     
