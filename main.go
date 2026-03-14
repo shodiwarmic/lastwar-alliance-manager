@@ -181,12 +181,12 @@ func main() {
 
 	// --- UI Routes ---
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		data := getPageData(r, "Members - Alliance Manager", "index")
+		data := getPageData(r, "Members - Alliance Manager", "members")
 		if !data.IsAuthenticated {
 			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
 			return
 		}
-		renderTemplate(w, r, "index.html", data)
+		renderTemplate(w, r, "members.html", data)
 	}).Methods("GET")
 
 	// Custom Login Route (No Layout)
