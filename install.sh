@@ -20,6 +20,9 @@ fi
 
 command -v sudo >/dev/null 2>&1 || { echo -e "${RED}sudo is required but not installed${NC}"; exit 1; }
 
+# Capture the exact path where the app is being installed for the backup script later
+APP_DIR=$(pwd)
+
 # Detect OS
 if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -202,21 +205,23 @@ EOF
     sudo systemctl restart nginx
 fi
 
-echo -e "${GREEN}[6/6] Building and starting Docker containers...${NC}"
-docker compose up -d --build
+echo -e "${GREEN}[6/6] Pulling and starting Docker containers...${NC}"
+sudo docker compose pull
+sudo docker compose up -d
 
 echo "Setting up daily backups..."
-sudo tee /usr/local/bin/backup-lastwar.sh > /dev/null <<'EOF'
+sudo tee /usr/local/bin/backup-lastwar.sh > /dev/null <<EOF
 #!/bin/bash
 BACKUP_DIR="/var/backups/lastwar"
-DB_PATH="$(pwd)/data/alliance.db"
-DATE=$(date +%Y%m%d_%H%M%S)
+DB_PATH="$APP_DIR/data/alliance.db"
+DATE=\$(date +%Y%m%d_%H%M%S)
 
-mkdir -p $BACKUP_DIR
-sqlite3 $DB_PATH ".backup '$BACKUP_DIR/alliance_$DATE.db'"
-find $BACKUP_DIR -name "alliance_*.db" -mtime +7 -delete
+mkdir -p \$BACKUP_DIR
+sudo sqlite3 \$DB_PATH ".backup '\$BACKUP_DIR/alliance_\$DATE.db'"
+find \$BACKUP_DIR -name "alliance_*.db" -mtime +7 -delete
 EOF
 sudo chmod +x /usr/local/bin/backup-lastwar.sh
+sudo mkdir -p /var/log/lastwar
 (sudo crontab -l 2>/dev/null; echo "0 2 * * * /usr/local/bin/backup-lastwar.sh >> /var/log/lastwar/backup.log 2>&1") | sudo crontab -
 
 echo -e "${GREEN}Installation Complete!${NC}"

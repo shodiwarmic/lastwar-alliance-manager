@@ -40,7 +40,7 @@ Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** conta
 
 ## Infrastructure & Deployment
 
-The application utilizes a multi-container **Docker Compose** stack, meaning you **do not** need to install Go, Tesseract, GCC, or SQLite on your host machine. Docker handles all dependencies internally.
+The application utilizes a multi-container **Docker Compose** stack powered by pre-built images from the GitHub Container Registry. This means you **do not** need to install Go, Tesseract, GCC, or SQLite on your host machine, and your server never has to waste resources compiling code. 
 
 ### Prerequisites (Production)
 - A Linux Server (Debian or Ubuntu recommended).
@@ -49,22 +49,23 @@ The application utilizes a multi-container **Docker Compose** stack, meaning you
   2. Document Server: `collabora.yourdomain.com`
 
 ### Quick Install (Debian/Ubuntu)
-We provide an automated script that installs Docker, generates secure secrets, configures the Caddy reverse proxy with SSL, and builds the containers.
+We provide an automated script that installs Docker, generates secure secrets, configures the Caddy reverse proxy with SSL, and pulls the pre-built containers.
 
 ```bash
 git clone [https://github.com/yourusername/lastwar.git](https://github.com/yourusername/lastwar.git)
 cd lastwar
 chmod +x install.sh
-./install.sh
+sudo ./install.sh
 ```
 
 ### Manual Docker Deployment
 If you prefer to deploy manually or are updating an existing environment:
 
 1. Copy `.env.example` to `.env` and fill in your domains and a secure `SESSION_KEY`.
-2. Build and start the stack:
+2. Pull the latest images and start the stack:
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for comprehensive production setup details.

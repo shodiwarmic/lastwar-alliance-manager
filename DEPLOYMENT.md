@@ -16,7 +16,7 @@ Wait for DNS propagation (5-60 minutes) before proceeding to the reverse proxy s
 
 ## 2. Automated Setup (Recommended)
 
-The easiest way to deploy the application on a fresh Debian or Ubuntu server is using the included installation script. It will automatically install Docker, configure your environment variables, build the containers, and set up Caddy or Nginx with automatic HTTPS.
+The easiest way to deploy the application on a fresh Debian or Ubuntu server is using the included installation script. It will automatically install Docker, configure your environment variables, download the pre-built containers from the registry, and set up Caddy or Nginx with automatic HTTPS.
 
 ```bash
 git clone [https://github.com/yourusername/lastwar.git](https://github.com/yourusername/lastwar.git) /opt/lastwar
@@ -61,11 +61,12 @@ COLLABORA_DOMAIN=collabora.yourdomain.com
 TRUSTED_ORIGINS=localhost:8080, 127.0.0.1:8080
 ```
 
-### Step C: Build and Start the Stack
+### Step C: Pull and Start the Stack
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
-This will create a private internal bridge network, start the Go application (exposing port `8080`), and start the Collabora document server (exposing port `9980`).
+This will download the latest images, create a private internal bridge network, start the Go application (exposing port `8080`), and start the Collabora document server (exposing port `9980`).
 
 ---
 
@@ -201,7 +202,7 @@ sqlite3 /opt/lastwar/data/alliance.db ".backup '/var/backups/lastwar/alliance_$(
 
 ## 6. Update Procedure
 
-We strongly recommend using the included `update.sh` script. It automatically pulls the latest code, safely rebuilds the Docker containers, cleans up orphaned resources, and checks your proxy configurations for security compliance.
+We strongly recommend using the included `update.sh` script. It automatically pulls the latest code, safely downloads the newest pre-built images from the registry, cleans up orphaned resources, and checks your proxy configurations for security compliance.
 
 ```bash
 cd /opt/lastwar
@@ -211,6 +212,6 @@ sudo ./update.sh
 If updating manually:
 ```bash
 git pull
-docker compose build
+docker compose pull
 docker compose up -d
 ```

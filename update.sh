@@ -185,8 +185,10 @@ EOF
     fi
 fi
 
-echo -e "${YELLOW}[4/5] Building and starting Docker containers...${NC}"
-docker compose up -d --build
+echo -e "${YELLOW}[4/5] Pulling and starting Docker containers...${NC}"
+sudo docker compose pull
+sudo docker compose up -d
+sudo docker image prune -f
 
 echo -e "${YELLOW}[5/5] Cleaning up old backups...${NC}"
 cd $BACKUP_DIR

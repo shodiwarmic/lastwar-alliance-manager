@@ -1,7 +1,7 @@
 services:
   # The Go Application
   alliance-manager:
-    build: .
+    image: ghcr.io/shodiwarmic/lastwar-alliance-manager:latest
     container_name: alliance-manager
     restart: unless-stopped
     ports:
