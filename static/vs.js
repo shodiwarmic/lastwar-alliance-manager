@@ -285,15 +285,17 @@ function handleCSVImport(event) {
         if (lines.length < 2) return;
 
         const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+        
+        // Swapped strict equality (===) for .includes() to ignore CSV quotes and hidden export artifacts
         const columnMap = {
             name: headers.findIndex(h => h.includes('name') || h.includes('member')),
-            monday: headers.findIndex(h => h === 'monday' || h === 'day 1' || h === 'day1'),
-            tuesday: headers.findIndex(h => h === 'tuesday' || h === 'day 2' || h === 'day2'),
-            wednesday: headers.findIndex(h => h === 'wednesday' || h === 'day 3' || h === 'day3'),
-            thursday: headers.findIndex(h => h === 'thursday' || h === 'day 4' || h === 'day4'),
-            friday: headers.findIndex(h => h === 'friday' || h === 'day 5' || h === 'day5'),
-            saturday: headers.findIndex(h => h === 'saturday' || h === 'day 6' || h === 'day6'),
-            total: headers.findIndex(h => h === 'total' || h === 'weekly total')
+            monday: headers.findIndex(h => h.includes('monday') || h.includes('day 1') || h.includes('day1')),
+            tuesday: headers.findIndex(h => h.includes('tuesday') || h.includes('day 2') || h.includes('day2')),
+            wednesday: headers.findIndex(h => h.includes('wednesday') || h.includes('day 3') || h.includes('day3')),
+            thursday: headers.findIndex(h => h.includes('thursday') || h.includes('day 4') || h.includes('day4')),
+            friday: headers.findIndex(h => h.includes('friday') || h.includes('day 5') || h.includes('day5')),
+            saturday: headers.findIndex(h => h.includes('saturday') || h.includes('day 6') || h.includes('day6')),
+            total: headers.findIndex(h => h.includes('total'))
         };
 
         if (columnMap.name === -1) {
