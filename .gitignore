@@ -48,3 +48,4 @@ temp/
 files-dev/
 uploads/
 data/
+docker-compose.override.yml

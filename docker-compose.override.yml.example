@@ -1,0 +1,15 @@
+services:
+  alliance-manager:
+    build: .
+    image: lastwar-alliance-manager:dev
+    environment:
+      - PRODUCTION=false
+      - HTTPS=false
+      # Replace these with your actual WSL or Windows LAN IP
+      - APP_DOMAIN=192.168.1.X:8080
+      - COLLABORA_DOMAIN=192.168.1.X:9980
+
+  collabora:
+    environment:
+      - aliasgroup1=http://.*:8080
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=false

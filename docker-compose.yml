@@ -1,43 +1,30 @@
 services:
-  # The Go Application
   alliance-manager:
-    image: ghcr.io/shodiwarmic/lastwar-alliance-manager:latest
+    image: ghcr.io/YOUR_GITHUB_USERNAME/lastwar-alliance-manager:latest
     container_name: alliance-manager
     restart: unless-stopped
+    env_file: .env
     ports:
       - "8080:8080"
-    environment:
-      - DATABASE_PATH=/app/data/alliance.db
-      - STORAGE_PATH=/app/uploads
-      - COLLABORA_INTERNAL_URL=http://collabora:9980
-    env_file:
-      - .env
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
-    depends_on:
-      - collabora
-    networks:
-      - lastwar-net
+    # Swapped to "mapping" syntax for strict docker-compose parsers
+    extra_hosts:
+      "${APP_DOMAIN}": "host-gateway"
+      "${COLLABORA_DOMAIN}": "host-gateway"
 
-  # The Collabora Online Development Edition (CODE)
   collabora:
     image: collabora/code
-    container_name: lastwar-collabora
+    container_name: collabora
     restart: unless-stopped
-    # We don't need to expose 9980 to the host if Caddy/Nginx handles it, 
-    # but keeping it exposed for now helps with local testing.
+    cap_add:
+      - MKNOD
     ports:
       - "9980:9980"
     environment:
-      - domain=${APP_DOMAIN}
       - aliasgroup1=https://${APP_DOMAIN}:443
       - extra_params=--o:ssl.enable=false --o:ssl.termination=true
-    cap_add:
-      - MKNOD
-    networks:
-      - lastwar-net
-
-networks:
-  lastwar-net:
-    driver: bridge
+    # Swapped to "mapping" syntax here as well
+    extra_hosts:
+      "${APP_DOMAIN}": "host-gateway"
