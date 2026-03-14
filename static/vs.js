@@ -67,17 +67,21 @@ async function checkPermissions() {
         const response = await fetch('/api/check-auth');
         if (response.ok) {
             const data = await response.json();
-            // Permissions check for R4/R5/Admin
-            canEditVS = data.is_admin || (data.permissions && data.permissions.manage_vs) || false;
+            
+            // Matches the TitleCase keys from your RankPermissions struct
+            // and the 'is_admin' boolean from your map
+            canEditVS = data.is_admin || (data.permissions && data.permissions.ManageVSPoints);
             
             if (canEditVS) {
-                document.getElementById('save-btn')?.classList.remove('hidden');
-                document.getElementById('clear-btn')?.classList.remove('hidden');
-                document.getElementById('csv-import-btn')?.classList.remove('hidden');
-                document.getElementById('toggle-mode-btn')?.classList.remove('hidden');
+                const adminElements = ['save-btn', 'clear-btn', 'csv-import-btn', 'toggle-mode-btn'];
+                adminElements.forEach(id => {
+                    document.getElementById(id)?.classList.remove('hidden');
+                });
             }
         }
-    } catch (e) { console.error("Failed to fetch permissions"); }
+    } catch (e) { 
+        console.error("Auth check failed:", e); 
+    }
 }
 
 async function loadMembers() {
