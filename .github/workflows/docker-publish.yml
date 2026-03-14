@@ -7,12 +7,15 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  # Forces GitHub to use the modern Node.js 24 runtime to resolve deprecation warnings
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
+    
+    # Moving the variable here and using string quotes ensures the runner reads it
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
     permissions:
       contents: read
       packages: write
@@ -29,7 +32,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        # Bumped to v6 for modern runner compatibility
         uses: docker/build-push-action@v6
         with:
           context: .
