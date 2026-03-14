@@ -1,6 +1,6 @@
 services:
   alliance-manager:
-    image: ghcr.io/YOUR_GITHUB_USERNAME/lastwar-alliance-manager:latest
+    image: ghcr.io/shodiwarmic/lastwar-alliance-manager:latest
     container_name: alliance-manager
     restart: unless-stopped
     env_file: .env
