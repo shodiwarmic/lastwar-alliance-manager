@@ -4,224 +4,56 @@
 {{end}}
 
 {{define "head_tags"}}
-    <style>
-        .vs-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--card-bg);
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .vs-table th {
-            background: #667eea;
-            color: white;
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-        }
-
-        .vs-table td {
-            padding: 10px 12px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .vs-table tr:last-child td {
-            border-bottom: none;
-        }
-
-        .vs-table tr:hover {
-            background: var(--hover-bg);
-        }
-
-        .vs-input {
-            width: 100%;                /* Stretches to fill the table cell */
-            max-width: 120px;           /* Caps the width so they don't look comically large on ultra-widescreens */
-            min-width: 60px;            /* Keeps them usable on smaller screens */
-            box-sizing: border-box;     /* Ensures border/padding don't break the 100% width */
-            padding: 8px 10px;
-            border: 2px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 14px;
-            text-align: center;
-        }
-
-        .vs-input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .member-name {
-            font-weight: 600;
-        }
-
-        .member-rank {
-            color: var(--text-secondary);
-            font-size: 0.9em;
-            margin-left: 8px;
-        }
-
-        .total-column {
-            font-weight: bold;
-            color: #667eea;
-            font-size: 1.1em;
-        }
-
-        .controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        .week-selector {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .week-nav-btn {
-            padding: 10px 20px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-
-        .week-nav-btn:hover {
-            background: #5568d3;
-            transform: translateY(-2px);
-        }
-
-        .week-info h3 {
-            margin: 0;
-            color: var(--text-primary);
-        }
-
-        .week-subtitle {
-            margin: 5px 0 0 0;
-            color: var(--text-secondary);
-            font-size: 0.9em;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-        }
-
-        .save-btn {
-            padding: 10px 20px;
-            background: #28a745;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-
-        .save-btn:hover {
-            background: #218838;
-            transform: translateY(-2px);
-        }
-
-        .clear-btn {
-            padding: 10px 20px;
-            background: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-
-        .clear-btn:hover {
-            background: #c82333;
-            transform: translateY(-2px);
-        }
-
-        .search-box {
-            width: 100%;
-            max-width: 300px;
-            padding: 10px 15px;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 14px;
-        }
-
-        .search-box:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .table-wrapper {
-            overflow-x: auto;
-        }
-
-        @media (max-width: 768px) {
-            .vs-input {
-                width: 50px;
-                padding: 4px 6px;
-                font-size: 12px;
-            }
-
-            .vs-table th,
-            .vs-table td {
-                padding: 8px 6px;
-                font-size: 13px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="vs.css">
 {{end}}
+
 {{define "content"}}
-            <section class="controls">
-                <div class="week-selector">
-                    <button id="prev-week" class="week-nav-btn">← Previous Week</button>
-                    <div class="week-info">
-                        <h3 id="week-display">Week of January 7, 2025</h3>
-                        <p class="week-subtitle">Monday - Saturday VS Points</p>
-                    </div>
-                    <button id="next-week" class="week-nav-btn">Next Week →</button>
-                </div>
-                <div class="action-buttons">
-                    <button id="save-btn" class="save-btn">💾 Save Points</button>
-                    <button id="clear-btn" class="clear-btn">🗑️ Clear Week</button>
-                </div>
-            </section>
+    <section class="controls">
+        <div class="week-selector">
+            <button id="prev-week" class="week-nav-btn">← Previous Week</button>
+            <div class="week-info">
+                <h3 id="week-display">Loading...</h3>
+                <p class="week-subtitle">Day 1 - Day 6 VS Points</p>
+            </div>
+            <button id="next-week" class="week-nav-btn">Next Week →</button>
+        </div>
+        <div class="action-buttons" id="admin-actions">
+            <button id="toggle-mode-btn" class="save-btn calc-mode-btn hidden">🧮 Enter Weekly Totals</button>
+            
+            <input type="file" id="csv-file-input" accept=".csv" class="hidden">
+            <button id="csv-import-btn" class="save-btn csv-btn hidden">📄 Import CSV</button>
+            <button id="save-btn" class="save-btn hidden">💾 Save Points</button>
+            <button id="clear-btn" class="clear-btn hidden">🗑️ Clear Week</button>
+        </div>
+    </section>
 
-            <section>
-                <input type="text" id="search-box" class="search-box" placeholder="🔍 Search member...">
-            </section>
+    <section>
+        <input type="text" id="search-box" class="search-box" placeholder="🔍 Search member...">
+    </section>
 
-            <section class="table-wrapper">
-                <table class="vs-table" id="vs-table">
-                    <thead>
-                        <tr>
-                            <th>Member</th>
-                            <th>Monday</th>
-                            <th>Tuesday</th>
-                            <th>Wednesday</th>
-                            <th>Thursday</th>
-                            <th>Friday</th>
-                            <th>Saturday</th>
-                            <th>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody id="vs-tbody">
-                        <tr>
-                            <td colspan="8" style="text-align: center; padding: 20px;">Loading members...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </section>
+    <section class="table-wrapper">
+        <table class="vs-table" id="vs-table">
+            <thead>
+                <tr>
+                    <th data-sort="name" class="sort-asc">Member</th>
+                    <th data-sort="monday">Day 1</th>
+                    <th data-sort="tuesday">Day 2</th>
+                    <th data-sort="wednesday">Day 3</th>
+                    <th data-sort="thursday">Day 4</th>
+                    <th data-sort="friday">Day 5</th>
+                    <th id="day6-header" data-sort="saturday">Day 6</th>
+                    <th id="total-header" data-sort="total">Total</th>
+                </tr>
+            </thead>
+            <tbody id="vs-tbody">
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 20px;">Loading members...</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
 {{end}}
+
 {{define "scripts"}}
     <script src="vs.js"></script>
 {{end}}

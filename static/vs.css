@@ -1,0 +1,224 @@
+/* static/vs.css - Styles for VS Points page */
+
+.vs-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card-bg);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.vs-table th {
+    background: #667eea;
+    color: white;
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    cursor: pointer; /* Added for sorting */
+    user-select: none;
+    transition: background 0.2s ease;
+}
+
+.vs-table th:hover {
+    background: #5568d3;
+}
+
+/* Sorting Indicators */
+.vs-table th.sort-asc::after { content: " ▲"; font-size: 0.8em; }
+.vs-table th.sort-desc::after { content: " ▼"; font-size: 0.8em; }
+
+.vs-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.vs-table tr:last-child td {
+    border-bottom: none;
+}
+
+.vs-table tr:hover {
+    background: var(--hover-bg);
+}
+
+.vs-input {
+    width: 100%;
+    max-width: 120px;
+    min-width: 60px;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+    text-align: center;
+    background: var(--input-bg);
+    color: var(--text-primary);
+}
+
+.vs-input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+/* Read-only state styling */
+.vs-input[readonly] {
+    background: transparent;
+    border: none;
+    pointer-events: none;
+    font-weight: 500;
+}
+
+.member-name {
+    font-weight: 600;
+}
+
+.member-rank {
+    color: var(--text-secondary);
+    font-size: 0.9em;
+    margin-left: 8px;
+}
+
+/* Update your .total-column to this (Removed display: flex) */
+.total-column {
+    font-weight: bold;
+    color: #667eea;
+    font-size: 1.1em;
+    text-align: center;
+}
+
+/* Add these new styles at the bottom of the file */
+.calc-mode-btn {
+    background: #17a2b8;
+}
+.calc-mode-btn:hover {
+    background: #138496;
+}
+
+/* Highlights the input boxes when in Total Calculation mode */
+.total-mode-input {
+    background-color: #fff3cd !important;
+    border-color: #ffc107 !important;
+    color: #000000 !important; /* Forces black text for contrast in Dark Mode */
+    font-weight: bold;
+}
+
+.calc-btn {
+    background: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.8em;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+.calc-btn:hover { background: #138496; }
+
+.controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.week-selector {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.week-nav-btn {
+    padding: 10px 20px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.week-nav-btn:hover {
+    background: #5568d3;
+    transform: translateY(-2px);
+}
+
+.week-nav-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+    opacity: 0.6;
+}
+
+.week-info h3 {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.week-subtitle {
+    margin: 5px 0 0 0;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.save-btn {
+    padding: 10px 20px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.save-btn:hover { background: #218838; transform: translateY(-2px); }
+
+.csv-btn {
+    background: #fd7e14;
+}
+.csv-btn:hover { background: #e86e10; }
+
+.clear-btn {
+    padding: 10px 20px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.clear-btn:hover { background: #c82333; transform: translateY(-2px); }
+
+.search-box {
+    width: 100%;
+    max-width: 300px;
+    padding: 10px 15px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+}
+
+.search-box:focus { outline: none; border-color: #667eea; }
+.table-wrapper { overflow-x: auto; }
+
+/* Hidden utility class for permissions */
+.hidden { display: none !important; }
+
+@media (max-width: 768px) {
+    .vs-input { width: 50px; padding: 4px 6px; font-size: 12px; }
+    .vs-table th, .vs-table td { padding: 8px 6px; font-size: 13px; }
+}
