@@ -1,3 +1,5 @@
+// files.js - Handles file management UI and interactions
+
 let canManageFiles = false;
 let canUploadFiles = false;
 let allFilesData = [];
@@ -65,13 +67,13 @@ async function openFile(id, type, title) {
         document.getElementById('image-modal-img').src = `/api/files/download/${id}`;
         document.getElementById('image-modal').style.display = 'block';
     } else {
+        // 1. Fetch the token and internal routing data from Go
         const res = await fetch(`/api/files/${id}/wopi-token`);
-        const { token, collabora_domain } = await res.json();
+        const { token, collabora_domain, wopi_src } = await res.json();
         
         const protocol = window.location.protocol; 
-        const host = window.location.host;
         
-        // Match Collabora theme to your app's theme.js state
+        // 2. Match Collabora theme to your app's theme.js state
         let themePref = localStorage.getItem('lastwar-theme-preference') || 'auto';
         let isDark = false;
         if (themePref === 'dark') {
@@ -81,8 +83,8 @@ async function openFile(id, type, title) {
         }
         const themeParam = isDark ? '&theme=dark' : '&theme=light';
         
-        const wopiSrc = `${protocol}//${host}/wopi/files/${id}`;
-        const collaboraUrl = `${protocol}//${collabora_domain}/browser/dist/cool.html?WOPISrc=${encodeURIComponent(wopiSrc)}${themeParam}`;
+        // 3. Build the external URL for the browser, but inject the internal route for the server
+        const collaboraUrl = `${protocol}//${collabora_domain}/browser/dist/cool.html?WOPISrc=${encodeURIComponent(wopi_src)}${themeParam}`;
         
         const iframeHtml = `
             <form id="wopi-form" action="${collaboraUrl}" method="post" target="collabora-iframe" style="display:none;">
@@ -93,6 +95,8 @@ async function openFile(id, type, title) {
         
         document.getElementById('document-modal-body').innerHTML = iframeHtml;
         document.getElementById('document-modal').style.display = 'flex';
+        
+        // Submit the hidden form to securely pass the token into the iframe
         document.getElementById('wopi-form').submit();
     }
 }
@@ -186,3 +190,5 @@ async function handleEdit(e) {
         btn.textContent = "Save Changes";
     }
 }
+
+// end of files.js

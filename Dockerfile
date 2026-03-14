@@ -1,41 +1,47 @@
-# Build stage
-FROM golang:1.21-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache gcc musl-dev sqlite-dev
+# Stage 1: Build the Go binary with CGO and Tesseract using Go 1.25
+FROM golang:1.25-bookworm AS builder
 
 WORKDIR /app
 
-# Copy go mod files
-COPY go.mod go.sum ./
-RUN go mod download
+# Install the C++ Tesseract/Leptonica dependencies required by gosseract
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    libtesseract-dev \
+    libleptonica-dev \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy source code
+# Copy the entire project first
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=1 GOOS=linux go build -o main .
+# Safely tidy and download dependencies natively in 1.25
+RUN go mod tidy
+RUN go mod download
 
-# Runtime stage
-FROM alpine:latest
+# Build the application (CGO_ENABLED=1 is required for gosseract)
+RUN CGO_ENABLED=1 GOOS=linux go build -o alliance-manager .
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates sqlite-libs
+# Stage 2: Clean runtime environment
+FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/main .
+# Install only the runtime Tesseract packages (no compilers needed)
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the compiled binary and web assets from the builder stage
+COPY --from=builder /app/alliance-manager .
+COPY --from=builder /app/templates ./templates
 COPY --from=builder /app/static ./static
+COPY --from=builder /app/migrations ./migrations
 
-# Create data directory for SQLite database
-RUN mkdir -p /data
-
-# Expose port
+# Expose the web port
 EXPOSE 8080
 
-# Set environment variable for database location
-ENV DATABASE_PATH=/data/alliance.db
-
-# Run the application
-CMD ["./main"]
+# Start the application
+CMD ["./alliance-manager"]

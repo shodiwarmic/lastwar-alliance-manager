@@ -46,3 +46,5 @@ logs/
 tmp/
 temp/
 files-dev/
+uploads/
+data/

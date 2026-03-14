@@ -6,8 +6,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${GREEN}Last War Alliance Manager - Update Script${NC}"
-echo "=========================================="
+echo -e "${GREEN}Last War Alliance Manager - Docker Update Script${NC}"
+echo "================================================="
 echo ""
 
 if [[ $EUID -eq 0 ]]; then
@@ -15,79 +15,13 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
-APP_NAME="lastwar"
-APP_USER="lastwar"
-APP_DIR="/opt/lastwar"
-DATA_DIR="/var/lib/lastwar"
-BACKUP_DIR="/var/backups/lastwar"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/var/backups/lastwar"
+sudo mkdir -p $BACKUP_DIR
 
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$ID
-    DISTRO_CODENAME=$VERSION_CODENAME
-else
-    echo -e "${RED}Cannot detect OS. This script requires Debian or Ubuntu.${NC}"
-    exit 1
-fi
-
-if [ "$OS" != "debian" ] && [ "$OS" != "ubuntu" ]; then
-    echo -e "${RED}Unsupported OS: $OS. This script requires Debian or Ubuntu.${NC}"
-    exit 1
-fi
-
-if [ ! -d "$APP_DIR" ]; then
-    echo -e "${RED}Application directory not found: $APP_DIR${NC}"
-    exit 1
-fi
-
-# Upgrade legacy environments
-if sudo test -f "$APP_DIR/.env"; then
-    set -a
-    source /dev/stdin <<< "$(sudo cat $APP_DIR/.env)"
-    set +a
-fi
-
-if [ -z "$APP_DOMAIN" ]; then
-    APP_DOMAIN=$(grep -oP '^([a-zA-Z0-9.-]+)\s*\{' /etc/caddy/Caddyfile 2>/dev/null | head -n 1 | tr -d ' {')
-    if [ -z "$APP_DOMAIN" ]; then
-        APP_DOMAIN=$(grep -oP 'server_name\s+\K[^; ]+' /etc/nginx/sites-available/lastwar 2>/dev/null | head -n 1)
-    fi
-fi
-
-if [ -z "$COLLABORA_DOMAIN" ]; then
-    echo ""
-    echo -e "${YELLOW}Document Sharing Upgrade Detected${NC}"
-    read -p "Enter your new Collabora domain name (default: collabora.$APP_DOMAIN): " NEW_COL_DOMAIN
-    COLLABORA_DOMAIN=${NEW_COL_DOMAIN:-collabora.$APP_DOMAIN}
-
-    echo ""
-    echo -e "${RED}!!! DNS CONFIGURATION REQUIRED !!!${NC}"
-    echo -e "${YELLOW}Before continuing, your DNS provider MUST have an A-Record pointing to this server for:${NC}"
-    echo " -> $COLLABORA_DOMAIN"
-    read -p "Press Enter to confirm DNS is configured, or Ctrl+C to abort..."
-    
-    echo "APP_DOMAIN=$APP_DOMAIN" | sudo tee -a $APP_DIR/.env >/dev/null
-    echo "COLLABORA_DOMAIN=$COLLABORA_DOMAIN" | sudo tee -a $APP_DIR/.env >/dev/null
-    
-    if [ -f "/etc/caddy/Caddyfile" ]; then
-        if ! grep -q "$COLLABORA_DOMAIN" /etc/caddy/Caddyfile; then
-            sudo tee -a /etc/caddy/Caddyfile > /dev/null <<EOF
-
-$COLLABORA_DOMAIN {
-    encode gzip
-    reverse_proxy localhost:9980
-}
-EOF
-            sudo systemctl restart caddy
-        fi
-    else
-        echo -e "${YELLOW}Warning: Please manually add $COLLABORA_DOMAIN to your Nginx configuration.${NC}"
-    fi
-fi
-
+# Determine update method (Git vs SCP)
 UPDATE_METHOD=""
-if [ -d "$APP_DIR/.git" ]; then
+if [ -d ".git" ]; then
     UPDATE_METHOD="git"
 elif [ "$1" = "--git" ]; then
     UPDATE_METHOD="git"
@@ -96,32 +30,95 @@ else
 fi
 
 if [ "$1" = "--setup-git" ]; then
-    if [ -z "$2" ]; then exit 1; fi
+    if [ -z "$2" ]; then echo "Missing repo URL"; exit 1; fi
     REPO_URL="$2"
-    sudo mkdir -p $BACKUP_DIR
-    sudo tar -czf $BACKUP_DIR/app_before_git_$TIMESTAMP.tar.gz -C $APP_DIR --exclude='.git' .
-    cd $APP_DIR
-    sudo -u $APP_USER git init
-    sudo -u $APP_USER git remote add origin $REPO_URL
-    sudo -u $APP_USER git fetch
-    sudo -u $APP_USER git reset --hard origin/main || sudo -u $APP_USER git reset --hard origin/master
+    sudo tar -czf $BACKUP_DIR/app_before_git_$TIMESTAMP.tar.gz -C . --exclude='.git' .
+    git init
+    git remote add origin $REPO_URL
+    git fetch
+    git reset --hard origin/main || git reset --hard origin/master
     exit 0
 fi
 
-echo -e "${YELLOW}[1/8] Creating backup...${NC}"
-sudo mkdir -p $BACKUP_DIR
-sudo tar -czf $BACKUP_DIR/app_$TIMESTAMP.tar.gz -C $APP_DIR --exclude='.git' .
-sudo sqlite3 $DATA_DIR/alliance.db ".backup '$BACKUP_DIR/db_$TIMESTAMP.db'"
+echo -e "${YELLOW}[1/5] Creating backups...${NC}"
+sudo tar -czf $BACKUP_DIR/app_$TIMESTAMP.tar.gz -C . --exclude='.git' .
+if [ -f "./data/alliance.db" ]; then
+    sudo sqlite3 ./data/alliance.db ".backup '$BACKUP_DIR/db_$TIMESTAMP.db'"
+elif [ -f "/var/lib/lastwar/alliance.db" ]; then
+    sudo sqlite3 /var/lib/lastwar/alliance.db ".backup '$BACKUP_DIR/db_$TIMESTAMP.db'"
+fi
 
-echo -e "${YELLOW}[2/8] Stopping application...${NC}"
-sudo systemctl stop $APP_NAME
+# --- LEGACY MIGRATION BLOCK ---
+# This block runs only once to transition a server from systemd to Docker
+if systemctl is-active --quiet lastwar.service 2>/dev/null || [ -d "/opt/lastwar" ]; then
+    echo -e "${YELLOW}Legacy bare-metal deployment detected. Migrating to Docker...${NC}"
+    
+    # 1. Stop legacy service
+    if systemctl is-active --quiet lastwar.service 2>/dev/null; then
+        sudo systemctl stop lastwar.service
+        sudo systemctl disable lastwar.service
+        sudo rm -f /etc/systemd/system/lastwar.service
+        sudo systemctl daemon-reload
+    fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    # 2. Kill standalone Collabora container if it exists
+    if sudo docker ps | grep -q "collabora/code"; then
+        sudo docker stop $(sudo docker ps -q --filter ancestor=collabora/code)
+    fi
 
-echo -e "${YELLOW}[3/8] Updating system dependencies & Docker...${NC}"
-sudo apt update
-sudo apt install -y sqlite3 tesseract-ocr tesseract-ocr-all libtesseract-dev libleptonica-dev
+    # 3. Create Docker volume directories
+    mkdir -p ./data ./uploads
 
+    # 4. Migrate Database
+    if [ -f "/var/lib/lastwar/alliance.db" ]; then
+        sudo cp /var/lib/lastwar/alliance.db ./data/
+        sudo chown $USER:$USER ./data/alliance.db
+    fi
+
+    # 5. Migrate Files
+    if [ -d "/var/lib/lastwar/files" ] && [ "$(ls -A /var/lib/lastwar/files)" ]; then
+        sudo cp -r /var/lib/lastwar/files/* ./uploads/
+        sudo chown -R $USER:$USER ./uploads/
+    fi
+
+    # 6. Migrate Env File
+    if [ -f "/opt/lastwar/.env" ]; then
+        sudo cp /opt/lastwar/.env ./.env
+        sudo chown $USER:$USER ./.env
+        
+        # Ensure new Docker paths are set in the .env
+        sed -i 's|DATABASE_PATH=.*|DATABASE_PATH=/app/data/alliance.db|g' ./.env
+        sed -i 's|STORAGE_PATH=.*|STORAGE_PATH=/app/uploads|g' ./.env
+    fi
+
+    # 7. Clean up orphaned user (Security)
+    if id "lastwar" &>/dev/null; then
+        sudo userdel lastwar || true
+    fi
+fi
+# --- END MIGRATION BLOCK ---
+
+echo -e "${YELLOW}[2/5] Updating code...${NC}"
+if [ "$UPDATE_METHOD" = "git" ]; then
+    git stash push -m "Auto-stash before update $TIMESTAMP"
+    git pull origin main || git pull origin master
+    if git stash list | grep -q "Auto-stash"; then
+        git stash pop || true
+    fi
+else
+    echo "Assuming files were copied via SCP."
+fi
+
+# Ensure .env exists
+if [ ! -f ".env" ]; then
+    echo "Generating secure .env file..."
+    echo "SESSION_KEY=$(openssl rand -hex 32)" > .env
+    echo "DATABASE_PATH=/app/data/alliance.db" >> .env
+    echo "STORAGE_PATH=/app/uploads" >> .env
+    echo "PORT=8080" >> .env
+fi
+
+echo -e "${YELLOW}[3/5] Updating Docker...${NC}"
 if ! command -v docker &> /dev/null; then
     sudo apt-get update
     sudo apt-get install -y ca-certificates curl
@@ -133,73 +130,67 @@ if ! command -v docker &> /dev/null; then
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
 
-# Ensure Docker daemon is running before querying it
 if ! sudo systemctl is-active --quiet docker; then
-    echo "Starting Docker service..."
     sudo systemctl enable --now docker
 fi
 
-if ! sudo docker ps | grep -q "collabora/code"; then
-    echo "Starting Collabora container..."
-    sudo docker run -t -d -p 9980:9980 \
-        -e "domain=$APP_DOMAIN" \
-        -e "aliasgroup1=https://$APP_DOMAIN:443" \
-        -e "extra_params=--o:ssl.enable=false --o:ssl.termination=true" \
-        --restart always \
-        --cap-add MKNOD \
-        collabora/code
-fi
+echo -e "${YELLOW}Cleaning up legacy standalone containers...${NC}"
+# Find collabora containers, exclude those managed by Compose, and cleanly remove them
+sudo docker ps -a --filter "ancestor=collabora/code" --format '{{.ID}}\t{{.Labels}}' | grep -v "com.docker.compose.project" | awk '{print $1}' | xargs -r sudo docker stop
+sudo docker ps -a --filter "ancestor=collabora/code" --format '{{.ID}}\t{{.Labels}}' | grep -v "com.docker.compose.project" | awk '{print $1}' | xargs -r sudo docker rm
 
-if [ "$UPDATE_METHOD" = "git" ]; then
-    echo -e "${YELLOW}[4/8] Pulling latest changes from git...${NC}"
-    cd $APP_DIR
-    sudo -u $APP_USER git stash push -m "Auto-stash before update $TIMESTAMP"
-    sudo -u $APP_USER git pull origin main || sudo -u $APP_USER git pull origin master
-    if sudo -u $APP_USER git stash list | grep -q "Auto-stash"; then
-        sudo -u $APP_USER git stash pop || true
+echo -e "${YELLOW}Checking reverse proxy security configurations...${NC}"
+if [ -f "/etc/caddy/Caddyfile" ]; then
+    # Check if the modern CSP frame-ancestors rule is missing
+    if ! grep -q "frame-ancestors" /etc/caddy/Caddyfile; then
+        echo -e "${YELLOW}Legacy Caddyfile detected. Upgrading security headers...${NC}"
+        
+        # Load environment variables so we know the domains
+        set -a; source .env; set +a
+        
+        # Backup the existing configuration just in case
+        sudo cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.backup_$(date +%Y%m%d_%H%M%S)"
+        
+        sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
+$APP_DOMAIN {
+    reverse_proxy localhost:8080
+    encode gzip
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
+    }
+}
+
+$COLLABORA_DOMAIN {
+    encode gzip
+    reverse_proxy localhost:9980
+    header {
+        X-Content-Type-Options "nosniff"
+        Content-Security-Policy "frame-ancestors https://$APP_DOMAIN"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
+    }
+}
+EOF
+        sudo systemctl reload caddy
+        echo -e "${GREEN}Caddyfile upgraded and reloaded successfully! Backup saved.${NC}"
+    else
+        echo -e "${GREEN}Caddy security headers are already up to date.${NC}"
     fi
-else
-    echo -e "${YELLOW}[4/8] Copying new files...${NC}"
-    sudo cp "$SCRIPT_DIR/"*.go $APP_DIR/
-    sudo cp "$SCRIPT_DIR/go.mod" $APP_DIR/ 2>/dev/null || true
-    sudo cp "$SCRIPT_DIR/go.sum" $APP_DIR/ 2>/dev/null || true
-    sudo cp "$SCRIPT_DIR/"*.html $APP_DIR/ 2>/dev/null || true
-    if [ -d "$SCRIPT_DIR/static" ]; then sudo cp -r "$SCRIPT_DIR/static/"* $APP_DIR/static/; fi
-    if [ -d "$SCRIPT_DIR/templates" ]; then sudo cp -r "$SCRIPT_DIR/templates/"* $APP_DIR/templates/; fi
 fi
 
-export PATH=$PATH:/usr/local/go/bin
-echo -e "${YELLOW}[6/8] Building application...${NC}"
-cd $APP_DIR
-if [ -f "go.mod" ]; then
-    sudo -u $APP_USER env PATH=$PATH:/usr/local/go/bin go mod download
-fi
-sudo -u $APP_USER env PATH=$PATH:/usr/local/go/bin go build -o alliance-manager .
+echo -e "${YELLOW}[4/5] Building and starting Docker containers...${NC}"
+docker compose up -d --build
 
-if [ ! -f "alliance-manager" ]; then
-    sudo tar -xzf $BACKUP_DIR/app_$TIMESTAMP.tar.gz -C $APP_DIR
-    sudo systemctl start $APP_NAME
-    exit 1
-fi
-
-sudo chown -R $APP_USER:$APP_USER $APP_DIR/alliance-manager
-sudo chmod +x $APP_DIR/alliance-manager
-
-echo -e "${YELLOW}[8/8] Starting application...${NC}"
-sudo systemctl start $APP_NAME
-sleep 2
-
-if sudo systemctl is-active --quiet $APP_NAME; then
-    echo -e "${GREEN}✓ Application is running${NC}"
-else
-    sudo systemctl stop $APP_NAME
-    sudo tar -xzf $BACKUP_DIR/app_$TIMESTAMP.tar.gz -C $APP_DIR
-    sudo systemctl start $APP_NAME
-    exit 1
-fi
-
+echo -e "${YELLOW}[5/5] Cleaning up old backups...${NC}"
 cd $BACKUP_DIR
 ls -t app_*.tar.gz 2>/dev/null | tail -n +11 | xargs -r sudo rm
 ls -t db_*.db 2>/dev/null | tail -n +11 | xargs -r sudo rm
 
-echo -e "${GREEN}Update Complete!${NC}"
+echo -e "${GREEN}Update Complete! Application is running in Docker.${NC}"

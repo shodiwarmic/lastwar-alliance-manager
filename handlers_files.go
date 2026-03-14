@@ -1,3 +1,5 @@
+// handlers_files.go - Handles file management and WOPI integration for LastWar alliance files.
+
 package main
 
 import (
@@ -298,10 +300,17 @@ func generateWOPIToken(w http.ResponseWriter, r *http.Request) {
 		collaboraDomain = "collabora." + strings.Split(r.Host, ":")[0]
 	}
 
+	// --- DOCKER NETWORKING FIX ---
+	// Generate the internal WOPISrc so Collabora talks directly to Go
+	// over the private Docker bridge network, bypassing the firewall entirely.
+	internalHost := "alliance-manager:8080"
+	wopiSrc := fmt.Sprintf("http://%s/wopi/files/%d", internalHost, fileID)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"token":            tokenString,
 		"collabora_domain": collaboraDomain,
+		"wopi_src":         wopiSrc, // Passing the internal route down to the frontend
 	})
 }
 
@@ -379,3 +388,5 @@ func wopiActionHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 }
+
+// end of handlers_files.go

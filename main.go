@@ -293,11 +293,24 @@ func main() {
 		sessionKey = sessionKey + strings.Repeat("x", 32-len(sessionKey))
 	}
 
-	csrfMiddleware := csrf.Protect(
-		[]byte(sessionKey[:32]),
+	// Base CSRF options
+	csrfOpts := []csrf.Option{
 		csrf.Secure(os.Getenv("PRODUCTION") == "true"),
 		csrf.Path("/"),
-	)
+	}
+
+	// Add trusted origins for local testing and reverse proxies
+	// Note: gorilla/csrf expects domains/IPs without the scheme (http://) or port (:8080)
+	if trusted := os.Getenv("TRUSTED_ORIGINS"); trusted != "" {
+		origins := strings.Split(trusted, ",")
+		for i, o := range origins {
+			origins[i] = strings.TrimSpace(o)
+		}
+		csrfOpts = append(csrfOpts, csrf.TrustedOrigins(origins))
+		slog.Info("Added trusted origins for CSRF", "origins", origins)
+	}
+
+	csrfMiddleware := csrf.Protect([]byte(sessionKey[:32]), csrfOpts...)
 
 	// Create the protected router handler
 	protectedHandler := csrfMiddleware(router)

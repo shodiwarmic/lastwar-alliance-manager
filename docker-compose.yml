@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # The Go Application
+  alliance-manager:
+    build: .
+    container_name: alliance-manager
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_PATH=/app/data/alliance.db
+      - STORAGE_PATH=/app/uploads
+      - COLLABORA_INTERNAL_URL=http://collabora:9980
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    depends_on:
+      - collabora
+    networks:
+      - lastwar-net
+
+  # The Collabora Online Development Edition (CODE)
+  collabora:
+    image: collabora/code
+    container_name: lastwar-collabora
+    restart: unless-stopped
+    # We don't need to expose 9980 to the host if Caddy/Nginx handles it, 
+    # but keeping it exposed for now helps with local testing.
+    ports:
+      - "9980:9980"
+    environment:
+      - domain=${APP_DOMAIN}
+      - aliasgroup1=https://${APP_DOMAIN}:443
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true
+    cap_add:
+      - MKNOD
+    networks:
+      - lastwar-net
+
+networks:
+  lastwar-net:
+    driver: bridge
