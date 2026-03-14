@@ -3,64 +3,59 @@
 ## One-Command Installation (Debian/Ubuntu)
 
 ```bash
+git clone [https://github.com/yourusername/lastwar.git](https://github.com/yourusername/lastwar.git) /opt/lastwar
+cd /opt/lastwar
 chmod +x install.sh
 sudo ./install.sh
 ```
 
-The script will:
-- ✅ Install Go, Docker, and system dependencies
-- ✅ Create system user and directories
-- ✅ Build the Go application
-- ✅ Provision the Collabora Document Engine container
-- ✅ Generate secure session key and `.env` file
-- ✅ Configure systemd service
-- ✅ Setup firewall (UFW)
-- ✅ Install Caddy or Nginx with dual-domain routing
-- ✅ Configure Let's Encrypt SSL
-- ✅ Setup fail2ban
-- ✅ Configure daily backups
+The script will automatically:
+- ✅ Install Docker and Docker Compose
+- ✅ Create persistent data directories
+- ✅ Generate a secure session key and `.env` file
+- ✅ Build the Go application and Collabora containers via Docker Compose
+- ✅ Install Caddy with dual-domain routing and automatic SSL
+- ✅ Apply strict Content-Security-Policy headers for document security
+- ✅ Setup firewall (UFW) and automated database backups
 
-## Manual Quick Start
+---
+
+## Manual Quick Start (Docker Compose)
+
+If you prefer to skip the script and spin it up manually:
 
 ### 1. Prerequisites
-```bash
-# TWO Domains pointing to your server IP (e.g., app.domain.com and collabora.domain.com)
-# Ports 80 and 443 open in firewall
-# Docker Engine installed (for the document server)
-```
+- **DNS**: Two domains pointing to your server IP (e.g., `app.domain.com` and `collabora.domain.com`)
+- **Firewall**: Ports 80 and 443 open
+- **Software**: Git, Docker, and Docker Compose installed
 
-### 2. Generate Session Key
+### 2. Prepare Environment
 ```bash
-openssl rand -hex 32
-```
+git clone [https://github.com/yourusername/lastwar.git](https://github.com/yourusername/lastwar.git) /opt/lastwar
+cd /opt/lastwar
 
-### 3. Create Environment File
-```bash
+# Create volume directories
+mkdir -p ./data ./uploads
+
+# Generate environment file
 cat > .env << EOF
-DATABASE_PATH=/var/lib/lastwar/alliance.db
-SESSION_KEY=your-generated-key-here
+DATABASE_PATH=/app/data/alliance.db
+STORAGE_PATH=/app/uploads
+SESSION_KEY=$(openssl rand -hex 32)
 PRODUCTION=true
 HTTPS=true
-PORT=8080
-APP_DOMAIN=your-domain.com
-COLLABORA_DOMAIN=collabora.your-domain.com
+APP_DOMAIN=app.yourdomain.com
+COLLABORA_DOMAIN=collabora.yourdomain.com
+TRUSTED_ORIGINS=localhost:8080, 127.0.0.1:8080
 EOF
 ```
 
-### 4. Start Collabora Container
+### 3. Start the Application Stack
 ```bash
-sudo docker run -t -d -p 9980:9980 \
-    -e "domain=your-domain.com" \
-    -e "aliasgroup1=[https://your-domain.com:443](https://your-domain.com:443)" \
-    -e "extra_params=--o:ssl.enable=false --o:ssl.termination=true" \
-    --restart always \
-    --cap-add MKNOD \
-    collabora/code
+docker compose up -d --build
 ```
 
-### 5. Choose Your Reverse Proxy
-
-#### Option A: Caddy (Recommended - Automatic HTTPS)
+### 4. Setup Reverse Proxy (Caddy - Recommended)
 ```bash
 # Install Caddy
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
@@ -68,245 +63,98 @@ curl -1sLf '[https://dl.cloudsmith.io/public/caddy/stable/gpg.key](https://dl.cl
 curl -1sLf '[https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt](https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt)' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install caddy
 
-# Configure both domains
-echo "your-domain.com {
+# Configure proxy and security headers
+cat << 'EOF' | sudo tee /etc/caddy/Caddyfile
+app.yourdomain.com {
     reverse_proxy localhost:8080
+    header {
+        X-Frame-Options "DENY"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
 }
-collabora.your-domain.com {
+collabora.yourdomain.com {
     reverse_proxy localhost:9980
-}" | sudo tee /etc/caddy/Caddyfile
+    header {
+        Content-Security-Policy "frame-ancestors [https://app.yourdomain.com](https://app.yourdomain.com)"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
+}
+EOF
 
 sudo systemctl restart caddy
 ```
 
-#### Option B: Nginx + Certbot
-```bash
-# Install
-sudo apt install -y nginx certbot python3-certbot-nginx
-
-# Get certificates for both domains
-sudo certbot --nginx -d your-domain.com -d collabora.your-domain.com
-```
-*(Note: You must manually configure the Nginx server blocks for both ports 8080 and 9980. See DEPLOYMENT.md for the full configuration).*
-
-### 6. Start Application
-```bash
-# Build
-go build -o alliance-manager main.go
-
-# Run with environment
-export $(cat .env | xargs)
-./alliance-manager
-```
-
-Or use systemd service (see DEPLOYMENT.md).
+---
 
 ## Essential Commands
 
-### Service Management
+### Container Management
+Run these commands from inside your `/opt/lastwar` directory:
 ```bash
-sudo systemctl status lastwar      # Check app status
-sudo docker ps | grep collabora    # Check document server status
-sudo systemctl start lastwar       # Start service
-sudo systemctl stop lastwar        # Stop service
-sudo systemctl restart lastwar     # Restart service
-sudo journalctl -u lastwar -f      # View logs
-```
-
-### SSL Certificate
-```bash
-# Caddy (automatic renewal)
-sudo systemctl status caddy
-
-# Nginx (manual renewal test)
-sudo certbot renew --dry-run
+docker compose ps                 # Check container status
+docker compose logs -f            # View real-time logs for all services
+docker compose logs -f app        # View only Go backend logs
+docker compose restart            # Restart the stack
+docker compose down               # Stop and remove containers
 ```
 
 ### Backups
 ```bash
-# Manual backup
-sudo /usr/local/bin/backup-lastwar.sh
-
-# List backups
-ls -lh /var/backups/lastwar/
+# Manual database backup (from host machine)
+sqlite3 /opt/lastwar/data/alliance.db ".backup '/var/backups/lastwar/alliance_$(date +%Y%m%d_%H%M%S).db'"
 
 # Restore from backup
-sudo cp /var/backups/lastwar/alliance_YYYYMMDD_HHMMSS.db /var/lib/lastwar/alliance.db
-sudo chown lastwar:lastwar /var/lib/lastwar/alliance.db
-sudo systemctl restart lastwar
-```
-
-### Security Checks
-```bash
-# Check firewall
-sudo ufw status
-
-# Check fail2ban
-sudo fail2ban-client status
-
-# Check banned IPs
-sudo fail2ban-client status sshd
-
-# Unban IP
-sudo fail2ban-client set sshd unbanip 123.123.123.123
-
-# Check SSL grade
-curl [https://www.ssllabs.com/ssltest/analyze.html?d=your-domain.com](https://www.ssllabs.com/ssltest/analyze.html?d=your-domain.com)
+sudo cp /var/backups/lastwar/alliance_YYYYMMDD_HHMMSS.db /opt/lastwar/data/alliance.db
+docker compose restart app
 ```
 
 ### Updates
 ```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Update application
 cd /opt/lastwar
-sudo ./update.sh --git
+sudo ./update.sh
 ```
+
+---
 
 ## Troubleshooting
 
-### Service won't start
+### App won't start or throws 502 Bad Gateway
 ```bash
-# Check logs
-sudo journalctl -u lastwar -n 100
+# Check if the Go container is crashing
+docker compose logs app
 
-# Check if ports are available
+# Check if ports are successfully mapped to the host
 sudo ss -tlnp | grep -E '(8080|9980)'
-
-# Check permissions
-sudo ls -la /var/lib/lastwar/
 ```
 
 ### Document Editor won't load
 ```bash
-# Verify Collabora is running
-sudo docker ps
+# Verify Collabora is healthy
+docker compose logs collabora
 
-# Check if Collabora domain is reachable
-curl -I [https://collabora.your-domain.com/hosting/discovery](https://collabora.your-domain.com/hosting/discovery)
+# Check if Collabora domain is reachable externally
+curl -I [https://collabora.yourdomain.com/hosting/discovery](https://collabora.yourdomain.com/hosting/discovery)
 ```
 
-### SSL certificate issues
-```bash
-# Caddy: Check logs
-sudo journalctl -u caddy -n 50
+### CSRF "Forbidden" Errors
+If you cannot log in or save settings, ensure your `TRUSTED_ORIGINS` in your `.env` file includes the exact domain or IP you are using to access the site, including the port (e.g., `TRUSTED_ORIGINS=192.168.1.50:8080`).
 
-# Nginx: Test configuration
-sudo nginx -t
-
-# Check DNS
-dig your-domain.com
-dig collabora.your-domain.com
-```
-
-### Database locked
-```bash
-# Check for open connections
-sudo lsof /var/lib/lastwar/alliance.db
-
-# Restart service
-sudo systemctl restart lastwar
-```
-
-### High memory usage
-```bash
-# Check memory
-free -h
-
-# Check Go memory
-sudo systemctl status lastwar
-
-# Check Docker memory
-sudo docker stats --no-stream
-```
-
-## Security Best Practices
-
-- ✅ Change default admin password immediately
-- ✅ Use strong, unique SESSION_KEY
-- ✅ Keep system updated (`sudo apt update && sudo apt upgrade`)
-- ✅ Monitor logs regularly
-- ✅ Test backups periodically
-- ✅ Use SSH keys instead of passwords
-- ✅ Enable 2FA for SSH (optional but recommended)
-- ✅ Monitor fail2ban bans
-- ✅ Use non-standard SSH port (optional)
-- ✅ Implement rate limiting (already configured)
-
-## Performance Optimization
-
-### For high traffic:
-```bash
-# Increase system limits
-echo "lastwar soft nofile 65535" | sudo tee -a /etc/security/limits.conf
-echo "lastwar hard nofile 65535" | sudo tee -a /etc/security/limits.conf
-
-# Enable kernel tweaks
-sudo sysctl -w net.core.somaxconn=65535
-sudo sysctl -w net.ipv4.tcp_max_syn_backlog=8192
-```
-
-### Enable compression in Caddy:
-Already configured in provided Caddyfile
-
-### Database optimization:
-```bash
-# Run VACUUM monthly
-echo "0 3 1 * * sqlite3 /var/lib/lastwar/alliance.db 'VACUUM;'" | sudo crontab -
-```
-
-## Monitoring (Simple)
-
-### Create monitoring script:
-```bash
-#!/bin/bash
-# /usr/local/bin/check-lastwar.sh
-
-if ! curl -f http://localhost:8080 > /dev/null 2>&1; then
-    echo "Service down at $(date)" >> /var/log/lastwar-monitor.log
-    systemctl restart lastwar
-fi
-
-if ! docker ps | grep -q collabora; then
-    echo "Collabora down at $(date)" >> /var/log/lastwar-monitor.log
-    docker restart $(docker ps -a -q --filter ancestor=collabora/code)
-fi
-```
-
-### Add to crontab (every 5 minutes):
-```bash
-*/5 * * * * /usr/local/bin/check-lastwar.sh
-```
-
-## Need Help?
-
-1. Check [DEPLOYMENT.md](DEPLOYMENT.md) for detailed guide
-2. Review logs: `sudo journalctl -u lastwar -f`
-3. Check application status: `sudo systemctl status lastwar`
-4. Check document engine: `sudo docker ps`
-5. Verify reverse proxy: `sudo systemctl status caddy` or `sudo systemctl status nginx`
-6. Test database: `sqlite3 /var/lib/lastwar/alliance.db ".tables"`
+---
 
 ## Quick Health Check
 
-Run this to verify everything is working:
+Run this to verify your Docker stack is operating correctly:
 
 ```bash
-# Check all services
-echo "=== Service Status ==="
-sudo systemctl is-active lastwar caddy fail2ban
-sudo docker ps --format '{{.Names}}: {{.Status}}'
+echo "=== Container Status ==="
+docker compose ps
 
 echo -e "\n=== Port Check ==="
 sudo ss -tlnp | grep -E '(8080|9980|80|443)'
 
-echo -e "\n=== SSL Certificate ==="
-echo | openssl s_client -servername your-domain.com -connect your-domain.com:443 2>/dev/null | openssl x509 -noout -dates
+echo -e "\n=== Database Check ==="
+sqlite3 ./data/alliance.db "SELECT COUNT(*) FROM members;"
 
-echo -e "\n=== Database ==="
-sudo sqlite3 /var/lib/lastwar/alliance.db "SELECT COUNT(*) FROM members;"
-
-echo -e "\n=== Recent Logs ==="
-sudo journalctl -u lastwar --since "5 minutes ago" --no-pager
+echo -e "\n=== Recent Application Logs ==="
+docker compose logs --tail=20 app
 ```
