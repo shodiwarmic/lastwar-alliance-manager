@@ -68,9 +68,7 @@ async function checkPermissions() {
         if (response.ok) {
             const data = await response.json();
             
-            // Matches the TitleCase keys from your RankPermissions struct
-            // and the 'is_admin' boolean from your map
-            canEditVS = data.is_admin || (data.permissions && data.permissions.ManageVSPoints);
+            canEditVS = data.is_admin || (data.permissions && data.permissions.manage_vs_points);
             
             if (canEditVS) {
                 const adminElements = ['save-btn', 'clear-btn', 'csv-import-btn', 'toggle-mode-btn'];
