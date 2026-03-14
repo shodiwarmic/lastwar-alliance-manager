@@ -332,20 +332,51 @@ header .user-info {
     padding: 0;
 }
 
+/* --- Navigation Desktop Styles --- */
+.hamburger-btn {
+    display: none; /* Hidden on desktop */
+}
+
+.nav-menu {
+    display: flex;
+    background: var(--card-bg);
+    border-bottom: 2px solid var(--border-color);
+    padding: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
 .nav-link {
     flex: 1;
-    padding: 15px 20px;
-    text-align: center;
+    min-width: 80px; /* Prevents squishing on small monitors */
+    padding: 12px 10px;
     text-decoration: none;
     color: var(--text-primary);
     font-weight: 600;
-    font-size: 1.1em;
+    font-size: 0.9em;
     transition: all 0.3s;
     border-bottom: 3px solid transparent;
+    
+    /* Flex column forces icon above text */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.nav-icon {
+    font-size: 1.4em;
+    line-height: 1;
+}
+
+.nav-text {
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .nav-link:hover {
-    background: var(--card-bg);
+    background: var(--container-bg);
     color: #667eea;
 }
 
@@ -359,17 +390,10 @@ header .user-info {
 .nav-link.admin-link {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white !important;
-    font-weight: bold;
 }
 
-.nav-link.admin-link:hover {
+.nav-link.admin-link:hover, .nav-link.admin-link.active {
     background: linear-gradient(135deg, #5568d3 0%, #653a8b 100%);
-    color: white !important;
-}
-
-.nav-link.admin-link.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white !important;
     border-bottom-color: white;
 }
 
@@ -942,9 +966,9 @@ button {
         border-radius: 8px;
     }
 
-    /* Header adjustments */
+    /* Header adjustments to fit hamburger button */
     header {
-        padding: 15px 10px 50px 10px;
+        padding: 60px 10px 20px 10px;
     }
 
     header h1 {
@@ -954,6 +978,27 @@ button {
 
     header h2 {
         font-size: 0.9em;
+    }
+
+    .hamburger-btn {
+        display: block;
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 8px;
+        font-size: 1em;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.3s;
+        z-index: 100;
+    }
+
+    .hamburger-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
     }
 
     /* User info - move below header */
@@ -999,20 +1044,39 @@ button {
         padding: 6px 15px;
     }
 
-    /* Navigation menu - make scrollable */
+    /* Navigation menu - Collapsible for mobile */
     .nav-menu {
-        overflow-x: auto;
-        overflow-y: hidden;
-        white-space: nowrap;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: thin;
+        display: none; /* Hidden by default */
+        flex-direction: column;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .nav-menu.show {
+        display: flex;
+        animation: slideDown 0.3s ease-out;
     }
 
     .nav-link {
-        display: inline-block;
-        padding: 12px 15px;
-        font-size: 0.9em;
-        min-width: fit-content;
+        flex-direction: row; /* Switch back to row for list layout */
+        justify-content: flex-start;
+        padding: 15px 20px;
+        font-size: 1.1em;
+        border-bottom: 1px solid var(--border-color);
+        border-left: 4px solid transparent;
+        min-width: 100%;
+    }
+
+    .nav-icon {
+        width: 30px; /* Fixed width ensures text aligns perfectly */
+        text-align: center;
+        margin-right: 15px;
+    }
+    
+    .nav-link.active {
+        border-bottom: 1px solid var(--border-color);
+        border-left-color: #667eea;
+        background: var(--container-bg);
     }
 
     /* Main content */
@@ -5391,5 +5455,24 @@ button {
     
     .card-header h2 {
         color: white;
+    }
+}
+
+/* High-Contrast Code Blocks */
+code {
+    background-color: var(--card-bg);
+    color: #e83e8c;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.95em;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+}
+
+@media (prefers-color-scheme: dark) {
+    code {
+        color: #ff79c6;
+        background-color: rgba(255, 255, 255, 0.1);
     }
 }

@@ -11,9 +11,17 @@
 </head>
 <body class="theme-auto">
     
+    <div id="csrf-container" style="display:none;">
+        {{.CSRFToken}}
+    </div>
+
     <div class="container {{block "main_class" .}}{{end}}">
         
         <header>
+            <button id="mobile-menu-btn" class="hamburger-btn" aria-label="Toggle Navigation">
+                ☰ Menu
+            </button>
+
             {{block "header_text" .}}
                 <h1>🎮 Last War: Survival</h1>
                 <h2>Alliance Manager</h2>
@@ -46,51 +54,75 @@
             </div>
         </header>
 
-        <nav class="nav-menu">
-            <a href="/" class="nav-link {{if eq .ActivePage "index"}}active{{end}}">👥 Members</a>
+        <nav class="nav-menu" id="main-nav">
+            <a href="/" class="nav-link {{if eq .ActivePage "index"}}active{{end}}">
+                <span class="nav-icon">👥</span><span class="nav-text">Members</span>
+            </a>
             
             {{if .Permissions.ViewFiles}}
-            <a href="/files" class="nav-link {{if eq .ActivePage "files"}}active{{end}}">📁 Files</a>
+            <a href="/files" class="nav-link {{if eq .ActivePage "files"}}active{{end}}">
+                <span class="nav-icon">📁</span><span class="nav-text">Files</span>
+            </a>
             {{end}}
             
             {{if .Permissions.ViewTrain}}
-            <a href="/train" class="nav-link {{if eq .ActivePage "train"}}active{{end}}">🚂 Train</a>
+            <a href="/train" class="nav-link {{if eq .ActivePage "train"}}active{{end}}">
+                <span class="nav-icon">🚂</span><span class="nav-text">Train</span>
+            </a>
             {{end}}
             
             {{if .Permissions.ViewAwards}}
-            <a href="/awards" class="nav-link {{if eq .ActivePage "awards"}}active{{end}}">🏆 Awards</a>
+            <a href="/awards" class="nav-link {{if eq .ActivePage "awards"}}active{{end}}">
+                <span class="nav-icon">🏆</span><span class="nav-text">Awards</span>
+            </a>
             {{end}}
             
             {{if .Permissions.ViewRecs}}
-            <a href="/recommendations" class="nav-link {{if eq .ActivePage "recommendations"}}active{{end}}">⭐ Recs</a>
+            <a href="/recommendations" class="nav-link {{if eq .ActivePage "recommendations"}}active{{end}}">
+                <span class="nav-icon">⭐</span><span class="nav-text">Recs</span>
+            </a>
             {{end}}
             
             {{if .Permissions.ViewDyno}}
-            <a href="/dyno" class="nav-link {{if eq .ActivePage "dyno"}}active{{end}}">💬 Dyno</a>
+            <a href="/dyno" class="nav-link {{if eq .ActivePage "dyno"}}active{{end}}">
+                <span class="nav-icon">💬</span><span class="nav-text">Dyno</span>
+            </a>
             {{end}}
             
             {{if .Permissions.ViewRankings}}
-            <a href="/rankings" class="nav-link {{if eq .ActivePage "rankings"}}active{{end}}">📊 Rankings</a>
+            <a href="/rankings" class="nav-link {{if eq .ActivePage "rankings"}}active{{end}}">
+                <span class="nav-icon">📊</span><span class="nav-text">Rankings</span>
+            </a>
             {{end}}
             
             {{if .Permissions.ViewStorm}}
-            <a href="/storm" class="nav-link {{if eq .ActivePage "storm"}}active{{end}}">🏜️ Storm</a>
+            <a href="/storm" class="nav-link {{if eq .ActivePage "storm"}}active{{end}}">
+                <span class="nav-icon">🏜️</span><span class="nav-text">Storm</span>
+            </a>
             {{end}}
             
             {{if .Permissions.ViewVSPoints}}
-            <a href="/vs" class="nav-link {{if eq .ActivePage "vs"}}active{{end}}">⚔️ VS Points</a>
+            <a href="/vs" class="nav-link {{if eq .ActivePage "vs"}}active{{end}}">
+                <span class="nav-icon">⚔️</span><span class="nav-text">VS Points</span>
+            </a>
             {{end}}
             
             {{if .Permissions.ViewUpload}}
-            <a href="/upload" class="nav-link {{if eq .ActivePage "upload"}}active{{end}}">📸 Upload</a>
+            <a href="/upload" class="nav-link {{if eq .ActivePage "upload"}}active{{end}}">
+                <span class="nav-icon">📸</span><span class="nav-text">Upload</span>
+            </a>
             {{end}}
             
             {{if .Permissions.ManageSettings}}
-            <a href="/settings" class="nav-link {{if eq .ActivePage "settings"}}active{{end}}">⚙️ Settings</a>
+            <a href="/settings" class="nav-link {{if eq .ActivePage "settings"}}active{{end}}">
+                <span class="nav-icon">⚙️</span><span class="nav-text">Settings</span>
+            </a>
             {{end}}
 
             {{if .IsAdmin}}
-            <a href="/admin" class="nav-link admin-link {{if eq .ActivePage "admin"}}active{{end}}">🔐 Admin</a>
+            <a href="/admin" class="nav-link admin-link {{if eq .ActivePage "admin"}}active{{end}}">
+                <span class="nav-icon">🔐</span><span class="nav-text">Admin</span>
+            </a>
             {{end}}
         </nav>
 
@@ -102,6 +134,34 @@
 
     <script src="/global.js"></script>
     
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // Mobile Menu Toggle
+            const menuBtn = document.getElementById("mobile-menu-btn");
+            const navMenu = document.getElementById("main-nav");
+            if(menuBtn && navMenu) {
+                menuBtn.addEventListener("click", () => {
+                    navMenu.classList.toggle("show");
+                });
+            }
+
+            // Global Fetch Interceptor to attach CSRF token to all mutations automatically
+            const csrfInput = document.querySelector('#csrf-container input[name="gorilla.csrf.Token"]');
+            const csrfToken = csrfInput ? csrfInput.value : '';
+
+            const originalFetch = window.fetch;
+            window.fetch = async function() {
+                let [resource, config] = arguments;
+                if (config && (config.method === 'POST' || config.method === 'PUT' || config.method === 'DELETE')) {
+                    config.headers = config.headers || {};
+                    // Attach token to standard header recognized by gorilla/csrf
+                    config.headers['X-CSRF-Token'] = csrfToken; 
+                }
+                return originalFetch(resource, config);
+            };
+        });
+    </script>
+
     {{block "scripts" .}}{{end}}
 </body>
 </html>
