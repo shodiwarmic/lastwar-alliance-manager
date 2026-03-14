@@ -133,34 +133,7 @@
     </div> {{block "modals" .}}{{end}}
 
     <script src="/global.js"></script>
-    
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            // Mobile Menu Toggle
-            const menuBtn = document.getElementById("mobile-menu-btn");
-            const navMenu = document.getElementById("main-nav");
-            if(menuBtn && navMenu) {
-                menuBtn.addEventListener("click", () => {
-                    navMenu.classList.toggle("show");
-                });
-            }
-
-            // Global Fetch Interceptor to attach CSRF token to all mutations automatically
-            const csrfInput = document.querySelector('#csrf-container input[name="gorilla.csrf.Token"]');
-            const csrfToken = csrfInput ? csrfInput.value : '';
-
-            const originalFetch = window.fetch;
-            window.fetch = async function() {
-                let [resource, config] = arguments;
-                if (config && (config.method === 'POST' || config.method === 'PUT' || config.method === 'DELETE')) {
-                    config.headers = config.headers || {};
-                    // Attach token to standard header recognized by gorilla/csrf
-                    config.headers['X-CSRF-Token'] = csrfToken; 
-                }
-                return originalFetch(resource, config);
-            };
-        });
-    </script>
+    <script src="/csrf.js"></script>
 
     {{block "scripts" .}}{{end}}
 </body>

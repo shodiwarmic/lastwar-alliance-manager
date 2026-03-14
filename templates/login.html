@@ -230,6 +230,9 @@
     </style>
 </head>
 <body>
+    <div id="csrf-container" style="display:none;">
+        {{.CSRFToken}}
+    </div>
     <div class="login-container">
         <div class="login-box">
             <div class="login-header">
@@ -288,6 +291,7 @@
         </div>
     </div>
 
+    <script src="/csrf.js"></script>
     <script>
         let currentPolicy = null;
 

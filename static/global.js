@@ -27,11 +27,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!confirm('Are you sure you want to logout?')) return;
             
             try {
-                await fetch('/api/logout', { method: 'POST' });
+                const response = await fetch('/api/logout', { method: 'POST' });
+                
+                // NEW: Force an error if the server rejected the logout
+                if (!response.ok) {
+                    throw new Error(`Server rejected logout: ${response.status} ${response.statusText}`);
+                }
+                
                 window.location.href = '/login'; 
             } catch (error) {
                 console.error('Logout failed:', error);
-                window.location.href = '/login';
+                alert('Logout failed! Check the F12 Developer Console for the exact error.');
             }
         });
     }
