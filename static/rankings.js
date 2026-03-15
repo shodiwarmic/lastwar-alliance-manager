@@ -164,7 +164,7 @@ function renderGrowthTable(data) {
         <tr>
             <td><strong>${m.name}</strong></td>
             <td><span class="rank-badge rank-${m.rank}">${m.rank}</span></td>
-            <td style="font-weight: 600; color: #2d3748;">${formatNumber(m.current_power)}</td>
+            <td style="font-weight: 600; color: var(--text-primary);">${formatNumber(m.current_power)}</td>
             <td>${formatGrowth(m.growth_7d)}</td>
             <td>${formatGrowth(m.growth_30d)}</td>
         </tr>
@@ -274,11 +274,11 @@ function renderVSWeek(weekDate) {
         }
     });
 
-    // 2. Render Table
+    // 2. Render Table (Inside renderVSWeek)
     const tbody = document.getElementById('vs-tbody');
     tbody.innerHTML = weekData.map((v, idx) => `
         <tr>
-            <td style="color: #a0aec0; font-size: 0.9em;">#${idx + 1}</td>
+            <td style="color: var(--text-muted); font-size: 0.9em;">#${idx + 1}</td>
             <td><strong>${v.member_name}</strong></td>
             <td>${formatShortPower(v.monday)}</td>
             <td>${formatShortPower(v.tuesday)}</td>
@@ -286,7 +286,7 @@ function renderVSWeek(weekDate) {
             <td>${formatShortPower(v.thursday)}</td>
             <td>${formatShortPower(v.friday)}</td>
             <td>${formatShortPower(v.saturday)}</td>
-            <td class="vs-total-col" style="font-weight: bold; color: #4a5568;">${formatNumber(v.total)}</td>
+            <td class="vs-total-col">${formatNumber(v.total)}</td>
         </tr>
     `).join('');
 }
