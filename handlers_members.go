@@ -439,7 +439,7 @@ func getMemberStats(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(stats)
 }
 
-// getMyProfile retrieves the current user's linked member stats
+// getMyProfile retrieves the current user's linked member stats and latest power history
 func getMyProfile(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	memberID, ok := session.Values["member_id"].(int)
@@ -450,15 +450,17 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 
 	var m Member
 
-	// Use COALESCE to prevent sql.Scan from panicking on NULL database values
-	// for fields that aren't defined as pointers in the Member struct.
+	// Fetch core stats from members, and the latest recorded power from the history tables.
+	// We use subqueries here because power is tracked over time, not stored flatly.
 	err := db.QueryRow(`
-		SELECT id, name, rank, level, power, 
-		       COALESCE(squad_type, ''), 
-		       squad_power, 
-		       COALESCE(troop_level, 0), 
-		       COALESCE(profession, '') 
-		FROM members WHERE id = ?`, memberID).
+		SELECT 
+			m.id, m.name, m.rank, m.level, 
+			(SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as power,
+			COALESCE(m.squad_type, ''), 
+			(SELECT power FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as squad_power,
+			COALESCE(m.troop_level, 0), 
+			COALESCE(m.profession, '') 
+		FROM members m WHERE m.id = ?`, memberID).
 		Scan(&m.ID, &m.Name, &m.Rank, &m.Level, &m.Power, &m.SquadType, &m.SquadPower, &m.TroopLevel, &m.Profession)
 
 	if err != nil {
@@ -493,16 +495,25 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Update the flat stats on the members table
 	_, err := db.Exec(`
 		UPDATE members 
-		SET level = ?, power = ?, troop_level = ?, squad_type = ?, profession = ?
+		SET level = ?, troop_level = ?, squad_type = ?, profession = ?
 		WHERE id = ?`,
-		req.Level, req.Power, req.TroopLevel, req.SquadType, req.Profession, memberID)
+		req.Level, req.TroopLevel, req.SquadType, req.Profession, memberID)
 
 	if err != nil {
 		log.Printf("Profile Update Error: %v", err)
 		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
 		return
+	}
+
+	// 2. Log the new power reading into the history table so growth tracking still works
+	if req.Power > 0 {
+		_, err = db.Exec(`INSERT INTO power_history (member_id, power) VALUES (?, ?)`, memberID, req.Power)
+		if err != nil {
+			log.Printf("Power History Insert Error: %v", err)
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
