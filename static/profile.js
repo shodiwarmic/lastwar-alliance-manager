@@ -73,18 +73,20 @@ async function loadGameStats() {
         if (response.ok) {
             const data = await response.json();
             
-            // Show the form, hide the warning
             document.getElementById('game-stats-section').style.display = 'block';
             document.getElementById('no-member-warning').style.display = 'none';
 
-            // Populate the data
+            // Hydrate the new comprehensive form layout
+            document.getElementById('stat-name').value = data.name || '';
+            document.getElementById('stat-rank').value = data.rank || '';
+            document.getElementById('stat-eligible').checked = data.eligible || false;
             document.getElementById('stat-level').value = data.level || '';
             document.getElementById('stat-power').value = data.power || '';
-            document.getElementById('stat-troop-level').value = data.troop_level || '';
+            document.getElementById('stat-troop-level').value = data.troop_level || 0;
             document.getElementById('stat-squad-type').value = data.squad_type || '';
+            document.getElementById('stat-squad-power').value = data.squad_power || '';
             document.getElementById('stat-profession').value = data.profession || '';
         } else if (response.status === 404 || response.status === 403) {
-            // User is authenticated, but not linked to a member. Hide form, show warning.
             document.getElementById('game-stats-section').style.display = 'none';
             document.getElementById('no-member-warning').style.display = 'block';
         }
@@ -232,10 +234,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
+                            name: document.getElementById('stat-name').value,
                             level: parseInt(document.getElementById('stat-level').value) || 0,
                             power: parseInt(document.getElementById('stat-power').value) || 0,
                             troop_level: parseInt(document.getElementById('stat-troop-level').value) || 0,
                             squad_type: document.getElementById('stat-squad-type').value,
+                            squad_power: parseInt(document.getElementById('stat-squad-power').value) || 0,
                             profession: document.getElementById('stat-profession').value
                         })
                     });

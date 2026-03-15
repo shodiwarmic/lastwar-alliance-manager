@@ -450,18 +450,17 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 
 	var m Member
 
-	// Fetch core stats from members, and the latest recorded power from the history tables.
-	// We use subqueries here because power is tracked over time, not stored flatly.
+	// Added m.eligible and updated to fetch the latest squad_power history
 	err := db.QueryRow(`
 		SELECT 
-			m.id, m.name, m.rank, m.level, 
+			m.id, m.name, m.rank, m.eligible, m.level, 
 			(SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as power,
 			COALESCE(m.squad_type, ''), 
 			(SELECT power FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as squad_power,
 			COALESCE(m.troop_level, 0), 
 			COALESCE(m.profession, '') 
 		FROM members m WHERE m.id = ?`, memberID).
-		Scan(&m.ID, &m.Name, &m.Rank, &m.Level, &m.Power, &m.SquadType, &m.SquadPower, &m.TroopLevel, &m.Profession)
+		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.Power, &m.SquadType, &m.SquadPower, &m.TroopLevel, &m.Profession)
 
 	if err != nil {
 		log.Printf("Profile Fetch Error: %v", err)
@@ -482,11 +481,14 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Rank and Eligibility are intentionally excluded to enforce admin security
 	var req struct {
+		Name       string `json:"name"`
 		Level      int    `json:"level"`
 		Power      int64  `json:"power"`
 		TroopLevel int    `json:"troop_level"`
 		SquadType  string `json:"squad_type"`
+		SquadPower int64  `json:"squad_power"`
 		Profession string `json:"profession"`
 	}
 
@@ -495,12 +497,12 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Update the flat stats on the members table
+	// 1. Update the flat stats on the members table (now including name)
 	_, err := db.Exec(`
 		UPDATE members 
-		SET level = ?, troop_level = ?, squad_type = ?, profession = ?
+		SET name = ?, level = ?, troop_level = ?, squad_type = ?, profession = ?
 		WHERE id = ?`,
-		req.Level, req.TroopLevel, req.SquadType, req.Profession, memberID)
+		req.Name, req.Level, req.TroopLevel, req.SquadType, req.Profession, memberID)
 
 	if err != nil {
 		log.Printf("Profile Update Error: %v", err)
@@ -508,12 +510,12 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Log the new power reading into the history table so growth tracking still works
+	// 2. Append history entries
 	if req.Power > 0 {
-		_, err = db.Exec(`INSERT INTO power_history (member_id, power) VALUES (?, ?)`, memberID, req.Power)
-		if err != nil {
-			log.Printf("Power History Insert Error: %v", err)
-		}
+		db.Exec(`INSERT INTO power_history (member_id, power) VALUES (?, ?)`, memberID, req.Power)
+	}
+	if req.SquadPower > 0 {
+		db.Exec(`INSERT INTO squad_power_history (member_id, power) VALUES (?, ?)`, memberID, req.SquadPower)
 	}
 
 	w.WriteHeader(http.StatusOK)

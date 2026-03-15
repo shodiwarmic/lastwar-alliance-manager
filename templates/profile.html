@@ -46,36 +46,85 @@
         <section class="form-section" id="game-stats-section" style="display: none;">
             <h3>📊 In-Game Stats</h3>
             <form id="game-stats-form">
-                <div class="form-group">
-                    <label for="stat-level">HQ Level</label>
-                    <input type="number" id="stat-level" min="1" max="40" required>
+                
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="stat-name">In-Game Name:</label>
+                    <input type="text" id="stat-name" required class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
                 </div>
-                <div class="form-group">
-                    <label for="stat-power">Total Power</label>
-                    <input type="number" id="stat-power" min="0" required>
+
+                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-rank">Rank (Managed by Admins):</label>
+                        <input type="text" id="stat-rank" disabled class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background-color: #f3f4f6; color: #6b7280; cursor: not-allowed;">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0; display: flex; flex-direction: column;">
+                        <label>&nbsp;</label> 
+                        <div style="flex: 1; display: flex; align-items: center;">
+                            <label class="checkbox-label" style="margin: 0; cursor: not-allowed; display: flex; align-items: center; gap: 8px; opacity: 0.7;">
+                                <input type="checkbox" id="stat-eligible" disabled style="width: 18px; height: 18px; cursor: not-allowed;">
+                                <span style="color: #6b7280;">Eligible for Train</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="stat-troop-level">Highest Troop Level</label>
-                    <input type="number" id="stat-troop-level" min="1" max="10">
+
+                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-level">HQ Level:</label>
+                        <input type="number" id="stat-level" class="form-input" min="1" max="40" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-troop-level">Troop Level:</label>
+                        <select id="stat-troop-level" class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                            <option value="0">None / Unknown</option>
+                            <option value="1">T1 (HQ 1+)</option>
+                            <option value="2">T2 (HQ 4+)</option>
+                            <option value="3">T3 (HQ 6+)</option>
+                            <option value="4">T4 (HQ 10+)</option>
+                            <option value="5">T5 (HQ 14+)</option>
+                            <option value="6">T6 (HQ 17+)</option>
+                            <option value="7">T7 (HQ 20+)</option>
+                            <option value="8">T8 (HQ 24+)</option>
+                            <option value="9">T9 (HQ 27+)</option>
+                            <option value="10">T10 (HQ 30+)</option>
+                            <option value="11">T11 (HQ 35+)</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="stat-squad-type">Main Squad Type</label>
-                    <select id="stat-squad-type">
-                        <option value="">Unknown</option>
-                        <option value="Tank">Tank</option>
-                        <option value="Aircraft">Aircraft</option>
-                        <option value="Missile">Missile</option>
-                    </select>
+
+                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-profession">Profession:</label>
+                        <select id="stat-profession" class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                            <option value="">None</option>
+                            <option value="Engineer">Engineer</option>
+                            <option value="War Leader">War Leader</option>
+                            <option value="Diplomat">Diplomat</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-power">Overall Power:</label>
+                        <input type="number" id="stat-power" class="form-input" min="0" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="stat-profession">Profession</label>
-                    <select id="stat-profession">
-                        <option value="">Unknown</option>
-                        <option value="Engineer">Engineer</option>
-                        <option value="Warlord">Warlord</option>
-                    </select>
+
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-squad-type">Primary Squad:</label>
+                        <select id="stat-squad-type" class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                            <option value="">Unknown</option>
+                            <option value="Tank">🛡️ Tank</option>
+                            <option value="Aircraft">✈️ Aircraft</option>
+                            <option value="Missile">🚀 Missile</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-squad-power">Squad Power:</label>
+                        <input type="number" id="stat-squad-power" class="form-input" min="0" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    </div>
                 </div>
-                <div class="button-group">
+
+                <div class="button-group" style="margin-top: 20px;">
                     <button type="submit" id="submit-stats-btn" class="primary-btn">💾 Save Stats</button>
                 </div>
             </form>
