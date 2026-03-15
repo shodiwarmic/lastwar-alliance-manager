@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gorilla/csrf"
@@ -260,8 +261,23 @@ func main() {
 		}).Methods("GET")
 	}
 
-	// Serve Static Files
-	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./static")))
+	// --- Serve Static Files (with Custom 404 Catch) ---
+	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Clean the path to prevent directory traversal attacks
+		cleanPath := filepath.Clean(r.URL.Path)
+		fullPath := filepath.Join("static", cleanPath)
+
+		// Check if the file actually exists in the /static folder
+		info, err := os.Stat(fullPath)
+		if os.IsNotExist(err) || info.IsDir() {
+			// It's not a real file, so trigger our custom 404 template!
+			router.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		// The file exists (like style.css or app.js), serve it normally
+		http.FileServer(http.Dir("static")).ServeHTTP(w, r)
+	})
 
 	// 4. Initialize CSRF Protection
 	sessionKey := os.Getenv("SESSION_KEY")
