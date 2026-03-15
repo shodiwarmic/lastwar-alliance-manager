@@ -348,8 +348,24 @@ func wopiCheckFileInfo(w http.ResponseWriter, r *http.Request) {
 func wopiGetFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	var fileName string
-	db.QueryRow("SELECT file_name FROM files WHERE id = ?", vars["id"]).Scan(&fileName)
-	http.ServeFile(w, r, filepath.Join(getStoragePath(), fileName))
+
+	// 1. Verify the file actually exists in the database first
+	err := db.QueryRow("SELECT file_name FROM files WHERE id = ?", vars["id"]).Scan(&fileName)
+	if err != nil {
+		http.Error(w, "Database record not found", http.StatusNotFound)
+		return
+	}
+
+	filePath := filepath.Join(getStoragePath(), fileName)
+
+	// 2. Verify the physical file hasn't been deleted from the hard drive
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		log.Printf("WOPI Error: Requested file does not exist on disk: %s", filePath)
+		http.Error(w, "Document not found on disk", http.StatusNotFound)
+		return
+	}
+
+	http.ServeFile(w, r, filePath)
 }
 
 func wopiPutFile(w http.ResponseWriter, r *http.Request) {
@@ -362,8 +378,21 @@ func wopiPutFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var fileName string
-	db.QueryRow("SELECT file_name FROM files WHERE id = ?", vars["id"]).Scan(&fileName)
+	// 1. Verify database record exists before trying to save
+	err := db.QueryRow("SELECT file_name FROM files WHERE id = ?", vars["id"]).Scan(&fileName)
+	if err != nil {
+		http.Error(w, "Database record not found", http.StatusNotFound)
+		return
+	}
+
 	filePath := filepath.Join(getStoragePath(), fileName)
+
+	// 2. Verify physical file exists before overwriting it
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		log.Printf("WOPI Put Error: Attempted to save to missing file: %s", filePath)
+		http.Error(w, "Target document missing from disk", http.StatusNotFound)
+		return
+	}
 
 	fileData, err := io.ReadAll(r.Body)
 	if err != nil {
