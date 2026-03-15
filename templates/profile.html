@@ -4,39 +4,123 @@
 {{end}}
 
 {{define "content"}}
-            <section class="form-section">
-                <h3>🔐 Change Password</h3>
-                <form id="password-form">
-                    <div class="form-group">
-                        <label for="current-password">Current Password:</label>
-                        <input type="password" id="current-password" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="new-password">New Password:</label>
-                        <input type="password" id="new-password" required>
-                        <ul id="password-rules" style="margin-top: 8px; padding-left: 0; list-style: none; font-size: 0.85em; line-height: 1.6;">
-                            <li style="color: #666;">⚪ Loading requirements...</li>
-                        </ul>
-                    </div>
-                    <div class="form-group">
-                        <label for="confirm-password">Confirm New Password:</label>
-                        <input type="password" id="confirm-password" required>
-                        <div id="match-status" style="margin-top: 5px; font-size: 0.85em; font-weight: bold; display: none;"></div>
-                    </div>
-                    <div class="button-group">
-                        <button type="submit" id="submit-pwd-btn" class="primary-btn" disabled style="opacity: 0.6; cursor: not-allowed;">🔒 Change Password</button>
-                    </div>
-                </form>
-            </section>
-
-            <section class="info-section">
-                <h3>ℹ️ Account Information</h3>
-                <div class="info-card">
-                    <p><strong>Username:</strong> <span id="profile-username">-</span></p>
-                    <p><strong>Role:</strong> <span id="profile-role">-</span></p>
-                    <p id="profile-member-info" style="display: none;"><strong>Linked Member:</strong> <span id="profile-member">-</span></p>
+<div class="profile-container" style="display: flex; gap: 20px; flex-wrap: wrap;">
+    
+    <div style="flex: 1; min-width: 300px;">
+        <section class="form-section" id="game-stats-section" style="display: none;">
+            <h3>📊 In-Game Stats</h3>
+            <form id="game-stats-form">
+                
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="stat-name">In-Game Name:</label>
+                    <input type="text" id="stat-name" required class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
                 </div>
-            </section>
+
+                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-level">HQ Level:</label>
+                        <input type="number" id="stat-level" class="form-input" min="1" max="40" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-troop-level">Troop Level:</label>
+                        <select id="stat-troop-level" class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                            <option value="0">None / Unknown</option>
+                            <option value="1">T1 (HQ 1+)</option>
+                            <option value="2">T2 (HQ 4+)</option>
+                            <option value="3">T3 (HQ 6+)</option>
+                            <option value="4">T4 (HQ 10+)</option>
+                            <option value="5">T5 (HQ 14+)</option>
+                            <option value="6">T6 (HQ 17+)</option>
+                            <option value="7">T7 (HQ 20+)</option>
+                            <option value="8">T8 (HQ 24+)</option>
+                            <option value="9">T9 (HQ 27+)</option>
+                            <option value="10">T10 (HQ 30+)</option>
+                            <option value="11">T11 (HQ 35+)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-profession">Profession:</label>
+                        <select id="stat-profession" class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                            <option value="">None</option>
+                            <option value="Engineer">Engineer</option>
+                            <option value="War Leader">War Leader</option>
+                            <option value="Diplomat">Diplomat</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-power">Overall Power:</label>
+                        <input type="number" id="stat-power" class="form-input" min="0" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-squad-type">Primary Squad:</label>
+                        <select id="stat-squad-type" class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                            <option value="">Unknown</option>
+                            <option value="Tank">🛡️ Tank</option>
+                            <option value="Aircraft">✈️ Aircraft</option>
+                            <option value="Missile">🚀 Missile</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="stat-squad-power">Squad Power:</label>
+                        <input type="number" id="stat-squad-power" class="form-input" min="0" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    </div>
+                </div>
+
+                <div class="button-group" style="margin-top: 20px;">
+                    <button type="submit" id="submit-stats-btn" class="primary-btn">💾 Save Stats</button>
+                </div>
+            </form>
+        </section>
+        
+        <div id="no-member-warning" class="info-card" style="display: none; background: #fff3cd; color: #856404; border-color: #ffeeba;">
+            <p>⚠️ Your account is not linked to an in-game commander profile. Contact an administrator to link your account to update your stats.</p>
+        </div>
+    </div>
+
+    <div style="flex: 1; min-width: 300px;">
+        
+        <section class="info-section" style="border-top: none; padding: 0; background: transparent;">
+            <h3>ℹ️ Account Information</h3>
+            <div class="info-card">
+                <p><strong>System Username:</strong> <span id="profile-username">-</span></p>
+                <p><strong>Account Role:</strong> <span id="profile-role">-</span></p>
+                <p id="profile-member-info" style="display: none;"><strong>Alliance Rank:</strong> <span id="profile-member">-</span></p>
+            </div>
+        </section>
+
+        <section class="form-section" style="margin-top: 20px;">
+            <h3>🔐 Change Password</h3>
+            <form id="password-form">
+                <div class="form-group">
+                    <label for="current-password">Current Password:</label>
+                    <input type="password" id="current-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-password">New Password:</label>
+                    <input type="password" id="new-password" required>
+                    <ul id="password-rules" style="margin-top: 8px; padding-left: 0; list-style: none; font-size: 0.85em; line-height: 1.6;">
+                        <li style="color: #666;">⚪ Loading requirements...</li>
+                    </ul>
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm New Password:</label>
+                    <input type="password" id="confirm-password" required>
+                    <div id="match-status" style="margin-top: 5px; font-size: 0.85em; font-weight: bold; display: none;"></div>
+                </div>
+                <div class="button-group">
+                    <button type="submit" id="submit-pwd-btn" class="primary-btn" disabled style="opacity: 0.6; cursor: not-allowed;">🔒 Change Password</button>
+                </div>
+            </form>
+        </section>
+
+    </div>
+</div>
 {{end}}
 
 {{define "scripts"}}

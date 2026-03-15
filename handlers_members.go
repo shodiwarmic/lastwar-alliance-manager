@@ -438,3 +438,103 @@ func getMemberStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
+
+// getMyProfile retrieves the current user's linked member stats and latest power history
+func getMyProfile(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	memberID, ok := session.Values["member_id"].(int)
+	if !ok {
+		http.Error(w, "No linked member profile found", http.StatusNotFound)
+		return
+	}
+
+	var m Member
+
+	// Added m.eligible and updated to fetch the latest squad_power history
+	err := db.QueryRow(`
+		SELECT 
+			m.id, m.name, m.rank, m.eligible, m.level, 
+			(SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as power,
+			COALESCE(m.squad_type, ''), 
+			(SELECT power FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as squad_power,
+			COALESCE(m.troop_level, 0), 
+			COALESCE(m.profession, '') 
+		FROM members m WHERE m.id = ?`, memberID).
+		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.Power, &m.SquadType, &m.SquadPower, &m.TroopLevel, &m.Profession)
+
+	if err != nil {
+		log.Printf("Profile Fetch Error: %v", err)
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(m)
+}
+
+// updateMyProfile allows a user to self-serve update their own in-game stats
+func updateMyProfile(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	memberID, ok := session.Values["member_id"].(int)
+	if !ok {
+		http.Error(w, "Forbidden: No linked member profile", http.StatusForbidden)
+		return
+	}
+
+	var req struct {
+		Name       string `json:"name"`
+		Level      int    `json:"level"`
+		Power      int64  `json:"power"`
+		TroopLevel int    `json:"troop_level"`
+		SquadType  string `json:"squad_type"`
+		SquadPower int64  `json:"squad_power"`
+		Profession string `json:"profession"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// --- ZERO-TRUST GAME LOGIC VALIDATION ---
+	// 1. Enforce Max HQ Level from Settings
+	var maxHQ int
+	db.QueryRow("SELECT max_hq_level FROM settings WHERE id = 1").Scan(&maxHQ)
+	if req.Level > maxHQ {
+		req.Level = maxHQ
+	}
+
+	// 2. Enforce Troop Level Requirements based on HQ Level
+	troopReqs := map[int]int{1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35}
+	if reqHQ, exists := troopReqs[req.TroopLevel]; exists && req.Level < reqHQ {
+		maxValid := 0
+		for t, hq := range troopReqs {
+			if req.Level >= hq && t > maxValid {
+				maxValid = t
+			}
+		}
+		req.TroopLevel = maxValid // Downgrade to the highest legal tier
+	}
+
+	// Execute database updates...
+	_, err := db.Exec(`
+		UPDATE members 
+		SET name = ?, level = ?, troop_level = ?, squad_type = ?, profession = ?
+		WHERE id = ?`,
+		req.Name, req.Level, req.TroopLevel, req.SquadType, req.Profession, memberID)
+
+	if err != nil {
+		log.Printf("Profile Update Error: %v", err)
+		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
+		return
+	}
+
+	if req.Power > 0 {
+		db.Exec(`INSERT INTO power_history (member_id, power) VALUES (?, ?)`, memberID, req.Power)
+	}
+	if req.SquadPower > 0 {
+		db.Exec(`INSERT INTO squad_power_history (member_id, power) VALUES (?, ?)`, memberID, req.SquadPower)
+	}
+
+	w.WriteHeader(http.StatusOK)
+}

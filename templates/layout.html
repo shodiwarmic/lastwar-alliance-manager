@@ -34,13 +34,6 @@
                     </button>
                     
                     <div id="user-dropdown-menu" class="dropdown-menu">
-                        <a href="/profile" class="dropdown-item">👤 Profile</a>
-                        
-                        {{if .IsAdmin}}
-                        <a href="/admin" class="dropdown-item admin-only" id="admin-dropdown-link">🔐 Admin Panel</a>
-                        {{end}}
-                        
-                        <div class="dropdown-divider"></div>
                         <div class="theme-section">
                             <div class="theme-section-label">Theme</div>
                             <a href="#" class="dropdown-item theme-option" data-theme="auto">● Auto (System)</a>
@@ -112,6 +105,10 @@
                 <span class="nav-icon">📸</span><span class="nav-text">Upload</span>
             </a>
             {{end}}
+
+            <a href="/profile" class="nav-link {{if eq .ActivePage "profile"}}active{{end}}">
+                <span class="nav-icon">👤</span><span class="nav-text">My Profile</span>
+            </a>
             
             {{if .Permissions.ManageSettings}}
             <a href="/settings" class="nav-link {{if eq .ActivePage "settings"}}active{{end}}">
