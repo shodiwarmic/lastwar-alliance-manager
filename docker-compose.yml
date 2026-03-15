@@ -23,7 +23,7 @@ services:
     ports:
       - "9980:9980"
     environment:
-      - aliasgroup1=https://${APP_DOMAIN}:443
+      - aliasgroup1=https://${APP_DOMAIN}
       - extra_params=--o:ssl.enable=false --o:ssl.termination=true
     # Swapped to "mapping" syntax here as well
     extra_hosts:
