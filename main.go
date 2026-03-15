@@ -158,6 +158,14 @@ func main() {
 	router.HandleFunc("/api/power-history/process-screenshot", authMiddleware(requirePermission("manage_members", processPowerScreenshot))).Methods("POST")
 
 	// --- UI Routes ---
+
+	// 1. Custom 404 Handler
+	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data := getPageData(r, "404 Not Found - Alliance Manager", "404")
+		w.WriteHeader(http.StatusNotFound)
+		renderTemplate(w, r, "404.html", data)
+	})
+
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		data := getPageData(r, "Members - Alliance Manager", "members")
 		if !data.IsAuthenticated {
@@ -181,7 +189,6 @@ func main() {
 			rawMessage = ""
 		}
 
-		// Sanitize for XSS Protection
 		p := bluemonday.UGCPolicy()
 		safeMessage := p.Sanitize(rawMessage)
 
@@ -199,15 +206,10 @@ func main() {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
-
-		err = t.Execute(w, data)
-		if err != nil {
-			slog.Error("Template execution error", "error", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		}
+		t.Execute(w, data)
 	}).Methods("GET")
 
-	// Map out the rest of your pages
+	// 2. Updated Page Map (Removed Train, Awards, Recs)
 	pages := map[string]string{
 		"/dyno":     "dyno",
 		"/rankings": "rankings",
@@ -232,27 +234,27 @@ func main() {
 			}
 
 			pagePermissions := map[string]bool{
-				"train":           data.Permissions.ViewTrain,
-				"awards":          data.Permissions.ViewAwards,
-				"recommendations": data.Permissions.ViewRecs,
-				"dyno":            data.Permissions.ViewDyno,
-				"rankings":        data.Permissions.ViewRankings,
-				"storm":           data.Permissions.ViewStorm,
-				"vs":              data.Permissions.ViewVSPoints,
-				"upload":          data.Permissions.ViewUpload,
-				"settings":        data.Permissions.ManageSettings,
-				"admin":           data.IsAdmin,
+				"dyno":     data.Permissions.ViewDyno,
+				"rankings": data.Permissions.ViewRankings,
+				"storm":    data.Permissions.ViewStorm,
+				"vs":       data.Permissions.ViewVSPoints,
+				"upload":   data.Permissions.ViewUpload,
+				"settings": data.Permissions.ManageSettings,
+				"admin":    data.IsAdmin,
 			}
 
+			// 3. Custom 403 Handler for Access Denied
 			if hasAccess, exists := pagePermissions[tmpl]; exists && !hasAccess {
-				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+				data.Title = "403 Access Denied"
+				data.ActivePage = "403"
+				w.WriteHeader(http.StatusForbidden)
+				renderTemplate(w, r, "403.html", data)
 				return
 			}
 
 			renderTemplate(w, r, tmpl+".html", data)
 		}).Methods("GET")
 
-		// Redirect old .html links to the clean URLs
 		router.HandleFunc(p+".html", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, p, http.StatusMovedPermanently)
 		}).Methods("GET")
