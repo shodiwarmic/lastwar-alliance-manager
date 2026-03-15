@@ -481,7 +481,6 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rank and Eligibility are intentionally excluded to enforce admin security
 	var req struct {
 		Name       string `json:"name"`
 		Level      int    `json:"level"`
@@ -497,7 +496,27 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Update the flat stats on the members table (now including name)
+	// --- ZERO-TRUST GAME LOGIC VALIDATION ---
+	// 1. Enforce Max HQ Level from Settings
+	var maxHQ int
+	db.QueryRow("SELECT max_hq_level FROM settings WHERE id = 1").Scan(&maxHQ)
+	if req.Level > maxHQ {
+		req.Level = maxHQ
+	}
+
+	// 2. Enforce Troop Level Requirements based on HQ Level
+	troopReqs := map[int]int{1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35}
+	if reqHQ, exists := troopReqs[req.TroopLevel]; exists && req.Level < reqHQ {
+		maxValid := 0
+		for t, hq := range troopReqs {
+			if req.Level >= hq && t > maxValid {
+				maxValid = t
+			}
+		}
+		req.TroopLevel = maxValid // Downgrade to the highest legal tier
+	}
+
+	// Execute database updates...
 	_, err := db.Exec(`
 		UPDATE members 
 		SET name = ?, level = ?, troop_level = ?, squad_type = ?, profession = ?
@@ -510,7 +529,6 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Append history entries
 	if req.Power > 0 {
 		db.Exec(`INSERT INTO power_history (member_id, power) VALUES (?, ?)`, memberID, req.Power)
 	}
