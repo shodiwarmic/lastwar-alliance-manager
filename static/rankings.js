@@ -1,5 +1,6 @@
 const API_BASE = '/api';
 
+// Global Chart instances so we can destroy/recreate them cleanly
 let charts = {
     troop: null,
     squad: null,
@@ -7,7 +8,17 @@ let charts = {
 };
 
 let rawGrowthData = [];
-let allVsData = []; // Holds all weeks to populate the dropdown
+let allVsData = []; 
+
+// --- Global Chart.js Styling ---
+// This ensures the charts match your app's typography and adapt to light/dark themes
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+Chart.defaults.color = '#718096'; 
+Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(26, 32, 44, 0.9)';
+Chart.defaults.plugins.tooltip.padding = 12;
+Chart.defaults.plugins.tooltip.cornerRadius = 8;
+Chart.defaults.plugins.tooltip.titleFont = { size: 14, weight: 'bold' };
+Chart.defaults.plugins.tooltip.bodyFont = { size: 13 };
 
 // --- Tab Management ---
 function switchTab(tabId) {
@@ -31,7 +42,7 @@ function formatShortPower(power) {
 
 function formatGrowth(num) {
     if (num > 0) return `<span class="positive-growth">+${formatShortPower(num)}</span>`;
-    if (num < 0) return `<span style="color: #dc3545;">${formatShortPower(num)}</span>`;
+    if (num < 0) return `<span style="color: #e53e3e;">${formatShortPower(num)}</span>`;
     return `<span class="neutral-growth">-</span>`;
 }
 
@@ -53,7 +64,7 @@ async function loadGrowthData() {
 }
 
 function renderCompositionCharts() {
-    // 1. Troop Distribution
+    // 1. Troop Distribution (Doughnut Chart)
     const troops = {};
     rawGrowthData.forEach(m => {
         if (m.troop_level > 0) {
@@ -62,46 +73,90 @@ function renderCompositionCharts() {
         }
     });
 
-    const troopCanvas = document.getElementById('troopChart');
+    const troopCanvas = document.getElementById('troopChart').getContext('2d');
     if (charts.troop) charts.troop.destroy();
+    
     charts.troop = new Chart(troopCanvas, {
-        type: 'pie',
+        type: 'doughnut',
         data: {
             labels: Object.keys(troops),
             datasets: [{
                 data: Object.values(troops),
-                backgroundColor: ['#667eea', '#764ba2', '#4facfe', '#00f2fe', '#f093fb', '#f5576c']
+                backgroundColor: ['#667eea', '#764ba2', '#4facfe', '#00f2fe', '#f093fb', '#f5576c', '#ed8936', '#48bb78'],
+                borderWidth: 2,
+                borderColor: '#ffffff',
+                hoverOffset: 4
             }]
         },
-        options: { responsive: true, plugins: { legend: { position: 'right' } } }
+        options: { 
+            responsive: true, 
+            cutout: '65%',
+            plugins: { 
+                legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            if (label) label += ': ';
+                            label += context.parsed + ' Commanders';
+                            return label;
+                        }
+                    }
+                }
+            } 
+        }
     });
 
-    // 2. Squad Distribution
+    // 2. Squad Distribution (Pie Chart)
     const squads = { 'Tank': 0, 'Aircraft': 0, 'Missile': 0, 'Unknown': 0 };
     rawGrowthData.forEach(m => {
         const type = m.squad_type || 'Unknown';
         if (squads[type] !== undefined) squads[type]++;
     });
 
-    const squadCanvas = document.getElementById('squadChart');
+    // Remove 'Unknown' if it's 0 to keep the chart clean
+    if (squads['Unknown'] === 0) delete squads['Unknown'];
+
+    const squadCanvas = document.getElementById('squadChart').getContext('2d');
     if (charts.squad) charts.squad.destroy();
+    
     charts.squad = new Chart(squadCanvas, {
-        type: 'doughnut',
+        type: 'pie',
         data: {
             labels: Object.keys(squads),
             datasets: [{
                 data: Object.values(squads),
-                backgroundColor: ['#f6ad55', '#63b3ed', '#fc8181', '#cbd5e0']
+                backgroundColor: [
+                    '#f6ad55', // Tank (Orange)
+                    '#63b3ed', // Aircraft (Blue)
+                    '#fc8181', // Missile (Red)
+                    '#cbd5e0'  // Unknown (Gray)
+                ],
+                borderWidth: 2,
+                borderColor: '#ffffff',
+                hoverOffset: 4
             }]
         },
-        options: { responsive: true, plugins: { legend: { position: 'right' } } }
+        options: { 
+            responsive: true, 
+            plugins: { 
+                legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return ` ${context.label}: ${context.parsed} Commanders`;
+                        }
+                    }
+                }
+            } 
+        }
     });
 }
 
 function renderGrowthTable(data) {
     const tbody = document.getElementById('growth-tbody');
     if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty">No active commanders found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="empty" style="text-align: center; padding: 20px;">No active commanders found.</td></tr>';
         return;
     }
 
@@ -109,7 +164,7 @@ function renderGrowthTable(data) {
         <tr>
             <td><strong>${m.name}</strong></td>
             <td><span class="rank-badge rank-${m.rank}">${m.rank}</span></td>
-            <td style="font-weight: bold;">${formatNumber(m.current_power)}</td>
+            <td style="font-weight: 600; color: #2d3748;">${formatNumber(m.current_power)}</td>
             <td>${formatGrowth(m.growth_7d)}</td>
             <td>${formatGrowth(m.growth_30d)}</td>
         </tr>
@@ -125,36 +180,32 @@ document.getElementById('growth-search')?.addEventListener('input', (e) => {
 // --- Tab 2: VS Duel Activity ---
 async function loadVSData() {
     try {
-        // Fetch all weeks to populate the dropdown
         const response = await fetch(`${API_BASE}/vs-points`);
         if (!response.ok) throw new Error('Failed to load VS data');
         
         allVsData = await response.json() || [];
         
-        // Extract unique weeks
         const weeks = [...new Set(allVsData.map(v => v.week_date))].sort((a, b) => b.localeCompare(a));
-        
         const select = document.getElementById('vs-week-select');
+        
         if (weeks.length === 0) {
             select.innerHTML = '<option value="">No VS Data Available</option>';
-            document.getElementById('vs-tbody').innerHTML = '<tr><td colspan="9" class="empty">No VS data recorded yet.</td></tr>';
+            document.getElementById('vs-tbody').innerHTML = '<tr><td colspan="9" class="empty" style="text-align: center; padding: 20px;">No VS data recorded yet.</td></tr>';
             return;
         }
 
         select.innerHTML = weeks.map(w => `<option value="${w}">Week of ${w}</option>`).join('');
         select.addEventListener('change', (e) => renderVSWeek(e.target.value));
         
-        // Render the most recent week initially
         renderVSWeek(weeks[0]);
 
     } catch (error) {
         console.error('Error:', error);
-        document.getElementById('vs-tbody').innerHTML = '<tr><td colspan="9" class="error">Failed to load data.</td></tr>';
+        document.getElementById('vs-tbody').innerHTML = '<tr><td colspan="9" class="error" style="text-align: center; color: #e53e3e; padding: 20px;">Failed to load data.</td></tr>';
     }
 }
 
 function renderVSWeek(weekDate) {
-    // Filter data for the selected week
     let weekData = allVsData.filter(v => v.week_date === weekDate);
     
     // Calculate totals and sort by Highest Total
@@ -163,34 +214,63 @@ function renderVSWeek(weekDate) {
         return v;
     }).sort((a, b) => b.total - a.total);
 
-    // 1. Render Stacked Bar Chart
-    const vsCanvas = document.getElementById('vsChart');
+    // 1. Render Massive Stacked Bar Chart
+    const vsCanvas = document.getElementById('vsChart').getContext('2d');
     if (charts.vs) charts.vs.destroy();
     
-    // Take top 15 performers for the chart so it doesn't get squished
-    const chartData = weekData.slice(0, 15);
+    // Cap at top 20 performers so the chart labels don't become unreadable
+    const chartData = weekData.slice(0, 20);
     
     charts.vs = new Chart(vsCanvas, {
         type: 'bar',
         data: {
             labels: chartData.map(v => v.member_name),
             datasets: [
-                { label: 'Mon (Radar)', data: chartData.map(v => v.monday), backgroundColor: '#f6ad55' },
-                { label: 'Tue (Base)', data: chartData.map(v => v.tuesday), backgroundColor: '#68d391' },
-                { label: 'Wed (Tech)', data: chartData.map(v => v.wednesday), backgroundColor: '#4fd1c5' },
-                { label: 'Thu (Hero)', data: chartData.map(v => v.thursday), backgroundColor: '#63b3ed' },
-                { label: 'Fri (Train)', data: chartData.map(v => v.friday), backgroundColor: '#b794f4' },
-                { label: 'Sat (Kill)', data: chartData.map(v => v.saturday), backgroundColor: '#fc8181' }
+                { label: 'Mon (Radar)', data: chartData.map(v => v.monday), backgroundColor: '#f6ad55', borderRadius: 2 },
+                { label: 'Tue (Base)', data: chartData.map(v => v.tuesday), backgroundColor: '#68d391', borderRadius: 2 },
+                { label: 'Wed (Tech)', data: chartData.map(v => v.wednesday), backgroundColor: '#4fd1c5', borderRadius: 2 },
+                { label: 'Thu (Hero)', data: chartData.map(v => v.thursday), backgroundColor: '#63b3ed', borderRadius: 2 },
+                { label: 'Fri (Train)', data: chartData.map(v => v.friday), backgroundColor: '#b794f4', borderRadius: 2 },
+                { label: 'Sat (Kill)', data: chartData.map(v => v.saturday), backgroundColor: '#fc8181', borderRadius: { topLeft: 4, topRight: 4 } }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                x: { stacked: true },
-                y: { stacked: true, title: { display: true, text: 'Points' } }
+            interaction: {
+                mode: 'index', // Hovering over a bar shows all days for that person
+                intersect: false,
             },
-            plugins: { legend: { position: 'bottom' } }
+            scales: {
+                x: { 
+                    stacked: true,
+                    grid: { display: false } // Cleaner look on the x-axis
+                },
+                y: { 
+                    stacked: true, 
+                    title: { display: true, text: 'VS Points', font: { weight: 'bold' } },
+                    ticks: {
+                        callback: function(value) { return formatShortPower(value); }
+                    }
+                }
+            },
+            plugins: { 
+                legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return ` ${context.dataset.label}: ${formatNumber(context.raw)}`;
+                        },
+                        footer: function(tooltipItems) {
+                            let total = 0;
+                            tooltipItems.forEach(function(tooltipItem) {
+                                total += tooltipItem.raw;
+                            });
+                            return `Total: ${formatNumber(total)}`;
+                        }
+                    }
+                }
+            }
         }
     });
 
@@ -198,7 +278,7 @@ function renderVSWeek(weekDate) {
     const tbody = document.getElementById('vs-tbody');
     tbody.innerHTML = weekData.map((v, idx) => `
         <tr>
-            <td><strong>#${idx + 1}</strong></td>
+            <td style="color: #a0aec0; font-size: 0.9em;">#${idx + 1}</td>
             <td><strong>${v.member_name}</strong></td>
             <td>${formatShortPower(v.monday)}</td>
             <td>${formatShortPower(v.tuesday)}</td>
@@ -206,7 +286,7 @@ function renderVSWeek(weekDate) {
             <td>${formatShortPower(v.thursday)}</td>
             <td>${formatShortPower(v.friday)}</td>
             <td>${formatShortPower(v.saturday)}</td>
-            <td class="vs-total-col">${formatNumber(v.total)}</td>
+            <td class="vs-total-col" style="font-weight: bold; color: #4a5568;">${formatNumber(v.total)}</td>
         </tr>
     `).join('');
 }
