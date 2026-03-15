@@ -449,9 +449,20 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var m Member
-	err := db.QueryRow("SELECT id, name, rank, level, power, squad_type, squad_power, troop_level, profession FROM members WHERE id = ?", memberID).
+
+	// Use COALESCE to prevent sql.Scan from panicking on NULL database values
+	// for fields that aren't defined as pointers in the Member struct.
+	err := db.QueryRow(`
+		SELECT id, name, rank, level, power, 
+		       COALESCE(squad_type, ''), 
+		       squad_power, 
+		       COALESCE(troop_level, 0), 
+		       COALESCE(profession, '') 
+		FROM members WHERE id = ?`, memberID).
 		Scan(&m.ID, &m.Name, &m.Rank, &m.Level, &m.Power, &m.SquadType, &m.SquadPower, &m.TroopLevel, &m.Profession)
+
 	if err != nil {
+		log.Printf("Profile Fetch Error: %v", err)
 		http.Error(w, "Member not found", http.StatusNotFound)
 		return
 	}
