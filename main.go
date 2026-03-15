@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gorilla/csrf"
@@ -134,37 +135,13 @@ func main() {
 	router.HandleFunc("/api/profile/me", authMiddleware(getMyProfile)).Methods("GET")
 	router.HandleFunc("/api/profile/me", authMiddleware(updateMyProfile)).Methods("PUT")
 
-	// Train schedule
-	router.HandleFunc("/api/train-schedules", authMiddleware(getTrainSchedules)).Methods("GET")
-	router.HandleFunc("/api/train-schedules/weekly-message", authMiddleware(generateWeeklyMessage)).Methods("GET")
-	router.HandleFunc("/api/train-schedules/daily-message", authMiddleware(generateDailyMessage)).Methods("GET")
-	router.HandleFunc("/api/train-schedules/conductor-messages", authMiddleware(generateConductorMessages)).Methods("GET")
-	router.HandleFunc("/api/train-schedules/auto-schedule", authMiddleware(requirePermission("manage_train", autoSchedule))).Methods("POST")
-	router.HandleFunc("/api/train-schedules", authMiddleware(requirePermission("manage_train", createTrainSchedule))).Methods("POST")
-	router.HandleFunc("/api/train-schedules/{id}", authMiddleware(requirePermission("manage_train", updateTrainSchedule))).Methods("PUT")
-	router.HandleFunc("/api/train-schedules/{id}", authMiddleware(requirePermission("manage_train", deleteTrainSchedule))).Methods("DELETE")
-
-	// Awards
-	router.HandleFunc("/api/awards", authMiddleware(getAwards)).Methods("GET")
-	router.HandleFunc("/api/awards", authMiddleware(requirePermission("manage_awards", saveAwards))).Methods("POST")
-	router.HandleFunc("/api/awards/{week}", authMiddleware(requirePermission("manage_awards", deleteWeekAwards))).Methods("DELETE")
-
-	// Award types
-	router.HandleFunc("/api/award-types", authMiddleware(getAwardTypes)).Methods("GET")
-	router.HandleFunc("/api/award-types", authMiddleware(requirePermission("manage_awards", createAwardType))).Methods("POST")
-	router.HandleFunc("/api/award-types/{id}", authMiddleware(requirePermission("manage_awards", updateAwardType))).Methods("PUT")
-	router.HandleFunc("/api/award-types/{id}", authMiddleware(requirePermission("manage_awards", deleteAwardType))).Methods("DELETE")
-
 	// VS points
 	router.HandleFunc("/api/vs-points", authMiddleware(getVSPoints)).Methods("GET")
 	router.HandleFunc("/api/vs-points", authMiddleware(requirePermission("manage_vs_points", saveVSPoints))).Methods("POST")
 	router.HandleFunc("/api/vs-points/{week}", authMiddleware(requirePermission("manage_vs_points", deleteWeekVSPoints))).Methods("DELETE")
 	router.HandleFunc("/api/vs-points/process-screenshot", authMiddleware(requirePermission("manage_vs_points", processVSPointsScreenshot))).Methods("POST")
 
-	// Recommendations & Dyno
-	router.HandleFunc("/api/recommendations", authMiddleware(getRecommendations)).Methods("GET")
-	router.HandleFunc("/api/recommendations", authMiddleware(createRecommendation)).Methods("POST")
-	router.HandleFunc("/api/recommendations/{id}", authMiddleware(deleteRecommendation)).Methods("DELETE")
+	// Dyno
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(getDynoRecommendations)).Methods("GET")
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(createDynoRecommendation)).Methods("POST")
 	router.HandleFunc("/api/dyno-recommendations/{id}", authMiddleware(deleteDynoRecommendation)).Methods("DELETE")
@@ -182,6 +159,14 @@ func main() {
 	router.HandleFunc("/api/power-history/process-screenshot", authMiddleware(requirePermission("manage_members", processPowerScreenshot))).Methods("POST")
 
 	// --- UI Routes ---
+
+	// 1. Custom 404 Handler
+	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data := getPageData(r, "404 Not Found - Alliance Manager", "404")
+		w.WriteHeader(http.StatusNotFound)
+		renderTemplate(w, r, "404.html", data)
+	})
+
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		data := getPageData(r, "Members - Alliance Manager", "members")
 		if !data.IsAuthenticated {
@@ -205,7 +190,6 @@ func main() {
 			rawMessage = ""
 		}
 
-		// Sanitize for XSS Protection
 		p := bluemonday.UGCPolicy()
 		safeMessage := p.Sanitize(rawMessage)
 
@@ -223,28 +207,20 @@ func main() {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
-
-		err = t.Execute(w, data)
-		if err != nil {
-			slog.Error("Template execution error", "error", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		}
+		t.Execute(w, data)
 	}).Methods("GET")
 
-	// Map out the rest of your pages
+	// 2. Updated Page Map (Removed Train, Awards, Recs)
 	pages := map[string]string{
-		"/train":           "train",
-		"/awards":          "awards",
-		"/recommendations": "recommendations",
-		"/dyno":            "dyno",
-		"/rankings":        "rankings",
-		"/storm":           "storm",
-		"/vs":              "vs",
-		"/upload":          "upload",
-		"/settings":        "settings",
-		"/admin":           "admin",
-		"/profile":         "profile",
-		"/files":           "files",
+		"/dyno":     "dyno",
+		"/rankings": "rankings",
+		"/storm":    "storm",
+		"/vs":       "vs",
+		"/upload":   "upload",
+		"/settings": "settings",
+		"/admin":    "admin",
+		"/profile":  "profile",
+		"/files":    "files",
 	}
 
 	for path, templateName := range pages {
@@ -259,34 +235,49 @@ func main() {
 			}
 
 			pagePermissions := map[string]bool{
-				"train":           data.Permissions.ViewTrain,
-				"awards":          data.Permissions.ViewAwards,
-				"recommendations": data.Permissions.ViewRecs,
-				"dyno":            data.Permissions.ViewDyno,
-				"rankings":        data.Permissions.ViewRankings,
-				"storm":           data.Permissions.ViewStorm,
-				"vs":              data.Permissions.ViewVSPoints,
-				"upload":          data.Permissions.ViewUpload,
-				"settings":        data.Permissions.ManageSettings,
-				"admin":           data.IsAdmin,
+				"dyno":     data.Permissions.ViewDyno,
+				"rankings": data.Permissions.ViewRankings,
+				"storm":    data.Permissions.ViewStorm,
+				"vs":       data.Permissions.ViewVSPoints,
+				"upload":   data.Permissions.ViewUpload,
+				"settings": data.Permissions.ManageSettings,
+				"admin":    data.IsAdmin,
 			}
 
+			// 3. Custom 403 Handler for Access Denied
 			if hasAccess, exists := pagePermissions[tmpl]; exists && !hasAccess {
-				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+				data.Title = "403 Access Denied"
+				data.ActivePage = "403"
+				w.WriteHeader(http.StatusForbidden)
+				renderTemplate(w, r, "403.html", data)
 				return
 			}
 
 			renderTemplate(w, r, tmpl+".html", data)
 		}).Methods("GET")
 
-		// Redirect old .html links to the clean URLs
 		router.HandleFunc(p+".html", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, p, http.StatusMovedPermanently)
 		}).Methods("GET")
 	}
 
-	// Serve Static Files
-	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./static")))
+	// --- Serve Static Files (with Custom 404 Catch) ---
+	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Clean the path to prevent directory traversal attacks
+		cleanPath := filepath.Clean(r.URL.Path)
+		fullPath := filepath.Join("static", cleanPath)
+
+		// Check if the file actually exists in the /static folder
+		info, err := os.Stat(fullPath)
+		if os.IsNotExist(err) || info.IsDir() {
+			// It's not a real file, so trigger our custom 404 template!
+			router.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		// The file exists (like style.css or app.js), serve it normally
+		http.FileServer(http.Dir("static")).ServeHTTP(w, r)
+	})
 
 	// 4. Initialize CSRF Protection
 	sessionKey := os.Getenv("SESSION_KEY")

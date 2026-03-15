@@ -58,27 +58,9 @@
             </a>
             {{end}}
             
-            {{if .Permissions.ViewTrain}}
-            <a href="/train" class="nav-link {{if eq .ActivePage "train"}}active{{end}}">
-                <span class="nav-icon">🚂</span><span class="nav-text">Train</span>
-            </a>
-            {{end}}
-            
-            {{if .Permissions.ViewAwards}}
-            <a href="/awards" class="nav-link {{if eq .ActivePage "awards"}}active{{end}}">
-                <span class="nav-icon">🏆</span><span class="nav-text">Awards</span>
-            </a>
-            {{end}}
-            
-            {{if .Permissions.ViewRecs}}
-            <a href="/recommendations" class="nav-link {{if eq .ActivePage "recommendations"}}active{{end}}">
-                <span class="nav-icon">⭐</span><span class="nav-text">Recs</span>
-            </a>
-            {{end}}
-            
             {{if .Permissions.ViewDyno}}
             <a href="/dyno" class="nav-link {{if eq .ActivePage "dyno"}}active{{end}}">
-                <span class="nav-icon">💬</span><span class="nav-text">Dyno</span>
+                <span class="nav-icon">📢</span><span class="nav-text">Shoutouts</span>
             </a>
             {{end}}
             

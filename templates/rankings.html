@@ -1,73 +1,110 @@
 {{define "head_tags"}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        .analytics-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: var(--card-bg); border-radius: 8px; overflow: hidden; }
+        .analytics-table th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px; text-align: left; }
+        .analytics-table td { padding: 12px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
+        .analytics-table tr:hover { background: rgba(102, 126, 234, 0.05); }
+        .positive-growth { color: #28a745; font-weight: bold; }
+        .neutral-growth { color: var(--text-muted); }
+        .vs-total-col { font-weight: bold; color: #667eea; background: rgba(102, 126, 234, 0.05); }
+    </style>
 {{end}}
 
 {{define "header_text"}}
-    <h1>🎮 Last War: Survival</h1>
-    <h2>Member Rankings & Scoring System</h2>
+    <h1>📊 Alliance Analytics</h1>
+    <h2>Commander Growth & VS Activity</h2>
 {{end}}
 
 {{define "content"}}
-            <section class="info-section">
-                <h3>📈 Current Ranking System</h3>
-                <div id="system-info" class="system-info-card">
-                    <p>Loading system configuration...</p>
-                </div>
-            </section>
+    <div class="tabs" style="margin-bottom: 20px;">
+        <button class="tab-button active" onclick="switchTab('growth')" id="tab-btn-growth">📈 Commander Growth</button>
+        <button class="tab-button" onclick="switchTab('vs')" id="tab-btn-vs">⚔️ VS Duel Activity</button>
+    </div>
 
-            <section class="charts-section">
-                <h3>📊 Statistics & Analytics</h3>
-                <div class="charts-grid">
-                    <div class="chart-container">
-                        <h4>Score Distribution</h4>
-                        <canvas id="scoreChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h4>Conductor Frequency</h4>
-                        <canvas id="conductorChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h4>Points Breakdown (Top 10)</h4>
-                        <canvas id="pointsBreakdownChart"></canvas>
-                    </div>
+    <div id="tab-growth" class="tab-content active">
+        <section class="charts-section" style="margin-top: 0;">
+            <h3>🛡️ Alliance Composition</h3>
+            <div class="charts-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                <div class="chart-container">
+                    <h4>Troop Tier Distribution</h4>
+                    <canvas id="troopChart"></canvas>
                 </div>
-            </section>
+                <div class="chart-container">
+                    <h4>Primary Squad Focus</h4>
+                    <canvas id="squadChart"></canvas>
+                </div>
+            </div>
+        </section>
 
-            <section class="rankings-section">
-                <h3>🏅 Member Rankings</h3>
-                <div class="rankings-controls">
-                    <button id="refresh-btn" class="primary-btn">🔄 Refresh</button>
-                    <div class="info-badge">
-                        <strong>Average Conductor Count:</strong> <span id="avg-count">-</span>
-                    </div>
+        <section class="rankings-section">
+            <h3>📈 Power Growth Leaderboard</h3>
+            <div class="filter-controls">
+                <div class="filter-group">
+                    <label for="growth-search">🔍 Search:</label>
+                    <input type="text" id="growth-search" placeholder="Commander name...">
                 </div>
-                
-                <div class="filter-controls">
-                    <div class="filter-group">
-                        <label for="filter-name">🔍 Filter by Name:</label>
-                        <input type="text" id="filter-name" placeholder="Enter member name...">
-                    </div>
-                    <div class="filter-group">
-                        <label for="filter-rank">🏅 Filter by Rank:</label>
-                        <select id="filter-rank">
-                            <option value="">All Ranks</option>
-                            <option value="R5">R5</option>
-                            <option value="R4">R4</option>
-                            <option value="R3">R3</option>
-                            <option value="R2">R2</option>
-                            <option value="R1">R1</option>
-                        </select>
-                    </div>
-                    </div>
-                    <button id="clear-filters-btn" class="secondary-btn">✖️ Clear Filters</button>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table class="analytics-table" id="growth-table">
+                    <thead>
+                        <tr>
+                            <th>Commander</th>
+                            <th>Rank</th>
+                            <th>Current Power</th>
+                            <th>7-Day Growth</th>
+                            <th>30-Day Growth</th>
+                        </tr>
+                    </thead>
+                    <tbody id="growth-tbody">
+                        <tr><td colspan="5" class="loading">Loading growth data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div id="tab-vs" class="tab-content">
+        <section class="charts-section" style="margin-top: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3>⚔️ VS Duel Contributions</h3>
+                <div class="filter-group">
+                    <label for="vs-week-select">📅 Select Week:</label>
+                    <select id="vs-week-select" style="min-width: 200px; padding: 8px; border-radius: 6px;"></select>
                 </div>
-                
-                <div id="rankings-list" class="rankings-list">
-                    <p class="loading">Loading rankings...</p>
-                </div>
-            </section>
+            </div>
+            
+            <div class="chart-container full-width">
+                <h4>Daily Contribution Breakdown</h4>
+                <canvas id="vsChart"></canvas>
+            </div>
+        </section>
+
+        <section class="rankings-section">
+            <h3>🏆 Weekly VS Leaderboard</h3>
+            <div style="overflow-x: auto;">
+                <table class="analytics-table" id="vs-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Commander</th>
+                            <th>Mon (Radar)</th>
+                            <th>Tue (Base)</th>
+                            <th>Wed (Tech)</th>
+                            <th>Thu (Hero)</th>
+                            <th>Fri (Train)</th>
+                            <th>Sat (Kill)</th>
+                            <th class="vs-total-col">Total Points</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vs-tbody">
+                        <tr><td colspan="9" class="loading">Loading VS data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
 {{end}}
 
 {{define "scripts"}}
