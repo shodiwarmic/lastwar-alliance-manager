@@ -1,12 +1,9 @@
 const API_BASE = '/api';
 const SETTINGS_URL = `${API_BASE}/settings`;
 
-// Notice: Removed 'view_train' and 'manage_train' from the matrix
 const PERM_ROWS = [
     { key: 'manage_members', label: 'Manage Roster (Home)' },
-    { key: 'view_awards', label: 'View Awards' }, { key: 'manage_awards', label: 'Manage Awards' },
-    { key: 'view_recs', label: 'View Recommendations' }, { key: 'manage_recs', label: 'Manage Recommendations' },
-    { key: 'view_dyno', label: 'View Dyno' }, { key: 'manage_dyno', label: 'Manage Dyno' },
+    { key: 'view_dyno', label: 'View Shoutouts' }, { key: 'manage_dyno', label: 'Manage Shoutouts' },
     { key: 'view_rankings', label: 'View Analytics Dashboard' },
     { key: 'view_storm', label: 'View Desert Storm' }, { key: 'manage_storm', label: 'Manage Desert Storm' },
     { key: 'view_vs_points', label: 'View VS Points' }, { key: 'manage_vs_points', label: 'Manage VS Points' },

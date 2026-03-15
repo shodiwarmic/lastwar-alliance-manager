@@ -134,27 +134,13 @@ func main() {
 	router.HandleFunc("/api/profile/me", authMiddleware(getMyProfile)).Methods("GET")
 	router.HandleFunc("/api/profile/me", authMiddleware(updateMyProfile)).Methods("PUT")
 
-	// Awards
-	router.HandleFunc("/api/awards", authMiddleware(getAwards)).Methods("GET")
-	router.HandleFunc("/api/awards", authMiddleware(requirePermission("manage_awards", saveAwards))).Methods("POST")
-	router.HandleFunc("/api/awards/{week}", authMiddleware(requirePermission("manage_awards", deleteWeekAwards))).Methods("DELETE")
-
-	// Award types
-	router.HandleFunc("/api/award-types", authMiddleware(getAwardTypes)).Methods("GET")
-	router.HandleFunc("/api/award-types", authMiddleware(requirePermission("manage_awards", createAwardType))).Methods("POST")
-	router.HandleFunc("/api/award-types/{id}", authMiddleware(requirePermission("manage_awards", updateAwardType))).Methods("PUT")
-	router.HandleFunc("/api/award-types/{id}", authMiddleware(requirePermission("manage_awards", deleteAwardType))).Methods("DELETE")
-
 	// VS points
 	router.HandleFunc("/api/vs-points", authMiddleware(getVSPoints)).Methods("GET")
 	router.HandleFunc("/api/vs-points", authMiddleware(requirePermission("manage_vs_points", saveVSPoints))).Methods("POST")
 	router.HandleFunc("/api/vs-points/{week}", authMiddleware(requirePermission("manage_vs_points", deleteWeekVSPoints))).Methods("DELETE")
 	router.HandleFunc("/api/vs-points/process-screenshot", authMiddleware(requirePermission("manage_vs_points", processVSPointsScreenshot))).Methods("POST")
 
-	// Recommendations & Dyno
-	router.HandleFunc("/api/recommendations", authMiddleware(getRecommendations)).Methods("GET")
-	router.HandleFunc("/api/recommendations", authMiddleware(createRecommendation)).Methods("POST")
-	router.HandleFunc("/api/recommendations/{id}", authMiddleware(deleteRecommendation)).Methods("DELETE")
+	// Dyno
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(getDynoRecommendations)).Methods("GET")
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(createDynoRecommendation)).Methods("POST")
 	router.HandleFunc("/api/dyno-recommendations/{id}", authMiddleware(deleteDynoRecommendation)).Methods("DELETE")
@@ -223,17 +209,15 @@ func main() {
 
 	// Map out the rest of your pages
 	pages := map[string]string{
-		"/awards":          "awards",
-		"/recommendations": "recommendations",
-		"/dyno":            "dyno",
-		"/rankings":        "rankings",
-		"/storm":           "storm",
-		"/vs":              "vs",
-		"/upload":          "upload",
-		"/settings":        "settings",
-		"/admin":           "admin",
-		"/profile":         "profile",
-		"/files":           "files",
+		"/dyno":     "dyno",
+		"/rankings": "rankings",
+		"/storm":    "storm",
+		"/vs":       "vs",
+		"/upload":   "upload",
+		"/settings": "settings",
+		"/admin":    "admin",
+		"/profile":  "profile",
+		"/files":    "files",
 	}
 
 	for path, templateName := range pages {

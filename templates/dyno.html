@@ -3,8 +3,8 @@
 {{end}}
 
 {{define "header_text"}}
-    <h1>🚂 Last War: Survival</h1>
-    <h2>Dyno Recommendations</h2>
+    <h1>🎮 Last War: Survival</h1>
+    <h2>📢 Shoutouts & Feedback</h2>
 {{end}}
 
 {{define "content"}}
@@ -12,15 +12,15 @@
                 <div class="info-content">
                     <div class="info-icon">ℹ️</div>
                     <div class="info-text">
-                        <strong>About Dyno Recommendations:</strong> 
-                        Quick informal feedback system for members. Can be positive (+) or negative (-) points. 
-                        These are just notices and don't affect rankings. All recommendations automatically expire after 1 week.
+                        <strong>About Shoutouts:</strong> 
+                        A quick, informal feedback system for alliance members. You can give positive (+) or negative (-) points. 
+                        These are just notices to help track activity and attitude. All shoutouts automatically expire after 1 week.
                     </div>
                 </div>
             </section>
 
             <section class="stats-dashboard">
-                <h3>📊 Dyno Statistics</h3>
+                <h3>📊 Shoutout Statistics</h3>
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-icon">💬</div>
@@ -54,7 +54,7 @@
             </section>
 
             <section class="charts-section">
-                <h3>📈 Dyno Analytics</h3>
+                <h3>📈 Shoutout Analytics</h3>
                 <div class="charts-grid">
                     <div class="chart-container">
                         <h4>Points Distribution</h4>
@@ -65,14 +65,14 @@
                         <canvas id="members-chart"></canvas>
                     </div>
                     <div class="chart-container full-width">
-                        <h4>Daily Dyno Activity (Last 7 Days)</h4>
+                        <h4>Daily Activity (Last 7 Days)</h4>
                         <canvas id="timeline-chart"></canvas>
                     </div>
                 </div>
             </section>
 
             <section class="recommendation-form-section">
-                <h3>➕ Add Dyno Recommendation</h3>
+                <h3>➕ Add a Shoutout</h3>
                 <div class="recommendation-form">
                     <div class="form-group">
                         <label for="member-select">Member:</label>
@@ -84,19 +84,19 @@
                     <div class="form-group">
                         <label for="points-input">Points:</label>
                         <input type="number" id="points-input" class="points-input" placeholder="Enter points (positive or negative)" min="-999" max="999" required>
-                        <small>Use positive numbers for good feedback, negative for concerns</small>
+                        <small>Use positive numbers to give props, negative for concerns</small>
                     </div>
                     <div class="form-group">
                         <label for="notes-input">Notes (Required):</label>
-                        <textarea id="notes-input" class="notes-input" rows="3" placeholder="Provide context for this recommendation..." required></textarea>
+                        <textarea id="notes-input" class="notes-input" rows="3" placeholder="Provide context for this shoutout..." required></textarea>
                     </div>
-                    <button id="submit-dyno-btn" class="btn-primary">✨ Submit Dyno Recommendation</button>
+                    <button id="submit-dyno-btn" class="btn-primary">✨ Submit Shoutout</button>
                 </div>
             </section>
 
             <section class="recommendations-list-section">
                 <div class="section-header-controls">
-                    <h3>📋 Dyno Recommendations</h3>
+                    <h3>📋 Recent Shoutouts</h3>
                     <div class="view-toggle">
                         <button class="toggle-btn active" data-view="list" id="list-view-btn">📄 List View</button>
                         <button class="toggle-btn" data-view="grouped" id="grouped-view-btn">👥 Grouped by Member</button>
@@ -109,12 +109,11 @@
                         <button class="filter-chip" data-filter="active">Active Only</button>
                         <button class="filter-chip" data-filter="positive">Positive</button>
                         <button class="filter-chip" data-filter="negative">Negative</button>
-                        <button class="filter-chip" data-filter="mine">My Dynos</button>
+                        <button class="filter-chip" data-filter="mine">My Shoutouts</button>
                     </div>
                 </div>
                 <div id="dyno-list" class="recommendations-list">
-                    <!-- Dyno recommendations will be loaded here -->
-                </div>
+                    </div>
             </section>
 {{end}}
 
