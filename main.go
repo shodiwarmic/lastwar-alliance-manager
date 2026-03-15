@@ -134,16 +134,6 @@ func main() {
 	router.HandleFunc("/api/profile/me", authMiddleware(getMyProfile)).Methods("GET")
 	router.HandleFunc("/api/profile/me", authMiddleware(updateMyProfile)).Methods("PUT")
 
-	// Train schedule
-	router.HandleFunc("/api/train-schedules", authMiddleware(getTrainSchedules)).Methods("GET")
-	router.HandleFunc("/api/train-schedules/weekly-message", authMiddleware(generateWeeklyMessage)).Methods("GET")
-	router.HandleFunc("/api/train-schedules/daily-message", authMiddleware(generateDailyMessage)).Methods("GET")
-	router.HandleFunc("/api/train-schedules/conductor-messages", authMiddleware(generateConductorMessages)).Methods("GET")
-	router.HandleFunc("/api/train-schedules/auto-schedule", authMiddleware(requirePermission("manage_train", autoSchedule))).Methods("POST")
-	router.HandleFunc("/api/train-schedules", authMiddleware(requirePermission("manage_train", createTrainSchedule))).Methods("POST")
-	router.HandleFunc("/api/train-schedules/{id}", authMiddleware(requirePermission("manage_train", updateTrainSchedule))).Methods("PUT")
-	router.HandleFunc("/api/train-schedules/{id}", authMiddleware(requirePermission("manage_train", deleteTrainSchedule))).Methods("DELETE")
-
 	// Awards
 	router.HandleFunc("/api/awards", authMiddleware(getAwards)).Methods("GET")
 	router.HandleFunc("/api/awards", authMiddleware(requirePermission("manage_awards", saveAwards))).Methods("POST")
@@ -233,7 +223,6 @@ func main() {
 
 	// Map out the rest of your pages
 	pages := map[string]string{
-		"/train":           "train",
 		"/awards":          "awards",
 		"/recommendations": "recommendations",
 		"/dyno":            "dyno",
