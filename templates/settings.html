@@ -1,12 +1,12 @@
 {{define "header_text"}}
     <h1>🎮 Last War: Survival</h1>
-    <h2>Auto-Schedule Settings</h2>
+    <h2>System Settings</h2>
 {{end}}
 
 {{define "content"}}
             <section class="form-section">
-                <h3>Ranking System Configuration</h3>
-                <p class="info-text">Configure the point system used for auto-scheduling train conductors. Higher points = higher priority.</p>
+                <h3>Global Configuration</h3>
+                <p class="info-text">Configure alliance-wide settings, game limits, and role-based permissions.</p>
                 
                 <form id="settings-form">
                     <div class="settings-group">
@@ -26,10 +26,11 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    </tbody>
+                                </tbody>
                             </table>
                         </div>
                     </div>
+
                     <div class="settings-group">
                         <h4>🏆 Award Points</h4>
                         <div class="form-group">
@@ -50,53 +51,7 @@
                     </div>
 
                     <div class="settings-group">
-                        <h4>⭐ Recommendation Points</h4>
-                        <div class="info-box">
-                            <p><strong>Non-Linear Scoring Formula:</strong> Points = 5 + 5 × √n</p>
-                            <p class="help-text">Where n = number of recommendations. This creates diminishing returns for multiple recommendations.</p>
-                            <p class="help-text">Examples: 1 rec = 10 pts, 4 recs = 15 pts, 9 recs = 20 pts</p>
-                        </div>
-                        <p class="help-text"><em>Note: Recommendation points are calculated using a non-linear formula and cannot be manually configured.</em></p>
-                    </div>
-
-                    <div class="settings-group">
-                        <h4>⏱️ Recent Conductor Penalty</h4>
-                        <div class="form-group">
-                            <label for="recent-conductor-days">Penalty Duration (days):</label>
-                            <input type="number" id="recent-conductor-days" min="1" required>
-                            <span class="help-text">Remove (this value - days since last conductor) points. If ≤0, member won't be penalized.</span>
-                        </div>
-                    </div>
-
-                    <div class="settings-group">
-                        <h4>📊 Above Average Penalty</h4>
-                        <div class="form-group">
-                            <label for="above-average-penalty">Penalty Points:</label>
-                            <input type="number" id="above-average-penalty" min="0" required>
-                            <span class="help-text">Points removed if member has been conductor more than average</span>
-                        </div>
-                    </div>
-
-                    <div class="settings-group">
-                        <h4>⭐ R4/R5 Rank Boost</h4>
-                        <div class="form-group">
-                            <label for="r4r5-rank-boost">Base Bonus Points:</label>
-                            <input type="number" id="r4r5-rank-boost" min="0" required>
-                            <span class="help-text">Base points for R4/R5 members, multiplied exponentially by 2^(days_since_last_conductor/7). Doubles every week to guarantee selection within 3 weeks.</span>
-                        </div>
-                    </div>
-
-                    <div class="settings-group">
-                        <h4>🎯 First Time Conductor Boost</h4>
-                        <div class="form-group">
-                            <label for="first-time-boost">Bonus Points:</label>
-                            <input type="number" id="first-time-boost" min="0" required>
-                            <span class="help-text">Bonus points for members who have never been conductor before (only if they have some points)</span>
-                        </div>
-                    </div>
-
-                    <div class="settings-group">
-                        <h4>⚡ Power Tracking</h4>
+                        <h4>⚡ Tracking Features</h4>
                         <div class="form-group">
                             <label class="checkbox-label" style="margin-bottom: 10px;">
                                 <input type="checkbox" id="squad-tracking-enabled">
@@ -112,9 +67,8 @@
                         <div id="power-upload-link" style="display: none; margin-top: 15px; padding: 15px; background: var(--card-bg); border-radius: 8px; border: 2px solid #667eea;">
                             <p style="margin: 0 0 10px 0; color: #667eea; font-weight: bold;">📸 Screenshot Upload Available</p>
                             <p style="margin: 0 0 10px 0; font-size: 14px;">Visit the dedicated Upload page to process game screenshots with OCR or manually enter data.</p>
-                            <a href="/upload.html" class="primary-btn" style="display: inline-block; text-decoration: none; padding: 10px 20px;">📸 Go to Upload Page</a>
+                            <a href="/upload" class="primary-btn" style="display: inline-block; text-decoration: none; padding: 10px 20px;">📸 Go to Upload Page</a>
                         </div>
-                        
                     </div>
 
                      <div class="settings-group">
@@ -125,43 +79,13 @@
                             <span class="help-text">Caps the maximum level a member can be assigned. Cannot be set lower than 30. Update this when the game increases the level cap.</span>
                         </div>
                     </div>
-                    
-                    <div class="settings-group">
-                        <h4>📝 Weekly Schedule Message Template</h4>
-                        <div class="form-group">
-                            <label for="schedule-message-template">Message Template:</label>
-                            <textarea id="schedule-message-template" rows="8" required></textarea>
-                            <span class="help-text">
-                                Template for in-game copy message. Use:<br>
-                                <code>{WEEK}</code> = Week start date<br>
-                                <code>{SCHEDULES}</code> = Daily schedules<br>
-                                <code>{NEXT_3}</code> = Next 3 candidates
-                            </span>
-                        </div>
-                    </div>
-
-                    <div class="settings-group">
-                        <h4>📨 Daily Message Template</h4>
-                        <div class="form-group">
-                            <label for="daily-message-template">Message Template:</label>
-                            <textarea id="daily-message-template" rows="10" required></textarea>
-                            <span class="help-text">
-                                Template for daily conductor reminder. Use:<br>
-                                <code>{DATE}</code> = Date (e.g., Monday, Jan 2, 2006)<br>
-                                <code>{CONDUCTOR_NAME}</code> = Conductor's name<br>
-                                <code>{CONDUCTOR_RANK}</code> = Conductor's rank<br>
-                                <code>{BACKUP_NAME}</code> = Backup's name<br>
-                                <code>{BACKUP_RANK}</code> = Backup's rank
-                            </span>
-                        </div>
-                    </div>
 
                     <div class="settings-group">
                         <h4>🚪 Login Screen Banner</h4>
                         <div class="form-group">
                             <label for="settings-login-message">Banner Content (Supports HTML):</label>
                             <textarea id="settings-login-message" rows="6" placeholder="Message to display below the login button..."></textarea>
-                            <span class="help-text">Leave blank to hide entirely. Useful for Discord links or onboarding instructions. Note: The text is automatically wrapped in a styled box on the login screen.</span>
+                            <span class="help-text">Leave blank to hide entirely. Useful for Discord links or onboarding instructions.</span>
                         </div>
                     </div>
 
@@ -182,7 +106,6 @@
                                 <input type="checkbox" id="storm_respect_dst" style="width: 20px; height: 20px;">
                                 Automatically respect Daylight Saving Time (DST)
                             </label>
-                            <p class="help-text" style="margin-left: 30px;">If disabled, times will be locked to Standard Time all year round.</p>
                         </div>
                     </div>
 
@@ -216,28 +139,8 @@
 
                     <div class="button-group">
                         <button type="submit" class="primary-btn">💾 Save Settings</button>
-                        <button type="button" id="reset-btn" class="secondary-btn">🔄 Reset to Defaults</button>
                     </div>
                 </form>
-            </section>
-
-            <section class="info-section">
-                <h3>ℹ️ How the Ranking System Works</h3>
-                <div class="info-card">
-                    <p><strong>Auto-Schedule Selection:</strong> When you auto-schedule, the system calculates a score for each eligible member:</p>
-                    <ul>
-                        <li><strong>Base Score:</strong> Starts at 0</li>
-                        <li><strong>Awards:</strong> Adds points based on active awards (1st/2nd/3rd place). Awards stack across weeks until member conducts.</li>
-                        <li><strong>Recommendations:</strong> Adds points using non-linear formula: 5 + 5×√n (where n = recommendation count). Recommendations stack until member conducts.</li>
-                        <li><strong>Rank Boost:</strong> R4 and R5 members receive bonus points</li>
-                        <li><strong>First Timer:</strong> Members who have never been conductor receive bonus points (if they have some base points)</li>
-                        <li><strong>Recent Conductor:</strong> Subtracts points if they were conductor recently (penalty = days_config - days_since_last, minimum 0)</li>
-                        <li><strong>Above Average:</strong> Subtracts points if they've been conductor more times than the average member</li>
-                    </ul>
-                    <p><strong>Member Eligibility:</strong> Only members marked as "Eligible for Train" are considered for auto-scheduling. You can toggle eligibility on the Members page.</p>
-                    <p><strong>Award/Recommendation Expiration:</strong> Awards and recommendations automatically become inactive (expire) when the member is assigned as conductor or used as backup. This is calculated on-the-fly based on conductor history.</p>
-                    <p><strong>Selection Priority:</strong> The member with the highest score who is eligible is selected as conductor. The system aims to schedule 7 unique conductors per week.</p>
-                </div>
             </section>
 {{end}}
 
