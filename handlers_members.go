@@ -438,3 +438,61 @@ func getMemberStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
+
+// getMyProfile retrieves the current user's linked member stats
+func getMyProfile(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	memberID, ok := session.Values["member_id"].(int)
+	if !ok {
+		http.Error(w, "No linked member profile found", http.StatusNotFound)
+		return
+	}
+
+	var m Member
+	err := db.QueryRow("SELECT id, name, rank, level, power, squad_type, squad_power, troop_level, profession FROM members WHERE id = ?", memberID).
+		Scan(&m.ID, &m.Name, &m.Rank, &m.Level, &m.Power, &m.SquadType, &m.SquadPower, &m.TroopLevel, &m.Profession)
+	if err != nil {
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(m)
+}
+
+// updateMyProfile allows a user to self-serve update their own in-game stats
+func updateMyProfile(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	memberID, ok := session.Values["member_id"].(int)
+	if !ok {
+		http.Error(w, "Forbidden: No linked member profile", http.StatusForbidden)
+		return
+	}
+
+	var req struct {
+		Level      int    `json:"level"`
+		Power      int64  `json:"power"`
+		TroopLevel int    `json:"troop_level"`
+		SquadType  string `json:"squad_type"`
+		Profession string `json:"profession"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	_, err := db.Exec(`
+		UPDATE members 
+		SET level = ?, power = ?, troop_level = ?, squad_type = ?, profession = ?
+		WHERE id = ?`,
+		req.Level, req.Power, req.TroopLevel, req.SquadType, req.Profession, memberID)
+
+	if err != nil {
+		log.Printf("Profile Update Error: %v", err)
+		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}

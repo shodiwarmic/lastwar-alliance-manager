@@ -131,6 +131,8 @@ func main() {
 	router.HandleFunc("/api/members/{id}", authMiddleware(requirePermission("manage_members", deleteMember))).Methods("DELETE")
 	router.HandleFunc("/api/members/import", authMiddleware(requirePermission("manage_members", importCSV))).Methods("POST")
 	router.HandleFunc("/api/members/import/confirm", authMiddleware(requirePermission("manage_members", confirmMemberUpdates))).Methods("POST")
+	router.HandleFunc("/api/profile/me", authMiddleware(getMyProfile)).Methods("GET")
+	router.HandleFunc("/api/profile/me", authMiddleware(updateMyProfile)).Methods("PUT")
 
 	// Train schedule
 	router.HandleFunc("/api/train-schedules", authMiddleware(getTrainSchedules)).Methods("GET")

@@ -4,39 +4,88 @@
 {{end}}
 
 {{define "content"}}
-            <section class="form-section">
-                <h3>🔐 Change Password</h3>
-                <form id="password-form">
-                    <div class="form-group">
-                        <label for="current-password">Current Password:</label>
-                        <input type="password" id="current-password" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="new-password">New Password:</label>
-                        <input type="password" id="new-password" required>
-                        <ul id="password-rules" style="margin-top: 8px; padding-left: 0; list-style: none; font-size: 0.85em; line-height: 1.6;">
-                            <li style="color: #666;">⚪ Loading requirements...</li>
-                        </ul>
-                    </div>
-                    <div class="form-group">
-                        <label for="confirm-password">Confirm New Password:</label>
-                        <input type="password" id="confirm-password" required>
-                        <div id="match-status" style="margin-top: 5px; font-size: 0.85em; font-weight: bold; display: none;"></div>
-                    </div>
-                    <div class="button-group">
-                        <button type="submit" id="submit-pwd-btn" class="primary-btn" disabled style="opacity: 0.6; cursor: not-allowed;">🔒 Change Password</button>
-                    </div>
-                </form>
-            </section>
+<div class="profile-container" style="display: flex; gap: 20px; flex-wrap: wrap;">
+    
+    <div style="flex: 1; min-width: 300px;">
+        <section class="info-section">
+            <h3>ℹ️ Account Information</h3>
+            <div class="info-card">
+                <p><strong>Username:</strong> <span id="profile-username">-</span></p>
+                <p><strong>Role:</strong> <span id="profile-role">-</span></p>
+                <p id="profile-member-info" style="display: none;"><strong>Linked Member:</strong> <span id="profile-member">-</span></p>
+            </div>
+        </section>
 
-            <section class="info-section">
-                <h3>ℹ️ Account Information</h3>
-                <div class="info-card">
-                    <p><strong>Username:</strong> <span id="profile-username">-</span></p>
-                    <p><strong>Role:</strong> <span id="profile-role">-</span></p>
-                    <p id="profile-member-info" style="display: none;"><strong>Linked Member:</strong> <span id="profile-member">-</span></p>
+        <section class="form-section" style="margin-top: 20px;">
+            <h3>🔐 Change Password</h3>
+            <form id="password-form">
+                <div class="form-group">
+                    <label for="current-password">Current Password:</label>
+                    <input type="password" id="current-password" required>
                 </div>
-            </section>
+                <div class="form-group">
+                    <label for="new-password">New Password:</label>
+                    <input type="password" id="new-password" required>
+                    <ul id="password-rules" style="margin-top: 8px; padding-left: 0; list-style: none; font-size: 0.85em; line-height: 1.6;">
+                        <li style="color: #666;">⚪ Loading requirements...</li>
+                    </ul>
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm New Password:</label>
+                    <input type="password" id="confirm-password" required>
+                    <div id="match-status" style="margin-top: 5px; font-size: 0.85em; font-weight: bold; display: none;"></div>
+                </div>
+                <div class="button-group">
+                    <button type="submit" id="submit-pwd-btn" class="primary-btn" disabled style="opacity: 0.6; cursor: not-allowed;">🔒 Change Password</button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div style="flex: 1; min-width: 300px;">
+        <section class="form-section" id="game-stats-section" style="display: none;">
+            <h3>📊 In-Game Stats</h3>
+            <form id="game-stats-form">
+                <div class="form-group">
+                    <label for="stat-level">HQ Level</label>
+                    <input type="number" id="stat-level" min="1" max="40" required>
+                </div>
+                <div class="form-group">
+                    <label for="stat-power">Total Power</label>
+                    <input type="number" id="stat-power" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="stat-troop-level">Highest Troop Level</label>
+                    <input type="number" id="stat-troop-level" min="1" max="10">
+                </div>
+                <div class="form-group">
+                    <label for="stat-squad-type">Main Squad Type</label>
+                    <select id="stat-squad-type">
+                        <option value="">Unknown</option>
+                        <option value="Tank">Tank</option>
+                        <option value="Aircraft">Aircraft</option>
+                        <option value="Missile">Missile</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="stat-profession">Profession</label>
+                    <select id="stat-profession">
+                        <option value="">Unknown</option>
+                        <option value="Engineer">Engineer</option>
+                        <option value="Warlord">Warlord</option>
+                    </select>
+                </div>
+                <div class="button-group">
+                    <button type="submit" id="submit-stats-btn" class="primary-btn">💾 Save Stats</button>
+                </div>
+            </form>
+        </section>
+        
+        <div id="no-member-warning" class="info-card" style="display: none; background: #fff3cd; color: #856404; border-color: #ffeeba;">
+            <p>⚠️ Your account is not linked to an in-game commander profile. Contact an administrator to link your account to update your stats.</p>
+        </div>
+    </div>
+</div>
 {{end}}
 
 {{define "scripts"}}

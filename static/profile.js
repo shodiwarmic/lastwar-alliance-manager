@@ -1,3 +1,5 @@
+// profile.js - Handles user profile information and password change logic
+
 const API_BASE = '/api';
 
 let currentPolicy = {
@@ -15,7 +17,6 @@ async function loadProfileInfo() {
         if (response.ok) {
             const data = await response.json();
             
-            // Display profile info
             const profileUsername = document.getElementById('profile-username');
             if (profileUsername) profileUsername.textContent = data.username;
             
@@ -35,7 +36,7 @@ async function loadProfileInfo() {
     }
 }
 
-// Fetch password policy from settings to dynamically update the UI
+// Fetch password policy from settings
 async function loadPasswordPolicy() {
     try {
         const response = await fetch(`${API_BASE}/settings`);
@@ -58,11 +59,37 @@ async function loadPasswordPolicy() {
                 if (currentPolicy.require_special) rulesList.innerHTML += `<li id="rule-special" data-text="At least one special character" style="color: #666; transition: color 0.3s;">⚪ At least one special character</li>`;
             }
             
-            // Re-evaluate current input just in case the browser auto-filled it
             checkPasswordRequirements();
         }
     } catch (error) {
         console.error('Failed to load password policy:', error);
+    }
+}
+
+// Fetch member game stats
+async function loadGameStats() {
+    try {
+        const response = await fetch(`${API_BASE}/profile/me`);
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Show the form, hide the warning
+            document.getElementById('game-stats-section').style.display = 'block';
+            document.getElementById('no-member-warning').style.display = 'none';
+
+            // Populate the data
+            document.getElementById('stat-level').value = data.level || '';
+            document.getElementById('stat-power').value = data.power || '';
+            document.getElementById('stat-troop-level').value = data.troop_level || '';
+            document.getElementById('stat-squad-type').value = data.squad_type || '';
+            document.getElementById('stat-profession').value = data.profession || '';
+        } else if (response.status === 404 || response.status === 403) {
+            // User is authenticated, but not linked to a member. Hide form, show warning.
+            document.getElementById('game-stats-section').style.display = 'none';
+            document.getElementById('no-member-warning').style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Failed to load game stats:', error);
     }
 }
 
@@ -75,22 +102,20 @@ function checkPasswordRequirements() {
     
     let allRulesMet = true;
 
-    // Helper to toggle UI state
     function toggleRule(id, isMet) {
         const el = document.getElementById(id);
         if (!el) return;
         const baseText = el.getAttribute('data-text');
         if (isMet) {
             el.innerHTML = `✅ ${baseText}`;
-            el.style.color = '#28a745'; // Green
+            el.style.color = '#28a745';
         } else {
             el.innerHTML = `❌ ${baseText}`;
-            el.style.color = '#dc3545'; // Red
+            el.style.color = '#dc3545';
             allRulesMet = false;
         }
     }
 
-    // Evaluate rules only if the user has typed something
     if (newPwd.length > 0) {
         toggleRule('rule-length', newPwd.length >= currentPolicy.min_length);
         if (currentPolicy.require_upper) toggleRule('rule-upper', /[A-Z]/.test(newPwd));
@@ -98,7 +123,6 @@ function checkPasswordRequirements() {
         if (currentPolicy.require_number) toggleRule('rule-number', /[0-9]/.test(newPwd));
         if (currentPolicy.require_special) toggleRule('rule-special', /[^a-zA-Z0-9]/.test(newPwd));
     } else {
-        // Reset to neutral if empty
         allRulesMet = false;
         const rulesList = document.getElementById('password-rules');
         const listItems = rulesList.getElementsByTagName('li');
@@ -108,7 +132,6 @@ function checkPasswordRequirements() {
         }
     }
 
-    // Evaluate matching status
     let passwordsMatch = false;
     if (confirmPwd.length > 0) {
         matchStatus.style.display = 'block';
@@ -124,7 +147,6 @@ function checkPasswordRequirements() {
         matchStatus.style.display = 'none';
     }
 
-    // Toggle submit button
     if (allRulesMet && passwordsMatch && newPwd.length > 0) {
         submitBtn.disabled = false;
         submitBtn.style.opacity = '1';
@@ -139,6 +161,7 @@ function checkPasswordRequirements() {
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     const passwordForm = document.getElementById('password-form');
+    const statsForm = document.getElementById('game-stats-form');
     const newPwdInput = document.getElementById('new-password');
     const confirmPwdInput = document.getElementById('confirm-password');
     
@@ -146,8 +169,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (passwordForm) {
         await loadProfileInfo();
         await loadPasswordPolicy();
+        await loadGameStats();
         
-        // Attach real-time listeners
         newPwdInput.addEventListener('input', checkPasswordRequirements);
         confirmPwdInput.addEventListener('input', checkPasswordRequirements);
         
@@ -184,7 +207,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 alert('✅ Password changed successfully!');
                 passwordForm.reset();
-                checkPasswordRequirements(); // Reset the UI indicators
+                checkPasswordRequirements();
                 
             } catch (error) {
                 console.error('Error changing password:', error);
@@ -194,5 +217,40 @@ document.addEventListener('DOMContentLoaded', async () => {
                 submitBtn.textContent = '🔒 Change Password';
             }
         });
+        
+        // Game stats form submission
+        if (statsForm) {
+            statsForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const submitBtn = document.getElementById('submit-stats-btn');
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Saving...';
+                
+                try {
+                    const response = await fetch(`${API_BASE}/profile/me`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            level: parseInt(document.getElementById('stat-level').value) || 0,
+                            power: parseInt(document.getElementById('stat-power').value) || 0,
+                            troop_level: parseInt(document.getElementById('stat-troop-level').value) || 0,
+                            squad_type: document.getElementById('stat-squad-type').value,
+                            profession: document.getElementById('stat-profession').value
+                        })
+                    });
+                    
+                    if (!response.ok) throw new Error(await response.text());
+                    
+                    alert('✅ Game stats updated successfully!');
+                } catch (error) {
+                    console.error('Error updating stats:', error);
+                    alert('❌ Failed to update stats.');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '💾 Save Stats';
+                }
+            });
+        }
     }
 });
