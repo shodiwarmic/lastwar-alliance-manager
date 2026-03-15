@@ -117,8 +117,6 @@ async function loadGameStats() {
             document.getElementById('no-member-warning').style.display = 'none';
 
             document.getElementById('stat-name').value = data.name || '';
-            document.getElementById('stat-rank').value = data.rank || '';
-            document.getElementById('stat-eligible').checked = data.eligible || false;
             document.getElementById('stat-level').value = data.level || '';
             document.getElementById('stat-power').value = data.power || '';
             document.getElementById('stat-troop-level').value = data.troop_level || 0;
