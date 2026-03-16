@@ -111,6 +111,16 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. NEW: Fetch the CURRENT name before we overwrite it
+	var oldName string
+	err = db.QueryRow("SELECT name FROM members WHERE id = ?", id).Scan(&oldName)
+	if err != nil {
+		log.Printf("Error fetching current member name: %v", err)
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	// 2. Perform the main UPDATE
 	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, id)
 	if err != nil {
 		log.Printf("DB Update Error: %v", err)
@@ -118,6 +128,15 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 3. NEW: If the update succeeded and the name actually changed, save the old name as a Global Alias
+	if m.Name != "" && oldName != m.Name {
+		_, aliasErr := db.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, alias) VALUES (?, NULL, ?)", id, oldName)
+		if aliasErr != nil {
+			log.Printf("Warning: Failed to auto-create global alias for name change (member %d): %v", id, aliasErr)
+		}
+	}
+
+	// Handle Power History
 	if m.Power != nil {
 		var currentPower int64 = -1
 		_ = db.QueryRow(`SELECT power FROM power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentPower)
@@ -130,6 +149,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Handle Squad Power History
 	if m.SquadPower != nil {
 		var currentSquadPower int64 = -1
 		_ = db.QueryRow(`SELECT power FROM squad_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentSquadPower)
