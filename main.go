@@ -135,6 +135,11 @@ func main() {
 	router.HandleFunc("/api/profile/me", authMiddleware(getMyProfile)).Methods("GET")
 	router.HandleFunc("/api/profile/me", authMiddleware(updateMyProfile)).Methods("PUT")
 
+	// Member Aliases API
+	router.HandleFunc("/api/members/{id:[0-9]+}/aliases", authMiddleware(getMemberAliases)).Methods("GET")
+	router.HandleFunc("/api/members/{id:[0-9]+}/aliases", authMiddleware(addMemberAlias)).Methods("POST")
+	router.HandleFunc("/api/aliases/{id:[0-9]+}", authMiddleware(deleteMemberAlias)).Methods("DELETE")
+
 	// VS points
 	router.HandleFunc("/api/vs-points", authMiddleware(getVSPoints)).Methods("GET")
 	router.HandleFunc("/api/vs-points", authMiddleware(requirePermission("manage_vs_points", saveVSPoints))).Methods("POST")

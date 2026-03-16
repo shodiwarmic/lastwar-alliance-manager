@@ -363,10 +363,23 @@ function displayMembers(members) {
             `;
         }
         
+        // Format the aliases for display
+        let aliasHtml = '';
+        if (member.personal_aliases) {
+            aliasHtml += ` <span style="color: #63b3ed; font-size: 0.85em;">(${escapeHtml(member.personal_aliases)})</span>`;
+        }
+        if (member.global_aliases) {
+            aliasHtml += ` <span style="color: #a0aec0; font-size: 0.85em;">[${escapeHtml(member.global_aliases)}]</span>`;
+        }
+        
         return `
             <div class="member-card">
                 <div class="member-info">
-                    <div class="member-name">${escapeHtml(member.name)}</div>
+                    <div class="member-name" style="display: flex; align-items: center; gap: 8px;">
+                        ${escapeHtml(member.name)}
+                        ${aliasHtml}
+                        <button onclick="openAliasModal(${member.id}, '${escapeHtml(member.name.replace(/'/g, "\\'"))}')" class="icon-btn" title="Manage Nicknames" style="background: none; border: none; cursor: pointer; opacity: 0.6; padding: 0;">🏷️</button>
+                    </div>
                     <span class="member-rank rank-${member.rank.replace(/\s+/g, '-')}">${escapeHtml(member.rank)}</span>
                     ${member.level ? `<span class="member-rank" style="background: #4a5568; margin-left: 5px;">HQ ${member.level}</span>` : ''}
                     ${troopBadge}
@@ -877,3 +890,97 @@ function displayImportError(message) {
     resultDiv.className = 'import-result error';
     resultDiv.innerHTML = `<strong>✗ Import failed:</strong> ${escapeHtml(message)}`;
 }
+
+// --- Alias Management Logic ---
+let currentAliasMemberId = null;
+
+async function openAliasModal(memberId, memberName) {
+    currentAliasMemberId = memberId;
+    document.getElementById('alias-modal-title').textContent = `Nicknames for ${memberName}`;
+    
+    // Only show the "Global" checkbox if the user is an Admin
+    const globalWrapper = document.getElementById('global-alias-checkbox-wrapper');
+    if (globalWrapper) {
+        globalWrapper.style.display = isAdmin ? 'block' : 'none';
+    }
+
+    document.getElementById('alias-modal').style.display = 'flex';
+    await loadAliases();
+}
+
+async function loadAliases() {
+    const list = document.getElementById('aliases-list');
+    list.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Loading...</p>';
+
+    try {
+        const res = await fetch(`${API_URL}/${currentAliasMemberId}/aliases`);
+        const aliases = await res.json();
+
+        if (!aliases || aliases.length === 0) {
+            list.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No nicknames set for this commander.</p>';
+            return;
+        }
+
+        list.innerHTML = aliases.map(a => {
+            const badge = a.is_global ? 
+                `<span style="background: #e2e8f0; color: #4a5568; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">Global</span>` : 
+                `<span style="background: #bee3f8; color: #2b6cb0; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">Personal</span>`;
+            
+            // Only allow deletion if they own the alias OR they are an admin
+            const canDelete = a.is_mine || isAdmin;
+            const deleteBtn = canDelete ? `<button onclick="deleteAlias(${a.id})" style="background: none; border: none; color: #e53e3e; cursor: pointer;" title="Remove Nickname">✖</button>` : '';
+
+            return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid var(--border-color);">
+                    <div>${badge} <strong>${escapeHtml(a.alias)}</strong></div>
+                    ${deleteBtn}
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        list.innerHTML = '<p style="color: #e53e3e; text-align: center;">Error loading aliases.</p>';
+    }
+}
+
+document.getElementById('add-alias-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('new-alias-input');
+    const isGlobal = document.getElementById('new-alias-global')?.checked || false;
+
+    try {
+        const res = await fetch(`${API_URL}/${currentAliasMemberId}/aliases`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ alias: input.value.trim(), is_global: isGlobal })
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        
+        input.value = ''; // Clear input
+        if (document.getElementById('new-alias-global')) {
+            document.getElementById('new-alias-global').checked = false;
+        }
+        await loadAliases(); // Refresh list
+        loadMembers(); // Refresh main table to show updated tags
+    } catch (err) {
+        alert("Failed to add nickname: " + err.message);
+    }
+});
+
+window.deleteAlias = async function(aliasId) {
+    if (!confirm("Remove this nickname?")) return;
+    
+    try {
+        const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        
+        await loadAliases();
+        loadMembers(); 
+    } catch (err) {
+        alert("Failed to delete nickname: " + err.message);
+    }
+};
+
+document.getElementById('close-alias-modal')?.addEventListener('click', () => {
+    document.getElementById('alias-modal').style.display = 'none';
+});

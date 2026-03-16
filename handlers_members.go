@@ -14,18 +14,27 @@ import (
 )
 
 func getMembers(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the current user's ID from the session so we can fetch their personal aliases
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+
+	// 2. Add the two alias subqueries to your existing complex query
 	query := `
-        SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
+		SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
 			   COALESCE(m.squad_type, ''), COALESCE(m.troop_level, 0), COALESCE(m.profession, ''),
-               COALESCE((SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_power,
-               COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date,
+			   COALESCE((SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_power,
+			   COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date,
 			   COALESCE((SELECT power FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_squad_power,
-               COALESCE((SELECT recorded_at FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_squad_power_date,
-               EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user
-        FROM members m
-        ORDER BY m.name
-    `
-	rows, err := db.Query(query)
+			   COALESCE((SELECT recorded_at FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_squad_power_date,
+			   EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user,
+			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND user_id IS NULL), '') as global_aliases,
+			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND user_id = ?), '') as personal_aliases
+		FROM members m
+		ORDER BY m.name
+	`
+
+	// 3. Pass the userID into the query to satisfy the '?' parameter
+	rows, err := db.Query(query, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -35,7 +44,12 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 	members := []Member{}
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.SquadType, &m.TroopLevel, &m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.HasUser); err != nil {
+		// 4. Add the two new alias fields to the end of the Scan function
+		if err := rows.Scan(
+			&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.SquadType, &m.TroopLevel,
+			&m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt,
+			&m.HasUser, &m.GlobalAliases, &m.PersonalAliases,
+		); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -97,6 +111,16 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. NEW: Fetch the CURRENT name before we overwrite it
+	var oldName string
+	err = db.QueryRow("SELECT name FROM members WHERE id = ?", id).Scan(&oldName)
+	if err != nil {
+		log.Printf("Error fetching current member name: %v", err)
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	// 2. Perform the main UPDATE
 	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, id)
 	if err != nil {
 		log.Printf("DB Update Error: %v", err)
@@ -104,6 +128,15 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 3. NEW: If the update succeeded and the name actually changed, save the old name as a Global Alias
+	if m.Name != "" && oldName != m.Name {
+		_, aliasErr := db.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, alias) VALUES (?, NULL, ?)", id, oldName)
+		if aliasErr != nil {
+			log.Printf("Warning: Failed to auto-create global alias for name change (member %d): %v", id, aliasErr)
+		}
+	}
+
+	// Handle Power History
 	if m.Power != nil {
 		var currentPower int64 = -1
 		_ = db.QueryRow(`SELECT power FROM power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentPower)
@@ -116,6 +149,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Handle Squad Power History
 	if m.SquadPower != nil {
 		var currentSquadPower int64 = -1
 		_ = db.QueryRow(`SELECT power FROM squad_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentSquadPower)
@@ -224,16 +258,40 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 	detectedMembers := []DetectedMember{}
 	errors := []string{}
 
-	existingMembers := make(map[string]Member)
+	// --- NEW ALIAS LOOKUP LOGIC ---
+	// 1. Get the current user's ID to fetch their personal aliases
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+
+	// 2. Build fast-lookup maps for canonical names and aliases
+	existingMembersByID := make(map[int]Member)
+	existingMembersByName := make(map[string]int) // Case-insensitive lookup
+
 	rows, err := db.Query("SELECT id, name, rank FROM members")
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var m Member
 			rows.Scan(&m.ID, &m.Name, &m.Rank)
-			existingMembers[m.Name] = m
+			existingMembersByID[m.ID] = m
+			existingMembersByName[strings.ToLower(m.Name)] = m.ID
 		}
 	}
+
+	aliasToID := make(map[string]int) // lower(alias) -> member_id
+	if userID > 0 {
+		aliasRows, err := db.Query("SELECT member_id, alias FROM member_aliases WHERE user_id IS NULL OR user_id = ?", userID)
+		if err == nil {
+			defer aliasRows.Close()
+			for aliasRows.Next() {
+				var mID int
+				var alias string
+				aliasRows.Scan(&mID, &alias)
+				aliasToID[strings.ToLower(alias)] = mID
+			}
+		}
+	}
+	// ------------------------------
 
 	for i := startIndex; i < len(records); i++ {
 		record := records[i]
@@ -245,6 +303,7 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 		if name == "" {
 			continue
 		}
+		lowerName := strings.ToLower(name)
 
 		rank := "R1"
 		if hasRank && len(record) > rankIdx {
@@ -255,7 +314,7 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 		}
 
 		detected := DetectedMember{
-			Name: name,
+			Name: name, // This will be overwritten with the canonical name if an alias matches
 			Rank: rank,
 		}
 
@@ -273,19 +332,37 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if existing, found := existingMembers[name]; found {
+		// --- RESOLVE MEMBER IDENTITY ---
+		var matchedMember Member
+		var isExisting bool
+
+		// Priority 1: Exact Name Match
+		if mID, found := existingMembersByName[lowerName]; found {
+			matchedMember = existingMembersByID[mID]
+			isExisting = true
+		} else if mID, found := aliasToID[lowerName]; found {
+			// Priority 2: Alias Match
+			matchedMember = existingMembersByID[mID]
+			isExisting = true
+		}
+
+		if isExisting {
+			// Overwrite the CSV name with the database's canonical name
+			// This prevents the system from accidentally creating a duplicate or failing to remove them
+			detected.Name = matchedMember.Name
+
 			if !hasRank {
-				detected.Rank = existing.Rank
-			} else if existing.Rank != rank {
+				detected.Rank = matchedMember.Rank
+			} else if matchedMember.Rank != rank {
 				detected.RankChanged = true
-				detected.OldRank = existing.Rank
+				detected.OldRank = matchedMember.Rank
 			}
 		} else {
 			detected.IsNew = true
 			similarNames := []string{}
-			for existingName := range existingMembers {
-				if areSimilar(name, existingName) {
-					similarNames = append(similarNames, existingName)
+			for _, existingName := range existingMembersByID {
+				if areSimilar(name, existingName.Name) {
+					similarNames = append(similarNames, existingName.Name)
 				}
 			}
 			if len(similarNames) > 0 {
@@ -301,7 +378,7 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 	for _, m := range detectedMembers {
 		csvNames[m.Name] = true
 	}
-	for _, existing := range existingMembers {
+	for _, existing := range existingMembersByID {
 		if !csvNames[existing.Name] {
 			membersToRemove = append(membersToRemove, MemberToRemove{
 				ID:   existing.ID,
@@ -536,5 +613,105 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		db.Exec(`INSERT INTO squad_power_history (member_id, power) VALUES (?, ?)`, memberID, req.SquadPower)
 	}
 
+	w.WriteHeader(http.StatusOK)
+}
+
+type AliasResponse struct {
+	ID       int    `json:"id"`
+	Alias    string `json:"alias"`
+	IsGlobal bool   `json:"is_global"`
+	IsMine   bool   `json:"is_mine"`
+}
+
+func getMemberAliases(w http.ResponseWriter, r *http.Request) {
+	memberID := mux.Vars(r)["id"]
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+
+	rows, err := db.Query(`
+		SELECT id, alias, user_id IS NULL as is_global, user_id = ? as is_mine
+		FROM member_aliases
+		WHERE member_id = ? AND (user_id IS NULL OR user_id = ?)
+		ORDER BY is_global DESC, alias ASC
+	`, userID, memberID, userID)
+
+	if err != nil {
+		http.Error(w, "Failed to fetch aliases", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var aliases []AliasResponse
+	for rows.Next() {
+		var a AliasResponse
+		rows.Scan(&a.ID, &a.Alias, &a.IsGlobal, &a.IsMine)
+		aliases = append(aliases, a)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(aliases)
+}
+
+func addMemberAlias(w http.ResponseWriter, r *http.Request) {
+	memberID := mux.Vars(r)["id"]
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+	isAdmin := session.Values["is_admin"].(bool)
+
+	var req struct {
+		Alias    string `json:"alias"`
+		IsGlobal bool   `json:"is_global"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	if req.Alias == "" {
+		http.Error(w, "Alias cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	if req.IsGlobal && !isAdmin {
+		http.Error(w, "Only administrators can create global aliases", http.StatusForbidden)
+		return
+	}
+
+	var err error
+	if req.IsGlobal {
+		_, err = db.Exec("INSERT INTO member_aliases (member_id, user_id, alias) VALUES (?, NULL, ?)", memberID, req.Alias)
+	} else {
+		_, err = db.Exec("INSERT INTO member_aliases (member_id, user_id, alias) VALUES (?, ?, ?)", memberID, userID, req.Alias)
+	}
+
+	if err != nil {
+		// Usually hits here if the UNIQUE constraint fails
+		http.Error(w, "Failed to save alias. It may already exist.", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
+	aliasID := mux.Vars(r)["id"]
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+	isAdmin := session.Values["is_admin"].(bool)
+
+	var ownerID *int
+	err := db.QueryRow("SELECT user_id FROM member_aliases WHERE id = ?", aliasID).Scan(&ownerID)
+	if err != nil {
+		http.Error(w, "Alias not found", http.StatusNotFound)
+		return
+	}
+
+	// Security Check: Admins can delete anything. Users can only delete their own personal aliases.
+	if ownerID == nil && !isAdmin {
+		http.Error(w, "Only administrators can delete global aliases", http.StatusForbidden)
+		return
+	}
+	if ownerID != nil && *ownerID != userID && !isAdmin {
+		http.Error(w, "You can only delete your own personal aliases", http.StatusForbidden)
+		return
+	}
+
+	db.Exec("DELETE FROM member_aliases WHERE id = ?", aliasID)
 	w.WriteHeader(http.StatusOK)
 }

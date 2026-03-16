@@ -29,6 +29,16 @@ type Member struct {
 	SquadPowerUpdatedAt string `json:"squad_power_updated_at"`
 	TroopLevel          int    `json:"troop_level"`
 	Profession          string `json:"profession"`
+	GlobalAliases       string `json:"global_aliases"`
+	PersonalAliases     string `json:"personal_aliases"`
+}
+
+type Alias struct {
+	ID       int    `json:"id"`
+	MemberID int    `json:"member_id"`
+	UserID   *int   `json:"user_id,omitempty"` // Pointer so it can be null
+	Alias    string `json:"alias"`
+	IsGlobal bool   `json:"is_global"`
 }
 
 type SquadPowerHistory struct {

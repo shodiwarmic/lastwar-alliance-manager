@@ -10,8 +10,9 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Password Security Lifecycle**: Enforce password expiration dates, track password history to prevent reuse, and trigger forced password resets.
 - **Customizable Login Banner**: Server-Side Rendered (SSR) login screen messaging configurable by Admins/R5s.
 - **Role-Based Permissions**: Granular access levels for Admin, R5, R4, R3, R2, and R1 ranks.
+- **Alias & Nickname Engine**: Assign personal nicknames or authoritative global aliases to commanders. The system automatically preserves legacy names as global aliases when a member rebrands, ensuring continuous data tracking.
 - **Self-Service Profiles**: Users securely linked to an in-game commander can update their own stats, HQ level, and squad power through a rule-enforced dashboard.
-- **Dynamic CSV Import**: Upload roster CSVs with any column order. Automatically maps Username, Rank, Power, and Level. Ignores garbage columns and safely applies default ranks to missing data.
+- **Dynamic CSV Import**: Upload roster CSVs with any column order. Automatically maps Username, Rank, Power, and Level. Intelligently resolves aliases to canonical profiles, preventing duplicate account creation.
 - **Advanced Player Stats**: Track optional fields including Player Profession and Troop Levels (dynamically validated against configurable HQ Level caps).
 
 ### 📈 Analytics & Activity Dashboard
@@ -34,7 +35,7 @@ Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** conta
 ### 📸 OCR Image Recognition (Tesseract)
 - **Automated Data Extraction**: Upload game screenshots to automatically extract VS Points or Power updates using built-in Tesseract OCR.
 - **Intelligent Preprocessing**: AI-powered region detection removes headers and UI buttons, enhancing contrast for perfect reads.
-- **Fuzzy Member Matching**: Automatically matches OCR text to database members.
+- **Fuzzy Member Matching**: Automatically matches OCR text to database members by cross-referencing primary names, global aliases, and your personal nicknames.
 - See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md) for detailed technical documentation.
 
 ---
