@@ -303,12 +303,41 @@ function handleCSVImport(event) {
             return;
         }
 
+        // Helper function to resolve aliases
+        const findMember = (searchName) => {
+            const lowerSearch = searchName.toLowerCase();
+            return allMembers.find(m => {
+                // Check direct name match
+                if (m.name.toLowerCase() === lowerSearch) return true;
+                
+                // Check Personal Aliases
+                if (m.personal_aliases) {
+                    const pAliases = m.personal_aliases.split(',').map(a => a.trim().toLowerCase());
+                    if (pAliases.includes(lowerSearch)) return true;
+                }
+                
+                // Check Global Aliases
+                if (m.global_aliases) {
+                    const gAliases = m.global_aliases.split(',').map(a => a.trim().toLowerCase());
+                    if (gAliases.includes(lowerSearch)) return true;
+                }
+                return false;
+            });
+        };
+
         let importCount = 0;
+        let missingCount = 0;
+
         for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(',').map(c => c.trim());
-            const memberName = cols[columnMap.name].toLowerCase();
-            const member = allMembers.find(m => m.name.toLowerCase() === memberName);
-            if (!member) continue;
+            const csvName = cols[columnMap.name];
+            if (!csvName) continue;
+
+            const member = findMember(csvName);
+            if (!member) {
+                missingCount++;
+                continue;
+            }
 
             let extracted = { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0 };
             let sum1to5 = 0;
@@ -331,7 +360,7 @@ function handleCSVImport(event) {
                 }
             }
 
-            // Update local memory
+            // Update local memory using the canonical resolved member.id
             if (!currentVSPoints[member.id]) {
                 currentVSPoints[member.id] = { member_id: member.id, ...extracted };
             } else {
@@ -342,7 +371,12 @@ function handleCSVImport(event) {
             importCount++;
         }
         renderTable();
-        alert(`Import complete: Updated ${importCount} members.`);
+        
+        let alertMsg = `Import complete: Updated ${importCount} members.`;
+        if (missingCount > 0) {
+            alertMsg += `\nWarning: ${missingCount} rows were ignored because the names/aliases could not be matched.`;
+        }
+        alert(alertMsg);
         event.target.value = '';
     };
     reader.readAsText(file);
