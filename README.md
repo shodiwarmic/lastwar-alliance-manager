@@ -1,36 +1,37 @@
 # Last War: Survival - Alliance Manager
 
-A comprehensive, self-hosted web application for managing your alliance in the online game Last War: Survival. Track members, manage train schedules, award achievements, host alliance documents, and generate communication messages, all deployed seamlessly via Docker.
+A comprehensive, self-hosted web application for managing your alliance in the online game Last War: Survival. Track member growth, monitor VS Duel activity, host alliance documents, and share feedback, all deployed seamlessly via Docker.
 
 ## Features
 
-### Core Management
+### ⚙️ Core Management
 - **Advanced Authentication**: Secure login/logout with rolling session management to keep active users logged in while expiring idle sessions.
 - **Configurable Password Policies**: Admin-controlled password complexity requirements (minimum length, uppercase, lowercase, numbers, special characters).
 - **Password Security Lifecycle**: Enforce password expiration dates, track password history to prevent reuse, and trigger forced password resets.
 - **Customizable Login Banner**: Server-Side Rendered (SSR) login screen messaging configurable by Admins/R5s.
 - **Role-Based Permissions**: Granular access levels for Admin, R5, R4, R3, R2, and R1 ranks.
-- **User-Member Linking**: Users are securely linked to alliance members with role inheritance.
+- **Self-Service Profiles**: Users securely linked to an in-game commander can update their own stats, HQ level, and squad power through a rule-enforced dashboard.
 - **Dynamic CSV Import**: Upload roster CSVs with any column order. Automatically maps Username, Rank, Power, and Level. Ignores garbage columns and safely applies default ranks to missing data.
 - **Advanced Player Stats**: Track optional fields including Player Profession and Troop Levels (dynamically validated against configurable HQ Level caps).
-- **Squad Tracking**: Admin-toggleable tracking for Hero Squad Types and Squad Power utilizing historical tracking tables to track progression over time.
+
+### 📈 Analytics & Activity Dashboard
+- **Commander Growth Tracking**: Instantly calculate and visualize 7-day and 30-day power deltas for every member to easily identify top grinders and stagnant accounts.
+- **VS Duel Leaderboards**: Track daily alliance duel contributions with massive, interactive stacked bar charts to see exactly where members excel (e.g., Radar vs. Tech day).
+- **Alliance Composition**: Premium `Chart.js` visualizations breaking down the alliance's Troop Tiers and Primary Squad focuses (Tank/Aircraft/Missile).
+- **Historical Integrity**: Power and Squad Power are tracked chronologically, preventing data loss and enabling long-term growth analysis.
+
+### 📢 Shoutouts & Feedback
+- **Informal Kudos Board**: Give positive or negative points to members with contextual notes to track activity and attitude.
+- **Auto-Expiring**: Shoutouts automatically expire after 7 days, keeping the feedback loop relevant to current events.
 
 ### 📁 Alliance Files & Document Management
 Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** container, the app provides a Google Drive-like experience natively.
-
 - **Live Document Editing**: Full browser-based collaborative editing for spreadsheets (`.xlsx`, `.csv`), text documents (`.docx`), and presentations.
 - **Native Image Hosting**: Fast, secure distribution of alliance cheat sheets, war infographics, and maps.
 - **Docker-Bridged Security**: Document data flows over a private, internal Docker network (`lastwar-net`), completely bypassing external firewalls and NAT hairpinning limits.
 - **Theme Synchronization**: The document editor dynamically reads your application's state, matching your Light or Dark mode preference automatically.
-- **Ownership & Safekeeping**: Uploaders retain absolute permanent rights. Account deletion is blocked until an Admin transfers a member's files to prevent data loss.
 
-### Train Schedule & Ranking System
-- **Auto-Schedule**: Automatically assign conductors for the week based on performance rankings.
-- **Configurable Point System**: Customize points for awards, recommendations, and penalties (e.g., recent conductor fatigue).
-- **Smart Conductor Selection**: Automatically selects top 7 performers.
-- **Message Generators**: Create formatted weekly schedules and daily reminders (with specific ST/UK times) ready to copy-paste into alliance chat.
-
-### OCR Image Recognition (Tesseract)
+### 📸 OCR Image Recognition (Tesseract)
 - **Automated Data Extraction**: Upload game screenshots to automatically extract VS Points or Power updates using built-in Tesseract OCR.
 - **Intelligent Preprocessing**: AI-powered region detection removes headers and UI buttons, enhancing contrast for perfect reads.
 - **Fuzzy Member Matching**: Automatically matches OCR text to database members.
