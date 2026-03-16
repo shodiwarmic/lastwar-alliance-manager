@@ -14,18 +14,27 @@ import (
 )
 
 func getMembers(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the current user's ID from the session so we can fetch their personal aliases
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+
+	// 2. Add the two alias subqueries to your existing complex query
 	query := `
-        SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
+		SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
 			   COALESCE(m.squad_type, ''), COALESCE(m.troop_level, 0), COALESCE(m.profession, ''),
-               COALESCE((SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_power,
-               COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date,
+			   COALESCE((SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_power,
+			   COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date,
 			   COALESCE((SELECT power FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_squad_power,
-               COALESCE((SELECT recorded_at FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_squad_power_date,
-               EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user
-        FROM members m
-        ORDER BY m.name
-    `
-	rows, err := db.Query(query)
+			   COALESCE((SELECT recorded_at FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_squad_power_date,
+			   EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user,
+			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND user_id IS NULL), '') as global_aliases,
+			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND user_id = ?), '') as personal_aliases
+		FROM members m
+		ORDER BY m.name
+	`
+
+	// 3. Pass the userID into the query to satisfy the '?' parameter
+	rows, err := db.Query(query, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -35,7 +44,12 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 	members := []Member{}
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.SquadType, &m.TroopLevel, &m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.HasUser); err != nil {
+		// 4. Add the two new alias fields to the end of the Scan function
+		if err := rows.Scan(
+			&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.SquadType, &m.TroopLevel,
+			&m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt,
+			&m.HasUser, &m.GlobalAliases, &m.PersonalAliases,
+		); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -536,5 +550,105 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		db.Exec(`INSERT INTO squad_power_history (member_id, power) VALUES (?, ?)`, memberID, req.SquadPower)
 	}
 
+	w.WriteHeader(http.StatusOK)
+}
+
+type AliasResponse struct {
+	ID       int    `json:"id"`
+	Alias    string `json:"alias"`
+	IsGlobal bool   `json:"is_global"`
+	IsMine   bool   `json:"is_mine"`
+}
+
+func getMemberAliases(w http.ResponseWriter, r *http.Request) {
+	memberID := mux.Vars(r)["id"]
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+
+	rows, err := db.Query(`
+		SELECT id, alias, user_id IS NULL as is_global, user_id = ? as is_mine
+		FROM member_aliases
+		WHERE member_id = ? AND (user_id IS NULL OR user_id = ?)
+		ORDER BY is_global DESC, alias ASC
+	`, userID, memberID, userID)
+
+	if err != nil {
+		http.Error(w, "Failed to fetch aliases", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var aliases []AliasResponse
+	for rows.Next() {
+		var a AliasResponse
+		rows.Scan(&a.ID, &a.Alias, &a.IsGlobal, &a.IsMine)
+		aliases = append(aliases, a)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(aliases)
+}
+
+func addMemberAlias(w http.ResponseWriter, r *http.Request) {
+	memberID := mux.Vars(r)["id"]
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+	isAdmin := session.Values["is_admin"].(bool)
+
+	var req struct {
+		Alias    string `json:"alias"`
+		IsGlobal bool   `json:"is_global"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	if req.Alias == "" {
+		http.Error(w, "Alias cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	if req.IsGlobal && !isAdmin {
+		http.Error(w, "Only administrators can create global aliases", http.StatusForbidden)
+		return
+	}
+
+	var err error
+	if req.IsGlobal {
+		_, err = db.Exec("INSERT INTO member_aliases (member_id, user_id, alias) VALUES (?, NULL, ?)", memberID, req.Alias)
+	} else {
+		_, err = db.Exec("INSERT INTO member_aliases (member_id, user_id, alias) VALUES (?, ?, ?)", memberID, userID, req.Alias)
+	}
+
+	if err != nil {
+		// Usually hits here if the UNIQUE constraint fails
+		http.Error(w, "Failed to save alias. It may already exist.", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
+	aliasID := mux.Vars(r)["id"]
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+	isAdmin := session.Values["is_admin"].(bool)
+
+	var ownerID *int
+	err := db.QueryRow("SELECT user_id FROM member_aliases WHERE id = ?", aliasID).Scan(&ownerID)
+	if err != nil {
+		http.Error(w, "Alias not found", http.StatusNotFound)
+		return
+	}
+
+	// Security Check: Admins can delete anything. Users can only delete their own personal aliases.
+	if ownerID == nil && !isAdmin {
+		http.Error(w, "Only administrators can delete global aliases", http.StatusForbidden)
+		return
+	}
+	if ownerID != nil && *ownerID != userID && !isAdmin {
+		http.Error(w, "You can only delete your own personal aliases", http.StatusForbidden)
+		return
+	}
+
+	db.Exec("DELETE FROM member_aliases WHERE id = ?", aliasID)
 	w.WriteHeader(http.StatusOK)
 }
