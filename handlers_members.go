@@ -258,16 +258,40 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 	detectedMembers := []DetectedMember{}
 	errors := []string{}
 
-	existingMembers := make(map[string]Member)
+	// --- NEW ALIAS LOOKUP LOGIC ---
+	// 1. Get the current user's ID to fetch their personal aliases
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+
+	// 2. Build fast-lookup maps for canonical names and aliases
+	existingMembersByID := make(map[int]Member)
+	existingMembersByName := make(map[string]int) // Case-insensitive lookup
+
 	rows, err := db.Query("SELECT id, name, rank FROM members")
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var m Member
 			rows.Scan(&m.ID, &m.Name, &m.Rank)
-			existingMembers[m.Name] = m
+			existingMembersByID[m.ID] = m
+			existingMembersByName[strings.ToLower(m.Name)] = m.ID
 		}
 	}
+
+	aliasToID := make(map[string]int) // lower(alias) -> member_id
+	if userID > 0 {
+		aliasRows, err := db.Query("SELECT member_id, alias FROM member_aliases WHERE user_id IS NULL OR user_id = ?", userID)
+		if err == nil {
+			defer aliasRows.Close()
+			for aliasRows.Next() {
+				var mID int
+				var alias string
+				aliasRows.Scan(&mID, &alias)
+				aliasToID[strings.ToLower(alias)] = mID
+			}
+		}
+	}
+	// ------------------------------
 
 	for i := startIndex; i < len(records); i++ {
 		record := records[i]
@@ -279,6 +303,7 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 		if name == "" {
 			continue
 		}
+		lowerName := strings.ToLower(name)
 
 		rank := "R1"
 		if hasRank && len(record) > rankIdx {
@@ -289,7 +314,7 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 		}
 
 		detected := DetectedMember{
-			Name: name,
+			Name: name, // This will be overwritten with the canonical name if an alias matches
 			Rank: rank,
 		}
 
@@ -307,19 +332,37 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if existing, found := existingMembers[name]; found {
+		// --- RESOLVE MEMBER IDENTITY ---
+		var matchedMember Member
+		var isExisting bool
+
+		// Priority 1: Exact Name Match
+		if mID, found := existingMembersByName[lowerName]; found {
+			matchedMember = existingMembersByID[mID]
+			isExisting = true
+		} else if mID, found := aliasToID[lowerName]; found {
+			// Priority 2: Alias Match
+			matchedMember = existingMembersByID[mID]
+			isExisting = true
+		}
+
+		if isExisting {
+			// Overwrite the CSV name with the database's canonical name
+			// This prevents the system from accidentally creating a duplicate or failing to remove them
+			detected.Name = matchedMember.Name
+
 			if !hasRank {
-				detected.Rank = existing.Rank
-			} else if existing.Rank != rank {
+				detected.Rank = matchedMember.Rank
+			} else if matchedMember.Rank != rank {
 				detected.RankChanged = true
-				detected.OldRank = existing.Rank
+				detected.OldRank = matchedMember.Rank
 			}
 		} else {
 			detected.IsNew = true
 			similarNames := []string{}
-			for existingName := range existingMembers {
-				if areSimilar(name, existingName) {
-					similarNames = append(similarNames, existingName)
+			for _, existingName := range existingMembersByID {
+				if areSimilar(name, existingName.Name) {
+					similarNames = append(similarNames, existingName.Name)
 				}
 			}
 			if len(similarNames) > 0 {
@@ -335,7 +378,7 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 	for _, m := range detectedMembers {
 		csvNames[m.Name] = true
 	}
-	for _, existing := range existingMembers {
+	for _, existing := range existingMembersByID {
 		if !csvNames[existing.Name] {
 			membersToRemove = append(membersToRemove, MemberToRemove{
 				ID:   existing.ID,
