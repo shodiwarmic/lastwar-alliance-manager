@@ -568,6 +568,22 @@ func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch manage_dyno permission dynamically for non-admins
+	var canManageDyno bool
+	if !isAdmin {
+		err := db.QueryRow(`
+			SELECT COALESCE(rp.manage_dyno, 0)
+			FROM users u
+			LEFT JOIN members m ON u.member_id = m.id
+			LEFT JOIN rank_permissions rp ON m.rank = rp.rank
+			WHERE u.id = ?
+		`, userID).Scan(&canManageDyno)
+		if err != nil && err != sql.ErrNoRows {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	var createdByID int
 	err = db.QueryRow("SELECT created_by_id FROM dyno_recommendations WHERE id = ?", id).Scan(&createdByID)
 	if err != nil {
@@ -579,8 +595,9 @@ func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if createdByID != userID && !isAdmin {
-		http.Error(w, "You can only delete your own dyno recommendations", http.StatusForbidden)
+	// Authorize if user is the creator, an admin, or possesses manage_dyno permissions
+	if createdByID != userID && !isAdmin && !canManageDyno {
+		http.Error(w, "You do not have permission to delete this shoutout", http.StatusForbidden)
 		return
 	}
 

@@ -8,6 +8,8 @@ let currentUsername = '';
 let currentUserId = 0;
 let currentView = 'list'; // 'list' or 'grouped'
 let currentFilter = 'all'; // 'all', 'active', 'positive', 'negative', 'mine'
+let canManageDyno = false; // Add this near your other let declarations
+
 
 // Chart instances
 let pointsChart = null;
@@ -21,7 +23,10 @@ async function fetchPermissions() {
         if (response.ok) {
             const data = await response.json();
             currentUsername = data.username;
-            currentUserId = data.user_id || 0;
+            // Removed reliance on user_id to prevent the 0 === 0 scrubbing bug
+            
+            // Extract the manage_dyno permission
+            canManageDyno = data.permissions?.manage_dyno || data.is_admin || false;
         }
     } catch (error) {
         console.error('Auth check error:', error);
@@ -521,10 +526,9 @@ function createDynoCard(rec, compact = false) {
                 <span class="rec-date">${formatDate(rec.created_at)}</span>
                 <span class="expiry-badge ${rec.expired ? 'expired' : ''}">${expiryText}</span>
             </div>
-            ${rec.created_by_id === currentUserId ? `
+            ${(canManageDyno || (currentUsername && rec.created_by === currentUsername)) ? `
                 <button class="delete-btn" onclick="deleteDynoRecommendation(${rec.id})">🗑️ Delete</button>
-            ` : ''}
-        </div>
+            ` : ''}        </div>
     `;
     
     return card;
