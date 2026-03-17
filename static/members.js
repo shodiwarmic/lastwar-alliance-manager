@@ -898,10 +898,10 @@ async function openAliasModal(memberId, memberName) {
     currentAliasMemberId = memberId;
     document.getElementById('alias-modal-title').textContent = `Nicknames for ${memberName}`;
     
-    // Only show the "Global" checkbox if the user is an Admin
+    // Show the "Global" checkbox if the user is an Admin OR has manage_members permission
     const globalWrapper = document.getElementById('global-alias-checkbox-wrapper');
     if (globalWrapper) {
-        globalWrapper.style.display = isAdmin ? 'block' : 'none';
+        globalWrapper.style.display = (isAdmin || canManageRanks) ? 'block' : 'none';
     }
 
     document.getElementById('alias-modal').style.display = 'flex';
@@ -926,8 +926,8 @@ async function loadAliases() {
                 `<span style="background: #e2e8f0; color: #4a5568; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">Global</span>` : 
                 `<span style="background: #bee3f8; color: #2b6cb0; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">Personal</span>`;
             
-            // Only allow deletion if they own the alias OR they are an admin
-            const canDelete = a.is_mine || isAdmin;
+            // Only allow deletion if they own it, are a super admin, or it's a global tag and they are a manager
+            const canDelete = a.is_mine || window.isAdmin || (a.is_global && canManageRanks);
             const deleteBtn = canDelete ? `<button onclick="deleteAlias(${a.id})" style="background: none; border: none; color: #e53e3e; cursor: pointer;" title="Remove Nickname">✖</button>` : '';
 
             return `

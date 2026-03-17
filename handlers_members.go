@@ -656,7 +656,19 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 	memberID := mux.Vars(r)["id"]
 	session, _ := store.Get(r, "session")
 	userID := session.Values["user_id"].(int)
-	isAdmin := session.Values["is_admin"].(bool)
+	isAdmin, _ := session.Values["is_admin"].(bool)
+
+	// Check if user is an Admin OR has the 'manage_members' permission
+	canManageGlobal := isAdmin
+	if !canManageGlobal {
+		_ = db.QueryRow(`
+			SELECT p.manage_members 
+			FROM users u
+			JOIN members m ON u.member_id = m.id
+			JOIN permissions p ON m.rank = p.rank
+			WHERE u.id = ?
+		`, userID).Scan(&canManageGlobal)
+	}
 
 	var req struct {
 		Alias    string `json:"alias"`
@@ -669,8 +681,8 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.IsGlobal && !isAdmin {
-		http.Error(w, "Only administrators can create global aliases", http.StatusForbidden)
+	if req.IsGlobal && !canManageGlobal {
+		http.Error(w, "Only administrators or roster managers can create global aliases", http.StatusForbidden)
 		return
 	}
 
@@ -682,7 +694,6 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		// Usually hits here if the UNIQUE constraint fails
 		http.Error(w, "Failed to save alias. It may already exist.", http.StatusInternalServerError)
 		return
 	}
@@ -693,7 +704,18 @@ func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 	aliasID := mux.Vars(r)["id"]
 	session, _ := store.Get(r, "session")
 	userID := session.Values["user_id"].(int)
-	isAdmin := session.Values["is_admin"].(bool)
+	isAdmin, _ := session.Values["is_admin"].(bool)
+
+	canManageGlobal := isAdmin
+	if !canManageGlobal {
+		_ = db.QueryRow(`
+			SELECT p.manage_members 
+			FROM users u
+			JOIN members m ON u.member_id = m.id
+			JOIN permissions p ON m.rank = p.rank
+			WHERE u.id = ?
+		`, userID).Scan(&canManageGlobal)
+	}
 
 	var ownerID *int
 	err := db.QueryRow("SELECT user_id FROM member_aliases WHERE id = ?", aliasID).Scan(&ownerID)
@@ -702,9 +724,9 @@ func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Security Check: Admins can delete anything. Users can only delete their own personal aliases.
-	if ownerID == nil && !isAdmin {
-		http.Error(w, "Only administrators can delete global aliases", http.StatusForbidden)
+	// Security Check: Admins can delete anything. Managers can delete global + their own. Regular users can only delete their own.
+	if ownerID == nil && !canManageGlobal {
+		http.Error(w, "Only administrators or roster managers can delete global aliases", http.StatusForbidden)
 		return
 	}
 	if ownerID != nil && *ownerID != userID && !isAdmin {
