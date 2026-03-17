@@ -8,16 +8,22 @@
 {{end}}
 
 {{define "content"}}
-            <section class="info-banner">
-                <div class="info-content">
-                    <div class="info-icon">ℹ️</div>
-                    <div class="info-text">
-                        <strong>About Shoutouts:</strong> 
-                        A quick, informal feedback system for alliance members. You can give positive (+) or negative (-) points. 
-                        These are just notices to help track activity and attitude. All shoutouts automatically expire after 1 week.
-                    </div>
+            <div class="action-bar" style="margin-bottom: 25px;">
+                <button type="button" id="open-shoutout-modal-btn" class="primary-action-btn">
+                    <span class="btn-icon">➕</span>
+                    <span class="btn-text">Add Shoutout</span>
+                </button>
+            </div>
+
+            <div class="info-box" style="display: flex; gap: 15px; align-items: flex-start; border-left: 4px solid #667eea; background: var(--card-bg); padding: 15px 20px; border-radius: 8px; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <div style="font-size: 1.6em; line-height: 1; margin-top: 2px;">💡</div>
+                <div>
+                    <strong style="color: var(--text-primary); font-size: 1.1em; display: block; margin-bottom: 5px;">How Shoutouts Work</strong>
+                    <p style="color: var(--text-secondary); margin: 0; line-height: 1.5; font-size: 0.95em;">
+                        A quick, informal feedback system to give positive (+ kudos) or negative (- concerns) points to alliance members. All shoutouts automatically expire after 7 days to keep feedback relevant to current events.
+                    </p>
                 </div>
-            </section>
+            </div>
 
             <section class="stats-dashboard">
                 <h3>📊 Shoutout Statistics</h3>
