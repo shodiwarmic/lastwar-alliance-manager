@@ -37,21 +37,12 @@ async function fetchPermissions() {
 async function loadMembers() {
     try {
         const response = await fetch(MEMBERS_URL);
+        if (!response.ok) throw new Error('Failed to fetch members');
+        
         allMembers = await response.json();
         allMembers.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-        populateMemberSelect();
-
-        // Extract unique ranks to populate min-rank-select without hardcoding strings
-        const ranks = [...new Set(allMembers.map(m => m.rank).filter(r => r))].sort();
-        const rankSelect = document.getElementById('min-rank-select');
-        if (rankSelect) {
-            ranks.forEach(rank => {
-                const opt = document.createElement('option');
-                opt.value = rank;
-                opt.textContent = rank + ' and above';
-                rankSelect.appendChild(opt);
-            });
-        }
+        
+        // populateMemberSelect() was removed here because the reactive modal handles the UI now
     } catch (error) {
         console.error('Error loading members:', error);
         alert('Failed to load members.');
