@@ -560,11 +560,14 @@ function createDynoCard(rec, compact = false) {
         <div class="rec-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-top: 15px;">
             <div class="rec-meta" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                 <span class="rec-by">by ${rec.created_by}</span>
+                ${(!rec.is_author_public && currentUsername && rec.created_by === currentUsername) ? `
+                    <span class="expiry-badge" style="background: #6c757d; color: white;" title="Your name is hidden from members without the view permission">🕵️ Anonymous to Alliance</span>
+                ` : ''}
                 <span class="rec-date">${formatDate(rec.created_at)}</span>
                 <span class="expiry-badge ${rec.expired ? 'expired' : ''}">${expiryText}</span>
             </div>
             <div class="member-actions">
-                ${(!rec.expired && rec.created_by_id === currentUserId) ? `
+                ${(!rec.expired && currentUsername && rec.created_by === currentUsername) ? `
                     <button class="edit-btn" onclick="editDynoRecommendation(${rec.id})">✏️ Edit</button>
                 ` : ''}
                 ${(canManageDyno || (currentUsername && rec.created_by === currentUsername)) ? `
