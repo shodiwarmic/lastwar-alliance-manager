@@ -21,9 +21,12 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Alliance Composition**: Premium `Chart.js` visualizations breaking down the alliance's Troop Tiers and Primary Squad focuses (Tank/Aircraft/Missile).
 - **Historical Integrity**: Power and Squad Power are tracked chronologically, preventing data loss and enabling long-term growth analysis.
 
-### 📢 Shoutouts & Feedback
-- **Informal Kudos Board**: Give positive or negative points to members with contextual notes to track activity and attitude.
-- **Auto-Expiring**: Shoutouts automatically expire after 7 days, keeping the feedback loop relevant to current events.
+### 📢 Shoutouts & Feedback (Zero-Trust Feedback Engine)
+- **Semi-Anonymous by Default:** To encourage honest feedback, authors are strictly anonymous. The Go backend scrubs identifying data and replaces it with "Anonymous" before the payload ever reaches the client.
+- **Targeted Visibility:** Authors can dynamically restrict their feedback to specific alliance ranks (e.g., R4 and above). The backend silently drops these records from the database query if the requesting user does not meet the minimum rank threshold.
+- **RBAC Anonymity Override:** Alliance leaders can configure specific ranks to possess the `view_anonymous_authors` permission via the Admin Settings matrix, allowing authorized moderators to see the true author for accountability.
+- **Creator Anonymity Bypass:** Authors can optionally toggle a "Make my author name public" checkbox, bypassing the anonymity filters to give public kudos.
+- **Auto-Expiring:** Shoutouts automatically expire after 7 days, keeping the feedback loop relevant to current events.
 
 ### 📁 Alliance Files & Document Management
 Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** container, the app provides a Google Drive-like experience natively.
