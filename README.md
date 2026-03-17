@@ -9,7 +9,7 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Configurable Password Policies**: Admin-controlled password complexity requirements (minimum length, uppercase, lowercase, numbers, special characters).
 - **Password Security Lifecycle**: Enforce password expiration dates, track password history to prevent reuse, and trigger forced password resets.
 - **Customizable Login Banner**: Server-Side Rendered (SSR) login screen messaging configurable by Admins/R5s.
-- **Role-Based Permissions**: Granular access levels for Admin, R5, R4, R3, R2, and R1 ranks.
+- **Role-Based Permissions**: Granular access levels governed by a dynamic, admin-controlled permissions matrix (e.g., toggling who can manage the roster, view analytics, or see anonymous feedback authors).
 - **Alias & Nickname Engine**: Assign personal nicknames or authoritative global aliases to commanders. The system automatically preserves legacy names as global aliases when a member rebrands, ensuring continuous data tracking.
 - **Self-Service Profiles**: Users securely linked to an in-game commander can update their own stats, HQ level, and squad power through a rule-enforced dashboard.
 - **Dynamic CSV Import**: Upload roster CSVs with any column order. Automatically maps Username, Rank, Power, and Level. Intelligently resolves aliases to canonical profiles, preventing duplicate account creation.
@@ -22,11 +22,12 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Historical Integrity**: Power and Squad Power are tracked chronologically, preventing data loss and enabling long-term growth analysis.
 
 ### 📢 Shoutouts & Feedback (Zero-Trust Feedback Engine)
-- **Semi-Anonymous by Default:** To encourage honest feedback, authors are strictly anonymous. The Go backend scrubs identifying data and replaces it with "Anonymous" before the payload ever reaches the client.
-- **Targeted Visibility:** Authors can dynamically restrict their feedback to specific alliance ranks (e.g., R4 and above). The backend silently drops these records from the database query if the requesting user does not meet the minimum rank threshold.
-- **RBAC Anonymity Override:** Alliance leaders can configure specific ranks to possess the `view_anonymous_authors` permission via the Admin Settings matrix, allowing authorized moderators to see the true author for accountability.
-- **Creator Anonymity Bypass:** Authors can optionally toggle a "Make my author name public" checkbox, bypassing the anonymity filters to give public kudos.
-- **Auto-Expiring:** Shoutouts automatically expire after 7 days, keeping the feedback loop relevant to current events.
+- **Semi-Anonymous by Default**: To encourage honest feedback, authors are strictly anonymous. The Go backend scrubs identifying data before the payload ever reaches the client.
+- **Targeted Visibility**: Authors can restrict their feedback to specific alliance ranks (e.g., R4 and above). The backend silently drops these records from the database query for unauthorized viewers.
+- **RBAC Anonymity Override**: Alliance leaders can configure specific ranks to possess the `view_anonymous_authors` permission via the Admin Settings matrix, allowing authorized moderators to see the true author for accountability.
+- **Creator Anonymity Bypass**: Authors can optionally toggle a "Make my author name public" checkbox, bypassing the anonymity filters to give public kudos.
+- **Creator Management**: Authors retain full control to edit or delete their own active shoutouts, while authorized moderators can curate the board.
+- **Auto-Expiring**: Shoutouts automatically expire after 7 days, keeping the feedback loop relevant to current events.
 
 ### 📁 Alliance Files & Document Management
 Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** container, the app provides a Google Drive-like experience natively.
