@@ -5476,3 +5476,27 @@ code {
         background-color: rgba(255, 255, 255, 0.1);
     }
 }
+
+/* Dyno Modal Specific UI */
+.member-search-item {
+    padding: 10px 15px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s;
+    color: var(--text-primary);
+}
+
+.member-search-item:last-child {
+    border-bottom: none;
+}
+
+.member-search-item:hover {
+    background: #f0f4ff;
+    color: #667eea;
+}
+
+@media (prefers-color-scheme: dark) {
+    .member-search-item:hover {
+        background: rgba(102, 126, 234, 0.2);
+    }
+}

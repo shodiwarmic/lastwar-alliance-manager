@@ -421,7 +421,7 @@ func deleteRecommendation(w http.ResponseWriter, r *http.Request) {
 func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool) // Extract admin status
+	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	var userRank string
 	var canViewAnon bool
@@ -441,7 +441,6 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Admins automatically get permission to view anonymous authors
 	if isAdmin {
 		canViewAnon = true
 	}
@@ -473,8 +472,9 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Targeted Visibility: Filter out if user's rank is below the minimum view rank, UNLESS they are an admin.
-		if !isAdmin && dr.MinViewRank != "" && userRank < dr.MinViewRank {
+		// Targeted Visibility: Filter out if user's rank is below the minimum view rank,
+		// UNLESS they are an admin, OR they are the original author.
+		if !isAdmin && dr.MinViewRank != "" && userRank < dr.MinViewRank && dr.CreatedByID != userID {
 			continue // Silently drop
 		}
 

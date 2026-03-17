@@ -58,51 +58,93 @@ async function loadMembers() {
     }
 }
 
-// Populate member select dropdown
-function populateMemberSelect() {
-    const select = document.getElementById('member-select');
-    if (!select) return;
-    
-    select.innerHTML = '<option value="">Select a member...</option>';
-    
-    allMembers.forEach(member => {
-        const option = document.createElement('option');
-        option.value = member.id;
-        option.textContent = `${member.name} (${member.rank})`;
-        select.appendChild(option);
+// Setup Modal Event Listeners
+function setupModal() {
+    const modal = document.getElementById('shoutout-modal');
+    const openBtn = document.getElementById('open-shoutout-modal-btn');
+    const closeBtn = document.getElementById('close-shoutout-modal');
+    const cancelBtn = document.getElementById('cancel-shoutout-btn');
+
+    const openModal = () => {
+        modal.style.display = 'flex';
+        // Dynamically parse ranks for visibility dropdown to prevent hardcoding
+        const ranks = [...new Set(allMembers.map(m => m.rank).filter(r => r))].sort();
+        const rankSelect = document.getElementById('min-rank-select');
+        if (rankSelect && rankSelect.options.length <= 1) { // Only populate if empty
+            ranks.forEach(rank => {
+                const opt = document.createElement('option');
+                opt.value = rank;
+                opt.textContent = rank + ' and above';
+                rankSelect.appendChild(opt);
+            });
+        }
+    };
+
+    const closeModal = () => {
+        modal.style.display = 'none';
+        document.getElementById('shoutout-form').reset();
+        document.getElementById('selected-member-display').style.display = 'none';
+        document.getElementById('member-search-results').style.display = 'none';
+        document.getElementById('member-select').value = '';
+    };
+
+    if (openBtn) openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+    // Close on outside click
+    window.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
     });
 }
 
-// Setup search filter for member dropdown
-function setupMemberSearch() {
+// Setup Reactive Member Search within the Modal
+function setupReactiveSearch() {
     const searchInput = document.getElementById('member-search');
-    const selectElement = document.getElementById('member-select');
-    
-    if (!searchInput || !selectElement) return;
-    
-    searchInput.addEventListener('input', () => {
-        const searchTerm = searchInput.value.toLowerCase().trim();
-        const options = selectElement.options;
-        let visibleCount = 0;
+    const resultsContainer = document.getElementById('member-search-results');
+    const hiddenSelect = document.getElementById('member-select');
+    const displayElement = document.getElementById('selected-member-display');
+
+    if (!searchInput || !resultsContainer) return;
+
+    searchInput.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase().trim();
+        resultsContainer.innerHTML = '';
         
-        for (let i = 1; i < options.length; i++) {
-            const text = options[i].textContent.toLowerCase();
-            if (text.includes(searchTerm)) {
-                options[i].style.display = '';
-                visibleCount++;
-            } else {
-                options[i].style.display = 'none';
-            }
+        if (term.length < 1) {
+            resultsContainer.style.display = 'none';
+            return;
         }
+
+        const matches = allMembers.filter(m => m.name.toLowerCase().includes(term));
         
-        // Auto-select if only one match
-        if (visibleCount === 1 && searchTerm) {
-            for (let i = 1; i < options.length; i++) {
-                if (options[i].style.display !== 'none') {
-                    selectElement.selectedIndex = i;
-                    break;
-                }
-            }
+        if (matches.length > 0) {
+            resultsContainer.style.display = 'block';
+            matches.forEach(member => {
+                const div = document.createElement('div');
+                div.className = 'member-search-item';
+                div.innerHTML = `<strong>${member.name}</strong> <span class="rank-badge rank-${member.rank.toLowerCase()}" style="font-size: 0.75em;">${member.rank}</span>`;
+                
+                div.addEventListener('click', () => {
+                    hiddenSelect.value = member.id;
+                    searchInput.value = ''; // Clear search bar
+                    displayElement.innerHTML = `Target: ${member.name} (${member.rank})`;
+                    displayElement.style.display = 'block';
+                    resultsContainer.style.display = 'none';
+                });
+                
+                resultsContainer.appendChild(div);
+            });
+        } else {
+            resultsContainer.style.display = 'block';
+            resultsContainer.innerHTML = '<div class="member-search-item" style="color: #999; cursor: default;">No members found</div>';
+        }
+    });
+
+    // Hide results if clicking outside the search box
+    document.addEventListener('click', (e) => {
+        if (e.target !== searchInput && e.target !== resultsContainer) {
+            resultsContainer.style.display = 'none';
         }
     });
 }
@@ -535,15 +577,27 @@ function createDynoCard(rec, compact = false) {
 }
 
 // Submit dyno recommendation
-async function submitDynoRecommendation() {
+async function submitDynoRecommendation(e) {
+    if (e) e.preventDefault(); // Prevent standard form submission
+
     const memberId = parseInt(document.getElementById('member-select').value);
     const points = parseInt(document.getElementById('points-input').value);
     const notes = document.getElementById('notes-input').value.trim();
     const isPublic = document.getElementById('is-public-input').checked;
     const minRank = document.getElementById('min-rank-select').value;
     
-    if (!memberId || isNaN(points) || !notes) {
-        alert('Please fill out all required fields.');
+    if (!memberId) {
+        alert('Please search and select a target member.');
+        return;
+    }
+    
+    if (isNaN(points)) {
+        alert('Please enter valid points.');
+        return;
+    }
+    
+    if (!notes) {
+        alert('Please provide notes for this recommendation.');
         return;
     }
     
@@ -560,21 +614,25 @@ async function submitDynoRecommendation() {
             })
         });
         
-        if (!response.ok) throw new Error(await response.text());
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error);
+        }
         
-        // Clear form
+        // Close modal and reset form
+        document.getElementById('shoutout-modal').style.display = 'none';
+        document.getElementById('shoutout-form').reset();
+        document.getElementById('selected-member-display').style.display = 'none';
         document.getElementById('member-select').value = '';
-        document.getElementById('member-search').value = '';
-        document.getElementById('points-input').value = '';
-        document.getElementById('notes-input').value = '';
-        document.getElementById('is-public-input').checked = false;
-        document.getElementById('min-rank-select').value = '';
         
+        // Reload recommendations
         await loadDynoRecommendations();
-        alert('Shoutout submitted successfully!');
+        
+        // Optional: Show a subtle success toast instead of an alert
+        // alert('Dyno recommendation submitted successfully!');
     } catch (error) {
-        console.error('Error submitting shoutout:', error);
-        alert('Failed to submit shoutout: ' + error.message);
+        console.error('Error submitting dyno recommendation:', error);
+        alert('Failed to submit dyno recommendation: ' + error.message);
     }
 }
 
@@ -662,6 +720,7 @@ function setupFilters() {
 }
 
 // Run on page load
+// Run on page load
 document.addEventListener('DOMContentLoaded', async () => {
     // Guard: Only run if we are actually on the Dyno page
     const dynoList = document.getElementById('dyno-list');
@@ -671,13 +730,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadMembers();
     await loadDynoRecommendations();
     
-    setupMemberSearch();
+    setupModal();
+    setupReactiveSearch();
     setupViewToggle();
     setupFilters();
     
-    // Submit button
-    const submitBtn = document.getElementById('submit-dyno-btn');
-    if (submitBtn) {
-        submitBtn.addEventListener('click', submitDynoRecommendation);
+    // Bind to the form submit event instead of the button click
+    const form = document.getElementById('shoutout-form');
+    if (form) {
+        form.addEventListener('submit', submitDynoRecommendation);
     }
 });
