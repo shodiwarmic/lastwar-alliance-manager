@@ -58,6 +58,10 @@ function setupModal() {
 
     const openModal = () => {
         modal.style.display = 'flex';
+
+        document.getElementById('modal-title').textContent = '➕ Add a Shoutout';
+        document.getElementById('edit-shoutout-id').value = '';
+        
         // Dynamically parse ranks for visibility dropdown to prevent hardcoding
         const ranks = [...new Set(allMembers.map(m => m.rank).filter(r => r))].sort();
         const rankSelect = document.getElementById('min-rank-select');
@@ -553,15 +557,21 @@ function createDynoCard(rec, compact = false) {
             </div>
         </div>
         <div class="rec-notes">${rec.notes || 'No notes provided'}</div>
-        <div class="rec-footer">
-            <div class="rec-meta">
+        <div class="rec-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-top: 15px;">
+            <div class="rec-meta" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                 <span class="rec-by">by ${rec.created_by}</span>
                 <span class="rec-date">${formatDate(rec.created_at)}</span>
                 <span class="expiry-badge ${rec.expired ? 'expired' : ''}">${expiryText}</span>
             </div>
-            ${(canManageDyno || (currentUsername && rec.created_by === currentUsername)) ? `
-                <button class="delete-btn" onclick="deleteDynoRecommendation(${rec.id})">🗑️ Delete</button>
-            ` : ''}        </div>
+            <div class="member-actions">
+                ${(!rec.expired && rec.created_by_id === currentUserId) ? `
+                    <button class="edit-btn" onclick="editDynoRecommendation(${rec.id})">✏️ Edit</button>
+                ` : ''}
+                ${(canManageDyno || (currentUsername && rec.created_by === currentUsername)) ? `
+                    <button class="delete-btn" onclick="deleteDynoRecommendation(${rec.id})">🗑️ Delete</button>
+                ` : ''}
+            </div>
+        </div>
     `;
     
     return card;
@@ -592,9 +602,13 @@ async function submitDynoRecommendation(e) {
         return;
     }
     
+    const editId = document.getElementById('edit-shoutout-id').value;
+    const method = editId ? 'PUT' : 'POST';
+    const endpoint = editId ? `${API_URL}/${editId}` : API_URL;
+
     try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
+        const response = await fetch(endpoint, {
+            method: method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 member_id: memberId, 
@@ -605,25 +619,17 @@ async function submitDynoRecommendation(e) {
             })
         });
         
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
-        }
+        if (!response.ok) throw new Error(await response.text());
         
-        // Close modal and reset form
         document.getElementById('shoutout-modal').style.display = 'none';
         document.getElementById('shoutout-form').reset();
         document.getElementById('selected-member-display').style.display = 'none';
-        document.getElementById('member-select').value = '';
+        document.getElementById('edit-shoutout-id').value = '';
         
-        // Reload recommendations
         await loadDynoRecommendations();
-        
-        // Optional: Show a subtle success toast instead of an alert
-        // alert('Dyno recommendation submitted successfully!');
     } catch (error) {
-        console.error('Error submitting dyno recommendation:', error);
-        alert('Failed to submit dyno recommendation: ' + error.message);
+        console.error('Error saving shoutout:', error);
+        alert('Failed to save shoutout: ' + error.message);
     }
 }
 
@@ -647,6 +653,42 @@ window.deleteDynoRecommendation = async function(id) {
         console.error('Error deleting dyno recommendation:', error);
         alert('Failed to delete dyno recommendation.');
     }
+};
+
+window.editDynoRecommendation = function(id) {
+    const rec = allDynoRecs.find(r => r.id === id);
+    if (!rec) return;
+    
+    // Set hidden ID and Title
+    document.getElementById('edit-shoutout-id').value = rec.id;
+    document.getElementById('modal-title').textContent = '✏️ Edit Shoutout';
+    
+    // Populate form fields
+    document.getElementById('member-select').value = rec.member_id;
+    const displayElement = document.getElementById('selected-member-display');
+    displayElement.innerHTML = `Target: ${rec.member_name} (${rec.member_rank})`;
+    displayElement.style.display = 'block';
+    
+    document.getElementById('points-input').value = rec.points;
+    document.getElementById('notes-input').value = rec.notes;
+    document.getElementById('is-public-input').checked = rec.is_author_public;
+    
+    // Open modal and set ranks
+    const modal = document.getElementById('shoutout-modal');
+    modal.style.display = 'flex';
+    
+    // Ensure visibility ranks are populated, then select the value
+    const ranks = [...new Set(allMembers.map(m => m.rank).filter(r => r))].sort();
+    const rankSelect = document.getElementById('min-rank-select');
+    if (rankSelect && rankSelect.options.length <= 1) {
+        ranks.forEach(rank => {
+            const opt = document.createElement('option');
+            opt.value = rank;
+            opt.textContent = rank + ' and above';
+            rankSelect.appendChild(opt);
+        });
+    }
+    rankSelect.value = rec.min_view_rank || '';
 };
 
 // Format date

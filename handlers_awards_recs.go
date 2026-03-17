@@ -556,6 +556,61 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(dr)
 }
 
+func updateDynoRecommendation(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	var input struct {
+		MemberID       int    `json:"member_id"`
+		Points         int    `json:"points"`
+		Notes          string `json:"notes"`
+		IsAuthorPublic bool   `json:"is_author_public"`
+		MinViewRank    string `json:"min_view_rank"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Zero-Trust verification: Ensure the user actually owns this record
+	var createdByID int
+	err = db.QueryRow("SELECT created_by_id FROM dyno_recommendations WHERE id = ?", id).Scan(&createdByID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if createdByID != userID {
+		http.Error(w, "You can only modify your own shoutouts.", http.StatusForbidden)
+		return
+	}
+
+	_, err = db.Exec(`
+		UPDATE dyno_recommendations 
+		SET member_id = ?, points = ?, notes = ?, is_author_public = ?, min_view_rank = ? 
+		WHERE id = ?`,
+		input.MemberID, input.Points, input.Notes, input.IsAuthorPublic, input.MinViewRank, id,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	userID := session.Values["user_id"].(int)
