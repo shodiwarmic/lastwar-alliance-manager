@@ -117,16 +117,18 @@ type Recommendation struct {
 }
 
 type DynoRecommendation struct {
-	ID          int    `json:"id"`
-	MemberID    int    `json:"member_id"`
-	MemberName  string `json:"member_name"`
-	MemberRank  string `json:"member_rank"`
-	Points      int    `json:"points"`
-	Notes       string `json:"notes"`
-	CreatedBy   string `json:"created_by"`
-	CreatedByID int    `json:"created_by_id"`
-	CreatedAt   string `json:"created_at"`
-	Expired     bool   `json:"expired"`
+	ID             int    `json:"id"`
+	MemberID       int    `json:"member_id"`
+	MemberName     string `json:"member_name"`
+	MemberRank     string `json:"member_rank"`
+	Points         int    `json:"points"`
+	Notes          string `json:"notes"`
+	CreatedBy      string `json:"created_by"`
+	CreatedByID    int    `json:"created_by_id"`
+	CreatedAt      string `json:"created_at"`
+	Expired        bool   `json:"expired"`
+	IsAuthorPublic bool   `json:"is_author_public"`
+	MinViewRank    string `json:"min_view_rank"`
 }
 
 type PowerHistory struct {
@@ -306,26 +308,27 @@ type VSPointsWithMember struct {
 }
 
 type RankPermissions struct {
-	Rank           string `json:"rank"`
-	ViewTrain      bool   `json:"view_train"`
-	ManageTrain    bool   `json:"manage_train"`
-	ViewAwards     bool   `json:"view_awards"`
-	ManageAwards   bool   `json:"manage_awards"`
-	ViewRecs       bool   `json:"view_recs"`
-	ManageRecs     bool   `json:"manage_recs"`
-	ViewDyno       bool   `json:"view_dyno"`
-	ManageDyno     bool   `json:"manage_dyno"`
-	ViewRankings   bool   `json:"view_rankings"`
-	ViewStorm      bool   `json:"view_storm"`
-	ManageStorm    bool   `json:"manage_storm"`
-	ViewVSPoints   bool   `json:"view_vs_points"`
-	ManageVSPoints bool   `json:"manage_vs_points"`
-	ViewUpload     bool   `json:"view_upload"`
-	ManageMembers  bool   `json:"manage_members"`
-	ManageSettings bool   `json:"manage_settings"`
-	ViewFiles      bool   `json:"view_files"`
-	UploadFiles    bool   `json:"upload_files"`
-	ManageFiles    bool   `json:"manage_files"`
+	Rank                 string `json:"rank"`
+	ViewTrain            bool   `json:"view_train"`
+	ManageTrain          bool   `json:"manage_train"`
+	ViewAwards           bool   `json:"view_awards"`
+	ManageAwards         bool   `json:"manage_awards"`
+	ViewRecs             bool   `json:"view_recs"`
+	ManageRecs           bool   `json:"manage_recs"`
+	ViewDyno             bool   `json:"view_dyno"`
+	ManageDyno           bool   `json:"manage_dyno"`
+	ViewRankings         bool   `json:"view_rankings"`
+	ViewStorm            bool   `json:"view_storm"`
+	ManageStorm          bool   `json:"manage_storm"`
+	ViewVSPoints         bool   `json:"view_vs_points"`
+	ManageVSPoints       bool   `json:"manage_vs_points"`
+	ViewUpload           bool   `json:"view_upload"`
+	ManageMembers        bool   `json:"manage_members"`
+	ManageSettings       bool   `json:"manage_settings"`
+	ViewFiles            bool   `json:"view_files"`
+	UploadFiles          bool   `json:"upload_files"`
+	ManageFiles          bool   `json:"manage_files"`
+	ViewAnonymousAuthors bool   `json:"view_anonymous_authors"`
 }
 
 type AllianceFile struct {

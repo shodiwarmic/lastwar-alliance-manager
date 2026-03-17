@@ -419,21 +419,33 @@ func deleteRecommendation(w http.ResponseWriter, r *http.Request) {
 }
 
 func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+
+	var userRank string
+	var canViewAnon bool
+
+	if userID > 0 {
+		err := db.QueryRow(`
+			SELECT COALESCE(m.rank, ''), COALESCE(rp.view_anonymous_authors, 0)
+			FROM users u
+			LEFT JOIN members m ON u.member_id = m.id
+			LEFT JOIN rank_permissions rp ON m.rank = rp.rank
+			WHERE u.id = ?
+		`, userID).Scan(&userRank, &canViewAnon)
+
+		if err != nil && err != sql.ErrNoRows {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	rows, err := db.Query(`
 		SELECT 
-			dr.id, 
-			dr.member_id, 
-			m.name, 
-			m.rank,
-			dr.points,
-			dr.notes,
-			u.username,
-			dr.created_by_id,
-			dr.created_at,
-			CASE 
-				WHEN datetime(dr.created_at, '+7 days') < datetime('now') THEN 1
-				ELSE 0
-			END as expired
+			dr.id, dr.member_id, m.name, m.rank, dr.points, dr.notes,
+			u.username, dr.created_by_id, dr.created_at,
+			CASE WHEN datetime(dr.created_at, '+7 days') < datetime('now') THEN 1 ELSE 0 END as expired,
+			dr.is_author_public, dr.min_view_rank
 		FROM dyno_recommendations dr
 		JOIN members m ON dr.member_id = m.id
 		JOIN users u ON dr.created_by_id = u.id
@@ -449,10 +461,24 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var dr DynoRecommendation
 		if err := rows.Scan(&dr.ID, &dr.MemberID, &dr.MemberName, &dr.MemberRank,
-			&dr.Points, &dr.Notes, &dr.CreatedBy, &dr.CreatedByID, &dr.CreatedAt, &dr.Expired); err != nil {
+			&dr.Points, &dr.Notes, &dr.CreatedBy, &dr.CreatedByID, &dr.CreatedAt, &dr.Expired,
+			&dr.IsAuthorPublic, &dr.MinViewRank); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		// Targeted Visibility: Filter out if user's rank is below the minimum view rank.
+		// (Using string comparison for dynamic rank handling)
+		if dr.MinViewRank != "" && userRank < dr.MinViewRank {
+			continue // Silently drop
+		}
+
+		// Semi-Anonymous & RBAC Zero-Trust Scrubbing
+		if !dr.IsAuthorPublic && !canViewAnon && dr.CreatedByID != userID {
+			dr.CreatedBy = "Anonymous"
+			dr.CreatedByID = 0
+		}
+
 		dynoRecs = append(dynoRecs, dr)
 	}
 
@@ -465,9 +491,11 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	userID := session.Values["user_id"].(int)
 
 	var input struct {
-		MemberID int    `json:"member_id"`
-		Points   int    `json:"points"`
-		Notes    string `json:"notes"`
+		MemberID       int    `json:"member_id"`
+		Points         int    `json:"points"`
+		Notes          string `json:"notes"`
+		IsAuthorPublic bool   `json:"is_author_public"`
+		MinViewRank    string `json:"min_view_rank"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -475,13 +503,8 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.MemberID == 0 {
-		http.Error(w, "Member ID is required", http.StatusBadRequest)
-		return
-	}
-
-	if input.Notes == "" {
-		http.Error(w, "Notes are required", http.StatusBadRequest)
+	if input.MemberID == 0 || input.Notes == "" {
+		http.Error(w, "Member ID and Notes are required", http.StatusBadRequest)
 		return
 	}
 
@@ -493,8 +516,8 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := db.Exec(
-		"INSERT INTO dyno_recommendations (member_id, points, notes, created_by_id) VALUES (?, ?, ?, ?)",
-		input.MemberID, input.Points, input.Notes, userID,
+		"INSERT INTO dyno_recommendations (member_id, points, notes, created_by_id, is_author_public, min_view_rank) VALUES (?, ?, ?, ?, ?, ?)",
+		input.MemberID, input.Points, input.Notes, userID, input.IsAuthorPublic, input.MinViewRank,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -506,25 +529,17 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	var dr DynoRecommendation
 	err = db.QueryRow(`
 		SELECT 
-			dr.id, 
-			dr.member_id, 
-			m.name, 
-			m.rank,
-			dr.points,
-			dr.notes,
-			u.username,
-			dr.created_by_id,
-			dr.created_at,
-			CASE 
-				WHEN datetime(dr.created_at, '+7 days') < datetime('now') THEN 1
-				ELSE 0
-			END as expired
+			dr.id, dr.member_id, m.name, m.rank, dr.points, dr.notes,
+			u.username, dr.created_by_id, dr.created_at,
+			CASE WHEN datetime(dr.created_at, '+7 days') < datetime('now') THEN 1 ELSE 0 END as expired,
+			dr.is_author_public, dr.min_view_rank
 		FROM dyno_recommendations dr
 		JOIN members m ON dr.member_id = m.id
 		JOIN users u ON dr.created_by_id = u.id
 		WHERE dr.id = ?
 	`, id).Scan(&dr.ID, &dr.MemberID, &dr.MemberName, &dr.MemberRank,
-		&dr.Points, &dr.Notes, &dr.CreatedBy, &dr.CreatedByID, &dr.CreatedAt, &dr.Expired)
+		&dr.Points, &dr.Notes, &dr.CreatedBy, &dr.CreatedByID, &dr.CreatedAt, &dr.Expired,
+		&dr.IsAuthorPublic, &dr.MinViewRank)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

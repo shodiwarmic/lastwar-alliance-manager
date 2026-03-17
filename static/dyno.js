@@ -35,6 +35,18 @@ async function loadMembers() {
         allMembers = await response.json();
         allMembers.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
         populateMemberSelect();
+
+        // Extract unique ranks to populate min-rank-select without hardcoding strings
+        const ranks = [...new Set(allMembers.map(m => m.rank).filter(r => r))].sort();
+        const rankSelect = document.getElementById('min-rank-select');
+        if (rankSelect) {
+            ranks.forEach(rank => {
+                const opt = document.createElement('option');
+                opt.value = rank;
+                opt.textContent = rank + ' and above';
+                rankSelect.appendChild(opt);
+            });
+        }
     } catch (error) {
         console.error('Error loading members:', error);
         alert('Failed to load members.');
@@ -523,19 +535,11 @@ async function submitDynoRecommendation() {
     const memberId = parseInt(document.getElementById('member-select').value);
     const points = parseInt(document.getElementById('points-input').value);
     const notes = document.getElementById('notes-input').value.trim();
+    const isPublic = document.getElementById('is-public-input').checked;
+    const minRank = document.getElementById('min-rank-select').value;
     
-    if (!memberId) {
-        alert('Please select a member.');
-        return;
-    }
-    
-    if (isNaN(points)) {
-        alert('Please enter valid points.');
-        return;
-    }
-    
-    if (!notes) {
-        alert('Please provide notes for this recommendation.');
+    if (!memberId || isNaN(points) || !notes) {
+        alert('Please fill out all required fields.');
         return;
     }
     
@@ -543,27 +547,30 @@ async function submitDynoRecommendation() {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ member_id: memberId, points: points, notes: notes })
+            body: JSON.stringify({ 
+                member_id: memberId, 
+                points: points, 
+                notes: notes,
+                is_author_public: isPublic,
+                min_view_rank: minRank
+            })
         });
         
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
-        }
+        if (!response.ok) throw new Error(await response.text());
         
         // Clear form
         document.getElementById('member-select').value = '';
         document.getElementById('member-search').value = '';
         document.getElementById('points-input').value = '';
         document.getElementById('notes-input').value = '';
+        document.getElementById('is-public-input').checked = false;
+        document.getElementById('min-rank-select').value = '';
         
-        // Reload recommendations
         await loadDynoRecommendations();
-        
-        alert('Dyno recommendation submitted successfully!');
+        alert('Shoutout submitted successfully!');
     } catch (error) {
-        console.error('Error submitting dyno recommendation:', error);
-        alert('Failed to submit dyno recommendation: ' + error.message);
+        console.error('Error submitting shoutout:', error);
+        alert('Failed to submit shoutout: ' + error.message);
     }
 }
 
