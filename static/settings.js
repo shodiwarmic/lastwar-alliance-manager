@@ -3,10 +3,14 @@ const SETTINGS_URL = `${API_BASE}/settings`;
 
 const PERM_ROWS = [
     { key: 'manage_members', label: 'Manage Roster (Home)' },
-    { key: 'view_dyno', label: 'View Shoutouts' }, { key: 'manage_dyno', label: 'Manage Shoutouts' },
+    { key: 'view_dyno', label: 'View Shoutouts' }, 
+    { key: 'manage_dyno', label: 'Manage Shoutouts' },
+    { key: 'view_anonymous_authors', label: 'View Anonymous Authors' },
     { key: 'view_rankings', label: 'View Analytics Dashboard' },
-    { key: 'view_storm', label: 'View Desert Storm' }, { key: 'manage_storm', label: 'Manage Desert Storm' },
-    { key: 'view_vs_points', label: 'View VS Points' }, { key: 'manage_vs_points', label: 'Manage VS Points' },
+    { key: 'view_storm', label: 'View Desert Storm' }, 
+    { key: 'manage_storm', label: 'Manage Desert Storm' },
+    { key: 'view_vs_points', label: 'View VS Points' }, 
+    { key: 'manage_vs_points', label: 'Manage VS Points' },
     { key: 'view_upload', label: 'Access OCR Upload Tool' },
     { key: 'view_files', label: 'View Alliance Files' },
     { key: 'upload_files', label: 'Upload Alliance Files' },
