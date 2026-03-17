@@ -419,21 +419,38 @@ func deleteRecommendation(w http.ResponseWriter, r *http.Request) {
 }
 
 func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+	isAdmin, _ := session.Values["is_admin"].(bool)
+
+	var userRank string
+	var canViewAnon bool
+
+	if userID > 0 {
+		err := db.QueryRow(`
+			SELECT COALESCE(m.rank, ''), COALESCE(rp.view_anonymous_authors, 0)
+			FROM users u
+			LEFT JOIN members m ON u.member_id = m.id
+			LEFT JOIN rank_permissions rp ON m.rank = rp.rank
+			WHERE u.id = ?
+		`, userID).Scan(&userRank, &canViewAnon)
+
+		if err != nil && err != sql.ErrNoRows {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if isAdmin {
+		canViewAnon = true
+	}
+
 	rows, err := db.Query(`
 		SELECT 
-			dr.id, 
-			dr.member_id, 
-			m.name, 
-			m.rank,
-			dr.points,
-			dr.notes,
-			u.username,
-			dr.created_by_id,
-			dr.created_at,
-			CASE 
-				WHEN datetime(dr.created_at, '+7 days') < datetime('now') THEN 1
-				ELSE 0
-			END as expired
+			dr.id, dr.member_id, m.name, m.rank, dr.points, dr.notes,
+			u.username, dr.created_by_id, dr.created_at,
+			CASE WHEN datetime(dr.created_at, '+7 days') < datetime('now') THEN 1 ELSE 0 END as expired,
+			dr.is_author_public, dr.min_view_rank
 		FROM dyno_recommendations dr
 		JOIN members m ON dr.member_id = m.id
 		JOIN users u ON dr.created_by_id = u.id
@@ -449,10 +466,24 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var dr DynoRecommendation
 		if err := rows.Scan(&dr.ID, &dr.MemberID, &dr.MemberName, &dr.MemberRank,
-			&dr.Points, &dr.Notes, &dr.CreatedBy, &dr.CreatedByID, &dr.CreatedAt, &dr.Expired); err != nil {
+			&dr.Points, &dr.Notes, &dr.CreatedBy, &dr.CreatedByID, &dr.CreatedAt, &dr.Expired,
+			&dr.IsAuthorPublic, &dr.MinViewRank); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		// Targeted Visibility: Filter out if user's rank is below the minimum view rank,
+		// UNLESS they are an admin, OR they are the original author.
+		if !isAdmin && dr.MinViewRank != "" && userRank < dr.MinViewRank && dr.CreatedByID != userID {
+			continue // Silently drop
+		}
+
+		// Semi-Anonymous & RBAC Zero-Trust Scrubbing
+		if !dr.IsAuthorPublic && !canViewAnon && dr.CreatedByID != userID {
+			dr.CreatedBy = "Anonymous"
+			dr.CreatedByID = 0
+		}
+
 		dynoRecs = append(dynoRecs, dr)
 	}
 
@@ -465,9 +496,11 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	userID := session.Values["user_id"].(int)
 
 	var input struct {
-		MemberID int    `json:"member_id"`
-		Points   int    `json:"points"`
-		Notes    string `json:"notes"`
+		MemberID       int    `json:"member_id"`
+		Points         int    `json:"points"`
+		Notes          string `json:"notes"`
+		IsAuthorPublic bool   `json:"is_author_public"`
+		MinViewRank    string `json:"min_view_rank"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -475,13 +508,8 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.MemberID == 0 {
-		http.Error(w, "Member ID is required", http.StatusBadRequest)
-		return
-	}
-
-	if input.Notes == "" {
-		http.Error(w, "Notes are required", http.StatusBadRequest)
+	if input.MemberID == 0 || input.Notes == "" {
+		http.Error(w, "Member ID and Notes are required", http.StatusBadRequest)
 		return
 	}
 
@@ -493,8 +521,8 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := db.Exec(
-		"INSERT INTO dyno_recommendations (member_id, points, notes, created_by_id) VALUES (?, ?, ?, ?)",
-		input.MemberID, input.Points, input.Notes, userID,
+		"INSERT INTO dyno_recommendations (member_id, points, notes, created_by_id, is_author_public, min_view_rank) VALUES (?, ?, ?, ?, ?, ?)",
+		input.MemberID, input.Points, input.Notes, userID, input.IsAuthorPublic, input.MinViewRank,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -506,25 +534,17 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	var dr DynoRecommendation
 	err = db.QueryRow(`
 		SELECT 
-			dr.id, 
-			dr.member_id, 
-			m.name, 
-			m.rank,
-			dr.points,
-			dr.notes,
-			u.username,
-			dr.created_by_id,
-			dr.created_at,
-			CASE 
-				WHEN datetime(dr.created_at, '+7 days') < datetime('now') THEN 1
-				ELSE 0
-			END as expired
+			dr.id, dr.member_id, m.name, m.rank, dr.points, dr.notes,
+			u.username, dr.created_by_id, dr.created_at,
+			CASE WHEN datetime(dr.created_at, '+7 days') < datetime('now') THEN 1 ELSE 0 END as expired,
+			dr.is_author_public, dr.min_view_rank
 		FROM dyno_recommendations dr
 		JOIN members m ON dr.member_id = m.id
 		JOIN users u ON dr.created_by_id = u.id
 		WHERE dr.id = ?
 	`, id).Scan(&dr.ID, &dr.MemberID, &dr.MemberName, &dr.MemberRank,
-		&dr.Points, &dr.Notes, &dr.CreatedBy, &dr.CreatedByID, &dr.CreatedAt, &dr.Expired)
+		&dr.Points, &dr.Notes, &dr.CreatedBy, &dr.CreatedByID, &dr.CreatedAt, &dr.Expired,
+		&dr.IsAuthorPublic, &dr.MinViewRank)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -534,6 +554,61 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(dr)
+}
+
+func updateDynoRecommendation(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID := session.Values["user_id"].(int)
+
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	var input struct {
+		MemberID       int    `json:"member_id"`
+		Points         int    `json:"points"`
+		Notes          string `json:"notes"`
+		IsAuthorPublic bool   `json:"is_author_public"`
+		MinViewRank    string `json:"min_view_rank"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Zero-Trust verification: Ensure the user actually owns this record
+	var createdByID int
+	err = db.QueryRow("SELECT created_by_id FROM dyno_recommendations WHERE id = ?", id).Scan(&createdByID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if createdByID != userID {
+		http.Error(w, "You can only modify your own shoutouts.", http.StatusForbidden)
+		return
+	}
+
+	_, err = db.Exec(`
+		UPDATE dyno_recommendations 
+		SET member_id = ?, points = ?, notes = ?, is_author_public = ?, min_view_rank = ? 
+		WHERE id = ?`,
+		input.MemberID, input.Points, input.Notes, input.IsAuthorPublic, input.MinViewRank, id,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
@@ -548,6 +623,22 @@ func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch manage_dyno permission dynamically for non-admins
+	var canManageDyno bool
+	if !isAdmin {
+		err := db.QueryRow(`
+			SELECT COALESCE(rp.manage_dyno, 0)
+			FROM users u
+			LEFT JOIN members m ON u.member_id = m.id
+			LEFT JOIN rank_permissions rp ON m.rank = rp.rank
+			WHERE u.id = ?
+		`, userID).Scan(&canManageDyno)
+		if err != nil && err != sql.ErrNoRows {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	var createdByID int
 	err = db.QueryRow("SELECT created_by_id FROM dyno_recommendations WHERE id = ?", id).Scan(&createdByID)
 	if err != nil {
@@ -559,8 +650,9 @@ func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if createdByID != userID && !isAdmin {
-		http.Error(w, "You can only delete your own dyno recommendations", http.StatusForbidden)
+	// Authorize if user is the creator, an admin, or possesses manage_dyno permissions
+	if createdByID != userID && !isAdmin && !canManageDyno {
+		http.Error(w, "You do not have permission to delete this shoutout", http.StatusForbidden)
 		return
 	}
 

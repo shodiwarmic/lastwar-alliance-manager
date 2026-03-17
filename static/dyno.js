@@ -8,6 +8,8 @@ let currentUsername = '';
 let currentUserId = 0;
 let currentView = 'list'; // 'list' or 'grouped'
 let currentFilter = 'all'; // 'all', 'active', 'positive', 'negative', 'mine'
+let canManageDyno = false; // Add this near your other let declarations
+
 
 // Chart instances
 let pointsChart = null;
@@ -21,7 +23,10 @@ async function fetchPermissions() {
         if (response.ok) {
             const data = await response.json();
             currentUsername = data.username;
-            currentUserId = data.user_id || 0;
+            // Removed reliance on user_id to prevent the 0 === 0 scrubbing bug
+            
+            // Extract the manage_dyno permission
+            canManageDyno = data.permissions?.manage_dyno || data.is_admin || false;
         }
     } catch (error) {
         console.error('Auth check error:', error);
@@ -32,60 +37,109 @@ async function fetchPermissions() {
 async function loadMembers() {
     try {
         const response = await fetch(MEMBERS_URL);
+        if (!response.ok) throw new Error('Failed to fetch members');
+        
         allMembers = await response.json();
         allMembers.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-        populateMemberSelect();
+        
+        // populateMemberSelect() was removed here because the reactive modal handles the UI now
     } catch (error) {
         console.error('Error loading members:', error);
         alert('Failed to load members.');
     }
 }
 
-// Populate member select dropdown
-function populateMemberSelect() {
-    const select = document.getElementById('member-select');
-    if (!select) return;
-    
-    select.innerHTML = '<option value="">Select a member...</option>';
-    
-    allMembers.forEach(member => {
-        const option = document.createElement('option');
-        option.value = member.id;
-        option.textContent = `${member.name} (${member.rank})`;
-        select.appendChild(option);
+// Setup Modal Event Listeners
+function setupModal() {
+    const modal = document.getElementById('shoutout-modal');
+    const openBtn = document.getElementById('open-shoutout-modal-btn');
+    const closeBtn = document.getElementById('close-shoutout-modal');
+    const cancelBtn = document.getElementById('cancel-shoutout-btn');
+
+    const openModal = () => {
+        modal.style.display = 'flex';
+
+        document.getElementById('modal-title').textContent = '➕ Add a Shoutout';
+        document.getElementById('edit-shoutout-id').value = '';
+        
+        // Dynamically parse ranks for visibility dropdown to prevent hardcoding
+        const ranks = [...new Set(allMembers.map(m => m.rank).filter(r => r))].sort();
+        const rankSelect = document.getElementById('min-rank-select');
+        if (rankSelect && rankSelect.options.length <= 1) { // Only populate if empty
+            ranks.forEach(rank => {
+                const opt = document.createElement('option');
+                opt.value = rank;
+                opt.textContent = rank + ' and above';
+                rankSelect.appendChild(opt);
+            });
+        }
+    };
+
+    const closeModal = () => {
+        modal.style.display = 'none';
+        document.getElementById('shoutout-form').reset();
+        document.getElementById('selected-member-display').style.display = 'none';
+        document.getElementById('member-search-results').style.display = 'none';
+        document.getElementById('member-select').value = '';
+    };
+
+    if (openBtn) openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+    // Close on outside click
+    window.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
     });
 }
 
-// Setup search filter for member dropdown
-function setupMemberSearch() {
+// Setup Reactive Member Search within the Modal
+function setupReactiveSearch() {
     const searchInput = document.getElementById('member-search');
-    const selectElement = document.getElementById('member-select');
-    
-    if (!searchInput || !selectElement) return;
-    
-    searchInput.addEventListener('input', () => {
-        const searchTerm = searchInput.value.toLowerCase().trim();
-        const options = selectElement.options;
-        let visibleCount = 0;
+    const resultsContainer = document.getElementById('member-search-results');
+    const hiddenSelect = document.getElementById('member-select');
+    const displayElement = document.getElementById('selected-member-display');
+
+    if (!searchInput || !resultsContainer) return;
+
+    searchInput.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase().trim();
+        resultsContainer.innerHTML = '';
         
-        for (let i = 1; i < options.length; i++) {
-            const text = options[i].textContent.toLowerCase();
-            if (text.includes(searchTerm)) {
-                options[i].style.display = '';
-                visibleCount++;
-            } else {
-                options[i].style.display = 'none';
-            }
+        if (term.length < 1) {
+            resultsContainer.style.display = 'none';
+            return;
         }
+
+        const matches = allMembers.filter(m => m.name.toLowerCase().includes(term));
         
-        // Auto-select if only one match
-        if (visibleCount === 1 && searchTerm) {
-            for (let i = 1; i < options.length; i++) {
-                if (options[i].style.display !== 'none') {
-                    selectElement.selectedIndex = i;
-                    break;
-                }
-            }
+        if (matches.length > 0) {
+            resultsContainer.style.display = 'block';
+            matches.forEach(member => {
+                const div = document.createElement('div');
+                div.className = 'member-search-item';
+                div.innerHTML = `<strong>${member.name}</strong> <span class="rank-badge rank-${member.rank.toLowerCase()}" style="font-size: 0.75em;">${member.rank}</span>`;
+                
+                div.addEventListener('click', () => {
+                    hiddenSelect.value = member.id;
+                    searchInput.value = ''; // Clear search bar
+                    displayElement.innerHTML = `Target: ${member.name} (${member.rank})`;
+                    displayElement.style.display = 'block';
+                    resultsContainer.style.display = 'none';
+                });
+                
+                resultsContainer.appendChild(div);
+            });
+        } else {
+            resultsContainer.style.display = 'block';
+            resultsContainer.innerHTML = '<div class="member-search-item" style="color: #999; cursor: default;">No members found</div>';
+        }
+    });
+
+    // Hide results if clicking outside the search box
+    document.addEventListener('click', (e) => {
+        if (e.target !== searchInput && e.target !== resultsContainer) {
+            resultsContainer.style.display = 'none';
         }
     });
 }
@@ -503,15 +557,23 @@ function createDynoCard(rec, compact = false) {
             </div>
         </div>
         <div class="rec-notes">${rec.notes || 'No notes provided'}</div>
-        <div class="rec-footer">
-            <div class="rec-meta">
+        <div class="rec-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-top: 15px;">
+            <div class="rec-meta" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                 <span class="rec-by">by ${rec.created_by}</span>
+                ${(!rec.is_author_public && currentUsername && rec.created_by === currentUsername) ? `
+                    <span class="expiry-badge" style="background: #6c757d; color: white;" title="Your name is hidden from members without the view permission">🕵️ Anonymous to Alliance</span>
+                ` : ''}
                 <span class="rec-date">${formatDate(rec.created_at)}</span>
                 <span class="expiry-badge ${rec.expired ? 'expired' : ''}">${expiryText}</span>
             </div>
-            ${rec.created_by_id === currentUserId ? `
-                <button class="delete-btn" onclick="deleteDynoRecommendation(${rec.id})">🗑️ Delete</button>
-            ` : ''}
+            <div class="member-actions">
+                ${(!rec.expired && currentUsername && rec.created_by === currentUsername) ? `
+                    <button class="edit-btn" onclick="editDynoRecommendation(${rec.id})">✏️ Edit</button>
+                ` : ''}
+                ${(canManageDyno || (currentUsername && rec.created_by === currentUsername)) ? `
+                    <button class="delete-btn" onclick="deleteDynoRecommendation(${rec.id})">🗑️ Delete</button>
+                ` : ''}
+            </div>
         </div>
     `;
     
@@ -519,13 +581,17 @@ function createDynoCard(rec, compact = false) {
 }
 
 // Submit dyno recommendation
-async function submitDynoRecommendation() {
+async function submitDynoRecommendation(e) {
+    if (e) e.preventDefault(); // Prevent standard form submission
+
     const memberId = parseInt(document.getElementById('member-select').value);
     const points = parseInt(document.getElementById('points-input').value);
     const notes = document.getElementById('notes-input').value.trim();
+    const isPublic = document.getElementById('is-public-input').checked;
+    const minRank = document.getElementById('min-rank-select').value;
     
     if (!memberId) {
-        alert('Please select a member.');
+        alert('Please search and select a target member.');
         return;
     }
     
@@ -539,31 +605,34 @@ async function submitDynoRecommendation() {
         return;
     }
     
+    const editId = document.getElementById('edit-shoutout-id').value;
+    const method = editId ? 'PUT' : 'POST';
+    const endpoint = editId ? `${API_URL}/${editId}` : API_URL;
+
     try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
+        const response = await fetch(endpoint, {
+            method: method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ member_id: memberId, points: points, notes: notes })
+            body: JSON.stringify({ 
+                member_id: memberId, 
+                points: points, 
+                notes: notes,
+                is_author_public: isPublic,
+                min_view_rank: minRank
+            })
         });
         
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
-        }
+        if (!response.ok) throw new Error(await response.text());
         
-        // Clear form
-        document.getElementById('member-select').value = '';
-        document.getElementById('member-search').value = '';
-        document.getElementById('points-input').value = '';
-        document.getElementById('notes-input').value = '';
+        document.getElementById('shoutout-modal').style.display = 'none';
+        document.getElementById('shoutout-form').reset();
+        document.getElementById('selected-member-display').style.display = 'none';
+        document.getElementById('edit-shoutout-id').value = '';
         
-        // Reload recommendations
         await loadDynoRecommendations();
-        
-        alert('Dyno recommendation submitted successfully!');
     } catch (error) {
-        console.error('Error submitting dyno recommendation:', error);
-        alert('Failed to submit dyno recommendation: ' + error.message);
+        console.error('Error saving shoutout:', error);
+        alert('Failed to save shoutout: ' + error.message);
     }
 }
 
@@ -587,6 +656,42 @@ window.deleteDynoRecommendation = async function(id) {
         console.error('Error deleting dyno recommendation:', error);
         alert('Failed to delete dyno recommendation.');
     }
+};
+
+window.editDynoRecommendation = function(id) {
+    const rec = allDynoRecs.find(r => r.id === id);
+    if (!rec) return;
+    
+    // Set hidden ID and Title
+    document.getElementById('edit-shoutout-id').value = rec.id;
+    document.getElementById('modal-title').textContent = '✏️ Edit Shoutout';
+    
+    // Populate form fields
+    document.getElementById('member-select').value = rec.member_id;
+    const displayElement = document.getElementById('selected-member-display');
+    displayElement.innerHTML = `Target: ${rec.member_name} (${rec.member_rank})`;
+    displayElement.style.display = 'block';
+    
+    document.getElementById('points-input').value = rec.points;
+    document.getElementById('notes-input').value = rec.notes;
+    document.getElementById('is-public-input').checked = rec.is_author_public;
+    
+    // Open modal and set ranks
+    const modal = document.getElementById('shoutout-modal');
+    modal.style.display = 'flex';
+    
+    // Ensure visibility ranks are populated, then select the value
+    const ranks = [...new Set(allMembers.map(m => m.rank).filter(r => r))].sort();
+    const rankSelect = document.getElementById('min-rank-select');
+    if (rankSelect && rankSelect.options.length <= 1) {
+        ranks.forEach(rank => {
+            const opt = document.createElement('option');
+            opt.value = rank;
+            opt.textContent = rank + ' and above';
+            rankSelect.appendChild(opt);
+        });
+    }
+    rankSelect.value = rec.min_view_rank || '';
 };
 
 // Format date
@@ -651,6 +756,7 @@ function setupFilters() {
 }
 
 // Run on page load
+// Run on page load
 document.addEventListener('DOMContentLoaded', async () => {
     // Guard: Only run if we are actually on the Dyno page
     const dynoList = document.getElementById('dyno-list');
@@ -660,13 +766,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadMembers();
     await loadDynoRecommendations();
     
-    setupMemberSearch();
+    setupModal();
+    setupReactiveSearch();
     setupViewToggle();
     setupFilters();
     
-    // Submit button
-    const submitBtn = document.getElementById('submit-dyno-btn');
-    if (submitBtn) {
-        submitBtn.addEventListener('click', submitDynoRecommendation);
+    // Bind to the form submit event instead of the button click
+    const form = document.getElementById('shoutout-form');
+    if (form) {
+        form.addEventListener('submit', submitDynoRecommendation);
     }
 });

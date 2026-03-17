@@ -8,16 +8,22 @@
 {{end}}
 
 {{define "content"}}
-            <section class="info-banner">
-                <div class="info-content">
-                    <div class="info-icon">ℹ️</div>
-                    <div class="info-text">
-                        <strong>About Shoutouts:</strong> 
-                        A quick, informal feedback system for alliance members. You can give positive (+) or negative (-) points. 
-                        These are just notices to help track activity and attitude. All shoutouts automatically expire after 1 week.
-                    </div>
+            <div class="action-bar" style="margin-bottom: 25px;">
+                <button type="button" id="open-shoutout-modal-btn" class="primary-action-btn">
+                    <span class="btn-icon">➕</span>
+                    <span class="btn-text">Add Shoutout</span>
+                </button>
+            </div>
+
+            <div class="info-box" style="display: flex; gap: 15px; align-items: flex-start; border-left: 4px solid #667eea; background: var(--card-bg); padding: 15px 20px; border-radius: 8px; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <div style="font-size: 1.6em; line-height: 1; margin-top: 2px;">💡</div>
+                <div>
+                    <strong style="color: var(--text-primary); font-size: 1.1em; display: block; margin-bottom: 5px;">How Shoutouts Work</strong>
+                    <p style="color: var(--text-secondary); margin: 0; line-height: 1.5; font-size: 0.95em;">
+                        A quick, informal feedback system to give positive (+ kudos) or negative (- concerns) points to alliance members. All shoutouts automatically expire after 7 days to keep feedback relevant to current events.
+                    </p>
                 </div>
-            </section>
+            </div>
 
             <section class="stats-dashboard">
                 <h3>📊 Shoutout Statistics</h3>
@@ -71,30 +77,7 @@
                 </div>
             </section>
 
-            <section class="recommendation-form-section">
-                <h3>➕ Add a Shoutout</h3>
-                <div class="recommendation-form">
-                    <div class="form-group">
-                        <label for="member-select">Member:</label>
-                        <input type="text" id="member-search" class="member-search" placeholder="Search member..." autocomplete="off">
-                        <select id="member-select" class="member-select" required>
-                            <option value="">Select a member...</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="points-input">Points:</label>
-                        <input type="number" id="points-input" class="points-input" placeholder="Enter points (positive or negative)" min="-999" max="999" required>
-                        <small>Use positive numbers to give props, negative for concerns</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="notes-input">Notes (Required):</label>
-                        <textarea id="notes-input" class="notes-input" rows="3" placeholder="Provide context for this shoutout..." required></textarea>
-                    </div>
-                    <button id="submit-dyno-btn" class="btn-primary">✨ Submit Shoutout</button>
-                </div>
-            </section>
-
-            <section class="recommendations-list-section">
+            <section class="recommendations-list-section" style="padding-top: 0;">
                 <div class="section-header-controls">
                     <h3>📋 Recent Shoutouts</h3>
                     <div class="view-toggle">
@@ -115,6 +98,54 @@
                 <div id="dyno-list" class="recommendations-list">
                     </div>
             </section>
+{{end}}
+
+{{define "modals"}}
+    <div id="shoutout-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" id="close-shoutout-modal">&times;</span>
+            <h3 id="modal-title" style="margin-bottom: 20px; color: var(--text-primary);">➕ Add a Shoutout</h3>
+            
+            <form id="shoutout-form">
+                <input type="hidden" id="edit-shoutout-id" value="">
+                <div class="form-group" style="position: relative;">
+                    <label for="member-search">Target Member:</label>
+                    <input type="text" id="member-search" class="form-input" placeholder="Type a name to search..." autocomplete="off" style="width: 100%; padding: 10px; border-radius: 6px; border: 2px solid var(--border-color);">
+                    <div id="member-search-results" class="dropdown-list" style="display: none; max-height: 200px; position: absolute; width: 100%; z-index: 1001; background: var(--container-bg); border: 1px solid #667eea; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+                    <input type="hidden" id="member-select" required>
+                    <div id="selected-member-display" style="margin-top: 8px; font-weight: bold; color: #667eea; display: none;"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="points-input">Points (+ / -):</label>
+                    <input type="number" id="points-input" class="form-input" placeholder="e.g. 5 or -5" min="-999" max="999" required style="width: 100%; padding: 10px; border-radius: 6px; border: 2px solid var(--border-color);">
+                    <span class="help-text">Use positive numbers for kudos, negative for concerns</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="notes-input">Context / Notes (Required):</label>
+                    <textarea id="notes-input" class="form-input" rows="4" placeholder="Why are you giving this shoutout?" required style="width: 100%; padding: 10px; border-radius: 6px; border: 2px solid var(--border-color); resize: vertical;"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="min-rank-select">Targeted Visibility (Minimum Rank):</label>
+                    <select id="min-rank-select" class="form-input" style="width: 100%; padding: 10px; border-radius: 6px; border: 2px solid var(--border-color);">
+                        <option value="">Everyone (No restriction)</option>
+                    </select>
+                </div>
+
+                <div class="form-group checkbox-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 25px;">
+                    <input type="checkbox" id="is-public-input" style="width: 18px; height: 18px; cursor: pointer;">
+                    <label for="is-public-input" style="margin: 0; cursor: pointer;">Make my author name public</label>
+                </div>
+
+                <div class="modal-actions" style="display: flex; gap: 15px;">
+                    <button type="submit" class="primary-btn" style="flex: 1;">✨ Submit Shoutout</button>
+                    <button type="button" id="cancel-shoutout-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
 {{end}}
 
 {{define "scripts"}}
