@@ -1,3 +1,4 @@
+-- +goose Up
 -- Migration: 004_credentials_table
 -- Description: Creates a dedicated table for AES-GCM encrypted external API credentials.
 
@@ -10,3 +11,6 @@ CREATE TABLE credentials (
 );
 
 CREATE INDEX idx_credentials_service ON credentials(service_name);
+
+-- +goose Down
+DROP TABLE credentials;

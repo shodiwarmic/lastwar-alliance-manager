@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-This guide covers the deployment of the Last War Alliance Manager. Because the application and its dependencies (Go, Tesseract OCR, Collabora CODE) are fully containerized using Docker, the host server setup is incredibly lightweight.
+This guide covers the deployment of the Last War Alliance Manager. Because the application and its dependencies (Go, Collabora CODE) are fully containerized using Docker, the host server setup is incredibly lightweight.
 
 ## 1. DNS Configuration (Pre-Requisite)
 
@@ -16,10 +16,10 @@ Wait for DNS propagation (5-60 minutes) before proceeding to the reverse proxy s
 
 ## 2. Automated Setup (Recommended)
 
-The easiest way to deploy the application on a fresh Debian or Ubuntu server is using the included installation script. It will automatically install Docker, configure your environment variables, download the pre-built containers from the registry, and set up Caddy or Nginx with automatic HTTPS.
+The easiest way to deploy the application on a fresh Debian or Ubuntu server is using the included installation script. It will automatically install Docker, securely generate your environment variables and encryption keys, download the pre-built containers from the registry, and set up Caddy or Nginx with automatic HTTPS.
 
 ```bash
-git clone [https://github.com/yourusername/lastwar.git](https://github.com/yourusername/lastwar.git) /opt/lastwar
+git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
 cd /opt/lastwar
 chmod +x install.sh
 sudo ./install.sh
@@ -38,7 +38,7 @@ Ensure Docker and Docker Compose are installed on your system.
 ### Step B: Prepare the Environment
 ```bash
 # Clone the repository
-git clone [https://github.com/yourusername/lastwar.git](https://github.com/yourusername/lastwar.git) /opt/lastwar
+git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
 cd /opt/lastwar
 
 # Create persistent storage directories
@@ -49,9 +49,12 @@ cp .env.example .env
 nano .env
 ```
 
-Ensure your `.env` contains secure values:
+Ensure your `.env` contains secure values. You **must** generate random 32-byte hex strings for both the session key and the credential encryption key.
+*(You can generate these by running `openssl rand -hex 32` in your terminal).*
+
 ```env
-SESSION_KEY=generate_a_random_64_character_string_here
+SESSION_KEY=your_generated_64_character_hex_string_here
+CREDENTIAL_ENCRYPTION_KEY=your_second_generated_64_character_hex_string_here
 DATABASE_PATH=/app/data/alliance.db
 STORAGE_PATH=/app/uploads
 PRODUCTION=true
@@ -64,9 +67,10 @@ TRUSTED_ORIGINS=localhost:8080, 127.0.0.1:8080
 ### Step C: Pull and Start the Stack
 ```bash
 docker compose pull
+docker compose build --no-cache
 docker compose up -d
 ```
-This will download the latest images, create a private internal bridge network, start the Go application (exposing port `8080`), and start the Collabora document server (exposing port `9980`).
+This will download the latest images, compile the Go binary, create a private internal bridge network, start the Go application (exposing port `8080`), and start the Collabora document server (exposing port `9980`).
 
 ---
 
@@ -202,7 +206,7 @@ sqlite3 /opt/lastwar/data/alliance.db ".backup '/var/backups/lastwar/alliance_$(
 
 ## 6. Update Procedure
 
-We strongly recommend using the included `update.sh` script. It automatically pulls the latest code, safely downloads the newest pre-built images from the registry, cleans up orphaned resources, and checks your proxy configurations for security compliance.
+We strongly recommend using the included `update.sh` script. It automatically pulls the latest code, clears legacy dependencies from your go.mod cache, safely downloads the newest pre-built images, and checks your proxy configurations for security compliance.
 
 ```bash
 cd /opt/lastwar
@@ -212,6 +216,7 @@ sudo ./update.sh
 If updating manually:
 ```bash
 git pull
-docker compose pull
+go mod tidy
+docker compose build --no-cache
 docker compose up -d
 ```

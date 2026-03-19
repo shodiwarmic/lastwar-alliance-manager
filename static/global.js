@@ -1,4 +1,5 @@
-// static/global.js
+// static/global.js - Global JavaScript for handling mobile menu, user dropdown, and logout functionality
+
 document.addEventListener('DOMContentLoaded', () => {
     // Mobile Menu Toggle
     const menuBtn = document.getElementById("mobile-menu-btn");

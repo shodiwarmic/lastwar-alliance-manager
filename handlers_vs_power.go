@@ -1,9 +1,13 @@
+// handlers_vs_power.go - Handlers for VS points and power tracking features
+
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"image"
 	"io"
 	"log"
 	"net/http"
@@ -24,8 +28,8 @@ func getVSPoints(w http.ResponseWriter, r *http.Request) {
 	if weekDate != "" {
 		query = `
 			SELECT v.id, v.member_id, v.week_date, v.monday, v.tuesday, v.wednesday, 
-			       v.thursday, v.friday, v.saturday, v.created_at, v.updated_at,
-			       m.name, m.rank
+				   v.thursday, v.friday, v.saturday, v.created_at, v.updated_at,
+				   m.name, m.rank
 			FROM vs_points v
 			JOIN members m ON v.member_id = m.id
 			WHERE v.week_date = ?
@@ -35,8 +39,8 @@ func getVSPoints(w http.ResponseWriter, r *http.Request) {
 	} else {
 		query = `
 			SELECT v.id, v.member_id, v.week_date, v.monday, v.tuesday, v.wednesday, 
-			       v.thursday, v.friday, v.saturday, v.created_at, v.updated_at,
-			       m.name, m.rank
+				   v.thursday, v.friday, v.saturday, v.created_at, v.updated_at,
+				   m.name, m.rank
 			FROM vs_points v
 			JOIN members m ON v.member_id = m.id
 			ORDER BY v.week_date DESC, m.name
@@ -157,7 +161,7 @@ func processVSPointsScreenshot(w http.ResponseWriter, r *http.Request) {
 
 	contentType := r.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "multipart/form-data") {
-		err := r.ParseMultipartForm(10 << 20) // 10 MB max
+		err := r.ParseMultipartForm(50 << 20) // 50 MB max for multi-file uploads
 		if err != nil {
 			http.Error(w, "Failed to parse form", http.StatusBadRequest)
 			return
@@ -168,20 +172,36 @@ func processVSPointsScreenshot(w http.ResponseWriter, r *http.Request) {
 			weekParam = "current"
 		}
 
-		file, _, err := r.FormFile("image")
-		if err != nil {
-			http.Error(w, "No image file provided", http.StatusBadRequest)
-			return
+		// Support both "images" (new multi-file) and "image" (legacy)
+		files := r.MultipartForm.File["images"]
+		if len(files) == 0 {
+			files = r.MultipartForm.File["image"]
 		}
-		defer file.Close()
 
-		imageData, err := io.ReadAll(file)
-		if err != nil {
-			http.Error(w, "Failed to read image", http.StatusInternalServerError)
+		if len(files) == 0 {
+			http.Error(w, "No image files provided", http.StatusBadRequest)
 			return
 		}
 
-		detectedDay, records, err = extractVSPointsDataFromImage(imageData)
+		var imageDatas [][]byte
+		for _, fileHeader := range files {
+			file, err := fileHeader.Open()
+			if err != nil {
+				http.Error(w, "Failed to open uploaded file", http.StatusInternalServerError)
+				return
+			}
+
+			data, err := io.ReadAll(file)
+			file.Close() // Close immediately after reading
+
+			if err != nil {
+				http.Error(w, "Failed to read image", http.StatusInternalServerError)
+				return
+			}
+			imageDatas = append(imageDatas, data)
+		}
+
+		detectedDay, records, err = extractVSPointsDataFromImages(imageDatas)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("OCR processing failed: %v", err), http.StatusInternalServerError)
 			return
@@ -467,26 +487,42 @@ func processPowerScreenshot(w http.ResponseWriter, r *http.Request) {
 
 	contentType := r.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "multipart/form-data") {
-		err := r.ParseMultipartForm(10 << 20)
+		err := r.ParseMultipartForm(50 << 20) // 50 MB max for multi-file uploads
 		if err != nil {
 			http.Error(w, "Failed to parse form", http.StatusBadRequest)
 			return
 		}
 
-		file, _, err := r.FormFile("image")
-		if err != nil {
-			http.Error(w, "No image file provided", http.StatusBadRequest)
-			return
+		// Support both "images" (new multi-file) and "image" (legacy)
+		files := r.MultipartForm.File["images"]
+		if len(files) == 0 {
+			files = r.MultipartForm.File["image"]
 		}
-		defer file.Close()
 
-		imageData, err := io.ReadAll(file)
-		if err != nil {
-			http.Error(w, "Failed to read image", http.StatusInternalServerError)
+		if len(files) == 0 {
+			http.Error(w, "No image files provided", http.StatusBadRequest)
 			return
 		}
 
-		records, err = extractPowerDataFromImage(imageData)
+		var imageDatas [][]byte
+		for _, fileHeader := range files {
+			file, err := fileHeader.Open()
+			if err != nil {
+				http.Error(w, "Failed to open uploaded file", http.StatusInternalServerError)
+				return
+			}
+
+			data, err := io.ReadAll(file)
+			file.Close() // Close immediately after reading
+
+			if err != nil {
+				http.Error(w, "Failed to read image", http.StatusInternalServerError)
+				return
+			}
+			imageDatas = append(imageDatas, data)
+		}
+
+		records, err = extractPowerDataFromImages(imageDatas)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("OCR processing failed: %v", err), http.StatusInternalServerError)
 			return
@@ -604,4 +640,250 @@ func processPowerScreenshot(w http.ResponseWriter, r *http.Request) {
 		"failed_count":  failedCount,
 		"errors":        errors,
 	})
+}
+
+// Process images with automatic bucketing and detection
+func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseMultipartForm(50 << 20) // 50 MB max
+	if err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	weekParam := r.FormValue("week")
+	if weekParam == "" {
+		weekParam = "current"
+	}
+
+	files := r.MultipartForm.File["images"]
+	if len(files) == 0 {
+		files = r.MultipartForm.File["image"] // Legacy fallback
+	}
+
+	if len(files) == 0 {
+		http.Error(w, "No image files provided", http.StatusBadRequest)
+		return
+	}
+
+	// 1. The Sorting Hat: Group images into buckets based on visual tabs
+	buckets := make(map[string][][]byte)
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(file)
+		file.Close()
+		if err != nil {
+			continue
+		}
+
+		day := detectDayFromTabRegion(data)
+		if day == "" {
+			day = "unknown"
+		}
+		buckets[day] = append(buckets[day], data)
+	}
+
+	// 3. Process Each Bucket Independently (Dynamic GCP Limits)
+	type ExtractedGroup struct {
+		DataType string
+		Day      string
+		Records  []SmartRecord
+	}
+
+	var processedGroups []ExtractedGroup
+	failedCount := 0
+	errors := []string{}
+
+	// GCP Vision Sweet Spot: Keep images under 12k pixels tall so it doesn't compress the text
+	const maxHeightPerChunk = 12000
+	const maxImagesPerChunk = 10
+
+	for bucketName, bucketData := range buckets {
+		log.Printf("Processing bucket: %s with %d images", bucketName, len(bucketData))
+
+		var currentChunk [][]byte
+		currentHeight := 0
+		chunkIndex := 1
+
+		// Helper to process a chunk
+		processChunk := func(chunk [][]byte) {
+			log.Printf("Stitching sub-chunk %d for bucket %s (%d images, ~%dpx tall)", chunkIndex, bucketName, len(chunk), currentHeight)
+			dataType, detectedDay, records, err := extractSmartDataFromImages(chunk, bucketName)
+			if err != nil {
+				failedCount += len(chunk)
+				errors = append(errors, fmt.Sprintf("Bucket '%s' (chunk %d) failed: %v", bucketName, chunkIndex, err))
+			} else {
+				processedGroups = append(processedGroups, ExtractedGroup{
+					DataType: dataType,
+					Day:      detectedDay,
+					Records:  records,
+				})
+			}
+			chunkIndex++
+		}
+
+		for _, imgBytes := range bucketData {
+			// Instantly read image dimensions without fully decoding it into memory
+			config, _, err := image.DecodeConfig(bytes.NewReader(imgBytes))
+			if err != nil {
+				continue // Skip corrupt images
+			}
+
+			// If adding this image exceeds our dynamic height limit OR hard file limit
+			if (currentHeight+config.Height > maxHeightPerChunk || len(currentChunk) >= maxImagesPerChunk) && len(currentChunk) > 0 {
+				processChunk(currentChunk)
+				// Reset the chunk with the current image that pushed us over the limit
+				currentChunk = [][]byte{imgBytes}
+				currentHeight = config.Height
+			} else {
+				currentChunk = append(currentChunk, imgBytes)
+				currentHeight += config.Height
+			}
+		}
+
+		// Process whatever is left over in the final chunk
+		if len(currentChunk) > 0 {
+			processChunk(currentChunk)
+		}
+	}
+
+	// Calculate VS week date
+	now := time.Now()
+	if weekParam == "last" {
+		now = now.AddDate(0, 0, -7)
+	}
+	weekday := now.Weekday()
+	daysFromMonday := int(weekday) - 1
+	if weekday == time.Sunday {
+		daysFromMonday = 6
+	}
+	monday := now.AddDate(0, 0, -daysFromMonday)
+	weekDate := monday.Format("2006-01-02")
+
+	// 3. Setup the Database Transaction for saving
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Pre-fetch members for fuzzy matching
+	allMembers := []struct {
+		ID   int
+		Name string
+	}{}
+	rows, err := tx.Query("SELECT id, name FROM members")
+	if err == nil {
+		for rows.Next() {
+			var m struct {
+				ID   int
+				Name string
+			}
+			if rows.Scan(&m.ID, &m.Name) == nil {
+				allMembers = append(allMembers, m)
+			}
+		}
+		rows.Close()
+	}
+
+	// 4. Save Extracted Data
+	successCount := 0
+	notFoundMembers := []string{}
+	var processedSummaries []string
+	seenSummaries := make(map[string]bool)
+
+	for _, group := range processedGroups {
+		// Track what we successfully parsed
+		summary := "Power Rankings"
+		if group.DataType == "vs_points" {
+			summary = fmt.Sprintf("VS Points (%s)", strings.Title(group.Day))
+		}
+		if !seenSummaries[summary] {
+			processedSummaries = append(processedSummaries, summary)
+			seenSummaries[summary] = true
+		}
+
+		for _, record := range group.Records {
+			var memberID int
+			err := tx.QueryRow("SELECT id FROM members WHERE LOWER(name) = LOWER(?)", record.MemberName).Scan(&memberID)
+
+			if err != nil {
+				bestMatch := ""
+				bestMatchID := 0
+				bestScore := 0
+
+				for _, member := range allMembers {
+					score := calculateSimilarity(record.MemberName, member.Name)
+					if score > bestScore {
+						bestScore = score
+						bestMatch = member.Name
+						bestMatchID = member.ID
+					}
+				}
+
+				requiredScore := 50
+				if group.DataType == "vs_points" {
+					requiredScore = 70
+				}
+
+				if bestMatchID > 0 && bestScore >= requiredScore {
+					memberID = bestMatchID
+				} else {
+					failedCount++
+					notFoundMembers = append(notFoundMembers, record.MemberName)
+					if bestMatch != "" {
+						errors = append(errors, fmt.Sprintf("Member '%s' not found (closest: '%s' at %d%%, need %d%%+)", record.MemberName, bestMatch, bestScore, requiredScore))
+					} else {
+						errors = append(errors, fmt.Sprintf("Member '%s' not found in database", record.MemberName))
+					}
+					continue
+				}
+			}
+
+			// Execute SQL
+			if group.DataType == "vs_points" {
+				var existingID int
+				err = tx.QueryRow("SELECT id FROM vs_points WHERE member_id = ? AND week_date = ?", memberID, weekDate).Scan(&existingID)
+
+				if err == sql.ErrNoRows {
+					query := fmt.Sprintf(`INSERT INTO vs_points (member_id, week_date, %s, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`, group.Day)
+					_, err = tx.Exec(query, memberID, weekDate, record.Value)
+				} else if err == nil {
+					query := fmt.Sprintf(`UPDATE vs_points SET %s = ?, updated_at = CURRENT_TIMESTAMP WHERE member_id = ? AND week_date = ?`, group.Day)
+					_, err = tx.Exec(query, record.Value, memberID, weekDate)
+				}
+			} else {
+				_, err = tx.Exec("INSERT INTO power_history (member_id, power) VALUES (?, ?)", memberID, record.Value)
+			}
+
+			if err != nil {
+				failedCount++
+				errors = append(errors, fmt.Sprintf("DB Error for %s: %v", record.MemberName, err))
+				continue
+			}
+
+			successCount++
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "Failed to save records", http.StatusInternalServerError)
+		return
+	}
+
+	// 5. Return Response
+	response := map[string]interface{}{
+		"message":           fmt.Sprintf("Processed %d records successfully.", successCount),
+		"processed_groups":  processedSummaries,
+		"success_count":     successCount,
+		"failed_count":      failedCount,
+		"errors":            errors,
+		"not_found_members": notFoundMembers,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

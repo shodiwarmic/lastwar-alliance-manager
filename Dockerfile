@@ -1,47 +1,35 @@
-# Stage 1: Build the Go binary with CGO and Tesseract using Go 1.25
+# --- Build Stage ---
 FROM golang:1.25-bookworm AS builder
 
 WORKDIR /app
 
-# Install the C++ Tesseract/Leptonica dependencies required by gosseract
-RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    libtesseract-dev \
-    libleptonica-dev \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy the entire project first
-COPY . .
-
-# Safely tidy and download dependencies natively in 1.25
-RUN go mod tidy
+# Cache dependencies first for faster rebuilds
+COPY go.mod go.sum ./
 RUN go mod download
 
-# Build the application (CGO_ENABLED=1 is required for gosseract)
+# Copy the rest of the application
+COPY . .
+
+# Build the binary. CGO_ENABLED=1 is kept for SQLite support.
 RUN CGO_ENABLED=1 GOOS=linux go build -o alliance-manager .
 
-# Stage 2: Clean runtime environment
+# --- Final Stage ---
 FROM debian:bookworm-slim
+
+# Install ca-certificates so the app can securely talk to Google Cloud Vision
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install only the runtime Tesseract packages (no compilers needed)
-RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy the compiled binary and web assets from the builder stage
+# Copy the compiled binary and necessary directories from the builder
 COPY --from=builder /app/alliance-manager .
-COPY --from=builder /app/templates ./templates
-COPY --from=builder /app/static ./static
-COPY --from=builder /app/migrations ./migrations
+COPY templates/ ./templates/
+COPY static/ ./static/
+COPY migrations/ ./migrations/
 
-# Expose the web port
+# (Optional) If you have a default .env.example you want available inside
+# COPY .env.example ./
+
 EXPOSE 8080
 
-# Start the application
 CMD ["./alliance-manager"]

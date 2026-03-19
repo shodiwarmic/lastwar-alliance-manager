@@ -1,9 +1,13 @@
+// handlers_admin.go - Admin dashboard handlers for permissions and user management
+
 package main
 
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -471,8 +475,23 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// NEW: Check if the GCP Vision credentials exist
+	var hasGCP bool
+	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCP)
+
+	// Wrap the standard settings struct with our new boolean
+	type extendedSettings struct {
+		Settings               // Embeds your existing struct fields automatically
+		HasGCPCredentials bool `json:"has_gcp_credentials"`
+	}
+
+	response := extendedSettings{
+		Settings:          s,
+		HasGCPCredentials: hasGCP,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s)
+	json.NewEncoder(w).Encode(response)
 }
 
 func updateSettings(w http.ResponseWriter, r *http.Request) {
@@ -565,4 +584,109 @@ func transferUserFiles(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Files transferred successfully"})
+}
+
+// Admin: Partially update the settings table with only Password Policy data
+func updatePasswordPolicy(w http.ResponseWriter, r *http.Request) {
+	var p struct {
+		MinLength      int  `json:"pwd_min_length"`
+		HistoryCount   int  `json:"pwd_history_count"`
+		ValidityDays   int  `json:"pwd_validity_days"`
+		RequireSpecial bool `json:"pwd_require_special"`
+		RequireUpper   bool `json:"pwd_require_upper"`
+		RequireLower   bool `json:"pwd_require_lower"`
+		RequireNumber  bool `json:"pwd_require_number"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if p.MinLength < 6 {
+		http.Error(w, "Minimum password length must be at least 6", http.StatusBadRequest)
+		return
+	}
+
+	_, err := db.Exec(`UPDATE settings SET 
+		pwd_min_length = ?, pwd_history_count = ?, pwd_validity_days = ?, 
+		pwd_require_special = ?, pwd_require_upper = ?, pwd_require_lower = ?, pwd_require_number = ? 
+		WHERE id = 1`,
+		p.MinLength, p.HistoryCount, p.ValidityDays,
+		p.RequireSpecial, p.RequireUpper, p.RequireLower, p.RequireNumber)
+
+	if err != nil {
+		http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Password policy updated successfully"})
+}
+
+// Admin: Delete an external API credential
+func deleteExternalCredential(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	serviceName := vars["service"]
+
+	_, err := db.Exec("DELETE FROM credentials WHERE service_name = ?", serviceName)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Credential deleted successfully"})
+}
+
+// Admin: Update external credentials (Write-Only)
+func updateExternalCredentials(w http.ResponseWriter, r *http.Request) {
+	var req CredentialUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.ServiceName == "" || req.Secret == "" {
+		http.Error(w, "Service name and secret are required", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the encryption key from the environment
+	hexKey := os.Getenv("CREDENTIAL_ENCRYPTION_KEY")
+	if hexKey == "" {
+		http.Error(w, "Server encryption key is not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Convert string to byte slice so it can be zeroed out in the helper
+	plaintext := []byte(req.Secret)
+
+	// Encrypt the secret (the helper automatically zeroes 'plaintext' upon return)
+	ciphertext, nonce, err := Encrypt(plaintext, hexKey)
+	if err != nil {
+		log.Printf("Encryption failed for service %s: %v", req.ServiceName, err)
+		http.Error(w, "Internal encryption error", http.StatusInternalServerError)
+		return
+	}
+
+	// Upsert the credential into the database
+	query := `
+		INSERT INTO credentials (service_name, encrypted_blob, nonce, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(service_name) DO UPDATE SET
+			encrypted_blob = excluded.encrypted_blob,
+			nonce = excluded.nonce,
+			updated_at = CURRENT_TIMESTAMP;
+	`
+
+	_, err = db.Exec(query, req.ServiceName, ciphertext, nonce)
+	if err != nil {
+		log.Printf("Database insertion failed for credential %s: %v", req.ServiceName, err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Credential updated successfully"})
 }

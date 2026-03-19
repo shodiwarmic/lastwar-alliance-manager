@@ -1,3 +1,5 @@
+// main.go - Entry point for the Alliance Manager application. Sets up routing, middleware, and starts the HTTP server.
+
 package main
 
 import (
@@ -41,6 +43,11 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 
 	// SPRINT 2 FIX: Inject the CSRF token into the page data so frontend forms/fetch requests can use it
 	data.CSRFToken = csrf.TemplateField(r)
+
+	// NEW: Check if GCP Vision credentials exist to conditionally render UI elements
+	var hasGCP bool
+	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCP)
+	data.HasGCPCredentials = hasGCP
 
 	return data
 }
@@ -100,6 +107,11 @@ func main() {
 	router.HandleFunc("/api/admin/login-history", authMiddleware(adminMiddleware(getLoginHistory))).Methods("GET")
 	router.HandleFunc("/api/admin/users/{id}/file-count", authMiddleware(adminMiddleware(getUserFileCount))).Methods("GET")
 	router.HandleFunc("/api/admin/users/{id}/transfer-files", authMiddleware(adminMiddleware(transferUserFiles))).Methods("POST")
+
+	// Add these to the Admin Routes section in main.go
+	router.HandleFunc("/api/admin/security/password-policy", authMiddleware(adminMiddleware(updatePasswordPolicy))).Methods("PUT")
+	router.HandleFunc("/api/admin/credentials", authMiddleware(adminMiddleware(updateExternalCredentials))).Methods("POST")
+	router.HandleFunc("/api/admin/credentials/{service}", authMiddleware(adminMiddleware(deleteExternalCredential))).Methods("DELETE")
 
 	// Files Implementation API
 	router.HandleFunc("/api/files", authMiddleware(requirePermission("view_files", getFilesList))).Methods("GET")
@@ -163,6 +175,8 @@ func main() {
 	router.HandleFunc("/api/power-history", authMiddleware(getPowerHistory)).Methods("GET")
 	router.HandleFunc("/api/power-history", authMiddleware(requirePermission("manage_members", addPowerRecord))).Methods("POST")
 	router.HandleFunc("/api/power-history/process-screenshot", authMiddleware(requirePermission("manage_members", processPowerScreenshot))).Methods("POST")
+
+	router.HandleFunc("/api/smart-screenshot", authMiddleware(processSmartScreenshot)).Methods("POST")
 
 	// --- UI Routes ---
 

@@ -6,12 +6,9 @@
 {{define "content"}}
         <!-- Tabs -->
         <div class="tabs">
-            <button class="tab-button active" onclick="switchTab('users')">
-                👥 User Management
-            </button>
-            <button class="tab-button" onclick="switchTab('logins')">
-                📊 Login History
-            </button>
+            <button class="tab-button active" onclick="switchTab('users')">👥 User Management</button>
+            <button class="tab-button" onclick="switchTab('logins')">📊 Login History</button>
+            <button class="tab-button" onclick="switchTab('security')">🔐 Security & API</button>
         </div>
 
         <!-- User Management Tab -->
@@ -58,6 +55,63 @@
 
                 <div id="logins-list" class="logins-list">
                     <div class="loading">Loading login history...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security & API Tab -->
+         <div id="security-tab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>🔐 Security & API Configuration</h2>
+                </div>
+                
+                <div class="form-section" style="padding: 20px;">
+                    <div class="settings-group" style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">
+                        <h4>🔒 Password Policy</h4>
+                        <p class="help-text">Enforce strict password requirements for all users.</p>
+                        <form id="password-policy-form" onsubmit="savePasswordPolicy(event)">
+                            <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                                <div>
+                                    <label for="pwd-min-length">Minimum Length:</label>
+                                    <input type="number" id="pwd-min-length" class="form-input" min="6" max="64" value="12" required>
+                                </div>
+                                <div>
+                                    <label for="pwd-history-count">Enforce History:</label>
+                                    <input type="number" id="pwd-history-count" class="form-input" min="0" max="24" value="4" required>
+                                </div>
+                                <div>
+                                    <label for="pwd-validity-days">Validity (Days):</label>
+                                    <input type="number" id="pwd-validity-days" class="form-input" min="0" max="365" value="180" required>
+                                </div>
+                            </div>
+                            <div class="checkbox-group" style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px; margin-bottom: 15px;">
+                                <label><input type="checkbox" id="pwd-require-special"> Require Special Char</label>
+                                <label><input type="checkbox" id="pwd-require-upper"> Require Uppercase</label>
+                                <label><input type="checkbox" id="pwd-require-lower"> Require Lowercase</label>
+                                <label><input type="checkbox" id="pwd-require-number"> Require Number</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary">💾 Save Password Policy</button>
+                        </form>
+                    </div>
+
+                    <div class="settings-group">
+                        <h4>☁️ Google Cloud Vision (OCR)</h4>
+                        <p class="help-text">Upload a Service Account JSON key to enable automated data extraction from game screenshots.</p>
+                        
+                        <div style="background: var(--bg-secondary); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <form id="gcp-upload-form" onsubmit="uploadGCPCredentials(event)">
+                                <div class="form-group">
+                                    <label for="gcp-json-file">Select Service Account JSON File:</label>
+                                    <input type="file" id="gcp-json-file" accept=".json" class="form-input" required>
+                                </div>
+                                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                    <button type="submit" class="btn btn-primary">⬆️ Securely Upload & Encrypt Key</button>
+                                    <button type="button" id="delete-gcp-btn" class="btn btn-danger" onclick="showDeleteGCPModal()">🗑️ Delete Active Key</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -143,6 +197,7 @@
         </div>
     </div>
 
+    <!-- Transfer Files Modal -->
     <div id="transfer-files-modal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeTransferFilesModal()">&times;</span>
@@ -161,6 +216,24 @@
             <div class="modal-actions">
                 <button type="button" class="btn btn-primary" onclick="confirmTransferFiles()">Transfer & Continue Deletion</button>
                 <button type="button" class="btn btn-secondary" onclick="closeTransferFilesModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete GCP Credentials Modal -->
+     <div id="delete-gcp-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDeleteGCPModal()">&times;</span>
+            <h2>⚠️ Disable OCR Pipelines?</h2>
+            
+            <div class="warning-message" style="background: #fff3cd; color: #856404; padding: 15px; border-left: 4px solid #ffc107; border-radius: 4px; margin-bottom: 20px;">
+                <p><strong>Warning:</strong> Deleting the Google Cloud Vision credentials will immediately disable the automated screenshot scanning feature for all users.</p>
+                <p>Users will still be able to manually enter VS Points and Power Data, but the image upload button will be disabled until a new key is provided.</p>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteGCP()">Yes, Delete Credentials</button>
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteGCPModal()">Cancel</button>
             </div>
         </div>
     </div>
