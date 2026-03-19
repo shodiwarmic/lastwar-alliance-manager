@@ -697,8 +697,8 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	errors := []string{}
 
 	// GCP Vision Sweet Spot: Keep images under 12k pixels tall so it doesn't compress the text
-	const maxHeightPerChunk = 12000
-	const maxImagesPerChunk = 10
+	const maxHeightPerChunk = 8000
+	const maxImagesPerChunk = 4
 
 	for bucketName, bucketData := range buckets {
 		log.Printf("Processing bucket: %s with %d images", bucketName, len(bucketData))
