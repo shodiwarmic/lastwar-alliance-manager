@@ -36,17 +36,18 @@ Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** conta
 - **Docker-Bridged Security**: Document data flows over a private, internal Docker network (`lastwar-net`), completely bypassing external firewalls and NAT hairpinning limits.
 - **Theme Synchronization**: The document editor dynamically reads your application's state, matching your Light or Dark mode preference automatically.
 
-### 📸 OCR Image Recognition (Tesseract)
-- **Automated Data Extraction**: Upload game screenshots to automatically extract VS Points or Power updates using built-in Tesseract OCR.
-- **Intelligent Preprocessing**: AI-powered region detection removes headers and UI buttons, enhancing contrast for perfect reads.
+### 📸 Smart OCR Extraction (Google Cloud Vision)
+- **Automated Data Extraction**: Drag and drop up to 100 game screenshots at once to automatically extract VS Points or Power updates using Google Cloud Vision Document AI.
+- **Intelligent Pipeline**: The system automatically detects the screenshot type by analyzing colored UI tabs, groups them into buckets, and dynamically stitches them into vertical towers to bypass API limits and retain razor-sharp text.
+- **Hybrid State Machine Parsing**: Overcomes vertical text-flow layout issues natively by intelligently pairing player names with valid scores while filtering out UI noise.
 - **Fuzzy Member Matching**: Automatically matches OCR text to database members by cross-referencing primary names, global aliases, and your personal nicknames.
-- See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md) for detailed technical documentation.
+- See [image_recognition.md](image_recognition.md) for detailed technical documentation.
 
 ---
 
 ## Infrastructure & Deployment
 
-The application utilizes a multi-container **Docker Compose** stack powered by pre-built images from the GitHub Container Registry. This means you **do not** need to install Go, Tesseract, GCC, or SQLite on your host machine, and your server never has to waste resources compiling code. 
+The application utilizes a multi-container **Docker Compose** stack powered by pre-built images from the GitHub Container Registry. This means you **do not** need to install Go, heavy C++ OCR libraries, or SQLite on your host machine, and your server never has to waste resources compiling code. 
 
 ### Prerequisites (Production)
 - A Linux Server (Debian or Ubuntu recommended).
@@ -58,7 +59,7 @@ The application utilizes a multi-container **Docker Compose** stack powered by p
 We provide an automated script that installs Docker, generates secure secrets, configures the Caddy reverse proxy with SSL, and pulls the pre-built containers.
 
 ```bash
-git clone [https://github.com/yourusername/lastwar.git](https://github.com/yourusername/lastwar.git)
+git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git)
 cd lastwar
 chmod +x install.sh
 sudo ./install.sh
@@ -67,14 +68,14 @@ sudo ./install.sh
 ### Manual Docker Deployment
 If you prefer to deploy manually or are updating an existing environment:
 
-1. Copy `.env.example` to `.env` and fill in your domains and a secure `SESSION_KEY`.
+1. Copy `.env.example` to `.env` and fill in your domains, a secure `SESSION_KEY`, and a `CREDENTIAL_ENCRYPTION_KEY`.
 2. Pull the latest images and start the stack:
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for comprehensive production setup details.
+See [deployment.md](deployment.md) for comprehensive production setup details.
 
 ---
 
@@ -84,6 +85,7 @@ The application relies on a `.env` file in the root directory:
 - `DATABASE_PATH` - Path to SQLite database file (Default: `/app/data/alliance.db`)
 - `STORAGE_PATH` - Path to uploaded files (Default: `/app/uploads`)
 - `SESSION_KEY` - 64-character hex string for session/CSRF encryption.
+- `CREDENTIAL_ENCRYPTION_KEY` - 64-character hex string for AES-GCM encryption of external API credentials.
 - `PRODUCTION` - Set to `true` to enforce secure cookies.
 - `HTTPS` - Set to `true` when behind an SSL proxy.
 - `APP_DOMAIN` - Your main domain (e.g., `app.example.com`).
@@ -100,9 +102,19 @@ The application relies on a `.env` file in the root directory:
 
 ## Security Architecture
 
+- **Encrypted Credentials**: External API credentials (like GCP Service Accounts) are symmetrically encrypted at rest using AES-GCM. The application employs strict memory hygiene, zeroing out sensitive plaintext buffers immediately after cryptographic operations or API transmissions to prevent memory scraping.
 - **Isolated Internal Networking**: The Go application and the Collabora document server communicate exclusively over a private Docker bridge (`lastwar-net`), preventing external data exposure.
 - **Strict CSRF Protection**: All mutating endpoints (POST/PUT/DELETE) are protected by robust Cross-Site Request Forgery tokens integrated natively into the JS fetch interceptors.
 - **Content-Security-Policy**: The automated Caddy setup injects strict `frame-ancestors` headers, ensuring your Collabora instance can *only* be embedded within your specific Alliance Manager domain.
 - **Password Hashing**: Passwords are exclusively hashed with bcrypt before storage, accompanied by strict server-side complexity enforcement.
 - **WOPI JWT**: Document editing sessions are secured with short-lived JSON Web Tokens.
 - **Volume Persistence**: Databases and uploads are stored in persistent Docker volumes, surviving container rebuilds while remaining inaccessible to the public web root.
+
+### Enabling Google Cloud Vision
+To enable the OCR features, you must generate a 32-byte hex string and add it to your `.env` file before starting the server:
+
+```bash
+openssl rand -hex 32
+```
+
+Set the output as the `CREDENTIAL_ENCRYPTION_KEY` in your environment variables. Once the server is running, log in as an Admin, navigate to **Settings -> Security**, and upload your Google Cloud Service Account JSON key.

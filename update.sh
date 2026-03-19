@@ -40,7 +40,7 @@ if [ "$1" = "--setup-git" ]; then
     exit 0
 fi
 
-echo -e "${YELLOW}[1/5] Creating backups...${NC}"
+echo -e "${YELLOW}[1/6] Creating backups...${NC}"
 sudo tar -czf $BACKUP_DIR/app_$TIMESTAMP.tar.gz -C . --exclude='.git' .
 if [ -f "./data/alliance.db" ]; then
     sudo sqlite3 ./data/alliance.db ".backup '$BACKUP_DIR/db_$TIMESTAMP.db'"
@@ -98,7 +98,7 @@ if systemctl is-active --quiet lastwar.service 2>/dev/null || [ -d "/opt/lastwar
 fi
 # --- END MIGRATION BLOCK ---
 
-echo -e "${YELLOW}[2/5] Updating code...${NC}"
+echo -e "${YELLOW}[2/6] Updating code...${NC}"
 if [ "$UPDATE_METHOD" = "git" ]; then
     git stash push -m "Auto-stash before update $TIMESTAMP"
     git pull origin main || git pull origin master
@@ -109,16 +109,27 @@ else
     echo "Assuming files were copied via SCP."
 fi
 
-# Ensure .env exists
+# Ensure .env exists and has required encryption keys
 if [ ! -f ".env" ]; then
     echo "Generating secure .env file..."
     echo "SESSION_KEY=$(openssl rand -hex 32)" > .env
+    echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
     echo "DATABASE_PATH=/app/data/alliance.db" >> .env
     echo "STORAGE_PATH=/app/uploads" >> .env
     echo "PORT=8080" >> .env
+else
+    # Inject GCP Encryption Key for existing users upgrading to this version
+    if ! grep -q "CREDENTIAL_ENCRYPTION_KEY=" .env; then
+        echo -e "${YELLOW}Injecting missing CREDENTIAL_ENCRYPTION_KEY into .env...${NC}"
+        echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
+    fi
 fi
 
-echo -e "${YELLOW}[3/5] Updating Docker...${NC}"
+echo -e "${YELLOW}[3/6] Cleaning Go Modules...${NC}"
+# Use a temporary docker container to run go mod tidy and strip out Tesseract
+sudo docker run --rm -v "$PWD":/usr/src/app -w /usr/src/app golang:1.22-bookworm go mod tidy
+
+echo -e "${YELLOW}[4/6] Updating Docker...${NC}"
 if ! command -v docker &> /dev/null; then
     sudo apt-get update
     sudo apt-get install -y ca-certificates curl
@@ -185,12 +196,14 @@ EOF
     fi
 fi
 
-echo -e "${YELLOW}[4/5] Pulling and starting Docker containers...${NC}"
+echo -e "${YELLOW}[5/6] Building and starting Docker containers...${NC}"
 sudo docker compose pull
+# Force a clean build to ensure Tesseract dependencies are purged from the image layers
+sudo docker compose build --no-cache
 sudo docker compose up -d
 sudo docker image prune -f
 
-echo -e "${YELLOW}[5/5] Cleaning up old backups...${NC}"
+echo -e "${YELLOW}[6/6] Cleaning up old backups...${NC}"
 cd $BACKUP_DIR
 ls -t app_*.tar.gz 2>/dev/null | tail -n +11 | xargs -r sudo rm
 ls -t db_*.db 2>/dev/null | tail -n +11 | xargs -r sudo rm

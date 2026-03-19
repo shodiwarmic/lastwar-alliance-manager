@@ -1,21 +1,108 @@
+// image_processing.go - Contains functions for processing uploaded screenshots, extracting data using Google Cloud Vision OCR, and detecting which day tab is selected based on color and text analysis.
+
 package main
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"fmt"
 	"image"
-	"image/color"
 	"image/draw"
 	_ "image/jpeg"
 	"image/png"
+	_ "image/png"
 	"log"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	gosseract "github.com/otiai10/gosseract/v2"
+	vision "cloud.google.com/go/vision/apiv1"
+	"google.golang.org/api/option"
 )
+
+// getGCPClient securely fetches, decrypts, and initializes the Google Cloud Vision client.
+func getGCPClient(ctx context.Context) (*vision.ImageAnnotatorClient, error) {
+	var encryptedBlob, nonce []byte
+
+	err := db.QueryRow("SELECT encrypted_blob, nonce FROM credentials WHERE service_name = 'gcp_vision'").Scan(&encryptedBlob, &nonce)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("GCP Vision credentials not configured by admin")
+		}
+		return nil, fmt.Errorf("database error retrieving credentials: %v", err)
+	}
+
+	hexKey := os.Getenv("CREDENTIAL_ENCRYPTION_KEY")
+	if hexKey == "" {
+		return nil, fmt.Errorf("server encryption key missing")
+	}
+
+	plaintextJSON, err := Decrypt(encryptedBlob, nonce, hexKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt GCP credentials: %v", err)
+	}
+
+	defer func() {
+		for i := range plaintextJSON {
+			plaintextJSON[i] = 0
+		}
+	}()
+
+	client, err := vision.NewImageAnnotatorClient(ctx, option.WithCredentialsJSON(plaintextJSON))
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize GCP client: %v", err)
+	}
+
+	return client, nil
+}
+
+// stitchImagesVertically combines multiple screenshots into a single tall image to save API quotas
+func stitchImagesVertically(imageDatas [][]byte) ([]byte, error) {
+	if len(imageDatas) == 0 {
+		return nil, fmt.Errorf("no images provided for stitching")
+	}
+
+	if len(imageDatas) == 1 {
+		return imageDatas[0], nil
+	}
+
+	var decodedImages []image.Image
+	var totalHeight, maxWidth int
+
+	for _, data := range imageDatas {
+		img, _, err := image.Decode(bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode an image for stitching: %v", err)
+		}
+		decodedImages = append(decodedImages, img)
+
+		bounds := img.Bounds()
+		totalHeight += bounds.Dy()
+		if bounds.Dx() > maxWidth {
+			maxWidth = bounds.Dx()
+		}
+	}
+
+	stitchedCanvas := image.NewRGBA(image.Rect(0, 0, maxWidth, totalHeight))
+	currentY := 0
+
+	for _, img := range decodedImages {
+		bounds := img.Bounds()
+		draw.Draw(stitchedCanvas, image.Rect(0, currentY, bounds.Dx(), currentY+bounds.Dy()), img, bounds.Min, draw.Src)
+		currentY += bounds.Dy()
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, stitchedCanvas); err != nil {
+		return nil, fmt.Errorf("failed to encode stitched image: %v", err)
+	}
+
+	log.Printf("Successfully stitched %d images. New dimensions: %dx%d", len(imageDatas), maxWidth, totalHeight)
+	return buf.Bytes(), nil
+}
 
 // Detect selected day tab by color
 func detectDayByColor(img image.Image) string {
@@ -34,8 +121,9 @@ func detectDayByColor(img image.Image) string {
 			endX = width
 		}
 
+		// Sample the middle 50% of the column to avoid borders and edge anti-aliasing
 		tabCenter := startX + tabWidth/2
-		sampleWidth := int(float64(tabWidth) * 0.70)
+		sampleWidth := int(float64(tabWidth) * 0.50)
 		sampleStartX := tabCenter - sampleWidth/2
 		sampleEndX := tabCenter + sampleWidth/2
 
@@ -52,7 +140,9 @@ func detectDayByColor(img image.Image) string {
 				r, g, b, _ := img.At(x, y).RGBA()
 				r8, g8, b8 := uint8(r>>8), uint8(g>>8), uint8(b>>8)
 
-				if r8 > 200 && g8 > 200 && b8 > 200 {
+				// STRICT threshold: The active tab is pure white (#FFFFFF).
+				// This ignores light gray headers (>200) and targets the actual tab.
+				if r8 > 240 && g8 > 240 && b8 > 240 {
 					lightCount++
 				}
 			}
@@ -69,9 +159,10 @@ func detectDayByColor(img image.Image) string {
 		}
 	}
 
-	minThreshold := 100
+	// Require a solid block of white pixels to prevent false positives from stray text
+	minThreshold := 50
 	if selectedDay >= 0 && maxLight > minThreshold {
-		log.Printf("Day detected by color: %s", days[selectedDay])
+		log.Printf("Day detected by color: %s (confidence score: %d)", days[selectedDay], maxLight)
 		return days[selectedDay]
 	}
 
@@ -90,8 +181,10 @@ func detectDayFromTabRegion(imageData []byte) string {
 	width := bounds.Dx()
 	height := bounds.Dy()
 
-	tabTop := int(float64(height) * 0.08)
-	tabBottom := int(float64(height) * 0.105)
+	// Expanded and lowered scan area (11% to 22%) to bypass the "RANKING" title
+	// and accurately hit the day tabs across varying screen aspect ratios.
+	tabTop := int(float64(height) * 0.11)
+	tabBottom := int(float64(height) * 0.22)
 
 	if tabTop < 0 {
 		tabTop = 0
@@ -106,81 +199,50 @@ func detectDayFromTabRegion(imageData []byte) string {
 	tabRegion := image.NewRGBA(image.Rect(0, 0, width, tabBottom-tabTop))
 	draw.Draw(tabRegion, tabRegion.Bounds(), img, image.Point{0, tabTop}, draw.Src)
 
-	dayByColor := detectDayByColor(tabRegion)
-	if dayByColor != "" {
-		return dayByColor
-	}
-
-	// Fallback to OCR
-	scaledTab := scaleImage(tabRegion, 2)
-	grayTab := convertToGrayscale(scaledTab)
-
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, grayTab); err != nil {
-		return ""
-	}
-
-	client := gosseract.NewClient()
-	defer client.Close()
-
-	if err := client.SetImageFromBytes(buf.Bytes()); err != nil {
-		return ""
-	}
-
-	client.SetPageSegMode(gosseract.PSM_SINGLE_LINE)
-	text, err := client.Text()
-	if err != nil || len(strings.TrimSpace(text)) == 0 {
-		return ""
-	}
-
-	textLower := strings.ToLower(text)
-	days := []struct {
-		name     string
-		patterns []string
-	}{
-		{"monday", []string{"monday", "mon.", "mon"}},
-		{"tuesday", []string{"tuesday", "tues.", "tues", "tue"}},
-		{"wednesday", []string{"wednesday", "wed.", "wed"}},
-		{"thursday", []string{"thursday", "thur.", "thur", "thu"}},
-		{"friday", []string{"friday", "fri.", "fri"}},
-		{"saturday", []string{"saturday", "sat.", "sat"}},
-	}
-
-	for _, day := range days {
-		for _, pattern := range day.patterns {
-			if strings.Contains(textLower, pattern) {
-				idx := strings.Index(textLower, pattern)
-				if idx < 100 {
-					return day.name
-				}
-			}
-		}
-	}
-
-	return ""
+	return detectDayByColor(tabRegion)
 }
 
-// Extract VS points data from image and detect which day
-func extractVSPointsDataFromImage(imageData []byte) (day string, records []struct {
+// Extract VS points data from an array of images
+func extractVSPointsDataFromImages(imageDatas [][]byte) (day string, records []struct {
 	MemberName string `json:"member_name"`
 	Points     int64  `json:"points"`
 }, error error) {
-	detectedDay := detectDayFromTabRegion(imageData)
-
-	img, _, err := image.Decode(bytes.NewReader(imageData))
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to decode image: %v", err)
+	if len(imageDatas) == 0 {
+		return "", nil, fmt.Errorf("no images provided")
 	}
 
-	attrs := analyzeScreenshot(img)
+	detectedDay := detectDayFromTabRegion(imageDatas[0])
 
-	records, err = extractVSPointsByRows(img, attrs)
+	stitchedBytes, err := stitchImagesVertically(imageDatas)
+	if err != nil {
+		return detectedDay, nil, fmt.Errorf("stitching failed: %v", err)
+	}
 
-	if err != nil || len(records) == 0 {
-		records, err = extractVSPointsFullImage(imageData, attrs)
-		if err != nil {
-			return detectedDay, nil, err
-		}
+	ctx := context.Background()
+	client, err := getGCPClient(ctx)
+	if err != nil {
+		return detectedDay, nil, err
+	}
+	defer client.Close()
+
+	img, err := vision.NewImageFromReader(bytes.NewReader(stitchedBytes))
+	if err != nil {
+		return detectedDay, nil, fmt.Errorf("failed to prepare image for GCP: %v", err)
+	}
+
+	annotation, err := client.DetectDocumentText(ctx, img, nil)
+	if err != nil {
+		return detectedDay, nil, fmt.Errorf("GCP Vision API error: %v", err)
+	}
+
+	if annotation == nil || annotation.Text == "" {
+		return detectedDay, nil, fmt.Errorf("GCP returned no text")
+	}
+
+	log.Printf("GCP Extracted Text (VS Points Stitched):\n%s", annotation.Text)
+
+	if detectedDay == "" {
+		detectedDay = detectSelectedDay(annotation.Text)
 	}
 
 	if detectedDay == "" {
@@ -204,6 +266,7 @@ func extractVSPointsDataFromImage(imageData []byte) (day string, records []struc
 		}
 	}
 
+	records = parseVSPointsText(annotation.Text)
 	if len(records) == 0 {
 		return "", nil, fmt.Errorf("no valid VS point records found in extracted text")
 	}
@@ -211,150 +274,62 @@ func extractVSPointsDataFromImage(imageData []byte) (day string, records []struc
 	return detectedDay, records, nil
 }
 
-// Extract VS points by segmenting image into rows
-func extractVSPointsByRows(img image.Image, attrs *ScreenshotAttributes) ([]struct {
+// Extract power data from an array of images using GCP Vision OCR
+func extractPowerDataFromImages(imageDatas [][]byte) ([]struct {
 	MemberName string `json:"member_name"`
-	Points     int64  `json:"points"`
+	Power      int64  `json:"power"`
 }, error) {
-	bounds := img.Bounds()
-	dataRegion := attrs.DataRegion
-	rowHeight := attrs.RowHeight
-	estimatedRows := attrs.EstimatedRows
-
-	if estimatedRows < 1 {
-		estimatedRows = 10
+	if len(imageDatas) == 0 {
+		return nil, fmt.Errorf("no images provided")
 	}
 
-	records := []struct {
-		MemberName string `json:"member_name"`
-		Points     int64  `json:"points"`
-	}{}
+	stitchedBytes, err := stitchImagesVertically(imageDatas)
+	if err != nil {
+		return nil, fmt.Errorf("stitching failed: %v", err)
+	}
 
-	for i := 0; i < estimatedRows; i++ {
-		rowTop := dataRegion.Top + (i * rowHeight)
-		rowBottom := rowTop + rowHeight
+	ctx := context.Background()
+	client, err := getGCPClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
 
-		if rowBottom > dataRegion.Bottom {
-			rowBottom = dataRegion.Bottom
-		}
-		if rowTop >= rowBottom {
-			break
-		}
+	img, err := vision.NewImageFromReader(bytes.NewReader(stitchedBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare image for GCP: %v", err)
+	}
 
-		rowImg := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), rowBottom-rowTop))
-		draw.Draw(rowImg, rowImg.Bounds(), img, image.Point{0, rowTop}, draw.Src)
+	annotation, err := client.DetectDocumentText(ctx, img, nil)
+	if err != nil {
+		return nil, fmt.Errorf("GCP Vision API error: %v", err)
+	}
 
-		rankWidth := bounds.Dx() * 15 / 100
-		nameStart := rankWidth
-		nameWidth := bounds.Dx() * 50 / 100
-		pointsStart := nameStart + nameWidth
+	if annotation == nil || annotation.Text == "" {
+		return nil, fmt.Errorf("GCP returned no text")
+	}
 
-		nameImg := image.NewRGBA(image.Rect(0, 0, nameWidth, rowBottom-rowTop))
-		draw.Draw(nameImg, nameImg.Bounds(), rowImg, image.Point{nameStart, 0}, draw.Src)
+	log.Printf("GCP Extracted Text (Power Stitched):\n%s", annotation.Text)
 
-		pointsWidth := bounds.Dx() - pointsStart
-		pointsImg := image.NewRGBA(image.Rect(0, 0, pointsWidth, rowBottom-rowTop))
-		draw.Draw(pointsImg, pointsImg.Bounds(), rowImg, image.Point{pointsStart, 0}, draw.Src)
-
-		scaledName := scaleImage(nameImg, 2)
-		grayName := convertToGrayscale(scaledName)
-
-		scaledPoints := scaleImage(pointsImg, 2)
-		grayPoints := convertToGrayscale(scaledPoints)
-
-		var nameBuf bytes.Buffer
-		if err := png.Encode(&nameBuf, grayName); err != nil {
-			continue
-		}
-
-		nameClient := gosseract.NewClient()
-		defer nameClient.Close()
-		nameClient.SetImageFromBytes(nameBuf.Bytes())
-		nameClient.SetPageSegMode(gosseract.PSM_SINGLE_LINE)
-		nameText, err := nameClient.Text()
-		if err != nil || len(strings.TrimSpace(nameText)) == 0 {
-			continue
-		}
-
-		var pointsBuf bytes.Buffer
-		if err := png.Encode(&pointsBuf, grayPoints); err != nil {
-			continue
-		}
-
-		pointsClient := gosseract.NewClient()
-		defer pointsClient.Close()
-		pointsClient.SetImageFromBytes(pointsBuf.Bytes())
-		pointsClient.SetPageSegMode(gosseract.PSM_SINGLE_LINE)
-		pointsText, err := pointsClient.Text()
-		if err != nil || len(strings.TrimSpace(pointsText)) == 0 {
-			continue
-		}
-
-		name := strings.TrimSpace(nameText)
-		name = cleanPlayerName(name)
-
-		pointsStr := strings.TrimSpace(pointsText)
-		pointsStr = strings.ReplaceAll(pointsStr, ",", "")
-		pointsStr = strings.ReplaceAll(pointsStr, ".", "")
-		pointsStr = strings.ReplaceAll(pointsStr, " ", "")
-
-		points, err := strconv.ParseInt(pointsStr, 10, 64)
-		if err != nil || points < 100 {
-			continue
-		}
-
-		records = append(records, struct {
-			MemberName string `json:"member_name"`
-			Points     int64  `json:"points"`
-		}{
-			MemberName: name,
-			Points:     points,
-		})
+	records := parsePowerRankingsText(annotation.Text)
+	if len(records) == 0 {
+		return nil, fmt.Errorf("no valid records found in extracted text")
 	}
 
 	return records, nil
 }
 
-// Fallback: Extract VS points from full image
-func extractVSPointsFullImage(imageData []byte, attrs *ScreenshotAttributes) ([]struct {
-	MemberName string `json:"member_name"`
-	Points     int64  `json:"points"`
-}, error) {
-	processedData, err := preprocessImageForOCR(imageData)
-	if err != nil {
-		processedData = imageData
+// isStrictlyNumeric checks if a string contains ONLY digits
+func isStrictlyNumeric(s string) bool {
+	if len(s) == 0 {
+		return false
 	}
-
-	client := gosseract.NewClient()
-	defer client.Close()
-
-	err = client.SetImageFromBytes(processedData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load image: %v", err)
-	}
-
-	var text string
-	psmModes := []gosseract.PageSegMode{
-		gosseract.PSM_AUTO,
-		gosseract.PSM_SINGLE_BLOCK,
-		gosseract.PSM_SPARSE_TEXT,
-	}
-
-	for _, mode := range psmModes {
-		client.SetPageSegMode(mode)
-		extractedText, err := client.Text()
-		if err == nil && len(strings.TrimSpace(extractedText)) > 0 {
-			text = extractedText
-			break
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
 		}
 	}
-
-	if len(strings.TrimSpace(text)) == 0 {
-		return nil, fmt.Errorf("OCR failed")
-	}
-
-	records := parseVSPointsText(text)
-	return records, nil
+	return true
 }
 
 // Clean player name by removing alliance tags, special characters, etc
@@ -418,7 +393,7 @@ func detectSelectedDay(text string) string {
 	return ""
 }
 
-// Parse VS points text(from OCR or manual input)
+// Parse VS points text using a Hybrid Regex + State Machine logic for GCP vertical lists
 func parseVSPointsText(text string) []struct {
 	MemberName string `json:"member_name"`
 	Points     int64  `json:"points"`
@@ -429,49 +404,27 @@ func parseVSPointsText(text string) []struct {
 	}
 
 	lines := strings.Split(text, "\n")
-
-	rankPattern := regexp.MustCompile(`(?:R[0-9]\s+)?([A-Za-z][A-Za-z0-9_\s]*?)\s+([0-9]{6,})`)
-	simplePattern := regexp.MustCompile(`([A-Za-z][A-Za-z0-9_]+)\s+([0-9]{6,})`)
-
 	seenNames := make(map[string]bool)
+	lastNameSeen := ""
+
+	// Hybrid Regex: In case GCP reads them on the same line horizontally
+	singleLineRegex := regexp.MustCompile(`([A-Za-z][A-Za-z0-9_\s]+)\s+([0-9]{5,})`)
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if len(line) < 5 {
+		if len(line) == 0 {
 			continue
 		}
 
-		lowerLine := strings.ToLower(line)
-		if strings.Contains(lowerLine, "ranking") ||
-			strings.Contains(lowerLine, "commander") ||
-			strings.Contains(lowerLine, "points") ||
-			strings.Contains(lowerLine, "daily") ||
-			strings.Contains(lowerLine, "weekly") ||
-			strings.Contains(lowerLine, "mon") ||
-			strings.Contains(lowerLine, "tues") ||
-			strings.Contains(lowerLine, "wed") ||
-			strings.Contains(lowerLine, "thur") ||
-			strings.Contains(lowerLine, "fri") ||
-			strings.Contains(lowerLine, "sat") ||
-			strings.Contains(lowerLine, "alliance") ||
-			strings.Contains(lowerLine, "your alliance") {
-			continue
-		}
+		// 1. Check if the line contains BOTH a name and a score horizontally
+		cleanLine := strings.ReplaceAll(line, ",", "")
+		cleanLine = strings.ReplaceAll(cleanLine, ".", "")
 
-		matches := rankPattern.FindStringSubmatch(line)
-		if len(matches) == 0 {
-			matches = simplePattern.FindStringSubmatch(line)
-		}
-
+		matches := singleLineRegex.FindStringSubmatch(cleanLine)
 		if len(matches) >= 3 {
-			name := strings.TrimSpace(matches[1])
-			pointsStr := strings.ReplaceAll(matches[2], ",", "")
-			pointsStr = strings.ReplaceAll(pointsStr, " ", "")
-
-			points, err := strconv.ParseInt(pointsStr, 10, 64)
-
-			if err == nil && points >= 10000 && points <= 999999999 &&
-				len(name) >= 3 && len(name) <= 30 && !seenNames[name] {
+			name := cleanPlayerName(matches[1])
+			points, _ := strconv.ParseInt(matches[2], 10, 64)
+			if points >= 10000 && len(name) >= 3 && !seenNames[name] {
 				records = append(records, struct {
 					MemberName string `json:"member_name"`
 					Points     int64  `json:"points"`
@@ -480,352 +433,76 @@ func parseVSPointsText(text string) []struct {
 					Points:     points,
 				})
 				seenNames[name] = true
+				lastNameSeen = "" // reset
+			}
+			continue
+		}
+
+		// 2. Filter out explicit junk lines
+		lowerLine := strings.ToLower(line)
+		if strings.Contains(lowerLine, "ranking") ||
+			strings.Contains(lowerLine, "commander") ||
+			strings.Contains(lowerLine, "points") ||
+			strings.Contains(lowerLine, "daily rank") ||
+			strings.Contains(lowerLine, "weekly rank") ||
+			strings.Contains(lowerLine, "mon.") ||
+			strings.Contains(lowerLine, "tues.") ||
+			strings.Contains(lowerLine, "wed.") ||
+			strings.Contains(lowerLine, "thur.") ||
+			strings.Contains(lowerLine, "fri.") ||
+			strings.Contains(lowerLine, "sat.") ||
+			strings.Contains(lowerLine, "alliance") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "[") && strings.Contains(line, "]") {
+			continue // Standalone Alliance Tag
+		}
+
+		// 3. State Machine check: Is this line a number?
+		numTest := cleanLine
+		numTest = strings.ReplaceAll(numTest, " ", "")
+		numTest = strings.ReplaceAll(numTest, "O", "0")
+		numTest = strings.ReplaceAll(numTest, "o", "0")
+
+		if isStrictlyNumeric(numTest) {
+			val, err := strconv.ParseInt(numTest, 10, 64)
+			if err == nil {
+				if val >= 10000 { // This is a Score!
+					if lastNameSeen != "" {
+						cleanName := cleanPlayerName(lastNameSeen)
+						if len(cleanName) >= 3 && !seenNames[cleanName] {
+							records = append(records, struct {
+								MemberName string `json:"member_name"`
+								Points     int64  `json:"points"`
+							}{
+								MemberName: cleanName,
+								Points:     val,
+							})
+							seenNames[cleanName] = true
+							log.Printf("Parsed VS Points (State Machine): %s -> %d", cleanName, val)
+						}
+						lastNameSeen = "" // reset
+					}
+				}
+				// If val < 10000, it's a Rank (e.g. "1", "2"). Ignore it, keeping lastNameSeen intact.
+				continue
 			}
 		}
+
+		// 4. If it's short, it's probably a misread Rank Badge (e.g. 'B')
+		if len(line) <= 2 || regexp.MustCompile(`(?i)^R[1-5]$`).MatchString(line) {
+			continue
+		}
+
+		// 5. If it survived all that, it is the Player Name!
+		lastNameSeen = line
 	}
 
 	return records
 }
 
-// Analyze screenshot to detect distinct regions and attributes
-func analyzeScreenshot(img image.Image) *ScreenshotAttributes {
-	bounds := img.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
-
-	attrs := &ScreenshotAttributes{
-		Width:  width,
-		Height: height,
-	}
-
-	// Detect dark title bar at top (typically 5-10% of height)
-	// Title bars are usually dark colored
-	titleBarHeight := height / 15 // ~6-7%
-	if titleBarHeight < 30 {
-		titleBarHeight = 30
-	}
-	attrs.TitleBarRegion = &ImageRegion{
-		Name:   "TitleBar",
-		Top:    0,
-		Bottom: titleBarHeight,
-		Left:   0,
-		Right:  width,
-	}
-
-	// Detect tabs region (typically right below title bar, ~5-8% of height)
-	tabsHeight := height / 15
-	if tabsHeight < 40 {
-		tabsHeight = 40
-	}
-	attrs.TabsRegion = &ImageRegion{
-		Name:   "Tabs",
-		Top:    titleBarHeight,
-		Bottom: titleBarHeight + tabsHeight,
-		Left:   0,
-		Right:  width,
-	}
-
-	// Detect column headers (below tabs, ~5% of height)
-	headerHeight := height / 20
-	if headerHeight < 30 {
-		headerHeight = 30
-	}
-	haederTop := titleBarHeight + tabsHeight
-	attrs.HeaderRegion = &ImageRegion{
-		Name:   "Headers",
-		Top:    haederTop,
-		Bottom: haederTop + headerHeight,
-		Left:   0,
-		Right:  width,
-	}
-
-	// Detect bottom button region (typically last 8-10% of height)
-	buttonHeight := height / 10
-	if buttonHeight < 50 {
-		buttonHeight = 50
-	}
-	attrs.ButtonRegion = &ImageRegion{
-		Name:   "BottomButton",
-		Top:    height - buttonHeight,
-		Bottom: height,
-		Left:   0,
-		Right:  width,
-	}
-
-	// Data region is everything between headers and bottom button
-	dataTop := haederTop + headerHeight
-	dataBottom := height - buttonHeight
-	attrs.DataRegion = &ImageRegion{
-		Name:   "DataRows",
-		Top:    dataTop,
-		Bottom: dataBottom,
-		Left:   0,
-		Right:  width,
-	}
-
-	// Estimate row height and count
-	dataHeight := dataBottom - dataTop
-	attrs.RowHeight = dataHeight / 10 // Assume ~10 visible rows
-	if attrs.RowHeight < 40 {
-		attrs.RowHeight = 40
-	}
-	attrs.EstimatedRows = dataHeight / attrs.RowHeight
-
-	log.Printf("Screenshot Analysis: %dx%d, DataRegion: (%d,%d) to (%d,%d), Est. Rows: %d",
-		width, height, attrs.DataRegion.Left, attrs.DataRegion.Top,
-		attrs.DataRegion.Right, attrs.DataRegion.Bottom, attrs.EstimatedRows)
-
-	return attrs
-}
-
-// Crop image to data region only
-func cropToDataRegion(img image.Image, region *ImageRegion) image.Image {
-	bounds := img.Bounds()
-	top := region.Top
-	bottom := region.Bottom
-	left := region.Left
-	right := region.Right
-
-	// Ensure bounds are valid
-	if top < bounds.Min.Y {
-		top = bounds.Min.Y
-	}
-	if bottom > bounds.Max.Y {
-		bottom = bounds.Max.Y
-	}
-	if left < bounds.Min.X {
-		left = bounds.Min.X
-	}
-	if right > bounds.Max.X {
-		right = bounds.Max.X
-	}
-
-	croppedImg := image.NewRGBA(image.Rect(0, 0, right-left, bottom-top))
-	draw.Draw(croppedImg, croppedImg.Bounds(), img, image.Point{left, top}, draw.Src)
-
-	log.Printf("Cropped image from %v to %v", bounds, croppedImg.Bounds())
-	return croppedImg
-}
-
-// Convert image to grayscale
-func convertToGrayscale(img image.Image) *image.Gray {
-	bounds := img.Bounds()
-	gray := image.NewGray(bounds)
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			gray.Set(x, y, img.At(x, y))
-		}
-	}
-
-	return gray
-}
-
-// Enhance contrast using histogram equalization (simplified)
-func enhanceContrast(img *image.Gray) *image.Gray {
-	bounds := img.Bounds()
-	enhanced := image.NewGray(bounds)
-
-	// Calculate histogram
-	histogram := make([]int, 256)
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			grayVal := img.GrayAt(x, y).Y
-			histogram[grayVal]++
-		}
-	}
-
-	// Calculate cumulative distribution
-	totalPixels := bounds.Dx() * bounds.Dy()
-	cdf := make([]float64, 256)
-	cdf[0] = float64(histogram[0]) / float64(totalPixels)
-	for i := 1; i < 256; i++ {
-		cdf[i] = cdf[i-1] + float64(histogram[i])/float64(totalPixels)
-	}
-
-	// Apply equalization
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			grayVal := img.GrayAt(x, y).Y
-			newVal := uint8(cdf[grayVal] * 255)
-			enhanced.SetGray(x, y, color.Gray{Y: newVal})
-		}
-	}
-
-	return enhanced
-}
-
-// Apply adaptive thresholding to enhance text
-func applyAdaptiveThreshold(img *image.Gray, blockSize int) *image.Gray {
-	bounds := img.Bounds()
-	thresholded := image.NewGray(bounds)
-
-	halfBlock := blockSize / 2
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			// Calculate local mean in block
-			sum := 0
-			count := 0
-			for by := y - halfBlock; by <= y+halfBlock; by++ {
-				for bx := x - halfBlock; bx <= x+halfBlock; bx++ {
-					if bx >= bounds.Min.X && bx < bounds.Max.X && by >= bounds.Min.Y && by < bounds.Max.Y {
-						sum += int(img.GrayAt(bx, by).Y)
-						count++
-					}
-				}
-			}
-			mean := uint8(sum / count)
-
-			// Threshold: if pixel is darker than local mean, make it black, else white
-			pixel := img.GrayAt(x, y).Y
-			if pixel < mean-10 { // -10 for bias towards text
-				thresholded.SetGray(x, y, color.Gray{Y: 0}) // Black (text)
-			} else {
-				thresholded.SetGray(x, y, color.Gray{Y: 255}) // White (background)
-			}
-		}
-	}
-
-	return thresholded
-}
-
-// Invert image (make text black on white background)
-func invertImage(img *image.Gray) *image.Gray {
-	bounds := img.Bounds()
-	inverted := image.NewGray(bounds)
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			grayVal := img.GrayAt(x, y).Y
-			inverted.SetGray(x, y, color.Gray{Y: 255 - grayVal})
-		}
-	}
-
-	return inverted
-}
-
-// Scale image up for better OCR
-func scaleImage(img image.Image, factor int) image.Image {
-	bounds := img.Bounds()
-	newWidth := bounds.Dx() * factor
-	newHeight := bounds.Dy() * factor
-
-	scaled := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-
-	// Simple nearest-neighbor scaling
-	for y := 0; y < newHeight; y++ {
-		for x := 0; x < newWidth; x++ {
-			origX := x / factor
-			origY := y / factor
-			scaled.Set(x, y, img.At(origX, origY))
-		}
-	}
-
-	return scaled
-}
-
-// Preprocess image for better OCR
-func preprocessImageForOCR(imageData []byte) ([]byte, error) {
-	// Decode image
-	img, format, err := image.Decode(bytes.NewReader(imageData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode image: %v", err)
-	}
-
-	log.Printf("Original image: %dx%d, format: %s", img.Bounds().Dx(), img.Bounds().Dy(), format)
-
-	// Analyze screenshot to detect regions
-	attrs := analyzeScreenshot(img)
-
-	// Crop to data region only (remove UI elements)
-	// For narrow screenshots or when power values might be cut off, use less aggressive cropping
-	croppedImg := img
-	if attrs.DataRegion != nil && attrs.Width > 600 {
-		croppedImg = cropToDataRegion(img, attrs.DataRegion)
-	} else {
-		log.Printf("Skipping crop for narrow image to preserve power values")
-	}
-
-	// Scale up 2x for better OCR (small text is hard to read)
-	scaledImg := scaleImage(croppedImg, 2)
-
-	// Convert to grayscale
-	grayImg := convertToGrayscale(scaledImg)
-
-	// For small images, skip contrast enhancement (can make things worse)
-	processedImg := grayImg
-
-	// Encode back to bytes
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, processedImg); err != nil {
-		return nil, fmt.Errorf("failed to encode processed image: %v", err)
-	}
-
-	log.Printf("Image preprocessed: %dx%d -> %dx%d (2x scaled grayscale)",
-		img.Bounds().Dx(), img.Bounds().Dy(),
-		processedImg.Bounds().Dx(), processedImg.Bounds().Dy())
-
-	return buf.Bytes(), nil
-}
-
-// Extract power data from image using OCR with preprocessing
-func extractPowerDataFromImage(imageData []byte) ([]struct {
-	MemberName string `json:"member_name"`
-	Power      int64  `json:"power"`
-}, error) {
-	// Preprocess image to filter and enhance relevant regions
-	processedData, err := preprocessImageForOCR(imageData)
-	if err != nil {
-		log.Printf("Warning: Image preprocessing failed: %v. Using original image.", err)
-		processedData = imageData // Fallback to original
-	}
-
-	client := gosseract.NewClient()
-	defer client.Close()
-
-	err = client.SetImageFromBytes(processedData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load image: %v", err)
-	}
-
-	// Try different PSM modes for better recognition
-	var text string
-	psmModes := []gosseract.PageSegMode{
-		gosseract.PSM_AUTO,
-		gosseract.PSM_SINGLE_BLOCK,
-		gosseract.PSM_SPARSE_TEXT,
-	}
-
-	for i, mode := range psmModes {
-		client.SetPageSegMode(mode)
-		extractedText, err := client.Text()
-		if err == nil && len(strings.TrimSpace(extractedText)) > 0 {
-			text = extractedText
-			log.Printf("OCR successful with PSM mode %d (attempt %d)", mode, i+1)
-			break
-		}
-		log.Printf("OCR attempt %d with PSM mode %d failed or empty", i+1, mode)
-	}
-
-	if len(strings.TrimSpace(text)) == 0 {
-		return nil, fmt.Errorf("OCR failed: no text extracted after trying multiple modes")
-	}
-
-	// Log the extracted text for debugging
-	log.Printf("OCR extracted text:\n%s\n---END OCR---", text)
-
-	// Parse the OCR text
-	records := parsePowerRankingsText(text)
-
-	if len(records) == 0 {
-		return nil, fmt.Errorf("no valid records found in extracted text (see server logs for OCR output)")
-	}
-
-	return records, nil
-}
-
-// Parse power rankings text (from OCR or manual input)
+// Parse power rankings text using Hybrid Regex + State Machine logic
 func parsePowerRankingsText(text string) []struct {
 	MemberName string `json:"member_name"`
 	Power      int64  `json:"power"`
@@ -836,90 +513,26 @@ func parsePowerRankingsText(text string) []struct {
 	}
 
 	lines := strings.Split(text, "\n")
-
-	// Pattern specifically for Last War rankings format
-	// Matches: optional rank badge (R4, R3), name (can have spaces), then large power number
-	// Examples: "R4 Gary6126 77421000", "Nutty Tx 61926102", "R3 DYNOSUR 63785308"
-	// Updated to better handle multi-word names
-	rankPattern := regexp.MustCompile(`(?:R[0-9]\s+)?([A-Za-z][A-Za-z0-9_\s]+?)\s+([0-9]{7,})`)
-
-	// Alternative simpler pattern: captures name with spaces followed by 7+ digit number
-	simplePattern := regexp.MustCompile(`([A-Za-z][A-Za-z0-9_\s]+?)\s+([0-9]{7,})`)
-
-	// Pattern for lines with rank number prefix: "1 Gary6126 R4 77421000" or "1 ileesu R4 66715876"
-	rankPrefixPattern := regexp.MustCompile(`^[0-9]{1,3}\s+([A-Za-z][A-Za-z0-9_\s]+?)\s+(?:R[0-9]\s+)?([0-9]{7,})`)
-
-	// Flexible pattern that allows letters in power (for OCR errors): "B 25) Nutty Tx s1926102"
-	// This captures name followed by 7+ chars that may contain letters misread as digits
-	flexiblePattern := regexp.MustCompile(`(?:[A-Z]{1,3}\s+)?(?:\d+\)?\s+)?([A-Za-z][A-Za-z0-9_\s]+?)\s+([A-Za-z0-9]{7,})`)
-
-	// Track seen names to avoid duplicates from multi-line OCR
 	seenNames := make(map[string]bool)
+	lastNameSeen := ""
+
+	singleLineRegex := regexp.MustCompile(`([A-Za-z][A-Za-z0-9_\s]+)\s+([0-9]{6,})`)
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if len(line) == 0 {
 			continue
 		}
 
-		// Skip lines that are clearly UI elements or rank numbers
-		if len(line) < 5 || regexp.MustCompile(`^[0-9]{1,2}$`).MatchString(line) {
-			continue
-		}
+		// 1. Horizontal Check
+		cleanLine := strings.ReplaceAll(line, ",", "")
+		cleanLine = strings.ReplaceAll(cleanLine, ".", "")
 
-		// Skip common UI text
-		lowerLine := strings.ToLower(line)
-		if strings.Contains(lowerLine, "ranking") ||
-			strings.Contains(lowerLine, "commander") ||
-			strings.Contains(lowerLine, "power") ||
-			strings.Contains(lowerLine, "kills") ||
-			strings.Contains(lowerLine, "donation") {
-			continue
-		}
-
-		// Try rank pattern first (for lines with R4, R3, etc.)
-		matches := rankPattern.FindStringSubmatch(line)
-		if len(matches) == 0 {
-			// Try pattern with rank number prefix
-			matches = rankPrefixPattern.FindStringSubmatch(line)
-		}
-		if len(matches) == 0 {
-			// Try simple pattern
-			matches = simplePattern.FindStringSubmatch(line)
-		}
-		if len(matches) == 0 {
-			// Try flexible pattern (allows letters in power number for OCR errors)
-			matches = flexiblePattern.FindStringSubmatch(line)
-		}
-
+		matches := singleLineRegex.FindStringSubmatch(cleanLine)
 		if len(matches) >= 3 {
-			name := strings.TrimSpace(matches[1])
-			// Clean up extra whitespace in names
-			name = regexp.MustCompile(`\s+`).ReplaceAllString(name, " ")
-
-			powerStr := strings.ReplaceAll(matches[2], ",", "")
-			powerStr = strings.ReplaceAll(powerStr, " ", "")
-			powerStr = strings.ReplaceAll(powerStr, ".", "") // Remove periods OCR might insert
-			// Common OCR character misreads for digits
-			powerStr = strings.ReplaceAll(powerStr, "O", "0")
-			powerStr = strings.ReplaceAll(powerStr, "o", "0")
-			powerStr = strings.ReplaceAll(powerStr, "s", "6") // s often misread as 6
-			powerStr = strings.ReplaceAll(powerStr, "S", "5") // S often misread as 5
-			powerStr = strings.ReplaceAll(powerStr, "l", "1") // l often misread as 1
-			powerStr = strings.ReplaceAll(powerStr, "I", "1") // I often misread as 1
-			powerStr = strings.ReplaceAll(powerStr, "Z", "2") // Z sometimes misread as 2
-			powerStr = strings.ReplaceAll(powerStr, "B", "8") // B sometimes misread as 8
-			powerStr = strings.ReplaceAll(powerStr, "e", "6") // e sometimes misread as 6
-			powerStr = strings.ReplaceAll(powerStr, "g", "9") // g sometimes misread as 9
-			powerStr = strings.ReplaceAll(powerStr, "G", "6") // G sometimes misread as 6
-			// Remove any remaining non-digit characters
-			powerStr = regexp.MustCompile(`[^0-9]`).ReplaceAllString(powerStr, "")
-
-			power, err := strconv.ParseInt(powerStr, 10, 64)
-
-			// Validate: power should be realistic (1M to 1B range), name should be reasonable
-			if err == nil && power >= 1000000 && power <= 9999999999 &&
-				len(name) >= 3 && len(name) <= 30 && !seenNames[name] {
+			name := cleanPlayerName(matches[1])
+			power, _ := strconv.ParseInt(matches[2], 10, 64)
+			if power >= 1000000 && len(name) >= 3 && !seenNames[name] {
 				records = append(records, struct {
 					MemberName string `json:"member_name"`
 					Power      int64  `json:"power"`
@@ -928,12 +541,183 @@ func parsePowerRankingsText(text string) []struct {
 					Power:      power,
 				})
 				seenNames[name] = true
-				log.Printf("Parsed: %s -> %d", name, power)
-			} else if err != nil {
-				log.Printf("Failed to parse power for %s: %s (error: %v)", name, powerStr, err)
+				lastNameSeen = ""
 			}
+			continue
 		}
+
+		// 2. Junk Filter
+		lowerLine := strings.ToLower(line)
+		if strings.Contains(lowerLine, "ranking") ||
+			strings.Contains(lowerLine, "commander") ||
+			strings.Contains(lowerLine, "power") ||
+			strings.Contains(lowerLine, "kills") ||
+			strings.Contains(lowerLine, "donation") ||
+			strings.Contains(lowerLine, "alliance") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "[") && strings.Contains(line, "]") {
+			continue
+		}
+
+		// 3. State Machine Check (Is it a Power number?)
+		numTest := cleanLine
+		numTest = strings.ReplaceAll(numTest, " ", "")
+		numTest = strings.ReplaceAll(numTest, "O", "0")
+		numTest = strings.ReplaceAll(numTest, "o", "0")
+		numTest = strings.ReplaceAll(numTest, "s", "6")
+		numTest = strings.ReplaceAll(numTest, "S", "5")
+		numTest = strings.ReplaceAll(numTest, "l", "1")
+		numTest = strings.ReplaceAll(numTest, "I", "1")
+		numTest = strings.ReplaceAll(numTest, "Z", "2")
+		numTest = strings.ReplaceAll(numTest, "B", "8")
+
+		// Strip remaining letters to see if it's primarily a number
+		numericOnly := regexp.MustCompile(`[^0-9]`).ReplaceAllString(numTest, "")
+
+		if len(numericOnly) >= 6 {
+			power, err := strconv.ParseInt(numericOnly, 10, 64)
+			if err == nil && power >= 1000000 && power <= 9999999999 {
+				if lastNameSeen != "" {
+					cleanName := cleanPlayerName(lastNameSeen)
+					if len(cleanName) >= 3 && !seenNames[cleanName] {
+						records = append(records, struct {
+							MemberName string `json:"member_name"`
+							Power      int64  `json:"power"`
+						}{
+							MemberName: cleanName,
+							Power:      power,
+						})
+						seenNames[cleanName] = true
+						log.Printf("Parsed Power (State Machine): %s -> %d", cleanName, power)
+					}
+					lastNameSeen = ""
+				}
+				continue
+			}
+		} else if isStrictlyNumeric(numTest) {
+			// It is a valid numeric string, but < 6 digits, so it is a Rank Number (1, 2, etc.)
+			continue
+		}
+
+		// 4. Short strings and Rank Badges
+		if len(line) <= 2 || regexp.MustCompile(`(?i)^R[1-5]$`).MatchString(line) {
+			continue
+		}
+
+		// 5. It is the Player Name!
+		lastNameSeen = line
 	}
 
 	return records
+}
+
+// SmartRecord holds data that could belong to either VS Points or Power Rankings
+type SmartRecord struct {
+	MemberName string
+	Value      int64
+}
+
+// extractSmartDataFromImages dynamically determines the screenshot type and parses the data
+func extractSmartDataFromImages(imageDatas [][]byte, preDetectedDay string) (dataType string, day string, records []SmartRecord, err error) {
+	if len(imageDatas) == 0 {
+		return "", "", nil, fmt.Errorf("no images provided")
+	}
+
+	detectedDay := preDetectedDay
+	if detectedDay == "unknown" {
+		detectedDay = "" // Let text analysis figure it out
+	}
+
+	stitchedBytes, err := stitchImagesVertically(imageDatas)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("stitching failed: %v", err)
+	}
+
+	ctx := context.Background()
+	client, err := getGCPClient(ctx)
+	if err != nil {
+		return "", "", nil, err
+	}
+	defer client.Close()
+
+	img, err := vision.NewImageFromReader(bytes.NewReader(stitchedBytes))
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to prepare image for GCP: %v", err)
+	}
+
+	annotation, err := client.DetectDocumentText(ctx, img, nil)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("GCP Vision API error: %v", err)
+	}
+
+	if annotation == nil || annotation.Text == "" {
+		return "", "", nil, fmt.Errorf("GCP returned no text")
+	}
+
+	text := annotation.Text
+	log.Printf("GCP Extracted Text (Bucket: %s):\n%s", preDetectedDay, text)
+
+	// Smart Type Detection: Trust explicit text over color-tab hints
+	lowerText := strings.ToLower(text)
+	isVSPoints := false
+
+	if strings.Contains(lowerText, "daily rank") || strings.Contains(lowerText, "weekly rank") || strings.Contains(lowerText, "mon.") || strings.Contains(lowerText, "tues.") {
+		isVSPoints = true
+	} else if strings.Contains(lowerText, "strength ranking") || strings.Contains(lowerText, "power") {
+		isVSPoints = false
+	} else if detectedDay != "" && detectedDay != "unknown" {
+		// Fallback: If no explicit headers were found, but we saw a white tab, assume VS points
+		isVSPoints = true
+	}
+
+	// Route to the correct parser
+	if isVSPoints {
+		dataType = "vs_points"
+
+		// Refine the day if we know it's VS Points
+		if detectedDay == "" {
+			detectedDay = detectSelectedDay(text)
+			if detectedDay == "" {
+				now := time.Now()
+				weekday := now.Weekday()
+				switch weekday {
+				case time.Monday:
+					detectedDay = "monday"
+				case time.Tuesday:
+					detectedDay = "tuesday"
+				case time.Wednesday:
+					detectedDay = "wednesday"
+				case time.Thursday:
+					detectedDay = "thursday"
+				case time.Friday:
+					detectedDay = "friday"
+				case time.Saturday:
+					detectedDay = "saturday"
+				default:
+					detectedDay = "monday"
+				}
+			}
+		}
+
+		vsRecords := parseVSPointsText(text)
+		for _, r := range vsRecords {
+			records = append(records, SmartRecord{MemberName: r.MemberName, Value: r.Points})
+		}
+	} else {
+		dataType = "power"
+		detectedDay = "" // Day doesn't matter for power rankings
+
+		pRecords := parsePowerRankingsText(text)
+		for _, r := range pRecords {
+			records = append(records, SmartRecord{MemberName: r.MemberName, Value: r.Power})
+		}
+	}
+
+	if len(records) == 0 {
+		return dataType, detectedDay, nil, fmt.Errorf("no valid %s records found in extracted text", dataType)
+	}
+
+	return dataType, detectedDay, records, nil
 }

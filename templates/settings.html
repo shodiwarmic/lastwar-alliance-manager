@@ -61,14 +61,16 @@
                                 <input type="checkbox" id="power-tracking-enabled">
                                 Enable Power Tracking
                             </label>
-                            <span class="help-text">When enabled, you can upload screenshots to track member power history and other data</span>
+                            {{if .HasGCPCredentials}}<span class="help-text">When enabled, you can upload screenshots to track member power history and other data</span>{{end}}
                         </div>
                         
+                        {{if .HasGCPCredentials}}
                         <div id="power-upload-link" style="display: none; margin-top: 15px; padding: 15px; background: var(--card-bg); border-radius: 8px; border: 2px solid #667eea;">
                             <p style="margin: 0 0 10px 0; color: #667eea; font-weight: bold;">📸 Screenshot Upload Available</p>
                             <p style="margin: 0 0 10px 0; font-size: 14px;">Visit the dedicated Upload page to process game screenshots with OCR or manually enter data.</p>
                             <a href="/upload" class="primary-btn" style="display: inline-block; text-decoration: none; padding: 10px 20px;">📸 Go to Upload Page</a>
                         </div>
+                        {{end}}
                     </div>
 
                      <div class="settings-group">
@@ -108,34 +110,6 @@
                             </label>
                         </div>
                     </div>
-
-                    {{if .IsAdmin}}
-                    <div class="settings-group">
-                        <h4>🔒 Password Policy (Admin Only)</h4>
-                        <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
-                            <div>
-                                <label for="pwd-min-length">Minimum Length:</label>
-                                <input type="number" id="pwd-min-length" min="6" max="64" value="12" required>
-                            </div>
-                            <div>
-                                <label for="pwd-history-count">Enforce History:</label>
-                                <input type="number" id="pwd-history-count" min="0" max="24" value="4" required>
-                                <span class="help-text">Prevent reusing X previous passwords</span>
-                            </div>
-                            <div>
-                                <label for="pwd-validity-days">Validity (Days):</label>
-                                <input type="number" id="pwd-validity-days" min="0" max="365" value="180" required>
-                                <span class="help-text">0 disables expiration</span>
-                            </div>
-                        </div>
-                        <div class="checkbox-group" style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
-                            <label><input type="checkbox" id="pwd-require-special"> Require Special Char</label>
-                            <label><input type="checkbox" id="pwd-require-upper"> Require Uppercase</label>
-                            <label><input type="checkbox" id="pwd-require-lower"> Require Lowercase</label>
-                            <label><input type="checkbox" id="pwd-require-number"> Require Number</label>
-                        </div>
-                    </div>
-                    {{end}}
 
                     <div class="button-group">
                         <button type="submit" class="primary-btn">💾 Save Settings</button>

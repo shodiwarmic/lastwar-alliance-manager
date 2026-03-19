@@ -1,351 +1,68 @@
 {{define "head_tags"}}
-    <style>
-        /* Mobile-first screenshot upload styles */
-        .upload-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 10px;
-        }
-
-        .upload-section {
-            background: var(--container-bg);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .tab-buttons {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #e9ecef;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .tab-btn {
-            padding: 12px 20px;
-            border: none;
-            background: none;
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            color: #6c757d;
-            font-size: 16px;
-            white-space: nowrap;
-            transition: all 0.3s;
-        }
-
-        .tab-btn.active {
-            border-bottom: 3px solid #667eea;
-            color: #667eea;
-            font-weight: bold;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .drop-zone {
-            border: 3px dashed var(--border-color);
-            border-radius: 12px;
-            padding: 40px 20px;
-            text-align: center;
-            cursor: pointer;
-            background: var(--card-bg);
-            transition: all 0.3s;
-            margin-bottom: 15px;
-        }
-
-        .drop-zone:hover {
-            border-color: #667eea;
-            background: var(--input-bg);
-        }
-
-        .drop-zone.dragover {
-            border-color: #667eea;
-            background: var(--input-bg);
-            border-style: solid;
-        }
-
-        .drop-icon {
-            font-size: 64px;
-            margin-bottom: 10px;
-        }
-
-        .preview-container {
-            display: none;
-        }
-
-        .preview-img {
-            width: 100%;
-            height: 120px;
-            object-fit: cover;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        .preview-img:hover {
-            transform: scale(1.05);
-        }
-
-        .preview-item {
-            position: relative;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            padding: 5px;
-            background: var(--card-bg);
-        }
-
-        .preview-item .remove-file {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            background: rgba(220, 53, 69, 0.9);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            cursor: pointer;
-            font-size: 16px;
-            line-height: 1;
-            padding: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .preview-item .remove-file:hover {
-            background: rgb(220, 53, 69);
-        }
-
-        .preview-item .file-name {
-            font-size: 11px;
-            color: #6c757d;
-            margin-top: 5px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .text-input {
-            width: 100%;
-            min-height: 300px;
-            padding: 15px;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            resize: vertical;
-            box-sizing: border-box;
-        }
-
-        .text-input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .btn {
-            padding: 15px 30px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            width: 100%;
-            transition: all 0.3s;
-            margin: 5px 0;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-
-        .result-box {
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 15px;
-        }
-
-        .result-success {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-        }
-
-        .result-error {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-        }
-
-        .result-info {
-            background: #d1ecf1;
-            border: 1px solid #bee5eb;
-            color: #0c5460;
-        }
-
-        .help-text {
-            font-size: 14px;
-            color: #6c757d;
-            margin: 10px 0;
-            line-height: 1.5;
-        }
-
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Mobile optimizations */
-        @media (max-width: 768px) {
-            .power-container {
-                padding: 5px;
-            }
-
-            .upload-section {
-                padding: 15px;
-                border-radius: 8px;
-            }
-
-            .drop-icon {
-                font-size: 48px;
-            }
-
-            .tab-btn {
-                padding: 10px 15px;
-                font-size: 14px;
-            }
-
-            .btn {
-                padding: 12px 20px;
-                font-size: 15px;
-            }
-
-            .text-input {
-                min-height: 250px;
-                font-size: 13px;
-            }
-
-            .preview-img {
-                max-height: 300px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="upload.css">
 {{end}}
 
 {{define "header_text"}}
     <h1>🎮 Last War: Survival</h1>
-    <h2>Screenshot Upload</h2>
+    <h2>Smart Screenshot Upload</h2>
 {{end}}
 
 {{define "content"}}
-<div class="upload-container">
+<div id="missing-credentials-msg" style="display: none; text-align: center; padding: 60px 20px; max-width: 600px; margin: 40px auto; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color);">
+    <div style="font-size: 64px; margin-bottom: 20px;">☁️</div>
+    <h2>OCR Pipelines Disabled</h2>
+    <p style="color: var(--text-muted); line-height: 1.6; font-size: 16px;">
+        Google Cloud Vision credentials have not been configured. An administrator must securely upload a Service Account JSON key via the Security tab in the System Settings to enable automated screenshot processing.
+    </p>
+</div>
+
+<div class="upload-container" id="main-upload-container">
     <div class="upload-section">
         <h3 style="margin-top: 0;">📸 Upload Screenshots</h3>
-        <p class="help-text">Upload game screenshots to automatically extract data using OCR, or enter data manually.</p>
+        <p class="help-text">Upload game screenshots. Our smart OCR will automatically stitch them together and detect if they are Power Rankings or VS Points.</p>
         
         <div class="screenshot-types" style="margin: 20px 0; padding: 15px; background: var(--card-bg); border-radius: 8px;">
             <p style="margin: 0 0 10px 0; font-weight: bold; color: #667eea;">📋 Supported Screenshot Types:</p>
             <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
                 <li><strong>⚡ Power Rankings</strong> - Track member power progression over time</li>
                 <li><strong>⚔️ VS Points (Daily Rank)</strong> - Record daily VS points with automatic day detection</li>
-                <li><strong>🏆 Event Scores</strong> - Record weekly competition results</li>
-                <li><strong>📊 Statistics</strong> - Capture member performance data</li>
             </ul>
         </div>
 
-        <div class="tab-buttons">
-            <button class="tab-btn active" data-tab="image">📷 Image Upload</button>
-            <button class="tab-btn" data-tab="text">✍️ Manual Entry</button>
+        <div id="week-selector" style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
+            <label for="vs-week" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--text-primary);">VS Points Week (If applicable):</label>
+            <select id="vs-week" class="form-input" style="width: 100%; max-width: 400px;">
+                <option value="current">📅 Current Week</option>
+                <option value="last">📅 Last Week</option>
+            </select>
+            <p class="help-text" style="margin-top: 8px;">
+                If uploading Daily VS Points, confirm which week they belong to. (This setting is safely ignored for Power Rankings).
+            </p>
         </div>
-
-        <div id="tab-image" class="tab-content active">
-            <div style="margin-bottom: 20px;">
-                <label for="screenshot-type" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--text-primary);">Screenshot Type:</label>
-                <select id="screenshot-type" class="form-input" style="width: 100%; max-width: 400px;">
-                    <option value="power">⚡ Power Rankings</option>
-                    <option value="vs-points">⚔️ VS Points (Daily Rank)</option>
-                </select>
-                <p id="screenshot-type-hint" class="help-text" style="margin-top: 8px;">
-                    Upload power ranking screenshots from the alliance member list.
-                </p>
-            </div>
-
-            <div id="week-selector" style="margin-bottom: 20px; display: none;">
-                <label for="vs-week" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--text-primary);">Week:</label>
-                <select id="vs-week" class="form-input" style="width: 100%; max-width: 400px;">
-                    <option value="current">📅 Current Week</option>
-                    <option value="last">📅 Last Week</option>
-                </select>
-                <p class="help-text" style="margin-top: 8px;">
-                    Select which week to upload VS Points for.
-                </p>
+        
+        <p class="help-text">Upload up to 100 screenshots at once.</p>
+        
+        <input type="file" id="image-input" accept="image/*" multiple style="display: none;">
+        
+        <div id="drop-zone" class="drop-zone">
+            <div id="drop-content">
+                <div class="drop-icon">📁</div>
+                <p style="margin: 10px 0; font-weight: bold; font-size: 18px;">Tap to upload or drag & drop</p>
+                <p style="margin: 0; color: #6c757d;">PNG, JPG, JPEG - Max 10MB each, up to 100 files</p>
             </div>
             
-            <p class="help-text">Upload up to 25 screenshots at once. Our OCR system will automatically extract text data from each image.</p>
-            
-            <input type="file" id="image-input" accept="image/*" multiple style="display: none;">
-            
-            <div id="drop-zone" class="drop-zone">
-                <div id="drop-content">
-                    <div class="drop-icon">📁</div>
-                    <p style="margin: 10px 0; font-weight: bold; font-size: 18px;">Tap to upload or drag & drop</p>
-                    <p style="margin: 0; color: #6c757d;">PNG, JPG, JPEG - Max 10MB each, up to 25 files</p>
+            <div id="preview-container" class="preview-container">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <p id="files-count" style="margin: 0; font-weight: bold; color: #667eea;"></p>
+                    <button id="clear-btn" class="btn btn-secondary" style="width: auto; padding: 8px 16px; margin: 0;">🗑️ Clear All</button>
                 </div>
-                
-                <div id="preview-container" class="preview-container">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <p id="files-count" style="margin: 0; font-weight: bold; color: #667eea;"></p>
-                        <button id="clear-btn" class="btn btn-secondary" style="width: auto; padding: 8px 16px; margin: 0;">🗑️ Clear All</button>
-                    </div>
-                    <div id="preview-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-height: 400px; overflow-y: auto;"></div>
-                </div>
+                <div id="preview-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-height: 400px; overflow-y: auto;"></div>
             </div>
-            
-            <button id="process-image-btn" class="btn btn-primary" style="display: none;">
-                🔍 Process All Images with OCR
-            </button>
         </div>
-
-        <div id="tab-text" class="tab-content">
-            <p class="help-text">Enter data manually, one entry per line in format: Name, Value</p>
-            <p class="help-text" style="font-style: italic; font-size: 13px;">Example for Power: Gary6126, 71407341</p>
-            
-            <textarea id="text-input" class="text-input" placeholder="Gary6126, 71407341&#10;Anjel87, 55456932&#10;ileesu, 52325609&#10;DYNOSUR, 51234567"></textarea>
-            
-            <button id="process-text-btn" class="btn btn-primary">📤 Upload Data</button>
-        </div>
+        
+        <button id="process-image-btn" class="btn btn-primary" style="display: none;">
+            🔍 Stitch & Process Images
+        </button>
 
         <div id="result-container"></div>
     </div>

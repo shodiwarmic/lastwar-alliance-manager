@@ -91,10 +91,12 @@ mkdir -p ./data ./uploads
 if [ ! -f ".env" ]; then
     echo "Generating secure .env file..."
     SESSION_KEY=$(openssl rand -hex 32)
+    CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -hex 32)
     cat > .env <<EOF
 DATABASE_PATH=/app/data/alliance.db
 STORAGE_PATH=/app/uploads
 SESSION_KEY=$SESSION_KEY
+CREDENTIAL_ENCRYPTION_KEY=$CREDENTIAL_ENCRYPTION_KEY
 PRODUCTION=true
 HTTPS=true
 PORT=8080

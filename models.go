@@ -1,3 +1,5 @@
+// models.go - Defines all data models used in the application, including database models and frontend template contexts.
+
 package main
 
 import (
@@ -390,17 +392,24 @@ type ConductorStat struct {
 // --- Frontend Template Context ---
 
 type PageData struct {
-	Title           string
-	ActivePage      string
-	IsAuthenticated bool
-	Username        string
-	IsAdmin         bool
-	Rank            string
-	Permissions     RankPermissions
-	CSRFToken       template.HTML
+	Title             string
+	ActivePage        string
+	IsAuthenticated   bool
+	Username          string
+	IsAdmin           bool
+	Rank              string
+	Permissions       RankPermissions
+	CSRFToken         template.HTML
+	HasGCPCredentials bool // NEW: Flags if OCR pipelines are available
 }
 
 type WeekAwards struct {
 	WeekDate string             `json:"week_date"`
 	Awards   map[string][]Award `json:"awards"`
+}
+
+// CredentialUpdateRequest is used by admins to submit new API keys.
+type CredentialUpdateRequest struct {
+	ServiceName string `json:"service_name"`
+	Secret      string `json:"secret"`
 }

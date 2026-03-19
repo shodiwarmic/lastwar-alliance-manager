@@ -1,253 +1,80 @@
-# Image Recognition & OCR Enhancement
+# Image Recognition & OCR Architecture
 
 ## Overview
 
-The application now includes intelligent image preprocessing to significantly improve OCR accuracy when processing power ranking screenshots from Last War: Survival.
+The Alliance Manager utilizes a highly optimized, multi-threaded image processing pipeline powered by **Google Cloud Vision Document AI**. This architecture allows users to drag-and-drop up to 100 screenshots of varying types simultaneously, automatically sorting, compiling, and extracting data with near-perfect accuracy.
 
-## Distinct Attributes Detected
+## The Smart Extraction Pipeline
 
-When analyzing a screenshot, the system identifies and processes these distinct visual elements:
+The system processes image uploads through a sequential, intelligent pipeline designed to minimize API costs while maximizing data accuracy.
 
-### 1. **Title Bar Region**
-- Location: Top 5-7% of image  
-- Contains: "STRENGTH RANKING" text
-- Background: Dark color
-- Processing: Removed before OCR (UI element, not data)
-
-### 2. **Tab Buttons**
-- Location: Below title bar (~5-8% of height)
-- Contains: "Power", "Kills", "Donation" buttons
-- Styling: Orange/gray tabs with highlighted active tab
-- Processing: Removed before OCR (UI navigation, not data)
-
-### 3. **Column Headers**
-- Location: Below tabs (~5% of height)
-- Contains: "Ranking", "Commander", "Power" labels
-- Background: Light brown/beige
-- Processing: Removed before OCR (UI labels, not data)
-
-### 4. **Data Rows Region** ⭐ PRIMARY FOCUS
-- Location: Middle section (between headers and bottom button)
-- Contains per row:
-  - **Ranking Number**: Position in list (e.g., 7, 8, 9, 10)
-  - **Player Icon**: Small square avatar image
-  - **Rank Badge**: R5, R4, R3, R2, R1 (orange badge icons)
-  - **Player Name**: Commander name (e.g., "dvdAlbert91", "Nutty Tx", "WoodWould")
-  - **Power Value**: Large numbers (e.g., "50914631", "49758621")
-- Background: Alternating colors with occasional highlighting
-- Row Height: Auto-detected based on image dimensions
-- Processing: **Enhanced and focused for OCR**
-
-### 5. **Bottom Button Region**
-- Location: Bottom 8-10% of image
-- Contains: Back arrow navigation button
-- Processing: Removed before OCR (UI control, not data)
-
-## Image Preprocessing Pipeline
-
-The system applies these enhancements sequentially:
-
-### Step 1: Region Analysis
-```
-analyzeScreenshot(img) → ScreenshotAttributes
-```
-- Detects image dimensions
-- Calculates region boundaries
-- Estimates row height and count
-- Logs analysis results for debugging
-
-### Step 2: Region Cropping
-```
-cropToDataRegion(img, region) → Cropped Image
-```
-- Removes title bar, tabs, headers, and bottom button
-- Focuses only on the data rows
-- Reduces noise and OCR errors from UI elements
-
-### Step 3: Grayscale Conversion
-```
-convertToGrayscale(img) → Gray Image
-```
-- Simplifies image to single color channel
-- Improves OCR accuracy
-- Reduces processing time
-
-### Step 4: Contrast Enhancement
-```
-enhanceContrast(img) → Enhanced Image
-```
-- Applies histogram equalization
-- Makes text more distinct from background
-- Improves readability of faded or low-contrast screenshots
-
-### Step 5: Adaptive Thresholding
-```
-applyAdaptiveThreshold(img, blockSize) → Binary Image
-```
-- Converts to black/white binary image
-- Uses local mean for each pixel region
-- Adapts to varying lighting/background colors
-- Block size adjusts based on row density (25px standard, 15px for dense text)
-
-### Step 6: Image Inversion
-```
-invertImage(img) → Inverted Image  
-```
-- Ensures black text on white background
-- Tesseract OCR performs best with this format
-
-### Result
-The preprocessed image is then passed to Tesseract OCR with optimized settings:
-- Page segmentation mode: PSM_AUTO
-- Character whitelist: A-Z, a-z, 0-9, and basic punctuation
-- Output: Clean text containing only player names and power values
-
-## Technical Details
-
-### Data Structures
-
+### Step 1: Smart Bucketing (Tab Detection)
 ```go
-type ImageRegion struct {
-    Name   string  // Region identifier
-    Top    int     // Y-coordinate of top edge
-    Bottom int     // Y-coordinate of bottom edge  
-    Left   int     // X-coordinate of left edge
-    Right  int     // X-coordinate of right edge
-}
-
-type ScreenshotAttributes struct {
-    Width          int          // Total image width
-    Height         int          // Total image height
-    TitleBarRegion *ImageRegion // Title area
-    TabsRegion     *ImageRegion // Tab buttons area
-    HeaderRegion   *ImageRegion // Column headers area
-    DataRegion     *ImageRegion // Player data rows ⭐
-    ButtonRegion   *ImageRegion // Bottom navigation area
-    RowHeight      int          // Estimated height per row
-    EstimatedRows  int          // Expected number of visible rows
-}
+detectDayFromTabRegion(imageData) → string
 ```
+Instead of manually selecting the data type, the system analyzes the top 11% to 22% of every uploaded image. It scans specifically for pure white pixels (`RGB > 240`) across 6 horizontal column zones.
+* **Match Found:** The image is bucketed into a specific VS Points day (e.g., "monday", "wednesday").
+* **No Match:** The image is routed to the "unknown" bucket (processed as Power Rankings).
 
-### Function Flow
-
+### Step 2: Dynamic Vertical Stitching (Mega-pixel Chunking)
+```go
+stitchImagesVertically(imageDatas) → []byte
 ```
-User uploads screenshot
-    ↓
-extractPowerDataFromImage(imageData)
-    ↓
-preprocessImageForOCR(imageData)
-    ├→ analyzeScreenshot()
-    ├→ cropToDataRegion()
-    ├→ convertToGrayscale()
-    ├→ enhanceContrast()
-    ├→ applyAdaptiveThreshold()
-    └→ invertImage()
-    ↓
-Tesseract OCR (gosseract library)
-    ↓
-parsePowerRankingsText(text)
-    ├→ Pattern matching: "R4 Gary6126 73716853"
-    ├→ Pattern matching: "Anjel87 57250482"
-    ├→ Validation: name length 3-30, power 1M-10B
-    └→ Deduplication: skip duplicate names
-    ↓
-Fuzzy matching with database members
-    └→ Levenshtein-like similarity scoring
-    ↓
-Records saved to database
+Google Cloud Vision has strict megapixel and aspect ratio limits. To prevent text compression and blurring:
+* The system iterates through each bucket and stacks the screenshots vertically into a single image.
+* **Dynamic Limits:** The system reads the image headers (without loading them fully into memory) and chunks the stitches so no single payload exceeds **12,000 pixels in height** or **15 images**.
+* This drastically reduces API quota usage (sending 1 image instead of 10) while maintaining razor-sharp text resolution.
+
+### Step 3: Cloud Vision API Extraction
+```go
+getGCPClient(ctx) → *vision.ImageAnnotatorClient
 ```
+The server decrypts the AES-GCM encrypted Google Service Account JSON key in memory, establishes a secure gRPC connection to Google Cloud, and submits the stitched image. GCP returns a complete text representation of the image, natively reading it as a structured document/spreadsheet.
 
-## Advantages of Image Preprocessing
-
-### Before Preprocessing ❌
-- OCR attempts to read entire screenshot
-- Gets confused by UI elements, buttons, titles
-- Low contrast text missed or misread
-- Background colors interfere with text detection
-- Icons/badges mistaken for characters
-- Lower accuracy, more manual corrections needed
-
-### After Preprocessing ✅
-- Focuses only on relevant data region
-- UI clutter removed completely
-- High contrast black-on-white text
-- Even lighting across entire image
-- Clear text boundaries
-- Significantly higher OCR accuracy
-
-## Requirements
-
-### On Linux (Production)
-```bash
-sudo apt install tesseract-ocr tesseract-ocr-all
-sudo apt install libtesseract-dev libleptonica-dev
+### Step 4: Hybrid State Machine Parsing
+```go
+parseVSPointsText(text) / parsePowerRankingsText(text) → []SmartRecord
 ```
+Because GCP Document AI often reads data vertically (straight down a column) rather than horizontally, traditional regex fails. The system uses a specialized state machine:
+1.  **Junk Filtering:** Explicitly ignores UI text ("Commander", "Points", "Ranking").
+2.  **Number Routing:** If it sees a massive number (e.g., `45000000`), it tags it as a Value. If it sees a small number (e.g., `2`), it assumes it's a Rank Badge and ignores it.
+3.  **Entity Pairing:** It remembers the last valid String (Player Name) it saw and pairs it with the next valid Value it encounters.
 
-### On Windows (Development)
-The image processing uses Go's standard library (`image`, `image/color`, `image/draw`) which works without CGO. However, Tesseract OCR requires CGO:
+### Step 5: Fuzzy Matching & Database Transaction
+The extracted records are compared against the database using a Levenshtein-like similarity algorithm. 
+* **VS Points:** Requires a 70% match threshold.
+* **Power Rankings:** Requires a 50% match threshold.
+* All valid records for the entire upload batch are saved inside a single, secure SQLite database transaction.
 
-```bash
-# Install MinGW-w64 or TDM-GCC for CGO support
-# Then test:
-go env CGO_ENABLED  # Should show: 1
+## Advantages of the GCP Architecture
 
-# If CGO is disabled, development on Windows won't compile
-# Deploy to Linux server for full functionality
-```
+### Before (Tesseract Local OCR) ❌
+* Required heavy C++ libraries (`libtesseract-dev`) on the host server.
+* Required fragile, manual image preprocessing (grayscale, contrast, inversion, cropping) to make text readable.
+* Struggled with background colors and light-blue player rows.
+* Required the user to manually sort uploads and specify the screenshot type.
 
-### Dependencies
-- `image` - Standard Go image decoding/encoding
-- `image/color` - Color model support
-- `image/draw` - Image composition
-- `image/png` - PNG encoding for processed images
-- `bytes` - Buffer management for image data
-- `github.com/otiai10/gosseract/v2` - Tesseract OCR bindings (requires CGO)
+### After (Cloud Vision API) ✅
+* Zero local dependencies; lightweight pure-Go Docker image.
+* GCP natively ignores background colors and UI noise.
+* Automatic tab-color detection routes VS Points vs. Power Rankings flawlessly.
+* Stitching drastically reduces API calls, easily supporting 100+ image uploads in seconds.
 
-## Usage Example
+## Technical Requirements
 
-1. Take a screenshot of the Power Rankings screen in Last War: Survival
-2. Navigate to Settings page in the Alliance Manager
-3. Click the "📷 Image Upload" tab
-4. Upload the screenshot
-5. Click "🔍 Process Image with OCR"
-6. The system will:
-   - Analyze the screenshot structure
-   - Crop to data region
-   - Enhance for optimal OCR
-   - Extract player names and power values
-   - Match to database members (with fuzzy matching)
-   - Save records to power history
+* **Google Cloud Console:** Cloud Vision API enabled.
+* **Credentials:** A Service Account JSON key must be securely uploaded via the Alliance Manager's Admin Security tab.
+* **Memory:** No special requirements. The system dynamically streams and chunks images to prevent memory spikes.
 
 ## Logging & Debugging
 
-The system logs detailed information at each stage:
+The system provides detailed tracing in the server stdout:
 
+```text
+[INFO] Image format for tab detection: png, bounds: (0,0)-(1080,2404)
+[INFO] Day detected by color: monday (confidence score: 142)
+[INFO] Processing bucket: monday with 28 images
+[INFO] Stitching sub-chunk 1 for bucket monday (10 images, ~11450px tall)
+[INFO] GCP Extracted Text (Bucket: monday): ...
+[INFO] Parsed VS Points (State Machine): dvdAlbert91 -> 50914631
 ```
-[INFO] Screenshot Analysis: 1080x1920, DataRegion: (0,250) to (1080,1650), Est. Rows: 10
-[INFO] Cropped image from (0,0)-(1080,1920) to (0,0)-(1080,1400)
-[INFO] Image preprocessed: 1080x1920 -> 1080x1400
-[INFO] OCR extracted text:
-7 dvdAlbert91 50914631
-8 Nutty Tx 49758621
-9 WoodWould 49359118
-...
----END OCR---
-[INFO] Parsed: dvdAlbert91 -> 50914631
-[INFO] ✓ Fuzzy matched 'dvdAlbert' to 'dvdAlbert91' (score: 92%)
-```
-
-## Future Enhancements
-
-Potential improvements for even better accuracy:
-
-1. **Template Matching**: Detect rank badges (R3, R4) visually to verify text OCR
-2. **Icon Detection**: Use player icons to help identify row boundaries
-3. **Multi-language Support**: Add language packs for non-English game versions
-4. **Confidence Scoring**: Report OCR confidence per record
-5. **Auto-rotation**: Detect and correct tilted/rotated screenshots
-6. **Batch Processing**: Upload multiple screenshots at once
-7. **Machine Learning**: Train a model to specifically recognize Last War UI fonts
-
----
-
-**Result**: The image recognition system automatically filters out UI elements and enhances the relevant data before OCR, dramatically improving accuracy and reducing manual corrections needed.

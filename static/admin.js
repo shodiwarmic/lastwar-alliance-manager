@@ -1,3 +1,5 @@
+// static/admin.js - JavaScript for Admin Dashboard
+
 let allUsers = [];
 let allMembers = [];
 let allLogins = [];
@@ -531,5 +533,133 @@ function extractDeviceInfo(userAgent) {
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
         event.target.style.display = 'none';
+    }
+}
+
+// --- SECURITY & API TAB LOGIC ---
+
+// Hook into the switchTab function
+const originalSwitchTab = switchTab;
+switchTab = function(tabName) {
+    originalSwitchTab(tabName);
+    if (tabName === 'security') {
+        loadSecuritySettings();
+    }
+};
+
+async function loadSecuritySettings() {
+    try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) return;
+        
+        const settings = await response.json();
+        document.getElementById('pwd-min-length').value = settings.pwd_min_length || 12;
+        // ... (keep the other pwd fields) ...
+
+        // NEW: Disable the delete button if no key exists
+        const deleteBtn = document.getElementById('delete-gcp-btn');
+        if (deleteBtn) {
+            if (settings.has_gcp_credentials) {
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = '🗑️ Delete Active Key';
+            } else {
+                deleteBtn.disabled = true;
+                deleteBtn.innerHTML = '❌ No Key Configured';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading security settings:', error);
+    }
+}
+
+async function savePasswordPolicy(event) {
+    event.preventDefault();
+    const payload = {
+        pwd_min_length: parseInt(document.getElementById('pwd-min-length').value),
+        pwd_history_count: parseInt(document.getElementById('pwd-history-count').value),
+        pwd_validity_days: parseInt(document.getElementById('pwd-validity-days').value),
+        pwd_require_special: document.getElementById('pwd-require-special').checked,
+        pwd_require_upper: document.getElementById('pwd-require-upper').checked,
+        pwd_require_lower: document.getElementById('pwd-require-lower').checked,
+        pwd_require_number: document.getElementById('pwd-require-number').checked
+    };
+
+    try {
+        const response = await fetch('/api/admin/security/password-policy', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) throw new Error(await response.text());
+        alert("Password Policy updated successfully.");
+    } catch (error) {
+        alert("Error: " + error.message);
+    }
+}
+
+// GCP File Upload Reader
+async function uploadGCPCredentials(event) {
+    event.preventDefault();
+    const fileInput = document.getElementById('gcp-json-file');
+    
+    if (fileInput.files.length === 0) {
+        alert("Please select a JSON file.");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = async function(e) {
+        const jsonContent = e.target.result;
+        
+        try {
+            // Verify it's actually valid JSON before sending
+            JSON.parse(jsonContent); 
+            
+            const response = await fetch('/api/admin/credentials', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    service_name: 'gcp_vision',
+                    secret: jsonContent
+                })
+            });
+
+            if (!response.ok) throw new Error(await response.text());
+            
+            alert("✅ GCP Credentials securely encrypted and stored.");
+            document.getElementById('gcp-upload-form').reset();
+            
+        } catch (error) {
+            alert("Invalid JSON or Upload Error: " + error.message);
+        }
+    };
+
+    reader.readAsText(file);
+}
+
+// GCP Deletion Modal Logic
+function showDeleteGCPModal() {
+    document.getElementById('delete-gcp-modal').style.display = 'block';
+}
+
+function closeDeleteGCPModal() {
+    document.getElementById('delete-gcp-modal').style.display = 'none';
+}
+
+async function confirmDeleteGCP() {
+    try {
+        const response = await fetch('/api/admin/credentials/gcp_vision', {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error(await response.text());
+        
+        alert("🗑️ Credentials deleted. OCR Pipelines disabled.");
+        closeDeleteGCPModal();
+    } catch (error) {
+        alert("Error: " + error.message);
     }
 }

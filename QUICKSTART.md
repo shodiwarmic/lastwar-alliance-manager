@@ -3,7 +3,7 @@
 ## One-Command Installation (Debian/Ubuntu)
 
 ```bash
-git clone [https://github.com/yourusername/lastwar.git](https://github.com/yourusername/lastwar.git) /opt/lastwar
+git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
 cd /opt/lastwar
 chmod +x install.sh
 sudo ./install.sh
@@ -12,7 +12,7 @@ sudo ./install.sh
 The script will automatically:
 - ✅ Install Docker and Docker Compose
 - ✅ Create persistent data directories
-- ✅ Generate a secure session key and `.env` file
+- ✅ Generate secure session/encryption keys and a `.env` file
 - ✅ Build the Go application and Collabora containers via Docker Compose
 - ✅ Install Caddy with dual-domain routing and automatic SSL
 - ✅ Apply strict Content-Security-Policy headers for document security
@@ -31,7 +31,7 @@ If you prefer to skip the script and spin it up manually:
 
 ### 2. Prepare Environment
 ```bash
-git clone [https://github.com/yourusername/lastwar.git](https://github.com/yourusername/lastwar.git) /opt/lastwar
+git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
 cd /opt/lastwar
 
 # Create volume directories
@@ -42,6 +42,7 @@ cat > .env << EOF
 DATABASE_PATH=/app/data/alliance.db
 STORAGE_PATH=/app/uploads
 SESSION_KEY=$(openssl rand -hex 32)
+CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -hex 32)
 PRODUCTION=true
 HTTPS=true
 APP_DOMAIN=app.yourdomain.com
