@@ -106,3 +106,13 @@ The application relies on a `.env` file in the root directory:
 - **Password Hashing**: Passwords are exclusively hashed with bcrypt before storage, accompanied by strict server-side complexity enforcement.
 - **WOPI JWT**: Document editing sessions are secured with short-lived JSON Web Tokens.
 - **Volume Persistence**: Databases and uploads are stored in persistent Docker volumes, surviving container rebuilds while remaining inaccessible to the public web root.
+
+## Security
+
+External API credentials managed by the application are symmetrically encrypted at rest using AES-GCM. To enable this, you must generate a 32-byte hex string and add it to your `.env` file before starting the server:
+
+```bash
+openssl rand -hex 32
+```
+
+Set the output as the `CREDENTIAL_ENCRYPTION_KEY` in your environment variables. The application employs strict memory hygiene, zeroing out sensitive plaintext buffers immediately after cryptographic operations or API transmissions to prevent memory scraping.
