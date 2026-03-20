@@ -496,3 +496,137 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 });
+
+let currentImportPayload = null;
+
+// Attach this to your CSV upload input's 'change' event or a specific button
+async function handleCSVUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('csv_file', file);
+    formData.append('week_date', document.getElementById('week-selector').value);
+
+    try {
+        const response = await fetch('/api/vs-points/import/preview', {
+            method: 'POST',
+            body: formData
+            // Include CSRF headers if required by your setup
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+
+        currentImportPayload = await response.json();
+        renderPreviewModal(currentImportPayload);
+    } catch (error) {
+        showToast('Error parsing CSV: ' + error.message, 'error');
+    }
+    
+    event.target.value = ''; // Reset input
+}
+
+function renderPreviewModal(data) {
+    const matchedBody = document.getElementById('matched-body');
+    const unresolvedBody = document.getElementById('unresolved-body');
+    
+    matchedBody.innerHTML = '';
+    unresolvedBody.innerHTML = '';
+    
+    document.getElementById('matched-count').textContent = data.matched?.length || 0;
+    document.getElementById('unresolved-count').textContent = data.unresolved?.length || 0;
+
+    // Render Matched
+    if (data.matched) {
+        data.matched.forEach(row => {
+            const updates = Object.entries(row.updated_fields)
+                .map(([day, val]) => `${day}: ${val}`)
+                .join(', ');
+            
+            let satBadge = row.calculated_sat ? '<span class="badge info">Calculated Sat</span>' : '';
+            
+            matchedBody.innerHTML += `
+                <tr>
+                    <td>${row.matched_member.name}</td>
+                    <td><span class="badge">${row.match_type}</span></td>
+                    <td>${updates} ${satBadge}</td>
+                </tr>
+            `;
+        });
+    }
+
+    // Render Unresolved
+    if (data.unresolved) {
+        // Assume window.allMembers exists from your current state, otherwise fetch it.
+        const memberOptions = window.allMembers.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+        
+        data.unresolved.forEach((row, idx) => {
+            const updates = Object.entries(row.updated_fields).map(([day, val]) => `${day}: ${val}`).join(', ');
+            
+            unresolvedBody.innerHTML += `
+                <tr data-index="${idx}">
+                    <td>${row.original_name}</td>
+                    <td>
+                        <select class="member-mapper" onchange="mapUnresolved(${idx}, this.value)">
+                            <option value="">-- Ignore / Do Not Import --</option>
+                            ${memberOptions}
+                        </select>
+                    </td>
+                    <td>${updates}</td>
+                </tr>
+            `;
+        });
+    }
+
+    document.getElementById('import-preview-modal').classList.remove('hidden');
+}
+
+function mapUnresolved(unresolvedIndex, memberId) {
+    if (!memberId) {
+        currentImportPayload.unresolved[unresolvedIndex].matched_member = null;
+        return;
+    }
+    const member = window.allMembers.find(m => m.id == memberId);
+    currentImportPayload.unresolved[unresolvedIndex].matched_member = member;
+}
+
+function closePreviewModal() {
+    document.getElementById('import-preview-modal').classList.add('hidden');
+    currentImportPayload = null;
+}
+
+async function commitImport() {
+    // Combine matched and successfully mapped unresolved records
+    const finalRecords = [...(currentImportPayload.matched || [])];
+    
+    if (currentImportPayload.unresolved) {
+        currentImportPayload.unresolved.forEach(row => {
+            if (row.matched_member && row.matched_member.id) {
+                finalRecords.push(row);
+            }
+        });
+    }
+
+    const payload = {
+        week_date: document.getElementById('week-selector').value,
+        records: finalRecords
+    };
+
+    try {
+        const response = await fetch('/api/vs-points/import/commit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+            // Include CSRF headers if required by your setup
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+        
+        const result = await response.json();
+        showToast(result.message, 'success');
+        closePreviewModal();
+        loadVSData(); // Refresh main table
+    } catch (error) {
+        showToast('Error saving data: ' + error.message, 'error');
+    }
+}

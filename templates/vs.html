@@ -54,6 +54,49 @@
     </section>
 {{end}}
 
+{{define "modals"}}
+<!-- CSV Import Preview Modal -->
+<div id="import-preview-modal" class="modal-overlay hidden">
+    <div class="modal-content large-modal">
+        <h2>Review Data Import</h2>
+        
+        <div class="preview-section">
+            <h3>Unresolved Names <span id="unresolved-count" class="badge">0</span></h3>
+            <p class="hint">These names were not found. Select an existing member to map them manually.</p>
+            <table id="unresolved-table" class="data-table">
+                <thead>
+                    <tr>
+                        <th>Uploaded Name</th>
+                        <th>Map To Member</th>
+                        <th>Preview Data</th>
+                    </tr>
+                </thead>
+                <tbody id="unresolved-body"></tbody>
+            </table>
+        </div>
+
+        <div class="preview-section mt-4">
+            <h3>Matched Names <span id="matched-count" class="badge">0</span></h3>
+            <table id="matched-table" class="data-table">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Match Type</th>
+                        <th>Updates Preview</th>
+                    </tr>
+                </thead>
+                <tbody id="matched-body"></tbody>
+            </table>
+        </div>
+
+        <div class="modal-actions mt-4">
+            <button class="btn btn-secondary" onclick="closePreviewModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="commitImport()">Confirm & Save</button>
+        </div>
+    </div>
+</div>
+{{end}}
+
 {{define "scripts"}}
     <script src="vs.js"></script>
 {{end}}

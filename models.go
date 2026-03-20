@@ -413,3 +413,25 @@ type CredentialUpdateRequest struct {
 	ServiceName string `json:"service_name"`
 	Secret      string `json:"secret"`
 }
+
+// --- Import Payloads ---
+
+type VSImportPreviewResponse struct {
+	Matched    []VSImportRow `json:"matched"`
+	Unresolved []VSImportRow `json:"unresolved"`
+}
+
+type VSImportRow struct {
+	OriginalName  string         `json:"original_name"`
+	MatchedMember *Member        `json:"matched_member,omitempty"`
+	MatchType     string         `json:"match_type"` // 'exact', 'personal_alias', 'global_alias', 'none'
+	UpdatedFields map[string]int `json:"updated_fields"`
+	Total         *int           `json:"total,omitempty"`
+	CalculatedSat bool           `json:"calculated_sat"`
+	Error         string         `json:"error,omitempty"`
+}
+
+type VSImportCommitRequest struct {
+	WeekDate string        `json:"week_date"`
+	Records  []VSImportRow `json:"records"`
+}
