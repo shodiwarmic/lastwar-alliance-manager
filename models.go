@@ -431,7 +431,14 @@ type VSImportRow struct {
 	Error         string         `json:"error,omitempty"`
 }
 
+type NewAliasMapping struct {
+	FailedAlias string `json:"failed_alias"`
+	MemberID    int    `json:"member_id"`
+	IsGlobal    bool   `json:"is_global"`
+}
+
 type VSImportCommitRequest struct {
-	WeekDate string        `json:"week_date"`
-	Records  []VSImportRow `json:"records"`
+	WeekDate    string            `json:"week_date"`
+	Records     []VSImportRow     `json:"records"`
+	SaveAliases []NewAliasMapping `json:"save_aliases"`
 }

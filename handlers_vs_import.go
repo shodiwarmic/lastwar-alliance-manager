@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -173,6 +174,13 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 }
 
 func commitCSVImport(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID, ok := session.Values["user_id"].(int)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var req VSImportCommitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -187,16 +195,19 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	successCount := 0
+	aliasCount := 0
+	var dbErrors []string
+
+	// 1. Process VS Points Records
 	for _, row := range req.Records {
 		if row.MatchedMember == nil || row.MatchedMember.ID == 0 {
-			continue // Skip truly unresolved
+			continue
 		}
 
 		var existingID int
 		err := tx.QueryRow("SELECT id FROM vs_points WHERE member_id = ? AND week_date = ?", row.MatchedMember.ID, req.WeekDate).Scan(&existingID)
 
 		if err == sql.ErrNoRows {
-			// Insert new record with provided fields
 			cols := []string{"member_id", "week_date"}
 			vals := []interface{}{row.MatchedMember.ID, req.WeekDate}
 			placeholders := []string{"?", "?"}
@@ -210,7 +221,6 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 			query := "INSERT INTO vs_points (" + strings.Join(cols, ", ") + ", updated_at) VALUES (" + strings.Join(placeholders, ", ") + ", CURRENT_TIMESTAMP)"
 			_, err = tx.Exec(query, vals...)
 		} else {
-			// Update existing record
 			var updates []string
 			var vals []interface{}
 			for day, val := range row.UpdatedFields {
@@ -226,6 +236,43 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 
 		if err == nil {
 			successCount++
+		} else {
+			dbErrors = append(dbErrors, fmt.Sprintf("Points Error (%s): %v", row.OriginalName, err))
+		}
+	}
+
+	// 2. Process Saved Aliases
+	aliasesReceived := len(req.SaveAliases)
+
+	for _, aliasReq := range req.SaveAliases {
+		if aliasReq.IsGlobal {
+			// Global Alias: Wipe out any existing personal or global aliases with this exact string
+			_, err := tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?)", aliasReq.FailedAlias)
+			if err != nil {
+				dbErrors = append(dbErrors, fmt.Sprintf("Failed to clean old aliases for '%s': %v", aliasReq.FailedAlias, err))
+			}
+
+			// Insert the new Global Alias (user_id IS NULL)
+			_, err = tx.Exec("INSERT INTO member_aliases (member_id, alias) VALUES (?, ?)", aliasReq.MemberID, aliasReq.FailedAlias)
+			if err == nil {
+				aliasCount++
+			} else {
+				dbErrors = append(dbErrors, fmt.Sprintf("Global Alias Insert Error ('%s'): %v", aliasReq.FailedAlias, err))
+			}
+		} else {
+			// Personal Alias: Wipe out ONLY this user's existing mapping for this string (if they had one)
+			_, err := tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND user_id = ?", aliasReq.FailedAlias, userID)
+			if err != nil {
+				dbErrors = append(dbErrors, fmt.Sprintf("Failed to clean personal alias for '%s': %v", aliasReq.FailedAlias, err))
+			}
+
+			// Insert the new Personal Alias mapping to the current user
+			_, err = tx.Exec("INSERT INTO member_aliases (member_id, user_id, alias) VALUES (?, ?, ?)", aliasReq.MemberID, userID, aliasReq.FailedAlias)
+			if err == nil {
+				aliasCount++
+			} else {
+				dbErrors = append(dbErrors, fmt.Sprintf("Personal Alias Insert Error ('%s'): %v", aliasReq.FailedAlias, err))
+			}
 		}
 	}
 
@@ -234,9 +281,17 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	response := map[string]interface{}{
+		"message":          fmt.Sprintf("Import successful. Updated %d records and saved %d new aliases.", successCount, aliasCount),
+		"imported":         successCount,
+		"aliases_saved":    aliasCount,
+		"aliases_received": aliasesReceived,
+	}
+
+	if len(dbErrors) > 0 {
+		response["errors"] = dbErrors
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":  "Import successful",
-		"imported": successCount,
-	})
+	json.NewEncoder(w).Encode(response)
 }
