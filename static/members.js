@@ -120,7 +120,13 @@ function updateDisplayedMembers() {
 
     // Apply Filters
     let filtered = allMembers.filter(member => {
-        const matchesSearch = member.name.toLowerCase().includes(searchTerm) || member.rank.toLowerCase().includes(searchTerm);
+        // --- NEW: Search against aliases as well as name and rank ---
+        const matchesSearch = 
+            member.name.toLowerCase().includes(searchTerm) || 
+            member.rank.toLowerCase().includes(searchTerm) ||
+            (member.global_aliases && member.global_aliases.toLowerCase().includes(searchTerm)) ||
+            (member.personal_aliases && member.personal_aliases.toLowerCase().includes(searchTerm));
+            
         const matchesEligible = !eligibleOnly || member.eligible !== false; 
 
         const matchesRank = activeRanks.includes('all') || activeRanks.includes(member.rank);
@@ -922,12 +928,18 @@ async function loadAliases() {
         }
 
         list.innerHTML = aliases.map(a => {
-            const badge = a.is_global ? 
-                `<span style="background: #e2e8f0; color: #4a5568; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">Global</span>` : 
-                `<span style="background: #bee3f8; color: #2b6cb0; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">Personal</span>`;
+            // --- NEW: Dynamic Badge Rendering based on Category ---
+            let badge = '';
+            if (a.category === 'global') {
+                badge = `<span style="background: #e2e8f0; color: #4a5568; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">Global</span>`;
+            } else if (a.category === 'personal') {
+                badge = `<span style="background: #bee3f8; color: #2b6cb0; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">Personal</span>`;
+            } else if (a.category === 'ocr') {
+                badge = `<span style="background: #fed7d7; color: #c53030; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">OCR</span>`;
+            }
             
-            // Only allow deletion if they own it, are a super admin, or it's a global tag and they are a manager
-            const canDelete = a.is_mine || window.isAdmin || (a.is_global && canManageRanks);
+            // Allow deletion if they own it (personal), are a super admin, or it's a global/ocr tag and they are a manager
+            const canDelete = a.is_mine || window.isAdmin || ((a.category === 'global' || a.category === 'ocr') && canManageRanks);
             const deleteBtn = canDelete ? `<button onclick="deleteAlias(${a.id})" style="background: none; border: none; color: #e53e3e; cursor: pointer;" title="Remove Nickname">✖</button>` : '';
 
             return `
