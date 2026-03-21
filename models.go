@@ -38,9 +38,10 @@ type Member struct {
 type Alias struct {
 	ID       int    `json:"id"`
 	MemberID int    `json:"member_id"`
-	UserID   *int   `json:"user_id,omitempty"` // Pointer so it can be null
+	UserID   *int   `json:"user_id,omitempty"`
 	Alias    string `json:"alias"`
-	IsGlobal bool   `json:"is_global"`
+	IsGlobal bool   `json:"is_global"` // Deprecated: keep for legacy compatibility if needed
+	Category string `json:"category"`  // 'global', 'personal', or 'ocr'
 }
 
 type SquadPowerHistory struct {
@@ -412,4 +413,33 @@ type WeekAwards struct {
 type CredentialUpdateRequest struct {
 	ServiceName string `json:"service_name"`
 	Secret      string `json:"secret"`
+}
+
+// --- Import Payloads ---
+
+type VSImportPreviewResponse struct {
+	Matched    []VSImportRow `json:"matched"`
+	Unresolved []VSImportRow `json:"unresolved"`
+}
+
+type VSImportRow struct {
+	OriginalName  string         `json:"original_name"`
+	MatchedMember *Member        `json:"matched_member,omitempty"`
+	MatchType     string         `json:"match_type"` // 'exact', 'personal_alias', 'global_alias', 'none'
+	UpdatedFields map[string]int `json:"updated_fields"`
+	Total         *int           `json:"total,omitempty"`
+	CalculatedSat bool           `json:"calculated_sat"`
+	Error         string         `json:"error,omitempty"`
+}
+
+type NewAliasMapping struct {
+	FailedAlias string `json:"failed_alias"`
+	MemberID    int    `json:"member_id"`
+	Category    string `json:"category"` // 'global', 'personal', or 'ocr'
+}
+
+type VSImportCommitRequest struct {
+	WeekDate    string            `json:"week_date"`
+	Records     []VSImportRow     `json:"records"`
+	SaveAliases []NewAliasMapping `json:"save_aliases"`
 }

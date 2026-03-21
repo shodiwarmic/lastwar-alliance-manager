@@ -158,6 +158,9 @@ func main() {
 	router.HandleFunc("/api/vs-points/{week}", authMiddleware(requirePermission("manage_vs_points", deleteWeekVSPoints))).Methods("DELETE")
 	router.HandleFunc("/api/vs-points/process-screenshot", authMiddleware(requirePermission("manage_vs_points", processVSPointsScreenshot))).Methods("POST")
 
+	router.HandleFunc("/api/vs-points/import/preview", authMiddleware(requirePermission("manage_members", previewCSVImport))).Methods("POST")
+	router.HandleFunc("/api/vs-points/import/commit", authMiddleware(requirePermission("manage_members", commitCSVImport))).Methods("POST")
+
 	// Dyno
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(getDynoRecommendations)).Methods("GET")
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(createDynoRecommendation)).Methods("POST")

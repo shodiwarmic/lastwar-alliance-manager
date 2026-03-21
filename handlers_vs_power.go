@@ -762,41 +762,18 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	monday := now.AddDate(0, 0, -daysFromMonday)
 	weekDate := monday.Format("2006-01-02")
 
-	// 3. Setup the Database Transaction for saving
-	tx, err := db.Begin()
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
+	// 3. Aggregate Extracted Data into Import Payload
+	tx, _ := db.Begin()
 	defer tx.Rollback()
 
-	// Pre-fetch members for fuzzy matching
-	allMembers := []struct {
-		ID   int
-		Name string
-	}{}
-	rows, err := tx.Query("SELECT id, name FROM members")
-	if err == nil {
-		for rows.Next() {
-			var m struct {
-				ID   int
-				Name string
-			}
-			if rows.Scan(&m.ID, &m.Name) == nil {
-				allMembers = append(allMembers, m)
-			}
-		}
-		rows.Close()
-	}
+	session, _ := store.Get(r, "session")
+	currentUserID, _ := session.Values["user_id"].(int)
 
-	// 4. Save Extracted Data
-	successCount := 0
-	notFoundMembers := []string{}
+	payloadMap := make(map[string]*VSImportRow)
 	var processedSummaries []string
 	seenSummaries := make(map[string]bool)
 
 	for _, group := range processedGroups {
-		// Track what we successfully parsed
 		summary := "Power Rankings"
 		if group.DataType == "vs_points" {
 			summary = fmt.Sprintf("VS Points (%s)", strings.Title(group.Day))
@@ -807,83 +784,49 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, record := range group.Records {
-			var memberID int
-			err := tx.QueryRow("SELECT id FROM members WHERE LOWER(name) = LOWER(?)", record.MemberName).Scan(&memberID)
-
-			if err != nil {
-				bestMatch := ""
-				bestMatchID := 0
-				bestScore := 0
-
-				for _, member := range allMembers {
-					score := calculateSimilarity(record.MemberName, member.Name)
-					if score > bestScore {
-						bestScore = score
-						bestMatch = member.Name
-						bestMatchID = member.ID
-					}
+			// Aggregate rows for the same original name (e.g., if parsing Mon & Tue together)
+			row, exists := payloadMap[record.MemberName]
+			if !exists {
+				row = &VSImportRow{
+					OriginalName:  record.MemberName,
+					UpdatedFields: make(map[string]int),
 				}
 
-				requiredScore := 50
-				if group.DataType == "vs_points" {
-					requiredScore = 70
-				}
-
-				if bestMatchID > 0 && bestScore >= requiredScore {
-					memberID = bestMatchID
+				// Run through the newly updated Alias Engine
+				member, matchType, err := resolveMemberAlias(tx, record.MemberName, currentUserID)
+				if err != nil {
+					row.MatchType = "unresolved"
 				} else {
-					failedCount++
-					notFoundMembers = append(notFoundMembers, record.MemberName)
-					if bestMatch != "" {
-						errors = append(errors, fmt.Sprintf("Member '%s' not found (closest: '%s' at %d%%, need %d%%+)", record.MemberName, bestMatch, bestScore, requiredScore))
-					} else {
-						errors = append(errors, fmt.Sprintf("Member '%s' not found in database", record.MemberName))
-					}
-					continue
+					row.MatchedMember = member
+					row.MatchType = matchType
 				}
+				payloadMap[record.MemberName] = row
 			}
 
-			// Execute SQL
 			if group.DataType == "vs_points" {
-				var existingID int
-				err = tx.QueryRow("SELECT id FROM vs_points WHERE member_id = ? AND week_date = ?", memberID, weekDate).Scan(&existingID)
-
-				if err == sql.ErrNoRows {
-					query := fmt.Sprintf(`INSERT INTO vs_points (member_id, week_date, %s, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`, group.Day)
-					_, err = tx.Exec(query, memberID, weekDate, record.Value)
-				} else if err == nil {
-					query := fmt.Sprintf(`UPDATE vs_points SET %s = ?, updated_at = CURRENT_TIMESTAMP WHERE member_id = ? AND week_date = ?`, group.Day)
-					_, err = tx.Exec(query, record.Value, memberID, weekDate)
-				}
+				row.UpdatedFields[group.Day] = int(record.Value)
 			} else {
-				_, err = tx.Exec("INSERT INTO power_history (member_id, power) VALUES (?, ?)", memberID, record.Value)
+				row.UpdatedFields["power"] = int(record.Value)
 			}
-
-			if err != nil {
-				failedCount++
-				errors = append(errors, fmt.Sprintf("DB Error for %s: %v", record.MemberName, err))
-				continue
-			}
-
-			successCount++
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		http.Error(w, "Failed to save records", http.StatusInternalServerError)
-		return
-	}
-
-	// 5. Return Response
-	response := map[string]interface{}{
-		"message":           fmt.Sprintf("Processed %d records successfully.", successCount),
-		"processed_groups":  processedSummaries,
-		"success_count":     successCount,
-		"failed_count":      failedCount,
-		"errors":            errors,
-		"not_found_members": notFoundMembers,
+	response := VSImportPreviewResponse{}
+	for _, row := range payloadMap {
+		if row.MatchType == "unresolved" {
+			response.Unresolved = append(response.Unresolved, *row)
+		} else {
+			response.Matched = append(response.Matched, *row)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":          fmt.Sprintf("OCR Processed successfully. Found %d matched and %d unresolved records.", len(response.Matched), len(response.Unresolved)),
+		"processed_groups": processedSummaries,
+		"matched":          response.Matched,
+		"unresolved":       response.Unresolved,
+		"week_date":        weekDate,
+		"errors":           errors,
+	})
 }

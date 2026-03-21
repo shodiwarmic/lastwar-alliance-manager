@@ -274,114 +274,6 @@ function handleSort(e) {
  * 5. CSV IMPORT & SAVE LOGIC
  */
 
-function handleCSVImport(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const text = e.target.result;
-        const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-        if (lines.length < 2) return;
-
-        const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-        
-        // Swapped strict equality (===) for .includes() to ignore CSV quotes and hidden export artifacts
-        const columnMap = {
-            name: headers.findIndex(h => h.includes('name') || h.includes('member')),
-            monday: headers.findIndex(h => h.includes('monday') || h.includes('day 1') || h.includes('day1')),
-            tuesday: headers.findIndex(h => h.includes('tuesday') || h.includes('day 2') || h.includes('day2')),
-            wednesday: headers.findIndex(h => h.includes('wednesday') || h.includes('day 3') || h.includes('day3')),
-            thursday: headers.findIndex(h => h.includes('thursday') || h.includes('day 4') || h.includes('day4')),
-            friday: headers.findIndex(h => h.includes('friday') || h.includes('day 5') || h.includes('day5')),
-            saturday: headers.findIndex(h => h.includes('saturday') || h.includes('day 6') || h.includes('day6')),
-            total: headers.findIndex(h => h.includes('total'))
-        };
-
-        if (columnMap.name === -1) {
-            alert("CSV Error: 'Name' column missing.");
-            return;
-        }
-
-        // Helper function to resolve aliases
-        const findMember = (searchName) => {
-            const lowerSearch = searchName.toLowerCase();
-            return allMembers.find(m => {
-                // Check direct name match
-                if (m.name.toLowerCase() === lowerSearch) return true;
-                
-                // Check Personal Aliases
-                if (m.personal_aliases) {
-                    const pAliases = m.personal_aliases.split(',').map(a => a.trim().toLowerCase());
-                    if (pAliases.includes(lowerSearch)) return true;
-                }
-                
-                // Check Global Aliases
-                if (m.global_aliases) {
-                    const gAliases = m.global_aliases.split(',').map(a => a.trim().toLowerCase());
-                    if (gAliases.includes(lowerSearch)) return true;
-                }
-                return false;
-            });
-        };
-
-        let importCount = 0;
-        let missingCount = 0;
-
-        for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',').map(c => c.trim());
-            const csvName = cols[columnMap.name];
-            if (!csvName) continue;
-
-            const member = findMember(csvName);
-            if (!member) {
-                missingCount++;
-                continue;
-            }
-
-            let extracted = { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0 };
-            let sum1to5 = 0;
-            let csvTotal = 0;
-
-            daysOfWeek.forEach(day => {
-                const idx = columnMap[day];
-                if (idx !== -1 && cols[idx]) {
-                    const val = parseInt(cols[idx].replace(/[^0-9]/g, '')) || 0;
-                    extracted[day] = val;
-                    if (day !== 'saturday') sum1to5 += val;
-                }
-            });
-
-            // Smart Deduction: If Saturday is missing but Total is present
-            if (columnMap.total !== -1 && cols[columnMap.total]) {
-                csvTotal = parseInt(cols[columnMap.total].replace(/[^0-9]/g, '')) || 0;
-                if (extracted.saturday === 0 && csvTotal > sum1to5) {
-                    extracted.saturday = csvTotal - sum1to5;
-                }
-            }
-
-            // Update local memory using the canonical resolved member.id
-            if (!currentVSPoints[member.id]) {
-                currentVSPoints[member.id] = { member_id: member.id, ...extracted };
-            } else {
-                Object.keys(extracted).forEach(d => {
-                    if (extracted[d] > 0) currentVSPoints[member.id][d] = extracted[d];
-                });
-            }
-            importCount++;
-        }
-        renderTable();
-        
-        let alertMsg = `Import complete: Updated ${importCount} members.`;
-        if (missingCount > 0) {
-            alertMsg += `\nWarning: ${missingCount} rows were ignored because the names/aliases could not be matched.`;
-        }
-        alert(alertMsg);
-        event.target.value = '';
-    };
-    reader.readAsText(file);
-}
-
 async function saveVSPoints() {
     const weekDate = formatDate(currentWeekDate);
     const points = allMembers.map(member => {
@@ -491,8 +383,210 @@ document.addEventListener('DOMContentLoaded', async () => {
             const fileInput = document.getElementById('csv-file-input');
             if (csvBtn && fileInput) {
                 csvBtn.addEventListener('click', () => fileInput.click());
-                fileInput.addEventListener('change', handleCSVImport);
+                fileInput.addEventListener('change', handleCSVUpload);
             }
         }
     }
 });
+
+let currentImportPayload = null;
+
+async function handleCSVUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('csv_file', file);
+    // Fixed: Use existing currentWeekDate state
+    formData.append('week_date', formatDate(currentWeekDate));
+
+    try {
+        const response = await fetch('/api/vs-points/import/preview', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+
+        currentImportPayload = await response.json();
+        renderPreviewModal(currentImportPayload);
+    } catch (error) {
+        alert('Error parsing CSV: ' + error.message);
+    }
+    
+    event.target.value = ''; // Reset input
+}
+
+function renderPreviewModal(data) {
+    const matchedBody = document.getElementById('matched-body');
+    const unresolvedBody = document.getElementById('unresolved-body');
+    
+    matchedBody.innerHTML = '';
+    unresolvedBody.innerHTML = '';
+    
+    document.getElementById('matched-count').textContent = data.matched?.length || 0;
+    document.getElementById('unresolved-count').textContent = data.unresolved?.length || 0;
+
+    // Render Matched
+    if (data.matched) {
+        data.matched.forEach(row => {
+            const updates = Object.entries(row.updated_fields)
+                .map(([day, val]) => `${day}: ${val}`)
+                .join(', ');
+            
+            let satBadge = row.calculated_sat ? '<span class="badge info">Calculated Sat</span>' : '';
+            
+            matchedBody.innerHTML += `
+                <tr>
+                    <td>${row.matched_member.name}</td>
+                    <td><span class="badge">${row.match_type}</span></td>
+                    <td>${updates} ${satBadge}</td>
+                </tr>
+            `;
+        });
+    }
+
+    // Render Unresolved
+    if (data.unresolved) {
+        // Filter out members that are already matched in this import
+        const matchedIds = (data.matched || []).map(r => r.matched_member.id);
+        const availableMembers = allMembers.filter(m => !matchedIds.includes(m.id));
+        const memberOptions = availableMembers.map(m => `<option value="${m.id}">${m.name}</option>`).join('');  
+
+        data.unresolved.forEach((row, idx) => {
+            const updates = Object.entries(row.updated_fields).map(([day, val]) => `${day}: ${val}`).join(', ');
+            
+            unresolvedBody.innerHTML += `
+                <tr data-index="${idx}">
+                    <td>${row.original_name}</td>
+                    <td>
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            <select class="member-mapper" onchange="mapUnresolved(${idx}, this.value)">
+                                <option value="">-- Ignore / Do Not Import --</option>
+                                ${memberOptions}
+                            </select>
+                            <select class="alias-saver" id="alias-save-${idx}" disabled style="font-size: 0.85em;">
+                                <option value="">Do not save alias</option>
+                                <option value="global">Save as Global Alias</option>
+                                <option value="personal">Save as Personal Alias</option>
+                            </select>
+                        </div>
+                    </td>
+                    <td>${updates}</td>
+                </tr>
+            `;
+        });
+    }
+
+    document.getElementById('import-preview-modal').classList.remove('hidden');
+}
+
+function mapUnresolved(unresolvedIndex, memberId) {
+    const row = currentImportPayload.unresolved[unresolvedIndex];
+    const aliasSelect = document.getElementById(`alias-save-${unresolvedIndex}`);
+    const updatesCell = document.querySelector(`#unresolved-body tr[data-index="${unresolvedIndex}"] td:last-child`);
+    
+    // Handle Un-selecting a member
+    if (!memberId) {
+        row.matched_member = null;
+        aliasSelect.disabled = true;
+        aliasSelect.value = "";
+        
+        // Revert calculation if we previously added it
+        if (row.calculated_sat) {
+            delete row.updated_fields.saturday;
+            row.calculated_sat = false;
+        }
+    } else {
+        // Handle Selecting a member
+        const member = allMembers.find(m => m.id == memberId);
+        row.matched_member = member;
+        aliasSelect.disabled = false;
+
+        // Dynamically calculate Saturday if Total is provided but Saturday is missing
+        if (row.total !== undefined && row.total !== null && row.updated_fields.saturday === undefined) {
+            const p = currentVSPoints[memberId] || {}; // Existing DB points from frontend state
+            
+            // Get the value from the CSV upload, or fallback to their existing DB value
+            const getVal = (day) => row.updated_fields[day] !== undefined ? row.updated_fields[day] : (parseInt(p[day]) || 0);
+
+            const sum1to5 = getVal('monday') + getVal('tuesday') + getVal('wednesday') + getVal('thursday') + getVal('friday');
+            const calcSat = row.total - sum1to5;
+
+            if (calcSat >= 0) {
+                row.updated_fields.saturday = calcSat;
+                row.calculated_sat = true;
+            }
+        }
+    }
+
+    // Refresh the UI cell to show the newly calculated Saturday
+    if (updatesCell) {
+        let updatesText = Object.entries(row.updated_fields).map(([day, val]) => `${day}: ${val}`).join(', ');
+        if (row.calculated_sat) {
+            updatesText += ' <span class="badge info">Calculated Sat</span>';
+        }
+        updatesCell.innerHTML = updatesText;
+    }
+}
+
+async function commitImport() {
+    const finalRecords = [...(currentImportPayload.matched || [])];
+    const saveAliases = [];
+    
+    if (currentImportPayload.unresolved) {
+        currentImportPayload.unresolved.forEach((row, idx) => {
+            if (row.matched_member && row.matched_member.id) {
+                finalRecords.push(row);
+                
+                const aliasSaveType = document.getElementById(`alias-save-${idx}`).value;
+                if (aliasSaveType) {
+                    saveAliases.push({
+                        failed_alias: row.original_name,
+                        member_id: row.matched_member.id,
+                        is_global: aliasSaveType === 'global'
+                    });
+                }
+            }
+        });
+    }
+
+    const payload = {
+        week_date: formatDate(currentWeekDate),
+        records: finalRecords,
+        save_aliases: saveAliases
+    };
+
+    // DEBUG: Log the payload so we can check it in the browser's developer console
+    console.log("Sending Payload:", payload);
+
+    try {
+        const response = await fetch('/api/vs-points/import/commit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+        
+        const result = await response.json();
+        
+        // Display errors if the backend caught any SQL issues
+        if (result.errors && result.errors.length > 0) {
+            console.error("Backend SQL Errors:", result.errors);
+            alert(`Backend received ${result.aliases_received} aliases to process.\n\n` + result.message + "\n\nDatabase Errors encountered:\n" + result.errors.join("\n"));
+        } else {
+            alert(`Backend received ${result.aliases_received} aliases to process.\n\n` + result.message);
+        }
+        
+        closePreviewModal();
+        loadVSPoints(); 
+    } catch (error) {
+        alert('Error saving data: ' + error.message);
+    }
+}
+
+function closePreviewModal() {
+    document.getElementById('import-preview-modal').classList.add('hidden');
+    currentImportPayload = null;
+}

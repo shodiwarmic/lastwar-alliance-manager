@@ -14,11 +14,9 @@ import (
 )
 
 func getMembers(w http.ResponseWriter, r *http.Request) {
-	// 1. Get the current user's ID from the session so we can fetch their personal aliases
 	session, _ := store.Get(r, "session")
 	userID, _ := session.Values["user_id"].(int)
 
-	// 2. Add the two alias subqueries to your existing complex query
 	query := `
 		SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
 			   COALESCE(m.squad_type, ''), COALESCE(m.troop_level, 0), COALESCE(m.profession, ''),
@@ -27,13 +25,12 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			   COALESCE((SELECT power FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_squad_power,
 			   COALESCE((SELECT recorded_at FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_squad_power_date,
 			   EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user,
-			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND user_id IS NULL), '') as global_aliases,
-			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND user_id = ?), '') as personal_aliases
+			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND category = 'global'), '') as global_aliases,
+			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND category = 'personal' AND user_id = ?), '') as personal_aliases
 		FROM members m
 		ORDER BY m.name
 	`
 
-	// 3. Pass the userID into the query to satisfy the '?' parameter
 	rows, err := db.Query(query, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -44,7 +41,6 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 	members := []Member{}
 	for rows.Next() {
 		var m Member
-		// 4. Add the two new alias fields to the end of the Scan function
 		if err := rows.Scan(
 			&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.SquadType, &m.TroopLevel,
 			&m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt,
@@ -619,7 +615,7 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 type AliasResponse struct {
 	ID       int    `json:"id"`
 	Alias    string `json:"alias"`
-	IsGlobal bool   `json:"is_global"`
+	Category string `json:"category"` // Changed from IsGlobal bool
 	IsMine   bool   `json:"is_mine"`
 }
 
@@ -628,11 +624,19 @@ func getMemberAliases(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	userID := session.Values["user_id"].(int)
 
+	// Fetch all aliases for this member (Global, OCR, and the user's specific Personal aliases)
 	rows, err := db.Query(`
-		SELECT id, alias, user_id IS NULL as is_global, user_id = ? as is_mine
+		SELECT id, alias, category, user_id = ? as is_mine
 		FROM member_aliases
-		WHERE member_id = ? AND (user_id IS NULL OR user_id = ?)
-		ORDER BY is_global DESC, alias ASC
+		WHERE member_id = ? AND (category != 'personal' OR user_id = ?)
+		ORDER BY 
+			CASE category 
+				WHEN 'personal' THEN 1 
+				WHEN 'global' THEN 2 
+				WHEN 'ocr' THEN 3 
+				ELSE 4 
+			END ASC, 
+			alias ASC
 	`, userID, memberID, userID)
 
 	if err != nil {
@@ -644,7 +648,7 @@ func getMemberAliases(w http.ResponseWriter, r *http.Request) {
 	var aliases []AliasResponse
 	for rows.Next() {
 		var a AliasResponse
-		rows.Scan(&a.ID, &a.Alias, &a.IsGlobal, &a.IsMine)
+		rows.Scan(&a.ID, &a.Alias, &a.Category, &a.IsMine)
 		aliases = append(aliases, a)
 	}
 
@@ -658,7 +662,6 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 	userID := session.Values["user_id"].(int)
 	isAdmin, _ := session.Values["is_admin"].(bool)
 
-	// Check if user is an Admin OR has the 'manage_members' permission
 	canManageGlobal := isAdmin
 	if !canManageGlobal {
 		_ = db.QueryRow(`
@@ -672,7 +675,7 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Alias    string `json:"alias"`
-		IsGlobal bool   `json:"is_global"`
+		IsGlobal bool   `json:"is_global"` // UI still sends a boolean for simplicity
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 
@@ -688,9 +691,9 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	if req.IsGlobal {
-		_, err = db.Exec("INSERT INTO member_aliases (member_id, user_id, alias) VALUES (?, NULL, ?)", memberID, req.Alias)
+		_, err = db.Exec("INSERT INTO member_aliases (member_id, category, alias) VALUES (?, 'global', ?)", memberID, req.Alias)
 	} else {
-		_, err = db.Exec("INSERT INTO member_aliases (member_id, user_id, alias) VALUES (?, ?, ?)", memberID, userID, req.Alias)
+		_, err = db.Exec("INSERT INTO member_aliases (member_id, user_id, category, alias) VALUES (?, ?, 'personal', ?)", memberID, userID, req.Alias)
 	}
 
 	if err != nil {
@@ -717,19 +720,20 @@ func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 		`, userID).Scan(&canManageGlobal)
 	}
 
+	var category string
 	var ownerID *int
-	err := db.QueryRow("SELECT user_id FROM member_aliases WHERE id = ?", aliasID).Scan(&ownerID)
+	err := db.QueryRow("SELECT category, user_id FROM member_aliases WHERE id = ?", aliasID).Scan(&category, &ownerID)
 	if err != nil {
 		http.Error(w, "Alias not found", http.StatusNotFound)
 		return
 	}
 
-	// Security Check: Admins can delete anything. Managers can delete global + their own. Regular users can only delete their own.
-	if ownerID == nil && !canManageGlobal {
-		http.Error(w, "Only administrators or roster managers can delete global aliases", http.StatusForbidden)
+	// Security Check
+	if (category == "global" || category == "ocr") && !canManageGlobal {
+		http.Error(w, "Only administrators or roster managers can delete global/ocr aliases", http.StatusForbidden)
 		return
 	}
-	if ownerID != nil && *ownerID != userID && !isAdmin {
+	if category == "personal" && ownerID != nil && *ownerID != userID && !isAdmin {
 		http.Error(w, "You can only delete your own personal aliases", http.StatusForbidden)
 		return
 	}
