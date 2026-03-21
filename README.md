@@ -10,9 +10,9 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Password Security Lifecycle**: Enforce password expiration dates, track password history to prevent reuse, and trigger forced password resets.
 - **Customizable Login Banner**: Server-Side Rendered (SSR) login screen messaging configurable by Admins/R5s.
 - **Role-Based Permissions**: Granular access levels governed by a dynamic, admin-controlled permissions matrix (e.g., toggling who can manage the roster, view analytics, or see anonymous feedback authors).
-- **Alias & Nickname Engine**: Assign personal nicknames or authoritative global aliases to commanders. The system automatically preserves legacy names as global aliases when a member rebrands, ensuring continuous data tracking.
+- **Categorized Alias Engine**: Assign personal nicknames or authoritative global aliases to commanders. The system utilizes a strict hierarchy (Exact -> Personal -> Global -> OCR) to resolve identities during imports. Background `ocr` aliases keep machine-read corrections hidden from standard user searches.
 - **Self-Service Profiles**: Users securely linked to an in-game commander can update their own stats, HQ level, and squad power through a rule-enforced dashboard.
-- **Dynamic CSV Import**: Upload roster CSVs with any column order. Automatically maps Username, Rank, Power, and Level. Intelligently resolves aliases to canonical profiles, preventing duplicate account creation.
+- **Smart CSV Ingestion**: Upload VS Points or roster CSVs with dynamic column mapping. Features a backend-driven "Preview & Confirm" modal allowing administrators to validate data, calculate missing values (e.g., deducing Saturday from Weekly Totals), and manually map unresolved names before committing.
 - **Advanced Player Stats**: Track optional fields including Player Profession and Troop Levels (dynamically validated against configurable HQ Level caps).
 
 ### 📈 Analytics & Activity Dashboard
@@ -40,7 +40,7 @@ Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** conta
 - **Automated Data Extraction**: Drag and drop up to 100 game screenshots at once to automatically extract VS Points or Power updates using Google Cloud Vision Document AI.
 - **Intelligent Pipeline**: The system automatically detects the screenshot type by analyzing colored UI tabs, groups them into buckets, and dynamically stitches them into vertical towers to bypass API limits and retain razor-sharp text.
 - **Hybrid State Machine Parsing**: Overcomes vertical text-flow layout issues natively by intelligently pairing player names with valid scores while filtering out UI noise.
-- **Fuzzy Member Matching**: Automatically matches OCR text to database members by cross-referencing primary names, global aliases, and your personal nicknames.
+- **Validation UI & Machine Learning**: OCR results are held in a "Preview & Confirm" modal. Administrators can manually map unresolved scans to existing members and save the pairing as an `ocr` alias, teaching the system to automatically correct that specific visual artifact in all future uploads.
 - See [image_recognition.md](image_recognition.md) for detailed technical documentation.
 
 ---

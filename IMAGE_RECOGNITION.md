@@ -40,11 +40,15 @@ Because GCP Document AI often reads data vertically (straight down a column) rat
 2.  **Number Routing:** If it sees a massive number (e.g., `45000000`), it tags it as a Value. If it sees a small number (e.g., `2`), it assumes it's a Rank Badge and ignores it.
 3.  **Entity Pairing:** It remembers the last valid String (Player Name) it saw and pairs it with the next valid Value it encounters.
 
-### Step 5: Fuzzy Matching & Database Transaction
-The extracted records are compared against the database using a Levenshtein-like similarity algorithm. 
-* **VS Points:** Requires a 70% match threshold.
-* **Power Rankings:** Requires a 50% match threshold.
-* All valid records for the entire upload batch are saved inside a single, secure SQLite database transaction.
+### Step 5: Alias Resolution & Validation UI
+The extracted records are aggregated and run through the backend Alias Engine. The system attempts to resolve each scanned name using a strict hierarchy: `Exact Name -> Personal Alias -> Global Alias -> OCR Alias`. 
+* If a match fails, the system falls back to a Levenshtein-like similarity algorithm (70% threshold for VS Points, 50% for Power).
+* The data is *not* saved immediately. Instead, a categorized JSON payload (Matched vs. Unresolved) is returned to the frontend "Preview & Confirm" modal.
+
+### Step 6: Database Commit & OCR Training
+Administrators review the proposed data in the UI. For any "Unresolved" records, the admin can manually map the scanned string to an existing member.
+* **OCR Aliases:** When an admin maps a mangled name (e.g., "M@rk" instead of "Mark"), they can save it as an `ocr` alias. This machine-read correction is strictly utilized by the background ingestion engine and explicitly hidden from standard roster searches, improving future automated imports without polluting the UI.
+* All verified records and new alias mappings are finally saved to the database inside a single, secure SQLite transaction.
 
 ## Advantages of the GCP Architecture
 
