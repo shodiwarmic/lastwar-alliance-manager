@@ -11,7 +11,8 @@ import (
 )
 
 // Helper to resolve aliases using the existing schema
-func resolveMemberAliasLegacy(tx *sql.Tx, providedName string, currentUserID int) (*Member, string, error) {
+// Replace resolveMemberAliasLegacy with this updated engine
+func resolveMemberAlias(tx *sql.Tx, providedName string, currentUserID int) (*Member, string, error) {
 	var m Member
 
 	// 1. Exact Name
@@ -20,25 +21,171 @@ func resolveMemberAliasLegacy(tx *sql.Tx, providedName string, currentUserID int
 		return &m, "exact", nil
 	}
 
-	// 2. Alias Hierarchy (Personal -> Global)
+	// 2. Alias Hierarchy (Personal -> Global -> OCR)
 	query := `
-		SELECT m.id, m.name, m.rank, a.user_id 
+		SELECT m.id, m.name, m.rank, a.category 
 		FROM member_aliases a
 		JOIN members m ON a.member_id = m.id
 		WHERE LOWER(a.alias) = LOWER(?) AND (a.user_id = ? OR a.user_id IS NULL)
-		ORDER BY a.user_id DESC -- Prioritize personal (NOT NULL) over global (NULL)
+		ORDER BY 
+			CASE a.category 
+				WHEN 'personal' THEN 1 
+				WHEN 'global' THEN 2 
+				WHEN 'ocr' THEN 3 
+				ELSE 4 
+			END ASC
 		LIMIT 1`
 
-	var aliasUserID *int
-	err = tx.QueryRow(query, providedName, currentUserID).Scan(&m.ID, &m.Name, &m.Rank, &aliasUserID)
+	var category string
+	err = tx.QueryRow(query, providedName, currentUserID).Scan(&m.ID, &m.Name, &m.Rank, &category)
 	if err == nil {
-		if aliasUserID != nil {
-			return &m, "personal_alias", nil
-		}
-		return &m, "global_alias", nil
+		return &m, category + "_alias", nil
 	}
 
 	return nil, "none", sql.ErrNoRows
+}
+
+// Update commitCSVImport to handle Power and the new Category string
+func commitCSVImport(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID, ok := session.Values["user_id"].(int)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req VSImportCommitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	successCount := 0
+	aliasCount := 0
+	var dbErrors []string
+
+	// 1. Process Records (VS Points & Power)
+	for _, row := range req.Records {
+		if row.MatchedMember == nil || row.MatchedMember.ID == 0 {
+			continue
+		}
+
+		hasVSPoints := false
+		var powerVal int
+		hasPower := false
+
+		// Separate power from VS points
+		for day, val := range row.UpdatedFields {
+			if day == "power" {
+				hasPower = true
+				powerVal = val
+			} else {
+				hasVSPoints = true
+			}
+		}
+
+		// Save Power Record
+		if hasPower {
+			_, err = tx.Exec("INSERT INTO power_history (member_id, power) VALUES (?, ?)", row.MatchedMember.ID, powerVal)
+			if err != nil {
+				dbErrors = append(dbErrors, fmt.Sprintf("Power Error (%s): %v", row.OriginalName, err))
+			} else {
+				successCount++
+			}
+		}
+
+		// Save VS Points Record
+		if hasVSPoints {
+			var existingID int
+			err := tx.QueryRow("SELECT id FROM vs_points WHERE member_id = ? AND week_date = ?", row.MatchedMember.ID, req.WeekDate).Scan(&existingID)
+
+			var vsErr error
+			if err == sql.ErrNoRows {
+				cols, placeholders := []string{"member_id", "week_date"}, []string{"?", "?"}
+				vals := []interface{}{row.MatchedMember.ID, req.WeekDate}
+
+				for day, val := range row.UpdatedFields {
+					if day == "power" {
+						continue
+					}
+					cols = append(cols, day)
+					vals = append(vals, val)
+					placeholders = append(placeholders, "?")
+				}
+
+				query := "INSERT INTO vs_points (" + strings.Join(cols, ", ") + ", updated_at) VALUES (" + strings.Join(placeholders, ", ") + ", CURRENT_TIMESTAMP)"
+				_, vsErr = tx.Exec(query, vals...)
+			} else {
+				var updates []string
+				var vals []interface{}
+				for day, val := range row.UpdatedFields {
+					if day == "power" {
+						continue
+					}
+					updates = append(updates, day+" = ?")
+					vals = append(vals, val)
+				}
+				if len(updates) > 0 {
+					vals = append(vals, row.MatchedMember.ID, req.WeekDate)
+					query := "UPDATE vs_points SET " + strings.Join(updates, ", ") + ", updated_at = CURRENT_TIMESTAMP WHERE member_id = ? AND week_date = ?"
+					_, vsErr = tx.Exec(query, vals...)
+				}
+			}
+
+			if vsErr != nil {
+				dbErrors = append(dbErrors, fmt.Sprintf("VS Points Error (%s): %v", row.OriginalName, vsErr))
+			} else if !hasPower {
+				successCount++
+			}
+		}
+	}
+
+	// 2. Process Saved Aliases
+	aliasesReceived := len(req.SaveAliases)
+	for _, aliasReq := range req.SaveAliases {
+		if aliasReq.Category == "global" || aliasReq.Category == "ocr" {
+			tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?)", aliasReq.FailedAlias)
+			_, err = tx.Exec("INSERT INTO member_aliases (member_id, category, alias) VALUES (?, ?, ?)", aliasReq.MemberID, aliasReq.Category, aliasReq.FailedAlias)
+			if err == nil {
+				aliasCount++
+			} else {
+				dbErrors = append(dbErrors, fmt.Sprintf("Alias Insert Error: %v", err))
+			}
+		} else if aliasReq.Category == "personal" {
+			tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND user_id = ?", aliasReq.FailedAlias, userID)
+			_, err = tx.Exec("INSERT INTO member_aliases (member_id, user_id, category, alias) VALUES (?, ?, 'personal', ?)", aliasReq.MemberID, userID, aliasReq.FailedAlias)
+			if err == nil {
+				aliasCount++
+			} else {
+				dbErrors = append(dbErrors, fmt.Sprintf("Alias Insert Error: %v", err))
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "Failed to save changes", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"message":          fmt.Sprintf("Import successful. Saved data for %d members and registered %d new aliases.", successCount, aliasCount),
+		"imported":         successCount,
+		"aliases_saved":    aliasCount,
+		"aliases_received": aliasesReceived,
+	}
+
+	if len(dbErrors) > 0 {
+		response["errors"] = dbErrors
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func previewCSVImport(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +277,7 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 			importRow.Total = providedTotal
 		}
 
-		member, matchType, err := resolveMemberAliasLegacy(tx, providedName, currentUserID)
+		member, matchType, err := resolveMemberAlias(tx, providedName, currentUserID)
 		if err != nil {
 			importRow.MatchType = "unresolved"
 			response.Unresolved = append(response.Unresolved, importRow)
@@ -167,129 +314,6 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		response.Matched = append(response.Matched, importRow)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func commitCSVImport(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, ok := session.Values["user_id"].(int)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	var req VSImportCommitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	successCount := 0
-	aliasCount := 0
-	var dbErrors []string
-
-	// 1. Process VS Points Records
-	for _, row := range req.Records {
-		if row.MatchedMember == nil || row.MatchedMember.ID == 0 {
-			continue
-		}
-
-		var existingID int
-		err := tx.QueryRow("SELECT id FROM vs_points WHERE member_id = ? AND week_date = ?", row.MatchedMember.ID, req.WeekDate).Scan(&existingID)
-
-		if err == sql.ErrNoRows {
-			cols := []string{"member_id", "week_date"}
-			vals := []interface{}{row.MatchedMember.ID, req.WeekDate}
-			placeholders := []string{"?", "?"}
-
-			for day, val := range row.UpdatedFields {
-				cols = append(cols, day)
-				vals = append(vals, val)
-				placeholders = append(placeholders, "?")
-			}
-
-			query := "INSERT INTO vs_points (" + strings.Join(cols, ", ") + ", updated_at) VALUES (" + strings.Join(placeholders, ", ") + ", CURRENT_TIMESTAMP)"
-			_, err = tx.Exec(query, vals...)
-		} else {
-			var updates []string
-			var vals []interface{}
-			for day, val := range row.UpdatedFields {
-				updates = append(updates, day+" = ?")
-				vals = append(vals, val)
-			}
-			if len(updates) > 0 {
-				vals = append(vals, row.MatchedMember.ID, req.WeekDate)
-				query := "UPDATE vs_points SET " + strings.Join(updates, ", ") + ", updated_at = CURRENT_TIMESTAMP WHERE member_id = ? AND week_date = ?"
-				_, err = tx.Exec(query, vals...)
-			}
-		}
-
-		if err == nil {
-			successCount++
-		} else {
-			dbErrors = append(dbErrors, fmt.Sprintf("Points Error (%s): %v", row.OriginalName, err))
-		}
-	}
-
-	// 2. Process Saved Aliases
-	aliasesReceived := len(req.SaveAliases)
-
-	for _, aliasReq := range req.SaveAliases {
-		if aliasReq.IsGlobal {
-			// Global Alias: Wipe out any existing personal or global aliases with this exact string
-			_, err := tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?)", aliasReq.FailedAlias)
-			if err != nil {
-				dbErrors = append(dbErrors, fmt.Sprintf("Failed to clean old aliases for '%s': %v", aliasReq.FailedAlias, err))
-			}
-
-			// Insert the new Global Alias (user_id IS NULL)
-			_, err = tx.Exec("INSERT INTO member_aliases (member_id, alias) VALUES (?, ?)", aliasReq.MemberID, aliasReq.FailedAlias)
-			if err == nil {
-				aliasCount++
-			} else {
-				dbErrors = append(dbErrors, fmt.Sprintf("Global Alias Insert Error ('%s'): %v", aliasReq.FailedAlias, err))
-			}
-		} else {
-			// Personal Alias: Wipe out ONLY this user's existing mapping for this string (if they had one)
-			_, err := tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND user_id = ?", aliasReq.FailedAlias, userID)
-			if err != nil {
-				dbErrors = append(dbErrors, fmt.Sprintf("Failed to clean personal alias for '%s': %v", aliasReq.FailedAlias, err))
-			}
-
-			// Insert the new Personal Alias mapping to the current user
-			_, err = tx.Exec("INSERT INTO member_aliases (member_id, user_id, alias) VALUES (?, ?, ?)", aliasReq.MemberID, userID, aliasReq.FailedAlias)
-			if err == nil {
-				aliasCount++
-			} else {
-				dbErrors = append(dbErrors, fmt.Sprintf("Personal Alias Insert Error ('%s'): %v", aliasReq.FailedAlias, err))
-			}
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		http.Error(w, "Failed to save changes", http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]interface{}{
-		"message":          fmt.Sprintf("Import successful. Updated %d records and saved %d new aliases.", successCount, aliasCount),
-		"imported":         successCount,
-		"aliases_saved":    aliasCount,
-		"aliases_received": aliasesReceived,
-	}
-
-	if len(dbErrors) > 0 {
-		response["errors"] = dbErrors
 	}
 
 	w.Header().Set("Content-Type", "application/json")

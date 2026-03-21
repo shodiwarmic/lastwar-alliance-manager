@@ -161,11 +161,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                          </ul>`;
             }
             
+            // NEW SUCCESS LOGIC
+            currentImportPayload = result;
+            currentWeekDate = result.week_date; // Capture the calculated week_date from the server
+            
+            // Show any hard OCR chunking errors before popping the modal
             if (result.errors && result.errors.length > 0) {
-                html += `<br><br><strong>Issues:</strong><br><div style="max-height: 200px; overflow-y: auto; margin-top: 5px;">${result.errors.join('<br>')}</div>`;
-            } else if (result.not_found_members && result.not_found_members.length > 0) {
-                html += `<br><br><strong>Issues:</strong><br>${result.not_found_members.length} members not found in database.`;
+                showResult(`⚠️ OCR Warning: <br>${result.errors.join('<br>')}`, 'error');
+            } else {
+                showResult(`✅ OCR Complete. Please review the extracted data in the popup.`, 'success');
             }
+            
+            renderPreviewModal(result);
             
             html += '</div>';
             document.getElementById('result-container').innerHTML = html;
@@ -215,3 +222,155 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('Failed to check backend configuration:', error);
     }
 });
+
+let allMembers = [];
+let currentImportPayload = null;
+let currentWeekDate = null;
+
+// Fetch members on load so the dropdowns have data
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const response = await fetch('/api/members');
+        allMembers = await response.json();
+    } catch (error) {
+        console.error('Error loading members:', error);
+    }
+});
+
+function renderPreviewModal(data) {
+    const matchedBody = document.getElementById('matched-body');
+    const unresolvedBody = document.getElementById('unresolved-body');
+    
+    matchedBody.innerHTML = '';
+    unresolvedBody.innerHTML = '';
+    
+    document.getElementById('matched-count').textContent = data.matched?.length || 0;
+    document.getElementById('unresolved-count').textContent = data.unresolved?.length || 0;
+
+    if (data.matched) {
+        data.matched.forEach(row => {
+            const updates = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`).join(', ');
+            matchedBody.innerHTML += `
+                <tr>
+                    <td>${row.matched_member.name}</td>
+                    <td><span class="badge">${row.match_type}</span></td>
+                    <td>${updates}</td>
+                </tr>
+            `;
+        });
+    }
+
+    if (data.unresolved) {
+        const matchedIds = (data.matched || []).map(r => r.matched_member.id);
+        const availableMembers = allMembers.filter(m => !matchedIds.includes(m.id));
+        const memberOptions = availableMembers.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+        
+        data.unresolved.forEach((row, idx) => {
+            const updates = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`).join(', ');
+            
+            unresolvedBody.innerHTML += `
+                <tr data-index="${idx}">
+                    <td><strong>${row.original_name}</strong></td>
+                    <td>
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            <select class="member-mapper" onchange="mapUnresolved(${idx}, this.value)">
+                                <option value="">-- Ignore / Do Not Import --</option>
+                                ${memberOptions}
+                            </select>
+                            <select class="alias-saver" id="alias-save-${idx}" disabled style="font-size: 0.85em;">
+                                <option value="">Do not save alias</option>
+                                <option value="ocr">Save as OCR Alias (Background Only)</option>
+                                <option value="global">Save as Global Alias</option>
+                                <option value="personal">Save as Personal Alias</option>
+                            </select>
+                        </div>
+                    </td>
+                    <td>${updates}</td>
+                </tr>
+            `;
+        });
+    }
+
+    document.getElementById('import-preview-modal').style.display = 'flex';
+}
+
+function mapUnresolved(unresolvedIndex, memberId) {
+    const row = currentImportPayload.unresolved[unresolvedIndex];
+    const aliasSelect = document.getElementById(`alias-save-${unresolvedIndex}`);
+    
+    if (!memberId) {
+        row.matched_member = null;
+        aliasSelect.disabled = true;
+        aliasSelect.value = "";
+    } else {
+        row.matched_member = allMembers.find(m => m.id == memberId);
+        aliasSelect.disabled = false;
+        // Default to OCR alias since this originated from an image scan
+        aliasSelect.value = "ocr"; 
+    }
+}
+
+function closePreviewModal() {
+    document.getElementById('import-preview-modal').style.display = 'none';
+    currentImportPayload = null;
+}
+
+async function commitImport() {
+    const finalRecords = [...(currentImportPayload.matched || [])];
+    const saveAliases = [];
+    
+    if (currentImportPayload.unresolved) {
+        currentImportPayload.unresolved.forEach((row, idx) => {
+            if (row.matched_member && row.matched_member.id) {
+                finalRecords.push(row);
+                
+                const aliasSaveType = document.getElementById(`alias-save-${idx}`).value;
+                if (aliasSaveType) {
+                    saveAliases.push({
+                        failed_alias: row.original_name,
+                        member_id: row.matched_member.id,
+                        category: aliasSaveType
+                    });
+                }
+            }
+        });
+    }
+
+    const payload = {
+        week_date: currentWeekDate,
+        records: finalRecords,
+        save_aliases: saveAliases
+    };
+
+    try {
+        const response = await fetch('/api/vs-points/import/commit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+        
+        const result = await response.json();
+        if (result.errors && result.errors.length > 0) {
+            alert(`Backend received ${result.aliases_received} aliases.\n\n${result.message}\n\nErrors:\n${result.errors.join("\n")}`);
+        } else {
+            alert(result.message);
+        }
+        
+        closePreviewModal();
+        
+        // Clear files from uploader
+        selectedFiles = [];
+        document.getElementById('image-input').value = '';
+        document.getElementById('preview-container').style.display = 'none';
+        document.getElementById('drop-content').style.display = 'block';
+        document.getElementById('process-image-btn').style.display = 'none';
+        document.getElementById('result-container').innerHTML = '';
+        
+    } catch (error) {
+        alert('Error saving data: ' + error.message);
+    }
+}
+
+

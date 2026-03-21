@@ -69,6 +69,48 @@
 </div>
 {{end}}
 
+{{define "modals"}}
+<div id="import-preview-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content large-modal">
+        <h2>Review Smart Analysis</h2>
+        
+        <div class="preview-section">
+            <h3>Unresolved Scans <span id="unresolved-count" class="badge">0</span></h3>
+            <p class="hint">The OCR could not perfectly match these names. Map them manually and optionally save as an OCR Alias to fix future scans.</p>
+            <table id="unresolved-table" class="data-table">
+                <thead>
+                    <tr>
+                        <th>Scanned Name</th>
+                        <th>Map To Member</th>
+                        <th>Detected Data</th>
+                    </tr>
+                </thead>
+                <tbody id="unresolved-body"></tbody>
+            </table>
+        </div>
+
+        <div class="preview-section mt-4">
+            <h3>Matched Scans <span id="matched-count" class="badge">0</span></h3>
+            <table id="matched-table" class="data-table">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Match Type</th>
+                        <th>Detected Data</th>
+                    </tr>
+                </thead>
+                <tbody id="matched-body"></tbody>
+            </table>
+        </div>
+
+        <div class="modal-actions mt-4">
+            <button class="btn btn-secondary" onclick="closePreviewModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="commitImport()">Confirm & Save</button>
+        </div>
+    </div>
+</div>
+{{end}}
+
 {{define "scripts"}}
     <script src="upload.js"></script>
 {{end}}
