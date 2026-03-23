@@ -18,9 +18,10 @@ services:
       "${COLLABORA_DOMAIN}": "host-gateway"
 
   collabora:
-    # Pin to a specific release so docker compose pull can't silently
-    # break things. Update deliberately when you want to upgrade.
-    image: collabora/code:24.04.13.1
+    # Pinned by digest to v25.04.9.2 (the version currently running).
+    # To upgrade: pull collabora/code:latest, get the new digest with
+    # `docker images collabora/code --digests`, then update this line.
+    image: collabora/code@sha256:cfbf62dbed7f3a2bebeb634235c606613813a1857f85111da3a97db316029bba
     container_name: collabora
     restart: unless-stopped
     cap_add:
