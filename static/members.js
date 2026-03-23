@@ -288,7 +288,7 @@ function resetMemberForm() {
     
     const squadSection = document.getElementById('modal-squad-section');
     if (squadSection) {
-        squadSection.style.display = isSquadTrackingEnabled ? 'block' : 'none';
+        squadSection.style.display = isSquadTrackingEnabled ? 'flex' : 'none';
     }
     
     // Clear the overall power input and timestamp
@@ -508,7 +508,7 @@ window.editMember = function(id, name, rank, eligible, power = 0, powerUpdatedAt
 
     // Handle Squad Tracking Section visibility
     const squadSection = document.getElementById('modal-squad-section');
-    if (squadSection) squadSection.style.display = isSquadTrackingEnabled ? 'block' : 'none';
+    if (squadSection) squadSection.style.display = isSquadTrackingEnabled ? 'flex' : 'none';
 
     const squadTypeInput = document.getElementById('member-squad-type');
     if (squadTypeInput) squadTypeInput.value = squadType;
