@@ -1,6 +1,8 @@
 # Binaries
 alliance-manager
 alliance-manager.exe
+lastwar-alliance
+lastwar-alliance.exe
 *.exe
 *.dll
 *.so
