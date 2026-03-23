@@ -67,7 +67,14 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 		m.Eligible = true
 	}
 
-	result, err := db.Exec("INSERT INTO members (name, rank, level, eligible, squad_type, troop_level, profession) VALUES (?, ?, ?, ?, ?, ?, ?)", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession)
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec("INSERT INTO members (name, rank, level, eligible, squad_type, troop_level, profession) VALUES (?, ?, ?, ?, ?, ?, ?)", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -77,14 +84,19 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 	m.ID = int(id)
 
 	if m.Power != nil {
-		_, insertErr := db.Exec(`INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.Power)
-		if insertErr != nil {
-			log.Printf("Warning: Failed to log initial power history for member %d: %v", m.ID, insertErr)
+		if _, err := tx.Exec(`INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.Power); err != nil {
+			http.Error(w, "Failed to log initial power history", http.StatusInternalServerError)
+			return
 		}
 	}
 
 	if m.SquadPower != nil {
-		db.Exec(`INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.SquadPower)
+		tx.Exec(`INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.SquadPower)
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "Failed to save member", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -126,7 +138,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 
 	// 3. NEW: If the update succeeded and the name actually changed, save the old name as a Global Alias
 	if m.Name != "" && oldName != m.Name {
-		_, aliasErr := db.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, alias) VALUES (?, NULL, ?)", id, oldName)
+		_, aliasErr := db.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", id, oldName)
 		if aliasErr != nil {
 			log.Printf("Warning: Failed to auto-create global alias for name change (member %d): %v", id, aliasErr)
 		}
@@ -192,7 +204,8 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func importCSV(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(10 << 20)
+	r.Body = http.MaxBytesReader(w, r.Body, MaxCSVUploadSize)
+	err := r.ParseMultipartForm(MaxCSVUploadSize)
 	if err != nil {
 		http.Error(w, "Failed to parse form data", http.StatusBadRequest)
 		return

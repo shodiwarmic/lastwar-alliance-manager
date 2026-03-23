@@ -3,6 +3,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"html/template"
 	"log"
 	"log/slog"
@@ -311,10 +312,21 @@ func main() {
 	})
 
 	// 4. Initialize CSRF Protection
+	var csrfKey []byte
 	sessionKey := os.Getenv("SESSION_KEY")
-	if len(sessionKey) < 32 {
-		slog.Warn("SESSION_KEY is less than 32 bytes. Padding for CSRF.")
-		sessionKey = sessionKey + strings.Repeat("x", 32-len(sessionKey))
+	if sessionKey == "" {
+		// Dev mode: generate an ephemeral random key (sessions won't persist across restarts)
+		csrfKey = make([]byte, 32)
+		if _, err := rand.Read(csrfKey); err != nil {
+			slog.Error("Failed to generate ephemeral CSRF key", "error", err)
+			os.Exit(1)
+		}
+		slog.Warn("SESSION_KEY not set; using ephemeral CSRF key")
+	} else if len(sessionKey) < MinSessionKeyLen {
+		slog.Error("SESSION_KEY must be at least 32 characters", "length", len(sessionKey))
+		os.Exit(1)
+	} else {
+		csrfKey = []byte(sessionKey[:32])
 	}
 
 	// Base CSRF options
@@ -334,7 +346,7 @@ func main() {
 		slog.Info("Added trusted origins for CSRF", "origins", origins)
 	}
 
-	csrfMiddleware := csrf.Protect([]byte(sessionKey[:32]), csrfOpts...)
+	csrfMiddleware := csrf.Protect(csrfKey, csrfOpts...)
 
 	// Create the protected router handler
 	protectedHandler := csrfMiddleware(router)

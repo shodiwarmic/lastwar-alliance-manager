@@ -205,7 +205,8 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 
 // previewCSVImport processes uploaded CSV files and maps them to the existing alias engine
 func previewCSVImport(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(10 << 20)
+	r.Body = http.MaxBytesReader(w, r.Body, MaxCSVUploadSize)
+	err := r.ParseMultipartForm(MaxCSVUploadSize)
 	if err != nil {
 		http.Error(w, "Unable to parse form", http.StatusBadRequest)
 		return

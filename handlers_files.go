@@ -81,7 +81,8 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	userID := session.Values["user_id"].(int)
 
-	err := r.ParseMultipartForm(50 << 20) // 50MB max
+	r.Body = http.MaxBytesReader(w, r.Body, MaxFileUploadSize)
+	err := r.ParseMultipartForm(MaxFileUploadSize)
 	if err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return

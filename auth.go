@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -21,6 +22,9 @@ func initSessionStore() {
 	sessionKey := os.Getenv("SESSION_KEY")
 	if sessionKey == "" {
 		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			log.Fatal("Failed to generate random session key: ", err)
+		}
 		sessionKey = hex.EncodeToString(key)
 		log.Println("WARNING: No SESSION_KEY environment variable set. Using generated key (not persistent across restarts).")
 	}
@@ -41,7 +45,7 @@ func initSessionStore() {
 
 	store.Options = &sessions.Options{
 		Path:     "/",
-		MaxAge:   86400,
+		MaxAge:   SessionMaxAge,
 		HttpOnly: true,
 		Secure:   isProduction,
 		SameSite: http.SameSiteStrictMode,
@@ -97,26 +101,27 @@ func getIPGeolocation(ip string) (*IPGeolocation, error) {
 	return &geo, nil
 }
 
-// Track login attempt in database
+// Track login attempt in database. Geolocation is resolved asynchronously so it
+// never blocks the login response.
 func trackLogin(userID int, username string, r *http.Request, success bool) {
 	ip := getClientIP(r)
 	userAgent := r.Header.Get("User-Agent")
 
-	var country, city, isp *string
+	go func() {
+		var country, city, isp *string
 
-	if geo, err := getIPGeolocation(ip); err == nil {
-		country = &geo.Country
-		city = &geo.City
-		isp = &geo.ISP
-	}
+		if geo, err := getIPGeolocation(ip); err == nil {
+			country = &geo.Country
+			city = &geo.City
+			isp = &geo.ISP
+		}
 
-	_, err := db.Exec(`INSERT INTO login_sessions (user_id, username, ip_address, user_agent, country, city, isp, success) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		userID, username, ip, userAgent, country, city, isp, success)
-
-	if err != nil {
-		log.Printf("Failed to track login: %v", err)
-	}
+		if _, err := db.Exec(`INSERT INTO login_sessions (user_id, username, ip_address, user_agent, country, city, isp, success)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			userID, username, ip, userAgent, country, city, isp, success); err != nil {
+			log.Printf("Failed to track login: %v", err)
+		}
+	}()
 }
 
 func login(w http.ResponseWriter, r *http.Request) {

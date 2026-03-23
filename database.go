@@ -23,10 +23,13 @@ func initDB() error {
 		return err
 	}
 
-	// WAL mode for concurrency
-	_, err = db.Exec("PRAGMA journal_mode=WAL;")
-	if err != nil {
-		log.Printf("Warning: Failed to enable WAL mode: %v", err)
+	// WAL mode for concurrency — QueryRow lets us verify the mode was actually applied.
+	var journalMode string
+	if err = db.QueryRow("PRAGMA journal_mode=WAL;").Scan(&journalMode); err != nil {
+		return fmt.Errorf("failed to configure WAL mode: %w", err)
+	}
+	if journalMode != "wal" {
+		log.Printf("Warning: WAL mode not enabled (got %q); performance may be degraded", journalMode)
 	}
 	db.SetMaxOpenConns(1)
 
