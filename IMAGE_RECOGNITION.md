@@ -2,83 +2,60 @@
 
 ## Overview
 
-The Alliance Manager utilizes a highly optimized, multi-threaded image processing pipeline powered by **Google Cloud Vision Document AI**. This architecture allows users to drag-and-drop up to 100 screenshots of varying types simultaneously, automatically sorting, compiling, and extracting data with near-perfect accuracy.
+The Alliance Manager utilizes a highly optimized, decoupled image processing pipeline. Heavy optical character recognition and image manipulation are offloaded to a dedicated Python microservice (**`lastwar-ocr-service`**) hosted on Google Cloud Run. This architecture allows users to drag-and-drop up to 100 screenshots simultaneously, while the Go backend securely brokers the data and resolves player aliases with near-perfect accuracy.
 
 ## The Smart Extraction Pipeline
 
-The system processes image uploads through a sequential, intelligent pipeline designed to minimize API costs while maximizing data accuracy.
+The system processes image uploads through a sequential, intelligent pipeline divided between the Go backend and the external microservice to minimize API costs and maximize data accuracy.
 
-### Step 1: Smart Bucketing (Tab Detection)
+### Step 1: Secure Microservice Invocation (Go Backend)
 ```go
-detectDayFromTabRegion(imageData) → string
+ProcessImagesViaWorker(ctx, files, workerURL) → CVWorkerResponse
 ```
-Instead of manually selecting the data type, the system analyzes the top 11% to 22% of every uploaded image. It scans specifically for pure white pixels (`RGB > 240`) across 6 horizontal column zones.
-* **Match Found:** The image is bucketed into a specific VS Points day (e.g., "monday", "wednesday").
-* **No Match:** The image is routed to the "unknown" bucket (processed as Power Rankings).
+When an admin uploads a batch of screenshots, the Go server decrypts the AES-GCM encrypted Google Service Account JSON key from its database. It uses this key to generate a secure OIDC identity token and POSTs the raw images to the protected Python microservice endpoint.
 
-### Step 2: Dynamic Vertical Stitching (Mega-pixel Chunking)
-```go
-stitchImagesVertically(imageDatas) → []byte
-```
-Google Cloud Vision has strict megapixel and aspect ratio limits. To prevent text compression and blurring:
-* The system iterates through each bucket and stacks the screenshots vertically into a single image.
-* **Dynamic Limits:** The system reads the image headers (without loading them fully into memory) and chunks the stitches so no single payload exceeds **12,000 pixels in height** or **15 images**.
-* This drastically reduces API quota usage (sending 1 image instead of 10) while maintaining razor-sharp text resolution.
+### Step 2: OpenCV UI Categorization (External Microservice)
+Instead of relying on the user to sort their uploads, the external worker mathematically analyzes the UI geometry of every screenshot:
+* **Band-Pass Masking:** It masks out everything except the 10%–25% height region of the screen, isolating the main navigation tabs and ignoring in-game scrolling marquees or yellow player rows.
+* **Geometric Filtering & Width Ratios:** It locates the active orange tab and measures its bounding box. If the tab takes up less than 42% of the screen width (a 3-tab layout), it categorizes the image as "Power Rankings". If it is ~50% (a 2-tab layout), it categorizes it as "VS Points".
+* **Sub-Tab Detection:** For VS Points, it applies a binary threshold below the orange header to find the active white weekday tab, routing the image to the correct day bucket.
 
-### Step 3: Cloud Vision API Extraction
-```go
-getGCPClient(ctx) → *vision.ImageAnnotatorClient
-```
-The server decrypts the AES-GCM encrypted Google Service Account JSON key in memory, establishes a secure gRPC connection to Google Cloud, and submits the stitched image. GCP returns a complete text representation of the image, natively reading it as a structured document/spreadsheet.
+### Step 3: Dynamic Vertical Stitching 
+Google Cloud Vision API charges per image. To drastically reduce API quota usage:
+* The microservice iterates through each categorized bucket (e.g., all "tuesday" images) and stitches them vertically into a single massive image tower.
+* This allows the system to send 1 image payload to GCP instead of 10, while maintaining razor-sharp text resolution.
 
-### Step 4: Hybrid State Machine Parsing
-```go
-parseVSPointsText(text) / parsePowerRankingsText(text) → []SmartRecord
-```
-Because GCP Document AI often reads data vertically (straight down a column) rather than horizontally, traditional regex fails. The system uses a specialized state machine:
-1.  **Junk Filtering:** Explicitly ignores UI text ("Commander", "Points", "Ranking").
-2.  **Number Routing:** If it sees a massive number (e.g., `45000000`), it tags it as a Value. If it sees a small number (e.g., `2`), it assumes it's a Rank Badge and ignores it.
-3.  **Entity Pairing:** It remembers the last valid String (Player Name) it saw and pairs it with the next valid Value it encounters.
+### Step 4: Spatial Parsing Engine
+Because standard OCR reads text left-to-right and top-to-bottom, vertical table layouts often get mangled. The worker uses a specialized spatial geometry engine to extract data:
+1. **Score Anchoring:** It searches the returned bounding boxes for valid numeric scores (Values >= 10,000).
+2. **Row-Band Clustering:** For every score found, it creates a virtual horizontal "band" to grab every word that falls within that Y-axis band to the left of the score.
+3. **Gap Detection:** It reconstructs the player's name by measuring the X-axis pixel gaps between the bounding boxes, intelligently preserving spaces in names like "Dumptruck 911" while merging fractured words.
 
-### Step 5: Alias Resolution & Validation UI
-The extracted records are aggregated and run through the backend Alias Engine. The system attempts to resolve each scanned name using a strict hierarchy: `Exact Name -> Personal Alias -> Global Alias -> OCR Alias`. 
-* If a match fails, the system falls back to a Levenshtein-like similarity algorithm (70% threshold for VS Points, 50% for Power).
-* The data is *not* saved immediately. Instead, a categorized JSON payload (Matched vs. Unresolved) is returned to the frontend "Preview & Confirm" modal.
+### Step 5: Surgical Regex Truncation
+Before returning the data to the Go backend, the worker cleans the raw strings using Regular Expressions:
+* Instantly truncates Alliance Tags by splitting the string at the first bracket (`[`).
+* Strips leading list numbers (e.g., "16 ").
+* Aggressively removes alliance badges (`R1`-`R5`) and single-character OCR hallucinations (e.g., a drop-shadow misread as a `B` or `N`).
 
-### Step 6: Database Commit & OCR Training
-Administrators review the proposed data in the UI. For any "Unresolved" records, the admin can manually map the scanned string to an existing member.
-* **OCR Aliases:** When an admin maps a mangled name (e.g., "M@rk" instead of "Mark"), they can save it as an `ocr` alias. This machine-read correction is strictly utilized by the background ingestion engine and explicitly hidden from standard roster searches, improving future automated imports without polluting the UI.
-* All verified records and new alias mappings are finally saved to the database inside a single, secure SQLite transaction.
+### Step 6: Alias Resolution & Validation UI (Go Backend)
+The microservice returns a clean JSON payload mapping categories to their extracted records. The Go server receives this and runs the names through its tiered **Alias Engine** (`Exact Name -> Personal Alias -> Global Alias -> OCR Alias`).
+* The data is *not* saved immediately. Instead, a categorized JSON payload (Matched, Unresolved, Ambiguous) is returned to the frontend "Preview & Confirm" modal.
+* **OCR Aliases:** When an admin manually maps a mangled name in the UI, they can save it as an `ocr` alias. This machine-read correction is explicitly hidden from standard roster searches but trains the Alias Engine to automatically correct that specific visual artifact in all future uploads.
 
-## Advantages of the GCP Architecture
+## Advantages of the Microservice Architecture
 
-### Before (Tesseract Local OCR) ❌
-* Required heavy C++ libraries (`libtesseract-dev`) on the host server.
-* Required fragile, manual image preprocessing (grayscale, contrast, inversion, cropping) to make text readable.
-* Struggled with background colors and light-blue player rows.
-* Required the user to manually sort uploads and specify the screenshot type.
+### Before (Monolithic Go Pipeline) ❌
+* Required heavy C++ OCR libraries or strict white-pixel logic that broke on varying phone aspect ratios.
+* Go's strict typing made spatial geometry math and image matrix manipulation incredibly verbose and difficult to maintain.
+* A crash in the OCR pipeline could potentially panic the entire web server.
 
-### After (Cloud Vision API) ✅
-* Zero local dependencies; lightweight pure-Go Docker image.
-* GCP natively ignores background colors and UI noise.
-* Automatic tab-color detection routes VS Points vs. Power Rankings flawlessly.
-* Stitching drastically reduces API calls, easily supporting 100+ image uploads in seconds.
+### After (Python Cloud Run Worker) ✅
+* **Decoupled:** The Go backend remains incredibly lightweight. The OCR worker scales automatically on Cloud Run and scales to zero when not in use.
+* **Robust Math:** Python handles matrix math, HSV color isolation, and standard deviation confidence guards effortlessly.
+* **Cost-Effective:** Vertical stitching combined with precise categorization cuts GCP Vision API costs by over 80%.
 
 ## Technical Requirements
 
-* **Google Cloud Console:** Cloud Vision API enabled.
-* **Credentials:** A Service Account JSON key must be securely uploaded via the Alliance Manager's Admin Security tab.
-* **Memory:** No special requirements. The system dynamically streams and chunks images to prevent memory spikes.
-
-## Logging & Debugging
-
-The system provides detailed tracing in the server stdout:
-
-```text
-[INFO] Image format for tab detection: png, bounds: (0,0)-(1080,2404)
-[INFO] Day detected by color: monday (confidence score: 142)
-[INFO] Processing bucket: monday with 28 images
-[INFO] Stitching sub-chunk 1 for bucket monday (10 images, ~11450px tall)
-[INFO] GCP Extracted Text (Bucket: monday): ...
-[INFO] Parsed VS Points (State Machine): dvdAlbert91 -> 50914631
-```
+* **External Service:** The `lastwar-ocr-service` must be deployed to Google Cloud Run (or a similar container host).
+* **Admin Configuration:** The Cloud Run endpoint URL must be saved in the Alliance Manager's Admin Settings dashboard.
+* **Secure Credentials:** A Google Cloud Service Account JSON key with `Cloud Vision API` and `Cloud Run Invoker` permissions must be uploaded to the Go backend.

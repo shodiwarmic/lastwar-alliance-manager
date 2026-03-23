@@ -1,6 +1,9 @@
+// /static/upload.js - Handles the image upload, preview, and processing logic for the Smart Screenshot feature
+
 const API_BASE = '/api';
 const MAX_FILES = 100;
 let selectedFiles = [];
+let manualCategories = {}; // NEW: Track manual overrides
 
 document.addEventListener('DOMContentLoaded', async () => {
     const dropZone = document.getElementById('drop-zone');
@@ -107,6 +110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         selectedFiles = [];
+        manualCategories = {}; // Reset mappings
         imageInput.value = '';
         updatePreview();
         document.getElementById('result-container').innerHTML = '';
@@ -130,17 +134,34 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formData.append('images', file);
             });
             formData.append('week', document.getElementById('vs-week').value);
+            // NEW: Append the force category selection
+            formData.append('force_category', document.getElementById('force-category').value);
             
+            // Append manual mappings if we are retrying
+            if (Object.keys(manualCategories).length > 0) {
+                formData.append('manual_categories', JSON.stringify(manualCategories));
+            }
+
             const response = await fetch(`${API_BASE}/smart-screenshot`, {
                 method: 'POST',
                 body: formData
             });
-            
+
             if (!response.ok) {
+                // Intercept the manual categorization request
+                if (response.status === 422) {
+                    const errData = await response.json();
+                    if (errData.error === "requires_manual_categorization") {
+                        renderManualCategoryUI(errData.files);
+                        processImageBtn.innerHTML = originalText;
+                        processImageBtn.disabled = false;
+                        return; // Stop the flow
+                    }
+                }
                 const error = await response.text();
                 throw new Error(error);
             }
-            
+                                    
             const result = await response.json();
             
             let html = `<div class="result-box result-success">
@@ -164,7 +185,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             // NEW SUCCESS LOGIC
             currentImportPayload = result;
             currentWeekDate = result.week_date; // Capture the calculated week_date from the server
-            
+
+            // Reset mappings after success
+            manualCategories = {};
+
             // Show any hard OCR chunking errors before popping the modal
             if (result.errors && result.errors.length > 0) {
                 showResult(`⚠️ OCR Warning: <br>${result.errors.join('<br>')}`, 'error');
@@ -206,8 +230,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (response.ok) {
             const settings = await response.json();
             
-            // 1. Check for GCP Credentials
-            if (!settings.has_gcp_credentials) {
+            // 1. Check for OCR Pipeline Readiness (both GCP credentials and CV Worker URL must be set)
+            if (!settings.ocr_pipeline_ready) {
                 document.getElementById('main-upload-container').style.display = 'none';
                 document.getElementById('missing-credentials-msg').style.display = 'block';
                 return; // Completely abort initializing the rest of the upload logic
@@ -240,63 +264,87 @@ document.addEventListener('DOMContentLoaded', async () => {
 function renderPreviewModal(data) {
     const matchedBody = document.getElementById('matched-body');
     const unresolvedBody = document.getElementById('unresolved-body');
+    // Ensure you add an <tbody id="ambiguous-body"> into your HTML modal
+    const ambiguousBody = document.getElementById('ambiguous-body'); 
     
     matchedBody.innerHTML = '';
-    unresolvedBody.innerHTML = '';
+    if(unresolvedBody) unresolvedBody.innerHTML = '';
+    if(ambiguousBody) ambiguousBody.innerHTML = '';
     
     document.getElementById('matched-count').textContent = data.matched?.length || 0;
     document.getElementById('unresolved-count').textContent = data.unresolved?.length || 0;
+    
+    // NEW: Count ambiguous if element exists
+    const ambigCountEl = document.getElementById('ambiguous-count');
+    if(ambigCountEl) ambigCountEl.textContent = data.ambiguous?.length || 0;
 
+    // --- Render Matched ---
     if (data.matched) {
         data.matched.forEach(row => {
             const updates = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`).join(', ');
             matchedBody.innerHTML += `
                 <tr>
                     <td>${row.matched_member.name}</td>
-                    <td><span class="badge">${row.match_type}</span></td>
+                    <td><span class="badge badge-success">${row.match_type}</span></td>
                     <td>${updates}</td>
                 </tr>
             `;
         });
     }
 
-    if (data.unresolved) {
-        const matchedIds = (data.matched || []).map(r => r.matched_member.id);
-        const availableMembers = allMembers.filter(m => !matchedIds.includes(m.id));
-        const memberOptions = availableMembers.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+    // Helper to generate dynamic select dropdowns
+    const generateReviewRow = (row, idx, bucketType, preSelectedId) => {
+        // Use the entire roster for every dropdown, so we can map multiple OCR hallucinations 
+        // across different screenshots to the same core member.
+        let memberOptions = allMembers.map(m => 
+            `<option value="${m.id}" ${m.id === preSelectedId ? 'selected' : ''}>${m.name}</option>`
+        ).join('');
+
+        const updates = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`).join(', ');
+        const aliasState = preSelectedId ? "" : "disabled";
         
+        return `
+            <tr data-index="${idx}" data-bucket="${bucketType}">
+                <td><strong>${row.original_name}</strong></td>
+                <td>
+                    <div style="display: flex; flex-direction: column; gap: 5px;">
+                        <select class="member-mapper" onchange="mapUnresolved('${bucketType}', ${idx}, this.value)">
+                            <option value="">-- Ignore / Do Not Import --</option>
+                            ${memberOptions}
+                        </select>
+                        <select class="alias-saver" id="alias-save-${bucketType}-${idx}" ${aliasState} style="font-size: 0.85em;">
+                            <option value="">Do not save alias</option>
+                            <option value="ocr" ${preSelectedId ? 'selected' : ''}>Save as OCR Alias</option>
+                            <option value="global">Save as Global Alias</option>
+                            <option value="personal">Save as Personal Alias</option>
+                        </select>
+                    </div>
+                </td>
+                <td>${updates}</td>
+            </tr>
+        `;
+    };
+
+    // --- Render Ambiguous ---
+    if (data.ambiguous && ambiguousBody) {
+        data.ambiguous.forEach((row, idx) => {
+            ambiguousBody.innerHTML += generateReviewRow(row, idx, 'ambiguous', row.matched_member?.id);
+        });
+    }
+
+    // --- Render Unresolved ---
+    if (data.unresolved && unresolvedBody) {
         data.unresolved.forEach((row, idx) => {
-            const updates = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`).join(', ');
-            
-            unresolvedBody.innerHTML += `
-                <tr data-index="${idx}">
-                    <td><strong>${row.original_name}</strong></td>
-                    <td>
-                        <div style="display: flex; flex-direction: column; gap: 5px;">
-                            <select class="member-mapper" onchange="mapUnresolved(${idx}, this.value)">
-                                <option value="">-- Ignore / Do Not Import --</option>
-                                ${memberOptions}
-                            </select>
-                            <select class="alias-saver" id="alias-save-${idx}" disabled style="font-size: 0.85em;">
-                                <option value="">Do not save alias</option>
-                                <option value="ocr">Save as OCR Alias (Background Only)</option>
-                                <option value="global">Save as Global Alias</option>
-                                <option value="personal">Save as Personal Alias</option>
-                            </select>
-                        </div>
-                    </td>
-                    <td>${updates}</td>
-                </tr>
-            `;
+            unresolvedBody.innerHTML += generateReviewRow(row, idx, 'unresolved', null);
         });
     }
 
     document.getElementById('import-preview-modal').style.display = 'flex';
 }
 
-function mapUnresolved(unresolvedIndex, memberId) {
-    const row = currentImportPayload.unresolved[unresolvedIndex];
-    const aliasSelect = document.getElementById(`alias-save-${unresolvedIndex}`);
+function mapUnresolved(bucketType, unresolvedIndex, memberId) {
+    const row = currentImportPayload[bucketType][unresolvedIndex];
+    const aliasSelect = document.getElementById(`alias-save-${bucketType}-${unresolvedIndex}`);
     
     if (!memberId) {
         row.matched_member = null;
@@ -305,7 +353,6 @@ function mapUnresolved(unresolvedIndex, memberId) {
     } else {
         row.matched_member = allMembers.find(m => m.id == memberId);
         aliasSelect.disabled = false;
-        // Default to OCR alias since this originated from an image scan
         aliasSelect.value = "ocr"; 
     }
 }
@@ -319,22 +366,28 @@ async function commitImport() {
     const finalRecords = [...(currentImportPayload.matched || [])];
     const saveAliases = [];
     
-    if (currentImportPayload.unresolved) {
-        currentImportPayload.unresolved.forEach((row, idx) => {
-            if (row.matched_member && row.matched_member.id) {
-                finalRecords.push(row);
-                
-                const aliasSaveType = document.getElementById(`alias-save-${idx}`).value;
-                if (aliasSaveType) {
-                    saveAliases.push({
-                        failed_alias: row.original_name,
-                        member_id: row.matched_member.id,
-                        category: aliasSaveType
-                    });
+    // Helper to process a bucket (Ambiguous or Unresolved)
+    const processBucket = (bucketType) => {
+        if (currentImportPayload[bucketType]) {
+            currentImportPayload[bucketType].forEach((row, idx) => {
+                if (row.matched_member && row.matched_member.id) {
+                    finalRecords.push(row);
+                    
+                    const aliasSaveType = document.getElementById(`alias-save-${bucketType}-${idx}`).value;
+                    if (aliasSaveType) {
+                        saveAliases.push({
+                            failed_alias: row.original_name,
+                            member_id: row.matched_member.id,
+                            category: aliasSaveType
+                        });
+                    }
                 }
-            }
-        });
-    }
+            });
+        }
+    };
+
+    processBucket('ambiguous');
+    processBucket('unresolved');
 
     const payload = {
         week_date: currentWeekDate,
@@ -373,4 +426,74 @@ async function commitImport() {
     }
 }
 
+function renderManualCategoryUI(uncategorizedFiles) {
+    let html = `
+        <div class="result-box result-error">
+            <strong>⚠️ Manual Categorization Required</strong><br>
+            <p>We couldn't auto-detect the tabs for ${uncategorizedFiles.length} image(s). Please select what they are:</p>
+            <div style="margin-top: 10px; max-height: 300px; overflow-y: auto; text-align: left;">
+    `;
+
+    uncategorizedFiles.forEach((filename) => {
+        html += `
+            <div style="margin-bottom: 10px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 5px;">
+                <strong>${filename}</strong><br>
+                <select class="manual-cat-select" data-filename="${filename}" style="width: 100%; margin-top: 5px; padding: 5px;">
+                    <option value="">-- Select Category --</option>
+                    <option value="monday">VS Points: Monday</option>
+                    <option value="tuesday">VS Points: Tuesday</option>
+                    <option value="wednesday">VS Points: Wednesday</option>
+                    <option value="thursday">VS Points: Thursday</option>
+                    <option value="friday">VS Points: Friday</option>
+                    <option value="saturday">VS Points: Saturday</option>
+                    <option value="power">Power Rankings</option>
+                    <option value="ignore">Ignore / Skip this image</option>
+                </select>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+            <button id="btn-submit-manual-cat" class="btn btn-primary" style="margin-top: 15px; width: 100%;">Save & Continue Processing</button>
+        </div>
+    `;
+
+    document.getElementById('result-container').innerHTML = html;
+
+    // Handle Retry Submission
+    document.getElementById('btn-submit-manual-cat').addEventListener('click', () => {
+        const selects = document.querySelectorAll('.manual-cat-select');
+        let allFilled = true;
+        manualCategories = {};
+
+        selects.forEach(select => {
+            if (!select.value) {
+                allFilled = false;
+                select.style.border = "2px solid red";
+            } else {
+                select.style.border = "";
+                if (select.value !== "ignore") {
+                    manualCategories[select.dataset.filename] = select.value;
+                }
+            }
+        });
+
+        if (!allFilled) {
+            alert("Please select a category for all images, or choose 'Ignore'.");
+            return;
+        }
+
+        // Remove ignored files from the payload
+        selects.forEach(select => {
+             if(select.value === "ignore") {
+                  const idx = selectedFiles.findIndex(f => f.name === select.dataset.filename);
+                  if(idx > -1) selectedFiles.splice(idx, 1);
+             }
+        });
+
+        // Trigger the upload button again with the new state
+        document.getElementById('process-image-btn').click();
+    });
+}
 

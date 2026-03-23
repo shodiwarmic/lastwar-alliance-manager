@@ -9,10 +9,10 @@
 
 {{define "content"}}
 <div id="missing-credentials-msg" style="display: none; text-align: center; padding: 60px 20px; max-width: 600px; margin: 40px auto; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color);">
-    <div style="font-size: 64px; margin-bottom: 20px;">☁️</div>
+    <div style="font-size: 64px; margin-bottom: 20px;">🔌</div>
     <h2>OCR Pipelines Disabled</h2>
     <p style="color: var(--text-muted); line-height: 1.6; font-size: 16px;">
-        Google Cloud Vision credentials have not been configured. An administrator must securely upload a Service Account JSON key via the Security tab in the System Settings to enable automated screenshot processing.
+        The computer vision pipeline is currently offline. An administrator must configure <b>both</b> the Google Cloud Vision credentials and the CV Worker routing URL in the Security Settings to enable automated screenshot processing.
     </p>
 </div>
 
@@ -29,15 +29,32 @@
             </ul>
         </div>
 
-        <div id="week-selector" style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
-            <label for="vs-week" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--text-primary);">VS Points Week (If applicable):</label>
-            <select id="vs-week" class="form-input" style="width: 100%; max-width: 400px;">
-                <option value="current">📅 Current Week</option>
-                <option value="last">📅 Last Week</option>
-            </select>
-            <p class="help-text" style="margin-top: 8px;">
-                If uploading Daily VS Points, confirm which week they belong to. (This setting is safely ignored for Power Rankings).
-            </p>
+        <div id="upload-controls" style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div id="week-selector" style="flex: 1; padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
+                <label for="vs-week" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--text-primary);">VS Points Week:</label>
+                <select id="vs-week" class="form-input" style="width: 100%;">
+                    <option value="current">📅 Current Week</option>
+                    <option value="last">📅 Last Week</option>
+                </select>
+                <p class="help-text" style="margin-top: 8px; font-size: 0.85em;">Only applies to VS Points.</p>
+            </div>
+            
+            <div id="category-selector" style="flex: 1; padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
+                <label for="force-category" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--text-primary);">Image Category:</label>
+                <select id="force-category" class="form-input" style="width: 100%;">
+                    <option value="auto">🤖 Auto-Detect (Smart Sorting)</option>
+                    <option value="total">📊 Force: Weekly Total (Auto-Calculates Sat)</option>
+                    <option value="power">⚡ Force: Power Rankings</option>
+                    <option disabled>──────────</option>
+                    <option value="monday">📅 Force: Monday</option>
+                    <option value="tuesday">📅 Force: Tuesday</option>
+                    <option value="wednesday">📅 Force: Wednesday</option>
+                    <option value="thursday">📅 Force: Thursday</option>
+                    <option value="friday">📅 Force: Friday</option>
+                    <option value="saturday">📅 Force: Saturday</option>
+                </select>
+                <p class="help-text" style="margin-top: 8px; font-size: 0.85em;">Bypass auto-detection for specific uploads.</p>
+            </div>
         </div>
         
         <p class="help-text">Upload up to 100 screenshots at once.</p>

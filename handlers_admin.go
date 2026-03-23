@@ -447,18 +447,20 @@ func createUserForMember(w http.ResponseWriter, r *http.Request) {
 func getSettings(w http.ResponseWriter, r *http.Request) {
 	var s Settings
 
+	// ADDED: COALESCE(cv_worker_url, '') to the end of the SELECT
 	err := db.QueryRow(`SELECT 
-		id, award_first_points, award_second_points, award_third_points, 
-		recommendation_points, recent_conductor_penalty_days, 
-		above_average_conductor_penalty, r4r5_rank_boost, 
-		first_time_conductor_boost, schedule_message_template, 
-		daily_message_template, power_tracking_enabled,
-		COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''), COALESCE(max_hq_level, 35) as max_hq_level,
-		COALESCE(pwd_min_length, 12), COALESCE(pwd_require_special, 0), 
-		COALESCE(pwd_require_upper, 0), COALESCE(pwd_require_lower, 0), 
-		COALESCE(pwd_require_number, 0), COALESCE(pwd_history_count, 4), 
-		COALESCE(pwd_validity_days, 180), COALESCE(squad_tracking_enabled, 0)
-		FROM settings WHERE id = 1`).Scan(
+        id, award_first_points, award_second_points, award_third_points, 
+        recommendation_points, recent_conductor_penalty_days, 
+        above_average_conductor_penalty, r4r5_rank_boost, 
+        first_time_conductor_boost, schedule_message_template, 
+        daily_message_template, power_tracking_enabled,
+        COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''), COALESCE(max_hq_level, 35) as max_hq_level,
+        COALESCE(pwd_min_length, 12), COALESCE(pwd_require_special, 0), 
+        COALESCE(pwd_require_upper, 0), COALESCE(pwd_require_lower, 0), 
+        COALESCE(pwd_require_number, 0), COALESCE(pwd_history_count, 4), 
+        COALESCE(pwd_validity_days, 180), COALESCE(squad_tracking_enabled, 0),
+        COALESCE(cv_worker_url, '') 
+        FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.AwardFirstPoints, &s.AwardSecondPoints, &s.AwardThirdPoints,
 		&s.RecommendationPoints, &s.RecentConductorPenaltyDays,
 		&s.AboveAverageConductorPenalty, &s.R4R5RankBoost,
@@ -468,6 +470,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.PwdMinLength, &s.PwdRequireSpecial, &s.PwdRequireUpper,
 		&s.PwdRequireLower, &s.PwdRequireNumber, &s.PwdHistoryCount, &s.PwdValidityDays,
 		&s.SquadTrackingEnabled,
+		&s.CVWorkerURL, // ADDED: Scan the new URL field
 	)
 
 	if err != nil {
@@ -475,19 +478,21 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NEW: Check if the GCP Vision credentials exist
-	var hasGCP bool
-	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCP)
+	// Check if the GCP Vision credentials physically exist in the database
+	var hasGCPKey bool
+	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCPKey)
 
-	// Wrap the standard settings struct with our new boolean
+	// Wrap the standard settings struct with our status booleans
 	type extendedSettings struct {
 		Settings               // Embeds your existing struct fields automatically
 		HasGCPCredentials bool `json:"has_gcp_credentials"`
+		OCRPipelineReady  bool `json:"ocr_pipeline_ready"`
 	}
 
 	response := extendedSettings{
 		Settings:          s,
-		HasGCPCredentials: hasGCP,
+		HasGCPCredentials: hasGCPKey,
+		OCRPipelineReady:  hasGCPKey && s.CVWorkerURL != "", // Requires BOTH to be true
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -622,6 +627,31 @@ func updatePasswordPolicy(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Password policy updated successfully"})
+}
+
+func updateCVWorkerURL(w http.ResponseWriter, r *http.Request) {
+	var p struct {
+		CVWorkerURL string `json:"cv_worker_url"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Clean up the URL to prevent trailing slash routing issues
+	cleanURL := strings.TrimSpace(p.CVWorkerURL)
+	cleanURL = strings.TrimRight(cleanURL, "/")
+
+	_, err := db.Exec("UPDATE settings SET cv_worker_url = ? WHERE id = 1", cleanURL)
+
+	if err != nil {
+		http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Microservice routing updated successfully"})
 }
 
 // Admin: Delete an external API credential
