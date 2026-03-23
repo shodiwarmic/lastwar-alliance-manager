@@ -49,7 +49,7 @@ async function loadFiles() {
                         </div>
                     </div>
                     <div style="margin-top: 15px; display: flex; gap: 10px;">
-                        <button class="btn btn-sm btn-primary" style="flex: 1;" onclick="openFile(${file.id}, '${file.file_type}', '${file.title}')">Open</button>
+                        <button class="btn btn-sm btn-primary" style="flex: 1;" onclick="openFile(${file.id}, '${file.file_type}', '${file.title}', '${file.file_name.substring(file.file_name.lastIndexOf('.'))}')">Open</button>
                         ${editBtn}
                         ${deleteBtn}
                     </div>
@@ -61,11 +61,17 @@ async function loadFiles() {
     }
 }
 
-async function openFile(id, type, title) {
+// Extensions Collabora Online can open via WOPI
+const COLLABORA_SUPPORTED = new Set(['.docx','.doc','.odt','.xlsx','.xls','.ods','.pptx','.ppt','.odp']);
+
+async function openFile(id, type, title, ext) {
     if (type === 'image') {
         document.getElementById('image-modal-title').textContent = title;
         document.getElementById('image-modal-img').src = `/api/files/download/${id}`;
         document.getElementById('image-modal').style.display = 'block';
+    } else if (!COLLABORA_SUPPORTED.has(ext)) {
+        // CSV and other plain-text formats can't be opened in Collabora Online — download instead
+        window.location.href = `/api/files/download/${id}`;
     } else {
         // 1. Fetch the token and internal routing data from Go
         const res = await fetch(`/api/files/${id}/wopi-token`);

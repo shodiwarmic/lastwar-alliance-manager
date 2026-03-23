@@ -407,7 +407,12 @@ func wopiPutFile(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	os.WriteFile(filePath, fileData, 0644)
-	w.WriteHeader(http.StatusOK)
+
+	// WOPI spec requires a JSON body with LastModifiedTime on success
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"LastModifiedTime": time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 func wopiActionHandler(w http.ResponseWriter, r *http.Request) {
