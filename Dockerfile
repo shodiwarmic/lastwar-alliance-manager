@@ -19,6 +19,9 @@ FROM debian:bookworm-slim
 # Install ca-certificates so the app can securely talk to Google Cloud Vision
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
+# Run as a non-root user
+RUN useradd -r -u 1001 -s /sbin/nologin appuser
+
 WORKDIR /app
 
 # Copy the compiled binary and necessary directories from the builder
@@ -27,8 +30,10 @@ COPY templates/ ./templates/
 COPY static/ ./static/
 COPY migrations/ ./migrations/
 
-# (Optional) If you have a default .env.example you want available inside
-# COPY .env.example ./
+# Ensure the app user owns the working directory and runtime data paths
+RUN mkdir -p /app/data /app/uploads && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8080
 

@@ -4,22 +4,28 @@ services:
     container_name: alliance-manager
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Ensure uploaded files always land in the mounted volume,
+      # regardless of what STORAGE_PATH is (or isn't) set to in .env
+      - STORAGE_PATH=/app/uploads
     ports:
       - "8080:8080"
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
-    # Swapped to "mapping" syntax for strict docker-compose parsers
     extra_hosts:
       "${APP_DOMAIN}": "host-gateway"
       "${COLLABORA_DOMAIN}": "host-gateway"
 
   collabora:
-    image: collabora/code
+    # Pin to a specific release so docker compose pull can't silently
+    # break things. Update deliberately when you want to upgrade.
+    image: collabora/code:24.04.13.1
     container_name: collabora
     restart: unless-stopped
     cap_add:
       - MKNOD
+      - SYS_ADMIN   # required for coolmount chroot jails
     ports:
       - "9980:9980"
     environment:
