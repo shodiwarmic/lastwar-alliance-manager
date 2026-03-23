@@ -30,7 +30,7 @@
         --text-muted: rgba(255, 255, 255, 0.6);
         --card-bg: rgba(255, 255, 255, 0.05);
         --border-color: rgba(255, 255, 255, 0.1);
-        --input-bg: rgba(255, 255, 255, 0.05);
+        --input-bg: #252b3b;
         --input-border: rgba(255, 255, 255, 0.2);
     }
 }
@@ -46,7 +46,7 @@ html.theme-dark {
     --text-muted: rgba(255, 255, 255, 0.6);
     --card-bg: rgba(255, 255, 255, 0.05);
     --border-color: rgba(255, 255, 255, 0.1);
-    --input-bg: rgba(255, 255, 255, 0.05);
+    --input-bg: #252b3b;
     --input-border: rgba(255, 255, 255, 0.2);
 }
 
@@ -628,6 +628,17 @@ main {
     background: var(--input-bg);
     color: var(--text-primary);
     box-sizing: border-box;
+}
+
+/* Tell the browser to render native select dropdowns using the active
+   color-scheme (dark/light) so the OS popup matches the page theme */
+.form-group select {
+    color-scheme: inherit;
+}
+
+.form-group select option {
+    background: var(--input-bg);
+    color: var(--text-primary);
 }
 
 .form-group input:focus,
