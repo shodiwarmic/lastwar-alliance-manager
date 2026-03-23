@@ -535,46 +535,15 @@ main {
     margin: 0;
 }
 
-/* Modal Enhancements */
-.modal {
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
-    align-items: center;
-    justify-content: center;
-    animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-.modal-member {
-    animation: slideUp 0.3s ease-out;
-}
-
 @keyframes slideUp {
     from {
         opacity: 0;
-        transform: translateY(50px);
+        transform: translateY(30px);
     }
     to {
         opacity: 1;
         transform: translateY(0);
     }
-}
-
-.modal-member h3 {
-    color: var(--text-primary);
-    margin-bottom: 25px;
-    font-size: 1.6em;
-    padding-right: 30px;
 }
 
 .modal-buttons {
@@ -583,41 +552,6 @@ main {
     gap: 12px;
 }
 
-.primary-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    flex: 1;
-    padding: 14px 28px;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.primary-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-}
-
-.secondary-btn {
-    background: #6c757d;
-    color: white;
-    flex: 1;
-    padding: 14px 28px;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.secondary-btn:hover {
-    background: #5a6268;
-    transform: translateY(-1px);
-}
 
 .form-section {
     background: var(--card-bg);
@@ -635,6 +569,44 @@ main {
 
 .form-group {
     margin-bottom: 20px;
+    flex: 1;
+}
+
+/* Two-column row inside modals */
+.form-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.form-row .form-group {
+    margin-bottom: 0;
+}
+
+.form-row--divided {
+    padding-top: 15px;
+    margin-top: 5px;
+    border-top: 1px solid var(--border-color);
+}
+
+.form-group--checkbox {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group--checkbox .checkbox-label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.form-group--checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
 }
 
 .form-group label {
@@ -645,17 +617,22 @@ main {
 }
 
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
     width: 100%;
     padding: 12px;
     border: 2px solid #dee2e6;
     border-radius: 8px;
     font-size: 16px;
     transition: border-color 0.3s;
+    background: var(--container-bg);
+    color: var(--text-primary);
+    box-sizing: border-box;
 }
 
 .form-group input:focus,
-.form-group select:focus {
+.form-group select:focus,
+.form-group textarea:focus {
     outline: none;
     border-color: #667eea;
 }
@@ -1104,9 +1081,15 @@ button {
     }
 
     .form-group input,
-    .form-group select {
+    .form-group select,
+    .form-group textarea {
         padding: 10px;
         font-size: 16px; /* Prevent zoom on iOS */
+    }
+
+    .form-row {
+        flex-direction: column;
+        gap: 0;
     }
 
     /* Button adjustments */
@@ -1974,20 +1957,45 @@ button {
     transform: translateY(-2px);
 }
 
-/* Modal Styles */
+/* ============================================================
+   UNIFIED MODAL SYSTEM
+   .modal       — toggle via style.display='flex'/'none'
+   .modal-overlay — toggle via .hidden class addition/removal
+   ============================================================ */
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
 .modal {
     display: none;
     position: fixed;
     z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
+    inset: 0;
     background-color: rgba(0, 0, 0, 0.6);
     align-items: center;
     justify-content: center;
+    animation: fadeIn 0.2s ease-out;
 }
 
+/* Same layout as .modal but shown by default; hidden by .hidden class */
+.modal-overlay {
+    display: flex;
+    position: fixed;
+    z-index: 1000;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ---- Modal content box ---- */
 .modal-content {
     background: var(--container-bg);
     padding: 30px;
@@ -1996,30 +2004,141 @@ button {
     width: 90%;
     max-height: 90vh;
     overflow-y: auto;
-    
-    /* Absolute Centering Fix */
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    margin: 0;
-    
+    position: relative;      /* anchor for .close button */
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.25s ease-out;
 }
 
+/* Wide modal — tables, CSV preview */
+.modal-lg {
+    max-width: 800px;
+}
+
+/* Fullscreen modal — document viewer */
+.modal-xl {
+    max-width: 95%;
+    width: 95%;
+    height: 90vh;
+    padding: 15px;
+}
+
+/* ---- Shared heading style ---- */
+.modal-content h2,
+.modal-content h3 {
+    color: var(--text-primary);
+    font-size: 1.4em;
+    margin-top: 0;
+    margin-bottom: 20px;
+    padding-right: 35px;   /* keep clear of .close button */
+}
+
+/* ---- Close button ---- */
 .close {
     position: absolute;
     right: 20px;
     top: 20px;
-    font-size: 28px;
+    font-size: 26px;
     font-weight: bold;
     color: var(--text-muted);
     cursor: pointer;
-    transition: color 0.3s;
+    transition: color 0.2s;
+    line-height: 1;
 }
 
 .close:hover {
     color: var(--text-primary);
+}
+
+/* ---- Button row ---- */
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 25px;
+    flex-wrap: wrap;
+}
+
+/* ---- Warning / info box inside modals ---- */
+.warning-message {
+    background: #fff3cd;
+    color: #856404;
+    padding: 15px;
+    border-left: 4px solid #ffc107;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.warning-message p {
+    margin: 0 0 8px;
+}
+
+.warning-message p:last-child {
+    margin-bottom: 0;
+}
+
+/* ---- Shared button base ---- */
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary,
+.primary-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary:hover,
+.primary-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-secondary,
+.secondary-btn {
+    background: #6c757d;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover,
+.secondary-btn:hover {
+    background: #5a6268;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+    transform: translateY(-1px);
 }
 
 .date-display {
@@ -4732,41 +4851,26 @@ button {
         width: 95%;
         max-width: 95%;
         padding: 20px 15px;
-        max-height: 90vh;
-        overflow-y: auto;
-        
-        /* Ensure mobile doesn't override the centering */
-        margin: 0;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
     }
 
-    .modal-header {
-        padding: 15px;
-        margin: -20px -15px 15px -15px;
+    .modal-content h2,
+    .modal-content h3 {
+        font-size: 1.2em;
+        margin-bottom: 15px;
     }
 
-    .modal-body {
-        padding: 10px 0;
-    }
-
-    .modal-footer {
-        padding: 15px;
-        margin: 15px -15px -20px -15px;
+    .modal-actions {
         flex-direction: column-reverse;
         gap: 8px;
     }
 
-    .modal-footer button {
+    .modal-actions .btn,
+    .modal-actions .btn-primary,
+    .modal-actions .btn-secondary,
+    .modal-actions .btn-danger,
+    .modal-actions .primary-btn,
+    .modal-actions .secondary-btn {
         width: 100%;
-        margin: 0;
-    }
-
-    /* Member modal mobile styles */
-    .modal-member h3 {
-        font-size: 1.3em;
-        margin-bottom: 20px;
     }
 
     .modal-buttons {

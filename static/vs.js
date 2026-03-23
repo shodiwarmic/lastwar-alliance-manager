@@ -478,7 +478,7 @@ function renderPreviewModal(data) {
         });
     }
 
-    document.getElementById('import-preview-modal').classList.remove('hidden');
+    document.getElementById('import-preview-modal').style.display = 'flex';
 }
 
 function mapUnresolved(unresolvedIndex, memberId) {
@@ -587,6 +587,6 @@ async function commitImport() {
 }
 
 function closePreviewModal() {
-    document.getElementById('import-preview-modal').classList.add('hidden');
+    document.getElementById('import-preview-modal').style.display = 'none';
     currentImportPayload = null;
 }
