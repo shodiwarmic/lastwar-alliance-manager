@@ -5500,3 +5500,82 @@ code {
         background: rgba(102, 126, 234, 0.2);
     }
 }
+
+/* ===== Filter Chips (members page, reusable) ===== */
+.filter-chip {
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.85em;
+    font-weight: 500;
+}
+.filter-chip:hover {
+    background: var(--bg-secondary);
+}
+.filter-chip.active {
+    background: var(--primary-color, #007bff);
+    color: white;
+    border-color: var(--primary-color, #007bff);
+}
+
+/* ===== Analytics / Rankings Tables ===== */
+.analytics-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.analytics-table th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px;
+    text-align: left;
+}
+.analytics-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+.analytics-table tr:hover {
+    background: rgba(102, 126, 234, 0.05);
+}
+.positive-growth {
+    color: #28a745;
+    font-weight: bold;
+}
+.neutral-growth {
+    color: var(--text-muted);
+}
+.vs-total-col {
+    font-weight: bold;
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+}
+
+/* ===== Error Pages (403 / 404) ===== */
+.error-page {
+    text-align: center;
+    padding: 60px 20px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.error-page-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+}
+.error-page-text {
+    color: var(--text-muted);
+    margin-bottom: 30px;
+}
+.error-page-link {
+    display: inline-block;
+    text-decoration: none;
+    padding: 12px 24px;
+}

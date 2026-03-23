@@ -4,11 +4,11 @@
 {{end}}
 
 {{define "content"}}
-    <div style="text-align: center; padding: 60px 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        <h1 style="font-size: 80px; margin-bottom: 20px;">🛡️</h1>
+    <div class="error-page">
+        <h1 class="error-page-icon">🛡️</h1>
         <h2 style="margin-bottom: 10px;">Command Clearance Required</h2>
-        <p style="color: var(--text-muted); margin-bottom: 30px;">You do not have the required rank permissions to access this page.</p>
-        <a href="/" class="primary-btn" style="display: inline-block; text-decoration: none; padding: 12px 24px;">Return to Base (Home)</a>
+        <p class="error-page-text">You do not have the required rank permissions to access this page.</p>
+        <a href="/" class="primary-btn error-page-link">Return to Base (Home)</a>
     </div>
 {{end}}
 
