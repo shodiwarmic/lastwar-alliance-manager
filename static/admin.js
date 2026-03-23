@@ -242,7 +242,6 @@ async function saveUser(event) {
     }
 }
 
-
 // Delete User (With Safeguards)
 let pendingDeleteUserId = null;
 let pendingDeleteUsername = null;
@@ -553,10 +552,23 @@ async function loadSecuritySettings() {
         if (!response.ok) return;
         
         const settings = await response.json();
+        
+        // Explicitly map all integer fields (fallback to safe defaults if db is empty)
         document.getElementById('pwd-min-length').value = settings.pwd_min_length || 12;
-        // ... (keep the other pwd fields) ...
+        document.getElementById('pwd-history-count').value = settings.pwd_history_count !== undefined ? settings.pwd_history_count : 4;
+        document.getElementById('pwd-validity-days').value = settings.pwd_validity_days !== undefined ? settings.pwd_validity_days : 180;
+        
+        // Explicitly map all boolean checkboxes
+        document.getElementById('pwd-require-special').checked = !!settings.pwd_require_special;
+        document.getElementById('pwd-require-upper').checked = !!settings.pwd_require_upper;
+        document.getElementById('pwd-require-lower').checked = !!settings.pwd_require_lower;
+        document.getElementById('pwd-require-number').checked = !!settings.pwd_require_number;
 
-        // NEW: Disable the delete button if no key exists
+        // Map the new CV Worker URL
+        const cvInput = document.getElementById('cv-worker-url');
+        if(cvInput) cvInput.value = settings.cv_worker_url || '';
+
+        // Disable the delete button if no GCP key exists
         const deleteBtn = document.getElementById('delete-gcp-btn');
         if (deleteBtn) {
             if (settings.has_gcp_credentials) {
@@ -569,6 +581,25 @@ async function loadSecuritySettings() {
         }
     } catch (error) {
         console.error('Error loading security settings:', error);
+    }
+}
+
+// NEW: Save CV Worker URL
+async function saveCVWorkerUrl(event) {
+    event.preventDefault();
+    const url = document.getElementById('cv-worker-url').value;
+
+    try {
+        const response = await fetch('/api/admin/security/cv-worker', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cv_worker_url: url })
+        });
+        
+        if (!response.ok) throw new Error(await response.text());
+        alert("Microservice routing updated successfully.");
+    } catch (error) {
+        alert("Error: " + error.message);
     }
 }
 

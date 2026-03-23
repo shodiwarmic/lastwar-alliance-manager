@@ -44,10 +44,17 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	// SPRINT 2 FIX: Inject the CSRF token into the page data so frontend forms/fetch requests can use it
 	data.CSRFToken = csrf.TemplateField(r)
 
-	// NEW: Check if GCP Vision credentials exist to conditionally render UI elements
+	// Check if GCP Vision credentials exist
 	var hasGCP bool
 	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCP)
 	data.HasGCPCredentials = hasGCP
+
+	// NEW: Check if the CV Worker URL is configured
+	var cvWorkerURL string
+	db.QueryRow("SELECT COALESCE(cv_worker_url, '') FROM settings WHERE id = 1").Scan(&cvWorkerURL)
+
+	// The pipeline is only ready if BOTH the key and the routing URL exist
+	data.OCRPipelineReady = hasGCP && cvWorkerURL != ""
 
 	return data
 }
@@ -110,6 +117,7 @@ func main() {
 
 	// Add these to the Admin Routes section in main.go
 	router.HandleFunc("/api/admin/security/password-policy", authMiddleware(adminMiddleware(updatePasswordPolicy))).Methods("PUT")
+	router.HandleFunc("/api/admin/security/cv-worker", authMiddleware(adminMiddleware(updateCVWorkerURL))).Methods("PUT")
 	router.HandleFunc("/api/admin/credentials", authMiddleware(adminMiddleware(updateExternalCredentials))).Methods("POST")
 	router.HandleFunc("/api/admin/credentials/{service}", authMiddleware(adminMiddleware(deleteExternalCredential))).Methods("DELETE")
 

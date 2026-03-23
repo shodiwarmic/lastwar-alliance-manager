@@ -10,8 +10,7 @@ import (
 	"strings"
 )
 
-// Helper to resolve aliases using the existing schema
-// Replace resolveMemberAliasLegacy with this updated engine
+// resolveMemberAlias resolves aliases using the tiered Alias Engine
 func resolveMemberAlias(tx *sql.Tx, providedName string, currentUserID int) (*Member, string, error) {
 	var m Member
 
@@ -45,7 +44,7 @@ func resolveMemberAlias(tx *sql.Tx, providedName string, currentUserID int) (*Me
 	return nil, "none", sql.ErrNoRows
 }
 
-// Update commitCSVImport to handle Power and the new Category string
+// commitCSVImport processes the final confirmed records from both CSV and OCR uploads
 func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	userID, ok := session.Values["user_id"].(int)
@@ -122,7 +121,8 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 
 				query := "INSERT INTO vs_points (" + strings.Join(cols, ", ") + ", updated_at) VALUES (" + strings.Join(placeholders, ", ") + ", CURRENT_TIMESTAMP)"
 				_, vsErr = tx.Exec(query, vals...)
-			} else {
+
+			} else if err == nil {
 				var updates []string
 				var vals []interface{}
 				for day, val := range row.UpdatedFields {
@@ -137,11 +137,14 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 					query := "UPDATE vs_points SET " + strings.Join(updates, ", ") + ", updated_at = CURRENT_TIMESTAMP WHERE member_id = ? AND week_date = ?"
 					_, vsErr = tx.Exec(query, vals...)
 				}
+			} else {
+				vsErr = err // Capture the actual database error
 			}
 
 			if vsErr != nil {
 				dbErrors = append(dbErrors, fmt.Sprintf("VS Points Error (%s): %v", row.OriginalName, vsErr))
 			} else if !hasPower {
+				// Only increment success if it wasn't already incremented by a successful power insert
 				successCount++
 			}
 		}
@@ -151,15 +154,26 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	aliasesReceived := len(req.SaveAliases)
 	for _, aliasReq := range req.SaveAliases {
 		if aliasReq.Category == "global" || aliasReq.Category == "ocr" {
-			tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?)", aliasReq.FailedAlias)
+			_, err = tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?)", aliasReq.FailedAlias)
+			if err != nil {
+				dbErrors = append(dbErrors, fmt.Sprintf("Failed to clear old global alias: %v", err))
+				continue
+			}
+
 			_, err = tx.Exec("INSERT INTO member_aliases (member_id, category, alias) VALUES (?, ?, ?)", aliasReq.MemberID, aliasReq.Category, aliasReq.FailedAlias)
 			if err == nil {
 				aliasCount++
 			} else {
 				dbErrors = append(dbErrors, fmt.Sprintf("Alias Insert Error: %v", err))
 			}
+
 		} else if aliasReq.Category == "personal" {
-			tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND user_id = ?", aliasReq.FailedAlias, userID)
+			_, err = tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND user_id = ?", aliasReq.FailedAlias, userID)
+			if err != nil {
+				dbErrors = append(dbErrors, fmt.Sprintf("Failed to clear old personal alias: %v", err))
+				continue
+			}
+
 			_, err = tx.Exec("INSERT INTO member_aliases (member_id, user_id, category, alias) VALUES (?, ?, 'personal', ?)", aliasReq.MemberID, userID, aliasReq.FailedAlias)
 			if err == nil {
 				aliasCount++
@@ -184,10 +198,12 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	if len(dbErrors) > 0 {
 		response["errors"] = dbErrors
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
+// previewCSVImport processes uploaded CSV files and maps them to the existing alias engine
 func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(10 << 20)
 	if err != nil {
@@ -204,7 +220,6 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 
 	weekDate := r.FormValue("week_date")
 
-	// Get current user ID from context/session (Assuming a helper exists or use your auth standard)
 	session, _ := store.Get(r, "session")
 	currentUserID, _ := session.Values["user_id"].(int)
 
@@ -247,12 +262,25 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	response := VSImportPreviewResponse{}
+
+	// NEW: Fetch the complete roster so the frontend can populate the alias assignment dropdowns
+	rows, err := tx.Query("SELECT id, name, rank FROM members ORDER BY LOWER(name) ASC")
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var m Member
+			if err := rows.Scan(&m.ID, &m.Name, &m.Rank); err == nil {
+				response.AllMembers = append(response.AllMembers, m)
+			}
+		}
+	}
+
 	validDays := []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
 
 	for _, row := range records[1:] {
 		nameIdx, ok := colMap["name"]
 		if !ok || len(row) <= nameIdx {
-			continue // Skip rows without names
+			continue
 		}
 		providedName := strings.TrimSpace(row[nameIdx])
 		if providedName == "" {

@@ -217,6 +217,7 @@ type Settings struct {
 	PwdRequireNumber             bool   `json:"pwd_require_number"`
 	PwdHistoryCount              int    `json:"pwd_history_count"`
 	PwdValidityDays              int    `json:"pwd_validity_days"`
+	CVWorkerURL                  string `json:"cv_worker_url"`
 }
 
 type MemberRanking struct {
@@ -401,7 +402,8 @@ type PageData struct {
 	Rank              string
 	Permissions       RankPermissions
 	CSRFToken         template.HTML
-	HasGCPCredentials bool // NEW: Flags if OCR pipelines are available
+	HasGCPCredentials bool
+	OCRPipelineReady  bool
 }
 
 type WeekAwards struct {
@@ -419,7 +421,9 @@ type CredentialUpdateRequest struct {
 
 type VSImportPreviewResponse struct {
 	Matched    []VSImportRow `json:"matched"`
+	Ambiguous  []VSImportRow `json:"ambiguous"` // NEW: For fuzzy matches needing review
 	Unresolved []VSImportRow `json:"unresolved"`
+	AllMembers []Member      `json:"all_members"`
 }
 
 type VSImportRow struct {
