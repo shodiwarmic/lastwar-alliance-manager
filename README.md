@@ -36,11 +36,13 @@ Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** conta
 - **Docker-Bridged Security**: Document data flows over a private, internal Docker network (`lastwar-net`), completely bypassing external firewalls and NAT hairpinning limits.
 - **Theme Synchronization**: The document editor dynamically reads your application's state, matching your Light or Dark mode preference automatically.
 
-### 📸 Smart OCR Extraction (Google Cloud Vision)
+### 📸 Smart OCR Extraction (External Microservice)
+To maintain a lightweight core application, heavy image processing and Optical Character Recognition (OCR) are offloaded to a dedicated, containerized Python microservice. 
+**Repository:** [`shodiwarmic/lastwar-ocr-service`](https://github.com/shodiwarmic/lastwar-ocr-service)
 - **Automated Data Extraction**: Drag and drop up to 100 game screenshots at once to automatically extract VS Points or Power updates using Google Cloud Vision Document AI.
-- **Intelligent Pipeline**: The system automatically detects the screenshot type by analyzing colored UI tabs, groups them into buckets, and dynamically stitches them into vertical towers to bypass API limits and retain razor-sharp text.
+- **Intelligent Pipeline**: The microservice automatically detects the screenshot type by analyzing colored UI tabs, groups them into buckets, and dynamically stitches them into vertical towers to bypass API limits and retain razor-sharp text.
 - **Hybrid State Machine Parsing**: Overcomes vertical text-flow layout issues natively by intelligently pairing player names with valid scores while filtering out UI noise.
-- **Validation UI & Machine Learning**: OCR results are held in a "Preview & Confirm" modal. Administrators can manually map unresolved scans to existing members and save the pairing as an `ocr` alias, teaching the system to automatically correct that specific visual artifact in all future uploads.
+- **Validation UI & Machine Learning**: OCR results are held in a "Preview & Confirm" modal. Administrators can manually map unresolved scans to existing members and save the pairing as an `ocr` alias, teaching the Alias Engine to automatically correct that specific visual artifact in all future uploads.
 - See [image_recognition.md](image_recognition.md) for detailed technical documentation.
 
 ---
@@ -110,11 +112,14 @@ The application relies on a `.env` file in the root directory:
 - **WOPI JWT**: Document editing sessions are secured with short-lived JSON Web Tokens.
 - **Volume Persistence**: Databases and uploads are stored in persistent Docker volumes, surviving container rebuilds while remaining inaccessible to the public web root.
 
-### Enabling Google Cloud Vision
-To enable the OCR features, you must generate a 32-byte hex string and add it to your `.env` file before starting the server:
+### Enabling the OCR Microservice
+To enable the Smart OCR Extraction features, you must deploy the [`lastwar-ocr-service`](https://github.com/shodiwarmic/lastwar-ocr-service) and configure your Go backend to communicate with it securely:
 
+1. Generate a 32-byte hex string to serve as your server's cryptographic vault key:
 ```bash
 openssl rand -hex 32
 ```
-
-Set the output as the `CREDENTIAL_ENCRYPTION_KEY` in your environment variables. Once the server is running, log in as an Admin, navigate to **Settings -> Security**, and upload your Google Cloud Service Account JSON key.
+2. Set the output as the `CREDENTIAL_ENCRYPTION_KEY` in your `.env` file and start the Go server.
+3. Log in as an Admin and navigate to the **Settings** dashboard.
+4. Provide the deployed URL of your Python CV Worker.
+5. Upload your Google Cloud Service Account JSON key (with Cloud Vision API access). The Go backend will encrypt this at rest and use it to securely invoke the private Cloud Run endpoint via OIDC tokens.
