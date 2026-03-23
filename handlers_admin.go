@@ -332,17 +332,31 @@ func getLoginHistory(w http.ResponseWriter, r *http.Request) {
 		limit = "100"
 	}
 
-	query := `
-		SELECT ls.id, ls.user_id, ls.username, ls.ip_address, ls.user_agent, 
-		       ls.country, ls.city, ls.isp, ls.login_time, ls.success
-		FROM login_sessions ls
-	`
-	if userIDParam != "" {
-		query += " WHERE ls.user_id = " + userIDParam
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil || limitInt < 1 || limitInt > 10000 {
+		limitInt = 100
 	}
-	query += " ORDER BY ls.login_time DESC LIMIT " + limit
 
-	rows, err := db.Query(query)
+	var rows *sql.Rows
+	if userIDParam != "" {
+		userID, err := strconv.Atoi(userIDParam)
+		if err != nil {
+			http.Error(w, "Invalid user_id parameter", http.StatusBadRequest)
+			return
+		}
+		rows, err = db.Query(`
+			SELECT ls.id, ls.user_id, ls.username, ls.ip_address, ls.user_agent,
+			       ls.country, ls.city, ls.isp, ls.login_time, ls.success
+			FROM login_sessions ls
+			WHERE ls.user_id = ?
+			ORDER BY ls.login_time DESC LIMIT ?`, userID, limitInt)
+	} else {
+		rows, err = db.Query(`
+			SELECT ls.id, ls.user_id, ls.username, ls.ip_address, ls.user_agent,
+			       ls.country, ls.city, ls.isp, ls.login_time, ls.success
+			FROM login_sessions ls
+			ORDER BY ls.login_time DESC LIMIT ?`, limitInt)
+	}
 	if err != nil {
 		http.Error(w, "Failed to fetch login history", http.StatusInternalServerError)
 		return

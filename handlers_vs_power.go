@@ -176,16 +176,25 @@ func processVSPointsScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	validDayColumns := map[string]bool{
+		"monday": true, "tuesday": true, "wednesday": true,
+		"thursday": true, "friday": true, "saturday": true,
+	}
+
 	// We only care about the explicit day requested, or the first daily category returned
-	detectedDay := r.FormValue("day")
+	detectedDay := strings.ToLower(r.FormValue("day"))
 	var records []PlayerRecord
 
 	if detectedDay != "" {
-		records = workerResults[strings.ToLower(detectedDay)]
+		if !validDayColumns[detectedDay] {
+			http.Error(w, "Invalid day parameter", http.StatusBadRequest)
+			return
+		}
+		records = workerResults[detectedDay]
 	} else {
 		// Attempt to auto-detect the day from what the worker returned
 		for category, parsedRecords := range workerResults {
-			if category != "power" && category != "unknown" {
+			if validDayColumns[category] {
 				detectedDay = category
 				records = parsedRecords
 				break
