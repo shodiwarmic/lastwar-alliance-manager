@@ -333,9 +333,13 @@ func wopiCheckFileInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// BaseFileName must include the file extension so Collabora picks the
+	// correct application (e.g. Calc for .csv/.xlsx, Writer for .docx).
+	baseFileName := title + filepath.Ext(fileName)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"BaseFileName":     title,
+		"BaseFileName":     baseFileName,
 		"OwnerId":          fmt.Sprintf("%d", ownerID),
 		"Size":             fileInfo.Size(),
 		"UserId":           fmt.Sprintf("%d", claims.UserID),
