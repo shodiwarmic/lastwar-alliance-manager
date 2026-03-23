@@ -569,7 +569,6 @@ main {
 
 .form-group {
     margin-bottom: 20px;
-    flex: 1;
 }
 
 /* Two-column row inside modals */
@@ -580,6 +579,7 @@ main {
 }
 
 .form-row .form-group {
+    flex: 1;
     margin-bottom: 0;
 }
 
@@ -2651,17 +2651,6 @@ button {
     padding: 20px;
     border-radius: 8px;
     border: 2px solid var(--border-color);
-}
-
-.form-group {
-    margin-bottom: 20px;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 600;
-    color: var(--text-secondary);
 }
 
 .notes-input {
