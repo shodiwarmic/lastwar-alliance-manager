@@ -323,7 +323,7 @@ func changePassword(w http.ResponseWriter, r *http.Request) {
 func checkAuth(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	if auth, ok := session.Values["authenticated"].(bool); ok && auth {
-		username := session.Values["username"].(string)
+		username, _ := session.Values["username"].(string)
 		isAdmin := false
 		if adminVal, ok := session.Values["is_admin"].(bool); ok {
 			isAdmin = adminVal

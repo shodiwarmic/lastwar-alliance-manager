@@ -310,7 +310,7 @@ func getRecommendations(w http.ResponseWriter, r *http.Request) {
 
 func createRecommendation(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
+	userID, _ := session.Values["user_id"].(int)
 
 	var input struct {
 		MemberID int    `json:"member_id"`
@@ -383,8 +383,8 @@ func createRecommendation(w http.ResponseWriter, r *http.Request) {
 
 func deleteRecommendation(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
-	isAdmin := session.Values["is_admin"].(bool)
+	userID, _ := session.Values["user_id"].(int)
+	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
@@ -493,7 +493,7 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 
 func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
+	userID, _ := session.Values["user_id"].(int)
 
 	var input struct {
 		MemberID       int    `json:"member_id"`
@@ -558,7 +558,7 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 
 func updateDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
+	userID, _ := session.Values["user_id"].(int)
 
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
@@ -613,8 +613,8 @@ func updateDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 
 func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
-	isAdmin := session.Values["is_admin"].(bool)
+	userID, _ := session.Values["user_id"].(int)
+	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])

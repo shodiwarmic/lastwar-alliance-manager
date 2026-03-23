@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -125,18 +124,6 @@ func ProcessImagesViaWorker(ctx context.Context, files []*multipart.FileHeader, 
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("worker returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
-
-	// --- NEW: Intercept and log the raw JSON payload ---
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read worker response body: %v", err)
-	}
-
-	log.Printf("Raw JSON from CV Worker:\n%s\n", string(bodyBytes))
-
-	// Re-wrap the bytes into a reader so the JSON decoder can still consume it
-	resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-	// ---------------------------------------------------
 
 	// 5. Decode the structured JSON response
 	var result CVWorkerResponse

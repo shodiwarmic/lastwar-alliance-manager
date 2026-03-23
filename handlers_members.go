@@ -17,17 +17,48 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	userID, _ := session.Values["user_id"].(int)
 
+	// CTE-based query replaces 6 correlated subqueries per row with a single pass.
 	query := `
+		WITH latest_power AS (
+			SELECT member_id, power, recorded_at
+			FROM (
+				SELECT member_id, power, recorded_at,
+					ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY recorded_at DESC) as rn
+				FROM power_history
+			) WHERE rn = 1
+		),
+		latest_squad_power AS (
+			SELECT member_id, power, recorded_at
+			FROM (
+				SELECT member_id, power, recorded_at,
+					ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY recorded_at DESC) as rn
+				FROM squad_power_history
+			) WHERE rn = 1
+		),
+		global_aliases AS (
+			SELECT member_id, GROUP_CONCAT(alias, ', ') as aliases
+			FROM member_aliases WHERE category = 'global'
+			GROUP BY member_id
+		),
+		personal_aliases AS (
+			SELECT member_id, GROUP_CONCAT(alias, ', ') as aliases
+			FROM member_aliases WHERE category = 'personal' AND user_id = ?
+			GROUP BY member_id
+		)
 		SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
 			   COALESCE(m.squad_type, ''), COALESCE(m.troop_level, 0), COALESCE(m.profession, ''),
-			   COALESCE((SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_power,
-			   COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_power_date,
-			   COALESCE((SELECT power FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as latest_squad_power,
-			   COALESCE((SELECT recorded_at FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as latest_squad_power_date,
+			   COALESCE(lp.power, 0) as latest_power,
+			   COALESCE(lp.recorded_at, '') as latest_power_date,
+			   COALESCE(lsp.power, 0) as latest_squad_power,
+			   COALESCE(lsp.recorded_at, '') as latest_squad_power_date,
 			   EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user,
-			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND category = 'global'), '') as global_aliases,
-			   COALESCE((SELECT GROUP_CONCAT(alias, ', ') FROM member_aliases WHERE member_id = m.id AND category = 'personal' AND user_id = ?), '') as personal_aliases
+			   COALESCE(ga.aliases, '') as global_aliases,
+			   COALESCE(pa.aliases, '') as personal_aliases
 		FROM members m
+		LEFT JOIN latest_power lp ON lp.member_id = m.id
+		LEFT JOIN latest_squad_power lsp ON lsp.member_id = m.id
+		LEFT JOIN global_aliases ga ON ga.member_id = m.id
+		LEFT JOIN personal_aliases pa ON pa.member_id = m.id
 		ORDER BY m.name
 	`
 
@@ -635,7 +666,7 @@ type AliasResponse struct {
 func getMemberAliases(w http.ResponseWriter, r *http.Request) {
 	memberID := mux.Vars(r)["id"]
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
+	userID, _ := session.Values["user_id"].(int)
 
 	// Fetch all aliases for this member (Global, OCR, and the user's specific Personal aliases)
 	rows, err := db.Query(`
@@ -672,7 +703,7 @@ func getMemberAliases(w http.ResponseWriter, r *http.Request) {
 func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 	memberID := mux.Vars(r)["id"]
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
+	userID, _ := session.Values["user_id"].(int)
 	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	canManageGlobal := isAdmin
@@ -719,7 +750,7 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 	aliasID := mux.Vars(r)["id"]
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
+	userID, _ := session.Values["user_id"].(int)
 	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	canManageGlobal := isAdmin

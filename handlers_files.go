@@ -38,8 +38,8 @@ func hasSufficientRank(userRank, requiredRank string) bool {
 
 func getFilesList(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
-	isAdmin := session.Values["is_admin"].(bool)
+	userID, _ := session.Values["user_id"].(int)
+	isAdmin, _ := session.Values["is_admin"].(bool)
 	var userRank string
 
 	if isAdmin {
@@ -79,7 +79,7 @@ func getFilesList(w http.ResponseWriter, r *http.Request) {
 
 func uploadFile(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
+	userID, _ := session.Values["user_id"].(int)
 
 	r.Body = http.MaxBytesReader(w, r.Body, MaxFileUploadSize)
 	err := r.ParseMultipartForm(MaxFileUploadSize)
@@ -134,8 +134,8 @@ func updateFile(w http.ResponseWriter, r *http.Request) {
 	fileID := vars["id"]
 
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
-	isAdmin := session.Values["is_admin"].(bool)
+	userID, _ := session.Values["user_id"].(int)
+	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	var ownerID int
 	err := db.QueryRow("SELECT owner_user_id FROM files WHERE id = ?", fileID).Scan(&ownerID)
@@ -185,8 +185,8 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 	fileID := vars["id"]
 
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
-	isAdmin := session.Values["is_admin"].(bool)
+	userID, _ := session.Values["user_id"].(int)
+	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	var fileName string
 	var ownerID int
@@ -219,8 +219,8 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 func downloadFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
-	isAdmin := session.Values["is_admin"].(bool)
+	userID, _ := session.Values["user_id"].(int)
+	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	var fileName, minRank string
 	var ownerID int
@@ -251,9 +251,9 @@ func generateWOPIToken(w http.ResponseWriter, r *http.Request) {
 	fileID, _ := strconv.Atoi(vars["id"])
 
 	session, _ := store.Get(r, "session")
-	userID := session.Values["user_id"].(int)
-	username := session.Values["username"].(string)
-	isAdmin := session.Values["is_admin"].(bool)
+	userID, _ := session.Values["user_id"].(int)
+	username, _ := session.Values["username"].(string)
+	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	var minRank, minEditRank string
 	var ownerID int
