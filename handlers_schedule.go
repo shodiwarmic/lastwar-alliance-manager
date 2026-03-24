@@ -12,37 +12,26 @@ const scheduleID = 1
 // defaults if it doesn't exist yet.
 func getSchedule(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
-	userID, ok := session.Values["user_id"].(int)
-	if !ok || userID == 0 {
-		userID = 0
+	userID, _ := session.Values["user_id"].(int)
+
+	// Ensure the singleton row exists — INSERT OR IGNORE is a no-op if id=1 is already there.
+	if userID != 0 {
+		db.Exec(
+			`INSERT OR IGNORE INTO schedules (id, name, duration_days, is_active, schedule_data, created_by) VALUES (?, ?, ?, 1, ?, ?)`,
+			scheduleID, "Alliance Schedule", 14, `{}`, userID,
+		)
 	}
 
 	var s Schedule
 	var isActive int
+	// COALESCE guards against any legacy NULL schedule_data rows.
 	err := db.QueryRow(`
-		SELECT id, name, duration_days, is_active, schedule_data, created_by, created_at, updated_at
+		SELECT id, name, duration_days, is_active, COALESCE(schedule_data, '{}'), created_by, created_at, updated_at
 		FROM schedules WHERE id = ?`, scheduleID).
 		Scan(&s.ID, &s.Name, &s.DurationDays, &isActive, &s.ScheduleData, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
-
 	if err != nil {
-		// Row doesn't exist yet — insert defaults
-		if userID == 0 {
-			http.Error(w, "schedule not initialised", http.StatusNotFound)
-			return
-		}
-		defaultData := json.RawMessage(`{}`)
-		_, err = db.Exec(
-			`INSERT INTO schedules (id, name, duration_days, is_active, schedule_data, created_by) VALUES (?, ?, ?, 1, ?, ?)`,
-			scheduleID, "Alliance Schedule", 14, string(defaultData), userID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		db.QueryRow(`
-			SELECT id, name, duration_days, is_active, schedule_data, created_by, created_at, updated_at
-			FROM schedules WHERE id = ?`, scheduleID).
-			Scan(&s.ID, &s.Name, &s.DurationDays, &isActive, &s.ScheduleData, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
 	}
 	s.IsActive = isActive == 1
 
