@@ -12,16 +12,28 @@ const VS_THEMES = [
     { label: 'Alliance Star',      icon: '⭐' },
 ];
 
-const SERVER_EVENTS = {
-    ironclad:        { label: 'Ironclad Vehicle', icon: '🚗' },
-    zombie_invasion: { label: 'Zombie Invasion',  icon: '☣️' },
-    generals_trial:  { label: "General's Trial",  icon: '⚔️' },
-    rampage_bosses:  { label: 'Rampage Bosses',   icon: '🏹' },
-    doomsday:        { label: 'Doomsday',         icon: '💀' },
-    svs:             { label: 'SVS',              icon: '🏳️' },
-    meteorite:       { label: 'Meteorite',        icon: '☄️' },
-    sky_battle:      { label: 'Sky Battle',       icon: '✈️' },
+// Fixed server events by day_number — never stored, always derived
+const FIXED_SERVER_EVENTS = {
+    1:  [{ key: 'ironclad',        label: 'Ironclad Vehicle', icon: '🚙' }],
+    2:  [{ key: 'ironclad',        label: 'Ironclad Vehicle', icon: '🚙' }],
+    3:  [{ key: 'zombie_invasion', label: 'Zombie Invasion',  icon: '☣️' }],
+    4:  [{ key: 'zombie_invasion', label: 'Zombie Invasion',  icon: '☣️' }],
+    5:  [{ key: 'zombie_invasion', label: 'Zombie Invasion',  icon: '☣️' }],
+    7:  [{ key: 'rampage_bosses',  label: 'Rampage Bosses',   icon: '👹' }],
+    11: [{ key: 'generals_trial',  label: "General's Trial",  icon: '⚔️' }],
+    12: [{ key: 'generals_trial',  label: "General's Trial",  icon: '⚔️' }],
+    13: [{ key: 'generals_trial',  label: "General's Trial",  icon: '⚔️' }],
+    14: [{ key: 'doomsday',        label: 'Doomsday',         icon: '🌋' }],
 };
+
+function getServerEvents(dayNumber) {
+    return FIXED_SERVER_EVENTS[dayNumber] || [];
+}
+
+const CUSTOM_EVENT_ICONS = [
+    '☄️', '🌪️', '🏔️', '⚡', '🌊', '🔥', '💀', '🎯',
+    '🛸', '🌙', '🌍', '🏳️', '⚔️', '🛡️', '🎪', '📦',
+];
 
 const VIBES = {
     base:        { label: 'Base',        delta: 0  },
@@ -68,11 +80,12 @@ function buildEmptyPolicy(durationDays = 14) {
         zs_baseline: 7,
         mg_time: DEFAULT_MG_TIME,
         zs_time: DEFAULT_ZS_TIME,
+        week_offset: 0,
         days: Array.from({ length: durationDays }, (_, i) => ({
             day_number: i + 1,
-            server_events: [],
-            mg: { active: false, vibe: 'base', conditional: null },
+            mg: { active: false, vibe: 'base', time_override: null, conditional: null },
             zs: { active: false, vibe: 'base', conditional: null },
+            custom_events: [],
             notes: null,
         })),
     };
@@ -83,10 +96,18 @@ function getPolicyData(schedule) {
     if (typeof raw === 'string') {
         try { raw = JSON.parse(raw); } catch { raw = null; }
     }
-    // Detect old shape (array) or missing → return empty policy
+    // Detect old/missing shapes → return empty policy
     if (!raw || Array.isArray(raw) || !raw.days) {
         return buildEmptyPolicy(schedule.duration_days);
     }
+    // Backfill fields added in later revisions
+    if (raw.week_offset === undefined) raw.week_offset = 0;
+    raw.days.forEach(d => {
+        if (!d.custom_events) d.custom_events = [];
+        if (d.mg && d.mg.time_override === undefined) d.mg.time_override = null;
+        // Drop stored server_events if present (now derived from constants)
+        delete d.server_events;
+    });
     return raw;
 }
 
@@ -155,7 +176,8 @@ function renderDayGrid(policy) {
 
     days.forEach((day, di) => {
         const week = Math.ceil(day.day_number / 7);
-        const newWeekLabel = `Week ${week}`;
+        const displayWeek = week + (policy.week_offset || 0);
+        const newWeekLabel = `Week ${displayWeek}`;
         if (newWeekLabel !== weekLabel) {
             weekLabel = newWeekLabel;
             const sep = document.createElement('h4');
@@ -177,15 +199,16 @@ function renderDayGrid(policy) {
         const chips = document.createElement('div');
         chips.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; flex:1;';
 
-        (day.server_events || []).forEach(key => {
-            const ev = SERVER_EVENTS[key];
-            if (ev) chips.appendChild(makeChip(`${ev.icon} ${ev.label}`, 'var(--accent-secondary, #555)'));
+        // Fixed server events (derived, not stored)
+        getServerEvents(day.day_number).forEach(ev => {
+            chips.appendChild(makeChip(`${ev.icon} ${ev.label}`, 'var(--accent-secondary, #555)'));
         });
 
         if (day.mg && day.mg.active) {
             const level = getLevel(policy.mg_baseline, day.mg.vibe);
             const vibeLabel = day.mg.vibe ? ` · ${VIBES[day.mg.vibe].label}` : '';
-            chips.appendChild(makeChip(`🛡️ MG @ ${policy.mg_time} (Lv.${level}${vibeLabel})`, 'var(--accent-primary)'));
+            const mgTime = day.mg.time_override || policy.mg_time;
+            chips.appendChild(makeChip(`🛡️ MG @ ${mgTime} (Lv.${level}${vibeLabel})`, 'var(--accent-primary)'));
         }
 
         if (day.zs && day.zs.active) {
@@ -193,6 +216,11 @@ function renderDayGrid(policy) {
             const vibeLabel = day.zs.vibe ? ` · ${VIBES[day.zs.vibe].label}` : '';
             chips.appendChild(makeChip(`🧟 ZS @ ${policy.zs_time} (Lv.${level}${vibeLabel})`, 'var(--accent-danger, #c0392b)'));
         }
+
+        // Custom events
+        (day.custom_events || []).forEach(ev => {
+            chips.appendChild(makeChip(`${ev.icon} ${ev.label}`, 'var(--text-secondary, #555)'));
+        });
 
         if (chips.children.length === 0) {
             const empty = document.createElement('span');
@@ -231,16 +259,17 @@ function generateText(schedule) {
 
     const weeks = Math.ceil(policy.days.length / 7);
     for (let w = 1; w <= weeks; w++) {
-        lines.push(`📅 WEEK ${w}`);
+        const displayWeek = w + (policy.week_offset || 0);
+        lines.push(`📅 WEEK ${displayWeek}`);
         policy.days.filter(d => Math.ceil(d.day_number / 7) === w).forEach(day => {
             const parts = [];
-            (day.server_events || []).forEach(key => {
-                const ev = SERVER_EVENTS[key];
-                if (ev) parts.push(`${ev.label} ${ev.icon}`);
+            getServerEvents(day.day_number).forEach(ev => {
+                parts.push(`${ev.label} ${ev.icon}`);
             });
             if (day.mg && day.mg.active) {
                 const vibe = day.mg.vibe ? VIBES[day.mg.vibe].label : 'Base';
-                let s = `MG @ ${policy.mg_time} (${vibe})`;
+                const mgTime = day.mg.time_override || policy.mg_time;
+                let s = `MG @ ${mgTime} (${vibe})`;
                 if (day.mg.conditional) s += ` [${day.mg.conditional}]`;
                 parts.push(s);
             }
@@ -250,6 +279,7 @@ function generateText(schedule) {
                 if (day.zs.conditional) s += ` [${day.zs.conditional}]`;
                 parts.push(s);
             }
+            (day.custom_events || []).forEach(ev => parts.push(`${ev.icon} ${ev.label}`));
             lines.push(`• D${day.day_number}: ${parts.length ? parts.join(' | ') : 'No Events'}`);
         });
         lines.push('');
@@ -344,10 +374,11 @@ function renderCanvas(schedule) {
         ctx.fillRect(cx, y, colW, WEEK_HDR_H);
         ctx.strokeStyle = COLORS.border;
         ctx.strokeRect(cx, y, colW, WEEK_HDR_H);
+        const displayWeek = w + (policy.week_offset || 0);
         ctx.fillStyle = COLORS.textPrimary;
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(`WEEK ${w}`, cx + colW / 2, y + 26);
+        ctx.fillText(`WEEK ${displayWeek}`, cx + colW / 2, y + 26);
 
         // Column headers
         const subY = y + WEEK_HDR_H;
@@ -389,7 +420,8 @@ function renderCanvas(schedule) {
             const eventLines = [];
             if (day.mg && day.mg.active) {
                 const vibe = day.mg.vibe ? VIBES[day.mg.vibe].label : 'Base';
-                eventLines.push({ text: `🛡️ MG @${policy.mg_time} (${vibe})`, color: COLORS.accentMG });
+                const mgTime = day.mg.time_override || policy.mg_time;
+                eventLines.push({ text: `🛡️ MG @${mgTime} (${vibe})`, color: COLORS.accentMG });
             }
             if (day.zs && day.zs.active) {
                 const vibe = day.zs.vibe ? VIBES[day.zs.vibe].label : 'Base';
@@ -408,8 +440,9 @@ function renderCanvas(schedule) {
                 });
             }
 
-            // Server events
-            const serverIcons = (day.server_events || []).map(k => SERVER_EVENTS[k]?.icon || '').join(' ');
+            // Server events (derived from constants, never stored)
+            const serverEvs = getServerEvents(day.day_number);
+            const serverIcons = serverEvs.map(ev => ev.icon).join(' ');
             ctx.font = serverIcons ? '16px Arial' : '11px Arial';
             ctx.fillStyle = serverIcons ? COLORS.accentServer : COLORS.textSecondary;
             ctx.textAlign = 'center';
@@ -456,11 +489,12 @@ function syncBaselineInputs(policy) {
     document.getElementById('zs-baseline').value = policy.zs_baseline;
     document.getElementById('mg-time').value = policy.mg_time || DEFAULT_MG_TIME;
     document.getElementById('zs-time').value = policy.zs_time || DEFAULT_ZS_TIME;
+    document.getElementById('week-offset').value = policy.week_offset || 0;
     document.querySelectorAll('input[name="duration"]').forEach(r => {
         r.checked = Number(r.value) === (currentSchedule ? currentSchedule.duration_days : 14);
     });
     if (!canManage) {
-        ['mg-baseline', 'zs-baseline', 'mg-time', 'zs-time'].forEach(id => {
+        ['mg-baseline', 'zs-baseline', 'mg-time', 'zs-time', 'week-offset'].forEach(id => {
             document.getElementById(id).disabled = true;
         });
     }
@@ -487,6 +521,11 @@ function wireBaselineInputs() {
         currentPolicy.zs_time = e.target.value;
         renderDayGrid(currentPolicy);
     });
+    document.getElementById('week-offset').addEventListener('input', e => {
+        if (!currentPolicy) return;
+        currentPolicy.week_offset = Number(e.target.value) || 0;
+        renderDayGrid(currentPolicy);
+    });
     document.querySelectorAll('input[name="duration"]').forEach(radio => {
         radio.addEventListener('change', () => {
             if (!currentPolicy || !currentSchedule) return;
@@ -495,9 +534,10 @@ function wireBaselineInputs() {
             while (currentPolicy.days.length < newDur) {
                 const n = currentPolicy.days.length + 1;
                 currentPolicy.days.push({
-                    day_number: n, server_events: [],
-                    mg: { active: false, vibe: 'base', conditional: null },
+                    day_number: n,
+                    mg: { active: false, vibe: 'base', time_override: null, conditional: null },
                     zs: { active: false, vibe: 'base', conditional: null },
+                    custom_events: [],
                     notes: null,
                 });
             }
@@ -643,23 +683,9 @@ function openDayModal(dayIndex) {
     const day = currentPolicy.days[dayIndex];
     document.getElementById('day-modal-title').textContent = `Edit Day ${day.day_number}`;
 
-    // Build server event checkboxes dynamically
-    const container = document.getElementById('server-event-checkboxes');
-    container.innerHTML = '';
-    Object.entries(SERVER_EVENTS).forEach(([key, ev]) => {
-        const label = document.createElement('label');
-        label.style.cssText = 'display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer;';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = key;
-        cb.checked = (day.server_events || []).includes(key);
-        label.appendChild(cb);
-        label.appendChild(document.createTextNode(` ${ev.icon} ${ev.label}`));
-        container.appendChild(label);
-    });
-
     document.getElementById('mg-active').checked = !!(day.mg && day.mg.active);
     document.getElementById('mg-vibe').value = day.mg?.vibe || 'base';
+    document.getElementById('mg-time-override').value = day.mg?.time_override || '';
     document.getElementById('mg-conditional').value = day.mg?.conditional || '';
     document.getElementById('mg-options').style.display = (day.mg && day.mg.active) ? '' : 'none';
 
@@ -668,14 +694,71 @@ function openDayModal(dayIndex) {
     document.getElementById('zs-conditional').value = day.zs?.conditional || '';
     document.getElementById('zs-options').style.display = (day.zs && day.zs.active) ? '' : 'none';
 
+    // Render custom events list
+    renderCustomEventsList(day.custom_events || []);
+
     document.getElementById('day-notes').value = day.notes || '';
     document.getElementById('day-modal').style.display = 'flex';
+}
+
+function renderCustomEventsList(events) {
+    const list = document.getElementById('custom-events-list');
+    list.innerHTML = '';
+    events.forEach((ev, i) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:6px;';
+
+        const iconSel = document.createElement('select');
+        iconSel.style.cssText = 'width:60px; font-size:1.2em;';
+        iconSel.dataset.ceIndex = i;
+        iconSel.dataset.ceField = 'icon';
+        CUSTOM_EVENT_ICONS.forEach(ic => {
+            const opt = document.createElement('option');
+            opt.value = ic;
+            opt.textContent = ic;
+            if (ic === ev.icon) opt.selected = true;
+            iconSel.appendChild(opt);
+        });
+
+        const labelInput = document.createElement('input');
+        labelInput.type = 'text';
+        labelInput.value = ev.label;
+        labelInput.maxLength = 60;
+        labelInput.placeholder = 'Event label';
+        labelInput.style.flex = '1';
+        labelInput.dataset.ceIndex = i;
+        labelInput.dataset.ceField = 'label';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-danger';
+        removeBtn.style.padding = '2px 8px';
+        removeBtn.textContent = '✕';
+        removeBtn.onclick = () => {
+            const day = currentPolicy.days[_editDayIndex];
+            day.custom_events.splice(i, 1);
+            renderCustomEventsList(day.custom_events);
+        };
+
+        row.appendChild(iconSel);
+        row.appendChild(labelInput);
+        row.appendChild(removeBtn);
+        list.appendChild(row);
+    });
 }
 
 function closeDayModal() {
     document.getElementById('day-modal').style.display = 'none';
     _editDayIndex = null;
 }
+
+document.getElementById('btn-add-custom-event').addEventListener('click', () => {
+    if (_editDayIndex === null) return;
+    const day = currentPolicy.days[_editDayIndex];
+    day.custom_events = day.custom_events || [];
+    day.custom_events.push({ icon: CUSTOM_EVENT_ICONS[0], label: '' });
+    renderCustomEventsList(day.custom_events);
+});
 
 document.getElementById('mg-active').addEventListener('change', e => {
     document.getElementById('mg-options').style.display = e.target.checked ? '' : 'none';
@@ -689,13 +772,10 @@ document.getElementById('day-form').addEventListener('submit', e => {
     if (_editDayIndex === null) return;
     const day = currentPolicy.days[_editDayIndex];
 
-    day.server_events = Array.from(
-        document.querySelectorAll('#server-event-checkboxes input[type="checkbox"]:checked')
-    ).map(cb => cb.value);
-
     day.mg = {
         active: document.getElementById('mg-active').checked,
         vibe: document.getElementById('mg-vibe').value,
+        time_override: document.getElementById('mg-time-override').value.trim() || null,
         conditional: document.getElementById('mg-conditional').value.trim() || null,
     };
     day.zs = {
@@ -703,6 +783,16 @@ document.getElementById('day-form').addEventListener('submit', e => {
         vibe: document.getElementById('zs-vibe').value,
         conditional: document.getElementById('zs-conditional').value.trim() || null,
     };
+
+    // Collect custom events from dynamic list
+    day.custom_events = Array.from(
+        document.querySelectorAll('#custom-events-list > div')
+    ).map(row => {
+        const iconSel = row.querySelector('select');
+        const labelInp = row.querySelector('input[type="text"]');
+        return { icon: iconSel.value, label: labelInp.value.trim() };
+    }).filter(ev => ev.label);
+
     day.notes = document.getElementById('day-notes').value.trim() || null;
 
     renderDayGrid(currentPolicy);

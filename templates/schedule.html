@@ -58,6 +58,11 @@
                 <input type="time" id="zs-time" style="width:130px;">
             </div>
             <div class="form-group">
+                <label for="week-offset">Week Offset</label>
+                <input type="number" id="week-offset" min="0" max="52" style="width:70px;"
+                    title="Shift displayed week labels (e.g. 6 → Week 1 shows as Week 7)">
+            </div>
+            <div class="form-group">
                 <label>Cycle Length</label>
                 {{if .Permissions.ManageSchedule}}
                 <label style="margin-left:12px;"><input type="radio" name="duration" value="7"> 7-Day</label>
@@ -131,11 +136,6 @@
         <h2 id="day-modal-title">Edit Day</h2>
         <form id="day-form">
 
-            <div class="form-group">
-                <label>Server Events</label>
-                <div id="server-event-checkboxes" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
-            </div>
-
             <!-- MG -->
             <div class="form-group">
                 <label>
@@ -143,7 +143,7 @@
                     🛡️ Marshal's Guard (MG)
                 </label>
                 <div id="mg-options" style="margin-left:24px; margin-top:8px; display:none;">
-                    <div class="form-row" style="gap:12px;">
+                    <div class="form-row" style="gap:12px; flex-wrap:wrap;">
                         <div class="form-group">
                             <label>Vibe</label>
                             <select id="mg-vibe">
@@ -152,6 +152,13 @@
                                 <option value="chill">Chill (-1)</option>
                                 <option value="extra_chill">Extra Chill (-2)</option>
                             </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="mg-time-override">Time Override
+                                <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                            </label>
+                            <input type="time" id="mg-time-override" style="width:130px;"
+                                title="Override the policy MG time for this day only">
                         </div>
                     </div>
                     <div class="form-group">
@@ -186,6 +193,16 @@
                             placeholder="optional conditional instruction">
                     </div>
                 </div>
+            </div>
+
+            <!-- Custom Events -->
+            <div class="form-group">
+                <label>Custom Events
+                    <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                </label>
+                <div id="custom-events-list" style="margin-bottom:8px;"></div>
+                <button type="button" class="btn btn-secondary" id="btn-add-custom-event"
+                    style="padding:4px 12px; font-size:0.9em;">+ Add Event</button>
             </div>
 
             <!-- Day Notes -->
