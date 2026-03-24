@@ -1,0 +1,143 @@
+{{define "header_text"}}
+    <h1>📅 Alliance Schedule</h1>
+    <h2>Dynamic Schedule Builder</h2>
+{{end}}
+
+{{define "content"}}
+<div id="schedule-page">
+
+    <!-- Validation Banner -->
+    <div id="validation-banner" class="warning-message hidden">
+        <strong>Schedule Warnings:</strong>
+        <ul id="validation-list"></ul>
+    </div>
+
+    <!-- Top Bar -->
+    <section class="form-section">
+        <div class="form-row" style="align-items: flex-end; flex-wrap: wrap; gap: 12px;">
+            <div class="form-group" style="flex: 2; min-width: 200px;">
+                <label for="schedule-select">Active Schedule</label>
+                <select id="schedule-select">
+                    <option value="">-- No schedules yet --</option>
+                </select>
+            </div>
+
+            <div class="form-group" style="flex: 0 0 auto;">
+                <label>&nbsp;</label>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    {{if .Permissions.ManageSchedule}}
+                    <button class="btn btn-primary" id="btn-new">+ New Schedule</button>
+                    <button class="btn btn-secondary" id="btn-save" disabled>Save</button>
+                    <button class="btn btn-danger" id="btn-delete" disabled>Delete</button>
+                    <button class="btn btn-secondary" id="btn-activate" disabled>Set Active</button>
+                    {{end}}
+                    <button class="btn btn-secondary" id="btn-vibe" disabled>Generate Vibe Text</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Duration Toggle -->
+        {{if .Permissions.ManageSchedule}}
+        <div class="form-group" id="duration-row" style="display: none; margin-top: 10px;">
+            <label>Cycle Length</label>
+            <label style="margin-left: 16px;">
+                <input type="radio" name="duration" value="7" checked> 7-Day
+            </label>
+            <label style="margin-left: 16px;">
+                <input type="radio" name="duration" value="14"> 14-Day
+            </label>
+        </div>
+        {{end}}
+    </section>
+
+    <!-- Day Grid -->
+    <section class="form-section" id="day-grid-section" style="display: none;">
+        <h3 id="schedule-title-display">Schedule</h3>
+        <div id="day-grid"></div>
+    </section>
+
+    <!-- Vibe Output -->
+    <section class="form-section hidden" id="vibe-section">
+        <h3>Discord Vibe Text</h3>
+        <textarea id="vibe-output" rows="12" readonly style="width: 100%; font-family: monospace; font-size: 13px;"></textarea>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="btn-copy-vibe">Copy to Clipboard</button>
+        </div>
+    </section>
+
+</div>
+
+<!-- Add / Edit Event Modal -->
+<div id="event-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2 id="event-modal-title">Add Event</h2>
+        <form id="event-form">
+            <input type="hidden" id="event-day-index">
+            <input type="hidden" id="event-edit-index">
+
+            <div class="form-group">
+                <label>Event Type</label>
+                <div>
+                    <label style="margin-right: 20px;">
+                        <input type="radio" name="event-type" value="mg" checked> 🛡️ Marshal's Guard (MG)
+                    </label>
+                    <label>
+                        <input type="radio" name="event-type" value="zs"> 🧟 Zombie Siege (ZS)
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="event-time">Start Time</label>
+                    <input type="time" id="event-time" required>
+                </div>
+                <div class="form-group">
+                    <label for="event-level">Level Override <span style="font-weight: normal; font-size: 0.85em;">(optional)</span></label>
+                    <input type="number" id="event-level" min="1" max="99" placeholder="e.g. 25">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="event-vibe">Vibe Label <span style="font-weight: normal; font-size: 0.85em;">(optional, e.g. "Base", "Hard")</span></label>
+                <input type="text" id="event-vibe" maxlength="60" placeholder="e.g. Base">
+            </div>
+
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save Event</button>
+                <button type="button" class="btn btn-secondary" onclick="closeEventModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" id="btn-delete-event" style="display:none;" onclick="deleteCurrentEvent()">Remove Event</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- New Schedule Modal -->
+<div id="new-schedule-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2>New Schedule</h2>
+        <form id="new-schedule-form">
+            <div class="form-group">
+                <label for="new-schedule-name">Schedule Name</label>
+                <input type="text" id="new-schedule-name" maxlength="100" placeholder="e.g. Week A" required>
+            </div>
+            <div class="form-group">
+                <label>Cycle Length</label>
+                <label style="margin-left: 16px;"><input type="radio" name="new-duration" value="7" checked> 7-Day</label>
+                <label style="margin-left: 16px;"><input type="radio" name="new-duration" value="14"> 14-Day</label>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Create</button>
+                <button type="button" class="btn btn-secondary" onclick="closeNewScheduleModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    window.CAN_MANAGE = {{if .Permissions.ManageSchedule}}true{{else}}false{{end}};
+</script>
+<script src="/schedule.js"></script>
+{{end}}
