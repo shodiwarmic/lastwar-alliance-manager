@@ -83,7 +83,7 @@ function buildEmptyPolicy(durationDays = 14) {
         days: Array.from({ length: durationDays }, (_, i) => ({
             day_number: i + 1,
             mg: { active: false, vibe: 'base', time_override: null, conditional: null },
-            zs: { active: false, vibe: 'base', conditional: null },
+            zs: { active: false, vibe: 'base', time_override: null, conditional: null },
             custom_events: [],
             notes: null,
         })),
@@ -104,6 +104,7 @@ function getPolicyData(schedule) {
     raw.days.forEach(d => {
         if (!d.custom_events) d.custom_events = [];
         if (d.mg && d.mg.time_override === undefined) d.mg.time_override = null;
+        if (d.zs && d.zs.time_override === undefined) d.zs.time_override = null;
         // Drop stored server_events if present (now derived from constants)
         delete d.server_events;
     });
@@ -213,7 +214,8 @@ function renderDayGrid(policy) {
         if (day.zs && day.zs.active) {
             const level = getLevel(policy.zs_baseline, day.zs.vibe);
             const vibeLabel = day.zs.vibe ? ` · ${VIBES[day.zs.vibe].label}` : '';
-            chips.appendChild(makeChip(`🧟 ZS @ ${policy.zs_time} (Lv.${level}${vibeLabel})`, 'var(--accent-danger, #c0392b)'));
+            const zsTime = day.zs.time_override || policy.zs_time;
+            chips.appendChild(makeChip(`🧟 ZS @ ${zsTime} (Lv.${level}${vibeLabel})`, 'var(--accent-danger, #c0392b)'));
         }
 
         // Custom events
@@ -274,7 +276,8 @@ function generateText(schedule) {
             }
             if (day.zs && day.zs.active) {
                 const vibe = day.zs.vibe ? VIBES[day.zs.vibe].label : 'Base';
-                let s = `ZS @ ${policy.zs_time} (${vibe})`;
+                const zsTime = day.zs.time_override || policy.zs_time;
+                let s = `ZS @ ${zsTime} (${vibe})`;
                 if (day.zs.conditional) s += ` [${day.zs.conditional}]`;
                 parts.push(s);
             }
@@ -409,7 +412,8 @@ function renderCanvas(schedule) {
             }
             if (day.zs && day.zs.active) {
                 const vibe = day.zs.vibe ? VIBES[day.zs.vibe].label : 'Base';
-                eventLines.push({ text: `🧟 ZS @${policy.zs_time} (${vibe})`, color: COLORS.accentZS });
+                const zsTime = day.zs.time_override || policy.zs_time;
+                eventLines.push({ text: `🧟 ZS @${zsTime} (${vibe})`, color: COLORS.accentZS });
             }
             if (eventLines.length === 0) {
                 ctx.font = 'italic 11px Arial';
@@ -520,7 +524,7 @@ function wireBaselineInputs() {
                 currentPolicy.days.push({
                     day_number: n,
                     mg: { active: false, vibe: 'base', time_override: null, conditional: null },
-                    zs: { active: false, vibe: 'base', conditional: null },
+                    zs: { active: false, vibe: 'base', time_override: null, conditional: null },
                     custom_events: [],
                     notes: null,
                 });
@@ -590,6 +594,7 @@ function openDayModal(dayIndex) {
 
     document.getElementById('zs-active').checked = !!(day.zs && day.zs.active);
     document.getElementById('zs-vibe').value = day.zs?.vibe || 'base';
+    document.getElementById('zs-time-override').value = day.zs?.time_override || '';
     document.getElementById('zs-conditional').value = day.zs?.conditional || '';
     document.getElementById('zs-options').style.display = (day.zs && day.zs.active) ? '' : 'none';
 
@@ -680,6 +685,7 @@ document.getElementById('day-form').addEventListener('submit', e => {
     day.zs = {
         active: document.getElementById('zs-active').checked,
         vibe: document.getElementById('zs-vibe').value,
+        time_override: document.getElementById('zs-time-override').value.trim() || null,
         conditional: document.getElementById('zs-conditional').value.trim() || null,
     };
 
