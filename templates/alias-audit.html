@@ -1,0 +1,84 @@
+{{define "header_text"}}
+    <h1>🏷️ Alias Management</h1>
+    <h2>Audit & Prune Member Aliases</h2>
+{{end}}
+
+{{define "content"}}
+<div id="alias-audit-page">
+
+    <!-- Member Selector + Filter Tabs -->
+    <section class="form-section">
+        <div class="form-row" style="align-items: flex-end; gap: 12px; flex-wrap: wrap;">
+            <div class="form-group" style="flex: 2; min-width: 220px;">
+                <label for="member-select">Member</label>
+                <select id="member-select">
+                    <option value="">-- Select a member --</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex: 0 0 auto;">
+                <label>&nbsp;</label>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary active-filter" id="btn-filter-all" data-filter="all">All</button>
+                    <button class="btn btn-secondary" id="btn-filter-global" data-filter="global">Global</button>
+                    <button class="btn btn-secondary" id="btn-filter-personal" data-filter="personal">Personal</button>
+                    <button class="btn btn-secondary" id="btn-filter-ocr" data-filter="ocr">OCR</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Alias Table -->
+    <section class="form-section hidden" id="alias-table-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3 id="alias-table-title">Aliases</h3>
+            <button class="btn btn-primary" id="btn-add-alias">+ Add Alias</button>
+        </div>
+
+        <div id="alias-error" class="warning-message hidden"></div>
+
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--border-color);">Alias</th>
+                    <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--border-color);">Category</th>
+                    <th style="text-align: right; padding: 8px; border-bottom: 1px solid var(--border-color);">Action</th>
+                </tr>
+            </thead>
+            <tbody id="alias-tbody"></tbody>
+        </table>
+
+        <p id="alias-empty-state" class="help-text hidden" style="margin-top: 16px;"></p>
+    </section>
+
+</div>
+
+<!-- Add Alias Modal -->
+<div id="add-alias-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h2>Add Alias</h2>
+        <form id="add-alias-form">
+            <div class="form-group">
+                <label for="new-alias-text">Alias</label>
+                <input type="text" id="new-alias-text" maxlength="100" required placeholder="e.g. xXDarkLord99Xx">
+            </div>
+            <div class="form-group">
+                <label>Scope</label>
+                <label style="margin-left: 16px;">
+                    <input type="radio" name="alias-scope" value="false" checked> Personal (only you)
+                </label>
+                <label style="margin-left: 16px;">
+                    <input type="radio" name="alias-scope" value="true"> Global (all officers)
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" onclick="closeAddAliasModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script src="/alias-audit.js"></script>
+{{end}}
