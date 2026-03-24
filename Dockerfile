@@ -17,7 +17,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o alliance-manager .
 FROM debian:bookworm-slim
 
 # Install ca-certificates so the app can securely talk to Google Cloud Vision
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates gosu && rm -rf /var/lib/apt/lists/*
 
 # Run as a non-root user
 RUN useradd -r -u 1001 -s /sbin/nologin appuser
@@ -33,8 +33,12 @@ COPY migrations/ ./migrations/
 # Ensure the app user owns the working directory and runtime data paths
 RUN mkdir -p /app/data /app/uploads && chown -R appuser:appuser /app
 
-USER appuser
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
+# Container starts as root so entrypoint can fix bind-mount ownership,
+# then drops to appuser via gosu before exec'ing the binary.
 EXPOSE 8080
 
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["./alliance-manager"]
