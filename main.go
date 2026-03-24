@@ -139,12 +139,9 @@ func main() {
 	wopiRouter.HandleFunc("/files/{id}", wopiAuthMiddleware(wopiActionHandler)).Methods("POST")
 	wopiRouter.HandleFunc("/files/{id}/contents", wopiAuthMiddleware(wopiPutFile)).Methods("POST")
 
-	// Schedule API
-	router.HandleFunc("/api/schedules", authMiddleware(requirePermission("view_schedule", listSchedules))).Methods("GET")
-	router.HandleFunc("/api/schedules", authMiddleware(requirePermission("manage_schedule", createSchedule))).Methods("POST")
-	router.HandleFunc("/api/schedules/{id}", authMiddleware(requirePermission("manage_schedule", updateSchedule))).Methods("PUT")
-	router.HandleFunc("/api/schedules/{id}", authMiddleware(requirePermission("manage_schedule", deleteSchedule))).Methods("DELETE")
-	router.HandleFunc("/api/schedules/{id}/activate", authMiddleware(requirePermission("manage_schedule", setActiveSchedule))).Methods("POST")
+	// Schedule API (single alliance schedule)
+	router.HandleFunc("/api/schedule", authMiddleware(requirePermission("view_schedule", getSchedule))).Methods("GET")
+	router.HandleFunc("/api/schedule", authMiddleware(requirePermission("manage_schedule", putSchedule))).Methods("PUT")
 
 	// Permission Matrix & Settings routes
 	router.HandleFunc("/api/permissions", authMiddleware(requirePermission("manage_settings", getPermissionsMatrix))).Methods("GET")

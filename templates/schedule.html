@@ -14,26 +14,12 @@
 
     <!-- Top Toolbar -->
     <section class="form-section">
-        <div class="form-row" style="align-items:flex-end; flex-wrap:wrap; gap:12px;">
-            <div class="form-group" style="flex:2; min-width:200px;">
-                <label for="schedule-select">Schedule</label>
-                <select id="schedule-select">
-                    <option value="">-- Select a schedule --</option>
-                </select>
-            </div>
-            <div class="form-group" style="flex:0 0 auto;">
-                <label>&nbsp;</label>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    {{if .Permissions.ManageSchedule}}
-                    <button class="btn btn-primary"   id="btn-new">+ New</button>
-                    <button class="btn btn-secondary" id="btn-save"     disabled>Save</button>
-                    <button class="btn btn-danger"    id="btn-delete"   disabled>Delete</button>
-                    <button class="btn btn-secondary" id="btn-activate" disabled>Set Active</button>
-                    {{end}}
-                    <button class="btn btn-secondary" id="btn-text"        disabled>📄 Text</button>
-                    <button class="btn btn-secondary" id="btn-infographic" disabled>🖼️ Infographic</button>
-                </div>
-            </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            {{if .Permissions.ManageSchedule}}
+            <button class="btn btn-secondary" id="btn-save" disabled>Save</button>
+            {{end}}
+            <button class="btn btn-secondary" id="btn-text"        disabled>📄 Text</button>
+            <button class="btn btn-secondary" id="btn-infographic" disabled>🖼️ Infographic</button>
         </div>
     </section>
 
@@ -100,34 +86,6 @@
         </div>
     </section>
 
-</div>
-
-<!-- New Schedule Modal -->
-<div id="new-schedule-modal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <h2>New Schedule</h2>
-        <form id="new-schedule-form">
-            <div class="form-group">
-                <label for="new-schedule-name">Schedule Name</label>
-                <input type="text" id="new-schedule-name" maxlength="100"
-                    placeholder="e.g. Standard 14-Day" required>
-            </div>
-            <div class="form-group">
-                <label>Cycle Length</label>
-                <label style="margin-left:16px;">
-                    <input type="radio" name="new-duration" value="7"> 7-Day
-                </label>
-                <label style="margin-left:16px;">
-                    <input type="radio" name="new-duration" value="14" checked> 14-Day
-                </label>
-            </div>
-            <div class="modal-actions">
-                <button type="submit" class="btn btn-primary">Create</button>
-                <button type="button" class="btn btn-secondary"
-                    onclick="closeNewScheduleModal()">Cancel</button>
-            </div>
-        </form>
-    </div>
 </div>
 
 <!-- Edit Day Modal -->

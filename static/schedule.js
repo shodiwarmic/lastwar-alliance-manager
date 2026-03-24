@@ -47,7 +47,6 @@ const DEFAULT_ZS_TIME = '23:00';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let schedules = [];
 let currentSchedule = null;
 let currentPolicy = null;
 const canManage = window.CAN_MANAGE === true;
@@ -532,73 +531,36 @@ function wireBaselineInputs() {
     });
 }
 
-// ── Schedule Selector ─────────────────────────────────────────────────────────
+// ── API ───────────────────────────────────────────────────────────────────────
 
-function populateSelector(selectedId) {
-    const sel = document.getElementById('schedule-select');
-    sel.innerHTML = '<option value="">-- Select a schedule --</option>';
-    schedules.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s.id;
-        opt.textContent = (s.is_active ? '★ ' : '') + s.name + ` (${s.duration_days}-day)`;
-        sel.appendChild(opt);
-    });
-    if (selectedId) sel.value = selectedId;
+function setButtonStates(loaded) {
+    if (canManage) document.getElementById('btn-save').disabled = !loaded;
+    document.getElementById('btn-text').disabled = !loaded;
+    document.getElementById('btn-infographic').disabled = !loaded;
 }
 
-function setButtonStates(hasSchedule) {
-    if (canManage) {
-        document.getElementById('btn-save').disabled = !hasSchedule;
-        document.getElementById('btn-delete').disabled = !hasSchedule || !!(currentSchedule && currentSchedule.is_active);
-        document.getElementById('btn-activate').disabled = !hasSchedule || !!(currentSchedule && currentSchedule.is_active);
-    }
-    document.getElementById('btn-text').disabled = !hasSchedule;
-    document.getElementById('btn-infographic').disabled = !hasSchedule;
-}
-
-function loadSchedule(id) {
-    const s = schedules.find(x => x.id === Number(id));
-    if (!s) {
-        currentSchedule = null;
-        currentPolicy = null;
-        document.getElementById('baseline-section').style.display = 'none';
-        document.getElementById('day-grid-section').style.display = 'none';
-        document.getElementById('text-section').classList.add('hidden');
-        document.getElementById('infographic-section').classList.add('hidden');
-        setButtonStates(false);
-        return;
-    }
-
-    currentSchedule = JSON.parse(JSON.stringify(s));
-    currentPolicy = getPolicyData(currentSchedule);
-
-    document.getElementById('schedule-title-display').textContent = currentSchedule.name;
+function applySchedule(s) {
+    currentSchedule = s;
+    currentPolicy = getPolicyData(s);
+    document.getElementById('schedule-title-display').textContent = s.name;
     document.getElementById('baseline-section').style.display = '';
     document.getElementById('day-grid-section').style.display = '';
     document.getElementById('text-section').classList.add('hidden');
     document.getElementById('infographic-section').classList.add('hidden');
-
     syncBaselineInputs(currentPolicy);
     setButtonStates(true);
     renderDayGrid(currentPolicy);
 }
 
-// ── API ───────────────────────────────────────────────────────────────────────
-
-async function fetchSchedules() {
-    const res = await fetch('/api/schedules');
+async function fetchSchedule() {
+    const res = await fetch('/api/schedule');
     if (!res.ok) return;
-    schedules = await res.json();
-    if (!Array.isArray(schedules)) schedules = [];
-    const activeId = (schedules.find(s => s.is_active) || {}).id;
-    populateSelector(activeId || (schedules[0] || {}).id);
-    const sel = document.getElementById('schedule-select');
-    if (sel.value) loadSchedule(sel.value);
+    applySchedule(await res.json());
 }
 
 async function saveCurrentSchedule() {
     if (!currentSchedule || !currentPolicy) return;
-    const res = await fetch(`/api/schedules/${currentSchedule.id}`, {
+    const res = await fetch('/api/schedule', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
         body: JSON.stringify({
@@ -608,55 +570,7 @@ async function saveCurrentSchedule() {
         }),
     });
     if (!res.ok) { alert('Save failed: ' + await res.text()); return; }
-    const updated = await res.json();
-    const idx = schedules.findIndex(s => s.id === updated.id);
-    if (idx !== -1) schedules[idx] = updated;
-    populateSelector(updated.id);
-    loadSchedule(updated.id);
-}
-
-async function createNewSchedule(name, duration_days) {
-    const res = await fetch('/api/schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-        body: JSON.stringify({ name, duration_days, schedule_data: buildEmptyPolicy(duration_days) }),
-    });
-    if (!res.ok) { alert('Create failed: ' + await res.text()); return; }
-    const created = await res.json();
-    schedules.unshift(created);
-    populateSelector(created.id);
-    loadSchedule(created.id);
-}
-
-async function deleteCurrentSchedule() {
-    if (!currentSchedule) return;
-    if (!confirm(`Delete schedule "${currentSchedule.name}"? This cannot be undone.`)) return;
-    const res = await fetch(`/api/schedules/${currentSchedule.id}`, {
-        method: 'DELETE',
-        headers: { 'X-CSRF-Token': csrfToken() },
-    });
-    if (!res.ok) { alert('Delete failed: ' + await res.text()); return; }
-    schedules = schedules.filter(s => s.id !== currentSchedule.id);
-    currentSchedule = null;
-    currentPolicy = null;
-    populateSelector(null);
-    document.getElementById('baseline-section').style.display = 'none';
-    document.getElementById('day-grid-section').style.display = 'none';
-    document.getElementById('text-section').classList.add('hidden');
-    document.getElementById('infographic-section').classList.add('hidden');
-    setButtonStates(false);
-}
-
-async function activateCurrentSchedule() {
-    if (!currentSchedule) return;
-    const res = await fetch(`/api/schedules/${currentSchedule.id}/activate`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrfToken() },
-    });
-    if (!res.ok) { alert('Activate failed: ' + await res.text()); return; }
-    schedules.forEach(s => s.is_active = s.id === currentSchedule.id);
-    populateSelector(currentSchedule.id);
-    loadSchedule(currentSchedule.id);
+    applySchedule(await res.json());
 }
 
 // ── Day Modal ─────────────────────────────────────────────────────────────────
@@ -788,37 +702,10 @@ document.getElementById('day-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeDayModal();
 });
 
-// ── New Schedule Modal ────────────────────────────────────────────────────────
-
-function closeNewScheduleModal() {
-    document.getElementById('new-schedule-modal').style.display = 'none';
-}
-
-document.getElementById('new-schedule-modal').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeNewScheduleModal();
-});
-
-document.getElementById('new-schedule-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const name = document.getElementById('new-schedule-name').value.trim();
-    const duration_days = Number(document.querySelector('input[name="new-duration"]:checked').value);
-    closeNewScheduleModal();
-    await createNewSchedule(name, duration_days);
-});
-
 // ── Toolbar Buttons ───────────────────────────────────────────────────────────
 
-document.getElementById('schedule-select').addEventListener('change', e => loadSchedule(e.target.value));
-
 if (canManage) {
-    document.getElementById('btn-new').addEventListener('click', () => {
-        document.getElementById('new-schedule-name').value = '';
-        document.querySelector('input[name="new-duration"][value="14"]').checked = true;
-        document.getElementById('new-schedule-modal').style.display = 'flex';
-    });
     document.getElementById('btn-save').addEventListener('click', saveCurrentSchedule);
-    document.getElementById('btn-delete').addEventListener('click', deleteCurrentSchedule);
-    document.getElementById('btn-activate').addEventListener('click', activateCurrentSchedule);
 }
 
 document.getElementById('btn-text').addEventListener('click', () => {
@@ -872,4 +759,4 @@ document.getElementById('btn-download-jpg').addEventListener('click', () => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 wireBaselineInputs();
-fetchSchedules();
+fetchSchedule();
