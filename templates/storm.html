@@ -4,79 +4,252 @@
 {{end}}
 
 {{define "content"}}
-            <!-- Task Force Selector -->
-            <section class="form-section">
-                <h3>⚙️ Battle Configuration</h3>
+<div id="storm-root" data-can-manage="{{if .Permissions.ManageStorm}}true{{else}}false{{end}}">
+
+    <!-- Error banner -->
+    <div id="storm-error" class="warning-message hidden"></div>
+
+    <!-- Section 1: Battle Configuration -->
+    <section class="form-section">
+        <h3>⚙️ Battle Configuration</h3>
+        <div class="form-row" style="gap:16px; flex-wrap:wrap; align-items:flex-end;">
             <div class="form-group">
-                <label>Task Force:</label>
-                <label style="margin-left: 20px;">
-                    <input type="radio" name="taskForce" value="A" checked>
-                    Task Force A
-                </label>
-                <label style="margin-left: 20px;">
-                    <input type="radio" name="taskForce" value="B">
-                    Task Force B
-                </label>
+                <label>Task Force</label>
+                <div style="display:flex; gap:8px; margin-top:4px;">
+                    <span class="filter-chip active" data-tf="A">Task Force A</span>
+                    <span class="filter-chip" data-tf="B">Task Force B</span>
+                </div>
             </div>
             <div class="form-group">
-                <label for="storm-time-select">Battle Time:</label>
-                <select id="storm-time-select" style="max-width: 400px;">
-                    <option value="">Loading timezones...</option>
+                <label for="storm-time-select-a">TF-A Battle Time</label>
+                <select id="storm-time-select-a" class="form-input" {{if not .Permissions.ManageStorm}}disabled{{end}}>
+                    <option value="">Loading...</option>
                 </select>
             </div>
-            </section>
-
-            <!-- Strategy Overview -->
-            <section class="form-section storm-strategy">
-                <h3>📋 Battle Strategy Overview</h3>
-            <div class="strategy-phases">
-                <div class="phase-card">
-                    <h4>⏱️ Stage 1 (Start - 10 min)</h4>
-                    <ul>
-                        <li><strong>Priority 1:</strong> Field Hospitals (all 4 - CRITICAL!)</li>
-                        <li><strong>Priority 2:</strong> Oil Refineries I & II (100/s total)</li>
-                        <li><strong>Priority 3:</strong> Science Hub (faster teleport)</li>
-                        <li><strong>Priority 4:</strong> Info Center (+10% all points)</li>
-                    </ul>
-                </div>
-                <div class="phase-card">
-                    <h4>⏱️ Stage 2 (10 - 30 min)</h4>
-                    <ul>
-                        <li><strong>Priority 1:</strong> Nuclear Silo (80/s - CRITICAL!)</li>
-                        <li><strong>Priority 2:</strong> Defend Nuclear Silo at all costs</li>
-                        <li><strong>Priority 3:</strong> Maintain Field Hospitals for healing</li>
-                        <li><strong>Optional:</strong> Arsenal/Mercenary Factory (buffs/debuffs)</li>
-                    </ul>
-                </div>
+            <div class="form-group">
+                <label for="storm-time-select-b">TF-B Battle Time</label>
+                <select id="storm-time-select-b" class="form-input" {{if not .Permissions.ManageStorm}}disabled{{end}}>
+                    <option value="">Loading...</option>
+                </select>
             </div>
+            {{if .Permissions.ManageStorm}}
+            <div class="form-group">
+                <button class="btn btn-secondary" id="btn-save-config">Save Config</button>
+            </div>
+            {{end}}
+        </div>
+    </section>
+
+    <!-- Section 2: Inner Tab Bar -->
+    <div class="section-tabs" style="margin-bottom:0;">
+        <button class="section-tab active" data-tab="planning">Planning</button>
+        <button class="section-tab" data-tab="my-reg">My Registration</button>
+        {{if .Permissions.ManageStorm}}
+        <button class="section-tab" data-tab="reg-view">Registration View</button>
+        {{end}}
+        <button class="section-tab" data-tab="mail">Battle Mail</button>
+    </div>
+
+    <!-- Planning Tab -->
+    <div id="tab-planning" class="tab-content">
+        <!-- Capacity Bar -->
+        <section class="form-section" style="margin-top:0; border-top:none;">
+            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                <div class="capacity-cell" id="cap-primaries">Primaries: —</div>
+                <div class="capacity-cell" id="cap-subs">Substitutes: —</div>
+                <div class="capacity-cell" id="cap-power">⚡ —</div>
+                <div class="capacity-cell" id="cap-unassigned">Unassigned: —</div>
+            </div>
+        </section>
+
+        <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+            <!-- Member Pool -->
+            <section class="form-section" style="flex:0 0 260px; min-width:220px; position:sticky; top:12px;">
+                <h3>👥 Member Pool</h3>
+                <input type="text" id="pool-search" class="form-input" placeholder="Search members..." style="margin-bottom:8px;">
+                <div id="member-pool" style="max-height:60vh; overflow-y:auto;"></div>
             </section>
 
-            <!-- Building Assignments -->
-            <section class="form-section">
-                <h3>🏗️ Building Assignments</h3>
-                <p class="help-text">Assign up to 4 members per building. These are your designated capture teams.</p>
-            
-                <div id="buildings-grid" class="storm-buildings-grid">
-                    <!-- Buildings will be rendered here -->
+            <!-- Groups Column -->
+            <div style="flex:1; min-width:300px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <h3 style="margin:0;">📋 Groups</h3>
+                    {{if .Permissions.ManageStorm}}
+                    <button class="btn btn-primary" id="btn-add-group">+ Add Group</button>
+                    {{end}}
                 </div>
+                <div id="groups-container"></div>
+            </div>
+        </div>
+    </div>
 
-                <!-- Actions -->
-                <div class="button-group">
-                    <button id="generate-mail-btn" class="primary-btn">📧 Generate Battle Mail</button>
-                    <button id="clear-assignments-btn" class="clear-btn">🗑️ Clear All</button>
-                </div>
-            </section>
+    <!-- My Registration Tab -->
+    <div id="tab-my-reg" class="tab-content hidden">
+        <section class="form-section">
+            <h3>📝 My Availability</h3>
+            {{if not .Rank}}
+            <p class="help-text">Your account is not linked to a member. Contact an admin to set up your profile.</p>
+            {{else}}
+            <div id="my-reg-slots"></div>
+            <div style="margin-top:12px;">
+                <button class="btn btn-primary" id="btn-save-my-reg">Save Availability</button>
+            </div>
+            {{end}}
+        </section>
+    </div>
 
-            <!-- Generated Mail Output -->
-            <section id="mail-output" class="form-section" style="display: none;">
-                <h3>📧 Generated Battle Mail</h3>
-                <div class="mail-header">
-                    <button id="copy-mail-btn" class="copy-btn">📋 Copy to Clipboard</button>
-                </div>
-                <div id="mail-content" class="mail-content"></div>
-            </section>
+    <!-- Registration View Tab (planner only) -->
+    {{if .Permissions.ManageStorm}}
+    <div id="tab-reg-view" class="tab-content hidden">
+        <section class="form-section">
+            <h3>📊 Registration View</h3>
+            <div id="reg-view-container"></div>
+        </section>
+    </div>
+    {{end}}
+
+    <!-- Battle Mail Tab -->
+    <div id="tab-mail" class="tab-content hidden">
+        <section class="form-section">
+            <h3>📧 Battle Mail</h3>
+            <button class="btn btn-primary" id="btn-generate-mail">Generate Mail</button>
+            <div id="mail-output" class="hidden" style="margin-top:12px;">
+                <button class="btn btn-secondary" id="btn-copy-mail" style="margin-bottom:8px;">📋 Copy to Clipboard</button>
+                <pre id="mail-content" style="background:var(--bg-secondary); padding:12px; border-radius:6px; overflow-x:auto; white-space:pre-wrap;"></pre>
+            </div>
+        </section>
+    </div>
+
+</div>
 {{end}}
 
 {{define "scripts"}}
-    <script src="storm.js"></script>
+<style>
+.capacity-cell {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 600;
+    min-width: 140px;
+    text-align: center;
+}
+.capacity-cell.warn { border-color: var(--warning-color, #f59e0b); color: var(--warning-color, #f59e0b); }
+.capacity-cell.danger { border-color: var(--danger-color, #ef4444); color: var(--danger-color, #ef4444); }
+.pool-card {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    cursor: grab;
+    background: var(--bg-card, var(--bg-secondary));
+    user-select: none;
+}
+.pool-card.dimmed { opacity: 0.45; }
+.pool-card .pool-name { font-weight: 600; font-size: 0.95em; }
+.pool-card .pool-meta { font-size: 0.8em; color: var(--text-secondary); }
+.pool-card .pool-reg { font-size: 0.75em; margin-top:2px; }
+.reg-avail { color: var(--success-color, #22c55e); }
+.reg-sub { color: var(--warning-color, #f59e0b); }
+.reg-none { color: var(--text-secondary); }
+.group-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+.group-header {
+    background: var(--bg-secondary);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.group-header h4 { margin: 0; flex: 1; }
+.group-body { padding: 12px 14px; }
+.building-slot {
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+    padding: 8px;
+    margin-bottom: 8px;
+    min-height: 48px;
+}
+.building-slot.drag-over { border-color: var(--accent-color, #3b82f6); background: rgba(59,130,246,0.08); }
+.building-slot-header { font-size: 0.85em; font-weight: 600; color: var(--text-secondary); margin-bottom:6px; }
+.member-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-tertiary, var(--bg-secondary));
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin: 2px;
+    font-size: 0.85em;
+}
+.member-chip.is-sub { opacity: 0.7; font-style: italic; }
+.member-chip .chip-remove { cursor: pointer; color: var(--danger-color, #ef4444); margin-left: 4px; font-weight: bold; }
+.my-slot-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+.slot-label { font-weight: 600; min-width: 180px; }
+.slot-times { font-size: 0.85em; color: var(--text-secondary); flex: 1; }
+.three-way { display: flex; gap: 4px; }
+.three-way button {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    font-size: 0.85em;
+    color: var(--text-primary);
+}
+.three-way button.active-unavail { background: var(--danger-color, #ef4444); color: #fff; border-color: var(--danger-color, #ef4444); }
+.three-way button.active-avail { background: var(--success-color, #22c55e); color: #fff; border-color: var(--success-color, #22c55e); }
+.three-way button.active-sub { background: var(--warning-color, #f59e0b); color: #fff; border-color: var(--warning-color, #f59e0b); }
+.reg-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.reg-table th, .reg-table td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); text-align: left; }
+.reg-table th { background: var(--bg-secondary); font-weight: 600; }
+.reg-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+.reg-pill.s0 { background: var(--bg-secondary); color: var(--text-secondary); border-color: var(--border-color); }
+.reg-pill.s1 { background: var(--success-color, #22c55e); color: #fff; }
+.reg-pill.s2 { background: var(--warning-color, #f59e0b); color: #fff; }
+.inline-search { position: relative; margin-top: 4px; }
+.inline-search input { width: 100%; box-sizing: border-box; }
+.inline-search .inline-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-card, var(--bg-secondary));
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    z-index: 100;
+    max-height: 180px;
+    overflow-y: auto;
+}
+.inline-search .inline-dropdown div {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.88em;
+}
+.inline-search .inline-dropdown div:hover { background: var(--bg-secondary); }
+.tab-content.hidden { display: none; }
+</style>
+<script src="/storm.js"></script>
 {{end}}

@@ -188,6 +188,39 @@ func main() {
 	router.HandleFunc("/api/storm-assignments", authMiddleware(getStormAssignments)).Methods("GET")
 	router.HandleFunc("/api/storm-assignments", authMiddleware(requirePermission("manage_storm", saveStormAssignments))).Methods("POST")
 	router.HandleFunc("/api/storm-assignments/{taskForce}", authMiddleware(requirePermission("manage_storm", deleteStormAssignments))).Methods("DELETE")
+
+	// Storm TF config
+	router.HandleFunc("/api/storm/config",
+		authMiddleware(getStormConfig)).Methods("GET")
+	router.HandleFunc("/api/storm/config",
+		authMiddleware(requirePermission("manage_storm", saveStormConfig))).Methods("PUT")
+
+	// Storm registrations
+	router.HandleFunc("/api/storm/registrations",
+		authMiddleware(requirePermission("manage_storm", getStormRegistrations))).Methods("GET")
+	router.HandleFunc("/api/storm/registrations/me",
+		authMiddleware(getMyRegistration)).Methods("GET")
+	router.HandleFunc("/api/storm/registrations/me",
+		authMiddleware(upsertMyRegistration)).Methods("PUT")
+	router.HandleFunc("/api/storm/registrations/{member_id:[0-9]+}",
+		authMiddleware(requirePermission("manage_storm", upsertMemberRegistration))).Methods("PUT")
+	router.HandleFunc("/api/storm/registrations/{member_id:[0-9]+}",
+		authMiddleware(requirePermission("manage_storm", deleteMemberRegistration))).Methods("DELETE")
+
+	// Storm groups
+	router.HandleFunc("/api/storm/groups",
+		authMiddleware(requirePermission("view_storm", getStormGroups))).Methods("GET")
+	router.HandleFunc("/api/storm/groups",
+		authMiddleware(requirePermission("manage_storm", createStormGroup))).Methods("POST")
+	router.HandleFunc("/api/storm/groups/{id:[0-9]+}",
+		authMiddleware(requirePermission("manage_storm", updateStormGroup))).Methods("PUT")
+	router.HandleFunc("/api/storm/groups/{id:[0-9]+}",
+		authMiddleware(requirePermission("manage_storm", deleteStormGroup))).Methods("DELETE")
+	router.HandleFunc("/api/storm/groups/{id:[0-9]+}/buildings",
+		authMiddleware(requirePermission("manage_storm", saveGroupBuildings))).Methods("PUT")
+	router.HandleFunc("/api/storm/groups/{id:[0-9]+}/members",
+		authMiddleware(requirePermission("manage_storm", saveGroupDirectMembers))).Methods("PUT")
+
 	router.HandleFunc("/api/power-history", authMiddleware(getPowerHistory)).Methods("GET")
 	router.HandleFunc("/api/power-history", authMiddleware(requirePermission("manage_members", addPowerRecord))).Methods("POST")
 	router.HandleFunc("/api/power-history/process-screenshot", authMiddleware(requirePermission("manage_members", processPowerScreenshot))).Methods("POST")

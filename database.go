@@ -39,6 +39,13 @@ func initDB() error {
 		return fmt.Errorf("failed to run database migrations: %v", err)
 	}
 
+	// Add is_sub to storm_assignments if missing
+	var colExists int
+	db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('storm_assignments') WHERE name='is_sub'`).Scan(&colExists)
+	if colExists == 0 {
+		db.Exec(`ALTER TABLE storm_assignments ADD COLUMN is_sub INTEGER NOT NULL DEFAULT 0`)
+	}
+
 	// Ensure physical file directory exists
 	os.MkdirAll(getStoragePath(), 0755)
 
