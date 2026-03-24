@@ -490,8 +490,10 @@ async function clearAssignments() {
     }
     
     try {
+        const csrfEl = document.querySelector('input[name="gorilla.csrf.Token"]');
         const response = await fetch(`${API_URL}/${currentTaskForce}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: { 'X-CSRF-Token': csrfEl ? csrfEl.value : '' }
         });
         
         if (!response.ok && response.status !== 204) {
