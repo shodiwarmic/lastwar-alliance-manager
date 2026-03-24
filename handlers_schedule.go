@@ -88,10 +88,16 @@ func putSchedule(w http.ResponseWriter, r *http.Request) {
 
 	var s Schedule
 	var isActive int
-	db.QueryRow(`
+	var scheduleData string
+	err = db.QueryRow(`
 		SELECT id, name, duration_days, is_active, schedule_data, created_by, created_at, updated_at
 		FROM schedules WHERE id = ?`, scheduleID).
-		Scan(&s.ID, &s.Name, &s.DurationDays, &isActive, &s.ScheduleData, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
+		Scan(&s.ID, &s.Name, &s.DurationDays, &isActive, &scheduleData, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.ScheduleData = json.RawMessage(scheduleData)
 	s.IsActive = isActive == 1
 
 	w.Header().Set("Content-Type", "application/json")

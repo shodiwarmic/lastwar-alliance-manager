@@ -248,8 +248,7 @@ function renderDayGrid(policy) {
 
 // ── Text Generator ────────────────────────────────────────────────────────────
 
-function generateText(schedule) {
-    const policy = getPolicyData(schedule);
+function generateText(schedule, policy) {
     const lines = [];
 
     lines.push(`📅 LAST WAR: ${schedule.duration_days}-DAY MASTER SCHEDULE`);
@@ -319,8 +318,7 @@ const COLORS = {
     gold:         '#f1c40f',
 };
 
-function renderCanvas(schedule) {
-    const policy = getPolicyData(schedule);
+function renderCanvas(schedule, policy) {
     const canvas = document.getElementById('schedule-canvas');
     const weeks = Math.ceil(policy.days.length / 7);
 
@@ -715,8 +713,8 @@ if (canManage) {
 }
 
 document.getElementById('btn-text').addEventListener('click', () => {
-    if (!currentSchedule) return;
-    document.getElementById('text-output').value = generateText(currentSchedule);
+    if (!currentSchedule || !currentPolicy) return;
+    document.getElementById('text-output').value = generateText(currentSchedule, currentPolicy);
     document.getElementById('text-section').classList.remove('hidden');
     document.getElementById('infographic-section').classList.add('hidden');
     document.getElementById('text-section').scrollIntoView({ behavior: 'smooth' });
@@ -732,10 +730,10 @@ document.getElementById('btn-copy-text').addEventListener('click', () => {
 });
 
 document.getElementById('btn-infographic').addEventListener('click', () => {
-    if (!currentSchedule) return;
+    if (!currentSchedule || !currentPolicy) return;
     document.getElementById('infographic-section').classList.remove('hidden');
     document.getElementById('text-section').classList.add('hidden');
-    renderCanvas(currentSchedule);
+    renderCanvas(currentSchedule, currentPolicy);
     document.getElementById('infographic-section').scrollIntoView({ behavior: 'smooth' });
 });
 
