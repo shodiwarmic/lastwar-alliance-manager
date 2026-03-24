@@ -81,6 +81,12 @@
                 <span class="nav-icon">⚔️</span><span class="nav-text">VS Points</span>
             </a>
             {{end}}
+
+            {{if .Permissions.ManageMembers}}
+            <a href="/alias-audit" class="nav-link {{if eq .ActivePage "alias-audit"}}active{{end}}">
+                <span class="nav-icon">🏷️</span><span class="nav-text">Aliases</span>
+            </a>
+            {{end}}
             
             {{if and .Permissions.ViewUpload .OCRPipelineReady}}
             <a href="/upload" class="nav-link {{if eq .ActivePage "upload"}}active{{end}}">

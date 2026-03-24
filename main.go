@@ -252,7 +252,8 @@ func main() {
 		"/settings": "settings",
 		"/admin":    "admin",
 		"/profile":  "profile",
-		"/files":    "files",
+		"/files":       "files",
+		"/alias-audit": "alias-audit",
 	}
 
 	for path, templateName := range pages {
@@ -273,7 +274,8 @@ func main() {
 				"vs":       data.Permissions.ViewVSPoints,
 				"upload":   data.Permissions.ViewUpload,
 				"settings": data.Permissions.ManageSettings,
-				"admin":    data.IsAdmin,
+				"admin":       data.IsAdmin,
+				"alias-audit": data.Permissions.ManageMembers,
 			}
 
 			// 3. Custom 403 Handler for Access Denied
