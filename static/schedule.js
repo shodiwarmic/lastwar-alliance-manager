@@ -323,7 +323,7 @@ function renderCanvas(schedule) {
     const weeks = Math.ceil(policy.days.length / 7);
 
     const ROW_H      = 52;
-    const HEADER_H   = 140;
+    const HEADER_H   = 60;
     const WEEK_HDR_H = 40;
     const COL_HDR_H  = 36;
     const LEGEND_H   = 80;
@@ -340,27 +340,6 @@ function renderCanvas(schedule) {
     ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
     ctx.fillText(`LAST WAR: SURVIVAL MASTER SCHEDULE (${schedule.duration_days}-DAY CYCLE)`, canvas.width / 2, 40);
-
-    // VS Theme row
-    ctx.fillStyle = COLORS.bgWeekHeader;
-    ctx.fillRect(10, 55, canvas.width - 20, 75);
-    ctx.strokeStyle = COLORS.border;
-    ctx.strokeRect(10, 55, canvas.width - 20, 75);
-    ctx.fillStyle = COLORS.textSecondary;
-    ctx.font = 'bold 13px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('VS DUEL THEME CYCLE (REPEATS WEEKLY)', canvas.width / 2, 73);
-
-    const themeColW = (canvas.width - 20) / VS_THEMES.length;
-    VS_THEMES.forEach((theme, i) => {
-        const tx = 10 + i * themeColW + themeColW / 2;
-        ctx.fillStyle = COLORS.textPrimary;
-        ctx.font = '20px Arial';
-        ctx.fillText(theme.icon, tx, 98);
-        ctx.font = '11px Arial';
-        ctx.fillStyle = COLORS.textTheme;
-        ctx.fillText(`${i + 1}. ${theme.label}`, tx, 116);
-    });
 
     const y = HEADER_H;
     const colW = (canvas.width - 20) / weeks;
@@ -409,12 +388,18 @@ function renderCanvas(schedule) {
             ctx.textAlign = 'center';
             ctx.fillText(`D${day.day_number}`, cx + subColW * 0.5, ry + ROW_H / 2 + 5);
 
-            // VS theme
-            ctx.font = '13px Arial';
+            // VS theme — icon left, abbreviated label right, both on same baseline
+            const THEME_SHORT = ['Radar', 'Base Exp', 'Science', 'Heroes', 'Mobilize', 'Buster', 'Alliance'];
+            const themeShort = THEME_SHORT[(day.day_number - 1) % 7];
+            const cellX = cx + subColW * 1;
+            const cellCenterY = ry + ROW_H / 2 + 5;
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'left';
             ctx.fillStyle = COLORS.textTheme;
-            ctx.fillText(theme.icon, cx + subColW * 1.5 - 12, ry + ROW_H / 2 + 5);
+            ctx.fillText(theme.icon, cellX + 4, cellCenterY);
+            const iconW = ctx.measureText(theme.icon).width;
             ctx.font = '10px Arial';
-            ctx.fillText(theme.label, cx + subColW * 1.5 + 6, ry + ROW_H / 2 + 5);
+            ctx.fillText(themeShort, cellX + iconW + 8, cellCenterY);
 
             // MG/ZS events
             const eventLines = [];
