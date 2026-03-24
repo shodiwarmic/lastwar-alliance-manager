@@ -15,6 +15,8 @@ const PERM_ROWS = [
     { key: 'view_files', label: 'View Alliance Files' },
     { key: 'upload_files', label: 'Upload Alliance Files' },
     { key: 'manage_files', label: 'Manage Alliance Files' },
+    { key: 'view_schedule', label: 'View Schedule' },
+    { key: 'manage_schedule', label: 'Manage Schedule' },
     { key: 'manage_settings', label: 'Access Settings Tab' }
 ];
 

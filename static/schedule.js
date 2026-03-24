@@ -64,6 +64,16 @@ function timeToMinutes(timeStr) {
     return h * 60 + (m || 0);
 }
 
+// Sort event objects by .time — null/missing times float to the top.
+function sortByTime(items) {
+    return [...items].sort((a, b) => {
+        if (!a.time && !b.time) return 0;
+        if (!a.time) return -1;
+        if (!b.time) return 1;
+        return timeToMinutes(a.time) - timeToMinutes(b.time);
+    });
+}
+
 function getVSTheme(dayNumber) {
     return VS_THEMES[(dayNumber - 1) % 7];
 }
@@ -105,6 +115,11 @@ function getPolicyData(schedule) {
         if (!d.custom_events) d.custom_events = [];
         if (d.mg && d.mg.time_override === undefined) d.mg.time_override = null;
         if (d.zs && d.zs.time_override === undefined) d.zs.time_override = null;
+        // Backfill column/time on custom events added before these fields existed
+        d.custom_events.forEach(ev => {
+            if (ev.column === undefined) ev.column = 'alliance';
+            if (ev.time === undefined) ev.time = null;
+        });
         // Drop stored server_events if present (now derived from constants)
         delete d.server_events;
     });
@@ -220,7 +235,9 @@ function renderDayGrid(policy) {
 
         // Custom events
         (day.custom_events || []).forEach(ev => {
-            chips.appendChild(makeChip(`${ev.icon} ${ev.label}`, 'var(--text-secondary, #555)'));
+            const timeStr = ev.time ? ` @ ${ev.time}` : '';
+            const bg = ev.column === 'server' ? 'var(--accent-secondary, #555)' : 'var(--accent-warning, #7d6608)';
+            chips.appendChild(makeChip(`${ev.icon} ${ev.label}${timeStr}`, bg));
         });
 
         if (chips.children.length === 0) {
@@ -251,7 +268,7 @@ function renderDayGrid(policy) {
 function generateText(schedule, policy) {
     const lines = [];
 
-    lines.push(`📅 LAST WAR: ${schedule.duration_days}-DAY MASTER SCHEDULE`);
+    lines.push(`📅 ${schedule.name}`);
     lines.push(`📊 Weekly VS Theme: ${VS_THEMES.map(t => t.label).join(' > ')}`);
     lines.push(`🎯 Current Baselines: MG ${policy.mg_baseline} | ZS ${policy.zs_baseline}`);
     lines.push(`   (Note: Baselines are reduced during gameplay seasons)`);
@@ -262,37 +279,40 @@ function generateText(schedule, policy) {
         const displayWeek = w + (policy.week_offset || 0);
         lines.push(`📅 WEEK ${displayWeek}`);
         policy.days.filter(d => Math.ceil(d.day_number / 7) === w).forEach(day => {
-            const parts = [];
+            const evs = [];
             getServerEvents(day.day_number).forEach(ev => {
-                parts.push(`${ev.label} ${ev.icon}`);
+                evs.push({ time: null, text: `${ev.label} ${ev.icon}` });
             });
             if (day.mg && day.mg.active) {
-                const vibe = day.mg.vibe ? VIBES[day.mg.vibe].label : 'Base';
                 const mgTime = day.mg.time_override || policy.mg_time;
+                const vibe = day.mg.vibe ? VIBES[day.mg.vibe].label : 'Base';
                 let s = `MG @ ${mgTime} (${vibe})`;
                 if (day.mg.conditional) s += ` [${day.mg.conditional}]`;
-                parts.push(s);
+                evs.push({ time: mgTime, text: s });
             }
             if (day.zs && day.zs.active) {
-                const vibe = day.zs.vibe ? VIBES[day.zs.vibe].label : 'Base';
                 const zsTime = day.zs.time_override || policy.zs_time;
+                const vibe = day.zs.vibe ? VIBES[day.zs.vibe].label : 'Base';
                 let s = `ZS @ ${zsTime} (${vibe})`;
                 if (day.zs.conditional) s += ` [${day.zs.conditional}]`;
-                parts.push(s);
+                evs.push({ time: zsTime, text: s });
             }
-            (day.custom_events || []).forEach(ev => parts.push(`${ev.icon} ${ev.label}`));
-            lines.push(`• D${day.day_number}: ${parts.length ? parts.join(' | ') : 'No Events'}`);
+            (day.custom_events || []).forEach(ev => {
+                const timeStr = ev.time ? ` @ ${ev.time}` : '';
+                evs.push({ time: ev.time || null, text: `${ev.icon} ${ev.label}${timeStr}` });
+            });
+            const sorted = sortByTime(evs);
+            const displayDayNum = ((day.day_number - 1) % 7) + 1;
+            lines.push(`• D${displayDayNum}: ${sorted.length ? sorted.map(e => e.text).join(' | ') : 'No Events'}`);
         });
         lines.push('');
     }
 
-    lines.push(`📋 LEVEL GUIDE & TIMINGS`);
-    lines.push(`• Base (Standard): Default difficulty — Lv.${policy.mg_baseline} MG / Lv.${policy.zs_baseline} ZS`);
-    lines.push(`• Push (Challenge): +1 Level. Leadership announces on event days.`);
-    lines.push(`• Chill (Easy): -1 Level for a weekend breather.`);
+    lines.push(`📋 LEVEL GUIDE`);
     lines.push(`• Extra Chill (Post-Event): -2 Levels. Run after major server events.`);
-    lines.push(`• ZS Timing: ${policy.zs_time} Server Time`);
-    lines.push(`• MG Timing: ${policy.mg_time} Server Time`);
+    lines.push(`• Chill (Easy): -1 Level for a weekend breather.`);
+    lines.push(`• Base (Standard): ±0 Levels`);
+    lines.push(`• Push (Challenge): +1 Level. Leadership announces on event days.`);
 
     return lines.join('\n');
 }
@@ -318,6 +338,25 @@ const COLORS = {
     gold:         '#f1c40f',
 };
 
+function drawCellLines(ctx, lines, centerX, ry, rowH) {
+    ctx.textAlign = 'center';
+    if (lines.length === 0) {
+        ctx.font = '11px Arial';
+        ctx.fillStyle = COLORS.textSecondary;
+        ctx.fillText('-', centerX, ry + rowH / 2 + 5);
+        return;
+    }
+    const fontSize = lines.length <= 2 ? 10 : 9;
+    const lineH = lines.length === 1 ? 0 : Math.min(16, (rowH - 10) / (lines.length - 1));
+    const totalH = (lines.length - 1) * lineH;
+    const startY = ry + (rowH - totalH) / 2 + fontSize / 2;
+    lines.forEach((line, i) => {
+        ctx.font = `${fontSize}px Arial`;
+        ctx.fillStyle = line.color;
+        ctx.fillText(line.text, centerX, startY + i * lineH);
+    });
+}
+
 function renderCanvas(schedule, policy) {
     const canvas = document.getElementById('schedule-canvas');
     const weeks = Math.ceil(policy.days.length / 7);
@@ -339,7 +378,7 @@ function renderCanvas(schedule, policy) {
     ctx.fillStyle = COLORS.accentTitle;
     ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(`LAST WAR: SURVIVAL MASTER SCHEDULE (${schedule.duration_days}-DAY CYCLE)`, canvas.width / 2, 40);
+    ctx.fillText(schedule.name, canvas.width / 2, 40);
 
     const y = HEADER_H;
     const colW = (canvas.width - 20) / weeks;
@@ -361,7 +400,7 @@ function renderCanvas(schedule, policy) {
 
         // Column headers
         const subY = y + WEEK_HDR_H;
-        const subCols = ['Day', 'VS Theme', 'MG / ZS', 'Server'];
+        const subCols = ['Day', 'VS Theme', 'Alliance', 'Server'];
         const subColW = colW / subCols.length;
         ctx.fillStyle = COLORS.bgCard;
         ctx.fillRect(cx, subY, colW, COL_HDR_H);
@@ -382,57 +421,51 @@ function renderCanvas(schedule, policy) {
             ctx.strokeStyle = COLORS.border;
             ctx.strokeRect(cx, ry, colW, ROW_H);
 
-            // Day number
+            // Day number — cycles 1-7 per week
+            const displayDay = ((day.day_number - 1) % 7) + 1;
             ctx.fillStyle = COLORS.textPrimary;
             ctx.font = 'bold 13px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(`D${day.day_number}`, cx + subColW * 0.5, ry + ROW_H / 2 + 5);
+            ctx.fillText(`D${displayDay}`, cx + subColW * 0.5, ry + ROW_H / 2 + 5);
 
-            // VS theme — icon left, abbreviated label right, both on same baseline
-            const THEME_SHORT = ['Radar', 'Base Exp', 'Science', 'Heroes', 'Mobilize', 'Buster', 'Alliance'];
-            const themeShort = THEME_SHORT[(day.day_number - 1) % 7];
-            const cellX = cx + subColW * 1;
-            const cellCenterY = ry + ROW_H / 2 + 5;
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'left';
+            // VS theme — icon + full label, two lines, centered
+            const themeCenterX = cx + subColW * 1.5;
+            ctx.textAlign = 'center';
             ctx.fillStyle = COLORS.textTheme;
-            ctx.fillText(theme.icon, cellX + 4, cellCenterY);
-            const iconW = ctx.measureText(theme.icon).width;
+            ctx.font = '14px Arial';
+            ctx.fillText(theme.icon, themeCenterX, ry + ROW_H / 2 - 4);
             ctx.font = '10px Arial';
-            ctx.fillText(themeShort, cellX + iconW + 8, cellCenterY);
+            ctx.fillText(theme.label, themeCenterX, ry + ROW_H / 2 + 10);
 
-            // MG/ZS events
-            const eventLines = [];
+            // Alliance column — MG, ZS, and alliance-type custom events, sorted by time
+            const allianceRaw = [];
             if (day.mg && day.mg.active) {
-                const vibe = day.mg.vibe ? VIBES[day.mg.vibe].label : 'Base';
                 const mgTime = day.mg.time_override || policy.mg_time;
-                eventLines.push({ text: `🛡️ MG @${mgTime} (${vibe})`, color: COLORS.accentMG });
+                const vibe = day.mg.vibe ? VIBES[day.mg.vibe].label : 'Base';
+                allianceRaw.push({ time: mgTime, text: `🛡️ MG @${mgTime} (${vibe})`, color: COLORS.accentMG });
             }
             if (day.zs && day.zs.active) {
-                const vibe = day.zs.vibe ? VIBES[day.zs.vibe].label : 'Base';
                 const zsTime = day.zs.time_override || policy.zs_time;
-                eventLines.push({ text: `🧟 ZS @${zsTime} (${vibe})`, color: COLORS.accentZS });
+                const vibe = day.zs.vibe ? VIBES[day.zs.vibe].label : 'Base';
+                allianceRaw.push({ time: zsTime, text: `🧟 ZS @${zsTime} (${vibe})`, color: COLORS.accentZS });
             }
-            if (eventLines.length === 0) {
-                ctx.font = 'italic 11px Arial';
-                ctx.fillStyle = COLORS.textSecondary;
-                ctx.fillText('-', cx + subColW * 2.5, ry + ROW_H / 2 + 5);
-            } else {
-                eventLines.forEach((el, eli) => {
-                    const lineY = eventLines.length === 1 ? ry + ROW_H / 2 + 5 : ry + 16 + eli * 18;
-                    ctx.font = '10px Arial';
-                    ctx.fillStyle = el.color;
-                    ctx.fillText(el.text, cx + subColW * 2.5, lineY);
-                });
-            }
+            (day.custom_events || []).filter(ev => ev.column !== 'server').forEach(ev => {
+                const timeStr = ev.time ? ` @${ev.time}` : '';
+                allianceRaw.push({ time: ev.time || null, text: `${ev.icon} ${ev.label}${timeStr}`, color: COLORS.gold });
+            });
+            drawCellLines(ctx, sortByTime(allianceRaw), cx + subColW * 2.5, ry, ROW_H);
 
-            // Server events (derived from constants, never stored)
+            // Server column — fixed server events + server-type custom events, sorted by time
             const serverEvs = getServerEvents(day.day_number);
-            const serverIcons = serverEvs.map(ev => ev.icon).join(' ');
-            ctx.font = serverIcons ? '16px Arial' : '11px Arial';
-            ctx.fillStyle = serverIcons ? COLORS.accentServer : COLORS.textSecondary;
-            ctx.textAlign = 'center';
-            ctx.fillText(serverIcons || '-', cx + subColW * 3.5, ry + ROW_H / 2 + 5);
+            const serverCustom = (day.custom_events || []).filter(ev => ev.column === 'server');
+            const serverRaw = [
+                ...serverEvs.map(ev => ({ time: null, text: `${ev.icon} ${ev.label}`, color: COLORS.accentServer })),
+                ...serverCustom.map(ev => {
+                    const timeStr = ev.time ? ` @${ev.time}` : '';
+                    return { time: ev.time || null, text: `${ev.icon} ${ev.label}${timeStr}`, color: COLORS.accentServer };
+                }),
+            ];
+            drawCellLines(ctx, sortByTime(serverRaw), cx + subColW * 3.5, ry, ROW_H);
         });
     }
 
@@ -449,7 +482,7 @@ function renderCanvas(schedule, policy) {
     ctx.fillText('LEGEND & TIMINGS', 20, legendY + 20);
     ctx.font = '11px Arial';
     [
-        `Base = Standard  |  Push = +1 Level  |  Chill = -1 Level  |  Extra Chill = -2 Levels`,
+        `Extra Chill = -2 Levels  |  Chill = -1 Level  |  Base = Standard  |  Push = +1 Level`,
         `ZS: ${policy.zs_time} Server Time  |  MG: ${policy.mg_time} Server Time`,
     ].forEach((item, i) => {
         ctx.fillStyle = COLORS.textSecondary;
@@ -476,9 +509,7 @@ function syncBaselineInputs(policy) {
     document.getElementById('mg-time').value = policy.mg_time || DEFAULT_MG_TIME;
     document.getElementById('zs-time').value = policy.zs_time || DEFAULT_ZS_TIME;
     document.getElementById('week-offset').value = policy.week_offset || 0;
-    document.querySelectorAll('input[name="duration"]').forEach(r => {
-        r.checked = Number(r.value) === (currentSchedule ? currentSchedule.duration_days : 14);
-    });
+    document.getElementById('schedule-title-input').disabled = !canManage;
     if (!canManage) {
         ['mg-baseline', 'zs-baseline', 'mg-time', 'zs-time', 'week-offset'].forEach(id => {
             document.getElementById(id).disabled = true;
@@ -512,39 +543,26 @@ function wireBaselineInputs() {
         currentPolicy.week_offset = Number(e.target.value) || 0;
         renderDayGrid(currentPolicy);
     });
-    document.querySelectorAll('input[name="duration"]').forEach(radio => {
-        radio.addEventListener('change', () => {
-            if (!currentPolicy || !currentSchedule) return;
-            const newDur = Number(radio.value);
-            currentSchedule.duration_days = newDur;
-            while (currentPolicy.days.length < newDur) {
-                const n = currentPolicy.days.length + 1;
-                currentPolicy.days.push({
-                    day_number: n,
-                    mg: { active: false, vibe: 'base', time_override: null, conditional: null },
-                    zs: { active: false, vibe: 'base', time_override: null, conditional: null },
-                    custom_events: [],
-                    notes: null,
-                });
-            }
-            currentPolicy.days = currentPolicy.days.slice(0, newDur);
-            renderDayGrid(currentPolicy);
-        });
-    });
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
 function setButtonStates(loaded) {
-    if (canManage) document.getElementById('btn-save').disabled = !loaded;
+    if (canManage) {
+        document.getElementById('btn-save').disabled = !loaded;
+        document.getElementById('btn-import').disabled = !loaded;
+        document.getElementById('btn-clear').disabled = !loaded;
+    }
     document.getElementById('btn-text').disabled = !loaded;
     document.getElementById('btn-infographic').disabled = !loaded;
+    document.getElementById('btn-export').disabled = !loaded;
 }
 
 function applySchedule(s) {
     currentSchedule = s;
     currentPolicy = getPolicyData(s);
     document.getElementById('schedule-title-display').textContent = s.name;
+    document.getElementById('schedule-title-input').value = s.name;
     document.getElementById('baseline-section').style.display = '';
     document.getElementById('day-grid-section').style.display = '';
     document.getElementById('text-section').classList.add('hidden');
@@ -566,7 +584,7 @@ async function saveCurrentSchedule() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
         body: JSON.stringify({
-            name: currentSchedule.name,
+            name: document.getElementById('schedule-title-input').value.trim() || currentSchedule.name,
             duration_days: currentSchedule.duration_days,
             schedule_data: currentPolicy,
         }),
@@ -608,12 +626,10 @@ function renderCustomEventsList(events) {
     list.innerHTML = '';
     events.forEach((ev, i) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:6px;';
+        row.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;';
 
         const iconSel = document.createElement('select');
         iconSel.style.cssText = 'width:60px; font-size:1.2em;';
-        iconSel.dataset.ceIndex = i;
-        iconSel.dataset.ceField = 'icon';
         CUSTOM_EVENT_ICONS.forEach(ic => {
             const opt = document.createElement('option');
             opt.value = ic;
@@ -624,12 +640,29 @@ function renderCustomEventsList(events) {
 
         const labelInput = document.createElement('input');
         labelInput.type = 'text';
-        labelInput.value = ev.label;
+        labelInput.value = ev.label || '';
         labelInput.maxLength = 60;
         labelInput.placeholder = 'Event label';
         labelInput.style.flex = '1';
-        labelInput.dataset.ceIndex = i;
-        labelInput.dataset.ceField = 'label';
+        labelInput.style.minWidth = '100px';
+
+        const timeInput = document.createElement('input');
+        timeInput.type = 'text';
+        timeInput.value = ev.time || '';
+        timeInput.pattern = '([0-1][0-9]|2[0-3]):[0-5][0-9]';
+        timeInput.placeholder = 'HH:MM';
+        timeInput.style.width = '72px';
+        timeInput.title = 'Optional time (24h)';
+
+        const colSel = document.createElement('select');
+        colSel.style.width = '90px';
+        [['alliance', 'Alliance'], ['server', 'Server']].forEach(([val, lbl]) => {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = lbl;
+            if ((ev.column || 'alliance') === val) opt.selected = true;
+            colSel.appendChild(opt);
+        });
 
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
@@ -644,6 +677,8 @@ function renderCustomEventsList(events) {
 
         row.appendChild(iconSel);
         row.appendChild(labelInput);
+        row.appendChild(timeInput);
+        row.appendChild(colSel);
         row.appendChild(removeBtn);
         list.appendChild(row);
     });
@@ -658,7 +693,7 @@ document.getElementById('btn-add-custom-event').addEventListener('click', () => 
     if (_editDayIndex === null) return;
     const day = currentPolicy.days[_editDayIndex];
     day.custom_events = day.custom_events || [];
-    day.custom_events.push({ icon: CUSTOM_EVENT_ICONS[0], label: '' });
+    day.custom_events.push({ icon: CUSTOM_EVENT_ICONS[0], label: '', time: null, column: 'alliance' });
     renderCustomEventsList(day.custom_events);
 });
 
@@ -691,9 +726,14 @@ document.getElementById('day-form').addEventListener('submit', e => {
     day.custom_events = Array.from(
         document.querySelectorAll('#custom-events-list > div')
     ).map(row => {
-        const iconSel = row.querySelector('select');
-        const labelInp = row.querySelector('input[type="text"]');
-        return { icon: iconSel.value, label: labelInp.value.trim() };
+        const selects = row.querySelectorAll('select');
+        const inputs  = row.querySelectorAll('input[type="text"]');
+        return {
+            icon:   selects[0].value,
+            label:  inputs[0].value.trim(),
+            time:   inputs[1].value.trim() || null,
+            column: selects[1].value,
+        };
     }).filter(ev => ev.label);
 
     day.notes = document.getElementById('day-notes').value.trim() || null;
@@ -759,6 +799,63 @@ document.getElementById('btn-download-jpg').addEventListener('click', () => {
     link.href = offscreen.toDataURL('image/jpeg', 0.92);
     link.click();
 });
+
+// ── Import / Export / Clear ───────────────────────────────────────────────────
+
+document.getElementById('btn-export').addEventListener('click', () => {
+    if (!currentPolicy) return;
+    const json = JSON.stringify(currentPolicy, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.download = `${(currentSchedule?.name || 'schedule').replace(/\s+/g, '_')}_policy.json`;
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    URL.revokeObjectURL(link.href);
+});
+
+if (canManage) {
+    document.getElementById('btn-import').addEventListener('click', () => {
+        document.getElementById('import-file-input').click();
+    });
+
+    document.getElementById('import-file-input').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = evt => {
+            try {
+                const parsed = JSON.parse(evt.target.result);
+                if (!parsed.days || !Array.isArray(parsed.days)) {
+                    alert('Invalid schedule JSON: missing "days" array.');
+                    return;
+                }
+                currentPolicy = getPolicyData({ ...currentSchedule, schedule_data: parsed });
+                syncBaselineInputs(currentPolicy);
+                renderDayGrid(currentPolicy);
+                document.getElementById('text-section').classList.add('hidden');
+                document.getElementById('infographic-section').classList.add('hidden');
+            } catch {
+                alert('Failed to parse JSON file.');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+        if (!currentPolicy) return;
+        if (!confirm('Clear all events from every day? Policy settings (baselines, times) will be kept.')) return;
+        currentPolicy.days.forEach(d => {
+            d.mg = { active: false, vibe: 'base', time_override: null, conditional: null };
+            d.zs = { active: false, vibe: 'base', time_override: null, conditional: null };
+            d.custom_events = [];
+            d.notes = null;
+        });
+        renderDayGrid(currentPolicy);
+        document.getElementById('text-section').classList.add('hidden');
+        document.getElementById('infographic-section').classList.add('hidden');
+    });
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

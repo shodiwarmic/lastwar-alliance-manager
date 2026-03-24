@@ -53,9 +53,8 @@ func putSchedule(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if req.DurationDays != 7 && req.DurationDays != 14 {
-		http.Error(w, "duration_days must be 7 or 14", http.StatusBadRequest)
-		return
+	if req.DurationDays != 14 {
+		req.DurationDays = 14
 	}
 	if !json.Valid(req.ScheduleData) {
 		http.Error(w, "schedule_data must be valid JSON", http.StatusBadRequest)
