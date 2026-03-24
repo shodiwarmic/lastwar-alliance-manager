@@ -24,15 +24,18 @@ func getSchedule(w http.ResponseWriter, r *http.Request) {
 
 	var s Schedule
 	var isActive int
+	var scheduleData string
 	// COALESCE guards against any legacy NULL schedule_data rows.
+	// Scan into string first — SQLite returns TEXT as string, not []byte.
 	err := db.QueryRow(`
 		SELECT id, name, duration_days, is_active, COALESCE(schedule_data, '{}'), created_by, created_at, updated_at
 		FROM schedules WHERE id = ?`, scheduleID).
-		Scan(&s.ID, &s.Name, &s.DurationDays, &isActive, &s.ScheduleData, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
+		Scan(&s.ID, &s.Name, &s.DurationDays, &isActive, &scheduleData, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	s.ScheduleData = json.RawMessage(scheduleData)
 	s.IsActive = isActive == 1
 
 	w.Header().Set("Content-Type", "application/json")
