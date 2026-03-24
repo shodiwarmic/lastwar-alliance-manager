@@ -4,6 +4,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"html/template"
 	"time"
 
@@ -333,6 +334,19 @@ type RankPermissions struct {
 	UploadFiles          bool   `json:"upload_files"`
 	ManageFiles          bool   `json:"manage_files"`
 	ViewAnonymousAuthors bool   `json:"view_anonymous_authors"`
+	ViewSchedule         bool   `json:"view_schedule"`
+	ManageSchedule       bool   `json:"manage_schedule"`
+}
+
+type Schedule struct {
+	ID           int             `json:"id"`
+	Name         string          `json:"name"`
+	DurationDays int             `json:"duration_days"`
+	IsActive     bool            `json:"is_active"`
+	ScheduleData json.RawMessage `json:"schedule_data"`
+	CreatedBy    int             `json:"created_by"`
+	CreatedAt    string          `json:"created_at"`
+	UpdatedAt    string          `json:"updated_at"`
 }
 
 type AllianceFile struct {

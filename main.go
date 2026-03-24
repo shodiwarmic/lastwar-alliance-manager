@@ -32,7 +32,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 
 		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
 			data.IsAdmin = true
-			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true}
+			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true}
 		} else if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
 			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
@@ -138,6 +138,10 @@ func main() {
 	// WOPI POST routes (CSRF exemption is handled at the server level below)
 	wopiRouter.HandleFunc("/files/{id}", wopiAuthMiddleware(wopiActionHandler)).Methods("POST")
 	wopiRouter.HandleFunc("/files/{id}/contents", wopiAuthMiddleware(wopiPutFile)).Methods("POST")
+
+	// Schedule API (single alliance schedule)
+	router.HandleFunc("/api/schedule", authMiddleware(requirePermission("view_schedule", getSchedule))).Methods("GET")
+	router.HandleFunc("/api/schedule", authMiddleware(requirePermission("manage_schedule", putSchedule))).Methods("PUT")
 
 	// Permission Matrix & Settings routes
 	router.HandleFunc("/api/permissions", authMiddleware(requirePermission("manage_settings", getPermissionsMatrix))).Methods("GET")
@@ -253,6 +257,7 @@ func main() {
 		"/admin":    "admin",
 		"/profile":  "profile",
 		"/files":       "files",
+		"/schedule":    "schedule",
 		"/alias-audit": "alias-audit",
 	}
 
@@ -275,6 +280,7 @@ func main() {
 				"upload":   data.Permissions.ViewUpload,
 				"settings": data.Permissions.ManageSettings,
 				"admin":       data.IsAdmin,
+				"schedule":    data.Permissions.ViewSchedule,
 				"alias-audit": data.Permissions.ManageMembers,
 			}
 

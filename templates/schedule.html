@@ -1,0 +1,200 @@
+{{define "header_text"}}
+    <h1>📅 Alliance Schedule</h1>
+    <h2>Schedule Policy Builder</h2>
+{{end}}
+
+{{define "content"}}
+<div id="schedule-page">
+
+    <!-- Validation Banner -->
+    <div id="validation-banner" class="warning-message hidden">
+        <strong>Schedule Warnings:</strong>
+        <ul id="validation-list"></ul>
+    </div>
+
+    <!-- Baseline Settings -->
+    <section class="form-section" id="baseline-section" style="display:none;">
+        <h3>⚙️ Policy Settings</h3>
+        <div class="form-group" style="margin-bottom:12px;">
+            <label for="schedule-title-input">Output Title</label>
+            <input type="text" id="schedule-title-input" maxlength="80" style="width:100%;"
+                placeholder="Alliance Schedule">
+        </div>
+        <div class="form-row" style="flex-wrap:wrap; gap:16px;">
+            <div class="form-group">
+                <label for="mg-baseline">MG Baseline Level</label>
+                <input type="number" id="mg-baseline" min="1" max="30" style="width:80px;">
+            </div>
+            <div class="form-group">
+                <label for="zs-baseline">ZS Baseline Level</label>
+                <input type="number" id="zs-baseline" min="1" max="30" style="width:80px;">
+            </div>
+            <div class="form-group">
+                <label for="mg-time">MG Time (Server)</label>
+                <input type="text" id="mg-time" pattern="([0-1][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" style="width:90px;">
+            </div>
+            <div class="form-group">
+                <label for="zs-time">ZS Time (Server)</label>
+                <input type="text" id="zs-time" pattern="([0-1][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" style="width:90px;">
+            </div>
+            <div class="form-group">
+                <label for="week-offset">Week Offset</label>
+                <input type="number" id="week-offset" min="0" max="52" style="width:70px;"
+                    title="Shift displayed week labels (e.g. 6 → Week 1 shows as Week 7)">
+            </div>
+        </div>
+    </section>
+
+    <!-- Day Grid -->
+    <section class="form-section" id="day-grid-section" style="display:none;">
+        <h3 id="schedule-title-display">Schedule</h3>
+        <div id="day-grid"></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:16px;">
+            {{if .Permissions.ManageSchedule}}
+            <button class="btn btn-secondary" id="btn-save"   disabled>Save</button>
+            {{end}}
+            <button class="btn btn-secondary" id="btn-text"        disabled>📄 Text</button>
+            <button class="btn btn-secondary" id="btn-infographic" disabled>🖼️ Infographic</button>
+            <button class="btn btn-secondary" id="btn-export"      disabled>⬇️ Export JSON</button>
+            {{if .Permissions.ManageSchedule}}
+            <button class="btn btn-secondary" id="btn-import" disabled>⬆️ Import JSON</button>
+            <button class="btn btn-danger"    id="btn-clear"  disabled>🗑️ Clear All</button>
+            {{end}}
+        </div>
+        <input type="file" id="import-file-input" accept=".json,application/json" style="display:none;">
+    </section>
+
+    <!-- Text Output -->
+    <section class="form-section hidden" id="text-section">
+        <h3>📄 Discord / Chat Text</h3>
+        <textarea id="text-output" rows="20" readonly
+            style="width:100%; font-family:monospace; font-size:13px;"></textarea>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="btn-copy-text">Copy to Clipboard</button>
+        </div>
+    </section>
+
+    <!-- Infographic Preview -->
+    <section class="form-section hidden" id="infographic-section">
+        <h3>🖼️ Infographic Preview</h3>
+        <div style="overflow-x:auto;">
+            <canvas id="schedule-canvas"></canvas>
+        </div>
+        <div class="modal-actions" style="margin-top:12px;">
+            <button class="btn btn-primary"   id="btn-download-png">⬇️ Download PNG</button>
+            <button class="btn btn-secondary" id="btn-download-jpg">⬇️ Download JPEG</button>
+        </div>
+    </section>
+
+</div>
+
+<!-- Edit Day Modal -->
+<div id="day-modal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:540px;">
+        <h2 id="day-modal-title">Edit Day</h2>
+        <form id="day-form">
+
+            <!-- MG -->
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="mg-active">
+                    🛡️ Marshal's Guard (MG)
+                </label>
+                <div id="mg-options" style="margin-left:24px; margin-top:8px; display:none;">
+                    <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+                        <div class="form-group">
+                            <label>Vibe</label>
+                            <select id="mg-vibe">
+                                <option value="extra_chill">Extra Chill (-2)</option>
+                                <option value="chill">Chill (-1)</option>
+                                <option value="base" selected>Base (±0)</option>
+                                <option value="push">Push (+1)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="mg-time-override">Time Override
+                                <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                            </label>
+                            <input type="text" id="mg-time-override" pattern="([0-1][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" style="width:90px;"
+                                title="Override the policy MG time for this day only">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="mg-conditional">Conditional Note
+                            <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                        </label>
+                        <input type="text" id="mg-conditional" maxlength="120"
+                            placeholder="e.g. If SVS/Meteorite/Sky: Post-Event @ Extra Chill">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ZS -->
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="zs-active">
+                    🧟 Zombie Siege (ZS)
+                </label>
+                <div id="zs-options" style="margin-left:24px; margin-top:8px; display:none;">
+                    <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+                        <div class="form-group">
+                            <label>Vibe</label>
+                            <select id="zs-vibe">
+                                <option value="extra_chill">Extra Chill (-2)</option>
+                                <option value="chill">Chill (-1)</option>
+                                <option value="base" selected>Base (±0)</option>
+                                <option value="push">Push (+1)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="zs-time-override">Time Override
+                                <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                            </label>
+                            <input type="text" id="zs-time-override" pattern="([0-1][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" style="width:90px;"
+                                title="Override the policy ZS time for this day only">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="zs-conditional">Conditional Note
+                            <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                        </label>
+                        <input type="text" id="zs-conditional" maxlength="120"
+                            placeholder="optional conditional instruction">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Events -->
+            <div class="form-group">
+                <label>Custom Events
+                    <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                </label>
+                <div id="custom-events-list" style="margin-bottom:8px;"></div>
+                <button type="button" class="btn btn-secondary" id="btn-add-custom-event"
+                    style="padding:4px 12px; font-size:0.9em;">+ Add Event</button>
+            </div>
+
+            <!-- Day Notes -->
+            <div class="form-group">
+                <label for="day-notes">Day Notes
+                    <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                </label>
+                <input type="text" id="day-notes" maxlength="160">
+            </div>
+
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save Day</button>
+                <button type="button" class="btn btn-secondary"
+                    onclick="closeDayModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    window.CAN_MANAGE = {{if .Permissions.ManageSchedule}}true{{else}}false{{end}};
+</script>
+<script src="/schedule.js"></script>
+{{end}}
