@@ -1,6 +1,6 @@
 {{define "header_text"}}
     <h1>📅 Alliance Schedule</h1>
-    <h2>Dynamic Schedule Builder</h2>
+    <h2>Schedule Policy Builder</h2>
 {{end}}
 
 {{define "content"}}
@@ -12,104 +12,89 @@
         <ul id="validation-list"></ul>
     </div>
 
-    <!-- Top Bar -->
+    <!-- Top Toolbar -->
     <section class="form-section">
-        <div class="form-row" style="align-items: flex-end; flex-wrap: wrap; gap: 12px;">
-            <div class="form-group" style="flex: 2; min-width: 200px;">
-                <label for="schedule-select">Active Schedule</label>
+        <div class="form-row" style="align-items:flex-end; flex-wrap:wrap; gap:12px;">
+            <div class="form-group" style="flex:2; min-width:200px;">
+                <label for="schedule-select">Schedule</label>
                 <select id="schedule-select">
-                    <option value="">-- No schedules yet --</option>
+                    <option value="">-- Select a schedule --</option>
                 </select>
             </div>
-
-            <div class="form-group" style="flex: 0 0 auto;">
+            <div class="form-group" style="flex:0 0 auto;">
                 <label>&nbsp;</label>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     {{if .Permissions.ManageSchedule}}
-                    <button class="btn btn-primary" id="btn-new">+ New Schedule</button>
-                    <button class="btn btn-secondary" id="btn-save" disabled>Save</button>
-                    <button class="btn btn-danger" id="btn-delete" disabled>Delete</button>
+                    <button class="btn btn-primary"   id="btn-new">+ New</button>
+                    <button class="btn btn-secondary" id="btn-save"     disabled>Save</button>
+                    <button class="btn btn-danger"    id="btn-delete"   disabled>Delete</button>
                     <button class="btn btn-secondary" id="btn-activate" disabled>Set Active</button>
                     {{end}}
-                    <button class="btn btn-secondary" id="btn-vibe" disabled>Generate Vibe Text</button>
+                    <button class="btn btn-secondary" id="btn-text"        disabled>📄 Text</button>
+                    <button class="btn btn-secondary" id="btn-infographic" disabled>🖼️ Infographic</button>
                 </div>
             </div>
         </div>
+    </section>
 
-        <!-- Duration Toggle -->
-        {{if .Permissions.ManageSchedule}}
-        <div class="form-group" id="duration-row" style="display: none; margin-top: 10px;">
-            <label>Cycle Length</label>
-            <label style="margin-left: 16px;">
-                <input type="radio" name="duration" value="7" checked> 7-Day
-            </label>
-            <label style="margin-left: 16px;">
-                <input type="radio" name="duration" value="14"> 14-Day
-            </label>
+    <!-- Baseline Settings -->
+    <section class="form-section" id="baseline-section" style="display:none;">
+        <h3>⚙️ Policy Settings</h3>
+        <div class="form-row" style="flex-wrap:wrap; gap:16px;">
+            <div class="form-group">
+                <label for="mg-baseline">MG Baseline Level</label>
+                <input type="number" id="mg-baseline" min="1" max="30" style="width:80px;">
+            </div>
+            <div class="form-group">
+                <label for="zs-baseline">ZS Baseline Level</label>
+                <input type="number" id="zs-baseline" min="1" max="30" style="width:80px;">
+            </div>
+            <div class="form-group">
+                <label for="mg-time">MG Time (Server)</label>
+                <input type="time" id="mg-time" style="width:130px;">
+            </div>
+            <div class="form-group">
+                <label for="zs-time">ZS Time (Server)</label>
+                <input type="time" id="zs-time" style="width:130px;">
+            </div>
+            <div class="form-group">
+                <label>Cycle Length</label>
+                {{if .Permissions.ManageSchedule}}
+                <label style="margin-left:12px;"><input type="radio" name="duration" value="7"> 7-Day</label>
+                <label style="margin-left:12px;"><input type="radio" name="duration" value="14" checked> 14-Day</label>
+                {{end}}
+            </div>
         </div>
-        {{end}}
     </section>
 
     <!-- Day Grid -->
-    <section class="form-section" id="day-grid-section" style="display: none;">
+    <section class="form-section" id="day-grid-section" style="display:none;">
         <h3 id="schedule-title-display">Schedule</h3>
         <div id="day-grid"></div>
     </section>
 
-    <!-- Vibe Output -->
-    <section class="form-section hidden" id="vibe-section">
-        <h3>Discord Vibe Text</h3>
-        <textarea id="vibe-output" rows="12" readonly style="width: 100%; font-family: monospace; font-size: 13px;"></textarea>
+    <!-- Text Output -->
+    <section class="form-section hidden" id="text-section">
+        <h3>📄 Discord / Chat Text</h3>
+        <textarea id="text-output" rows="20" readonly
+            style="width:100%; font-family:monospace; font-size:13px;"></textarea>
         <div class="modal-actions">
-            <button class="btn btn-secondary" id="btn-copy-vibe">Copy to Clipboard</button>
+            <button class="btn btn-secondary" id="btn-copy-text">Copy to Clipboard</button>
         </div>
     </section>
 
-</div>
+    <!-- Infographic Preview -->
+    <section class="form-section hidden" id="infographic-section">
+        <h3>🖼️ Infographic Preview</h3>
+        <div style="overflow-x:auto;">
+            <canvas id="schedule-canvas"></canvas>
+        </div>
+        <div class="modal-actions" style="margin-top:12px;">
+            <button class="btn btn-primary"   id="btn-download-png">⬇️ Download PNG</button>
+            <button class="btn btn-secondary" id="btn-download-jpg">⬇️ Download JPEG</button>
+        </div>
+    </section>
 
-<!-- Add / Edit Event Modal -->
-<div id="event-modal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <h2 id="event-modal-title">Add Event</h2>
-        <form id="event-form">
-            <input type="hidden" id="event-day-index">
-            <input type="hidden" id="event-edit-index">
-
-            <div class="form-group">
-                <label>Event Type</label>
-                <div>
-                    <label style="margin-right: 20px;">
-                        <input type="radio" name="event-type" value="mg" checked> 🛡️ Marshal's Guard (MG)
-                    </label>
-                    <label>
-                        <input type="radio" name="event-type" value="zs"> 🧟 Zombie Siege (ZS)
-                    </label>
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="event-time">Start Time</label>
-                    <input type="time" id="event-time" required>
-                </div>
-                <div class="form-group">
-                    <label for="event-level">Level Override <span style="font-weight: normal; font-size: 0.85em;">(optional)</span></label>
-                    <input type="number" id="event-level" min="1" max="99" placeholder="e.g. 25">
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="event-vibe">Vibe Label <span style="font-weight: normal; font-size: 0.85em;">(optional, e.g. "Base", "Hard")</span></label>
-                <input type="text" id="event-vibe" maxlength="60" placeholder="e.g. Base">
-            </div>
-
-            <div class="modal-actions">
-                <button type="submit" class="btn btn-primary">Save Event</button>
-                <button type="button" class="btn btn-secondary" onclick="closeEventModal()">Cancel</button>
-                <button type="button" class="btn btn-danger" id="btn-delete-event" style="display:none;" onclick="deleteCurrentEvent()">Remove Event</button>
-            </div>
-        </form>
-    </div>
 </div>
 
 <!-- New Schedule Modal -->
@@ -119,16 +104,102 @@
         <form id="new-schedule-form">
             <div class="form-group">
                 <label for="new-schedule-name">Schedule Name</label>
-                <input type="text" id="new-schedule-name" maxlength="100" placeholder="e.g. Week A" required>
+                <input type="text" id="new-schedule-name" maxlength="100"
+                    placeholder="e.g. Standard 14-Day" required>
             </div>
             <div class="form-group">
                 <label>Cycle Length</label>
-                <label style="margin-left: 16px;"><input type="radio" name="new-duration" value="7" checked> 7-Day</label>
-                <label style="margin-left: 16px;"><input type="radio" name="new-duration" value="14"> 14-Day</label>
+                <label style="margin-left:16px;">
+                    <input type="radio" name="new-duration" value="7"> 7-Day
+                </label>
+                <label style="margin-left:16px;">
+                    <input type="radio" name="new-duration" value="14" checked> 14-Day
+                </label>
             </div>
             <div class="modal-actions">
                 <button type="submit" class="btn btn-primary">Create</button>
-                <button type="button" class="btn btn-secondary" onclick="closeNewScheduleModal()">Cancel</button>
+                <button type="button" class="btn btn-secondary"
+                    onclick="closeNewScheduleModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Day Modal -->
+<div id="day-modal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:540px;">
+        <h2 id="day-modal-title">Edit Day</h2>
+        <form id="day-form">
+
+            <div class="form-group">
+                <label>Server Events</label>
+                <div id="server-event-checkboxes" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+            </div>
+
+            <!-- MG -->
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="mg-active">
+                    🛡️ Marshal's Guard (MG)
+                </label>
+                <div id="mg-options" style="margin-left:24px; margin-top:8px; display:none;">
+                    <div class="form-row" style="gap:12px;">
+                        <div class="form-group">
+                            <label>Vibe</label>
+                            <select id="mg-vibe">
+                                <option value="base">Base (±0)</option>
+                                <option value="push">Push (+1)</option>
+                                <option value="chill">Chill (-1)</option>
+                                <option value="extra_chill">Extra Chill (-2)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="mg-conditional">Conditional Note
+                            <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                        </label>
+                        <input type="text" id="mg-conditional" maxlength="120"
+                            placeholder="e.g. If SVS/Meteorite/Sky: Post-Event @ Extra Chill">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ZS -->
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="zs-active">
+                    🧟 Zombie Siege (ZS)
+                </label>
+                <div id="zs-options" style="margin-left:24px; margin-top:8px; display:none;">
+                    <div class="form-group">
+                        <label>Vibe</label>
+                        <select id="zs-vibe">
+                            <option value="base">Base (±0)</option>
+                            <option value="push">Push (+1)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="zs-conditional">Conditional Note
+                            <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                        </label>
+                        <input type="text" id="zs-conditional" maxlength="120"
+                            placeholder="optional conditional instruction">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Day Notes -->
+            <div class="form-group">
+                <label for="day-notes">Day Notes
+                    <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
+                </label>
+                <input type="text" id="day-notes" maxlength="160">
+            </div>
+
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save Day</button>
+                <button type="button" class="btn btn-secondary"
+                    onclick="closeDayModal()">Cancel</button>
             </div>
         </form>
     </div>
