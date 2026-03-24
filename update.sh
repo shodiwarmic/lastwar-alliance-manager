@@ -127,7 +127,7 @@ fi
 
 echo -e "${YELLOW}[3/6] Cleaning Go Modules...${NC}"
 # Use a temporary docker container to run go mod tidy and strip out Tesseract
-sudo docker run --rm -v "$PWD":/usr/src/app -w /usr/src/app golang:1.22-bookworm go mod tidy
+sudo docker run --rm -v "$PWD":/usr/src/app -w /usr/src/app golang:1.25-bookworm go mod tidy
 
 echo -e "${YELLOW}[4/6] Updating Docker...${NC}"
 if ! command -v docker &> /dev/null; then
