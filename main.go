@@ -32,7 +32,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 
 		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
 			data.IsAdmin = true
-			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true}
+			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true}
 		} else if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
 			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
@@ -221,6 +221,19 @@ func main() {
 	router.HandleFunc("/api/storm/groups/{id:[0-9]+}/members",
 		authMiddleware(requirePermission("manage_storm", saveGroupDirectMembers))).Methods("PUT")
 
+	// Officer Command
+	router.HandleFunc("/api/officer-command/data", authMiddleware(requirePermission("view_officer_command", getOfficerCommandData))).Methods("GET")
+	router.HandleFunc("/api/officer-command/categories", authMiddleware(requirePermission("manage_officer_command", createOCCategory))).Methods("POST")
+	router.HandleFunc("/api/officer-command/categories/reorder", authMiddleware(requirePermission("manage_officer_command", reorderOCCategories))).Methods("PUT")
+	router.HandleFunc("/api/officer-command/categories/{id:[0-9]+}", authMiddleware(requirePermission("manage_officer_command", updateOCCategory))).Methods("PUT")
+	router.HandleFunc("/api/officer-command/categories/{id:[0-9]+}", authMiddleware(requirePermission("manage_officer_command", deleteOCCategory))).Methods("DELETE")
+	router.HandleFunc("/api/officer-command/responsibilities", authMiddleware(requirePermission("manage_officer_command", createOCResponsibility))).Methods("POST")
+	router.HandleFunc("/api/officer-command/responsibilities/reorder", authMiddleware(requirePermission("manage_officer_command", reorderOCResponsibilities))).Methods("PUT")
+	router.HandleFunc("/api/officer-command/responsibilities/{id:[0-9]+}", authMiddleware(requirePermission("manage_officer_command", updateOCResponsibility))).Methods("PUT")
+	router.HandleFunc("/api/officer-command/responsibilities/{id:[0-9]+}", authMiddleware(requirePermission("manage_officer_command", deleteOCResponsibility))).Methods("DELETE")
+	router.HandleFunc("/api/officer-command/responsibilities/{id:[0-9]+}/assignees", authMiddleware(requirePermission("manage_officer_command", addOCAssignee))).Methods("POST")
+	router.HandleFunc("/api/officer-command/responsibilities/{id:[0-9]+}/assignees/{member_id:[0-9]+}", authMiddleware(requirePermission("manage_officer_command", removeOCAssignee))).Methods("DELETE")
+
 	router.HandleFunc("/api/power-history", authMiddleware(getPowerHistory)).Methods("GET")
 	router.HandleFunc("/api/power-history", authMiddleware(requirePermission("manage_members", addPowerRecord))).Methods("POST")
 	router.HandleFunc("/api/power-history/process-screenshot", authMiddleware(requirePermission("manage_members", processPowerScreenshot))).Methods("POST")
@@ -291,7 +304,8 @@ func main() {
 		"/profile":  "profile",
 		"/files":       "files",
 		"/schedule":    "schedule",
-		"/alias-audit": "alias-audit",
+		"/alias-audit":     "alias-audit",
+		"/officer-command": "officer-command",
 	}
 
 	for path, templateName := range pages {
@@ -314,7 +328,8 @@ func main() {
 				"settings": data.Permissions.ManageSettings,
 				"admin":       data.IsAdmin,
 				"schedule":    data.Permissions.ViewSchedule,
-				"alias-audit": data.Permissions.ManageMembers,
+				"alias-audit":     data.Permissions.ManageMembers,
+				"officer-command": data.Permissions.ViewOfficerCommand,
 			}
 
 			// 3. Custom 403 Handler for Access Denied

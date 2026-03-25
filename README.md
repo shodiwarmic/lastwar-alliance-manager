@@ -41,6 +41,15 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Infographic Export**: Export finished schedules as shareable infographics.
 - **Permission-Gated Access**: Separate `view_schedule` and `manage_schedule` permissions.
 
+### 🎖️ Officer Command
+- **Responsibility Directory**: A living org chart of standing alliance functions, grouped by domain (e.g. Membership, Relations, War). Not a task manager — no completion states or due dates.
+- **Category & Responsibility Management**: Admins can create, rename, and delete categories and responsibilities inline without leaving the page.
+- **Assignee Tracking**: Assign one or more members to each responsibility; chips display name and rank. Members can be added via a searchable picker and removed individually.
+- **Frequency Badges**: Each responsibility carries a Daily / Weekly / Seasonal frequency, displayed as colour-coded pill badges.
+- **Client-Side Filtering**: Filter the directory by assigned leader or frequency without round-trips to the server.
+- **Drag-to-Reorder**: Categories and responsibilities within a category can be reordered by drag-and-drop; order is persisted server-side.
+- **Permission-Gated Access**: Separate `view_officer_command` (R1–R5 default) and `manage_officer_command` (R4–R5 default) permissions control who can view vs. administer the directory.
+
 ### 📁 Alliance Files & Document Management
 Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** container, the app provides a Google Drive-like experience natively.
 - **Live Document Editing**: Full browser-based collaborative editing for spreadsheets (`.xlsx`, `.csv`), text documents (`.docx`), and presentations.
