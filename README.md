@@ -75,7 +75,6 @@ We provide an automated script that installs Docker, generates secure secrets, c
 ```bash
 git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git)
 cd lastwar-alliance-manager
-chmod +x install.sh
 ./install.sh
 ```
 

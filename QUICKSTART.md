@@ -5,7 +5,6 @@
 ```bash
 git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
 cd /opt/lastwar
-chmod +x install.sh
 ./install.sh
 ```
 
