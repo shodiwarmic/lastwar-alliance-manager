@@ -4,79 +4,131 @@
 {{end}}
 
 {{define "content"}}
-            <!-- Task Force Selector -->
-            <section class="form-section">
-                <h3>⚙️ Battle Configuration</h3>
+<div id="storm-root" data-can-manage="{{if .Permissions.ManageStorm}}true{{else}}false{{end}}">
+
+    <!-- Error banner -->
+    <div id="storm-error" class="warning-message hidden"></div>
+
+    <!-- Section 1: Battle Configuration -->
+    <section class="form-section">
+        <h3>⚙️ Battle Configuration</h3>
+        <div class="form-row" style="gap:16px; flex-wrap:wrap; align-items:flex-end;">
             <div class="form-group">
-                <label>Task Force:</label>
-                <label style="margin-left: 20px;">
-                    <input type="radio" name="taskForce" value="A" checked>
-                    Task Force A
-                </label>
-                <label style="margin-left: 20px;">
-                    <input type="radio" name="taskForce" value="B">
-                    Task Force B
-                </label>
+                <span style="display:block; margin-bottom:6px; font-weight:500;">Task Force</span>
+                <div style="display:flex; gap:8px;">
+                    <span class="filter-chip active" data-tf="A">Task Force A</span>
+                    <span class="filter-chip" data-tf="B">Task Force B</span>
+                </div>
             </div>
             <div class="form-group">
-                <label for="storm-time-select">Battle Time:</label>
-                <select id="storm-time-select" style="max-width: 400px;">
-                    <option value="">Loading timezones...</option>
+                <label for="storm-time-select-a">TF-A Battle Time</label>
+                <select id="storm-time-select-a" class="form-input" {{if not .Permissions.ManageStorm}}disabled{{end}}>
+                    <option value="">Loading...</option>
                 </select>
             </div>
-            </section>
-
-            <!-- Strategy Overview -->
-            <section class="form-section storm-strategy">
-                <h3>📋 Battle Strategy Overview</h3>
-            <div class="strategy-phases">
-                <div class="phase-card">
-                    <h4>⏱️ Stage 1 (Start - 10 min)</h4>
-                    <ul>
-                        <li><strong>Priority 1:</strong> Field Hospitals (all 4 - CRITICAL!)</li>
-                        <li><strong>Priority 2:</strong> Oil Refineries I & II (100/s total)</li>
-                        <li><strong>Priority 3:</strong> Science Hub (faster teleport)</li>
-                        <li><strong>Priority 4:</strong> Info Center (+10% all points)</li>
-                    </ul>
-                </div>
-                <div class="phase-card">
-                    <h4>⏱️ Stage 2 (10 - 30 min)</h4>
-                    <ul>
-                        <li><strong>Priority 1:</strong> Nuclear Silo (80/s - CRITICAL!)</li>
-                        <li><strong>Priority 2:</strong> Defend Nuclear Silo at all costs</li>
-                        <li><strong>Priority 3:</strong> Maintain Field Hospitals for healing</li>
-                        <li><strong>Optional:</strong> Arsenal/Mercenary Factory (buffs/debuffs)</li>
-                    </ul>
-                </div>
+            <div class="form-group">
+                <label for="storm-time-select-b">TF-B Battle Time</label>
+                <select id="storm-time-select-b" class="form-input" {{if not .Permissions.ManageStorm}}disabled{{end}}>
+                    <option value="">Loading...</option>
+                </select>
             </div>
-            </section>
+            {{if .Permissions.ManageStorm}}
+            <div class="form-group">
+                <button class="btn btn-secondary" id="btn-save-config">Save Config</button>
+            </div>
+            {{end}}
+        </div>
+    </section>
 
-            <!-- Building Assignments -->
-            <section class="form-section">
-                <h3>🏗️ Building Assignments</h3>
-                <p class="help-text">Assign up to 4 members per building. These are your designated capture teams.</p>
-            
-                <div id="buildings-grid" class="storm-buildings-grid">
-                    <!-- Buildings will be rendered here -->
-                </div>
+    <!-- Section 2: Inner Tab Bar -->
+    <div class="storm-tabs">
+        <button class="storm-tab" data-tab="my-reg">My Registration</button>
+        <button class="storm-tab" data-tab="planning">Planning</button>
+        {{if .Permissions.ManageStorm}}
+        <button class="storm-tab" data-tab="reg-view">Registration View</button>
+        {{end}}
+        <button class="storm-tab" data-tab="mail">Battle Mail</button>
+    </div>
 
-                <!-- Actions -->
-                <div class="button-group">
-                    <button id="generate-mail-btn" class="primary-btn">📧 Generate Battle Mail</button>
-                    <button id="clear-assignments-btn" class="clear-btn">🗑️ Clear All</button>
-                </div>
-            </section>
+    <!-- Planning Tab -->
+    <div id="tab-planning" class="tab-content">
+        <!-- Capacity Bar -->
+        <section class="form-section" style="margin-top:0; border-top:none;">
+            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                <div class="capacity-cell" id="cap-primaries">Primaries: —</div>
+                <div class="capacity-cell" id="cap-subs">Substitutes: —</div>
+                <div class="capacity-cell" id="cap-power">⚡ —</div>
+                {{if .Permissions.ManageStorm}}<div class="capacity-cell" id="cap-unassigned">Unassigned: —</div>{{end}}
+            </div>
+        </section>
 
-            <!-- Generated Mail Output -->
-            <section id="mail-output" class="form-section" style="display: none;">
-                <h3>📧 Generated Battle Mail</h3>
-                <div class="mail-header">
-                    <button id="copy-mail-btn" class="copy-btn">📋 Copy to Clipboard</button>
-                </div>
-                <div id="mail-content" class="mail-content"></div>
+        <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+            {{if .Permissions.ManageStorm}}
+            <!-- Member Pool -->
+            <section class="form-section" style="flex:0 0 260px; min-width:220px; position:sticky; top:12px;">
+                <h3>👥 Member Pool</h3>
+                <input type="text" id="pool-search" class="form-input" placeholder="Search members..." style="margin-bottom:8px;">
+                <div id="member-pool"></div>
             </section>
+            {{end}}
+
+            <!-- Groups Column -->
+            <div style="flex:1; min-width:300px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <h3 style="margin:0;">📋 Groups</h3>
+                    {{if .Permissions.ManageStorm}}
+                    <button class="btn btn-primary" id="btn-add-group" style="padding:4px 10px; font-size:0.85em; white-space:nowrap; width:auto; flex-shrink:0;">+ Add Group</button>
+                    {{end}}
+                </div>
+                <div id="groups-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Registration Tab -->
+    <div id="tab-my-reg" class="tab-content">
+        <section class="form-section">
+            <h3>📝 My Availability</h3>
+            {{if not .Rank}}
+            <p class="help-text">Your account is not linked to a member. Contact an admin to set up your profile.</p>
+            {{else}}
+            <div id="my-reg-slots"></div>
+            <div style="margin-top:12px;">
+                <button class="btn btn-primary" id="btn-save-my-reg">Save Availability</button>
+            </div>
+            {{end}}
+        </section>
+    </div>
+
+    <!-- Registration View Tab (planner only) -->
+    {{if .Permissions.ManageStorm}}
+    <div id="tab-reg-view" class="tab-content">
+        <section class="form-section">
+            <h3>📊 Registration View</h3>
+            <div id="reg-view-container"></div>
+        </section>
+    </div>
+    {{end}}
+
+    <!-- Battle Mail Tab -->
+    <div id="tab-mail" class="tab-content">
+        <section class="form-section">
+            <h3>📧 Battle Mail</h3>
+            <button class="btn btn-primary" id="btn-generate-mail">Generate Mail</button>
+            <div id="mail-output" class="hidden" style="margin-top:12px;">
+                <button class="btn btn-secondary" id="btn-copy-mail" style="margin-bottom:8px;">📋 Copy to Clipboard</button>
+                <pre id="mail-content" style="background:var(--bg-secondary); padding:12px; border-radius:6px; overflow-x:auto; white-space:pre-wrap;"></pre>
+            </div>
+        </section>
+    </div>
+
+</div>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="/storm.css">
 {{end}}
 
 {{define "scripts"}}
-    <script src="storm.js"></script>
+<script src="/storm.js"></script>
 {{end}}

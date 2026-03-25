@@ -253,6 +253,47 @@ type StormAssignment struct {
 	Position   int    `json:"position"`
 }
 
+type StormTFConfig struct {
+	TaskForce string `json:"task_force"`
+	TimeSlot  *int   `json:"time_slot"`
+}
+
+type StormRegistration struct {
+	ID          int    `json:"id"`
+	MemberID    int    `json:"member_id"`
+	MemberName  string `json:"member_name,omitempty"`
+	MemberRank  string `json:"member_rank,omitempty"`
+	MemberPower *int64 `json:"member_power,omitempty"`
+	Slot1       int    `json:"slot_1"`
+	Slot2       int    `json:"slot_2"`
+	Slot3       int    `json:"slot_3"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type StormGroupMember struct {
+	ID       int  `json:"id"`
+	MemberID int  `json:"member_id"`
+	IsSub    bool `json:"is_sub"`
+	Position int  `json:"position"`
+}
+
+type StormGroupBuilding struct {
+	ID         int                `json:"id"`
+	BuildingID string             `json:"building_id"`
+	SortOrder  int                `json:"sort_order"`
+	Members    []StormGroupMember `json:"members"`
+}
+
+type StormGroup struct {
+	ID            int                  `json:"id"`
+	TaskForce     string               `json:"task_force"`
+	Name          string               `json:"name"`
+	Instructions  string               `json:"instructions"`
+	SortOrder     int                  `json:"sort_order"`
+	Buildings     []StormGroupBuilding `json:"buildings"`
+	DirectMembers []StormGroupMember   `json:"direct_members"`
+}
+
 type DetectedMember struct {
 	Name         string   `json:"name"`
 	Rank         string   `json:"rank"`
