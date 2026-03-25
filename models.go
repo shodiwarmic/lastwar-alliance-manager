@@ -377,6 +377,33 @@ type RankPermissions struct {
 	ViewAnonymousAuthors bool   `json:"view_anonymous_authors"`
 	ViewSchedule         bool   `json:"view_schedule"`
 	ManageSchedule       bool   `json:"manage_schedule"`
+	ViewOfficerCommand   bool   `json:"view_officer_command"`
+	ManageOfficerCommand bool   `json:"manage_officer_command"`
+}
+
+// --- Officer Command Models ---
+
+type OCAssignee struct {
+	MemberID int    `json:"member_id"`
+	Name     string `json:"name"`
+	Rank     string `json:"rank"`
+}
+
+type OCResponsibility struct {
+	ID           int          `json:"id"`
+	CategoryID   int          `json:"category_id"`
+	Name         string       `json:"name"`
+	Description  string       `json:"description"`
+	Frequency    string       `json:"frequency"`
+	DisplayOrder int          `json:"display_order"`
+	Assignees    []OCAssignee `json:"assignees"`
+}
+
+type OCCategory struct {
+	ID               int                `json:"id"`
+	Name             string             `json:"name"`
+	DisplayOrder     int                `json:"display_order"`
+	Responsibilities []OCResponsibility `json:"responsibilities"`
 }
 
 type Schedule struct {

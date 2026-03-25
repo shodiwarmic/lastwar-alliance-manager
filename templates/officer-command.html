@@ -1,0 +1,86 @@
+{{define "head_tags"}}
+<link rel="stylesheet" href="/officer_command.css">
+{{end}}
+
+{{define "header_text"}}
+<h1>🎖️ Officer Command</h1>
+<h2>Alliance Responsibility Directory</h2>
+{{end}}
+
+{{define "content"}}
+<div id="oc-root" data-can-manage="{{if .Permissions.ManageOfficerCommand}}true{{else}}false{{end}}">
+    <div id="oc-error" class="oc-error hidden"></div>
+
+    <div class="oc-header-row">
+        <div>
+            <h2 style="margin:0;">Responsibilities</h2>
+        </div>
+        {{if .Permissions.ManageOfficerCommand}}
+        <button class="btn btn-primary" id="btn-add-category">+ Add Category</button>
+        {{end}}
+    </div>
+
+    <div class="oc-filter-bar">
+        <select id="filter-leader">
+            <option value="">All Leaders</option>
+        </select>
+        <select id="filter-frequency">
+            <option value="">All Frequencies</option>
+            <option value="Daily">Daily</option>
+            <option value="Weekly">Weekly</option>
+            <option value="Seasonal">Seasonal</option>
+        </select>
+    </div>
+
+    <div id="oc-categories"></div>
+</div>
+
+<!-- Responsibility Modal -->
+<div id="resp-modal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:480px;">
+        <h2 id="resp-modal-title">Add Responsibility</h2>
+        <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="resp-name" class="form-input" placeholder="e.g. Member Recruiting">
+        </div>
+        <div class="form-group">
+            <label>Description</label>
+            <textarea id="resp-desc" class="form-input" style="resize:vertical;min-height:70px;" placeholder="Brief description of this responsibility"></textarea>
+        </div>
+        <div class="form-group">
+            <label>Frequency</label>
+            <select id="resp-freq" class="form-input">
+                <option value="Daily">Daily</option>
+                <option value="Weekly" selected>Weekly</option>
+                <option value="Seasonal">Seasonal</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="resp-modal-cancel">Cancel</button>
+            <button class="btn btn-primary" id="resp-modal-save">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Assignee Picker Modal -->
+<div id="assignee-modal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:480px;">
+        <h2>Add Assignee</h2>
+        <div class="form-group">
+            <label>Search member</label>
+            <input type="text" id="assignee-search" class="form-input" placeholder="Type to filter…">
+        </div>
+        <div id="assignee-list" style="max-height:260px;overflow-y:auto;margin-top:0.5rem;"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="assignee-modal-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    window.CAN_MANAGE = {{if .Permissions.ManageOfficerCommand}}true{{else}}false{{end}};
+</script>
+<script src="/officer_command.js"></script>
+{{end}}
