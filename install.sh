@@ -68,7 +68,6 @@ echo ""
 
 echo -e "${GREEN}[1/6] Updating system packages...${NC}"
 sudo apt update
-sudo apt upgrade -y
 
 echo -e "${GREEN}[2/6] Installing dependencies...${NC}"
 sudo apt install -y curl wget git ufw fail2ban sqlite3
