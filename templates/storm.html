@@ -14,8 +14,8 @@
         <h3>⚙️ Battle Configuration</h3>
         <div class="form-row" style="gap:16px; flex-wrap:wrap; align-items:flex-end;">
             <div class="form-group">
-                <label>Task Force</label>
-                <div style="display:flex; gap:8px; margin-top:4px;">
+                <span style="display:block; margin-bottom:6px; font-weight:500;">Task Force</span>
+                <div style="display:flex; gap:8px;">
                     <span class="filter-chip active" data-tf="A">Task Force A</span>
                     <span class="filter-chip" data-tf="B">Task Force B</span>
                 </div>
@@ -41,13 +41,13 @@
     </section>
 
     <!-- Section 2: Inner Tab Bar -->
-    <div class="section-tabs" style="margin-bottom:0;">
-        <button class="section-tab active" data-tab="planning">Planning</button>
-        <button class="section-tab" data-tab="my-reg">My Registration</button>
+    <div class="storm-tabs">
+        <button class="storm-tab" data-tab="my-reg">My Registration</button>
+        <button class="storm-tab" data-tab="planning">Planning</button>
         {{if .Permissions.ManageStorm}}
-        <button class="section-tab" data-tab="reg-view">Registration View</button>
+        <button class="storm-tab" data-tab="reg-view">Registration View</button>
         {{end}}
-        <button class="section-tab" data-tab="mail">Battle Mail</button>
+        <button class="storm-tab" data-tab="mail">Battle Mail</button>
     </div>
 
     <!-- Planning Tab -->
@@ -58,24 +58,26 @@
                 <div class="capacity-cell" id="cap-primaries">Primaries: —</div>
                 <div class="capacity-cell" id="cap-subs">Substitutes: —</div>
                 <div class="capacity-cell" id="cap-power">⚡ —</div>
-                <div class="capacity-cell" id="cap-unassigned">Unassigned: —</div>
+                {{if .Permissions.ManageStorm}}<div class="capacity-cell" id="cap-unassigned">Unassigned: —</div>{{end}}
             </div>
         </section>
 
         <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+            {{if .Permissions.ManageStorm}}
             <!-- Member Pool -->
             <section class="form-section" style="flex:0 0 260px; min-width:220px; position:sticky; top:12px;">
                 <h3>👥 Member Pool</h3>
                 <input type="text" id="pool-search" class="form-input" placeholder="Search members..." style="margin-bottom:8px;">
-                <div id="member-pool" style="max-height:60vh; overflow-y:auto;"></div>
+                <div id="member-pool"></div>
             </section>
+            {{end}}
 
             <!-- Groups Column -->
             <div style="flex:1; min-width:300px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <h3 style="margin:0;">📋 Groups</h3>
                     {{if .Permissions.ManageStorm}}
-                    <button class="btn btn-primary" id="btn-add-group">+ Add Group</button>
+                    <button class="btn btn-primary" id="btn-add-group" style="padding:4px 10px; font-size:0.85em; white-space:nowrap; width:auto; flex-shrink:0;">+ Add Group</button>
                     {{end}}
                 </div>
                 <div id="groups-container"></div>
@@ -84,7 +86,7 @@
     </div>
 
     <!-- My Registration Tab -->
-    <div id="tab-my-reg" class="tab-content hidden">
+    <div id="tab-my-reg" class="tab-content">
         <section class="form-section">
             <h3>📝 My Availability</h3>
             {{if not .Rank}}
@@ -100,7 +102,7 @@
 
     <!-- Registration View Tab (planner only) -->
     {{if .Permissions.ManageStorm}}
-    <div id="tab-reg-view" class="tab-content hidden">
+    <div id="tab-reg-view" class="tab-content">
         <section class="form-section">
             <h3>📊 Registration View</h3>
             <div id="reg-view-container"></div>
@@ -109,7 +111,7 @@
     {{end}}
 
     <!-- Battle Mail Tab -->
-    <div id="tab-mail" class="tab-content hidden">
+    <div id="tab-mail" class="tab-content">
         <section class="form-section">
             <h3>📧 Battle Mail</h3>
             <button class="btn btn-primary" id="btn-generate-mail">Generate Mail</button>
@@ -123,133 +125,10 @@
 </div>
 {{end}}
 
+{{define "head_tags"}}
+<link rel="stylesheet" href="/storm.css">
+{{end}}
+
 {{define "scripts"}}
-<style>
-.capacity-cell {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 8px 16px;
-    font-weight: 600;
-    min-width: 140px;
-    text-align: center;
-}
-.capacity-cell.warn { border-color: var(--warning-color, #f59e0b); color: var(--warning-color, #f59e0b); }
-.capacity-cell.danger { border-color: var(--danger-color, #ef4444); color: var(--danger-color, #ef4444); }
-.pool-card {
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 8px 10px;
-    margin-bottom: 6px;
-    cursor: grab;
-    background: var(--bg-card, var(--bg-secondary));
-    user-select: none;
-}
-.pool-card.dimmed { opacity: 0.45; }
-.pool-card .pool-name { font-weight: 600; font-size: 0.95em; }
-.pool-card .pool-meta { font-size: 0.8em; color: var(--text-secondary); }
-.pool-card .pool-reg { font-size: 0.75em; margin-top:2px; }
-.reg-avail { color: var(--success-color, #22c55e); }
-.reg-sub { color: var(--warning-color, #f59e0b); }
-.reg-none { color: var(--text-secondary); }
-.group-card {
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    margin-bottom: 16px;
-    overflow: hidden;
-}
-.group-header {
-    background: var(--bg-secondary);
-    padding: 10px 14px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-.group-header h4 { margin: 0; flex: 1; }
-.group-body { padding: 12px 14px; }
-.building-slot {
-    border: 1px dashed var(--border-color);
-    border-radius: 6px;
-    padding: 8px;
-    margin-bottom: 8px;
-    min-height: 48px;
-}
-.building-slot.drag-over { border-color: var(--accent-color, #3b82f6); background: rgba(59,130,246,0.08); }
-.building-slot-header { font-size: 0.85em; font-weight: 600; color: var(--text-secondary); margin-bottom:6px; }
-.member-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: var(--bg-tertiary, var(--bg-secondary));
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 2px 8px;
-    margin: 2px;
-    font-size: 0.85em;
-}
-.member-chip.is-sub { opacity: 0.7; font-style: italic; }
-.member-chip .chip-remove { cursor: pointer; color: var(--danger-color, #ef4444); margin-left: 4px; font-weight: bold; }
-.my-slot-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-    padding: 10px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-}
-.slot-label { font-weight: 600; min-width: 180px; }
-.slot-times { font-size: 0.85em; color: var(--text-secondary); flex: 1; }
-.three-way { display: flex; gap: 4px; }
-.three-way button {
-    padding: 4px 10px;
-    border-radius: 4px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-    cursor: pointer;
-    font-size: 0.85em;
-    color: var(--text-primary);
-}
-.three-way button.active-unavail { background: var(--danger-color, #ef4444); color: #fff; border-color: var(--danger-color, #ef4444); }
-.three-way button.active-avail { background: var(--success-color, #22c55e); color: #fff; border-color: var(--success-color, #22c55e); }
-.three-way button.active-sub { background: var(--warning-color, #f59e0b); color: #fff; border-color: var(--warning-color, #f59e0b); }
-.reg-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-.reg-table th, .reg-table td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); text-align: left; }
-.reg-table th { background: var(--bg-secondary); font-weight: 600; }
-.reg-pill {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.8em;
-    cursor: pointer;
-    border: 1px solid transparent;
-}
-.reg-pill.s0 { background: var(--bg-secondary); color: var(--text-secondary); border-color: var(--border-color); }
-.reg-pill.s1 { background: var(--success-color, #22c55e); color: #fff; }
-.reg-pill.s2 { background: var(--warning-color, #f59e0b); color: #fff; }
-.inline-search { position: relative; margin-top: 4px; }
-.inline-search input { width: 100%; box-sizing: border-box; }
-.inline-search .inline-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: var(--bg-card, var(--bg-secondary));
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    z-index: 100;
-    max-height: 180px;
-    overflow-y: auto;
-}
-.inline-search .inline-dropdown div {
-    padding: 6px 10px;
-    cursor: pointer;
-    font-size: 0.88em;
-}
-.inline-search .inline-dropdown div:hover { background: var(--bg-secondary); }
-.tab-content.hidden { display: none; }
-</style>
 <script src="/storm.js"></script>
 {{end}}

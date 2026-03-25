@@ -1,0 +1,257 @@
+/* ── Storm Tab Navigation ─────────────────────────────────────────────────── */
+
+.storm-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 0;
+    flex-wrap: wrap;
+}
+
+.storm-tab {
+    padding: 10px 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.95em;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.storm-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border-radius: 4px 4px 0 0;
+}
+
+.storm-tab.active {
+    color: var(--text-primary);
+    border-bottom-color: #667eea;
+    font-weight: 600;
+}
+
+/* .tab-content visibility is governed by the global .tab-content { display:none } / .tab-content.active { display:block } rules in styles.css */
+
+/* ── Capacity Bar ─────────────────────────────────────────────────────────── */
+
+.capacity-cell {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 600;
+    min-width: 140px;
+    text-align: center;
+}
+.capacity-cell.warn   { border-color: var(--warning-color, #f59e0b); color: var(--warning-color, #f59e0b); }
+.capacity-cell.danger { border-color: var(--danger-color, #ef4444);  color: var(--danger-color, #ef4444); }
+
+/* ── Member Pool ──────────────────────────────────────────────────────────── */
+
+#member-pool {
+    min-height: 60vh;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+@media (max-width: 640px) {
+    #member-pool { min-height: 0; max-height: 50vh; }
+}
+
+.pool-card {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    background: var(--bg-card, var(--bg-secondary));
+    user-select: none;
+}
+.pool-card[draggable="true"] { cursor: grab; }
+.pool-card[draggable="true"]:active { cursor: grabbing; }
+.pool-card.dimmed  { opacity: 0.45; }
+.pool-card .pool-name { font-weight: 600; font-size: 0.95em; }
+.pool-card .pool-meta { font-size: 0.8em; color: var(--text-secondary); }
+.pool-card .pool-reg  { font-size: 0.75em; margin-top: 2px; }
+
+.reg-avail { color: var(--success-color, #22c55e); }
+.reg-sub   { color: var(--warning-color, #f59e0b); }
+.reg-none  { color: var(--text-secondary); }
+.reg-other { font-size: 0.75em; margin-left: 6px; opacity: 0.75; }
+.pool-squad-power { color: var(--warning-color, #f59e0b); font-size: 0.8em; }
+
+/* ── Group Cards ──────────────────────────────────────────────────────────── */
+
+.group-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    /* overflow:hidden removed — was clipping inline-dropdown */
+}
+.group-header {
+    background: var(--bg-secondary);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    border-radius: 8px 8px 0 0;
+}
+.group-header h4 { margin: 0; flex: 1; }
+.group-name-input {
+    flex: 1;
+    font-size: 1em;
+    font-weight: 600;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: var(--text-primary);
+    min-width: 0;
+}
+.group-name-input:hover { border-color: var(--border-color); }
+.group-name-input:focus { outline: none; border-color: #667eea; background: var(--bg-primary, #1a1a2e); }
+.group-body { padding: 12px 14px; }
+
+/* ── Building Slots ───────────────────────────────────────────────────────── */
+
+.building-slot {
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+    padding: 8px;
+    margin-bottom: 8px;
+    min-height: 48px;
+}
+.building-slot.drag-over {
+    border-color: var(--accent-color, #3b82f6);
+    background: rgba(59, 130, 246, 0.08);
+}
+.building-slot-header {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+/* ── Member Chips ─────────────────────────────────────────────────────────── */
+
+.member-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-tertiary, var(--bg-secondary));
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 3px 6px;
+    margin: 2px;
+    font-size: 0.85em;
+    color: var(--text-primary);
+    user-select: none;
+}
+.member-chip[draggable="true"] { cursor: grab; }
+.member-chip[draggable="true"]:active { cursor: grabbing; }
+.member-chip.is-sub { opacity: 0.75; font-style: italic; border-style: dashed; }
+.member-chip .chip-power { font-size: 0.8em; color: var(--text-secondary); }
+.member-chip .chip-sub-toggle {
+    cursor: pointer;
+    font-size: 0.72em;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    line-height: 1.4;
+    user-select: none;
+}
+.member-chip.is-sub .chip-sub-toggle {
+    background: var(--warning-color, #f59e0b);
+    color: #fff;
+    border-color: var(--warning-color, #f59e0b);
+}
+.member-chip .chip-remove {
+    cursor: pointer;
+    color: var(--danger-color, #ef4444);
+    margin-left: 2px;
+    font-weight: bold;
+    font-size: 1em;
+    line-height: 1;
+}
+
+/* ── My Registration ──────────────────────────────────────────────────────── */
+
+.my-slot-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+.slot-label { font-weight: 600; min-width: 180px; }
+.slot-times { font-size: 0.85em; color: var(--text-secondary); flex: 1; }
+
+.three-way { display: flex; gap: 4px; }
+.three-way button {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    font-size: 0.85em;
+    color: var(--text-primary);
+}
+.three-way button.active-unavail { background: var(--danger-color, #ef4444);  color: #fff; border-color: var(--danger-color, #ef4444); }
+.three-way button.active-avail   { background: var(--success-color, #22c55e); color: #fff; border-color: var(--success-color, #22c55e); }
+.three-way button.active-sub     { background: var(--warning-color, #f59e0b); color: #fff; border-color: var(--warning-color, #f59e0b); }
+
+/* ── Registration Table ───────────────────────────────────────────────────── */
+
+.reg-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.reg-table th,
+.reg-table td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); text-align: left; }
+.reg-table th  { background: var(--bg-secondary); font-weight: 600; }
+
+.reg-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+.reg-pill.s0 { background: var(--bg-secondary); color: var(--text-secondary); border-color: var(--border-color); }
+.reg-pill.s1 { background: var(--success-color, #22c55e); color: #fff; }
+.reg-pill.s2 { background: var(--warning-color, #f59e0b); color: #fff; }
+
+/* ── Inline Member Search ─────────────────────────────────────────────────── */
+
+.inline-search { position: relative; margin-top: 4px; }
+.inline-search input { width: 100%; box-sizing: border-box; }
+.inline-search .inline-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-primary, #1a1a2e);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    z-index: 200;
+    max-height: 180px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.inline-search .inline-dropdown div {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.88em;
+    color: var(--text-primary);
+}
+.inline-search .inline-dropdown div:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}

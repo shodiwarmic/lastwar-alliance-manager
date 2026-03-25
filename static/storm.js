@@ -110,6 +110,10 @@ let saveDebounceTimer = null;
 let myRegState = { slot_1: 0, slot_2: 0, slot_3: 0 };
 let dragMemberId = null;
 let dragIsSub = false;
+// Source slot when dragging an already-assigned chip (null = dragging from pool)
+let dragSourceGroupId = null;
+let dragSourceBuildingId = null;
+let dragSourceIsDirect = false;
 
 // --- Error display ---
 function showError(msg) {
@@ -155,33 +159,48 @@ function renderAll() {
 }
 
 // --- Render member pool ---
+function getRegVal(memberId, slotIdx) {
+    if (!slotIdx) return 0;
+    const key = `slot_${slotIdx}`;
+    const reg = registrations.find(r => r.member_id === memberId);
+    let val = reg ? (reg[key] || 0) : 0;
+    if (myRegistration && myRegistration.member_id === memberId) val = myRegistration[key] || 0;
+    return val;
+}
+
 function renderPool() {
     const pool = document.getElementById('member-pool');
     if (!pool) return;
     const searchVal = (document.getElementById('pool-search') || {}).value || '';
     const assigned = allAssignedIds();
-    const activeSlotIdx = tfConfig[currentTF]; // 1,2,3 or null
+    const activeSlotIdx = tfConfig[currentTF];
+    const otherTF = currentTF === 'A' ? 'B' : 'A';
+    const otherSlotIdx = tfConfig[otherTF];
 
-    const filtered = allMembers.filter(m => {
+    const unassigned = allMembers.filter(m => {
+        if (assigned.has(m.id)) return false;
         if (searchVal) {
             const q = searchVal.toLowerCase();
-            if (!m.name.toLowerCase().includes(q) && !m.rank.toLowerCase().includes(q)) return false;
+            if (!m.name.toLowerCase().includes(q) &&
+                !m.rank.toLowerCase().includes(q) &&
+                !(m.squad_type || '').toLowerCase().includes(q)) return false;
         }
-        return !assigned.has(m.id);
+        return true;
+    });
+
+    // Sort: available first, then sub-only, then unregistered; within each group sort by power desc
+    const regPriority = v => v === 1 ? 0 : v === 2 ? 1 : 2;
+    unassigned.sort((a, b) => {
+        const ra = regPriority(getRegVal(a.id, activeSlotIdx));
+        const rb = regPriority(getRegVal(b.id, activeSlotIdx));
+        if (ra !== rb) return ra - rb;
+        return (b.power || 0) - (a.power || 0);
     });
 
     let html = '';
-    for (const m of filtered) {
-        let regVal = 0;
-        if (activeSlotIdx) {
-            const key = `slot_${activeSlotIdx}`;
-            const reg = registrations.find(r => r.member_id === m.id);
-            if (reg) regVal = reg[key] || 0;
-            // If this is the current user's own registration
-            if (myRegistration && myRegistration.member_id === m.id) {
-                regVal = myRegistration[key] || 0;
-            }
-        }
+    for (const m of unassigned) {
+        const regVal = getRegVal(m.id, activeSlotIdx);
+        const otherRegVal = otherSlotIdx && otherSlotIdx !== activeSlotIdx ? getRegVal(m.id, otherSlotIdx) : 0;
 
         let regBadge = '';
         let dimmed = '';
@@ -196,24 +215,41 @@ function renderPool() {
             dimmed = ' dimmed';
         }
 
-        const powerStr = m.power != null ? m.power.toLocaleString() : '—';
-        html += `<div class="pool-card${dimmed}" draggable="true" data-member-id="${m.id}" data-is-sub="${regVal === 2 ? 'true' : 'false'}">
+        let otherBadge = '';
+        if (otherRegVal === 1) {
+            otherBadge = `<span class="reg-other reg-avail" title="Also available for TF-${otherTF}">TF-${otherTF} ✓</span>`;
+        } else if (otherRegVal === 2) {
+            otherBadge = `<span class="reg-other reg-sub" title="Sub only for TF-${otherTF}">TF-${otherTF} ⚡</span>`;
+        }
+
+        const SQUAD_ICON = { Tank: '🛡️', Aircraft: '✈️', Missile: '🚀' };
+        const squadIcon = SQUAD_ICON[m.squad_type] || '';
+        const powerStr = m.power != null ? Number(m.power).toLocaleString() : '—';
+        const squadPowerStr = m.squad_power != null && m.squad_power > 0
+            ? `<span class="pool-squad-power">${squadIcon} ${Number(m.squad_power).toLocaleString()}</span>` : '';
+
+        html += `<div class="pool-card${dimmed}"${canManage ? ' draggable="true"' : ''} data-member-id="${m.id}" data-is-sub="${regVal === 2 ? 'true' : 'false'}">
             <div class="pool-name">${escapeHtml(m.name)}</div>
-            <div class="pool-meta">${escapeHtml(m.rank)} · ⚡${powerStr}</div>
-            <div class="pool-reg">${regBadge}</div>
+            <div class="pool-meta">${escapeHtml(m.rank)} · ⚡${powerStr}${squadPowerStr ? ` · ${squadPowerStr}` : ''}</div>
+            <div class="pool-reg">${regBadge}${otherBadge}</div>
         </div>`;
     }
 
     pool.innerHTML = html || '<p style="color:var(--text-secondary); font-size:0.85em;">All members assigned</p>';
 
-    // Drag events
-    pool.querySelectorAll('.pool-card').forEach(card => {
-        card.addEventListener('dragstart', e => {
-            dragMemberId = parseInt(card.dataset.memberId);
-            dragIsSub = card.dataset.isSub === 'true';
-            e.dataTransfer.effectAllowed = 'move';
+    // Drag events (manage-only)
+    if (canManage) {
+        pool.querySelectorAll('.pool-card').forEach(card => {
+            card.addEventListener('dragstart', e => {
+                dragMemberId = parseInt(card.dataset.memberId);
+                dragIsSub = card.dataset.isSub === 'true';
+                dragSourceGroupId = null;
+                dragSourceBuildingId = null;
+                dragSourceIsDirect = false;
+                e.dataTransfer.effectAllowed = 'move';
+            });
         });
-    });
+    }
 }
 
 // --- Format power sum ---
@@ -229,6 +265,20 @@ function formatPowerSum(memberIds) {
     let str = '⚡' + total.toLocaleString();
     if (unknown > 0) str += ` (+${unknown} unknown)`;
     return str;
+}
+
+const SQUAD_ICON_MAP = { Tank: '🛡️', Aircraft: '✈️', Missile: '🚀' };
+function memberChipBadges(member) {
+    if (!member) return '';
+    let badges = '';
+    if (member.power != null) {
+        badges += `<span class="chip-power">⚡${Number(member.power).toLocaleString()}</span>`;
+    }
+    const icon = SQUAD_ICON_MAP[member.squad_type];
+    if (icon && member.squad_power != null && member.squad_power > 0) {
+        badges += `<span class="chip-power">${icon}${Number(member.squad_power).toLocaleString()}</span>`;
+    }
+    return badges;
 }
 
 // --- Render groups ---
@@ -257,9 +307,12 @@ function renderGroups() {
         const primaryPower = formatPowerSum(primaryIds);
         const subPower = formatPowerSum(subIds);
 
+        const nameField = canManage
+            ? `<input class="group-name-input" type="text" value="${escapeHtml(g.name)}" data-group-id="${g.id}" placeholder="Group name">`
+            : `<h4 style="margin:0;">${escapeHtml(g.name)}</h4>`;
         html += `<div class="group-card" data-group-id="${g.id}">
             <div class="group-header">
-                <h4>${escapeHtml(g.name)}</h4>
+                ${nameField}
                 <span style="font-size:0.8em; color:var(--text-secondary);">Primary: ${primaryPower} | Sub: ${subPower}</span>
                 ${canManage ? `<button class="btn btn-danger" style="padding:2px 8px;" onclick="deleteGroup(${g.id})">✕</button>` : ''}
             </div>
@@ -275,13 +328,18 @@ function renderGroups() {
         for (const b of g.buildings) {
             const bInfo = BUILDINGS.find(x => x.id === b.building_id) || { name: b.building_id, priority: '' };
             const priorityBadge = bInfo.priority ? `<span style="font-size:0.75em;margin-left:4px;opacity:0.7;">[${bInfo.priority}]</span>` : '';
+            const slotPower = formatPowerSum(b.members.map(m => m.member_id));
             html += `<div class="building-slot" data-group-id="${g.id}" data-building-id="${b.building_id}" data-gb-id="${b.id}">
-                <div class="building-slot-header">${escapeHtml(bInfo.name)}${priorityBadge}</div>
+                <div class="building-slot-header">${escapeHtml(bInfo.name)}${priorityBadge} <span style="font-weight:400;font-size:0.85em;color:var(--text-secondary);">${slotPower}</span></div>
                 <div>`;
             for (const m of b.members) {
                 const member = allMembers.find(x => x.id === m.member_id);
                 const mName = member ? member.name : `#${m.member_id}`;
-                html += `<span class="member-chip${m.is_sub ? ' is-sub' : ''}">${escapeHtml(mName)}${m.is_sub ? ' (sub)' : ''}
+                const chipBadges = memberChipBadges(member);
+                html += `<span class="member-chip${m.is_sub ? ' is-sub' : ''}"${canManage ? ' draggable="true"' : ''}
+                    data-chip-member-id="${m.member_id}" data-chip-group-id="${g.id}" data-chip-building-id="${b.building_id}" data-chip-direct="false">
+                    ${escapeHtml(mName)}${chipBadges}
+                    ${canManage ? `<span class="chip-sub-toggle" data-group-id="${g.id}" data-building-id="${b.building_id}" data-member-id="${m.member_id}" title="${m.is_sub ? 'Mark as Primary' : 'Mark as Sub'}">${m.is_sub ? 'SUB' : 'PRI'}</span>` : ''}
                     ${canManage ? `<span class="chip-remove" data-group-id="${g.id}" data-building-id="${b.building_id}" data-member-id="${m.member_id}">×</span>` : ''}
                 </span>`;
             }
@@ -294,13 +352,18 @@ function renderGroups() {
         }
 
         // Direct/flex members slot
+        const flexPower = formatPowerSum(g.direct_members.map(m => m.member_id));
         html += `<div class="building-slot" data-group-id="${g.id}" data-direct="true">
-            <div class="building-slot-header">Flexible Role</div>
+            <div class="building-slot-header">Flexible Role <span style="font-weight:400;font-size:0.85em;color:var(--text-secondary);">${flexPower}</span></div>
             <div>`;
         for (const m of g.direct_members) {
             const member = allMembers.find(x => x.id === m.member_id);
             const mName = member ? member.name : `#${m.member_id}`;
-            html += `<span class="member-chip${m.is_sub ? ' is-sub' : ''}">${escapeHtml(mName)}${m.is_sub ? ' (sub)' : ''}
+            const chipBadges = memberChipBadges(member);
+            html += `<span class="member-chip${m.is_sub ? ' is-sub' : ''}"${canManage ? ' draggable="true"' : ''}
+                data-chip-member-id="${m.member_id}" data-chip-group-id="${g.id}" data-chip-direct="true">
+                ${escapeHtml(mName)}${chipBadges}
+                ${canManage ? `<span class="chip-sub-toggle" data-group-id="${g.id}" data-direct="true" data-member-id="${m.member_id}" title="${m.is_sub ? 'Mark as Primary' : 'Mark as Sub'}">${m.is_sub ? 'SUB' : 'PRI'}</span>` : ''}
                 ${canManage ? `<span class="chip-remove" data-group-id="${g.id}" data-direct="true" data-member-id="${m.member_id}">×</span>` : ''}
             </span>`;
         }
@@ -331,22 +394,59 @@ function renderGroups() {
 
     container.innerHTML = html;
 
-    // Wire drop zones
-    container.querySelectorAll('.building-slot').forEach(slot => {
-        slot.addEventListener('dragover', e => {
-            e.preventDefault();
-            slot.classList.add('drag-over');
+    // Wire drop zones (manage-only)
+    if (canManage) {
+        container.querySelectorAll('.building-slot').forEach(slot => {
+            slot.addEventListener('dragover', e => {
+                e.preventDefault();
+                slot.classList.add('drag-over');
+            });
+            slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+            slot.addEventListener('drop', e => {
+                e.preventDefault();
+                slot.classList.remove('drag-over');
+                if (!dragMemberId) return;
+                const gid = parseInt(slot.dataset.groupId);
+                const bid = slot.dataset.buildingId;
+                const isDirect = slot.dataset.direct === 'true';
+                handleDrop(gid, bid, isDirect, dragMemberId, dragIsSub);
+                dragMemberId = null;
+            });
         });
-        slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
-        slot.addEventListener('drop', e => {
-            e.preventDefault();
-            slot.classList.remove('drag-over');
-            if (!dragMemberId) return;
-            const gid = parseInt(slot.dataset.groupId);
-            const bid = slot.dataset.buildingId;
-            const isDirect = slot.dataset.direct === 'true';
-            handleDrop(gid, bid, isDirect, dragMemberId, dragIsSub);
-            dragMemberId = null;
+    }
+
+    // Wire chip dragstart (move between slots)
+    container.querySelectorAll('.member-chip[draggable]').forEach(chip => {
+        chip.addEventListener('dragstart', e => {
+            dragMemberId = parseInt(chip.dataset.chipMemberId);
+            dragSourceGroupId = parseInt(chip.dataset.chipGroupId);
+            dragSourceBuildingId = chip.dataset.chipBuildingId || null;
+            dragSourceIsDirect = chip.dataset.chipDirect === 'true';
+            // Preserve is_sub from current state
+            const srcG = groups.find(x => x.id === dragSourceGroupId);
+            if (srcG) {
+                let srcM;
+                if (dragSourceIsDirect) {
+                    srcM = srcG.direct_members.find(x => x.member_id === dragMemberId);
+                } else {
+                    const srcB = srcG.buildings.find(x => x.building_id === dragSourceBuildingId);
+                    srcM = srcB && srcB.members.find(x => x.member_id === dragMemberId);
+                }
+                dragIsSub = srcM ? srcM.is_sub : false;
+            }
+            e.dataTransfer.effectAllowed = 'move';
+            e.stopPropagation();
+        });
+    });
+
+    // Wire sub toggles
+    container.querySelectorAll('.chip-sub-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const gid = parseInt(btn.dataset.groupId);
+            const mid = parseInt(btn.dataset.memberId);
+            const bid = btn.dataset.buildingId || null;
+            const isDirect = btn.dataset.direct === 'true';
+            toggleMemberSub(gid, bid, isDirect, mid);
         });
     });
 
@@ -358,6 +458,13 @@ function renderGroups() {
             const bid = btn.dataset.buildingId;
             const isDirect = btn.dataset.direct === 'true';
             removeMemberChip(gid, bid, isDirect, mid);
+        });
+    });
+
+    // Wire group name inputs
+    container.querySelectorAll('.group-name-input').forEach(input => {
+        input.addEventListener('input', () => {
+            debouncedUpdateGroupMeta(parseInt(input.dataset.groupId));
         });
     });
 
@@ -428,20 +535,31 @@ function showInlineDropdown(dropdown, q, groupId, buildingId, isDirect) {
 }
 
 function handleDrop(groupId, buildingId, isDirect, memberId, isSub) {
-    const assigned = allAssignedIds();
-    if (assigned.has(memberId)) return;
+    // If dragging from an existing slot, remove from source first
+    if (dragSourceGroupId !== null) {
+        const srcG = groups.find(x => x.id === dragSourceGroupId);
+        if (srcG) {
+            if (dragSourceIsDirect) {
+                srcG.direct_members = srcG.direct_members.filter(m => m.member_id !== memberId);
+            } else {
+                const srcB = srcG.buildings.find(x => x.building_id === dragSourceBuildingId);
+                if (srcB) srcB.members = srcB.members.filter(m => m.member_id !== memberId);
+            }
+        }
+    } else {
+        // Dragging from pool — reject if already assigned
+        if (allAssignedIds().has(memberId)) return;
+    }
 
     const g = groups.find(x => x.id === groupId);
     if (!g) return;
 
     if (isDirect) {
-        const pos = g.direct_members.length;
-        g.direct_members.push({ id: 0, member_id: memberId, is_sub: isSub, position: pos });
+        g.direct_members.push({ id: 0, member_id: memberId, is_sub: isSub, position: g.direct_members.length });
     } else {
         const b = g.buildings.find(x => x.building_id === buildingId);
         if (!b) return;
-        const pos = b.members.length;
-        b.members.push({ id: 0, member_id: memberId, is_sub: isSub, position: pos });
+        b.members.push({ id: 0, member_id: memberId, is_sub: isSub, position: b.members.length });
     }
 
     debouncedSaveGroups();
@@ -457,6 +575,25 @@ function removeMemberChip(groupId, buildingId, isDirect, memberId) {
     } else {
         const b = g.buildings.find(x => x.building_id === buildingId);
         if (b) b.members = b.members.filter(m => m.member_id !== memberId);
+    }
+
+    debouncedSaveGroups();
+    renderAll();
+}
+
+function toggleMemberSub(groupId, buildingId, isDirect, memberId) {
+    const g = groups.find(x => x.id === groupId);
+    if (!g) return;
+
+    if (isDirect) {
+        const m = g.direct_members.find(x => x.member_id === memberId);
+        if (m) m.is_sub = !m.is_sub;
+    } else {
+        const b = g.buildings.find(x => x.building_id === buildingId);
+        if (b) {
+            const m = b.members.find(x => x.member_id === memberId);
+            if (m) m.is_sub = !m.is_sub;
+        }
     }
 
     debouncedSaveGroups();
@@ -620,6 +757,8 @@ function debouncedUpdateGroupMeta(groupId) {
 async function updateGroupMeta(groupId) {
     const g = groups.find(x => x.id === groupId);
     if (!g) return;
+    const nameInput = document.querySelector(`.group-name-input[data-group-id="${groupId}"]`);
+    if (nameInput) g.name = nameInput.value.trim() || g.name;
     const textarea = document.querySelector(`textarea[data-group-id="${groupId}"]`);
     if (textarea) g.instructions = textarea.value;
     try {
@@ -643,7 +782,7 @@ function renderMyRegistration() {
     if (!container) return;
 
     let html = '';
-    STORM_SLOTS.forEach((slot, i) => {
+    STORM_SLOTS.forEach((slot) => {
         const slotKey = `slot_${slot.id}`;
         const val = myRegState[slotKey] || 0;
         const selectA = document.getElementById('storm-time-select-a');
@@ -946,35 +1085,16 @@ function generateMail() {
 async function copyMail() {
     const mailContent = document.getElementById('mail-content');
     if (!mailContent) return;
-    const mailText = mailContent.textContent;
-
     const btn = document.getElementById('btn-copy-mail');
     try {
-        await navigator.clipboard.writeText(mailText);
+        await navigator.clipboard.writeText(mailContent.textContent);
         if (btn) {
             const orig = btn.textContent;
             btn.textContent = '✓ Copied!';
             setTimeout(() => { btn.textContent = orig; }, 2000);
         }
-    } catch (error) {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = mailText;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.select();
-        try {
-            document.execCommand('copy');
-            if (btn) {
-                const orig = btn.textContent;
-                btn.textContent = '✓ Copied!';
-                setTimeout(() => { btn.textContent = orig; }, 2000);
-            }
-        } catch (err) {
-            showError('Failed to copy mail. Please copy manually.');
-        }
-        document.body.removeChild(textArea);
+    } catch {
+        showError('Copy failed — please select the text and copy manually.');
     }
 }
 
@@ -1066,20 +1186,30 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 7. Render
     renderAll();
+    renderMyRegistration();
+
+    // Activate My Registration tab by default
+    document.querySelectorAll('.storm-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const defaultTabBtn = document.querySelector('.storm-tab[data-tab="my-reg"]');
+    const defaultContent = document.getElementById('tab-my-reg');
+    if (defaultTabBtn) defaultTabBtn.classList.add('active');
+    if (defaultContent) defaultContent.classList.add('active');
 
     // --- Event listeners ---
 
     // Tab switching
-    document.querySelectorAll('.section-tab').forEach(tab => {
+    document.querySelectorAll('.storm-tab').forEach(tab => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.section-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.storm-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             tab.classList.add('active');
             const target = document.getElementById('tab-' + tab.dataset.tab);
             if (target) {
-                target.classList.remove('hidden');
-                if (tab.dataset.tab === 'reg-view') renderRegistrationView();
-                if (tab.dataset.tab === 'my-reg') renderMyRegistration();
+                target.classList.add('active');
+                if (tab.dataset.tab === 'planning') renderAll();
+                else if (tab.dataset.tab === 'reg-view') renderRegistrationView();
+                else if (tab.dataset.tab === 'my-reg') renderMyRegistration();
             }
         });
     });

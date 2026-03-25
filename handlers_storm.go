@@ -173,14 +173,22 @@ func saveStormConfig(w http.ResponseWriter, r *http.Request) {
 
 func getStormRegistrations(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query(`
-		SELECT m.id, m.name, m.rank, m.power,
+		WITH latest_power AS (
+			SELECT member_id, power FROM (
+				SELECT member_id, power,
+				       ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY recorded_at DESC) AS rn
+				FROM power_history
+			) WHERE rn = 1
+		)
+		SELECT m.id, m.name, m.rank, lp.power,
 		       COALESCE(r.id, 0), COALESCE(r.slot_1,0), COALESCE(r.slot_2,0), COALESCE(r.slot_3,0),
 		       COALESCE(r.updated_at,'')
 		FROM members m
+		LEFT JOIN latest_power lp ON lp.member_id = m.id
 		LEFT JOIN storm_registrations r ON r.member_id = m.id
 		ORDER BY
 		    CASE m.rank WHEN 'R5' THEN 1 WHEN 'R4' THEN 2 WHEN 'R3' THEN 3 WHEN 'R2' THEN 4 WHEN 'R1' THEN 5 ELSE 6 END,
-		    m.power DESC`)
+		    lp.power DESC`)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
