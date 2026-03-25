@@ -29,6 +29,18 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Creator Management**: Authors retain full control to edit or delete their own active shoutouts, while authorized moderators can curate the board.
 - **Auto-Expiring**: Shoutouts automatically expire after 7 days, keeping the feedback loop relevant to current events.
 
+### 🌩️ Desert Storm Planner
+- **Task Force Configuration**: Set up two Task Forces (A/B) with custom time slots for coordinated Storm events.
+- **Member Registration**: Members self-register for Storm participation; leaders get a live view of sign-ups by TF.
+- **Group & Building Management**: Organize registered members into groups, assign them to specific buildings, and track assignments in real time.
+- **Permission-Gated Access**: Separate `view_storm` and `manage_storm` permissions let you control who can see vs. administer the planner.
+
+### 🗓️ Schedule Builder
+- **Dynamic Policy Engine**: Build reusable weekly schedules with configurable time overrides, week offsets, and custom events.
+- **Delta Spec Support**: Define relative adjustments on top of a base schedule for recurring edge cases.
+- **Infographic Export**: Export finished schedules as shareable infographics.
+- **Permission-Gated Access**: Separate `view_schedule` and `manage_schedule` permissions.
+
 ### 📁 Alliance Files & Document Management
 Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** container, the app provides a Google Drive-like experience natively.
 - **Live Document Editing**: Full browser-based collaborative editing for spreadsheets (`.xlsx`, `.csv`), text documents (`.docx`), and presentations.
@@ -62,9 +74,9 @@ We provide an automated script that installs Docker, generates secure secrets, c
 
 ```bash
 git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git)
-cd lastwar
+cd lastwar-alliance-manager
 chmod +x install.sh
-sudo ./install.sh
+./install.sh
 ```
 
 ### Manual Docker Deployment

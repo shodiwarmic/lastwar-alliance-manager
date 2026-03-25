@@ -6,7 +6,7 @@
 git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
 cd /opt/lastwar
 chmod +x install.sh
-sudo ./install.sh
+./install.sh
 ```
 
 The script will automatically:
@@ -112,7 +112,7 @@ docker compose restart app
 ### Updates
 ```bash
 cd /opt/lastwar
-sudo ./update.sh
+./update.sh
 ```
 
 ---
