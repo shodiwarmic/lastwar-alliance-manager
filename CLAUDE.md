@@ -127,7 +127,7 @@ btn.addEventListener('click', () => editMember(member.id));
 | `static/settings.js` | ✅ Done |
 | `static/profile.js` | ✅ Done |
 | `static/schedule.js` | ✅ Done |
-| `static/upload.js` | ⬜ |
+| `static/upload.js` | ✅ Done |
 | `static/files.js` | ⬜ |
 
 `static/officer_command.js` — skip, already uses correct patterns.
