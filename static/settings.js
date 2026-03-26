@@ -84,21 +84,33 @@ async function loadSettings() {
         if (matrixRes.ok) {
             const matrix = await matrixRes.json();
             const tbody = document.querySelector('#permissions-matrix tbody');
-            tbody.innerHTML = '';
-            
-            PERM_ROWS.forEach((row, index) => {
-                const bgClass = index % 2 === 0 ? '' : 'background: var(--bg-secondary);';
-                let tr = `<tr style="border-bottom: 1px solid var(--border-color); ${bgClass}">
-                            <td style="text-align: left; padding: 10px 12px; font-weight: 500;">${row.label}</td>`;
-                
+            tbody.replaceChildren(...PERM_ROWS.map((row, index) => {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid var(--border-color)';
+                if (index % 2 !== 0) tr.style.background = 'var(--bg-secondary)';
+
+                const tdLabel = document.createElement('td');
+                tdLabel.style.cssText = 'text-align: left; padding: 10px 12px; font-weight: 500;';
+                tdLabel.textContent = row.label;
+                tr.appendChild(tdLabel);
+
                 ['R5', 'R4', 'R3', 'R2', 'R1'].forEach(rank => {
                     const rankData = matrix.find(m => m.rank === rank) || {};
-                    const checked = rankData[row.key] ? 'checked' : '';
-                    tr += `<td style="padding: 10px;"><input type="checkbox" class="perm-checkbox" data-rank="${rank}" data-key="${row.key}" ${checked} style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary-color);"></td>`;
+                    const td = document.createElement('td');
+                    td.style.padding = '10px';
+                    const input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.className = 'perm-checkbox';
+                    input.dataset.rank = rank;
+                    input.dataset.key = row.key;
+                    input.checked = !!rankData[row.key];
+                    input.style.cssText = 'width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary-color);';
+                    td.appendChild(input);
+                    tr.appendChild(td);
                 });
-                tr += '</tr>';
-                tbody.innerHTML += tr;
-            });
+
+                return tr;
+            }));
         }
     } catch (error) {
         console.error('Error loading settings:', error);

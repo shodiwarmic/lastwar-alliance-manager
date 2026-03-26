@@ -124,7 +124,7 @@ btn.addEventListener('click', () => editMember(member.id));
 | `static/alias-audit.js` | ✅ Done |
 | `static/dyno.js` | ✅ Done |
 | `static/admin.js` | ✅ Done |
-| `static/settings.js` | ⬜ |
+| `static/settings.js` | ✅ Done |
 | `static/profile.js` | ⬜ |
 | `static/schedule.js` | ⬜ |
 | `static/upload.js` | ⬜ |
