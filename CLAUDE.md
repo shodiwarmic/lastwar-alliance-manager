@@ -119,7 +119,7 @@ btn.addEventListener('click', () => editMember(member.id));
 |------|--------|
 | `static/members.js` | ✅ Done |
 | `static/storm.js` | ✅ Done |
-| `static/rankings.js` | ⬜ |
+| `static/rankings.js` | ✅ Done |
 | `static/vs.js` | ⬜ |
 | `static/alias-audit.js` | ⬜ |
 | `static/dyno.js` | ⬜ |
