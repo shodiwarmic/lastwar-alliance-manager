@@ -47,7 +47,7 @@ function renderTable() {
 
     const tbody = document.getElementById('alias-tbody');
     const empty = document.getElementById('alias-empty-state');
-    tbody.innerHTML = '';
+    tbody.replaceChildren();
 
     if (filtered.length === 0) {
         empty.textContent = EMPTY_MESSAGES[activeFilter] || EMPTY_MESSAGES.all;
@@ -86,7 +86,7 @@ function renderTable() {
         deleteBtn.className = 'btn btn-danger';
         deleteBtn.style.padding = '3px 10px';
         deleteBtn.textContent = 'Delete';
-        deleteBtn.onclick = () => deleteAlias(alias.id);
+        deleteBtn.addEventListener('click', () => deleteAlias(alias.id));
         tdAction.appendChild(deleteBtn);
 
         tr.appendChild(tdAlias);
