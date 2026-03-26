@@ -159,7 +159,7 @@ function renderValidation(policy) {
     const banner = document.getElementById('validation-banner');
     const list = document.getElementById('validation-list');
     const warnings = validatePolicy(policy);
-    list.innerHTML = '';
+    list.replaceChildren();
     if (warnings.length === 0) {
         banner.classList.add('hidden');
     } else {
@@ -185,7 +185,7 @@ function makeChip(text, bg) {
 
 function renderDayGrid(policy) {
     const grid = document.getElementById('day-grid');
-    grid.innerHTML = '';
+    grid.replaceChildren();
     const days = policy.days || [];
     let weekLabel = '';
 
@@ -208,7 +208,11 @@ function renderDayGrid(policy) {
 
         const dayLabel = document.createElement('div');
         dayLabel.style.cssText = 'min-width:200px; font-weight:600;';
-        dayLabel.innerHTML = `D${day.day_number} &nbsp;<span style="font-weight:normal; color:var(--text-secondary);">${theme.icon} ${theme.label}</span>`;
+        dayLabel.appendChild(document.createTextNode(`D${day.day_number}\u00a0`));
+        const themeSpan = document.createElement('span');
+        themeSpan.style.cssText = 'font-weight:normal; color:var(--text-secondary);';
+        themeSpan.textContent = `${theme.icon} ${theme.label}`;
+        dayLabel.appendChild(themeSpan);
         row.appendChild(dayLabel);
 
         const chips = document.createElement('div');
@@ -623,7 +627,7 @@ function openDayModal(dayIndex) {
 
 function renderCustomEventsList(events) {
     const list = document.getElementById('custom-events-list');
-    list.innerHTML = '';
+    list.replaceChildren();
     events.forEach((ev, i) => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;';

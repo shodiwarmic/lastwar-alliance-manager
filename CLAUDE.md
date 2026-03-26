@@ -126,7 +126,7 @@ btn.addEventListener('click', () => editMember(member.id));
 | `static/admin.js` | ✅ Done |
 | `static/settings.js` | ✅ Done |
 | `static/profile.js` | ✅ Done |
-| `static/schedule.js` | ⬜ |
+| `static/schedule.js` | ✅ Done |
 | `static/upload.js` | ⬜ |
 | `static/files.js` | ⬜ |
 
