@@ -22,7 +22,7 @@ const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'sat
 function getMostRecentMonday(date = new Date()) {
     const d = new Date(date);
     const day = d.getDay();
-    const diff = day === 0 ? 6 : day - 1; 
+    const diff = day === 0 ? 6 : day - 1;
     d.setDate(d.getDate() - diff);
     return d;
 }
@@ -37,15 +37,15 @@ function formatDate(date) {
 function formatDisplayDate(dateStr) {
     const date = new Date(dateStr + 'T00:00:00');
     // Localizes the date format automatically based on the user's browser settings
-    return `Week of ${date.toLocaleDateString(undefined, { 
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+    return `Week of ${date.toLocaleDateString(undefined, {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     })}`;
 }
 
 function updateWeekDisplay() {
     const weekDisplay = document.getElementById('week-display');
     const nextBtn = document.getElementById('next-week');
-    
+
     const formatted = formatDate(currentWeekDate);
     if (weekDisplay) {
         weekDisplay.textContent = formatDisplayDate(formatted);
@@ -67,9 +67,9 @@ async function checkPermissions() {
         const response = await fetch('/api/check-auth');
         if (response.ok) {
             const data = await response.json();
-            
+
             canEditVS = data.is_admin || (data.permissions && data.permissions.manage_vs_points);
-            
+
             if (canEditVS) {
                 const adminElements = ['save-btn', 'clear-btn', 'csv-import-btn', 'toggle-mode-btn'];
                 adminElements.forEach(id => {
@@ -77,8 +77,8 @@ async function checkPermissions() {
                 });
             }
         }
-    } catch (e) { 
-        console.error("Auth check failed:", e); 
+    } catch (e) {
+        console.error("Auth check failed:", e);
     }
 }
 
@@ -96,7 +96,7 @@ async function loadVSPoints() {
     try {
         const response = await fetch(`${API_URL}?week=${weekDate}`);
         const vsPoints = await response.json();
-        
+
         currentVSPoints = {};
         if (vsPoints && Array.isArray(vsPoints)) {
             vsPoints.forEach(point => {
@@ -120,10 +120,88 @@ function calculateTotal(memberId) {
     return daysOfWeek.reduce((sum, day) => sum + (parseInt(points[day]) || 0), 0);
 }
 
+function buildVSRow(member) {
+    const points = currentVSPoints[member.id] || { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0 };
+    const total = calculateTotal(member.id);
+
+    const tr = document.createElement('tr');
+    tr.dataset.memberId = member.id;
+
+    // Name cell
+    const tdName = document.createElement('td');
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'member-name';
+    nameSpan.textContent = member.name;
+    const rankSpan = document.createElement('span');
+    rankSpan.className = 'member-rank';
+    rankSpan.textContent = `(${member.rank})`;
+    tdName.append(nameSpan, ' ', rankSpan);
+    tr.appendChild(tdName);
+
+    // Day 1–5 input cells
+    ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].forEach(day => {
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'vs-input';
+        input.dataset.member = member.id;
+        input.dataset.day = day;
+        input.value = points[day];
+        input.min = '0';
+        if (!canEditVS) input.readOnly = true;
+        td.appendChild(input);
+        tr.appendChild(td);
+    });
+
+    // Day 6 cell
+    const tdDay6 = document.createElement('td');
+    tdDay6.className = 'day6-column';
+    if (isTotalMode) {
+        const span = document.createElement('span');
+        span.className = 'day6-val';
+        span.style.cssText = 'font-weight:bold; color:var(--text-secondary);';
+        span.textContent = points.saturday;
+        tdDay6.appendChild(span);
+    } else {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'vs-input';
+        input.dataset.member = member.id;
+        input.dataset.day = 'saturday';
+        input.value = points.saturday;
+        input.min = '0';
+        if (!canEditVS) input.readOnly = true;
+        tdDay6.appendChild(input);
+    }
+    tr.appendChild(tdDay6);
+
+    // Total cell
+    const tdTotal = document.createElement('td');
+    tdTotal.className = 'total-column';
+    if (isTotalMode && canEditVS) {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'vs-input total-mode-input';
+        input.dataset.member = member.id;
+        input.dataset.day = 'total-calc';
+        input.value = total;
+        input.min = '0';
+        tdTotal.appendChild(input);
+    } else {
+        const span = document.createElement('span');
+        span.className = 'total-val';
+        span.textContent = total;
+        tdTotal.appendChild(span);
+    }
+    tr.appendChild(tdTotal);
+
+    return tr;
+}
+
 function renderTable() {
     const tbody = document.getElementById('vs-tbody');
     if (!tbody) return;
-    
+
     // Update Header Labels
     const day6Header = document.getElementById('day6-header');
     const totalHeader = document.getElementById('total-header');
@@ -133,46 +211,9 @@ function renderTable() {
     }
 
     const searchTerm = document.getElementById('search-box')?.value.toLowerCase().trim() || '';
-    let filteredMembers = sortData(allMembers.filter(member => member.name.toLowerCase().includes(searchTerm)));
-    
-    let html = '';
-    const readOnlyAttr = canEditVS ? '' : 'readonly';
-    const totalModeClass = isTotalMode ? 'total-mode-input' : '';
-    
-    filteredMembers.forEach(member => {
-        const points = currentVSPoints[member.id] || { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0 };
-        const total = calculateTotal(member.id);
+    const filteredMembers = sortData(allMembers.filter(member => member.name.toLowerCase().includes(searchTerm)));
 
-        html += `
-            <tr data-member-id="${member.id}">
-                <td>
-                    <span class="member-name">${escapeHtml(member.name)}</span>
-                    <span class="member-rank">(${escapeHtml(member.rank)})</span>
-                </td>
-                <td><input type="number" class="vs-input" data-member="${member.id}" data-day="monday" value="${points.monday}" min="0" ${readOnlyAttr}></td>
-                <td><input type="number" class="vs-input" data-member="${member.id}" data-day="tuesday" value="${points.tuesday}" min="0" ${readOnlyAttr}></td>
-                <td><input type="number" class="vs-input" data-member="${member.id}" data-day="wednesday" value="${points.wednesday}" min="0" ${readOnlyAttr}></td>
-                <td><input type="number" class="vs-input" data-member="${member.id}" data-day="thursday" value="${points.thursday}" min="0" ${readOnlyAttr}></td>
-                <td><input type="number" class="vs-input" data-member="${member.id}" data-day="friday" value="${points.friday}" min="0" ${readOnlyAttr}></td>
-                
-                <td class="day6-column">
-                    ${isTotalMode 
-                        ? `<span class="day6-val" style="font-weight:bold; color:var(--text-secondary);">${points.saturday}</span>` 
-                        : `<input type="number" class="vs-input" data-member="${member.id}" data-day="saturday" value="${points.saturday}" min="0" ${readOnlyAttr}>`
-                    }
-                </td>
-
-                <td class="total-column">
-                    ${isTotalMode && canEditVS
-                        ? `<input type="number" class="vs-input ${totalModeClass}" data-member="${member.id}" data-day="total-calc" value="${total}" min="0">`
-                        : `<span class="total-val">${total}</span>`
-                    }
-                </td>
-            </tr>
-        `;
-    });
-    
-    tbody.innerHTML = html;
+    tbody.replaceChildren(...filteredMembers.map(buildVSRow));
     attachInputListeners();
 }
 
@@ -189,7 +230,7 @@ function attachInputListeners() {
                 // Calculation Logic: Final Total entered, deduce Day 6
                 const p = currentVSPoints[memberId] || {};
                 const sum1to5 = (parseInt(p.monday)||0) + (parseInt(p.tuesday)||0) + (parseInt(p.wednesday)||0) + (parseInt(p.thursday)||0) + (parseInt(p.friday)||0);
-                
+
                 // Enforce no negatives
                 const deducedDay6 = Math.max(0, val - sum1to5);
                 updateCurrentVSPoints(memberId, 'saturday', deducedDay6);
@@ -199,14 +240,14 @@ function attachInputListeners() {
                 if (row) row.querySelector('.day6-val').textContent = deducedDay6;
             } else {
                 updateCurrentVSPoints(memberId, day, val);
-                
+
                 // If we edit Day 1-5 while in Total Mode, Day 6 must update to keep the Total constant
                 if (isTotalMode) {
                     const row = e.target.closest('tr');
                     const targetTotal = parseInt(row.querySelector('input[data-day="total-calc"]').value) || 0;
                     const p = currentVSPoints[memberId] || {};
                     const newSum1to5 = (parseInt(p.monday)||0) + (parseInt(p.tuesday)||0) + (parseInt(p.wednesday)||0) + (parseInt(p.thursday)||0) + (parseInt(p.friday)||0);
-                    
+
                     const newDeducedDay6 = Math.max(0, targetTotal - newSum1to5);
                     updateCurrentVSPoints(memberId, 'saturday', newDeducedDay6);
                     row.querySelector('.day6-val').textContent = newDeducedDay6;
@@ -288,7 +329,7 @@ async function saveVSPoints() {
             saturday: parseInt(vsPoint.saturday) || 0
         };
     });
-    
+
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -307,7 +348,7 @@ async function clearVSPoints() {
     const weekDate = formatDate(currentWeekDate);
     if (!confirm('Clear all points for this week?')) return;
     try {
-        const response = await fetch(`${API_URL}/${weekDate}`, { method: 'DELETE' });
+        await fetch(`${API_URL}/${weekDate}`, { method: 'DELETE' });
         currentVSPoints = {};
         renderTable();
     } catch (error) { alert('Error: ' + error.message); }
@@ -317,22 +358,15 @@ async function clearVSPoints() {
  * 6. INITIALIZATION & HELPERS
  */
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
     const vsTbody = document.getElementById('vs-tbody');
     if (vsTbody) {
-        await checkPermissions(); 
+        await checkPermissions();
         await loadMembers();
         currentWeekDate = getMostRecentMonday();
         updateWeekDisplay();
         await loadVSPoints();
-        
+
         // Navigation
         document.getElementById('prev-week')?.addEventListener('click', () => {
             currentWeekDate.setDate(currentWeekDate.getDate() - 7);
@@ -343,7 +377,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('next-week')?.addEventListener('click', () => {
             const nextWeek = new Date(currentWeekDate);
             nextWeek.setDate(nextWeek.getDate() + 7);
-            
+
             // Prevent going past the actual current week
             const todayMonday = getMostRecentMonday();
             if (nextWeek > todayMonday) {
@@ -358,17 +392,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Search
         document.getElementById('search-box')?.addEventListener('input', renderTable);
-        
+
         // Sorting
         document.querySelectorAll('th[data-sort]').forEach(th => {
             th.addEventListener('click', handleSort);
         });
-        
+
         // Admin Features
         if (canEditVS) {
             document.getElementById('save-btn')?.addEventListener('click', saveVSPoints);
             document.getElementById('clear-btn')?.addEventListener('click', clearVSPoints);
-            
+
             const toggleBtn = document.getElementById('toggle-mode-btn');
             if (toggleBtn) {
                 toggleBtn.addEventListener('click', () => {
@@ -397,7 +431,6 @@ async function handleCSVUpload(event) {
 
     const formData = new FormData();
     formData.append('csv_file', file);
-    // Fixed: Use existing currentWeekDate state
     formData.append('week_date', formatDate(currentWeekDate));
 
     try {
@@ -413,85 +446,137 @@ async function handleCSVUpload(event) {
     } catch (error) {
         alert('Error parsing CSV: ' + error.message);
     }
-    
+
     event.target.value = ''; // Reset input
+}
+
+function buildMatchedRow(row) {
+    const updates = Object.entries(row.updated_fields)
+        .map(([day, val]) => `${day}: ${val}`)
+        .join(', ');
+
+    const tr = document.createElement('tr');
+
+    const tdName = document.createElement('td');
+    tdName.textContent = row.matched_member.name;
+
+    const tdType = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = row.match_type;
+    tdType.appendChild(badge);
+
+    const tdUpdates = document.createElement('td');
+    tdUpdates.textContent = updates;
+    if (row.calculated_sat) {
+        tdUpdates.appendChild(document.createTextNode(' '));
+        const calcBadge = document.createElement('span');
+        calcBadge.className = 'badge info';
+        calcBadge.textContent = 'Calculated Sat';
+        tdUpdates.appendChild(calcBadge);
+    }
+
+    tr.append(tdName, tdType, tdUpdates);
+    return tr;
+}
+
+function buildUnresolvedRow(row, idx, availableMembers) {
+    const updates = Object.entries(row.updated_fields)
+        .map(([day, val]) => `${day}: ${val}`)
+        .join(', ');
+
+    const tr = document.createElement('tr');
+    tr.dataset.index = idx;
+
+    const tdName = document.createElement('td');
+    tdName.textContent = row.original_name;
+
+    const tdMap = document.createElement('td');
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display: flex; flex-direction: column; gap: 5px;';
+
+    const memberSelect = document.createElement('select');
+    memberSelect.className = 'member-mapper';
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = '-- Ignore / Do Not Import --';
+    memberSelect.appendChild(defaultOpt);
+    availableMembers.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name;
+        memberSelect.appendChild(opt);
+    });
+    memberSelect.addEventListener('change', (e) => mapUnresolved(idx, e.target.value));
+
+    const aliasSelect = document.createElement('select');
+    aliasSelect.className = 'alias-saver';
+    aliasSelect.id = `alias-save-${idx}`;
+    aliasSelect.disabled = true;
+    aliasSelect.style.fontSize = '0.85em';
+    [['', 'Do not save alias'], ['global', 'Save as Global Alias'], ['personal', 'Save as Personal Alias']].forEach(([val, text]) => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = text;
+        aliasSelect.appendChild(opt);
+    });
+
+    wrapper.append(memberSelect, aliasSelect);
+    tdMap.appendChild(wrapper);
+
+    const tdUpdates = document.createElement('td');
+    tdUpdates.textContent = updates;
+
+    tr.append(tdName, tdMap, tdUpdates);
+    return tr;
 }
 
 function renderPreviewModal(data) {
     const matchedBody = document.getElementById('matched-body');
     const unresolvedBody = document.getElementById('unresolved-body');
-    
-    matchedBody.innerHTML = '';
-    unresolvedBody.innerHTML = '';
-    
+
     document.getElementById('matched-count').textContent = data.matched?.length || 0;
     document.getElementById('unresolved-count').textContent = data.unresolved?.length || 0;
 
     // Render Matched
-    if (data.matched) {
-        data.matched.forEach(row => {
-            const updates = Object.entries(row.updated_fields)
-                .map(([day, val]) => `${day}: ${val}`)
-                .join(', ');
-            
-            let satBadge = row.calculated_sat ? '<span class="badge info">Calculated Sat</span>' : '';
-            
-            matchedBody.innerHTML += `
-                <tr>
-                    <td>${row.matched_member.name}</td>
-                    <td><span class="badge">${row.match_type}</span></td>
-                    <td>${updates} ${satBadge}</td>
-                </tr>
-            `;
-        });
-    }
+    const matchedRows = (data.matched || []).map(buildMatchedRow);
+    matchedBody.replaceChildren(...matchedRows);
 
     // Render Unresolved
-    if (data.unresolved) {
-        // Filter out members that are already matched in this import
-        const matchedIds = (data.matched || []).map(r => r.matched_member.id);
-        const availableMembers = allMembers.filter(m => !matchedIds.includes(m.id));
-        const memberOptions = availableMembers.map(m => `<option value="${m.id}">${m.name}</option>`).join('');  
-
-        data.unresolved.forEach((row, idx) => {
-            const updates = Object.entries(row.updated_fields).map(([day, val]) => `${day}: ${val}`).join(', ');
-            
-            unresolvedBody.innerHTML += `
-                <tr data-index="${idx}">
-                    <td>${row.original_name}</td>
-                    <td>
-                        <div style="display: flex; flex-direction: column; gap: 5px;">
-                            <select class="member-mapper" onchange="mapUnresolved(${idx}, this.value)">
-                                <option value="">-- Ignore / Do Not Import --</option>
-                                ${memberOptions}
-                            </select>
-                            <select class="alias-saver" id="alias-save-${idx}" disabled style="font-size: 0.85em;">
-                                <option value="">Do not save alias</option>
-                                <option value="global">Save as Global Alias</option>
-                                <option value="personal">Save as Personal Alias</option>
-                            </select>
-                        </div>
-                    </td>
-                    <td>${updates}</td>
-                </tr>
-            `;
-        });
-    }
+    const matchedIds = (data.matched || []).map(r => r.matched_member.id);
+    const availableMembers = allMembers.filter(m => !matchedIds.includes(m.id));
+    const unresolvedRows = (data.unresolved || []).map((row, idx) => buildUnresolvedRow(row, idx, availableMembers));
+    unresolvedBody.replaceChildren(...unresolvedRows);
 
     document.getElementById('import-preview-modal').style.display = 'flex';
+}
+
+function refreshUpdatesCell(unresolvedIndex) {
+    const row = currentImportPayload.unresolved[unresolvedIndex];
+    const updatesCell = document.querySelector(`#unresolved-body tr[data-index="${unresolvedIndex}"] td:last-child`);
+    if (!updatesCell) return;
+
+    const text = Object.entries(row.updated_fields).map(([day, val]) => `${day}: ${val}`).join(', ');
+    updatesCell.textContent = text;
+    if (row.calculated_sat) {
+        updatesCell.appendChild(document.createTextNode(' '));
+        const badge = document.createElement('span');
+        badge.className = 'badge info';
+        badge.textContent = 'Calculated Sat';
+        updatesCell.appendChild(badge);
+    }
 }
 
 function mapUnresolved(unresolvedIndex, memberId) {
     const row = currentImportPayload.unresolved[unresolvedIndex];
     const aliasSelect = document.getElementById(`alias-save-${unresolvedIndex}`);
-    const updatesCell = document.querySelector(`#unresolved-body tr[data-index="${unresolvedIndex}"] td:last-child`);
-    
+
     // Handle Un-selecting a member
     if (!memberId) {
         row.matched_member = null;
         aliasSelect.disabled = true;
         aliasSelect.value = "";
-        
+
         // Revert calculation if we previously added it
         if (row.calculated_sat) {
             delete row.updated_fields.saturday;
@@ -506,7 +591,7 @@ function mapUnresolved(unresolvedIndex, memberId) {
         // Dynamically calculate Saturday if Total is provided but Saturday is missing
         if (row.total !== undefined && row.total !== null && row.updated_fields.saturday === undefined) {
             const p = currentVSPoints[memberId] || {}; // Existing DB points from frontend state
-            
+
             // Get the value from the CSV upload, or fallback to their existing DB value
             const getVal = (day) => row.updated_fields[day] !== undefined ? row.updated_fields[day] : (parseInt(p[day]) || 0);
 
@@ -521,24 +606,18 @@ function mapUnresolved(unresolvedIndex, memberId) {
     }
 
     // Refresh the UI cell to show the newly calculated Saturday
-    if (updatesCell) {
-        let updatesText = Object.entries(row.updated_fields).map(([day, val]) => `${day}: ${val}`).join(', ');
-        if (row.calculated_sat) {
-            updatesText += ' <span class="badge info">Calculated Sat</span>';
-        }
-        updatesCell.innerHTML = updatesText;
-    }
+    refreshUpdatesCell(unresolvedIndex);
 }
 
 async function commitImport() {
     const finalRecords = [...(currentImportPayload.matched || [])];
     const saveAliases = [];
-    
+
     if (currentImportPayload.unresolved) {
         currentImportPayload.unresolved.forEach((row, idx) => {
             if (row.matched_member && row.matched_member.id) {
                 finalRecords.push(row);
-                
+
                 const aliasSaveType = document.getElementById(`alias-save-${idx}`).value;
                 if (aliasSaveType) {
                     saveAliases.push({
@@ -568,9 +647,9 @@ async function commitImport() {
         });
 
         if (!response.ok) throw new Error(await response.text());
-        
+
         const result = await response.json();
-        
+
         // Display errors if the backend caught any SQL issues
         if (result.errors && result.errors.length > 0) {
             console.error("Backend SQL Errors:", result.errors);
@@ -578,9 +657,9 @@ async function commitImport() {
         } else {
             alert(`Backend received ${result.aliases_received} aliases to process.\n\n` + result.message);
         }
-        
+
         closePreviewModal();
-        loadVSPoints(); 
+        loadVSPoints();
     } catch (error) {
         alert('Error saving data: ' + error.message);
     }
