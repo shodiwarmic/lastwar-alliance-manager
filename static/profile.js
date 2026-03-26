@@ -199,15 +199,7 @@ function checkPasswordRequirements() {
         matchStatus.style.display = 'none';
     }
 
-    if (allRulesMet && passwordsMatch && newPwd.length > 0) {
-        submitBtn.disabled = false;
-        submitBtn.style.opacity = '1';
-        submitBtn.style.cursor = 'pointer';
-    } else {
-        submitBtn.disabled = true;
-        submitBtn.style.opacity = '0.6';
-        submitBtn.style.cursor = 'not-allowed';
-    }
+    submitBtn.disabled = !(allRulesMet && passwordsMatch && newPwd.length > 0);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
