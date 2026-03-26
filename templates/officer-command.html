@@ -78,6 +78,23 @@
 </div>
 {{end}}
 
+{{define "modals"}}
+<!-- Add Category Modal -->
+<div id="cat-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2>Add Category</h2>
+        <div class="form-group">
+            <label for="cat-name-input">Category Name</label>
+            <input type="text" id="cat-name-input" class="form-input" placeholder="e.g. Recruitment">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="cat-modal-cancel">Cancel</button>
+            <button class="btn btn-primary" id="cat-modal-save">Add</button>
+        </div>
+    </div>
+</div>
+{{end}}
+
 {{define "scripts"}}
 <script>
     window.CAN_MANAGE = {{if .Permissions.ManageOfficerCommand}}true{{else}}false{{end}};

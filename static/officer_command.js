@@ -296,20 +296,37 @@ function wireEvents(container) {
 }
 
 // ── category actions ─────────────────────────────────────────────
-async function addCategory() {
-    const name = prompt('Category name:');
-    if (!name || !name.trim()) return;
+function openCatModal() {
+    const input = document.getElementById('cat-name-input');
+    input.value = '';
+    document.getElementById('cat-modal').style.display = 'flex';
+    input.focus();
+}
+
+function closeCatModal() {
+    document.getElementById('cat-modal').style.display = 'none';
+}
+
+async function saveCatModal() {
+    const name = document.getElementById('cat-name-input').value.trim();
+    if (!name) {
+        setFieldError(document.getElementById('cat-name-input'), 'Category name is required.');
+        return;
+    }
+    clearFieldError(document.getElementById('cat-name-input'));
     try {
         const res = await fetch(`${API}/categories`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name.trim() }),
+            body: JSON.stringify({ name }),
         });
         if (!res.ok) throw new Error(await res.text());
         const cat = await res.json();
         categories.push(cat);
         buildLeaderFilter();
         render();
+        closeCatModal();
+        showToast('Category added.');
     } catch (e) {
         showError('Failed to add category: ' + e.message);
     }
@@ -559,9 +576,18 @@ async function removeAssignee(ci, ri, memberID) {
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
 
-    // Add category button
+    // Add category button / modal
     const btnAddCat = document.getElementById('btn-add-category');
-    if (btnAddCat) btnAddCat.addEventListener('click', addCategory);
+    if (btnAddCat) btnAddCat.addEventListener('click', openCatModal);
+    document.getElementById('cat-modal-cancel').addEventListener('click', closeCatModal);
+    document.getElementById('cat-modal-save').addEventListener('click', saveCatModal);
+    document.getElementById('cat-name-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); saveCatModal(); }
+        if (e.key === 'Escape') closeCatModal();
+    });
+    document.getElementById('cat-modal').addEventListener('click', e => {
+        if (e.target.id === 'cat-modal') closeCatModal();
+    });
 
     // Resp modal buttons
     document.getElementById('resp-modal-cancel').addEventListener('click', closeRespModal);
