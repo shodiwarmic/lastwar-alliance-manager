@@ -786,7 +786,7 @@ button {
 
 .rank-R5 {
     background: #ffd700;
-    color: #856404;
+    color: #5d4400;
 }
 
 .rank-R4 {
@@ -1885,7 +1885,7 @@ button {
 
 .status-badge.warning {
     background: #ffc107;
-    color: #856404;
+    color: #4a3700;
 }
 
 .status-badge.active {
@@ -5642,6 +5642,66 @@ code {
     display: inline-block;
     text-decoration: none;
     padding: 12px 24px;
+}
+
+/* ---- Dark mode: amber/yellow info boxes ---- */
+@media (prefers-color-scheme: dark) {
+    .warning-message,
+    .system-note {
+        background: rgba(255, 193, 7, 0.1);
+        color: #ffd54f;
+        border-left-color: #ffc107;
+    }
+    .permission-notice {
+        background: rgba(255, 193, 7, 0.1);
+        border-color: #ffc107;
+    }
+    .permission-notice p {
+        color: #ffd54f;
+    }
+    .import-result.success {
+        background: rgba(40, 167, 69, 0.12);
+        color: #75d99f;
+        border-color: rgba(40, 167, 69, 0.3);
+    }
+    .import-result.error {
+        background: rgba(220, 53, 69, 0.12);
+        color: #f08080;
+        border-color: rgba(220, 53, 69, 0.3);
+    }
+    .import-result.warning {
+        background: rgba(255, 193, 7, 0.1);
+        color: #ffd54f;
+        border-color: rgba(255, 193, 7, 0.3);
+    }
+}
+html.theme-dark .warning-message,
+html.theme-dark .system-note {
+    background: rgba(255, 193, 7, 0.1);
+    color: #ffd54f;
+    border-left-color: #ffc107;
+}
+html.theme-dark .permission-notice {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: #ffc107;
+}
+html.theme-dark .permission-notice p {
+    color: #ffd54f;
+}
+html.theme-dark .import-result.success {
+    background: rgba(40, 167, 69, 0.12);
+    color: #75d99f;
+    border-color: rgba(40, 167, 69, 0.3);
+}
+html.theme-dark .import-result.error {
+    background: rgba(220, 53, 69, 0.12);
+    color: #f08080;
+    border-color: rgba(220, 53, 69, 0.3);
+}
+html.theme-dark .import-result.warning {
+    background: rgba(255, 193, 7, 0.1);
+    color: #ffd54f;
+    border-color: rgba(255, 193, 7, 0.3);
 }
 
 /* ---- Confirm modal message ---- */
