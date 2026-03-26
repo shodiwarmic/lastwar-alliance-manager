@@ -20,13 +20,14 @@
     padding: 0.4rem 0.75rem;
     border-radius: 6px;
     border: 1px solid var(--border-color);
-    background: var(--bg-secondary);
+    background: var(--input-bg);
     color: var(--text-primary);
     font-size: 0.9rem;
     cursor: pointer;
+    color-scheme: inherit;
 }
 .oc-filter-bar select option {
-    background: var(--bg-secondary);
+    background: var(--input-bg);
     color: var(--text-primary);
 }
 .oc-category {
@@ -119,7 +120,7 @@
 }
 .freq-daily    { background: var(--color-info-bg, #dbeafe); color: var(--color-info, #1d4ed8); }
 .freq-weekly   { background: var(--color-success-bg, #dcfce7); color: var(--color-success, #15803d); }
-.freq-seasonal { background: #ede9fe; color: #6d28d9; }
+.freq-seasonal { background: var(--color-purple-bg, #ede9fe); color: var(--color-purple, #6d28d9); }
 .oc-assignees {
     display: flex;
     flex-wrap: wrap;
