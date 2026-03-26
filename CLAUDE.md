@@ -89,6 +89,47 @@ When adding new permission columns, follow `008_schedules.sql` exactly:
 - `UPDATE` using `WHERE rank IN (...)` — never `WHERE rank >= N`
 - Populate all ranks explicitly if the default isn't right for everyone
 
+## Frontend JS hardening
+
+All JS files are being migrated away from `innerHTML` string injection to safe DOM construction. Work is tracked on the `js-hardening` branch, one file per session.
+
+**Target pattern** — use `createElement` + `textContent`, never build HTML strings:
+```javascript
+// Safe
+const card = document.createElement('div');
+card.className = 'member-card';
+card.textContent = member.name;   // never executes HTML
+container.appendChild(card);
+
+// For clearing + replacing children
+container.replaceChildren(...items);  // or replaceChildren(singleNode)
+```
+
+**Event handling** — wire via `addEventListener`, never inline `onclick` in JS-generated markup:
+```javascript
+btn.addEventListener('click', () => editMember(member.id));
+```
+
+**`escapeHtml()`** — remove at the injection point when converting to `textContent`. Do not leave orphaned calls.
+
+**Progress** (branch: `js-hardening`):
+| File | Status |
+|------|--------|
+| `static/members.js` | ✅ Done |
+| `static/storm.js` | ⬜ |
+| `static/rankings.js` | ⬜ |
+| `static/vs.js` | ⬜ |
+| `static/alias-audit.js` | ⬜ |
+| `static/dyno.js` | ⬜ |
+| `static/admin.js` | ⬜ |
+| `static/settings.js` | ⬜ |
+| `static/profile.js` | ⬜ |
+| `static/schedule.js` | ⬜ |
+| `static/upload.js` | ⬜ |
+| `static/files.js` | ⬜ |
+
+`static/officer_command.js` — skip, already uses correct patterns.
+
 ## Running locally
 
 ```bash
