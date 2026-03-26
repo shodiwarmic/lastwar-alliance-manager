@@ -131,6 +131,7 @@ btn.addEventListener('click', () => editMember(member.id));
 | `static/files.js` | ✅ Done |
 
 `static/officer_command.js` — skip, already uses correct patterns.
+`static/login.js` — ✅ Done (same password-rules pattern as profile.js; fixed during final sweep).
 
 ## Running locally
 
