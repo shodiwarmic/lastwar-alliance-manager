@@ -769,7 +769,7 @@ function setupCSVImport() {
                 membersToRemove = result.members_to_remove || [];
                 selectedRemoveMembers = new Set();
                 showCSVPreview(result);
-                modal.style.display = 'block';
+                modal.style.display = 'flex';
             } else {
                 displayImportError('No valid members found in CSV file');
             }

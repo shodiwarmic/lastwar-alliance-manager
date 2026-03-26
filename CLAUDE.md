@@ -112,6 +112,8 @@ btn.addEventListener('click', () => editMember(member.id));
 
 **`escapeHtml()`** — remove at the injection point when converting to `textContent`. Do not leave orphaned calls.
 
+**Modal open/close check** — the global `.modal` class uses `display: flex` for centering. Always open modals with `modal.style.display = 'flex'`, never `'block'`. Verify this on every file during hardening.
+
 **Progress** (branch: `js-hardening`):
 | File | Status |
 |------|--------|
