@@ -1,5 +1,71 @@
 // static/global.js - Global JavaScript for handling mobile menu, user dropdown, and logout functionality
 
+// ---- Toast notifications ----
+function showToast(message, type = 'success', duration = 3500) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => toast.classList.add('toast-show'));
+    });
+    setTimeout(() => {
+        toast.classList.remove('toast-show');
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    }, duration);
+}
+
+// ---- Confirmation modal ----
+function showConfirm(message, confirmLabel = 'Confirm') {
+    return new Promise(resolve => {
+        const modal = document.getElementById('confirm-modal');
+        const msg   = document.getElementById('confirm-modal-message');
+        msg.textContent = message;
+
+        // Re-query after potential cloneNode replacements
+        const freshConfirm = () => document.getElementById('confirm-modal-confirm');
+        const freshCancel  = () => document.getElementById('confirm-modal-cancel');
+
+        freshConfirm().textContent = confirmLabel;
+        modal.style.display = 'flex';
+
+        const cleanup = (result) => {
+            modal.style.display = 'none';
+            // Remove listeners by replacing nodes
+            const c = freshConfirm();
+            const x = freshCancel();
+            c.replaceWith(c.cloneNode(true));
+            x.replaceWith(x.cloneNode(true));
+            resolve(result);
+        };
+
+        freshConfirm().addEventListener('click', () => cleanup(true),  { once: true });
+        freshCancel().addEventListener('click',  () => cleanup(false), { once: true });
+    });
+}
+
+// ---- Inline field validation ----
+function setFieldError(fieldEl, message) {
+    clearFieldError(fieldEl);
+    fieldEl.classList.add('field-error');
+    const err = document.createElement('span');
+    err.className = 'field-error-message';
+    err.textContent = message;
+    fieldEl.insertAdjacentElement('afterend', err);
+}
+
+function clearFieldError(fieldEl) {
+    fieldEl.classList.remove('field-error');
+    const next = fieldEl.nextElementSibling;
+    if (next?.classList.contains('field-error-message')) next.remove();
+}
+
+function clearAllFieldErrors(formEl) {
+    formEl.querySelectorAll('.field-error').forEach(el => clearFieldError(el));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Mobile Menu Toggle
     const menuBtn = document.getElementById("mobile-menu-btn");
@@ -34,20 +100,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async (event) => {
             event.preventDefault();
-            if (!confirm('Are you sure you want to logout?')) return;
-            
+            if (!await showConfirm('Are you sure you want to logout?', 'Logout')) return;
+
             try {
                 const response = await fetch('/api/logout', { method: 'POST' });
-                
-                // NEW: Force an error if the server rejected the logout
                 if (!response.ok) {
                     throw new Error(`Server rejected logout: ${response.status} ${response.statusText}`);
                 }
-                
-                window.location.href = '/login'; 
+                window.location.href = '/login';
             } catch (error) {
                 console.error('Logout failed:', error);
-                alert('Logout failed! Check the F12 Developer Console for the exact error.');
+                showToast('Logout failed. Check the browser console for details.', 'error');
             }
         });
     }

@@ -5643,3 +5643,47 @@ code {
     text-decoration: none;
     padding: 12px 24px;
 }
+
+/* ---- Toast notifications ---- */
+#toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.toast {
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 0.925em;
+    color: #fff;
+    min-width: 220px;
+    max-width: 360px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: auto;
+}
+.toast.toast-show {
+    opacity: 1;
+    transform: translateY(0);
+}
+.toast-success { background: #28a745; }
+.toast-error   { background: #dc3545; }
+.toast-info    { background: #2980b9; }
+
+/* ---- Inline field validation ---- */
+.field-error {
+    border-color: #dc3545 !important;
+}
+.field-error-message {
+    display: block;
+    color: #dc3545;
+    font-size: 0.85em;
+    margin-top: 4px;
+}
