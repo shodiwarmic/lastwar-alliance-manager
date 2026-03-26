@@ -227,7 +227,7 @@ function setupModalListeners() {
 
 function openMemberModal(editing = false) {
     if (!canManageRanks) {
-        alert('You do not have permission to manage members. Only R4 and R5 can do this.');
+        showToast('You do not have permission to manage members. Only R4 and R5 can do this.', 'error');
         return;
     }
     const memberModal = document.getElementById('member-modal');
@@ -471,7 +471,7 @@ function buildMemberCard(member) {
 async function handleMemberFormSubmit(e) {
     e.preventDefault();
     if (!canManageRanks) {
-        alert('You do not have permission to manage members. Only R4 and R5 can do this.');
+        showToast('You do not have permission to manage members. Only R4 and R5 can do this.', 'error');
         return;
     }
 
@@ -479,7 +479,8 @@ async function handleMemberFormSubmit(e) {
     const rank = document.getElementById('member-rank').value;
     const eligible = document.getElementById('member-eligible').checked;
 
-    const level = parseInt(document.getElementById('member-level').value, 10) || 0;
+    const levelInput = document.getElementById('member-level');
+    const level = parseInt(levelInput.value, 10) || 0;
     const profession = document.getElementById('member-profession').value;
     const squad_type = document.getElementById('member-squad-type').value;
     const troop_level = parseInt(document.getElementById('member-troop-level').value, 10) || 0;
@@ -488,22 +489,26 @@ async function handleMemberFormSubmit(e) {
     const squad_power = (sqPowerInput && sqPowerInput.value !== '') ? parseInt(sqPowerInput.value, 10) : 0;
 
     if (level > currentMaxHQ) {
-        alert(`HQ Level cannot exceed the current server maximum of ${currentMaxHQ}.`);
+        setFieldError(levelInput, `HQ Level cannot exceed the current server maximum of ${currentMaxHQ}.`);
         return;
     }
     if (level < 0) {
-        alert('HQ Level cannot be negative.');
+        setFieldError(levelInput, 'HQ Level cannot be negative.');
         return;
     }
+    clearFieldError(levelInput);
 
     const powerInput = document.getElementById('modal-member-power');
     const power = (powerInput && powerInput.value !== '') ? parseInt(powerInput.value, 10) : 0;
 
+    const nameInput = document.getElementById('member-name');
     if (!name || !rank) {
-        alert('Please fill in all fields');
+        setFieldError(nameInput, 'Please fill in all required fields.');
         return;
     }
+    clearFieldError(nameInput);
 
+    const wasEditing = !!editingMemberId;
     try {
         if (editingMemberId) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
@@ -526,15 +531,16 @@ async function handleMemberFormSubmit(e) {
         }
         closeMemberModalFunc();
         await loadMembers();
+        showToast(wasEditing ? 'Member updated.' : 'Member added.');
     } catch (error) {
         console.error('Error saving member:', error);
-        alert('Failed to save member. Please try again.');
+        showToast('Failed to save member. Please try again.', 'error');
     }
 }
 
 window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0, squadType = '', squadPower = 0, squadPowerUpdatedAt = '', troopLevel = 0, profession = '') {
     if (!canManageRanks) {
-        alert('You do not have permission to edit members.');
+        showToast('You do not have permission to edit members.', 'error');
         return;
     }
     editingMemberId = id;
@@ -597,27 +603,28 @@ window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedA
 window.deleteMember = async function (id, name, hasUser = false) {
     let confirmMessage = `Are you sure you want to delete ${name} from the roster?`;
     if (hasUser) confirmMessage += '\n\n⚠️ WARNING: This will also permanently delete their login account!';
-    if (!confirm(confirmMessage)) return;
+    if (!await showConfirm(confirmMessage, 'Delete Member')) return;
 
     try {
         const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
         if (!response.ok) throw new Error('Failed to delete member');
         await loadMembers();
+        showToast(`${name} removed from roster.`);
     } catch (error) {
         console.error('Error:', error);
-        alert('Failed to delete member. Please try again.');
+        showToast('Failed to delete member. Please try again.', 'error');
     }
 };
 
 window.toggleEligible = async function (id, currentStatus) {
     if (!permissions.manage_train) {
-        alert('You do not have permission to manage the train schedule.');
+        showToast('You do not have permission to manage the train schedule.', 'error');
         return;
     }
 
     const newStatus = !currentStatus;
     const statusText = newStatus ? 'eligible' : 'not eligible';
-    if (!confirm(`Mark this member as ${statusText} for train scheduling?`)) return;
+    if (!await showConfirm(`Mark this member as ${statusText} for train scheduling?`, 'Confirm')) return;
 
     try {
         const response = await fetch(`${API_URL}`);
@@ -636,14 +643,15 @@ window.toggleEligible = async function (id, currentStatus) {
 
         if (!updateResponse.ok) throw new Error('Failed to update member');
         loadMembers();
+        showToast(`Member marked as ${statusText}.`);
     } catch (error) {
         console.error('Error toggling eligibility:', error);
-        alert('Failed to update member eligibility: ' + error.message);
+        showToast('Failed to update member eligibility: ' + error.message, 'error');
     }
 };
 
 window.createUserForMember = async function (memberId, memberName) {
-    if (!confirm(`Create a user account for ${memberName}? A random password will be generated.`)) return;
+    if (!await showConfirm(`Create a user account for ${memberName}? A random password will be generated.`, 'Create Account')) return;
     try {
         const response = await fetch(`${API_URL}/${memberId}/create-user`, { method: 'POST' });
         if (!response.ok) {
@@ -651,11 +659,15 @@ window.createUserForMember = async function (memberId, memberName) {
             throw new Error(error);
         }
         const result = await response.json();
-        alert(`User created successfully!\n\nUsername: ${result.username}\nPassword: ${result.password}\n\n⚠️ IMPORTANT: Save this password now! It won't be shown again.`);
+        await showConfirm(
+            `Username: ${result.username}\nPassword: ${result.password}\n\n⚠️ Save this password now! It won't be shown again.`,
+            'OK',
+            'User Created'
+        );
         await loadMembers();
     } catch (error) {
         console.error('Error creating user:', error);
-        alert('Failed to create user: ' + error.message);
+        showToast('Failed to create user: ' + error.message, 'error');
     }
 };
 
@@ -738,12 +750,12 @@ function setupCSVImport() {
 
     importBtn.addEventListener('click', async () => {
         if (!canManageRanks) {
-            alert('You do not have permission to import members. Only R4 and R5 can do this.');
+            showToast('You do not have permission to import members. Only R4 and R5 can do this.', 'error');
             return;
         }
         const file = fileInput.files[0];
         if (!file || !file.name.endsWith('.csv')) {
-            alert('Please select a valid CSV file');
+            showToast('Please select a valid CSV file.', 'error');
             return;
         }
 
@@ -788,7 +800,7 @@ function setupCSVImport() {
     confirmBtn.addEventListener('click', async () => {
         const selectedMembers = detectedCSVMembers.filter((_, i) => selectedCSVMembers.has(i));
         if (selectedMembers.length === 0) {
-            alert('Please select at least one member to import');
+            showToast('Please select at least one member to import.', 'error');
             return;
         }
 
@@ -799,7 +811,7 @@ function setupCSVImport() {
 
         const removeMemberIDs = Array.from(selectedRemoveMembers);
         if (removeMemberIDs.length > 0) {
-            if (!confirm(`⚠️ WARNING: You are about to delete ${removeMemberIDs.length} member(s)!\n\nAre you sure you want to continue?`)) return;
+            if (!await showConfirm(`You are about to delete ${removeMemberIDs.length} member(s). Are you sure you want to continue?`, 'Delete Members')) return;
         }
 
         confirmBtn.disabled = true;
@@ -827,7 +839,7 @@ function setupCSVImport() {
             fileInput.value = '';
         } catch (error) {
             console.error('Confirm error:', error);
-            alert('Error importing members: ' + error.message);
+            showToast('Error importing members: ' + error.message, 'error');
         } finally {
             confirmBtn.disabled = false;
             confirmBtn.textContent = '✔ Confirm & Import Selected';
@@ -1143,20 +1155,21 @@ document.getElementById('add-alias-form')?.addEventListener('submit', async e =>
         await loadAliases();
         loadMembers();
     } catch (err) {
-        alert('Failed to add nickname: ' + err.message);
+        showToast('Failed to add nickname: ' + err.message, 'error');
     }
 });
 
 window.deleteAlias = async function (aliasId) {
-    if (!confirm('Remove this nickname?')) return;
+    if (!await showConfirm('Remove this nickname?', 'Remove')) return;
 
     try {
         const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
         if (!res.ok) throw new Error(await res.text());
         await loadAliases();
         loadMembers();
+        showToast('Nickname removed.');
     } catch (err) {
-        alert('Failed to delete nickname: ' + err.message);
+        showToast('Failed to delete nickname: ' + err.message, 'error');
     }
 };
 

@@ -5644,6 +5644,12 @@ code {
     padding: 12px 24px;
 }
 
+/* ---- Confirm modal message ---- */
+#confirm-modal-message {
+    white-space: pre-line;
+    margin: 12px 0 24px;
+}
+
 /* ---- Toast notifications ---- */
 #toast-container {
     position: fixed;

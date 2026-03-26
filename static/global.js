@@ -18,10 +18,12 @@ function showToast(message, type = 'success', duration = 3500) {
 }
 
 // ---- Confirmation modal ----
-function showConfirm(message, confirmLabel = 'Confirm') {
+function showConfirm(message, confirmLabel = 'Confirm', title = 'Are you sure?') {
     return new Promise(resolve => {
-        const modal = document.getElementById('confirm-modal');
-        const msg   = document.getElementById('confirm-modal-message');
+        const modal  = document.getElementById('confirm-modal');
+        const msg    = document.getElementById('confirm-modal-message');
+        const titleEl = document.getElementById('confirm-modal-title');
+        if (titleEl) titleEl.textContent = title;
         msg.textContent = message;
 
         // Re-query after potential cloneNode replacements
