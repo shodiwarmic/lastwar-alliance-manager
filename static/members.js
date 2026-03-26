@@ -334,13 +334,13 @@ function buildMemberCard(member) {
 
     if (member.personal_aliases) {
         const span = document.createElement('span');
-        span.style.cssText = 'color:#63b3ed;font-size:0.85em;';
+        span.style.cssText = 'color:var(--text-muted);font-size:0.85em;';
         span.textContent = `(${member.personal_aliases})`;
         nameDiv.appendChild(span);
     }
     if (member.global_aliases) {
         const span = document.createElement('span');
-        span.style.cssText = 'color:#a0aec0;font-size:0.85em;';
+        span.style.cssText = 'color:var(--text-muted);font-size:0.85em;';
         span.textContent = `[${member.global_aliases}]`;
         nameDiv.appendChild(span);
     }
@@ -1096,9 +1096,9 @@ async function loadAliases() {
             const left = document.createElement('div');
 
             const badgeStyles = {
-                global:   'background:#e2e8f0;color:#4a5568;',
-                personal: 'background:#bee3f8;color:#2b6cb0;',
-                ocr:      'background:#fed7d7;color:#c53030;',
+                global:   'background:#4a5568;color:#fff;',
+                personal: 'background:#2b6cb0;color:#fff;',
+                ocr:      'background:#c53030;color:#fff;',
             };
             if (badgeStyles[a.category]) {
                 const badge = document.createElement('span');

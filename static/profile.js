@@ -62,7 +62,7 @@ async function loadSystemSettings() {
                     const li = document.createElement('li');
                     li.id = r.id;
                     li.dataset.text = r.text;
-                    li.style.cssText = 'color: #666; transition: color 0.3s;';
+                    li.style.cssText = 'color: var(--text-secondary); transition: color 0.3s;';
                     li.textContent = `⚪ ${r.text}`;
                     return li;
                 });
