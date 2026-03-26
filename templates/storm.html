@@ -129,6 +129,23 @@
 <link rel="stylesheet" href="/storm.css">
 {{end}}
 
+{{define "modals"}}
+<!-- Add Group Modal -->
+<div id="group-name-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2>Add Group</h2>
+        <div class="form-group">
+            <label for="group-name-input">Group Name</label>
+            <input type="text" id="group-name-input" class="form-input" placeholder="e.g. Alpha Squad">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="group-name-cancel">Cancel</button>
+            <button class="btn btn-primary" id="group-name-save">Add</button>
+        </div>
+    </div>
+</div>
+{{end}}
+
 {{define "scripts"}}
 <script src="/storm.js"></script>
 {{end}}

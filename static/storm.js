@@ -1421,10 +1421,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (poolSearch) poolSearch.addEventListener('input', renderPool);
 
     const btnAddGroup = document.getElementById('btn-add-group');
-    if (btnAddGroup) {
+    const groupNameModal = document.getElementById('group-name-modal');
+    if (btnAddGroup && groupNameModal) {
+        const groupNameInput = document.getElementById('group-name-input');
+        const saveGroupName = () => {
+            const name = groupNameInput.value.trim();
+            if (!name) { setFieldError(groupNameInput, 'Group name is required.'); return; }
+            clearFieldError(groupNameInput);
+            groupNameModal.style.display = 'none';
+            createGroup(name);
+        };
         btnAddGroup.addEventListener('click', () => {
-            const name = prompt('Group name:');
-            if (name && name.trim()) createGroup(name.trim());
+            groupNameInput.value = '';
+            groupNameModal.style.display = 'flex';
+            groupNameInput.focus();
+        });
+        document.getElementById('group-name-save').addEventListener('click', saveGroupName);
+        document.getElementById('group-name-cancel').addEventListener('click', () => {
+            groupNameModal.style.display = 'none';
+        });
+        groupNameInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); saveGroupName(); }
+            if (e.key === 'Escape') groupNameModal.style.display = 'none';
+        });
+        groupNameModal.addEventListener('click', e => {
+            if (e.target === groupNameModal) groupNameModal.style.display = 'none';
         });
     }
 
