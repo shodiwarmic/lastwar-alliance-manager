@@ -593,8 +593,9 @@ async function saveCurrentSchedule() {
             schedule_data: currentPolicy,
         }),
     });
-    if (!res.ok) { alert('Save failed: ' + await res.text()); return; }
+    if (!res.ok) { showToast('Save failed: ' + await res.text(), 'error'); return; }
     applySchedule(await res.json());
+    showToast('Schedule saved.');
 }
 
 // ── Day Modal ─────────────────────────────────────────────────────────────────
@@ -830,7 +831,7 @@ if (canManage) {
             try {
                 const parsed = JSON.parse(evt.target.result);
                 if (!parsed.days || !Array.isArray(parsed.days)) {
-                    alert('Invalid schedule JSON: missing "days" array.');
+                    showToast('Invalid schedule JSON: missing "days" array.', 'error');
                     return;
                 }
                 currentPolicy = getPolicyData({ ...currentSchedule, schedule_data: parsed });
@@ -839,16 +840,16 @@ if (canManage) {
                 document.getElementById('text-section').classList.add('hidden');
                 document.getElementById('infographic-section').classList.add('hidden');
             } catch {
-                alert('Failed to parse JSON file.');
+                showToast('Failed to parse JSON file.', 'error');
             }
         };
         reader.readAsText(file);
         e.target.value = '';
     });
 
-    document.getElementById('btn-clear').addEventListener('click', () => {
+    document.getElementById('btn-clear').addEventListener('click', async () => {
         if (!currentPolicy) return;
-        if (!confirm('Clear all events from every day? Policy settings (baselines, times) will be kept.')) return;
+        if (!await showConfirm('Clear all events from every day? Policy settings (baselines, times) will be kept.', 'Clear All')) return;
         currentPolicy.days.forEach(d => {
             d.mg = { active: false, vibe: 'base', time_override: null, conditional: null };
             d.zs = { active: false, vibe: 'base', time_override: null, conditional: null };

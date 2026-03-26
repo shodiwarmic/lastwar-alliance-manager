@@ -252,13 +252,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     throw new Error(errorMessage);
                 }
                 
-                alert('✅ Password changed successfully!');
+                showToast('Password changed successfully.');
                 passwordForm.reset();
                 checkPasswordRequirements();
-                
+
             } catch (error) {
                 console.error('Error changing password:', error);
-                alert('❌ Failed to change password: ' + error.message);
+                showToast('Failed to change password: ' + error.message, 'error');
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = '🔒 Change Password';
@@ -290,10 +290,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     
                     if (!response.ok) throw new Error(await response.text());
                     
-                    alert('✅ Game stats updated successfully!');
+                    showToast('Game stats updated.');
                 } catch (error) {
                     console.error('Error updating stats:', error);
-                    alert('❌ Failed to update stats.');
+                    showToast('Failed to update stats.', 'error');
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.textContent = '💾 Save Stats';

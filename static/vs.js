@@ -337,21 +337,22 @@ async function saveVSPoints() {
             body: JSON.stringify({ week_date: weekDate, points })
         });
         if (!response.ok) throw new Error('Failed to save');
-        alert('✓ Saved successfully!');
+        showToast('VS Points saved.');
         await loadVSPoints();
     } catch (error) {
-        alert('Error: ' + error.message);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
 async function clearVSPoints() {
     const weekDate = formatDate(currentWeekDate);
-    if (!confirm('Clear all points for this week?')) return;
+    if (!await showConfirm('Clear all points for this week?', 'Clear Week')) return;
     try {
         await fetch(`${API_URL}/${weekDate}`, { method: 'DELETE' });
         currentVSPoints = {};
         renderTable();
-    } catch (error) { alert('Error: ' + error.message); }
+        showToast('Points cleared.');
+    } catch (error) { showToast('Error: ' + error.message, 'error'); }
 }
 
 /**
@@ -381,7 +382,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Prevent going past the actual current week
             const todayMonday = getMostRecentMonday();
             if (nextWeek > todayMonday) {
-                alert("Cannot navigate to a future week.");
+                showToast('Cannot navigate to a future week.', 'error');
                 return;
             }
 
@@ -444,7 +445,7 @@ async function handleCSVUpload(event) {
         currentImportPayload = await response.json();
         renderPreviewModal(currentImportPayload);
     } catch (error) {
-        alert('Error parsing CSV: ' + error.message);
+        showToast('Error parsing CSV: ' + error.message, 'error');
     }
 
     event.target.value = ''; // Reset input
@@ -653,15 +654,15 @@ async function commitImport() {
         // Display errors if the backend caught any SQL issues
         if (result.errors && result.errors.length > 0) {
             console.error("Backend SQL Errors:", result.errors);
-            alert(`Backend received ${result.aliases_received} aliases to process.\n\n` + result.message + "\n\nDatabase Errors encountered:\n" + result.errors.join("\n"));
+            showToast(result.message + ` (${result.errors.length} error(s) — see console)`, 'error');
         } else {
-            alert(`Backend received ${result.aliases_received} aliases to process.\n\n` + result.message);
+            showToast(result.message || 'Import complete.');
         }
 
         closePreviewModal();
         loadVSPoints();
     } catch (error) {
-        alert('Error saving data: ' + error.message);
+        showToast('Error saving data: ' + error.message, 'error');
     }
 }
 

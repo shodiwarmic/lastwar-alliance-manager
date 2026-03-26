@@ -138,7 +138,7 @@ async function loadAliases(memberID) {
 }
 
 async function deleteAlias(aliasID) {
-    if (!confirm('Delete this alias?')) return;
+    if (!await showConfirm('Delete this alias?', 'Delete')) return;
     const res = await fetch(`/api/aliases/${aliasID}`, {
         method: 'DELETE',
         headers: { 'X-CSRF-Token': csrfToken() },

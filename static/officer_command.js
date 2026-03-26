@@ -353,7 +353,7 @@ function startRenameCategory(ci) {
 
 async function deleteCategory(ci) {
     const cat = categories[ci];
-    if (!confirm(`Delete category "${cat.name}" and all its responsibilities?`)) return;
+    if (!await showConfirm(`Delete category "${cat.name}" and all its responsibilities?`, 'Delete Category')) return;
     try {
         const res = await fetch(`${API}/categories/${cat.id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error(await res.text());
@@ -413,7 +413,7 @@ async function saveRespModal() {
     const description = document.getElementById('resp-desc').value.trim();
     const frequency = document.getElementById('resp-freq').value;
 
-    if (!name) { alert('Name is required.'); return; }
+    if (!name) { showToast('Name is required.', 'error'); return; }
 
     const ci = respModalCatIdx;
     const ri = respModalRespIdx;
@@ -452,7 +452,7 @@ async function saveRespModal() {
 
 async function deleteResponsibility(ci, ri) {
     const rp = categories[ci].responsibilities[ri];
-    if (!confirm(`Delete responsibility "${rp.name}"?`)) return;
+    if (!await showConfirm(`Delete responsibility "${rp.name}"?`, 'Delete')) return;
     try {
         const res = await fetch(`${API}/responsibilities/${rp.id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error(await res.text());

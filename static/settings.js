@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             e.preventDefault();
             
             if (!isR5OrAdmin) {
-                alert('You do not have permission to modify settings.');
+                showToast('You do not have permission to modify settings.', 'error');
                 return;
             }
             
@@ -197,10 +197,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
                 
                 if (!response.ok) throw new Error(await response.text());
-                alert('✅ Settings saved successfully!');
+                showToast('Settings saved.');
             } catch (error) {
                 console.error('Error saving settings:', error);
-                alert('❌ Failed to save settings: ' + error.message);
+                showToast('Failed to save settings: ' + error.message, 'error');
             }
         });
 

@@ -189,8 +189,9 @@ async function handleUpload(e) {
 
         closeUploadModal();
         loadFiles();
+        showToast('File uploaded.');
     } catch (err) {
-        alert(err.message);
+        showToast(err.message, 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = "Upload";
@@ -198,9 +199,10 @@ async function handleUpload(e) {
 }
 
 async function deleteFile(id) {
-    if (!confirm("Delete this file permanently?")) return;
+    if (!await showConfirm('Delete this file permanently?', 'Delete File')) return;
     await fetch(`/api/files/${id}`, { method: 'DELETE' });
     loadFiles();
+    showToast('File deleted.');
 }
 
 // --- File Editing Logic ---
@@ -244,8 +246,9 @@ async function handleEdit(e) {
 
         closeEditModal();
         loadFiles();
+        showToast('File updated.');
     } catch (err) {
-        alert(err.message);
+        showToast(err.message, 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = "Save Changes";

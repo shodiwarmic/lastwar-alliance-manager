@@ -895,7 +895,7 @@ async function createGroup(name) {
 }
 
 async function deleteGroup(id) {
-    if (!confirm('Delete this group? This cannot be undone.')) return;
+    if (!await showConfirm('Delete this group? This cannot be undone.', 'Delete Group')) return;
     try {
         const res = await apiFetch(`${API_BASE}/groups/${id}`, { method: 'DELETE' });
         if (!res.ok) {

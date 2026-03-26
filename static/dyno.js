@@ -45,7 +45,7 @@ async function loadMembers() {
         // populateMemberSelect() was removed here because the reactive modal handles the UI now
     } catch (error) {
         console.error('Error loading members:', error);
-        alert('Failed to load members.');
+        showToast('Failed to load members.', 'error');
     }
 }
 
@@ -660,19 +660,22 @@ async function submitDynoRecommendation(e) {
     const minRank = document.getElementById('min-rank-select').value;
 
     if (!memberId) {
-        alert('Please search and select a target member.');
+        setFieldError(document.getElementById('member-select'), 'Please search and select a target member.');
         return;
     }
+    clearFieldError(document.getElementById('member-select'));
 
     if (isNaN(points)) {
-        alert('Please enter valid points.');
+        setFieldError(document.getElementById('points-input'), 'Please enter valid points.');
         return;
     }
+    clearFieldError(document.getElementById('points-input'));
 
     if (!notes) {
-        alert('Please provide notes for this recommendation.');
+        setFieldError(document.getElementById('notes-input'), 'Please provide notes for this recommendation.');
         return;
     }
+    clearFieldError(document.getElementById('notes-input'));
 
     const editId = document.getElementById('edit-shoutout-id').value;
     const method = editId ? 'PUT' : 'POST';
@@ -698,17 +701,16 @@ async function submitDynoRecommendation(e) {
         document.getElementById('selected-member-display').style.display = 'none';
         document.getElementById('edit-shoutout-id').value = '';
 
+        showToast(editId ? 'Shoutout updated.' : 'Shoutout saved.');
         await loadDynoRecommendations();
     } catch (error) {
         console.error('Error saving shoutout:', error);
-        alert('Failed to save shoutout: ' + error.message);
+        showToast('Failed to save shoutout: ' + error.message, 'error');
     }
 }
 
 async function deleteDynoRecommendation(id) {
-    if (!confirm('Are you sure you want to delete this dyno recommendation?')) {
-        return;
-    }
+    if (!await showConfirm('Delete this shoutout?', 'Delete')) return;
 
     try {
         const response = await fetch(`${API_URL}/${id}`, {
@@ -720,9 +722,10 @@ async function deleteDynoRecommendation(id) {
         }
 
         await loadDynoRecommendations();
+        showToast('Shoutout deleted.');
     } catch (error) {
         console.error('Error deleting dyno recommendation:', error);
-        alert('Failed to delete dyno recommendation.');
+        showToast('Failed to delete shoutout.', 'error');
     }
 }
 
