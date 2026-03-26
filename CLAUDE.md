@@ -133,6 +133,60 @@ btn.addEventListener('click', () => editMember(member.id));
 `static/officer_command.js` — skip, already uses correct patterns.
 `static/login.js` — ✅ Done (same password-rules pattern as profile.js; fixed during final sweep).
 
+## UI feedback — never use browser dialogs
+
+All user-facing feedback must go through the helpers in `static/global.js`. Browser-native `alert()`, `confirm()`, and `prompt()` are banned — they block the thread, ignore theming, and break automated tests.
+
+| Need | Use |
+|------|-----|
+| Success/error notification | `showToast(message, type, duration)` — `type` is `'success'` (default), `'error'`, or `'info'` |
+| Destructive confirmation | `await showConfirm(message, confirmLabel, title)` — returns `true`/`false` |
+| Inline field validation | `setFieldError(fieldEl, message)` / `clearFieldError(fieldEl)` / `clearAllFieldErrors(formEl)` |
+| Input from user | Add a dedicated `<div class="modal">` in `{{define "modals"}}` with its own form |
+
+```javascript
+// Confirmation before delete
+if (!await showConfirm('Delete this entry?', 'Delete')) return;
+
+// Toast on success
+showToast('Entry deleted.');
+showToast('Something went wrong.', 'error');
+
+// Inline field error
+setFieldError(document.getElementById('name-input'), 'Name is required.');
+```
+
+`showConfirm` supports a `title` parameter (third arg) for cases where the heading should differ from the body, e.g. displaying newly-created credentials.
+
+## CSS variables — always use tokens, never hardcode colors
+
+`styles.css` defines a semantic token layer in all four theme blocks (`:root`, `html.theme-light`, `html.theme-dark`, `@media (prefers-color-scheme: dark) html.theme-auto`). New feature CSS files must use these tokens exclusively — hardcoded hex/rgb values do not adapt to dark mode.
+
+### Available tokens
+
+| Token | Light value | Dark value |
+|-------|-------------|------------|
+| `--bg-primary` | `white` | `#1a1f2e` |
+| `--bg-secondary` | `#f8f9fa` | `rgba(255,255,255,0.05)` |
+| `--bg-tertiary` | `#edf2f7` | `rgba(255,255,255,0.08)` |
+| `--text-primary` | `#1a202c` | `#e2e8f0` |
+| `--text-secondary` | `#4a5568` | `#a0aec0` |
+| `--text-muted` | `#718096` | `#718096` |
+| `--border-color` | `#e2e8f0` | `rgba(255,255,255,0.1)` |
+| `--color-primary` | `#667eea` | `#667eea` |
+| `--color-info-bg` / `--color-info` | `#dbeafe` / `#1d4ed8` | `rgba(59,130,246,0.15)` / `#93c5fd` |
+| `--color-success-bg` / `--color-success` | `#dcfce7` / `#15803d` | `rgba(34,197,94,0.15)` / `#86efac` |
+| `--color-danger-bg` / `--color-danger` | `#fee2e2` / `#dc2626` | `rgba(220,53,69,0.15)` / `#f87171` |
+| `--color-purple-bg` / `--color-purple` | `#ede9fe` / `#6d28d9` | `rgba(109,40,217,0.15)` / `#c4b5fd` |
+
+### Rules
+
+- **Backgrounds**: use `var(--bg-primary/secondary/tertiary)`. Never write `background: #fff` or `background: white`.
+- **Text**: use `var(--text-primary/secondary/muted)`. Never write `color: #666` or `color: #333`.
+- **Tinted boxes** (info/success/warning/error panels): use the `-bg`/text token pair, e.g. `background: var(--color-info-bg); color: var(--color-info)`.
+- **Borders**: use `var(--border-color)`.
+- **JS-injected styles**: same rules apply — use `var(--token)` in `element.style.cssText` strings. Never write hardcoded colors in JS.
+
 ## Running locally
 
 ```bash
