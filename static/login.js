@@ -16,10 +16,10 @@ function checkForcePasswordRequirements() {
         if (!el) return;
         const baseText = el.getAttribute('data-text');
         if (isMet) {
-            el.innerHTML = `✅ ${baseText}`;
+            el.textContent = `✅ ${baseText}`;
             el.style.color = '#28a745';
         } else {
-            el.innerHTML = `❌ ${baseText}`;
+            el.textContent = `❌ ${baseText}`;
             el.style.color = '#dc3545';
             allRulesMet = false;
         }
@@ -36,7 +36,7 @@ function checkForcePasswordRequirements() {
         const rulesList = document.getElementById('password-rules');
         const listItems = rulesList.getElementsByTagName('li');
         for (let li of listItems) {
-            li.innerHTML = `⚪ ${li.getAttribute('data-text')}`;
+            li.textContent = `⚪ ${li.getAttribute('data-text')}`;
             li.style.color = '#666';
         }
     }
@@ -45,11 +45,11 @@ function checkForcePasswordRequirements() {
     if (confirmPwd.length > 0) {
         matchStatus.style.display = 'block';
         if (newPwd === confirmPwd) {
-            matchStatus.innerHTML = '✅ Passwords match';
+            matchStatus.textContent = '✅ Passwords match';
             matchStatus.style.color = '#28a745';
             passwordsMatch = true;
         } else {
-            matchStatus.innerHTML = '❌ Passwords do not match';
+            matchStatus.textContent = '❌ Passwords do not match';
             matchStatus.style.color = '#dc3545';
         }
     } else {
@@ -109,11 +109,21 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
                 // Dynamically build the reactive data-text list
                 const rulesList = document.getElementById('password-rules');
-                rulesList.innerHTML = `<li id="rule-length" data-text="Minimum ${currentPolicy.min_length} characters" style="color: #666; transition: color 0.3s;">⚪ Minimum ${currentPolicy.min_length} characters</li>`;
-                if (currentPolicy.require_upper) rulesList.innerHTML += `<li id="rule-upper" data-text="At least one uppercase letter" style="color: #666; transition: color 0.3s;">⚪ At least one uppercase letter</li>`;
-                if (currentPolicy.require_lower) rulesList.innerHTML += `<li id="rule-lower" data-text="At least one lowercase letter" style="color: #666; transition: color 0.3s;">⚪ At least one lowercase letter</li>`;
-                if (currentPolicy.require_number) rulesList.innerHTML += `<li id="rule-number" data-text="At least one number" style="color: #666; transition: color 0.3s;">⚪ At least one number</li>`;
-                if (currentPolicy.require_special) rulesList.innerHTML += `<li id="rule-special" data-text="At least one special character" style="color: #666; transition: color 0.3s;">⚪ At least one special character</li>`;
+                const ruleItems = [
+                    { id: 'rule-length', text: `Minimum ${currentPolicy.min_length} characters`, show: true },
+                    { id: 'rule-upper', text: 'At least one uppercase letter', show: currentPolicy.require_upper },
+                    { id: 'rule-lower', text: 'At least one lowercase letter', show: currentPolicy.require_lower },
+                    { id: 'rule-number', text: 'At least one number', show: currentPolicy.require_number },
+                    { id: 'rule-special', text: 'At least one special character', show: currentPolicy.require_special },
+                ];
+                rulesList.replaceChildren(...ruleItems.filter(r => r.show).map(r => {
+                    const li = document.createElement('li');
+                    li.id = r.id;
+                    li.dataset.text = r.text;
+                    li.style.cssText = 'color: #666; transition: color 0.3s;';
+                    li.textContent = `⚪ ${r.text}`;
+                    return li;
+                }));
 
                 // Evaluate immediately in case browser auto-filled it
                 checkForcePasswordRequirements();

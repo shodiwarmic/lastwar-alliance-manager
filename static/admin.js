@@ -22,11 +22,11 @@ function switchTab(tabName) {
     // Update tab buttons
     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
     event.target.classList.add('active');
-    
+
     // Update tab content
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
     document.getElementById(tabName + '-tab').classList.add('active');
-    
+
     // Load data for the active tab
     if (tabName === 'logins') {
         loadLoginHistory();
@@ -38,86 +38,162 @@ async function loadUsers() {
     try {
         const response = await fetch('/api/admin/users');
         if (!response.ok) throw new Error('Failed to fetch users');
-        
+
         allUsers = await response.json();
         displayUsers(allUsers);
     } catch (error) {
         console.error('Error loading users:', error);
-        document.getElementById('users-list').innerHTML = `
-            <div class="error-message">Failed to load users: ${error.message}</div>
-        `;
+        const div = document.createElement('div');
+        div.className = 'error-message';
+        div.textContent = `Failed to load users: ${error.message}`;
+        document.getElementById('users-list').replaceChildren(div);
     }
+}
+
+function buildRecentLoginsSection(user) {
+    if (!user.recent_logins || user.recent_logins.length === 0) return null;
+
+    const section = document.createElement('div');
+    section.className = 'recent-logins';
+
+    const label = document.createElement('strong');
+    label.textContent = 'Recent Logins:';
+    section.appendChild(label);
+
+    user.recent_logins.slice(0, 3).forEach(login => {
+        const location = [login.city, login.country].filter(v => v).join(', ') || 'Unknown';
+        const time = new Date(login.login_time).toLocaleString();
+
+        const entry = document.createElement('div');
+        entry.className = 'login-entry';
+
+        const locSpan = document.createElement('span');
+        locSpan.className = 'login-location';
+        locSpan.textContent = `📍 ${location}`;
+
+        const ipSpan = document.createElement('span');
+        ipSpan.className = 'login-ip';
+        ipSpan.textContent = login.ip_address || 'N/A';
+
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'login-time';
+        timeSpan.textContent = time;
+
+        entry.append(locSpan, ipSpan, timeSpan);
+        section.appendChild(entry);
+    });
+
+    return section;
+}
+
+function buildUserCard(user) {
+    const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString() : 'Never';
+
+    const card = document.createElement('div');
+    card.className = 'user-card';
+    card.dataset.username = user.username.toLowerCase();
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'user-header';
+
+    const userInfo = document.createElement('div');
+    userInfo.className = 'user-info';
+
+    const h3 = document.createElement('h3');
+    h3.textContent = user.username;
+    if (user.is_admin) {
+        const adminBadge = document.createElement('span');
+        adminBadge.className = 'admin-badge';
+        adminBadge.textContent = 'Admin';
+        h3.appendChild(adminBadge);
+    }
+
+    const memberSpan = document.createElement('span');
+    if (user.member_name) {
+        memberSpan.className = 'member-badge';
+        memberSpan.textContent = user.member_name;
+    } else {
+        memberSpan.className = 'no-member';
+        memberSpan.textContent = 'No member linked';
+    }
+
+    userInfo.append(h3, memberSpan);
+
+    const actions = document.createElement('div');
+    actions.className = 'user-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-sm btn-secondary';
+    editBtn.textContent = '✏️ Edit';
+    editBtn.addEventListener('click', () => editUser(user.id));
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'btn btn-sm btn-warning';
+    resetBtn.textContent = '🔑 Reset Password';
+    resetBtn.addEventListener('click', () => showResetPasswordModal(user.id, user.username));
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn btn-sm btn-danger';
+    deleteBtn.textContent = '🗑️ Delete';
+    deleteBtn.addEventListener('click', () => deleteUser(user.id, user.username));
+
+    actions.append(editBtn, resetBtn, deleteBtn);
+    header.append(userInfo, actions);
+
+    // Stats
+    const stats = document.createElement('div');
+    stats.className = 'user-stats';
+
+    const statLast = document.createElement('div');
+    statLast.className = 'stat';
+    const lastLabel = document.createElement('span');
+    lastLabel.className = 'stat-label';
+    lastLabel.textContent = 'Last Login:';
+    const lastVal = document.createElement('span');
+    lastVal.className = 'stat-value';
+    lastVal.textContent = lastLogin;
+    statLast.append(lastLabel, lastVal);
+
+    const statCount = document.createElement('div');
+    statCount.className = 'stat';
+    const countLabel = document.createElement('span');
+    countLabel.className = 'stat-label';
+    countLabel.textContent = 'Total Logins:';
+    const countVal = document.createElement('span');
+    countVal.className = 'stat-value';
+    countVal.textContent = user.login_count;
+    statCount.append(countLabel, countVal);
+
+    stats.append(statLast, statCount);
+
+    card.append(header, stats);
+
+    const recentLogins = buildRecentLoginsSection(user);
+    if (recentLogins) card.appendChild(recentLogins);
+
+    return card;
 }
 
 // Display Users
 function displayUsers(users) {
     const usersList = document.getElementById('users-list');
-    
+
     if (users.length === 0) {
-        usersList.innerHTML = '<div class="empty-state">No users found</div>';
+        const div = document.createElement('div');
+        div.className = 'empty-state';
+        div.textContent = 'No users found';
+        usersList.replaceChildren(div);
         return;
     }
-    
-    usersList.innerHTML = users.map(user => {
-        const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString() : 'Never';
-        const memberInfo = user.member_name ? `<span class="member-badge">${user.member_name}</span>` : '<span class="no-member">No member linked</span>';
-        
-        let recentLoginsHTML = '';
-        if (user.recent_logins && user.recent_logins.length > 0) {
-            recentLoginsHTML = `
-                <div class="recent-logins">
-                    <strong>Recent Logins:</strong>
-                    ${user.recent_logins.slice(0, 3).map(login => {
-                        const location = [login.city, login.country].filter(v => v).join(', ') || 'Unknown';
-                        const time = new Date(login.login_time).toLocaleString();
-                        return `
-                            <div class="login-entry">
-                                <span class="login-location">📍 ${location}</span>
-                                <span class="login-ip">${login.ip_address || 'N/A'}</span>
-                                <span class="login-time">${time}</span>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-            `;
-        }
-        
-        return `
-            <div class="user-card" data-username="${user.username.toLowerCase()}">
-                <div class="user-header">
-                    <div class="user-info">
-                        <h3>
-                            ${user.username}
-                            ${user.is_admin ? '<span class="admin-badge">Admin</span>' : ''}
-                        </h3>
-                        ${memberInfo}
-                    </div>
-                    <div class="user-actions">
-                        <button class="btn btn-sm btn-secondary" onclick="editUser(${user.id})">✏️ Edit</button>
-                        <button class="btn btn-sm btn-warning" onclick="showResetPasswordModal(${user.id}, '${user.username}')">🔑 Reset Password</button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id}, '${user.username}')">🗑️ Delete</button>
-                    </div>
-                </div>
-                <div class="user-stats">
-                    <div class="stat">
-                        <span class="stat-label">Last Login:</span>
-                        <span class="stat-value">${lastLogin}</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-label">Total Logins:</span>
-                        <span class="stat-value">${user.login_count}</span>
-                    </div>
-                </div>
-                ${recentLoginsHTML}
-            </div>
-        `;
-    }).join('');
+
+    usersList.replaceChildren(...users.map(buildUserCard));
 }
 
 // Filter Users
 function filterUsers() {
     const searchTerm = document.getElementById('user-search').value.toLowerCase();
-    const filtered = allUsers.filter(user => 
+    const filtered = allUsers.filter(user =>
         user.username.toLowerCase().includes(searchTerm) ||
         (user.member_name && user.member_name.toLowerCase().includes(searchTerm))
     );
@@ -129,7 +205,7 @@ async function loadMembers() {
     try {
         const response = await fetch('/api/members');
         if (!response.ok) throw new Error('Failed to fetch members');
-        
+
         allMembers = await response.json();
         populateMemberDropdown();
     } catch (error) {
@@ -140,9 +216,17 @@ async function loadMembers() {
 // Populate member dropdown
 function populateMemberDropdown() {
     const select = document.getElementById('member-id');
-    if(select) {
-        select.innerHTML = '<option value="">No member linked</option>' + 
-            allMembers.map(m => `<option value="${m.id}">${m.name} (${m.rank})</option>`).join('');
+    if (select) {
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = 'No member linked';
+        const opts = allMembers.map(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = `${m.name} (${m.rank})`;
+            return opt;
+        });
+        select.replaceChildren(defaultOpt, ...opts);
     }
 }
 
@@ -152,13 +236,13 @@ function showCreateUserModal() {
     document.getElementById('modal-title').textContent = 'Create New User';
     document.getElementById('user-form').reset();
     document.getElementById('user-id').value = '';
-    
+
     // Default to true for new users
-    document.getElementById('force-password-change').checked = true; 
+    document.getElementById('force-password-change').checked = true;
 
     document.getElementById('password-group').style.display = 'block';
     document.getElementById('password').required = true;
-    document.getElementById('user-modal').style.display = 'block';
+    document.getElementById('user-modal').style.display = 'flex';
 }
 
 // Edit User
@@ -166,19 +250,19 @@ function editUser(userId) {
     currentEditUserId = userId;
     const user = allUsers.find(u => u.id === userId);
     if (!user) return;
-    
+
     document.getElementById('modal-title').textContent = 'Edit User';
     document.getElementById('user-id').value = user.id;
     document.getElementById('username').value = user.username;
     document.getElementById('member-id').value = user.member_id || '';
     document.getElementById('is-admin').checked = user.is_admin;
-    
+
     // Check the box if the user is currently flagged in the DB
-    document.getElementById('force-password-change').checked = user.force_password_change; 
+    document.getElementById('force-password-change').checked = user.force_password_change;
 
     document.getElementById('password-group').style.display = 'none';
     document.getElementById('password').required = false;
-    document.getElementById('user-modal').style.display = 'block';
+    document.getElementById('user-modal').style.display = 'flex';
 }
 
 // Close User Modal
@@ -190,26 +274,26 @@ function closeUserModal() {
 // Save User (Create or Update)
 async function saveUser(event) {
     event.preventDefault();
-    
+
     const userId = document.getElementById('user-id').value;
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
     const memberIdValue = document.getElementById('member-id').value;
     const isAdmin = document.getElementById('is-admin').checked;
-    const forcePasswordChange = document.getElementById('force-password-change').checked; // Grab the new value
-    
+    const forcePasswordChange = document.getElementById('force-password-change').checked;
+
     const userData = {
         username,
         member_id: memberIdValue ? parseInt(memberIdValue) : null,
         is_admin: isAdmin,
-        force_password_change: forcePasswordChange // Append to payload
+        force_password_change: forcePasswordChange
     };
-    
+
     // Add password for new users
     if (!userId) {
         userData.password = password;
     }
-    
+
     try {
         let response;
         if (userId) {
@@ -227,12 +311,12 @@ async function saveUser(event) {
                 body: JSON.stringify(userData)
             });
         }
-        
+
         if (!response.ok) {
             const error = await response.text();
             throw new Error(error);
         }
-        
+
         const result = await response.json();
         alert(result.message);
         closeUserModal();
@@ -257,16 +341,19 @@ async function deleteUser(userId, username) {
             pendingDeleteUsername = username;
             document.getElementById('transfer-username').textContent = username;
             document.getElementById('transfer-file-count').textContent = data.count;
-            
-            const select = document.getElementById('new-owner-select');
-            select.innerHTML = '';
-            allUsers.forEach(u => {
-                if (u.id !== userId) {
-                    select.innerHTML += `<option value="${u.id}">${u.username}</option>`;
-                }
-            });
 
-            document.getElementById('transfer-files-modal').style.display = 'block';
+            const select = document.getElementById('new-owner-select');
+            const opts = allUsers
+                .filter(u => u.id !== userId)
+                .map(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.id;
+                    opt.textContent = u.username;
+                    return opt;
+                });
+            select.replaceChildren(...opts);
+
+            document.getElementById('transfer-files-modal').style.display = 'flex';
             return;
         }
     } catch (error) {
@@ -294,7 +381,7 @@ async function confirmTransferFiles() {
             body: JSON.stringify({ new_owner_id: parseInt(newOwnerId) })
         });
         if (!res.ok) throw new Error('Failed to transfer files');
-        
+
         closeTransferFilesModal();
         executeUserDelete(pendingDeleteUserId);
     } catch (error) {
@@ -306,7 +393,7 @@ async function executeUserDelete(userId) {
     try {
         const response = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
         if (!response.ok) throw new Error(await response.text());
-        
+
         const result = await response.json();
         alert(result.message);
         loadUsers();
@@ -322,7 +409,7 @@ function showResetPasswordModal(userId, username) {
     document.getElementById('reset-password-info').style.display = 'block';
     document.getElementById('reset-password-result').style.display = 'none';
     document.getElementById('confirm-reset-btn').style.display = 'inline-block';
-    document.getElementById('reset-password-modal').style.display = 'block';
+    document.getElementById('reset-password-modal').style.display = 'flex';
 }
 
 // Close Reset Password Modal
@@ -337,21 +424,21 @@ async function confirmResetPassword() {
         const response = await fetch(`/api/admin/users/${currentResetUserId}/reset-password`, {
             method: 'POST'
         });
-        
+
         if (!response.ok) {
             const error = await response.text();
             throw new Error(error);
         }
-        
+
         const result = await response.json();
-        
+
         // Show the result
         document.getElementById('result-username').textContent = result.username;
         document.getElementById('result-password').textContent = result.password;
         document.getElementById('reset-password-info').style.display = 'none';
         document.getElementById('confirm-reset-btn').style.display = 'none';
         document.getElementById('reset-password-result').style.display = 'block';
-        
+
         loadUsers();
     } catch (error) {
         alert('Error: ' + error.message);
@@ -370,29 +457,30 @@ function copyPassword() {
 async function loadLoginHistory() {
     const userId = document.getElementById('login-filter').value;
     const limit = document.getElementById('login-limit').value;
-    
+
     let url = `/api/admin/login-history?limit=${limit}`;
     if (userId) {
         url += `&user_id=${userId}`;
     }
-    
+
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to fetch login history');
-        
+
         allLogins = await response.json();
         displayLoginHistory(allLogins);
         displayLoginStats(allLogins);
-        
+
         // Populate user filter if not already done
         if (document.getElementById('login-filter').options.length === 1) {
             populateLoginFilter();
         }
     } catch (error) {
         console.error('Error loading login history:', error);
-        document.getElementById('logins-list').innerHTML = `
-            <div class="error-message">Failed to load login history: ${error.message}</div>
-        `;
+        const div = document.createElement('div');
+        div.className = 'error-message';
+        div.textContent = `Failed to load login history: ${error.message}`;
+        document.getElementById('logins-list').replaceChildren(div);
     }
 }
 
@@ -400,7 +488,7 @@ async function loadLoginHistory() {
 function populateLoginFilter() {
     const select = document.getElementById('login-filter');
     const uniqueUsers = [...new Map(allLogins.map(l => [l.user_id, l])).values()];
-    
+
     uniqueUsers.forEach(login => {
         const option = document.createElement('option');
         option.value = login.user_id;
@@ -409,106 +497,133 @@ function populateLoginFilter() {
     });
 }
 
+function buildStatCard(icon, value, label) {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'stat-icon';
+    iconDiv.textContent = icon;
+
+    const info = document.createElement('div');
+    info.className = 'stat-info';
+
+    const valDiv = document.createElement('div');
+    valDiv.className = 'stat-value';
+    valDiv.textContent = value;
+
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'stat-label';
+    labelDiv.textContent = label;
+
+    info.append(valDiv, labelDiv);
+    card.append(iconDiv, info);
+    return card;
+}
+
 // Display Login Stats
 function displayLoginStats(logins) {
     const statsDiv = document.getElementById('login-stats');
-    if(!statsDiv) return;
+    if (!statsDiv) return;
 
     const successLogins = logins.filter(l => l.success).length;
     const failedLogins = logins.filter(l => !l.success).length;
     const uniqueUsers = new Set(logins.map(l => l.user_id)).size;
     const uniqueIPs = new Set(logins.map(l => l.ip_address).filter(Boolean)).size;
-    
-    statsDiv.innerHTML = `
-        <div class="stat-card">
-            <div class="stat-icon">✅</div>
-            <div class="stat-info">
-                <div class="stat-value">${successLogins}</div>
-                <div class="stat-label">Successful Logins</div>
-            </div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">❌</div>
-            <div class="stat-info">
-                <div class="stat-value">${failedLogins}</div>
-                <div class="stat-label">Failed Attempts</div>
-            </div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">👥</div>
-            <div class="stat-info">
-                <div class="stat-value">${uniqueUsers}</div>
-                <div class="stat-label">Unique Users</div>
-            </div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">🌐</div>
-            <div class="stat-info">
-                <div class="stat-value">${uniqueIPs}</div>
-                <div class="stat-label">Unique IPs</div>
-            </div>
-        </div>
-    `;
+
+    statsDiv.replaceChildren(
+        buildStatCard('✅', successLogins, 'Successful Logins'),
+        buildStatCard('❌', failedLogins, 'Failed Attempts'),
+        buildStatCard('👥', uniqueUsers, 'Unique Users'),
+        buildStatCard('🌐', uniqueIPs, 'Unique IPs')
+    );
+}
+
+function buildLoginRow(login) {
+    const status = login.success ? '✅' : '❌';
+    const statusClass = login.success ? 'success' : 'failed';
+    const time = new Date(login.login_time).toLocaleString();
+    const location = [login.city, login.country].filter(v => v).join(', ') || 'Unknown';
+    const ip = login.ip_address || 'N/A';
+    const isp = login.isp || 'Unknown';
+    const device = extractDeviceInfo(login.user_agent);
+
+    const tr = document.createElement('tr');
+    tr.className = `login-row ${statusClass}`;
+
+    const tdStatus = document.createElement('td');
+    const statusBadge = document.createElement('span');
+    statusBadge.className = `status-badge ${statusClass}`;
+    statusBadge.textContent = status;
+    tdStatus.appendChild(statusBadge);
+
+    const tdUser = document.createElement('td');
+    const strong = document.createElement('strong');
+    strong.textContent = login.username;
+    tdUser.appendChild(strong);
+
+    const tdTime = document.createElement('td');
+    tdTime.textContent = time;
+
+    const tdLocation = document.createElement('td');
+    tdLocation.textContent = `📍 ${location}`;
+
+    const tdIP = document.createElement('td');
+    const code = document.createElement('code');
+    code.textContent = ip;
+    tdIP.appendChild(code);
+
+    const tdISP = document.createElement('td');
+    tdISP.textContent = isp;
+
+    const tdDevice = document.createElement('td');
+    tdDevice.className = 'device-info';
+    tdDevice.textContent = device;
+
+    tr.append(tdStatus, tdUser, tdTime, tdLocation, tdIP, tdISP, tdDevice);
+    return tr;
 }
 
 // Display Login History
 function displayLoginHistory(logins) {
     const loginsList = document.getElementById('logins-list');
-    if(!loginsList) return;
-    
+    if (!loginsList) return;
+
     if (logins.length === 0) {
-        loginsList.innerHTML = '<div class="empty-state">No login history found</div>';
+        const div = document.createElement('div');
+        div.className = 'empty-state';
+        div.textContent = 'No login history found';
+        loginsList.replaceChildren(div);
         return;
     }
-    
-    loginsList.innerHTML = `
-        <table class="login-table">
-            <thead>
-                <tr>
-                    <th>Status</th>
-                    <th>Username</th>
-                    <th>Date & Time</th>
-                    <th>Location</th>
-                    <th>IP Address</th>
-                    <th>ISP</th>
-                    <th>Device</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${logins.map(login => {
-                    const status = login.success ? '✅' : '❌';
-                    const statusClass = login.success ? 'success' : 'failed';
-                    const time = new Date(login.login_time).toLocaleString();
-                    const location = [login.city, login.country].filter(v => v).join(', ') || 'Unknown';
-                    const ip = login.ip_address || 'N/A';
-                    const isp = login.isp || 'Unknown';
-                    const device = extractDeviceInfo(login.user_agent);
-                    
-                    return `
-                        <tr class="login-row ${statusClass}">
-                            <td><span class="status-badge ${statusClass}">${status}</span></td>
-                            <td><strong>${login.username}</strong></td>
-                            <td>${time}</td>
-                            <td>📍 ${location}</td>
-                            <td><code>${ip}</code></td>
-                            <td>${isp}</td>
-                            <td class="device-info">${device}</td>
-                        </tr>
-                    `;
-                }).join('')}
-            </tbody>
-        </table>
-    `;
+
+    const table = document.createElement('table');
+    table.className = 'login-table';
+
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ['Status', 'Username', 'Date & Time', 'Location', 'IP Address', 'ISP', 'Device'].forEach(text => {
+        const th = document.createElement('th');
+        th.textContent = text;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+
+    const tbody = document.createElement('tbody');
+    logins.forEach(login => tbody.appendChild(buildLoginRow(login)));
+
+    table.append(thead, tbody);
+    loginsList.replaceChildren(table);
 }
 
 // Extract device info from user agent
 function extractDeviceInfo(userAgent) {
     if (!userAgent) return 'Unknown';
-    
+
     const ua = userAgent.toLowerCase();
     let device = '';
     let browser = '';
-    
+
     // Device detection
     if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
         device = '📱 Mobile';
@@ -517,14 +632,14 @@ function extractDeviceInfo(userAgent) {
     } else {
         device = '💻 Desktop';
     }
-    
+
     // Browser detection
     if (ua.includes('edge')) browser = 'Edge';
     else if (ua.includes('chrome')) browser = 'Chrome';
     else if (ua.includes('firefox')) browser = 'Firefox';
     else if (ua.includes('safari')) browser = 'Safari';
     else browser = 'Other';
-    
+
     return `${device} • ${browser}`;
 }
 
@@ -533,7 +648,7 @@ window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
         event.target.style.display = 'none';
     }
-}
+};
 
 // --- SECURITY & API TAB LOGIC ---
 
@@ -550,14 +665,14 @@ async function loadSecuritySettings() {
     try {
         const response = await fetch('/api/settings');
         if (!response.ok) return;
-        
+
         const settings = await response.json();
-        
+
         // Explicitly map all integer fields (fallback to safe defaults if db is empty)
         document.getElementById('pwd-min-length').value = settings.pwd_min_length || 12;
         document.getElementById('pwd-history-count').value = settings.pwd_history_count !== undefined ? settings.pwd_history_count : 4;
         document.getElementById('pwd-validity-days').value = settings.pwd_validity_days !== undefined ? settings.pwd_validity_days : 180;
-        
+
         // Explicitly map all boolean checkboxes
         document.getElementById('pwd-require-special').checked = !!settings.pwd_require_special;
         document.getElementById('pwd-require-upper').checked = !!settings.pwd_require_upper;
@@ -566,17 +681,17 @@ async function loadSecuritySettings() {
 
         // Map the new CV Worker URL
         const cvInput = document.getElementById('cv-worker-url');
-        if(cvInput) cvInput.value = settings.cv_worker_url || '';
+        if (cvInput) cvInput.value = settings.cv_worker_url || '';
 
         // Disable the delete button if no GCP key exists
         const deleteBtn = document.getElementById('delete-gcp-btn');
         if (deleteBtn) {
             if (settings.has_gcp_credentials) {
                 deleteBtn.disabled = false;
-                deleteBtn.innerHTML = '🗑️ Delete Active Key';
+                deleteBtn.textContent = '🗑️ Delete Active Key';
             } else {
                 deleteBtn.disabled = true;
-                deleteBtn.innerHTML = '❌ No Key Configured';
+                deleteBtn.textContent = '❌ No Key Configured';
             }
         }
     } catch (error) {
@@ -584,7 +699,7 @@ async function loadSecuritySettings() {
     }
 }
 
-// NEW: Save CV Worker URL
+// Save CV Worker URL
 async function saveCVWorkerUrl(event) {
     event.preventDefault();
     const url = document.getElementById('cv-worker-url').value;
@@ -595,7 +710,7 @@ async function saveCVWorkerUrl(event) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cv_worker_url: url })
         });
-        
+
         if (!response.ok) throw new Error(await response.text());
         alert("Microservice routing updated successfully.");
     } catch (error) {
@@ -621,7 +736,7 @@ async function savePasswordPolicy(event) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
+
         if (!response.ok) throw new Error(await response.text());
         alert("Password Policy updated successfully.");
     } catch (error) {
@@ -633,7 +748,7 @@ async function savePasswordPolicy(event) {
 async function uploadGCPCredentials(event) {
     event.preventDefault();
     const fileInput = document.getElementById('gcp-json-file');
-    
+
     if (fileInput.files.length === 0) {
         alert("Please select a JSON file.");
         return;
@@ -644,11 +759,11 @@ async function uploadGCPCredentials(event) {
 
     reader.onload = async function(e) {
         const jsonContent = e.target.result;
-        
+
         try {
             // Verify it's actually valid JSON before sending
-            JSON.parse(jsonContent); 
-            
+            JSON.parse(jsonContent);
+
             const response = await fetch('/api/admin/credentials', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -659,10 +774,10 @@ async function uploadGCPCredentials(event) {
             });
 
             if (!response.ok) throw new Error(await response.text());
-            
+
             alert("✅ GCP Credentials securely encrypted and stored.");
             document.getElementById('gcp-upload-form').reset();
-            
+
         } catch (error) {
             alert("Invalid JSON or Upload Error: " + error.message);
         }
@@ -673,7 +788,7 @@ async function uploadGCPCredentials(event) {
 
 // GCP Deletion Modal Logic
 function showDeleteGCPModal() {
-    document.getElementById('delete-gcp-modal').style.display = 'block';
+    document.getElementById('delete-gcp-modal').style.display = 'flex';
 }
 
 function closeDeleteGCPModal() {
@@ -685,9 +800,9 @@ async function confirmDeleteGCP() {
         const response = await fetch('/api/admin/credentials/gcp_vision', {
             method: 'DELETE'
         });
-        
+
         if (!response.ok) throw new Error(await response.text());
-        
+
         alert("🗑️ Credentials deleted. OCR Pipelines disabled.");
         closeDeleteGCPModal();
     } catch (error) {
