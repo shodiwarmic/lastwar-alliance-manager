@@ -125,7 +125,7 @@ btn.addEventListener('click', () => editMember(member.id));
 | `static/dyno.js` | ✅ Done |
 | `static/admin.js` | ✅ Done |
 | `static/settings.js` | ✅ Done |
-| `static/profile.js` | ⬜ |
+| `static/profile.js` | ✅ Done |
 | `static/schedule.js` | ⬜ |
 | `static/upload.js` | ⬜ |
 | `static/files.js` | ⬜ |
