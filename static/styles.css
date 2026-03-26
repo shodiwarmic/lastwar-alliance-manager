@@ -16,6 +16,19 @@
     --border-color: #e9ecef;
     --input-bg: white;
     --input-border: #dee2e6;
+    /* Semantic layer aliases */
+    --bg-primary: white;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #edf2f7;
+    --color-primary: #667eea;
+    --color-info-bg: #dbeafe;
+    --color-info: #1d4ed8;
+    --color-success-bg: #dcfce7;
+    --color-success: #15803d;
+    --color-danger-bg: #fee2e2;
+    --color-danger: #dc2626;
+    --color-purple-bg: #ede9fe;
+    --color-purple: #6d28d9;
 }
 
 /* Auto theme - respects browser preference */
@@ -32,6 +45,17 @@
         --border-color: rgba(255, 255, 255, 0.1);
         --input-bg: #252b3b;
         --input-border: rgba(255, 255, 255, 0.2);
+        --bg-primary: #1a1f2e;
+        --bg-secondary: rgba(255, 255, 255, 0.05);
+        --bg-tertiary: rgba(255, 255, 255, 0.08);
+        --color-info-bg: rgba(59, 130, 246, 0.15);
+        --color-info: #93c5fd;
+        --color-success-bg: rgba(34, 197, 94, 0.15);
+        --color-success: #86efac;
+        --color-danger-bg: rgba(220, 53, 69, 0.15);
+        --color-danger: #f87171;
+        --color-purple-bg: rgba(109, 40, 217, 0.15);
+        --color-purple: #c4b5fd;
     }
 }
 
@@ -48,6 +72,17 @@ html.theme-dark {
     --border-color: rgba(255, 255, 255, 0.1);
     --input-bg: #252b3b;
     --input-border: rgba(255, 255, 255, 0.2);
+    --bg-primary: #1a1f2e;
+    --bg-secondary: rgba(255, 255, 255, 0.05);
+    --bg-tertiary: rgba(255, 255, 255, 0.08);
+    --color-info-bg: rgba(59, 130, 246, 0.15);
+    --color-info: #93c5fd;
+    --color-success-bg: rgba(34, 197, 94, 0.15);
+    --color-success: #86efac;
+    --color-danger-bg: rgba(220, 53, 69, 0.15);
+    --color-danger: #f87171;
+    --color-purple-bg: rgba(109, 40, 217, 0.15);
+    --color-purple: #c4b5fd;
 }
 
 /* Explicit light theme */
@@ -63,6 +98,18 @@ html.theme-light {
     --border-color: #e9ecef;
     --input-bg: white;
     --input-border: #dee2e6;
+    --bg-primary: white;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #edf2f7;
+    --color-primary: #667eea;
+    --color-info-bg: #dbeafe;
+    --color-info: #1d4ed8;
+    --color-success-bg: #dcfce7;
+    --color-success: #15803d;
+    --color-danger-bg: #fee2e2;
+    --color-danger: #dc2626;
+    --color-purple-bg: #ede9fe;
+    --color-purple: #6d28d9;
 }
 
 body {

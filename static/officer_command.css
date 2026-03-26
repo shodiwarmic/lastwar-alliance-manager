@@ -119,7 +119,7 @@
 }
 .freq-daily    { background: var(--color-info-bg, #dbeafe); color: var(--color-info, #1d4ed8); }
 .freq-weekly   { background: var(--color-success-bg, #dcfce7); color: var(--color-success, #15803d); }
-.freq-seasonal { background: #ede9fe; color: #6d28d9; }
+.freq-seasonal { background: var(--color-purple-bg, #ede9fe); color: var(--color-purple, #6d28d9); }
 .oc-assignees {
     display: flex;
     flex-wrap: wrap;
