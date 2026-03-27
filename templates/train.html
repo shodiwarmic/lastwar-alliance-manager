@@ -1,0 +1,196 @@
+{{define "header_text"}}
+    <h1>🚂 Train Tracker</h1>
+    <h2>Conductor Log &amp; Eligibility Engine</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="/train.css">
+{{end}}
+
+{{define "content"}}
+<div id="train-page">
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="logs">Trains</button>
+        {{if .Permissions.ManageTrain}}
+        <button class="tab-btn" data-tab="selection">Selection</button>
+        <button class="tab-btn" data-tab="rules">Rules</button>
+        {{end}}
+    </div>
+
+    <!-- ── Tab: Trains ──────────────────────────────────────────────────── -->
+    <div id="tab-logs" class="tab-panel">
+
+        <div class="panel-header">
+            <h3>Train Log</h3>
+            <div class="panel-header-actions">
+                <div class="date-range-row">
+                    <label>From <input type="date" id="filter-from"></label>
+                    <label>Until <input type="date" id="filter-to"></label>
+                    <button id="btn-apply-filter" class="btn btn-secondary btn-sm">Filter</button>
+                    <button id="btn-clear-filter" class="btn btn-ghost btn-sm">Clear</button>
+                </div>
+                {{if .Permissions.ManageTrain}}
+                <button id="btn-log-train" class="btn btn-primary">+ Log Train</button>
+                {{end}}
+            </div>
+        </div>
+
+        <div id="limit-warning" class="warning-message hidden">
+            Daily limit exceeded for this train type. Record saved — review if intentional.
+        </div>
+
+        <div id="logs-container">
+            <p class="empty-state">Loading…</p>
+        </div>
+    </div>
+
+    <!-- ── Tab: Selection ───────────────────────────────────────────────── -->
+    {{if .Permissions.ManageTrain}}
+    <div id="tab-selection" class="tab-panel hidden">
+        <div class="panel-header">
+            <h3>Run Eligibility Check</h3>
+        </div>
+
+        <div class="selection-controls form-row">
+            <div class="form-group">
+                <label for="sel-rule-picker">Saved Rule</label>
+                <select id="sel-rule-picker">
+                    <option value="">— select a rule —</option>
+                </select>
+            </div>
+            <button id="btn-run-rule" class="btn btn-primary" disabled>Run</button>
+        </div>
+
+        <div id="eligible-container"></div>
+    </div>
+
+    <!-- ── Tab: Rules ───────────────────────────────────────────────────── -->
+    <div id="tab-rules" class="tab-panel hidden">
+        <div class="panel-header">
+            <h3>Eligibility Rules</h3>
+            <button id="btn-new-rule" class="btn btn-primary">+ New Rule</button>
+        </div>
+        <div id="rules-container">
+            <p class="empty-state">Loading…</p>
+        </div>
+    </div>
+    {{end}}
+
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>window.CAN_MANAGE = {{if .Permissions.ManageTrain}}true{{else}}false{{end}};</script>
+<script src="/train.js"></script>
+{{end}}
+
+{{define "modals"}}
+
+<!-- Log Train Modal -->
+<div id="log-modal" class="modal">
+    <div class="modal-content" style="max-width:480px;">
+        <h2 id="log-modal-title">Log Train</h2>
+
+        <div class="form-group">
+            <label for="log-date">Date (Game Time)</label>
+            <input type="date" id="log-date">
+        </div>
+        <div class="form-group">
+            <label for="log-type">Train Type</label>
+            <select id="log-type">
+                <option value="FREE">Free</option>
+                <option value="PURCHASED">Purchased</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="log-conductor">Conductor</label>
+            <select id="log-conductor">
+                <option value="">— select member —</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>VIP (optional)</label>
+            <div class="vip-row">
+                <select id="log-vip" style="flex:1;">
+                    <option value="">— none —</option>
+                </select>
+                <select id="log-vip-type" style="width:170px;">
+                    <option value="SPECIAL_GUEST">Special Guest</option>
+                    <option value="GUARDIAN_DEFENDER">Guardian Defender</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="log-notes">Notes</label>
+            <textarea id="log-notes" rows="2" style="width:100%;resize:vertical;"></textarea>
+        </div>
+
+        <div id="log-limit-warning" class="warning-message hidden">
+            This will exceed the daily limit for this train type.
+        </div>
+
+        <div class="modal-actions">
+            <button id="btn-log-save" class="btn btn-primary">Save</button>
+            <button id="btn-log-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+
+        <input type="hidden" id="log-edit-id" value="">
+    </div>
+</div>
+
+<!-- Rule Editor Modal -->
+<div id="rule-modal" class="modal">
+    <div class="modal-content" style="max-width:580px;">
+        <h2 id="rule-modal-title">New Rule</h2>
+
+        <div class="form-group">
+            <label for="rule-name">Rule Name</label>
+            <input type="text" id="rule-name" maxlength="80" style="width:100%;" placeholder="e.g. Free Train Eligibility">
+        </div>
+
+        <div class="form-group">
+            <label>Selection Method</label>
+            <div class="selection-method-row">
+                <select id="rule-sm-type">
+                    <option value="RANDOM">Random</option>
+                    <option value="GREATEST">Greatest</option>
+                    <option value="LEAST">Least</option>
+                </select>
+                <select id="rule-sm-field" style="display:none;">
+                    <option value="days_since_free_conducted">Days since free train</option>
+                    <option value="days_since_any_conducted">Days since any train</option>
+                    <option value="vs_total_week">VS total (this week)</option>
+                    <option value="vs_yesterday">VS yesterday</option>
+                    <option value="vs_total_prev_week">VS total (prev week)</option>
+                    <option value="vs_day_monday">VS Monday</option>
+                    <option value="vs_day_tuesday">VS Tuesday</option>
+                    <option value="vs_day_wednesday">VS Wednesday</option>
+                    <option value="vs_day_thursday">VS Thursday</option>
+                    <option value="vs_day_friday">VS Friday</option>
+                    <option value="vs_day_saturday">VS Saturday</option>
+                    <option value="rank">Rank</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Eligibility Conditions</label>
+            <p class="field-hint">Groups are OR'd. Conditions within a group are AND'd.</p>
+            <div id="rule-groups-container"></div>
+            <button id="btn-add-group" class="btn btn-secondary btn-sm" style="margin-top:8px;">+ Add OR Group</button>
+        </div>
+
+        <div class="modal-actions">
+            <button id="btn-rule-save" class="btn btn-primary">Save Rule</button>
+            <button id="btn-rule-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+
+        <input type="hidden" id="rule-edit-id" value="">
+    </div>
+</div>
+
+{{end}}

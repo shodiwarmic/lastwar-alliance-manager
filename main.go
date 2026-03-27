@@ -143,6 +143,17 @@ func main() {
 	router.HandleFunc("/api/schedule", authMiddleware(requirePermission("view_schedule", getSchedule))).Methods("GET")
 	router.HandleFunc("/api/schedule", authMiddleware(requirePermission("manage_schedule", putSchedule))).Methods("PUT")
 
+	// Train Tracker API
+	router.HandleFunc("/api/train-logs", authMiddleware(requirePermission("view_train", getTrainLogs))).Methods("GET")
+	router.HandleFunc("/api/train-logs", authMiddleware(requirePermission("manage_train", postTrainLog))).Methods("POST")
+	router.HandleFunc("/api/train-logs/{id:[0-9]+}", authMiddleware(requirePermission("manage_train", putTrainLog))).Methods("PUT")
+	router.HandleFunc("/api/train-logs/{id:[0-9]+}", authMiddleware(requirePermission("manage_train", deleteTrainLog))).Methods("DELETE")
+	router.HandleFunc("/api/eligibility-rules", authMiddleware(requirePermission("view_train", getEligibilityRules))).Methods("GET")
+	router.HandleFunc("/api/eligibility-rules", authMiddleware(requirePermission("manage_train", postEligibilityRule))).Methods("POST")
+	router.HandleFunc("/api/eligibility-rules/{id:[0-9]+}", authMiddleware(requirePermission("manage_train", putEligibilityRule))).Methods("PUT")
+	router.HandleFunc("/api/eligibility-rules/{id:[0-9]+}", authMiddleware(requirePermission("manage_train", deleteEligibilityRule))).Methods("DELETE")
+	router.HandleFunc("/api/eligibility-rules/{id:[0-9]+}/run", authMiddleware(requirePermission("manage_train", runEligibilityRule))).Methods("POST")
+
 	// Permission Matrix & Settings routes
 	router.HandleFunc("/api/permissions", authMiddleware(requirePermission("manage_settings", getPermissionsMatrix))).Methods("GET")
 	router.HandleFunc("/api/permissions", authMiddleware(requirePermission("manage_settings", updatePermissionsMatrix))).Methods("PUT")
@@ -306,6 +317,7 @@ func main() {
 		"/schedule":    "schedule",
 		"/alias-audit":     "alias-audit",
 		"/officer-command": "officer-command",
+		"/train":           "train",
 	}
 
 	for path, templateName := range pages {
@@ -330,6 +342,7 @@ func main() {
 				"schedule":    data.Permissions.ViewSchedule,
 				"alias-audit":     data.Permissions.ManageMembers,
 				"officer-command": data.Permissions.ViewOfficerCommand,
+				"train":           data.Permissions.ViewTrain,
 			}
 
 			// 3. Custom 403 Handler for Access Denied

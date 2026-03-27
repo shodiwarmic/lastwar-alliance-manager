@@ -72,6 +72,49 @@ No string-formatted SQL for user input. All DB writes should use `?` placeholder
 ### Wrap deletes in a transaction
 Even when cascades handle children, wrap category/parent deletes in a transaction — consistent with existing handlers.
 
+### Never use browser `alert()` or `confirm()`
+`alert()` and `confirm()` block the main thread, look out of place, and vary wildly across browsers/OS. Do not add new calls to either.
+
+**For success/error feedback** — show an inline status message near the triggering action (e.g. a `<p class="status-msg">` that you set `textContent` on and clear after a few seconds), or a non-blocking toast element.
+
+**For destructive confirmations** — use the inline button-swap pattern: hide the Delete button, append a `"Sure?" [Yes] [No]` span in its place, and restore the original button if the user picks No. Never use `confirm()`. Example from `train.js`:
+
+```javascript
+delBtn.addEventListener('click', () => {
+    delBtn.style.display = 'none';
+    const confirmSpan = document.createElement('span');
+    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+    const label = document.createElement('span');
+    label.textContent = 'Sure?';
+    label.style.fontSize = '0.85rem';
+    const yesBtn = document.createElement('button');
+    yesBtn.className = 'btn btn-danger btn-sm';
+    yesBtn.textContent = 'Yes';
+    yesBtn.addEventListener('click', () => doDelete(item.id));
+    const noBtn = document.createElement('button');
+    noBtn.className = 'btn btn-secondary btn-sm';
+    noBtn.textContent = 'No';
+    noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
+    confirmSpan.append(label, yesBtn, noBtn);
+    actionsContainer.appendChild(confirmSpan);
+});
+
+Note: many existing files still use `alert()` — do not add more, and replace them when touching those files.
+
+### Never leak raw errors to the client
+Do not pass `err.Error()` (or any internal error string) directly to `http.Error`. Log the detail server-side with `slog.Error` and return a generic message to the client.
+
+```go
+// Wrong
+http.Error(w, err.Error(), http.StatusInternalServerError)
+
+// Correct
+slog.Error("short description of what failed", "error", err)
+http.Error(w, "Database error", http.StatusInternalServerError)
+```
+
+For bad-request (400) errors from JSON decode failures, use `"Invalid request body"` — no logging needed since it's a client error. Validation messages (missing fields, bad enum values) are safe to return as-is since they are written by us, not sourced from the DB or runtime.
+
 ## Template blocks
 
 | Block | Purpose |

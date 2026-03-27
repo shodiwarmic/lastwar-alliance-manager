@@ -1,0 +1,310 @@
+/* train.css — Train Tracker page styles */
+
+#train-page {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+
+.tab-bar {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 24px;
+}
+
+.tab-btn {
+    padding: 8px 20px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+}
+
+.tab-btn.active {
+    color: var(--accent-color);
+    border-bottom-color: var(--accent-color);
+    font-weight: 600;
+}
+
+.tab-panel.hidden {
+    display: none;
+}
+
+/* ── Panel Header ─────────────────────────────────────────────────────────── */
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.panel-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.panel-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.date-range-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.date-range-row input[type="date"] {
+    padding: 4px 8px;
+    font-size: 0.875rem;
+}
+
+/* ── Train Log Table ──────────────────────────────────────────────────────── */
+
+.train-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.train-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--surface-secondary);
+    border-bottom: 2px solid var(--border-color);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.train-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.train-table tr:last-child td {
+    border-bottom: none;
+}
+
+.train-table tr:hover td {
+    background: var(--surface-hover);
+}
+
+.badge-free {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--success-bg, #1a3a2a);
+    color: var(--success-color, #4caf50);
+}
+
+.badge-purchased {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--info-bg, #1a2a3a);
+    color: var(--info-color, #42a5f5);
+}
+
+.badge-vip-type {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    background: var(--surface-secondary);
+    color: var(--text-secondary);
+    margin-left: 4px;
+}
+
+.row-actions {
+    display: flex;
+    gap: 6px;
+}
+
+/* ── Selection Tab ────────────────────────────────────────────────────────── */
+
+.selection-controls {
+    align-items: flex-end;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.eligible-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.eligible-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--surface-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.eligible-card-name {
+    font-weight: 600;
+    min-width: 120px;
+}
+
+.eligible-card-stats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.eligible-card-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 60px;
+}
+
+.eligible-card-stat span:first-child {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.eligible-card-stat span:last-child {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* ── Rules Tab ────────────────────────────────────────────────────────────── */
+
+.rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.rule-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--surface-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.rule-card-name {
+    font-weight: 600;
+}
+
+.rule-card-meta {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+/* ── Rule Editor Modal ────────────────────────────────────────────────────── */
+
+.selection-method-row {
+    display: flex;
+    gap: 8px;
+}
+
+.field-hint {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin: 4px 0 10px;
+}
+
+.condition-group {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: var(--surface-primary);
+}
+
+.condition-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.group-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+}
+
+.or-divider {
+    text-align: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--accent-color);
+    letter-spacing: 0.1em;
+    margin: 6px 0;
+}
+
+.condition-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+
+.condition-row select,
+.condition-row input {
+    font-size: 0.875rem;
+}
+
+.condition-row .cond-var  { flex: 2; min-width: 140px; }
+.condition-row .cond-op   { width: 70px; }
+.condition-row .cond-val  { flex: 1; min-width: 80px; }
+
+/* ── VIP row in log modal ─────────────────────────────────────────────────── */
+
+.vip-row {
+    display: flex;
+    gap: 8px;
+}
+
+/* ── Misc ─────────────────────────────────────────────────────────────────── */
+
+.empty-state {
+    color: var(--text-secondary);
+    font-style: italic;
+    text-align: center;
+    padding: 32px 0;
+}

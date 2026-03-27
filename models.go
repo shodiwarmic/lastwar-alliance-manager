@@ -219,6 +219,8 @@ type Settings struct {
 	PwdHistoryCount              int    `json:"pwd_history_count"`
 	PwdValidityDays              int    `json:"pwd_validity_days"`
 	CVWorkerURL                  string `json:"cv_worker_url"`
+	TrainFreeDailyLimit          int    `json:"train_free_daily_limit"`
+	TrainPurchasedDailyLimit     int    `json:"train_purchased_daily_limit"`
 }
 
 type MemberRanking struct {
@@ -415,6 +417,49 @@ type Schedule struct {
 	CreatedBy    int             `json:"created_by"`
 	CreatedAt    string          `json:"created_at"`
 	UpdatedAt    string          `json:"updated_at"`
+}
+
+type TrainLog struct {
+	ID            int     `json:"id"`
+	Date          string  `json:"date"`
+	TrainType     string  `json:"train_type"`
+	ConductorID   int     `json:"conductor_id"`
+	ConductorName string  `json:"conductor_name"`
+	VIPID         *int    `json:"vip_id"`
+	VIPName       *string `json:"vip_name"`
+	VIPType       *string `json:"vip_type"` // "SPECIAL_GUEST" | "GUARDIAN_DEFENDER" | nil
+	Notes         string  `json:"notes"`
+	CreatedBy     int     `json:"created_by"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
+type EligibilityRule struct {
+	ID              int             `json:"id"`
+	Name            string          `json:"name"`
+	SelectionMethod json.RawMessage `json:"selection_method"`
+	Conditions      json.RawMessage `json:"conditions"`
+	CreatedBy       int             `json:"created_by"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+// EligibleMember is returned by the /run endpoint with per-member stats.
+type EligibleMember struct {
+	MemberID                  int     `json:"member_id"`
+	Name                      string  `json:"name"`
+	Rank                      string  `json:"rank"`
+	VSTotalWeek               int     `json:"vs_total_week"`
+	VSYesterday               int     `json:"vs_yesterday"`
+	VSTotalPrevWeek           int     `json:"vs_total_prev_week"`
+	VSDayMonday               int     `json:"vs_day_monday"`
+	VSDayTuesday              int     `json:"vs_day_tuesday"`
+	VSDayWednesday            int     `json:"vs_day_wednesday"`
+	VSDayThursday             int     `json:"vs_day_thursday"`
+	VSDayFriday               int     `json:"vs_day_friday"`
+	VSDaySaturday             int     `json:"vs_day_saturday"`
+	DaysSinceFreeConducted    float64 `json:"days_since_free_conducted"`    // 9999 = never
+	DaysSinceAnyConducted     float64 `json:"days_since_any_conducted"`     // 9999 = never
 }
 
 type AllianceFile struct {

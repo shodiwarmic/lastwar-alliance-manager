@@ -111,6 +111,20 @@
                         </div>
                     </div>
 
+                    <div class="settings-group">
+                        <h4>🚂 Train Tracker</h4>
+                        <div class="form-group">
+                            <label for="train-free-limit">Free Train Daily Limit:</label>
+                            <input type="number" id="train-free-limit" min="1" max="10" required>
+                            <span class="help-text">Maximum Free trains that can be logged per game day before a warning is shown.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="train-purchased-limit">Purchased Train Daily Limit:</label>
+                            <input type="number" id="train-purchased-limit" min="1" max="10" required>
+                            <span class="help-text">Maximum Purchased trains that can be logged per game day before a warning is shown.</span>
+                        </div>
+                    </div>
+
                     <div class="button-group">
                         <button type="submit" class="btn btn-primary">💾 Save Settings</button>
                     </div>

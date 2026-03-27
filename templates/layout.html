@@ -88,6 +88,12 @@
             </a>
             {{end}}
 
+            {{if .Permissions.ViewTrain}}
+            <a href="/train" class="nav-link {{if eq .ActivePage "train"}}active{{end}}">
+                <span class="nav-icon">🚂</span><span class="nav-text">Train</span>
+            </a>
+            {{end}}
+
             {{if .Permissions.ViewOfficerCommand}}
             <a href="/officer-command" class="nav-link {{if eq .ActivePage "officer-command"}}active{{end}}">
                 <span class="nav-icon">🎖️</span><span class="nav-text">Officers</span>

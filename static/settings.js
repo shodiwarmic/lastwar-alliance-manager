@@ -17,6 +17,8 @@ const PERM_ROWS = [
     { key: 'manage_files', label: 'Manage Alliance Files' },
     { key: 'view_schedule', label: 'View Schedule' },
     { key: 'manage_schedule', label: 'Manage Schedule' },
+    { key: 'view_train', label: 'View Train Tracker' },
+    { key: 'manage_train', label: 'Manage Train Tracker' },
     { key: 'manage_settings', label: 'Access Settings Tab' }
 ];
 
@@ -46,6 +48,8 @@ async function loadSettings() {
         document.getElementById('award-third').value = settings.award_third_points || 1;
         document.getElementById('max-hq-level').value = settings.max_hq_level || 35;
         document.getElementById('settings-login-message').value = settings.login_message || '';
+        document.getElementById('train-free-limit').value = settings.train_free_daily_limit ?? 1;
+        document.getElementById('train-purchased-limit').value = settings.train_purchased_daily_limit ?? 2;
 
         const minLen = document.getElementById('pwd-min-length');
         if (minLen) {
@@ -157,7 +161,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
                 squad_tracking_enabled: document.getElementById('squad-tracking-enabled').checked,
                 storm_timezones: selectedZones,
-                storm_respect_dst: document.getElementById('storm_respect_dst').checked
+                storm_respect_dst: document.getElementById('storm_respect_dst').checked,
+                train_free_daily_limit: parseInt(document.getElementById('train-free-limit').value, 10) || 1,
+                train_purchased_daily_limit: parseInt(document.getElementById('train-purchased-limit').value, 10) || 2,
             };
 
             const newMatrix = ['R5', 'R4', 'R3', 'R2', 'R1'].map(rank => {
