@@ -2,10 +2,22 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/json"
+	"log/slog"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 )
+
+// writeJSON sets Content-Type and encodes v as JSON. Encoding errors are logged
+// but not propagated (the response headers are already sent by that point).
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Error("failed to write JSON response", "error", err)
+	}
+}
 
 func min(nums ...int) int {
 	if len(nums) == 0 {

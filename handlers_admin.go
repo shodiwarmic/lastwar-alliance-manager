@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -39,11 +40,16 @@ func getPermissionsMatrix(w http.ResponseWriter, r *http.Request) {
 func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
 	var matrix []RankPermissions
 	if err := json.NewDecoder(r.Body).Decode(&matrix); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	tx, _ := db.Begin()
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
 	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=?, view_files=?, upload_files=?, manage_files=?, view_anonymous_authors=?, view_schedule=?, manage_schedule=?, view_officer_command=?, manage_officer_command=? WHERE rank=?`)
 
 	for _, p := range matrix {
@@ -188,7 +194,8 @@ func createAdminUser(w http.ResponseWriter, r *http.Request) {
 	result, err := db.Exec("INSERT INTO users (username, password, member_id, is_admin, force_password_change) VALUES (?, ?, ?, ?, ?)",
 		req.Username, string(hashedPassword), req.MemberID, req.IsAdmin, req.ForcePasswordChange)
 	if err != nil {
-		http.Error(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to create user", "error", err)
+		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
@@ -242,7 +249,8 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		http.Error(w, "Failed to update user: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to update user", "error", err, "userID", userID)
+		http.Error(w, "Failed to update user", http.StatusInternalServerError)
 		return
 	}
 
@@ -272,7 +280,8 @@ func deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("DELETE FROM users WHERE id = ?", userID)
 	if err != nil {
-		http.Error(w, "Failed to delete user: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to delete user", "error", err, "userID", userID)
+		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
 		return
 	}
 
@@ -310,7 +319,8 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("UPDATE users SET password = ?, force_password_change = 1, password_changed_at = CURRENT_TIMESTAMP WHERE id = ?", string(hashedPassword), userID)
 	if err != nil {
-		http.Error(w, "Failed to reset password: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to reset user password", "error", err, "userID", userID)
+		http.Error(w, "Failed to reset password", http.StatusInternalServerError)
 		return
 	}
 
@@ -444,7 +454,8 @@ func createUserForMember(w http.ResponseWriter, r *http.Request) {
 	_, err = db.Exec("INSERT INTO users (username, password, member_id, is_admin) VALUES (?, ?, ?, ?)",
 		username, string(hashedPassword), memberID, false)
 	if err != nil {
-		http.Error(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to create user for member", "error", err, "memberID", memberID)
+		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
@@ -516,7 +527,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 func updateSettings(w http.ResponseWriter, r *http.Request) {
 	var settings Settings
 	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -537,7 +548,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.StormRespectDST, settings.LoginMessage, settings.MaxHQLevel, settings.SquadTrackingEnabled,
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to update settings", "error", err)
+		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
 		return
 	}
 

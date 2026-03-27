@@ -1,21 +1,39 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/sessions"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/time/rate"
 )
+
+// Per-IP login rate limiter: 5 attempts per minute, burst of 5.
+var (
+	loginLimiters sync.Map
+)
+
+func getLoginLimiter(ip string) *rate.Limiter {
+	if l, ok := loginLimiters.Load(ip); ok {
+		return l.(*rate.Limiter)
+	}
+	l := rate.NewLimiter(rate.Every(12*time.Second), 5)
+	loginLimiters.Store(ip, l)
+	return l
+}
 
 // initSessionStore initializes the session store with secure settings
 func initSessionStore() {
@@ -116,7 +134,7 @@ func trackLogin(userID int, username string, r *http.Request, success bool) {
 			isp = &geo.ISP
 		}
 
-		if _, err := db.Exec(`INSERT INTO login_sessions (user_id, username, ip_address, user_agent, country, city, isp, success)
+		if _, err := db.ExecContext(context.Background(), `INSERT INTO login_sessions (user_id, username, ip_address, user_agent, country, city, isp, success)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			userID, username, ip, userAgent, country, city, isp, success); err != nil {
 			log.Printf("Failed to track login: %v", err)
@@ -125,9 +143,15 @@ func trackLogin(userID int, username string, r *http.Request, success bool) {
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
+	if !getLoginLimiter(getClientIP(r)).Allow() {
+		slog.Warn("login rate limit exceeded", "ip", getClientIP(r))
+		http.Error(w, "Too many login attempts. Please try again later.", http.StatusTooManyRequests)
+		return
+	}
+
 	var creds Credentials
 	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 

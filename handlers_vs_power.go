@@ -46,7 +46,7 @@ func getVSPoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to fetch VS points", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -57,7 +57,7 @@ func getVSPoints(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&v.ID, &v.MemberID, &v.WeekDate, &v.Monday, &v.Tuesday,
 			&v.Wednesday, &v.Thursday, &v.Friday, &v.Saturday, &v.CreatedAt, &v.UpdatedAt,
 			&v.MemberName, &v.MemberRank); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Failed to read VS points", http.StatusInternalServerError)
 			return
 		}
 		vsPoints = append(vsPoints, v)
@@ -83,7 +83,7 @@ func saveVSPoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -92,6 +92,7 @@ func saveVSPoints(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	defer tx.Rollback()
 
 	for _, point := range data.Points {
 		var existingID int
@@ -593,7 +594,11 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	monday := now.AddDate(0, 0, -daysFromMonday)
 	weekDate := monday.Format("2006-01-02")
 
-	tx, _ := db.Begin()
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer tx.Rollback()
 
 	session, _ := store.Get(r, "session")

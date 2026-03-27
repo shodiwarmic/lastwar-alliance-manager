@@ -51,3 +51,4 @@ files-dev/
 uploads/
 data/
 docker-compose.override.yml
+.claude/settings.json

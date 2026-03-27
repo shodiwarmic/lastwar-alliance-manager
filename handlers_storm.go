@@ -573,7 +573,11 @@ func saveGroupDirectMembers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tx, _ := db.Begin()
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer tx.Rollback()
 	tx.Exec(`DELETE FROM storm_group_members WHERE group_id=?`, groupID)
 	for _, m := range members {
