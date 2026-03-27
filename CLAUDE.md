@@ -176,6 +176,10 @@ btn.addEventListener('click', () => editMember(member.id));
 `static/officer_command.js` — skip, already uses correct patterns.
 `static/login.js` — ✅ Done (same password-rules pattern as profile.js; fixed during final sweep).
 
+## Documentation
+
+Keep `README.md` up to date whenever a user-facing feature is added, changed, or removed. Each feature should have an entry under the appropriate `###` section in the Features block, written in the same style as existing entries (bullet points, bolded lead phrase, plain-English description of what it does and its permission model). Do not document internal implementation details — README is for end users and operators.
+
 ## Running locally
 
 ```bash
