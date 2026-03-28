@@ -40,6 +40,13 @@ async function fetchPermissions() {
             if (modalEligibleWrapper) {
                 modalEligibleWrapper.style.display = permissions.manage_train ? 'flex' : 'none';
             }
+
+            // Show Former chip and notes field only to officers who can manage members
+            const formerChip = document.getElementById('former-chip');
+            if (formerChip) formerChip.style.display = canManageRanks ? '' : 'none';
+
+            const notesSection = document.getElementById('modal-notes-section');
+            if (notesSection) notesSection.style.display = canManageRanks ? 'block' : 'none';
         }
     } catch (error) {
         console.error('Auth check error:', error);
@@ -125,7 +132,8 @@ function updateDisplayedMembers() {
             (member.personal_aliases && member.personal_aliases.toLowerCase().includes(searchTerm));
 
         const matchesEligible = !eligibleOnly || member.eligible !== false;
-        const matchesRank = activeRanks.includes('all') || activeRanks.includes(member.rank);
+        // "All" excludes former members — they only appear when "Former" chip is explicitly selected
+        const matchesRank = (activeRanks.includes('all') && member.rank !== 'EX') || activeRanks.includes(member.rank);
 
         const memProf = member.profession || 'none';
         const matchesProf = activeProfs.includes('all') || activeProfs.includes(memProf);
@@ -155,7 +163,8 @@ function updateDisplayedMembers() {
     });
 
     displayMembers(filtered);
-    updateMemberCount(filtered.length);
+    const isFormerView = activeRanks.length > 0 && activeRanks.every(r => r === 'EX');
+    updateMemberCount(filtered.length, isFormerView);
 
     const clearBtn = document.getElementById('clear-search');
     if (clearBtn) clearBtn.style.display = searchTerm ? 'flex' : 'none';
@@ -226,10 +235,7 @@ function setupModalListeners() {
 }
 
 function openMemberModal(editing = false) {
-    if (!canManageRanks) {
-        alert('You do not have permission to manage members. Only R4 and R5 can do this.');
-        return;
-    }
+    if (!canManageRanks) return;
     const memberModal = document.getElementById('member-modal');
     if (memberModal) {
         memberModal.style.display = 'flex';
@@ -280,6 +286,9 @@ function resetMemberForm() {
     }
 
     if (typeof updateTroopLevelOptions === 'function') updateTroopLevelOptions();
+
+    const notesInput = document.getElementById('member-notes');
+    if (notesInput) notesInput.value = '';
 
     document.getElementById('modal-form-title').textContent = 'Add New Member';
     document.getElementById('submit-btn').textContent = 'Add Member';
@@ -435,21 +444,23 @@ function buildMemberCard(member) {
             member.power || 0, member.power_updated_at || '',
             member.level || 0, member.squad_type || '',
             member.squad_power || 0, member.squad_power_updated_at || '',
-            member.troop_level || 0, member.profession || ''
+            member.troop_level || 0, member.profession || '', member.notes || ''
         ));
         actions.appendChild(editBtn);
 
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'delete-btn';
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.addEventListener('click', () => deleteMember(member.id, member.name, member.has_user));
-        actions.appendChild(deleteBtn);
+        if (member.rank !== 'EX') {
+            const archiveBtn = document.createElement('button');
+            archiveBtn.className = 'delete-btn';
+            archiveBtn.textContent = 'Archive';
+            archiveBtn.addEventListener('click', () => archiveMember(member.id, member.name, actions, archiveBtn));
+            actions.appendChild(archiveBtn);
+        }
 
         if (isR5OrAdmin && !member.has_user) {
             const createUserBtn = document.createElement('button');
             createUserBtn.className = 'create-user-btn';
             createUserBtn.textContent = 'Create User';
-            createUserBtn.addEventListener('click', () => createUserForMember(member.id, member.name));
+            createUserBtn.addEventListener('click', () => createUserForMember(member.id, member.name, actions, createUserBtn));
             actions.appendChild(createUserBtn);
         }
 
@@ -458,7 +469,7 @@ function buildMemberCard(member) {
             const toggleBtn = document.createElement('button');
             toggleBtn.className = `toggle-eligible-btn ${eligible ? 'eligible' : 'not-eligible'}`;
             toggleBtn.textContent = eligible ? '✓ Eligible' : '✗ Not Eligible';
-            toggleBtn.addEventListener('click', () => toggleEligible(member.id, eligible));
+            toggleBtn.addEventListener('click', () => toggleEligible(member.id, eligible, actions, toggleBtn));
             actions.appendChild(toggleBtn);
         }
 
@@ -470,10 +481,7 @@ function buildMemberCard(member) {
 
 async function handleMemberFormSubmit(e) {
     e.preventDefault();
-    if (!canManageRanks) {
-        alert('You do not have permission to manage members. Only R4 and R5 can do this.');
-        return;
-    }
+    if (!canManageRanks) return;
 
     const name = document.getElementById('member-name').value.trim();
     const rank = document.getElementById('member-rank').value;
@@ -488,19 +496,22 @@ async function handleMemberFormSubmit(e) {
     const squad_power = (sqPowerInput && sqPowerInput.value !== '') ? parseInt(sqPowerInput.value, 10) : 0;
 
     if (level > currentMaxHQ) {
-        alert(`HQ Level cannot exceed the current server maximum of ${currentMaxHQ}.`);
+        showModalStatus(`HQ Level cannot exceed the server maximum of ${currentMaxHQ}.`);
         return;
     }
     if (level < 0) {
-        alert('HQ Level cannot be negative.');
+        showModalStatus('HQ Level cannot be negative.');
         return;
     }
 
     const powerInput = document.getElementById('modal-member-power');
     const power = (powerInput && powerInput.value !== '') ? parseInt(powerInput.value, 10) : 0;
 
+    const notesInput = document.getElementById('member-notes');
+    const notes = (notesInput && canManageRanks) ? notesInput.value.trim() : '';
+
     if (!name || !rank) {
-        alert('Please fill in all fields');
+        showModalStatus('Please fill in Name and Rank.');
         return;
     }
 
@@ -509,7 +520,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, notes }),
             });
             if (!response.ok) throw new Error('Failed to update member');
             editingMemberId = null;
@@ -517,10 +528,10 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, notes }),
             });
             if (!response.ok) {
-                if (response.status === 403) throw new Error('Permission denied: Only R4/R5 members can manage ranks');
+                if (response.status === 403) throw new Error('Permission denied');
                 throw new Error('Failed to add member');
             }
         }
@@ -528,15 +539,26 @@ async function handleMemberFormSubmit(e) {
         await loadMembers();
     } catch (error) {
         console.error('Error saving member:', error);
-        alert('Failed to save member. Please try again.');
+        showModalStatus('Failed to save member. Please try again.');
     }
 }
 
-window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0, squadType = '', squadPower = 0, squadPowerUpdatedAt = '', troopLevel = 0, profession = '') {
-    if (!canManageRanks) {
-        alert('You do not have permission to edit members.');
-        return;
+function showModalStatus(msg) {
+    let el = document.getElementById('member-modal-status');
+    if (!el) {
+        el = document.createElement('p');
+        el.id = 'member-modal-status';
+        el.className = 'status-msg';
+        el.style.color = 'var(--danger-color)';
+        document.getElementById('submit-btn')?.parentElement?.prepend(el);
     }
+    el.textContent = msg;
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.textContent = ''; }, 5000);
+}
+
+window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0, squadType = '', squadPower = 0, squadPowerUpdatedAt = '', troopLevel = 0, profession = '', notes = '') {
+    if (!canManageRanks) return;
     editingMemberId = id;
 
     document.getElementById('member-name').value = name;
@@ -589,74 +611,144 @@ window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedA
 
     if (typeof updateTroopLevelOptions === 'function') updateTroopLevelOptions();
 
+    const notesInput = document.getElementById('member-notes');
+    if (notesInput) notesInput.value = notes;
+
     document.getElementById('modal-form-title').textContent = 'Edit Member';
     document.getElementById('submit-btn').textContent = 'Update Member';
     openMemberModal(true);
 };
 
-window.deleteMember = async function (id, name, hasUser = false) {
-    let confirmMessage = `Are you sure you want to delete ${name} from the roster?`;
-    if (hasUser) confirmMessage += '\n\n⚠️ WARNING: This will also permanently delete their login account!';
-    if (!confirm(confirmMessage)) return;
+async function archiveMember(id, name, actionsContainer, archiveBtn) {
+    archiveBtn.style.display = 'none';
+    const confirmSpan = document.createElement('span');
+    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+    const label = document.createElement('span');
+    label.textContent = 'Archive?';
+    label.style.fontSize = '0.85rem';
+    const yesBtn = document.createElement('button');
+    yesBtn.className = 'btn btn-danger btn-sm';
+    yesBtn.textContent = 'Yes';
+    yesBtn.addEventListener('click', async () => {
+        try {
+            const response = await fetch(`${API_URL}/${id}/archive`, { method: 'PUT' });
+            if (!response.ok) throw new Error('Failed to archive member');
+            await loadMembers();
+        } catch (error) {
+            console.error('Error archiving member:', error);
+            const msg = document.createElement('span');
+            msg.style.cssText = 'color:var(--danger-color);font-size:0.85rem;';
+            msg.textContent = 'Failed to archive.';
+            confirmSpan.replaceWith(msg);
+            archiveBtn.style.display = '';
+        }
+    });
+    const noBtn = document.createElement('button');
+    noBtn.className = 'btn btn-secondary btn-sm';
+    noBtn.textContent = 'No';
+    noBtn.addEventListener('click', () => { confirmSpan.remove(); archiveBtn.style.display = ''; });
+    confirmSpan.append(label, yesBtn, noBtn);
+    actionsContainer.appendChild(confirmSpan);
+}
 
-    try {
-        const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('Failed to delete member');
-        await loadMembers();
-    } catch (error) {
-        console.error('Error:', error);
-        alert('Failed to delete member. Please try again.');
-    }
-};
-
-window.toggleEligible = async function (id, currentStatus) {
-    if (!permissions.manage_train) {
-        alert('You do not have permission to manage the train schedule.');
-        return;
-    }
+window.toggleEligible = function (id, currentStatus, actionsContainer, toggleBtn) {
+    if (!permissions.manage_train) return;
 
     const newStatus = !currentStatus;
     const statusText = newStatus ? 'eligible' : 'not eligible';
-    if (!confirm(`Mark this member as ${statusText} for train scheduling?`)) return;
 
-    try {
-        const response = await fetch(`${API_URL}`);
-        if (!response.ok) throw new Error('Failed to fetch members');
-        const members = await response.json();
-        const member = members.find(m => m.id === id);
-        if (!member) throw new Error('Member not found');
-
-        const updatedMemberData = { ...member, eligible: newStatus };
-
-        const updateResponse = await fetch(`${API_URL}/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatedMemberData),
-        });
-
-        if (!updateResponse.ok) throw new Error('Failed to update member');
-        loadMembers();
-    } catch (error) {
-        console.error('Error toggling eligibility:', error);
-        alert('Failed to update member eligibility: ' + error.message);
-    }
+    toggleBtn.style.display = 'none';
+    const confirmSpan = document.createElement('span');
+    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+    const label = document.createElement('span');
+    label.textContent = `Mark ${statusText}?`;
+    label.style.fontSize = '0.85rem';
+    const yesBtn = document.createElement('button');
+    yesBtn.className = 'btn btn-primary btn-sm';
+    yesBtn.textContent = 'Yes';
+    yesBtn.addEventListener('click', async () => {
+        confirmSpan.remove();
+        try {
+            const response = await fetch(`${API_URL}`);
+            if (!response.ok) throw new Error('fetch failed');
+            const members = await response.json();
+            const member = members.find(m => m.id === id);
+            if (!member) throw new Error('Member not found');
+            const updateResponse = await fetch(`${API_URL}/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...member, eligible: newStatus }),
+            });
+            if (!updateResponse.ok) throw new Error('update failed');
+            loadMembers();
+        } catch (error) {
+            console.error('Error toggling eligibility:', error);
+            toggleBtn.style.display = '';
+        }
+    });
+    const noBtn = document.createElement('button');
+    noBtn.className = 'btn btn-secondary btn-sm';
+    noBtn.textContent = 'No';
+    noBtn.addEventListener('click', () => { confirmSpan.remove(); toggleBtn.style.display = ''; });
+    confirmSpan.append(label, yesBtn, noBtn);
+    actionsContainer.appendChild(confirmSpan);
 };
 
-window.createUserForMember = async function (memberId, memberName) {
-    if (!confirm(`Create a user account for ${memberName}? A random password will be generated.`)) return;
-    try {
-        const response = await fetch(`${API_URL}/${memberId}/create-user`, { method: 'POST' });
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
+window.createUserForMember = function (memberId, memberName, actionsContainer, createBtn) {
+    createBtn.style.display = 'none';
+    const confirmSpan = document.createElement('span');
+    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+    const label = document.createElement('span');
+    label.textContent = `Create user for ${memberName}?`;
+    label.style.fontSize = '0.85rem';
+    const yesBtn = document.createElement('button');
+    yesBtn.className = 'btn btn-primary btn-sm';
+    yesBtn.textContent = 'Yes';
+    yesBtn.addEventListener('click', async () => {
+        confirmSpan.remove();
+        try {
+            const response = await fetch(`${API_URL}/${memberId}/create-user`, { method: 'POST' });
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(errText);
+            }
+            const result = await response.json();
+            // Show credentials inline — password is only shown once
+            const credBox = document.createElement('div');
+            credBox.style.cssText = 'display:flex;flex-direction:column;gap:4px;font-size:0.85rem;padding:8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;max-width:260px;';
+            const line1 = document.createElement('span');
+            line1.textContent = `Username: ${result.username}`;
+            const line2 = document.createElement('span');
+            line2.style.fontWeight = 'bold';
+            line2.textContent = `Password: ${result.password}`;
+            const warn = document.createElement('span');
+            warn.style.cssText = 'color:var(--warning-color,#f6ad55);font-size:0.8rem;';
+            warn.textContent = '⚠️ Save this password — it won\'t be shown again.';
+            const dismissBtn = document.createElement('button');
+            dismissBtn.className = 'btn btn-secondary btn-sm';
+            dismissBtn.textContent = 'Dismiss';
+            dismissBtn.addEventListener('click', async () => {
+                credBox.remove();
+                await loadMembers();
+            });
+            credBox.append(line1, line2, warn, dismissBtn);
+            actionsContainer.appendChild(credBox);
+        } catch (error) {
+            console.error('Error creating user:', error);
+            const errSpan = document.createElement('span');
+            errSpan.style.cssText = 'color:var(--danger-color);font-size:0.85rem;';
+            errSpan.textContent = 'Failed to create user.';
+            actionsContainer.appendChild(errSpan);
+            createBtn.style.display = '';
+            setTimeout(() => { errSpan.remove(); }, 4000);
         }
-        const result = await response.json();
-        alert(`User created successfully!\n\nUsername: ${result.username}\nPassword: ${result.password}\n\n⚠️ IMPORTANT: Save this password now! It won't be shown again.`);
-        await loadMembers();
-    } catch (error) {
-        console.error('Error creating user:', error);
-        alert('Failed to create user: ' + error.message);
-    }
+    });
+    const noBtn = document.createElement('button');
+    noBtn.className = 'btn btn-secondary btn-sm';
+    noBtn.textContent = 'No';
+    noBtn.addEventListener('click', () => { confirmSpan.remove(); createBtn.style.display = ''; });
+    confirmSpan.append(label, yesBtn, noBtn);
+    actionsContainer.appendChild(confirmSpan);
 };
 
 function formatPower(power) {
@@ -667,9 +759,9 @@ function formatPower(power) {
     return power.toString();
 }
 
-function updateMemberCount(count) {
+function updateMemberCount(count, isFormerView = false) {
     const heading = document.querySelector('.members-section h3');
-    if (heading) heading.textContent = `Alliance Members (${count})`;
+    if (heading) heading.textContent = isFormerView ? `Former Members (${count})` : `Alliance Members (${count})`;
 }
 
 function setupSearch() {
@@ -737,13 +829,10 @@ function setupCSVImport() {
     if (!importBtn || !fileInput) return;
 
     importBtn.addEventListener('click', async () => {
-        if (!canManageRanks) {
-            alert('You do not have permission to import members. Only R4 and R5 can do this.');
-            return;
-        }
+        if (!canManageRanks) return;
         const file = fileInput.files[0];
         if (!file || !file.name.endsWith('.csv')) {
-            alert('Please select a valid CSV file');
+            displayImportError('Please select a valid CSV file.');
             return;
         }
 
@@ -788,7 +877,7 @@ function setupCSVImport() {
     confirmBtn.addEventListener('click', async () => {
         const selectedMembers = detectedCSVMembers.filter((_, i) => selectedCSVMembers.has(i));
         if (selectedMembers.length === 0) {
-            alert('Please select at least one member to import');
+            displayCSVModalStatus('Please select at least one member to import.');
             return;
         }
 
@@ -799,40 +888,76 @@ function setupCSVImport() {
 
         const removeMemberIDs = Array.from(selectedRemoveMembers);
         if (removeMemberIDs.length > 0) {
-            if (!confirm(`⚠️ WARNING: You are about to delete ${removeMemberIDs.length} member(s)!\n\nAre you sure you want to continue?`)) return;
-        }
-
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = 'Importing...';
-
-        try {
-            const response = await fetch('/api/members/import/confirm', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ members: selectedMembers, remove_member_ids: removeMemberIDs, renames }),
+            // Button-swap confirm for destructive remove
+            confirmBtn.style.display = 'none';
+            const confirmSpan = document.createElement('span');
+            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+            const warnLabel = document.createElement('span');
+            warnLabel.style.cssText = 'font-size:0.85rem;color:var(--danger-color);';
+            warnLabel.textContent = `Delete ${removeMemberIDs.length} member(s)?`;
+            const proceedBtn = document.createElement('button');
+            proceedBtn.className = 'btn btn-danger btn-sm';
+            proceedBtn.textContent = 'Proceed';
+            const abortBtn = document.createElement('button');
+            abortBtn.className = 'btn btn-secondary btn-sm';
+            abortBtn.textContent = 'Cancel';
+            abortBtn.addEventListener('click', () => { confirmSpan.remove(); confirmBtn.style.display = ''; });
+            proceedBtn.addEventListener('click', () => {
+                confirmSpan.remove();
+                doImport(selectedMembers, removeMemberIDs, renames, confirmBtn, modal, fileInput);
             });
-
-            if (!response.ok) throw new Error('Failed to import members');
-            const result = await response.json();
-            modal.style.display = 'none';
-
-            const resultDiv = document.getElementById('import-result');
-            resultDiv.style.display = 'block';
-            resultDiv.className = 'import-result success';
-            const strong = document.createElement('strong');
-            strong.textContent = `✓ Successfully imported ${result.added + result.updated} member(s)`;
-            resultDiv.replaceChildren(strong);
-
-            await loadMembers();
-            fileInput.value = '';
-        } catch (error) {
-            console.error('Confirm error:', error);
-            alert('Error importing members: ' + error.message);
-        } finally {
-            confirmBtn.disabled = false;
-            confirmBtn.textContent = '✔ Confirm & Import Selected';
+            confirmSpan.append(warnLabel, proceedBtn, abortBtn);
+            confirmBtn.parentElement.appendChild(confirmSpan);
+            return;
         }
+
+        doImport(selectedMembers, removeMemberIDs, renames, confirmBtn, modal, fileInput);
     });
+}
+
+async function doImport(selectedMembers, removeMemberIDs, renames, confirmBtn, modal, fileInput) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Importing...';
+    try {
+        const response = await fetch('/api/members/import/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ members: selectedMembers, remove_member_ids: removeMemberIDs, renames }),
+        });
+        if (!response.ok) throw new Error('Failed to import members');
+        const result = await response.json();
+        modal.style.display = 'none';
+
+        const resultDiv = document.getElementById('import-result');
+        resultDiv.style.display = 'block';
+        resultDiv.className = 'import-result success';
+        const strong = document.createElement('strong');
+        strong.textContent = `✓ Successfully imported ${result.added + result.updated} member(s)`;
+        resultDiv.replaceChildren(strong);
+
+        await loadMembers();
+        fileInput.value = '';
+    } catch (error) {
+        console.error('Confirm error:', error);
+        displayCSVModalStatus('Error importing members. Please try again.');
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = '✔ Confirm & Import Selected';
+    }
+}
+
+function displayCSVModalStatus(msg) {
+    let el = document.getElementById('csv-modal-status');
+    if (!el) {
+        el = document.createElement('p');
+        el.id = 'csv-modal-status';
+        el.className = 'status-msg';
+        el.style.color = 'var(--danger-color)';
+        document.getElementById('confirm-csv-btn')?.parentElement?.prepend(el);
+    }
+    el.textContent = msg;
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.textContent = ''; }, 5000);
 }
 
 function showCSVPreview(result) {
@@ -1106,7 +1231,7 @@ async function loadAliases() {
                 deleteBtn.style.cssText = 'background:none;border:none;color:#e53e3e;cursor:pointer;';
                 deleteBtn.title = 'Remove Nickname';
                 deleteBtn.textContent = '✖';
-                deleteBtn.addEventListener('click', () => deleteAlias(a.id));
+                deleteBtn.addEventListener('click', () => deleteAlias(a.id, row, deleteBtn));
                 row.appendChild(deleteBtn);
             }
 
@@ -1143,21 +1268,44 @@ document.getElementById('add-alias-form')?.addEventListener('submit', async e =>
         await loadAliases();
         loadMembers();
     } catch (err) {
-        alert('Failed to add nickname: ' + err.message);
+        const statusEl = document.getElementById('alias-add-status');
+        if (statusEl) {
+            statusEl.textContent = 'Failed to add nickname.';
+            clearTimeout(statusEl._timer);
+            statusEl._timer = setTimeout(() => { statusEl.textContent = ''; }, 4000);
+        }
     }
 });
 
-window.deleteAlias = async function (aliasId) {
-    if (!confirm('Remove this nickname?')) return;
-
-    try {
-        const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error(await res.text());
-        await loadAliases();
-        loadMembers();
-    } catch (err) {
-        alert('Failed to delete nickname: ' + err.message);
-    }
+window.deleteAlias = function (aliasId, rowEl, deleteBtn) {
+    deleteBtn.style.display = 'none';
+    const confirmSpan = document.createElement('span');
+    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+    const label = document.createElement('span');
+    label.textContent = 'Remove?';
+    label.style.fontSize = '0.85rem';
+    const yesBtn = document.createElement('button');
+    yesBtn.className = 'btn btn-danger btn-sm';
+    yesBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
+    yesBtn.textContent = 'Yes';
+    yesBtn.addEventListener('click', async () => {
+        try {
+            const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(await res.text());
+            await loadAliases();
+            loadMembers();
+        } catch (err) {
+            confirmSpan.remove();
+            deleteBtn.style.display = '';
+        }
+    });
+    const noBtn = document.createElement('button');
+    noBtn.className = 'btn btn-secondary btn-sm';
+    noBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
+    noBtn.textContent = 'No';
+    noBtn.addEventListener('click', () => { confirmSpan.remove(); deleteBtn.style.display = ''; });
+    confirmSpan.append(label, yesBtn, noBtn);
+    rowEl.appendChild(confirmSpan);
 };
 
 document.getElementById('close-alias-modal')?.addEventListener('click', () => {

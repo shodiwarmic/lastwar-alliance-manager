@@ -50,6 +50,13 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Drag-to-Reorder**: Categories and responsibilities within a category can be reordered by drag-and-drop; order is persisted server-side.
 - **Permission-Gated Access**: Separate `view_officer_command` (R1–R5 default) and `manage_officer_command` (R4–R5 default) permissions control who can view vs. administer the directory.
 
+### 🎯 Recruiting
+- **Former Members**: Instead of deleting members and losing their history, officers can archive them (rank `EX`). Archived members remain in all historical records — train logs still show their name, VS point history is preserved. Officers with `manage_members` can view former members on the Members page ("Former" filter chip) and on the Recruiting page with stats: last known power, total train runs conducted, and last VS week active.
+- **Reactivate**: Former members can be restored to an active rank (R1–R5) from the Recruiting page, re-joining the roster immediately.
+- **Prospect Tracking**: Officers can log potential recruits with fields for in-game name, server, current alliance, power, rank in their alliance, recruiter, first contact date, notes, and status (Interested / Pending / Declined).
+- **Officer Notes**: Each active member now has an internal notes field visible only to officers with `manage_members`. Notes are displayed in the member edit modal and never shown to standard members.
+- **Permission-Gated Access**: `manage_members` controls archive/reactivate and viewing former members. Separate `view_recruiting` and `manage_recruiting` permissions (R4–R5 default) gate the Recruiting page and prospect CRUD. Hard-deleting archived members is admin-only.
+
 ### 🚂 Train Tracker
 - **Eligibility Rule Engine**: Officers create and save named eligibility rules using flexible OR-group / AND-condition logic to define who qualifies to conduct a train. Conditions can filter on member rank, current/previous week VS points, individual VS day columns, and days since last FREE or any train conducted.
 - **Configurable Selection**: Each rule stores a selection method — Random, Greatest, or Least — applied to any tracked field (e.g. "prioritise members who have gone longest without conducting a FREE train").

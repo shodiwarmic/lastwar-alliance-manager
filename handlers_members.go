@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"log"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -53,7 +54,8 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			   COALESCE(lsp.recorded_at, '') as latest_squad_power_date,
 			   EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user,
 			   COALESCE(ga.aliases, '') as global_aliases,
-			   COALESCE(pa.aliases, '') as personal_aliases
+			   COALESCE(pa.aliases, '') as personal_aliases,
+			   COALESCE(m.notes, '') as notes
 		FROM members m
 		LEFT JOIN latest_power lp ON lp.member_id = m.id
 		LEFT JOIN latest_squad_power lsp ON lsp.member_id = m.id
@@ -75,7 +77,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(
 			&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.SquadType, &m.TroopLevel,
 			&m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt,
-			&m.HasUser, &m.GlobalAliases, &m.PersonalAliases,
+			&m.HasUser, &m.GlobalAliases, &m.PersonalAliases, &m.Notes,
 		); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -160,7 +162,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Perform the main UPDATE
-	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, id)
+	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ?, notes = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, m.Notes, id)
 	if err != nil {
 		log.Printf("DB Update Error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -210,28 +212,130 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Exec("DELETE FROM users WHERE member_id = ?", id)
-	if err != nil {
-		log.Printf("Warning: Failed to delete linked user for member %d: %v", id, err)
+	if _, err = db.Exec("DELETE FROM users WHERE member_id = ?", id); err != nil {
+		slog.Error("Failed to delete linked user for member", "member_id", id, "error", err)
 	}
 
-	_, err = db.Exec("DELETE FROM power_history WHERE member_id = ?", id)
-	if err != nil {
-		log.Printf("Warning: Failed to delete power history for member %d: %v", id, err)
+	if _, err = db.Exec("DELETE FROM power_history WHERE member_id = ?", id); err != nil {
+		slog.Error("Failed to delete power history for member", "member_id", id, "error", err)
 	}
 
-	_, err = db.Exec("DELETE FROM squad_power_history WHERE member_id = ?", id)
-	if err != nil {
-		log.Printf("Warning: Failed to delete squad power history for member %d: %v", id, err)
+	if _, err = db.Exec("DELETE FROM squad_power_history WHERE member_id = ?", id); err != nil {
+		slog.Error("Failed to delete squad power history for member", "member_id", id, "error", err)
 	}
 
-	_, err = db.Exec("DELETE FROM members WHERE id = ?", id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if _, err = db.Exec("DELETE FROM members WHERE id = ?", id); err != nil {
+		slog.Error("Failed to delete member", "member_id", id, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func archiveMember(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid member ID", http.StatusBadRequest)
+		return
+	}
+
+	result, err := db.Exec("UPDATE members SET rank = 'EX', eligible = 0 WHERE id = ? AND rank != 'EX'", id)
+	if err != nil {
+		slog.Error("Failed to archive member", "member_id", id, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		http.Error(w, "Member not found or already archived", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func reactivateMember(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid member ID", http.StatusBadRequest)
+		return
+	}
+
+	var body struct {
+		Rank string `json:"rank"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	validRanks := map[string]bool{"R1": true, "R2": true, "R3": true, "R4": true, "R5": true}
+	if !validRanks[body.Rank] {
+		http.Error(w, "Rank must be R1–R5", http.StatusBadRequest)
+		return
+	}
+
+	result, err := db.Exec("UPDATE members SET rank = ?, eligible = 1 WHERE id = ? AND rank = 'EX'", body.Rank, id)
+	if err != nil {
+		slog.Error("Failed to reactivate member", "member_id", id, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		http.Error(w, "Member not found or not archived", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func getFormerMembers(w http.ResponseWriter, r *http.Request) {
+	query := `
+		SELECT
+			m.id,
+			m.name,
+			COALESCE((
+				SELECT power FROM power_history
+				WHERE member_id = m.id
+				ORDER BY recorded_at DESC LIMIT 1
+			), 0) as last_power,
+			COUNT(DISTINCT tl.id) as train_count,
+			COALESCE(MAX(vp.week_date), '') as last_vs_week
+		FROM members m
+		LEFT JOIN train_logs tl ON tl.conductor_id = m.id
+		LEFT JOIN vs_points vp ON vp.member_id = m.id
+		WHERE m.rank = 'EX'
+		GROUP BY m.id
+		ORDER BY m.name
+	`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		slog.Error("Failed to query former members", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	members := []FormerMember{}
+	for rows.Next() {
+		var fm FormerMember
+		if err := rows.Scan(&fm.ID, &fm.Name, &fm.LastPower, &fm.TrainCount, &fm.LastVSWeek); err != nil {
+			slog.Error("Failed to scan former member row", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		members = append(members, fm)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(members)
 }
 
 func importCSV(w http.ResponseWriter, r *http.Request) {
