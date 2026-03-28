@@ -71,6 +71,7 @@
                             <button class="filter-chip rank-chip" data-rank="R3">R3</button>
                             <button class="filter-chip rank-chip" data-rank="R2">R2</button>
                             <button class="filter-chip rank-chip" data-rank="R1">R1</button>
+                            <button class="filter-chip rank-chip" id="former-chip" data-rank="EX" style="display: none;">Former</button>
                         </div>
 
                         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
@@ -206,6 +207,11 @@
                     </div>
                 </div>
 
+                <div id="modal-notes-section" class="form-group" style="display: none;">
+                    <label for="member-notes">Officer Notes:</label>
+                    <textarea id="member-notes" class="form-input" rows="3" placeholder="Internal notes visible to officers only..."></textarea>
+                </div>
+
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary" id="submit-btn">Save Member</button>
                     <button type="button" class="btn btn-secondary" id="cancel-btn">Cancel</button>
@@ -248,6 +254,7 @@
                     </div>
                     <button type="submit" class="btn btn-primary btn-sm">➕ Add</button>
                 </form>
+                <p id="alias-add-status" class="status-msg" style="color: var(--danger-color); margin: 6px 0 0;"></p>
                 <div id="global-alias-checkbox-wrapper" style="margin-top: 10px; display: none;">
                     <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-muted); font-size: 0.9em;">
                         <input type="checkbox" id="new-alias-global" style="width: 16px; height: 16px;">

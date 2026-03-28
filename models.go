@@ -34,6 +34,31 @@ type Member struct {
 	Profession          string `json:"profession"`
 	GlobalAliases       string `json:"global_aliases"`
 	PersonalAliases     string `json:"personal_aliases"`
+	Notes               string `json:"notes"`
+}
+
+type FormerMember struct {
+	ID             int    `json:"id"`
+	Name           string `json:"name"`
+	LastPower      *int64 `json:"last_power"`
+	TrainCount     int    `json:"train_count"`
+	LastVSWeek     string `json:"last_vs_week"`
+}
+
+type Prospect struct {
+	ID             int    `json:"id"`
+	Name           string `json:"name"`
+	Server         string `json:"server"`
+	SourceAlliance string `json:"source_alliance"`
+	Power          *int64 `json:"power"`
+	RankInAlliance string `json:"rank_in_alliance"`
+	RecruiterID    *int   `json:"recruiter_id"`
+	RecruiterName  string `json:"recruiter_name"`
+	Status         string `json:"status"`
+	Notes          string `json:"notes"`
+	FirstContacted string `json:"first_contacted"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 type Alias struct {
@@ -381,6 +406,8 @@ type RankPermissions struct {
 	ManageSchedule       bool   `json:"manage_schedule"`
 	ViewOfficerCommand   bool   `json:"view_officer_command"`
 	ManageOfficerCommand bool   `json:"manage_officer_command"`
+	ViewRecruiting       bool   `json:"view_recruiting"`
+	ManageRecruiting     bool   `json:"manage_recruiting"`
 }
 
 // --- Officer Command Models ---

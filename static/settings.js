@@ -19,6 +19,10 @@ const PERM_ROWS = [
     { key: 'manage_schedule', label: 'Manage Schedule' },
     { key: 'view_train', label: 'View Train Tracker' },
     { key: 'manage_train', label: 'Manage Train Tracker' },
+    { key: 'view_officer_command', label: 'View Officer Command' },
+    { key: 'manage_officer_command', label: 'Manage Officer Command' },
+    { key: 'view_recruiting', label: 'View Recruiting' },
+    { key: 'manage_recruiting', label: 'Manage Recruiting' },
     { key: 'manage_settings', label: 'Access Settings Tab' }
 ];
 

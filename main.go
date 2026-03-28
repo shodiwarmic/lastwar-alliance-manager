@@ -32,7 +32,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 
 		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
 			data.IsAdmin = true
-			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true}
+			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true}
 		} else if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
 			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
@@ -164,10 +164,19 @@ func main() {
 	router.HandleFunc("/api/members", authMiddleware(getMembers)).Methods("GET")
 	router.HandleFunc("/api/members/stats", authMiddleware(getMemberStats)).Methods("GET")
 	router.HandleFunc("/api/members", authMiddleware(requirePermission("manage_members", createMember))).Methods("POST")
-	router.HandleFunc("/api/members/{id}", authMiddleware(requirePermission("manage_members", updateMember))).Methods("PUT")
-	router.HandleFunc("/api/members/{id}", authMiddleware(requirePermission("manage_members", deleteMember))).Methods("DELETE")
+	router.HandleFunc("/api/members/{id:[0-9]+}", authMiddleware(requirePermission("manage_members", updateMember))).Methods("PUT")
+	router.HandleFunc("/api/members/{id:[0-9]+}", authMiddleware(adminMiddleware(deleteMember))).Methods("DELETE")
+	router.HandleFunc("/api/members/{id:[0-9]+}/archive", authMiddleware(requirePermission("manage_members", archiveMember))).Methods("PUT")
+	router.HandleFunc("/api/members/{id:[0-9]+}/reactivate", authMiddleware(requirePermission("manage_members", reactivateMember))).Methods("PUT")
+	router.HandleFunc("/api/former-members", authMiddleware(requirePermission("manage_members", getFormerMembers))).Methods("GET")
 	router.HandleFunc("/api/members/import", authMiddleware(requirePermission("manage_members", importCSV))).Methods("POST")
 	router.HandleFunc("/api/members/import/confirm", authMiddleware(requirePermission("manage_members", confirmMemberUpdates))).Methods("POST")
+
+	// Prospects API
+	router.HandleFunc("/api/prospects", authMiddleware(requirePermission("view_recruiting", getProspects))).Methods("GET")
+	router.HandleFunc("/api/prospects", authMiddleware(requirePermission("manage_recruiting", createProspect))).Methods("POST")
+	router.HandleFunc("/api/prospects/{id:[0-9]+}", authMiddleware(requirePermission("manage_recruiting", updateProspect))).Methods("PUT")
+	router.HandleFunc("/api/prospects/{id:[0-9]+}", authMiddleware(requirePermission("manage_recruiting", deleteProspect))).Methods("DELETE")
 	router.HandleFunc("/api/profile/me", authMiddleware(getMyProfile)).Methods("GET")
 	router.HandleFunc("/api/profile/me", authMiddleware(updateMyProfile)).Methods("PUT")
 
@@ -318,6 +327,7 @@ func main() {
 		"/alias-audit":     "alias-audit",
 		"/officer-command": "officer-command",
 		"/train":           "train",
+		"/recruiting":      "recruiting",
 	}
 
 	for path, templateName := range pages {
@@ -343,6 +353,7 @@ func main() {
 				"alias-audit":     data.Permissions.ManageMembers,
 				"officer-command": data.Permissions.ViewOfficerCommand,
 				"train":           data.Permissions.ViewTrain,
+				"recruiting":      data.Permissions.ViewRecruiting,
 			}
 
 			// 3. Custom 403 Handler for Access Denied
