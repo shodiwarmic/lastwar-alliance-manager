@@ -235,25 +235,21 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 	colMap := make(map[string]int)
 	for i, h := range headers {
 		h = strings.ToLower(strings.TrimSpace(h))
-		if strings.Contains(h, "day 1") {
+		if h == "member" {
+			h = "name"
+		} else if strings.Contains(h, "day 1") {
 			h = "monday"
-		}
-		if strings.Contains(h, "day 2") {
+		} else if strings.Contains(h, "day 2") {
 			h = "tuesday"
-		}
-		if strings.Contains(h, "day 3") {
+		} else if strings.Contains(h, "day 3") {
 			h = "wednesday"
-		}
-		if strings.Contains(h, "day 4") {
+		} else if strings.Contains(h, "day 4") {
 			h = "thursday"
-		}
-		if strings.Contains(h, "day 5") {
+		} else if strings.Contains(h, "day 5") {
 			h = "friday"
-		}
-		if strings.Contains(h, "day 6") {
+		} else if strings.Contains(h, "day 6") {
 			h = "saturday"
-		}
-		if strings.Contains(h, "total") {
+		} else if strings.Contains(h, "total") {
 			h = "total"
 		}
 		colMap[h] = i
@@ -276,11 +272,16 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	nameIdx, ok := colMap["name"]
+	if !ok {
+		http.Error(w, "CSV missing required column: Member (or Name)", http.StatusBadRequest)
+		return
+	}
+
 	validDays := []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
 
 	for _, row := range records[1:] {
-		nameIdx, ok := colMap["name"]
-		if !ok || len(row) <= nameIdx {
+		if len(row) <= nameIdx {
 			continue
 		}
 		providedName := strings.TrimSpace(row[nameIdx])

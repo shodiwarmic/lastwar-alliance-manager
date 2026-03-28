@@ -47,6 +47,17 @@ UPDATE rank_permissions SET col = 1 WHERE rank IN ('R4', 'R5');
 ### Use the global `.modal` / `.modal-content` classes
 `styles.css` already defines `.modal` (hidden by default, toggled via `style.display='flex'`) and `.modal-content` (styled box). Don't write custom modal CSS — use these.
 
+### Never add `class="hidden"` to a `.modal` element
+`.modal` is already `display: none` by default. Adding `.hidden` (which is `display: none !important`) is redundant, but more importantly it **breaks the open logic**: `element.style.display = 'flex'` cannot override `!important` from a stylesheet rule, so the modal will silently stay hidden.
+
+- **Open**: `modal.style.display = 'flex'`
+- **Close**: `modal.style.display = ''` (clears the inline style; `.modal`'s own `display: none` takes back over)
+
+```html
+<!-- Correct — no extra hidden class needed -->
+<div id="my-modal" class="modal">
+```
+
 ### CSRF is handled globally
 `static/csrf.js` intercepts all `fetch` calls and injects `X-CSRF-Token` on POST/PUT/DELETE automatically. You don't need to manually attach the token in page JS.
 
@@ -100,6 +111,28 @@ delBtn.addEventListener('click', () => {
 });
 
 Note: many existing files still use `alert()` — do not add more, and replace them when touching those files.
+
+### Validate required CSV columns before the row loop — never silently skip
+After building a `colMap` from CSV headers, check that all required columns are present **before** entering the row loop. A missing column causes every row to hit a `continue`, returning an empty result with no error — a silent failure that's very hard to debug.
+
+```go
+// Wrong — silently skips all rows if "name" column is missing
+for _, row := range records[1:] {
+    nameIdx, ok := colMap["name"]
+    if !ok { continue }
+    ...
+}
+
+// Correct — fail fast with a clear error
+nameIdx, ok := colMap["name"]
+if !ok {
+    http.Error(w, "CSV missing required column: Member (or Name)", http.StatusBadRequest)
+    return
+}
+for _, row := range records[1:] { ... }
+```
+
+Also map expected header aliases up front (e.g. `"member"` → `"name"`, `"day 1"` → `"monday"`) so the column check is reliable regardless of export format.
 
 ### Never leak raw errors to the client
 Do not pass `err.Error()` (or any internal error string) directly to `http.Error`. Log the detail server-side with `slog.Error` and return a generic message to the client.
@@ -155,7 +188,7 @@ btn.addEventListener('click', () => editMember(member.id));
 
 **`escapeHtml()`** — remove at the injection point when converting to `textContent`. Do not leave orphaned calls.
 
-**Modal open/close check** — the global `.modal` class uses `display: flex` for centering. Always open modals with `modal.style.display = 'flex'`, never `'block'`. Verify this on every file during hardening.
+**Modal open/close check** — the global `.modal` class uses `display: flex` for centering. Always open modals with `modal.style.display = 'flex'` (never `'block'`) and close with `modal.style.display = ''`. Never add `class="hidden"` to a `.modal` element — see gotcha above. Verify open/close on every file during hardening.
 
 **Progress** (branch: `js-hardening`):
 | File | Status |

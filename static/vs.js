@@ -315,6 +315,15 @@ function handleSort(e) {
  * 5. CSV IMPORT & SAVE LOGIC
  */
 
+function showStatus(container, msg, isError = false) {
+    const p = document.createElement('p');
+    p.className = 'status-msg';
+    p.style.cssText = `margin:4px 0 0; font-size:0.85rem; color:${isError ? '#dc3545' : '#28a745'};`;
+    p.textContent = msg;
+    container.appendChild(p);
+    setTimeout(() => p.remove(), 4000);
+}
+
 async function saveVSPoints() {
     const weekDate = formatDate(currentWeekDate);
     const points = allMembers.map(member => {
@@ -337,21 +346,42 @@ async function saveVSPoints() {
             body: JSON.stringify({ week_date: weekDate, points })
         });
         if (!response.ok) throw new Error('Failed to save');
-        alert('✓ Saved successfully!');
+        showStatus(document.getElementById('admin-actions'), '✓ Saved successfully!');
         await loadVSPoints();
     } catch (error) {
-        alert('Error: ' + error.message);
+        showStatus(document.getElementById('admin-actions'), 'Error saving points', true);
     }
 }
 
-async function clearVSPoints() {
-    const weekDate = formatDate(currentWeekDate);
-    if (!confirm('Clear all points for this week?')) return;
-    try {
-        await fetch(`${API_URL}/${weekDate}`, { method: 'DELETE' });
-        currentVSPoints = {};
-        renderTable();
-    } catch (error) { alert('Error: ' + error.message); }
+function clearVSPoints() {
+    const clearBtn = document.getElementById('clear-btn');
+    clearBtn.style.display = 'none';
+    const confirmSpan = document.createElement('span');
+    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+    const label = document.createElement('span');
+    label.textContent = 'Sure?';
+    label.style.fontSize = '0.85rem';
+    const yesBtn = document.createElement('button');
+    yesBtn.className = 'btn btn-danger btn-sm';
+    yesBtn.textContent = 'Yes';
+    const noBtn = document.createElement('button');
+    noBtn.className = 'btn btn-secondary btn-sm';
+    noBtn.textContent = 'No';
+    noBtn.addEventListener('click', () => { confirmSpan.remove(); clearBtn.style.display = ''; });
+    yesBtn.addEventListener('click', async () => {
+        confirmSpan.remove();
+        clearBtn.style.display = '';
+        const weekDate = formatDate(currentWeekDate);
+        try {
+            await fetch(`${API_URL}/${weekDate}`, { method: 'DELETE' });
+            currentVSPoints = {};
+            renderTable();
+        } catch {
+            showStatus(document.getElementById('admin-actions'), 'Error clearing week', true);
+        }
+    });
+    confirmSpan.append(label, yesBtn, noBtn);
+    clearBtn.insertAdjacentElement('afterend', confirmSpan);
 }
 
 /**
@@ -378,12 +408,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             const nextWeek = new Date(currentWeekDate);
             nextWeek.setDate(nextWeek.getDate() + 7);
 
-            // Prevent going past the actual current week
+            // Prevent going past the actual current week (button is also disabled by updateWeekDisplay)
             const todayMonday = getMostRecentMonday();
-            if (nextWeek > todayMonday) {
-                alert("Cannot navigate to a future week.");
-                return;
-            }
+            if (nextWeek > todayMonday) return;
 
             currentWeekDate.setDate(currentWeekDate.getDate() + 7);
             updateWeekDisplay();
@@ -443,8 +470,8 @@ async function handleCSVUpload(event) {
 
         currentImportPayload = await response.json();
         renderPreviewModal(currentImportPayload);
-    } catch (error) {
-        alert('Error parsing CSV: ' + error.message);
+    } catch {
+        showStatus(document.getElementById('admin-actions'), 'Error parsing CSV — check file format', true);
     }
 
     event.target.value = ''; // Reset input
@@ -653,19 +680,21 @@ async function commitImport() {
         // Display errors if the backend caught any SQL issues
         if (result.errors && result.errors.length > 0) {
             console.error("Backend SQL Errors:", result.errors);
-            alert(`Backend received ${result.aliases_received} aliases to process.\n\n` + result.message + "\n\nDatabase Errors encountered:\n" + result.errors.join("\n"));
+            const modalActions = document.querySelector('#import-preview-modal .modal-actions');
+            showStatus(modalActions, `Saved with errors — ${result.errors.length} DB error(s), see console`, true);
         } else {
-            alert(`Backend received ${result.aliases_received} aliases to process.\n\n` + result.message);
+            closePreviewModal();
+            showStatus(document.getElementById('admin-actions'), result.message || '✓ Import saved');
         }
 
-        closePreviewModal();
         loadVSPoints();
-    } catch (error) {
-        alert('Error saving data: ' + error.message);
+    } catch {
+        const modalActions = document.querySelector('#import-preview-modal .modal-actions');
+        showStatus(modalActions, 'Error saving data', true);
     }
 }
 
 function closePreviewModal() {
-    document.getElementById('import-preview-modal').style.display = 'none';
+    document.getElementById('import-preview-modal').style.display = '';
     currentImportPayload = null;
 }
