@@ -47,6 +47,29 @@ UPDATE rank_permissions SET col = 1 WHERE rank IN ('R4', 'R5');
 ### Use the global `.modal` / `.modal-content` classes
 `styles.css` already defines `.modal` (hidden by default, toggled via `style.display='flex'`) and `.modal-content` (styled box). Don't write custom modal CSS — use these.
 
+### Tab switching: use `style.display = 'block'`, never `style.display = ''`
+`styles.css` has a global rule `.tab-content { display: none }`. If you clear a tab's inline style with `style.display = ''`, the element reverts to the CSS rule and stays hidden — tabs appear broken (cursor changes, nothing happens).
+
+Always show the active tab with an explicit value:
+```javascript
+// Wrong — reverts to CSS display:none
+target.style.display = '';
+
+// Correct
+target.style.display = 'block';
+```
+
+Also show the **initial** active tab explicitly in `DOMContentLoaded` — CSS hides all `.tab-content` by default, so nothing is visible on load until JS sets it:
+```javascript
+const activeBtn = document.querySelector('.tab-btn.active');
+if (activeBtn) {
+    const target = document.getElementById('tab-' + activeBtn.dataset.tab);
+    if (target) target.style.display = 'block';
+}
+```
+
+`.tab-bar` / `.tab-btn` styles are only defined in `train.css` — copy them to your page CSS or tab buttons will render as unstyled grey browser defaults.
+
 ### CSRF is handled globally
 `static/csrf.js` intercepts all `fetch` calls and injects `X-CSRF-Token` on POST/PUT/DELETE automatically. You don't need to manually attach the token in page JS.
 
@@ -172,6 +195,7 @@ btn.addEventListener('click', () => editMember(member.id));
 | `static/schedule.js` | ✅ Done |
 | `static/upload.js` | ✅ Done |
 | `static/files.js` | ✅ Done |
+| `static/recruiting.js` | ✅ Done (written with safe patterns from the start) |
 
 `static/officer_command.js` — skip, already uses correct patterns.
 `static/login.js` — ✅ Done (same password-rules pattern as profile.js; fixed during final sweep).

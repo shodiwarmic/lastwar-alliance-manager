@@ -19,9 +19,15 @@ function setupTabs() {
             btn.classList.add('active');
             document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
             const target = document.getElementById('tab-' + btn.dataset.tab);
-            if (target) target.style.display = '';
+            if (target) target.style.display = 'block';
         });
     });
+    // Show the initially active tab (CSS hides all .tab-content by default)
+    const activeBtn = document.querySelector('.tab-btn.active');
+    if (activeBtn) {
+        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
+        if (target) target.style.display = 'block';
+    }
 }
 
 // ── Former Members ────────────────────────────────────────────────────────────
