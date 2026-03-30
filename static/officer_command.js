@@ -181,11 +181,26 @@ function wireEvents(container) {
         });
     });
 
-    // Category delete
+    // Category delete — button-swap confirmation
     container.querySelectorAll('[data-del-cat]').forEach(btn => {
         btn.addEventListener('click', () => {
             const ci = parseInt(btn.dataset.delCat);
-            deleteCategory(ci);
+            btn.style.display = 'none';
+            const confirmSpan = document.createElement('span');
+            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+            const label = document.createElement('span');
+            label.textContent = 'Sure?';
+            label.style.fontSize = '0.85rem';
+            const yesBtn = document.createElement('button');
+            yesBtn.className = 'btn btn-danger btn-sm';
+            yesBtn.textContent = 'Yes';
+            yesBtn.addEventListener('click', () => deleteCategory(ci));
+            const noBtn = document.createElement('button');
+            noBtn.className = 'btn btn-secondary btn-sm';
+            noBtn.textContent = 'No';
+            noBtn.addEventListener('click', () => { confirmSpan.remove(); btn.style.display = ''; });
+            confirmSpan.append(label, yesBtn, noBtn);
+            btn.insertAdjacentElement('afterend', confirmSpan);
         });
     });
 
@@ -203,10 +218,27 @@ function wireEvents(container) {
         });
     });
 
-    // Delete responsibility
+    // Delete responsibility — button-swap confirmation
     container.querySelectorAll('[data-del-resp]').forEach(btn => {
         btn.addEventListener('click', () => {
-            deleteResponsibility(parseInt(btn.dataset.ci), parseInt(btn.dataset.ri));
+            const ci = parseInt(btn.dataset.ci);
+            const ri = parseInt(btn.dataset.ri);
+            btn.style.display = 'none';
+            const confirmSpan = document.createElement('span');
+            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+            const label = document.createElement('span');
+            label.textContent = 'Sure?';
+            label.style.fontSize = '0.85rem';
+            const yesBtn = document.createElement('button');
+            yesBtn.className = 'btn btn-danger btn-sm';
+            yesBtn.textContent = 'Yes';
+            yesBtn.addEventListener('click', () => deleteResponsibility(ci, ri));
+            const noBtn = document.createElement('button');
+            noBtn.className = 'btn btn-secondary btn-sm';
+            noBtn.textContent = 'No';
+            noBtn.addEventListener('click', () => { confirmSpan.remove(); btn.style.display = ''; });
+            confirmSpan.append(label, yesBtn, noBtn);
+            btn.insertAdjacentElement('afterend', confirmSpan);
         });
     });
 
@@ -295,24 +327,49 @@ function wireEvents(container) {
     });
 }
 
-// ── category actions ─────────────────────────────────────────────
-async function addCategory() {
-    const name = prompt('Category name:');
-    if (!name || !name.trim()) return;
+// ── add category modal ───────────────────────────────────────────
+function openAddCatModal() {
+    document.getElementById('add-cat-name').value = '';
+    document.getElementById('add-cat-error').style.display = 'none';
+    document.getElementById('add-cat-modal').style.display = 'flex';
+    document.getElementById('add-cat-name').focus();
+}
+
+function closeAddCatModal() {
+    document.getElementById('add-cat-modal').style.display = '';
+}
+
+async function saveAddCatModal() {
+    const name = document.getElementById('add-cat-name').value.trim();
+    const errorEl = document.getElementById('add-cat-error');
+    errorEl.style.display = 'none';
+
+    if (!name) {
+        errorEl.textContent = 'Name is required.';
+        errorEl.style.display = '';
+        document.getElementById('add-cat-name').focus();
+        return;
+    }
     try {
         const res = await fetch(`${API}/categories`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name.trim() }),
+            body: JSON.stringify({ name }),
         });
         if (!res.ok) throw new Error(await res.text());
         const cat = await res.json();
         categories.push(cat);
         buildLeaderFilter();
         render();
+        closeAddCatModal();
     } catch (e) {
         showError('Failed to add category: ' + e.message);
     }
+}
+
+// ── category actions ─────────────────────────────────────────────
+function addCategory() {
+    openAddCatModal();
 }
 
 function startRenameCategory(ci) {
@@ -353,16 +410,15 @@ function startRenameCategory(ci) {
 
 async function deleteCategory(ci) {
     const cat = categories[ci];
-    if (!confirm(`Delete category "${cat.name}" and all its responsibilities?`)) return;
     try {
         const res = await fetch(`${API}/categories/${cat.id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error(await res.text());
         categories.splice(ci, 1);
         buildLeaderFilter();
-        render();
     } catch (e) {
         showError('Failed to delete category: ' + e.message);
     }
+    render();
 }
 
 async function saveCategoryOrder() {
@@ -386,6 +442,7 @@ function openRespModal(ci, ri) {
 
     const isEdit = ri !== null;
     document.getElementById('resp-modal-title').textContent = isEdit ? 'Edit Responsibility' : 'Add Responsibility';
+    document.getElementById('resp-name-error').style.display = 'none';
 
     if (isEdit) {
         const rp = categories[ci].responsibilities[ri];
@@ -403,7 +460,8 @@ function openRespModal(ci, ri) {
 }
 
 function closeRespModal() {
-    document.getElementById('resp-modal').style.display = 'none';
+    document.getElementById('resp-modal').style.display = '';
+    document.getElementById('resp-name-error').style.display = 'none';
     respModalCatIdx = null;
     respModalRespIdx = null;
 }
@@ -412,8 +470,16 @@ async function saveRespModal() {
     const name = document.getElementById('resp-name').value.trim();
     const description = document.getElementById('resp-desc').value.trim();
     const frequency = document.getElementById('resp-freq').value;
+    const nameErrorEl = document.getElementById('resp-name-error');
 
-    if (!name) { alert('Name is required.'); return; }
+    nameErrorEl.style.display = 'none';
+
+    if (!name) {
+        nameErrorEl.textContent = 'Name is required.';
+        nameErrorEl.style.display = '';
+        document.getElementById('resp-name').focus();
+        return;
+    }
 
     const ci = respModalCatIdx;
     const ri = respModalRespIdx;
@@ -452,16 +518,15 @@ async function saveRespModal() {
 
 async function deleteResponsibility(ci, ri) {
     const rp = categories[ci].responsibilities[ri];
-    if (!confirm(`Delete responsibility "${rp.name}"?`)) return;
     try {
         const res = await fetch(`${API}/responsibilities/${rp.id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error(await res.text());
         categories[ci].responsibilities.splice(ri, 1);
         buildLeaderFilter();
-        render();
     } catch (e) {
         showError('Failed to delete responsibility: ' + e.message);
     }
+    render();
 }
 
 async function saveRespOrder(ci) {
@@ -493,7 +558,7 @@ function openAssigneeModal(ci, ri) {
 }
 
 function closeAssigneeModal() {
-    document.getElementById('assignee-modal').style.display = 'none';
+    document.getElementById('assignee-modal').style.display = '';
     assigneeModalCatIdx = null;
     assigneeModalRespIdx = null;
 }
@@ -562,6 +627,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add category button
     const btnAddCat = document.getElementById('btn-add-category');
     if (btnAddCat) btnAddCat.addEventListener('click', addCategory);
+
+    // Add category modal
+    document.getElementById('add-cat-save').addEventListener('click', saveAddCatModal);
+    document.getElementById('add-cat-cancel').addEventListener('click', closeAddCatModal);
+    document.getElementById('add-cat-modal').addEventListener('click', e => {
+        if (e.target.id === 'add-cat-modal') closeAddCatModal();
+    });
+    document.getElementById('add-cat-name').addEventListener('keydown', e => {
+        if (e.key === 'Enter') saveAddCatModal();
+        if (e.key === 'Escape') closeAddCatModal();
+    });
 
     // Resp modal buttons
     document.getElementById('resp-modal-cancel').addEventListener('click', closeRespModal);
