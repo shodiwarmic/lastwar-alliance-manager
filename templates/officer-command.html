@@ -34,14 +34,33 @@
 
     <div id="oc-categories"></div>
 </div>
+{{end}}
+
+{{define "modals"}}
+<!-- Add Category Modal -->
+<div id="add-cat-modal" class="modal">
+    <div class="modal-content">
+        <h2>Add Category</h2>
+        <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="add-cat-name" class="form-input" placeholder="e.g. Combat Operations">
+            <p id="add-cat-error" style="color:var(--danger);display:none;margin-top:0.25rem;font-size:0.875rem;"></p>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="add-cat-cancel">Cancel</button>
+            <button class="btn btn-primary" id="add-cat-save">Save</button>
+        </div>
+    </div>
+</div>
 
 <!-- Responsibility Modal -->
-<div id="resp-modal" class="modal" style="display:none;">
+<div id="resp-modal" class="modal">
     <div class="modal-content">
         <h2 id="resp-modal-title">Add Responsibility</h2>
         <div class="form-group">
             <label>Name</label>
             <input type="text" id="resp-name" class="form-input" placeholder="e.g. Member Recruiting">
+            <p id="resp-name-error" style="color:var(--danger);display:none;margin-top:0.25rem;font-size:0.875rem;"></p>
         </div>
         <div class="form-group">
             <label>Description</label>
@@ -63,7 +82,7 @@
 </div>
 
 <!-- Assignee Picker Modal -->
-<div id="assignee-modal" class="modal" style="display:none;">
+<div id="assignee-modal" class="modal">
     <div class="modal-content">
         <h2>Add Assignee</h2>
         <div class="form-group">
