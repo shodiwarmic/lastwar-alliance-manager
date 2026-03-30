@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accept Invite - Last War Alliance Manager</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/invite.css">
+</head>
+<body>
+    <div id="csrf-container" style="display:none;">
+        {{.CSRFToken}}
+    </div>
+
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <h1>🎮 Last War</h1>
+                <p>Alliance Manager — Accept Invite</p>
+            </div>
+
+            <div class="login-form">
+                {{if .Error}}
+                <div class="invite-error-state">
+                    <p class="invite-error-icon">🔗</p>
+                    <h2>Invite Link Invalid</h2>
+                    <p>{{.Error}}</p>
+                    <a href="/login" class="login-btn" style="display:block;text-align:center;text-decoration:none;margin-top:20px;">Go to Login</a>
+                </div>
+                {{else}}
+                <div id="server-error" class="error-message"></div>
+
+                <p class="invite-member-label">You've been invited as: <strong>{{.MemberName}}</strong></p>
+
+                <form id="invite-form">
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username" value="{{.DefaultUsername}}"
+                            required minlength="3" maxlength="30"
+                            pattern="[a-zA-Z0-9._\-]+"
+                            autocomplete="username">
+                        <div id="username-error" class="field-hint error-hint" style="display:none;"></div>
+                        <div class="field-hint">Letters, numbers, <code>.</code> <code>_</code> <code>-</code> only &mdash; 3 to 30 characters</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required autocomplete="new-password">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm-password">Confirm Password:</label>
+                        <input type="password" id="confirm-password" name="confirm_password" required autocomplete="new-password">
+                        <div id="match-status" style="margin-top:5px;font-size:0.85em;font-weight:bold;display:none;"></div>
+                    </div>
+
+                    <ul class="password-rules" id="password-rules">
+                        <li data-rule="length">Minimum {{.PwdMinLength}} characters</li>
+                        {{if .PwdRequireUpper}}<li data-rule="upper">Uppercase letter required</li>{{end}}
+                        {{if .PwdRequireLower}}<li data-rule="lower">Lowercase letter required</li>{{end}}
+                        {{if .PwdRequireNumber}}<li data-rule="number">Number required</li>{{end}}
+                        {{if .PwdRequireSpecial}}<li data-rule="special">Special character required</li>{{end}}
+                    </ul>
+
+                    <button type="submit" class="login-btn" id="submit-btn" disabled style="opacity:0.6;cursor:not-allowed;">
+                        Create Account &amp; Log In
+                    </button>
+                </form>
+                {{end}}
+            </div>
+        </div>
+    </div>
+
+    <script src="/csrf.js"></script>
+    <script>
+        window.PWD_MIN_LENGTH = {{.PwdMinLength}};
+        window.PWD_REQUIRE_UPPER = {{if .PwdRequireUpper}}true{{else}}false{{end}};
+        window.PWD_REQUIRE_LOWER = {{if .PwdRequireLower}}true{{else}}false{{end}};
+        window.PWD_REQUIRE_NUMBER = {{if .PwdRequireNumber}}true{{else}}false{{end}};
+        window.PWD_REQUIRE_SPECIAL = {{if .PwdRequireSpecial}}true{{else}}false{{end}};
+    </script>
+    <script src="/invite.js"></script>
+</body>
+</html>

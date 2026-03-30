@@ -457,11 +457,11 @@ function buildMemberCard(member) {
         }
 
         if (isR5OrAdmin && !member.has_user) {
-            const createUserBtn = document.createElement('button');
-            createUserBtn.className = 'create-user-btn';
-            createUserBtn.textContent = 'Create User';
-            createUserBtn.addEventListener('click', () => createUserForMember(member.id, member.name, actions, createUserBtn));
-            actions.appendChild(createUserBtn);
+            const inviteUserBtn = document.createElement('button');
+            inviteUserBtn.className = 'invite-user-btn';
+            inviteUserBtn.textContent = 'Invite User';
+            inviteUserBtn.addEventListener('click', () => inviteUserForMember(member.id, member.name, actions, inviteUserBtn));
+            actions.appendChild(inviteUserBtn);
         }
 
         if (permissions.manage_train) {
@@ -694,12 +694,26 @@ window.toggleEligible = function (id, currentStatus, actionsContainer, toggleBtn
     actionsContainer.appendChild(confirmSpan);
 };
 
-window.createUserForMember = function (memberId, memberName, actionsContainer, createBtn) {
-    createBtn.style.display = 'none';
+function fallbackCopy(text, onSuccess) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+        if (document.execCommand('copy')) onSuccess();
+    } finally {
+        document.body.removeChild(ta);
+    }
+}
+
+window.inviteUserForMember = function (memberId, memberName, actionsContainer, inviteBtn) {
+    inviteBtn.style.display = 'none';
     const confirmSpan = document.createElement('span');
     confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
     const label = document.createElement('span');
-    label.textContent = `Create user for ${memberName}?`;
+    label.textContent = `Send invite to ${memberName}?`;
     label.style.fontSize = '0.85rem';
     const yesBtn = document.createElement('button');
     yesBtn.className = 'btn btn-primary btn-sm';
@@ -707,46 +721,63 @@ window.createUserForMember = function (memberId, memberName, actionsContainer, c
     yesBtn.addEventListener('click', async () => {
         confirmSpan.remove();
         try {
-            const response = await fetch(`${API_URL}/${memberId}/create-user`, { method: 'POST' });
+            const response = await fetch(`${API_URL}/${memberId}/invite`, { method: 'POST' });
             if (!response.ok) {
                 const errText = await response.text();
                 throw new Error(errText);
             }
             const result = await response.json();
-            // Show credentials inline — password is only shown once
-            const credBox = document.createElement('div');
-            credBox.style.cssText = 'display:flex;flex-direction:column;gap:4px;font-size:0.85rem;padding:8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;max-width:260px;';
-            const line1 = document.createElement('span');
-            line1.textContent = `Username: ${result.username}`;
-            const line2 = document.createElement('span');
-            line2.style.fontWeight = 'bold';
-            line2.textContent = `Password: ${result.password}`;
-            const warn = document.createElement('span');
-            warn.style.cssText = 'color:var(--warning-color,#f6ad55);font-size:0.8rem;';
-            warn.textContent = '⚠️ Save this password — it won\'t be shown again.';
+            const inviteBox = document.createElement('div');
+            inviteBox.style.cssText = 'display:flex;flex-direction:column;gap:6px;font-size:0.85rem;padding:10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;max-width:320px;';
+            const heading = document.createElement('span');
+            heading.style.fontWeight = 'bold';
+            heading.textContent = 'Invite link (valid 48h):';
+            const linkRow = document.createElement('div');
+            linkRow.style.cssText = 'display:flex;gap:6px;align-items:center;';
+            const linkAnchor = document.createElement('a');
+            linkAnchor.href = result.invite_url;
+            linkAnchor.textContent = window.location.origin + result.invite_url;
+            linkAnchor.style.cssText = 'font-size:0.8rem;word-break:break-all;';
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'btn btn-secondary btn-sm';
+            copyBtn.textContent = 'Copy';
+            copyBtn.style.flexShrink = '0';
+            copyBtn.addEventListener('click', () => {
+                const fullURL = window.location.origin + result.invite_url;
+                const onSuccess = () => {
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+                };
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(fullURL).then(onSuccess).catch(() => fallbackCopy(fullURL, onSuccess));
+                } else {
+                    fallbackCopy(fullURL, onSuccess);
+                }
+            });
+            linkRow.append(linkAnchor, copyBtn);
             const dismissBtn = document.createElement('button');
             dismissBtn.className = 'btn btn-secondary btn-sm';
             dismissBtn.textContent = 'Dismiss';
             dismissBtn.addEventListener('click', async () => {
-                credBox.remove();
+                inviteBox.remove();
                 await loadMembers();
             });
-            credBox.append(line1, line2, warn, dismissBtn);
-            actionsContainer.appendChild(credBox);
+            inviteBox.append(heading, linkRow, dismissBtn);
+            actionsContainer.appendChild(inviteBox);
         } catch (error) {
-            console.error('Error creating user:', error);
+            console.error('Error generating invite:', error);
             const errSpan = document.createElement('span');
             errSpan.style.cssText = 'color:var(--danger-color);font-size:0.85rem;';
-            errSpan.textContent = 'Failed to create user.';
+            errSpan.textContent = error.message || 'Failed to generate invite.';
             actionsContainer.appendChild(errSpan);
-            createBtn.style.display = '';
+            inviteBtn.style.display = '';
             setTimeout(() => { errSpan.remove(); }, 4000);
         }
     });
     const noBtn = document.createElement('button');
     noBtn.className = 'btn btn-secondary btn-sm';
     noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); createBtn.style.display = ''; });
+    noBtn.addEventListener('click', () => { confirmSpan.remove(); inviteBtn.style.display = ''; });
     confirmSpan.append(label, yesBtn, noBtn);
     actionsContainer.appendChild(confirmSpan);
 };

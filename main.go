@@ -104,7 +104,9 @@ func main() {
 	router.HandleFunc("/api/logout", logout).Methods("POST")
 	router.HandleFunc("/api/check-auth", checkAuth).Methods("GET")
 	router.HandleFunc("/api/change-password", authMiddleware(changePassword)).Methods("POST")
-	router.HandleFunc("/api/members/{id}/create-user", authMiddleware(requirePermission("manage_settings", createUserForMember))).Methods("POST")
+	router.HandleFunc("/api/members/{id}/invite", authMiddleware(requirePermission("manage_members", generateInvite))).Methods("POST")
+	router.HandleFunc("/invite/{token}", showInvitePage).Methods("GET")
+	router.HandleFunc("/invite/{token}", claimInvite).Methods("POST")
 
 	// Admin routes (admin only)
 	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(getAdminUsers))).Methods("GET")

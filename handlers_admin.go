@@ -408,65 +408,6 @@ func getLoginHistory(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(history)
 }
 
-// Create user for member
-func createUserForMember(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	memberID, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		http.Error(w, "Invalid member ID", http.StatusBadRequest)
-		return
-	}
-
-	var memberName string
-	err = db.QueryRow("SELECT name FROM members WHERE id = ?", memberID).Scan(&memberName)
-	if err != nil {
-		http.Error(w, "Member not found", http.StatusNotFound)
-		return
-	}
-
-	var existingUserID int
-	err = db.QueryRow("SELECT id FROM users WHERE member_id = ?", memberID).Scan(&existingUserID)
-	if err == nil {
-		http.Error(w, "User already exists for this member", http.StatusConflict)
-		return
-	}
-
-	randomPassword, err := generateRandomPassword(10)
-	if err != nil {
-		http.Error(w, "Failed to generate password", http.StatusInternalServerError)
-		return
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(randomPassword), bcrypt.DefaultCost)
-	if err != nil {
-		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
-		return
-	}
-
-	username := strings.ToLower(strings.ReplaceAll(memberName, " ", ""))
-
-	var existingUsername string
-	err = db.QueryRow("SELECT username FROM users WHERE username = ?", username).Scan(&existingUsername)
-	if err == nil {
-		username = username + strconv.Itoa(memberID)
-	}
-
-	_, err = db.Exec("INSERT INTO users (username, password, member_id, is_admin) VALUES (?, ?, ?, ?)",
-		username, string(hashedPassword), memberID, false)
-	if err != nil {
-		slog.Error("failed to create user for member", "error", err, "memberID", memberID)
-		http.Error(w, "Failed to create user", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":  "User created successfully",
-		"username": username,
-		"password": randomPassword,
-	})
-}
-
 // --- SETTINGS MANAGEMENT ---
 
 func getSettings(w http.ResponseWriter, r *http.Request) {
