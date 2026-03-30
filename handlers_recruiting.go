@@ -11,14 +11,19 @@ import (
 	"github.com/gorilla/mux"
 )
 
+var validSeatColors = map[string]bool{
+	"": true, "gold": true, "purple": true, "blue": true, "grey": true,
+}
+
 func getProspects(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT
 			p.id, p.name, p.server, p.source_alliance,
 			p.power, p.rank_in_alliance,
 			p.recruiter_id, COALESCE(m.name, '') as recruiter_name,
-			p.status, p.notes, p.first_contacted,
-			p.created_at, p.updated_at
+			p.status, p.notes,
+			p.hero_power, p.seat_color, p.interested_in_r4,
+			p.first_contacted, p.created_at, p.updated_at
 		FROM prospects p
 		LEFT JOIN members m ON m.id = p.recruiter_id
 		ORDER BY p.name
@@ -39,8 +44,9 @@ func getProspects(w http.ResponseWriter, r *http.Request) {
 			&p.ID, &p.Name, &p.Server, &p.SourceAlliance,
 			&p.Power, &p.RankInAlliance,
 			&p.RecruiterID, &p.RecruiterName,
-			&p.Status, &p.Notes, &p.FirstContacted,
-			&p.CreatedAt, &p.UpdatedAt,
+			&p.Status, &p.Notes,
+			&p.HeroPower, &p.SeatColor, &p.InterestedInR4,
+			&p.FirstContacted, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			slog.Error("Failed to scan prospect row", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -65,14 +71,25 @@ func createProspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validProspectStatus(p.Status) {
-		http.Error(w, "Status must be interested, pending, or declined", http.StatusBadRequest)
+		http.Error(w, "Invalid status value", http.StatusBadRequest)
+		return
+	}
+	if !validSeatColors[p.SeatColor] {
+		http.Error(w, "seat_color must be one of: gold, purple, blue, grey, or empty", http.StatusBadRequest)
 		return
 	}
 
 	result, err := db.Exec(`
-		INSERT INTO prospects (name, server, source_alliance, power, rank_in_alliance, recruiter_id, status, notes, first_contacted)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.Server, p.SourceAlliance, p.Power, p.RankInAlliance, p.RecruiterID, p.Status, p.Notes, p.FirstContacted,
+		INSERT INTO prospects
+			(name, server, source_alliance, power, rank_in_alliance,
+			 recruiter_id, status, notes,
+			 hero_power, seat_color, interested_in_r4,
+			 first_contacted)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.Server, p.SourceAlliance, p.Power, p.RankInAlliance,
+		p.RecruiterID, p.Status, p.Notes,
+		p.HeroPower, p.SeatColor, p.InterestedInR4,
+		p.FirstContacted,
 	)
 	if err != nil {
 		slog.Error("Failed to create prospect", "error", err)
@@ -83,7 +100,6 @@ func createProspect(w http.ResponseWriter, r *http.Request) {
 	id, _ := result.LastInsertId()
 	p.ID = int(id)
 
-	// Fetch recruiter name if set
 	if p.RecruiterID != nil {
 		db.QueryRow("SELECT name FROM members WHERE id = ?", *p.RecruiterID).Scan(&p.RecruiterName)
 	}
@@ -112,18 +128,25 @@ func updateProspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validProspectStatus(p.Status) {
-		http.Error(w, "Status must be interested, pending, or declined", http.StatusBadRequest)
+		http.Error(w, "Invalid status value", http.StatusBadRequest)
+		return
+	}
+	if !validSeatColors[p.SeatColor] {
+		http.Error(w, "seat_color must be one of: gold, purple, blue, grey, or empty", http.StatusBadRequest)
 		return
 	}
 
 	result, err := db.Exec(`
 		UPDATE prospects
 		SET name=?, server=?, source_alliance=?, power=?, rank_in_alliance=?,
-		    recruiter_id=?, status=?, notes=?, first_contacted=?,
-		    updated_at=CURRENT_TIMESTAMP
+		    recruiter_id=?, status=?, notes=?,
+		    hero_power=?, seat_color=?, interested_in_r4=?,
+		    first_contacted=?, updated_at=CURRENT_TIMESTAMP
 		WHERE id=?`,
 		p.Name, p.Server, p.SourceAlliance, p.Power, p.RankInAlliance,
-		p.RecruiterID, p.Status, p.Notes, p.FirstContacted, id,
+		p.RecruiterID, p.Status, p.Notes,
+		p.HeroPower, p.SeatColor, p.InterestedInR4,
+		p.FirstContacted, id,
 	)
 	if err != nil {
 		slog.Error("Failed to update prospect", "prospect_id", id, "error", err)
@@ -171,5 +194,9 @@ func deleteProspect(w http.ResponseWriter, r *http.Request) {
 }
 
 func validProspectStatus(status string) bool {
-	return status == "interested" || status == "pending" || status == "declined"
+	switch status {
+	case "interested", "pending", "declined", "qualified_transfer", "unqualified_transfer":
+		return true
+	}
+	return false
 }

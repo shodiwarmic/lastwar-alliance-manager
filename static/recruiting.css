@@ -119,6 +119,16 @@
     color: #fc8181;
 }
 
+.status-qualified_transfer {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+.status-unqualified_transfer {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
 /* ── Prospect Details ─────────────────────────────────────────────────────── */
 
 .prospect-details {
@@ -150,6 +160,88 @@
     gap: 6px;
     flex-wrap: wrap;
     margin-top: auto;
+}
+
+/* ── Seat Color Dots ──────────────────────────────────────────────────────── */
+
+.seat-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+.seat-gold   { background: #f1c40f; }
+.seat-purple { background: #9b59b6; }
+.seat-blue   { background: #3498db; }
+.seat-grey   { background: #95a5a6; }
+
+/* ── R4 Badge ─────────────────────────────────────────────────────────────── */
+
+.r4-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(159, 122, 234, 0.2);
+    color: #9f7aea;
+}
+
+/* ── Recruiting Capacity Header ───────────────────────────────────────────── */
+
+.capacity-bar {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+}
+
+.capacity-line {
+    margin: 0 0 4px;
+    font-size: 1rem;
+}
+
+.open-spots {
+    margin-left: 16px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.req-label {
+    margin: 8px 0 2px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.req-text {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-color);
+    white-space: pre-wrap;
+}
+
+/* ── Checkbox Label ───────────────────────────────────────────────────────── */
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.optional {
+    font-size: 0.8em;
+    font-weight: normal;
+    color: var(--text-secondary);
 }
 
 /* ── Empty / Loading states ────────────────────────────────────────────────── */

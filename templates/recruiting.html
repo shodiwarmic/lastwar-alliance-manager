@@ -1,6 +1,6 @@
 {{define "header_text"}}
     <h1>🎯 Recruiting</h1>
-    <h2>Former Members &amp; Prospects</h2>
+    <h2>Prospects &amp; Former Members</h2>
 {{end}}
 
 {{define "head_tags"}}
@@ -10,31 +10,19 @@
 {{define "content"}}
 <div id="recruiting-page">
 
-    <!-- Tab Bar -->
+    <!-- Capacity Header (populated by JS) -->
+    <div id="recruiting-header"></div>
+
+    <!-- Tab Bar — Prospects first, Former Members second -->
     <div class="tab-bar">
+        <button class="tab-btn active" data-tab="prospects">Prospects</button>
         {{if .Permissions.ManageMembers}}
-        <button class="tab-btn active" data-tab="former">Former Members</button>
+        <button class="tab-btn" data-tab="former">Former Members</button>
         {{end}}
-        <button class="tab-btn {{if not .Permissions.ManageMembers}}active{{end}}" data-tab="prospects">Prospects</button>
     </div>
 
-    {{if .Permissions.ManageMembers}}
-    <!-- Former Members Tab -->
-    <div id="tab-former" class="tab-content">
-        <div class="action-bar" style="margin-bottom: 20px;">
-            <p class="help-text" style="margin: 0; color: var(--text-secondary);">
-                Archived members. Their train logs, VS points, and power history are preserved.
-                Use <strong>Reactivate</strong> to restore them with an active rank.
-            </p>
-        </div>
-        <div id="former-members-list">
-            <p class="loading">Loading former members...</p>
-        </div>
-    </div>
-    {{end}}
-
-    <!-- Prospects Tab -->
-    <div id="tab-prospects" class="tab-content" style="display: none;">
+    <!-- Prospects Tab (default active) -->
+    <div id="tab-prospects" class="tab-content">
         {{if .Permissions.ManageRecruiting}}
         <div class="action-bar" style="margin-bottom: 20px;">
             <button type="button" id="add-prospect-btn" class="primary-action-btn">
@@ -47,6 +35,21 @@
             <p class="loading">Loading prospects...</p>
         </div>
     </div>
+
+    {{if .Permissions.ManageMembers}}
+    <!-- Former Members Tab -->
+    <div id="tab-former" class="tab-content" style="display: none;">
+        <div class="action-bar" style="margin-bottom: 20px;">
+            <p class="help-text" style="margin: 0; color: var(--text-secondary);">
+                Archived members. Their train logs, VS points, and power history are preserved.
+                Use <strong>Reactivate</strong> to restore them with an active rank.
+            </p>
+        </div>
+        <div id="former-members-list">
+            <p class="loading">Loading former members...</p>
+        </div>
+    </div>
+    {{end}}
 
 </div>
 {{end}}
@@ -93,6 +96,8 @@
                             <option value="interested">Interested</option>
                             <option value="pending">Pending</option>
                             <option value="declined">Declined</option>
+                            <option value="qualified_transfer">Qualified for Transfer</option>
+                            <option value="unqualified_transfer">Unqualified for Transfer</option>
                         </select>
                     </div>
                 </div>
@@ -135,6 +140,30 @@
                 <div class="form-group">
                     <label for="prospect-notes">Notes:</label>
                     <textarea id="prospect-notes" class="form-input" rows="3" placeholder="Recruiting notes..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="prospect-hero-power">Hero Power <span class="optional">(optional)</span></label>
+                        <input type="number" id="prospect-hero-power" class="form-input" min="0" placeholder="e.g. 1200000">
+                    </div>
+                    <div class="form-group">
+                        <label for="prospect-seat-color">Seat Color:</label>
+                        <select id="prospect-seat-color" class="form-input">
+                            <option value="">Unknown</option>
+                            <option value="gold">Gold</option>
+                            <option value="purple">Purple</option>
+                            <option value="blue">Blue</option>
+                            <option value="grey">White / Grey</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="prospect-interested-r4">
+                        Interested in R4 position
+                    </label>
                 </div>
 
                 <div class="modal-actions">

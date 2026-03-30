@@ -621,6 +621,8 @@ window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedA
 
 async function archiveMember(id, name, actionsContainer, archiveBtn) {
     archiveBtn.style.display = 'none';
+
+    // Step 1: "Archive?" confirm
     const confirmSpan = document.createElement('span');
     confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
     const label = document.createElement('span');
@@ -629,19 +631,48 @@ async function archiveMember(id, name, actionsContainer, archiveBtn) {
     const yesBtn = document.createElement('button');
     yesBtn.className = 'btn btn-danger btn-sm';
     yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        try {
-            const response = await fetch(`${API_URL}/${id}/archive`, { method: 'PUT' });
-            if (!response.ok) throw new Error('Failed to archive member');
-            await loadMembers();
-        } catch (error) {
-            console.error('Error archiving member:', error);
-            const msg = document.createElement('span');
-            msg.style.cssText = 'color:var(--danger-color);font-size:0.85rem;';
-            msg.textContent = 'Failed to archive.';
-            confirmSpan.replaceWith(msg);
-            archiveBtn.style.display = '';
+    yesBtn.addEventListener('click', () => {
+        confirmSpan.remove();
+
+        // Step 2: optional reason input
+        const reasonSpan = document.createElement('span');
+        reasonSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;';
+        const reasonInput = document.createElement('input');
+        reasonInput.type = 'text';
+        reasonInput.placeholder = 'Reason for leaving (optional)';
+        reasonInput.style.cssText = 'font-size:0.85rem;padding:3px 6px;border:1px solid var(--border-color);border-radius:4px;min-width:180px;';
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'btn btn-danger btn-sm';
+        confirmBtn.textContent = 'Confirm';
+        const skipBtn = document.createElement('button');
+        skipBtn.className = 'btn btn-secondary btn-sm';
+        skipBtn.textContent = 'Skip';
+
+        async function doArchive(leaveReason) {
+            try {
+                const response = await fetch(`${API_URL}/${id}/archive`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ leave_reason: leaveReason }),
+                });
+                if (!response.ok) throw new Error('Failed to archive member');
+                await loadMembers();
+            } catch (error) {
+                console.error('Error archiving member:', error);
+                reasonSpan.remove();
+                const msg = document.createElement('span');
+                msg.style.cssText = 'color:var(--danger-color);font-size:0.85rem;';
+                msg.textContent = 'Failed to archive.';
+                actionsContainer.appendChild(msg);
+                archiveBtn.style.display = '';
+            }
         }
+
+        confirmBtn.addEventListener('click', () => doArchive(reasonInput.value.trim()));
+        skipBtn.addEventListener('click', () => doArchive(''));
+
+        reasonSpan.append(reasonInput, confirmBtn, skipBtn);
+        actionsContainer.appendChild(reasonSpan);
     });
     const noBtn = document.createElement('button');
     noBtn.className = 'btn btn-secondary btn-sm';

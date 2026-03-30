@@ -241,7 +241,15 @@ func archiveMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.Exec("UPDATE members SET rank = 'EX', eligible = 0 WHERE id = ? AND rank != 'EX'", id)
+	var req struct {
+		LeaveReason string `json:"leave_reason"`
+	}
+	json.NewDecoder(r.Body).Decode(&req) // soft decode — field is optional
+
+	result, err := db.Exec(
+		"UPDATE members SET rank = 'EX', eligible = 0, leave_reason = ? WHERE id = ? AND rank != 'EX'",
+		req.LeaveReason, id,
+	)
 	if err != nil {
 		slog.Error("Failed to archive member", "member_id", id, "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -306,7 +314,8 @@ func getFormerMembers(w http.ResponseWriter, r *http.Request) {
 				ORDER BY recorded_at DESC LIMIT 1
 			), 0) as last_power,
 			COUNT(DISTINCT tl.id) as train_count,
-			COALESCE(MAX(vp.week_date), '') as last_vs_week
+			COALESCE(MAX(vp.week_date), '') as last_vs_week,
+			m.leave_reason
 		FROM members m
 		LEFT JOIN train_logs tl ON tl.conductor_id = m.id
 		LEFT JOIN vs_points vp ON vp.member_id = m.id
@@ -326,7 +335,7 @@ func getFormerMembers(w http.ResponseWriter, r *http.Request) {
 	members := []FormerMember{}
 	for rows.Next() {
 		var fm FormerMember
-		if err := rows.Scan(&fm.ID, &fm.Name, &fm.LastPower, &fm.TrainCount, &fm.LastVSWeek); err != nil {
+		if err := rows.Scan(&fm.ID, &fm.Name, &fm.LastPower, &fm.TrainCount, &fm.LastVSWeek, &fm.LeaveReason); err != nil {
 			slog.Error("Failed to scan former member row", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return

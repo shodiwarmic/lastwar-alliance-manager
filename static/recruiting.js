@@ -5,7 +5,7 @@ const CAN_MANAGE_RECRUITING = window.CAN_MANAGE_RECRUITING === true;
 const IS_ADMIN = window.IS_ADMIN === true;
 const HAS_FORMER_TAB = window.HAS_FORMER_TAB === true;
 
-let allMembers = [];        // for recruiter dropdown
+let allMembers = [];        // for recruiter dropdown and capacity header
 let editingProspectId = null;
 let reactivatingMemberId = null;
 
@@ -28,6 +28,42 @@ function setupTabs() {
         const target = document.getElementById('tab-' + activeBtn.dataset.tab);
         if (target) target.style.display = 'block';
     }
+}
+
+// ── Capacity Header ───────────────────────────────────────────────────────────
+
+function renderCapacityHeader(settings) {
+    const headerEl = document.getElementById('recruiting-header');
+    if (!headerEl) return;
+
+    const activeMemberCount = allMembers.filter(m => m.rank !== 'EX').length;
+    const maxMembers = settings.alliance_max_members || 100;
+    const openSpots = Math.max(0, maxMembers - activeMemberCount);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'capacity-bar';
+
+    const capacityLine = document.createElement('p');
+    capacityLine.className = 'capacity-line';
+    const strong = document.createElement('strong');
+    strong.textContent = `Alliance Capacity: ${activeMemberCount} / ${maxMembers}`;
+    const spotsSpan = document.createElement('span');
+    spotsSpan.className = 'open-spots';
+    spotsSpan.textContent = `  Open Spots: ${openSpots}`;
+    capacityLine.append(strong, spotsSpan);
+    wrapper.appendChild(capacityLine);
+
+    if (settings.join_requirements) {
+        const reqLabel = document.createElement('p');
+        reqLabel.className = 'req-label';
+        reqLabel.textContent = 'Join Requirements:';
+        const reqText = document.createElement('p');
+        reqText.className = 'req-text';
+        reqText.textContent = settings.join_requirements;
+        wrapper.append(reqLabel, reqText);
+    }
+
+    headerEl.replaceChildren(wrapper);
 }
 
 // ── Former Members ────────────────────────────────────────────────────────────
@@ -64,7 +100,7 @@ function renderFormerMembers(members, container) {
 
     const thead = table.createTHead();
     const hr = thead.insertRow();
-    ['Name', 'Last Power', 'Train Runs', 'Last VS Week', ''].forEach(h => {
+    ['Name', 'Last Power', 'Train Runs', 'Last VS Week', 'Reason', ''].forEach(h => {
         const th = document.createElement('th');
         th.textContent = h;
         hr.appendChild(th);
@@ -85,6 +121,9 @@ function renderFormerMembers(members, container) {
 
         const vsTd = tr.insertCell();
         vsTd.textContent = m.last_vs_week || '—';
+
+        const reasonTd = tr.insertCell();
+        reasonTd.textContent = m.leave_reason || '—';
 
         const actionsTd = tr.insertCell();
         actionsTd.className = 'actions-cell';
@@ -185,6 +224,14 @@ function renderProspects(prospects, container) {
     container.replaceChildren(...cards);
 }
 
+const STATUS_LABELS = {
+    interested:            'Interested',
+    pending:               'Pending',
+    declined:              'Declined',
+    qualified_transfer:    'Qualified Transfer',
+    unqualified_transfer:  'Unqualified Transfer',
+};
+
 function buildProspectCard(p) {
     const card = document.createElement('div');
     card.className = 'prospect-card';
@@ -193,14 +240,31 @@ function buildProspectCard(p) {
     const header = document.createElement('div');
     header.className = 'prospect-header';
 
+    // Seat color dot (before name)
+    if (p.seat_color) {
+        const dot = document.createElement('span');
+        dot.className = `seat-dot seat-${p.seat_color}`;
+        dot.title = p.seat_color.charAt(0).toUpperCase() + p.seat_color.slice(1) + ' seat';
+        header.appendChild(dot);
+    }
+
     const nameEl = document.createElement('span');
     nameEl.className = 'prospect-name';
     nameEl.textContent = p.name;
     header.appendChild(nameEl);
 
+    // R4 interest badge
+    if (p.interested_in_r4) {
+        const r4Badge = document.createElement('span');
+        r4Badge.className = 'r4-badge';
+        r4Badge.textContent = 'R4 ✓';
+        header.appendChild(r4Badge);
+    }
+
+    const statusLabel = STATUS_LABELS[p.status] || (p.status.charAt(0).toUpperCase() + p.status.slice(1));
     const badge = document.createElement('span');
     badge.className = `status-badge status-${p.status}`;
-    badge.textContent = p.status.charAt(0).toUpperCase() + p.status.slice(1);
+    badge.textContent = statusLabel;
     header.appendChild(badge);
 
     card.appendChild(header);
@@ -213,6 +277,7 @@ function buildProspectCard(p) {
     if (p.server) detailItems.push(['Server', p.server]);
     if (p.source_alliance) detailItems.push(['Alliance', p.source_alliance]);
     if (p.power) detailItems.push(['Power', formatPower(p.power)]);
+    if (p.hero_power != null) detailItems.push(['Hero Power', formatPower(p.hero_power)]);
     if (p.rank_in_alliance) detailItems.push(['Rank', p.rank_in_alliance]);
     if (p.recruiter_name) detailItems.push(['Recruiter', p.recruiter_name]);
     if (p.first_contacted) detailItems.push(['Contacted', p.first_contacted]);
@@ -304,6 +369,9 @@ function openProspectModal(prospect = null) {
     document.getElementById('prospect-recruiter').value = (prospect && prospect.recruiter_id) ? prospect.recruiter_id : '';
     document.getElementById('prospect-contacted').value = prospect ? prospect.first_contacted : '';
     document.getElementById('prospect-notes').value = prospect ? prospect.notes : '';
+    document.getElementById('prospect-hero-power').value = (prospect && prospect.hero_power != null) ? prospect.hero_power : '';
+    document.getElementById('prospect-seat-color').value = prospect ? (prospect.seat_color || '') : '';
+    document.getElementById('prospect-interested-r4').checked = prospect ? !!prospect.interested_in_r4 : false;
 
     if (title) title.textContent = prospect ? 'Edit Prospect' : 'Add Prospect';
     if (submitBtn) submitBtn.textContent = prospect ? 'Save Changes' : 'Add Prospect';
@@ -324,10 +392,18 @@ async function handleProspectSubmit(e) {
     const recruiter_id = recruiterVal !== '' ? parseInt(recruiterVal, 10) : null;
     const first_contacted = document.getElementById('prospect-contacted').value;
     const notes = document.getElementById('prospect-notes').value.trim();
+    const heroPowerVal = document.getElementById('prospect-hero-power').value;
+    const hero_power = heroPowerVal !== '' ? parseInt(heroPowerVal, 10) : null;
+    const seat_color = document.getElementById('prospect-seat-color').value;
+    const interested_in_r4 = document.getElementById('prospect-interested-r4').checked;
 
     if (!name) return;
 
-    const payload = { name, status, server, source_alliance, power, rank_in_alliance, recruiter_id, first_contacted, notes };
+    const payload = {
+        name, status, server, source_alliance, power, rank_in_alliance,
+        recruiter_id, first_contacted, notes,
+        hero_power, seat_color, interested_in_r4,
+    };
 
     try {
         let res;
@@ -368,17 +444,28 @@ async function loadMembersForRecruiter() {
         if (!res.ok) return;
         allMembers = await res.json();
         const select = document.getElementById('prospect-recruiter');
-        if (!select) return;
-        // keep the "None" option, add active members
-        const activeMembers = allMembers.filter(m => m.rank !== 'EX' && m.rank !== 'PROSPECT');
-        activeMembers.forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m.id;
-            opt.textContent = `${m.name} (${m.rank})`;
-            select.appendChild(opt);
-        });
+        if (select) {
+            const activeMembers = allMembers.filter(m => m.rank !== 'EX' && m.rank !== 'PROSPECT');
+            activeMembers.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = `${m.name} (${m.rank})`;
+                select.appendChild(opt);
+            });
+        }
     } catch (err) {
         console.error('Failed to load members for recruiter dropdown:', err);
+    }
+}
+
+async function loadSettingsForHeader() {
+    try {
+        const res = await fetch('/api/settings');
+        if (!res.ok) return;
+        const data = await res.json();
+        renderCapacityHeader(data);
+    } catch (err) {
+        console.error('Failed to load settings for header:', err);
     }
 }
 
@@ -387,13 +474,25 @@ async function loadMembersForRecruiter() {
 document.addEventListener('DOMContentLoaded', async () => {
     setupTabs();
 
+    // Prospects is default tab — load it first
+    loadProspects();
     if (HAS_FORMER_TAB) {
         loadFormerMembers();
     }
-    loadProspects();
+
+    // Members needed for both recruiter dropdown and capacity header
     if (CAN_MANAGE_RECRUITING) {
         await loadMembersForRecruiter();
+    } else {
+        // Still need allMembers for the capacity header even without manage permission
+        try {
+            const res = await fetch('/api/members');
+            if (res.ok) allMembers = await res.json();
+        } catch (_) { /* non-fatal */ }
     }
+
+    // Capacity header requires allMembers to be populated first
+    loadSettingsForHeader();
 
     // Reactivate modal
     const reactivateModal = document.getElementById('reactivate-modal');

@@ -47,13 +47,12 @@ async function loadSettings() {
         
         const settings = await response.json();
         
-        document.getElementById('award-first').value = settings.award_first_points || 3;
-        document.getElementById('award-second').value = settings.award_second_points || 2;
-        document.getElementById('award-third').value = settings.award_third_points || 1;
         document.getElementById('max-hq-level').value = settings.max_hq_level || 35;
         document.getElementById('settings-login-message').value = settings.login_message || '';
         document.getElementById('train-free-limit').value = settings.train_free_daily_limit ?? 1;
         document.getElementById('train-purchased-limit').value = settings.train_purchased_daily_limit ?? 2;
+        document.getElementById('alliance-max-members').value = settings.alliance_max_members ?? 100;
+        document.getElementById('join-requirements').value = settings.join_requirements ?? '';
 
         const minLen = document.getElementById('pwd-min-length');
         if (minLen) {
@@ -130,6 +129,16 @@ function togglePowerUploadSection(enabled) {
     if (uploadLink) uploadLink.style.display = enabled ? 'block' : 'none';
 }
 
+let _settingsStatusTimer = null;
+function showSettingsStatus(message, success) {
+    const el = document.getElementById('settings-save-status');
+    if (!el) return;
+    el.textContent = message;
+    el.style.color = success ? 'var(--color-success, #2ecc71)' : 'var(--danger-color, #e74c3c)';
+    clearTimeout(_settingsStatusTimer);
+    _settingsStatusTimer = setTimeout(() => { el.textContent = ''; }, 4000);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const settingsForm = document.getElementById('settings-form');
     
@@ -141,23 +150,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             e.preventDefault();
             
             if (!isR5OrAdmin) {
-                alert('You do not have permission to modify settings.');
+                showSettingsStatus('You do not have permission to modify settings.', false);
                 return;
             }
             
             const selectedZones = Array.from(document.querySelectorAll('.tz-checkbox:checked'))
                 .map(cb => cb.value).join(',');
     
-            // We pass placeholder 0/empty values for the dead Train settings so the Go Backend API doesn't panic
             const settings = {
-                award_first_points: parseInt(document.getElementById('award-first').value) || 0,
-                award_second_points: parseInt(document.getElementById('award-second').value) || 0,
-                award_third_points: parseInt(document.getElementById('award-third').value) || 0,
-                recent_conductor_penalty_days: 0,
-                above_average_conductor_penalty: 0,
-                r4r5_rank_boost: 0,
-                first_time_conductor_boost: 0,
-                recommendation_points: 0,
                 schedule_message_template: "",
                 daily_message_template: "",
                 login_message: document.getElementById('settings-login-message').value,
@@ -168,6 +168,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 storm_respect_dst: document.getElementById('storm_respect_dst').checked,
                 train_free_daily_limit: parseInt(document.getElementById('train-free-limit').value, 10) || 1,
                 train_purchased_daily_limit: parseInt(document.getElementById('train-purchased-limit').value, 10) || 2,
+                alliance_max_members: parseInt(document.getElementById('alliance-max-members').value, 10) || 100,
+                join_requirements: document.getElementById('join-requirements').value.trim(),
             };
 
             const newMatrix = ['R5', 'R4', 'R3', 'R2', 'R1'].map(rank => {
@@ -207,10 +209,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
                 
                 if (!response.ok) throw new Error(await response.text());
-                alert('✅ Settings saved successfully!');
+                showSettingsStatus('Settings saved successfully.', true);
             } catch (error) {
                 console.error('Error saving settings:', error);
-                alert('❌ Failed to save settings: ' + error.message);
+                showSettingsStatus('Failed to save settings.', false);
             }
         });
 

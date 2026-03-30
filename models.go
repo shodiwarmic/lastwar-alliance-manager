@@ -38,11 +38,12 @@ type Member struct {
 }
 
 type FormerMember struct {
-	ID             int    `json:"id"`
-	Name           string `json:"name"`
-	LastPower      *int64 `json:"last_power"`
-	TrainCount     int    `json:"train_count"`
-	LastVSWeek     string `json:"last_vs_week"`
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	LastPower   *int64 `json:"last_power"`
+	TrainCount  int    `json:"train_count"`
+	LastVSWeek  string `json:"last_vs_week"`
+	LeaveReason string `json:"leave_reason"`
 }
 
 type Prospect struct {
@@ -56,6 +57,9 @@ type Prospect struct {
 	RecruiterName  string `json:"recruiter_name"`
 	Status         string `json:"status"`
 	Notes          string `json:"notes"`
+	HeroPower      *int64 `json:"hero_power"`
+	SeatColor      string `json:"seat_color"`
+	InterestedInR4 bool   `json:"interested_in_r4"`
 	FirstContacted string `json:"first_contacted"`
 	CreatedAt      string `json:"created_at"`
 	UpdatedAt      string `json:"updated_at"`
@@ -220,14 +224,6 @@ type AdminUserResponse struct {
 
 type Settings struct {
 	ID                           int    `json:"id"`
-	AwardFirstPoints             int    `json:"award_first_points"`
-	AwardSecondPoints            int    `json:"award_second_points"`
-	AwardThirdPoints             int    `json:"award_third_points"`
-	RecommendationPoints         int    `json:"recommendation_points"`
-	RecentConductorPenaltyDays   int    `json:"recent_conductor_penalty_days"`
-	AboveAverageConductorPenalty int    `json:"above_average_conductor_penalty"`
-	R4R5RankBoost                int    `json:"r4r5_rank_boost"`
-	FirstTimeConductorBoost      int    `json:"first_time_conductor_boost"`
 	ScheduleMessageTemplate      string `json:"schedule_message_template"`
 	DailyMessageTemplate         string `json:"daily_message_template"`
 	PowerTrackingEnabled         bool   `json:"power_tracking_enabled"`
@@ -246,30 +242,8 @@ type Settings struct {
 	CVWorkerURL                  string `json:"cv_worker_url"`
 	TrainFreeDailyLimit          int    `json:"train_free_daily_limit"`
 	TrainPurchasedDailyLimit     int    `json:"train_purchased_daily_limit"`
-}
-
-type MemberRanking struct {
-	Member                  Member        `json:"member"`
-	TotalScore              int           `json:"total_score"`
-	AwardPoints             int           `json:"award_points"`
-	RecommendationPoints    int           `json:"recommendation_points"`
-	RecentConductorPenalty  int           `json:"recent_conductor_penalty"`
-	AboveAveragePenalty     int           `json:"above_average_penalty"`
-	RankBoost               int           `json:"rank_boost"`
-	FirstTimeConductorBoost int           `json:"first_time_conductor_boost"`
-	ConductorCount          int           `json:"conductor_count"`
-	LastConductorDate       *string       `json:"last_conductor_date"`
-	DaysSinceLastConductor  *int          `json:"days_since_last_conductor"`
-	AwardDetails            []AwardDetail `json:"award_details"`
-	RecommendationCount     int           `json:"recommendation_count"`
-}
-
-type AwardDetail struct {
-	AwardType string `json:"award_type"`
-	Rank      int    `json:"rank"`
-	Points    int    `json:"points"`
-	WeekDate  string `json:"week_date"`
-	Expired   bool   `json:"expired"`
+	AllianceMaxMembers           int    `json:"alliance_max_members"`
+	JoinRequirements             string `json:"join_requirements"`
 }
 
 type StormAssignment struct {

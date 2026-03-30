@@ -51,24 +51,3 @@ func initDB() error {
 
 	return nil
 }
-
-func loadSettings() (Settings, error) {
-	var settings Settings
-	err := db.QueryRow(`SELECT id, award_first_points, award_second_points, award_third_points, 
-		recommendation_points, recent_conductor_penalty_days, above_average_conductor_penalty, r4r5_rank_boost,
-		first_time_conductor_boost, schedule_message_template, daily_message_template 
-		FROM settings WHERE id = 1`).Scan(
-		&settings.ID,
-		&settings.AwardFirstPoints,
-		&settings.AwardSecondPoints,
-		&settings.AwardThirdPoints,
-		&settings.RecommendationPoints,
-		&settings.RecentConductorPenaltyDays,
-		&settings.AboveAverageConductorPenalty,
-		&settings.R4R5RankBoost,
-		&settings.FirstTimeConductorBoost,
-		&settings.ScheduleMessageTemplate,
-		&settings.DailyMessageTemplate,
-	)
-	return settings, err
-}

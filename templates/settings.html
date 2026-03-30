@@ -32,25 +32,6 @@
                     </div>
 
                     <div class="settings-group">
-                        <h4>🏆 Award Points</h4>
-                        <div class="form-group">
-                            <label for="award-first">1st Place Award:</label>
-                            <input type="number" id="award-first" min="0" required>
-                            <span class="help-text">Points given for being 1st in any weekly award</span>
-                        </div>
-                        <div class="form-group">
-                            <label for="award-second">2nd Place Award:</label>
-                            <input type="number" id="award-second" min="0" required>
-                            <span class="help-text">Points given for being 2nd in any weekly award</span>
-                        </div>
-                        <div class="form-group">
-                            <label for="award-third">3rd Place Award:</label>
-                            <input type="number" id="award-third" min="0" required>
-                            <span class="help-text">Points given for being 3rd in any weekly award</span>
-                        </div>
-                    </div>
-
-                    <div class="settings-group">
                         <h4>⚡ Tracking Features</h4>
                         <div class="form-group">
                             <label class="checkbox-label" style="margin-bottom: 10px;">
@@ -125,8 +106,23 @@
                         </div>
                     </div>
 
+                    <div class="settings-group">
+                        <h4>🎯 Recruiting</h4>
+                        <div class="form-group">
+                            <label for="alliance-max-members">Alliance Max Members:</label>
+                            <input type="number" id="alliance-max-members" min="1" max="500" required>
+                            <span class="help-text">Used to calculate open spots on the Recruiting page.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="join-requirements">Join Requirements:</label>
+                            <textarea id="join-requirements" rows="3" placeholder="e.g. Minimum HQ 20, 50M+ power, active in VS events..."></textarea>
+                            <span class="help-text">Displayed on the Recruiting page header for officers to reference.</span>
+                        </div>
+                    </div>
+
                     <div class="button-group">
                         <button type="submit" class="btn btn-primary">💾 Save Settings</button>
+                        <span id="settings-save-status" style="margin-left:12px;font-size:0.9em;"></span>
                     </div>
                 </form>
             </section>

@@ -413,25 +413,18 @@ func getLoginHistory(w http.ResponseWriter, r *http.Request) {
 func getSettings(w http.ResponseWriter, r *http.Request) {
 	var s Settings
 
-	// ADDED: COALESCE(cv_worker_url, '') to the end of the SELECT
-	err := db.QueryRow(`SELECT 
-        id, award_first_points, award_second_points, award_third_points, 
-        recommendation_points, recent_conductor_penalty_days, 
-        above_average_conductor_penalty, r4r5_rank_boost, 
-        first_time_conductor_boost, schedule_message_template, 
-        daily_message_template, power_tracking_enabled,
-        COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''), COALESCE(max_hq_level, 35) as max_hq_level,
+	err := db.QueryRow(`SELECT
+        id, schedule_message_template, daily_message_template, power_tracking_enabled,
+        COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''), COALESCE(max_hq_level, 35),
         COALESCE(pwd_min_length, 12), COALESCE(pwd_require_special, 0),
         COALESCE(pwd_require_upper, 0), COALESCE(pwd_require_lower, 0),
         COALESCE(pwd_require_number, 0), COALESCE(pwd_history_count, 4),
         COALESCE(pwd_validity_days, 180), COALESCE(squad_tracking_enabled, 0),
         COALESCE(cv_worker_url, ''),
-        COALESCE(train_free_daily_limit, 1), COALESCE(train_purchased_daily_limit, 2)
+        COALESCE(train_free_daily_limit, 1), COALESCE(train_purchased_daily_limit, 2),
+        COALESCE(alliance_max_members, 100), COALESCE(join_requirements, '')
         FROM settings WHERE id = 1`).Scan(
-		&s.ID, &s.AwardFirstPoints, &s.AwardSecondPoints, &s.AwardThirdPoints,
-		&s.RecommendationPoints, &s.RecentConductorPenaltyDays,
-		&s.AboveAverageConductorPenalty, &s.R4R5RankBoost,
-		&s.FirstTimeConductorBoost, &s.ScheduleMessageTemplate,
+		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
 		&s.StormTimezones, &s.StormRespectDST, &s.LoginMessage, &s.MaxHQLevel,
 		&s.PwdMinLength, &s.PwdRequireSpecial, &s.PwdRequireUpper,
@@ -439,6 +432,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.SquadTrackingEnabled,
 		&s.CVWorkerURL,
 		&s.TrainFreeDailyLimit, &s.TrainPurchasedDailyLimit,
+		&s.AllianceMaxMembers, &s.JoinRequirements,
 	)
 
 	if err != nil {
@@ -478,19 +472,17 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 	isAdmin, _ := session.Values["is_admin"].(bool)
 
 	_, err := db.Exec(`UPDATE settings SET
-		award_first_points = ?, award_second_points = ?, award_third_points = ?,
-		recommendation_points = ?, recent_conductor_penalty_days = ?, above_average_conductor_penalty = ?,
-		r4r5_rank_boost = ?, first_time_conductor_boost = ?, schedule_message_template = ?,
+		schedule_message_template = ?,
 		daily_message_template = ?, power_tracking_enabled = ?, storm_timezones = ?,
 		storm_respect_dst = ?, login_message = ?, max_hq_level = ?, squad_tracking_enabled = ?,
-		train_free_daily_limit = ?, train_purchased_daily_limit = ?
+		train_free_daily_limit = ?, train_purchased_daily_limit = ?,
+		alliance_max_members = ?, join_requirements = ?
 		WHERE id = 1`,
-		settings.AwardFirstPoints, settings.AwardSecondPoints, settings.AwardThirdPoints,
-		settings.RecommendationPoints, settings.RecentConductorPenaltyDays, settings.AboveAverageConductorPenalty,
-		settings.R4R5RankBoost, settings.FirstTimeConductorBoost, settings.ScheduleMessageTemplate,
+		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
 		settings.StormRespectDST, settings.LoginMessage, settings.MaxHQLevel, settings.SquadTrackingEnabled,
 		settings.TrainFreeDailyLimit, settings.TrainPurchasedDailyLimit,
+		settings.AllianceMaxMembers, settings.JoinRequirements,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)
@@ -507,7 +499,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 			settings.PwdRequireLower, settings.PwdRequireNumber, settings.PwdHistoryCount, settings.PwdValidityDays,
 		)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			slog.Error("failed to update password settings", "error", err)
+			http.Error(w, "Failed to update settings", http.StatusInternalServerError)
 			return
 		}
 	}
