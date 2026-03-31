@@ -77,6 +77,7 @@
 .oc-drag-handle:active { cursor: grabbing; }
 .oc-table {
     width: 100%;
+    min-width: 480px;
     border-collapse: collapse;
 }
 .oc-table thead th {
@@ -88,6 +89,7 @@
     color: var(--text-secondary);
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-primary);
+    white-space: nowrap;
 }
 .oc-table thead th:last-child { width: 1%; white-space: nowrap; }
 .oc-row {

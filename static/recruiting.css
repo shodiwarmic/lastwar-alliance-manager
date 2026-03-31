@@ -1,40 +1,10 @@
 /* recruiting.css — Styles for the Recruiting page */
 
-/* ── Tabs ─────────────────────────────────────────────────────────────────── */
-
-.tab-bar {
-    display: flex;
-    gap: 4px;
-    border-bottom: 2px solid var(--border-color);
-    margin-bottom: 24px;
-}
-
-.tab-btn {
-    padding: 8px 20px;
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
-    cursor: pointer;
-    font-size: 0.95rem;
-    color: var(--text-secondary);
-    transition: color 0.15s, border-color 0.15s;
-}
-
-.tab-btn:hover {
-    color: var(--text-primary);
-}
-
-.tab-btn.active {
-    color: var(--accent-color);
-    border-bottom-color: var(--accent-color);
-    font-weight: 600;
-}
-
 /* ── Former Members Table ─────────────────────────────────────────────────── */
 
 .recruiting-table {
     width: 100%;
+    min-width: 560px;
     border-collapse: collapse;
     font-size: 0.95rem;
 }
@@ -52,6 +22,7 @@
     letter-spacing: 0.5px;
     color: var(--text-secondary);
     background: var(--bg-secondary);
+    white-space: nowrap;
 }
 
 .recruiting-table tbody tr:hover {
@@ -228,15 +199,6 @@
     white-space: pre-wrap;
 }
 
-/* ── Checkbox Label ───────────────────────────────────────────────────────── */
-
-.checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: normal;
-    cursor: pointer;
-}
 
 .optional {
     font-size: 0.8em;

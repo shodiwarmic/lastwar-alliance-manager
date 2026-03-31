@@ -404,6 +404,7 @@ main {
 /* Action Bar */
 .action-bar {
     display: flex;
+    align-items: center;
     gap: 15px;
     margin-bottom: 30px;
     flex-wrap: wrap;
@@ -897,6 +898,7 @@ button {
     display: flex;
     align-items: center;
     gap: 8px;
+    font-weight: normal;
     cursor: pointer;
     user-select: none;
 }
@@ -4980,6 +4982,44 @@ button {
     .tab-button.active {
         color: #a0aef0;
     }
+}
+
+/* ── Scrollable table wrapper ────────────────────────────────────────────── */
+
+.table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ── Tab component (shared across all tabbed pages) ─────────────────────── */
+
+.tab-bar {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 24px;
+}
+
+.tab-btn {
+    padding: 8px 20px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+}
+
+.tab-btn.active {
+    color: var(--accent-color);
+    border-bottom-color: var(--accent-color);
+    font-weight: 600;
 }
 
 .tab-content {

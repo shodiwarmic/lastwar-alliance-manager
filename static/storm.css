@@ -210,10 +210,10 @@
 
 /* ── Registration Table ───────────────────────────────────────────────────── */
 
-.reg-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.reg-table { width: 100%; min-width: 480px; border-collapse: collapse; font-size: 0.9em; }
 .reg-table th,
 .reg-table td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); text-align: left; }
-.reg-table th  { background: var(--bg-secondary); font-weight: 600; }
+.reg-table th  { background: var(--bg-secondary); font-weight: 600; white-space: nowrap; }
 
 .reg-pill {
     display: inline-block;

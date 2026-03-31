@@ -32,7 +32,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 
 		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
 			data.IsAdmin = true
-			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true}
+			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true}
 		} else if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
 			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
@@ -179,6 +179,16 @@ func main() {
 	router.HandleFunc("/api/prospects", authMiddleware(requirePermission("manage_recruiting", createProspect))).Methods("POST")
 	router.HandleFunc("/api/prospects/{id:[0-9]+}", authMiddleware(requirePermission("manage_recruiting", updateProspect))).Methods("PUT")
 	router.HandleFunc("/api/prospects/{id:[0-9]+}", authMiddleware(requirePermission("manage_recruiting", deleteProspect))).Methods("DELETE")
+
+	// Allies API
+	router.HandleFunc("/api/ally-agreement-types", authMiddleware(getAllyAgreementTypes)).Methods("GET")
+	router.HandleFunc("/api/ally-agreement-types", authMiddleware(requirePermission("manage_allies", createAllyAgreementType))).Methods("POST")
+	router.HandleFunc("/api/ally-agreement-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", updateAllyAgreementType))).Methods("PUT")
+	router.HandleFunc("/api/ally-agreement-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", deleteAllyAgreementType))).Methods("DELETE")
+	router.HandleFunc("/api/allies", authMiddleware(getAllies)).Methods("GET")
+	router.HandleFunc("/api/allies", authMiddleware(requirePermission("manage_allies", createAlly))).Methods("POST")
+	router.HandleFunc("/api/allies/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", updateAlly))).Methods("PUT")
+	router.HandleFunc("/api/allies/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", deleteAlly))).Methods("DELETE")
 	router.HandleFunc("/api/profile/me", authMiddleware(getMyProfile)).Methods("GET")
 	router.HandleFunc("/api/profile/me", authMiddleware(updateMyProfile)).Methods("PUT")
 
@@ -330,6 +340,7 @@ func main() {
 		"/officer-command": "officer-command",
 		"/train":           "train",
 		"/recruiting":      "recruiting",
+		"/allies":          "allies",
 	}
 
 	for path, templateName := range pages {
@@ -356,6 +367,7 @@ func main() {
 				"officer-command": data.Permissions.ViewOfficerCommand,
 				"train":           data.Permissions.ViewTrain,
 				"recruiting":      data.Permissions.ViewRecruiting,
+				"allies":          data.Permissions.ViewAllies,
 			}
 
 			// 3. Custom 403 Handler for Access Denied

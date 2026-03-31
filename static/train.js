@@ -216,7 +216,10 @@ function renderLogsTable(logs) {
         }
     });
 
-    container.replaceChildren(table);
+    const wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
+    wrap.appendChild(table);
+    container.replaceChildren(wrap);
 }
 
 function applyFilter() {
@@ -244,6 +247,7 @@ function openLogModal(log) {
     document.getElementById('log-notes').value = log ? log.notes : '';
     document.getElementById('log-edit-id').value = log ? log.id : '';
     document.getElementById('log-limit-warning').classList.add('hidden');
+    document.getElementById('log-modal-status').textContent = '';
     onVIPChange();
     document.getElementById('log-modal').style.display = 'flex';
 }
@@ -268,8 +272,10 @@ async function saveTrainLog() {
     const vipType = vipId ? document.getElementById('log-vip-type').value : null;
     const notes = document.getElementById('log-notes').value.trim();
 
-    if (!date) { alert('Date is required.'); return; }
-    if (!conductorId) { alert('Conductor is required.'); return; }
+    const logStatus = document.getElementById('log-modal-status');
+    if (!date) { logStatus.textContent = 'Date is required.'; return; }
+    if (!conductorId) { logStatus.textContent = 'Conductor is required.'; return; }
+    logStatus.textContent = '';
 
     const body = { date, train_type: trainType, conductor_id: conductorId, notes };
     if (vipId) { body.vip_id = vipId; body.vip_type = vipType; }
@@ -285,7 +291,7 @@ async function saveTrainLog() {
 
     if (!res.ok) {
         const text = await res.text();
-        alert('Error: ' + text);
+        document.getElementById('log-modal-status').textContent = 'Error: ' + text;
         return;
     }
 
@@ -529,6 +535,7 @@ function openRuleModal(rule) {
         cond.groups.forEach(g => addGroup(g.conditions || []));
     }
 
+    document.getElementById('rule-modal-status').textContent = '';
     document.getElementById('rule-modal').style.display = 'flex';
 }
 
@@ -684,7 +691,9 @@ function serializeSelectionMethod() {
 
 async function saveRule() {
     const name = document.getElementById('rule-name').value.trim();
-    if (!name) { alert('Rule name is required.'); return; }
+    const ruleStatus = document.getElementById('rule-modal-status');
+    if (!name) { ruleStatus.textContent = 'Rule name is required.'; return; }
+    ruleStatus.textContent = '';
 
     const body = {
         name,
@@ -703,7 +712,7 @@ async function saveRule() {
 
     if (!res.ok) {
         const text = await res.text();
-        alert('Error: ' + text);
+        document.getElementById('rule-modal-status').textContent = 'Error: ' + text;
         return;
     }
 

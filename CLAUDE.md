@@ -79,7 +79,7 @@ if (activeBtn) {
 }
 ```
 
-`.tab-bar` / `.tab-btn` styles are only defined in `train.css` — copy them to your page CSS or tab buttons will render as unstyled grey browser defaults.
+`.tab-bar` / `.tab-btn` styles are defined in `styles.css` (globally available). No need to add them to page CSS — they work automatically on any page that uses `.tab-bar` / `.tab-btn` markup.
 ### CSRF is handled globally
 `static/csrf.js` intercepts all `fetch` calls and injects `X-CSRF-Token` on POST/PUT/DELETE automatically. You don't need to manually attach the token in page JS.
 

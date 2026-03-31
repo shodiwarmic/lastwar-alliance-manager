@@ -106,6 +106,12 @@
             </a>
             {{end}}
 
+            {{if .Permissions.ViewAllies}}
+            <a href="/allies" class="nav-link {{if eq .ActivePage "allies"}}active{{end}}">
+                <span class="nav-icon">🤝</span><span class="nav-text">Allies</span>
+            </a>
+            {{end}}
+
             {{if .Permissions.ManageMembers}}
             <a href="/alias-audit" class="nav-link {{if eq .ActivePage "alias-audit"}}active{{end}}">
                 <span class="nav-icon">🏷️</span><span class="nav-text">Aliases</span>

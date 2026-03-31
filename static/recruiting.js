@@ -146,7 +146,10 @@ function renderFormerMembers(members, container) {
         tbody.appendChild(tr);
     });
 
-    container.replaceChildren(table);
+    const wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
+    wrap.appendChild(table);
+    container.replaceChildren(wrap);
 }
 
 function openReactivateModal(id, name) {

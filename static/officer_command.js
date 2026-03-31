@@ -12,21 +12,12 @@ let dragRespCatIdx = null;
 let dragRespIdx = null;
 
 // ── modal state ──────────────────────────────────────────────────
-let respModalCatIdx = null;   // category index being edited/added to
-let respModalRespIdx = null;  // null = new, number = editing existing
+let respModalCatIdx = null;
+let respModalRespIdx = null;
 let assigneeModalCatIdx = null;
 let assigneeModalRespIdx = null;
 
 // ── helpers ──────────────────────────────────────────────────────
-function escapeHtml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
 function showError(msg) {
     const el = document.getElementById('oc-error');
     el.textContent = msg;
@@ -34,9 +25,12 @@ function showError(msg) {
     setTimeout(() => el.classList.add('hidden'), 6000);
 }
 
-function freqBadge(freq) {
+function freqBadgeEl(freq) {
     const cls = { Daily: 'freq-daily', Weekly: 'freq-weekly', Seasonal: 'freq-seasonal' }[freq] || 'freq-weekly';
-    return `<span class="freq-badge ${cls}">${escapeHtml(freq)}</span>`;
+    const span = document.createElement('span');
+    span.className = `freq-badge ${cls}`;
+    span.textContent = freq;
+    return span;
 }
 
 // ── data loading ─────────────────────────────────────────────────
@@ -62,18 +56,28 @@ async function loadData() {
 // ── filter bar ───────────────────────────────────────────────────
 function buildLeaderFilter() {
     const seen = new Set();
-    const opts = ['<option value="">All Leaders</option>'];
+    const sel = document.getElementById('filter-leader');
+
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'All Leaders';
+    const opts = [defaultOpt];
+
     categories.forEach(cat => {
         (cat.responsibilities || []).forEach(rp => {
             (rp.assignees || []).forEach(a => {
                 if (!seen.has(a.member_id)) {
                     seen.add(a.member_id);
-                    opts.push(`<option value="${a.member_id}">${escapeHtml(a.name)}</option>`);
+                    const opt = document.createElement('option');
+                    opt.value = a.member_id;
+                    opt.textContent = a.name;
+                    opts.push(opt);
                 }
             });
         });
     });
-    document.getElementById('filter-leader').innerHTML = opts.join('');
+
+    sel.replaceChildren(...opts);
 }
 
 function getFilters() {
@@ -89,242 +93,283 @@ function render() {
     const { leader, frequency } = getFilters();
 
     if (!categories.length) {
-        container.innerHTML = canManage
-            ? '<p style="color:var(--text-secondary)">No categories yet. Use <strong>+ Add Category</strong> to get started.</p>'
-            : '<p style="color:var(--text-secondary)">No responsibilities have been configured yet.</p>';
+        const p = document.createElement('p');
+        p.style.color = 'var(--text-secondary)';
+        if (canManage) {
+            p.appendChild(document.createTextNode('No categories yet. Use '));
+            const strong = document.createElement('strong');
+            strong.textContent = '+ Add Category';
+            p.appendChild(strong);
+            p.appendChild(document.createTextNode(' to get started.'));
+        } else {
+            p.textContent = 'No responsibilities have been configured yet.';
+        }
+        container.replaceChildren(p);
         return;
     }
 
-    const html = categories.map((cat, ci) => {
+    const catEls = [];
+    categories.forEach((cat, ci) => {
         const visibleResps = (cat.responsibilities || []).filter(rp => {
             if (frequency && rp.frequency !== frequency) return false;
             if (leader && !rp.assignees.some(a => a.member_id === leader)) return false;
             return true;
         });
 
-        // Category is hidden if all its responsibilities are filtered out (and leader/freq filter is active)
         const catHidden = (leader || frequency) && visibleResps.length === 0 && (cat.responsibilities || []).length > 0;
-        if (catHidden) return '';
+        if (catHidden) return;
 
-        const rows = visibleResps.map((rp, ri) => {
-            const assigneeChips = (rp.assignees || []).map(a =>
-                `<span class="oc-chip">
-                    ${escapeHtml(a.name)} ${escapeHtml(a.rank)}
-                    ${canManage ? `<button class="oc-chip-remove" data-ci="${ci}" data-ri="${ri}" data-mid="${a.member_id}" title="Remove">×</button>` : ''}
-                </span>`
-            ).join('');
+        const catDiv = document.createElement('div');
+        catDiv.className = 'oc-category';
+        catDiv.dataset.catIdx = ci;
+        if (canManage) {
+            catDiv.draggable = true;
+            catDiv.dataset.dragCat = ci;
+            catDiv.addEventListener('dragstart', e => {
+                dragCatIdx = ci;
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            catDiv.addEventListener('dragover', e => {
+                e.preventDefault();
+                catDiv.classList.add('drag-over-cat');
+            });
+            catDiv.addEventListener('dragleave', () => catDiv.classList.remove('drag-over-cat'));
+            catDiv.addEventListener('drop', e => {
+                e.preventDefault();
+                catDiv.classList.remove('drag-over-cat');
+                const targetIdx = parseInt(catDiv.dataset.catIdx);
+                if (dragCatIdx === null || dragCatIdx === targetIdx) return;
+                const moved = categories.splice(dragCatIdx, 1)[0];
+                categories.splice(targetIdx, 0, moved);
+                dragCatIdx = null;
+                render();
+                saveCategoryOrder();
+            });
+            catDiv.addEventListener('dragend', () => {
+                dragCatIdx = null;
+                catDiv.classList.remove('drag-over-cat');
+            });
+        }
 
-            const addAssigneeBtn = canManage
-                ? `<button class="oc-add-assignee-btn" data-ci="${ci}" data-ri="${ri}">+ Add</button>`
-                : '';
+        // ── Category header ──────────────────────────────────────
+        const header = document.createElement('div');
+        header.className = 'oc-category-header';
 
-            const rowActions = canManage ? `
-                <div class="oc-row-actions">
-                    <button class="btn btn-sm btn-secondary" data-edit-resp data-ci="${ci}" data-ri="${ri}">Edit</button>
-                    <button class="btn btn-sm btn-danger" data-del-resp data-ci="${ci}" data-ri="${ri}">Delete</button>
-                </div>` : '';
+        if (canManage) {
+            const handle = document.createElement('span');
+            handle.className = 'oc-drag-handle';
+            handle.title = 'Drag to reorder category';
+            handle.textContent = '⠿';
+            header.appendChild(handle);
+        }
 
-            const dragAttr = canManage ? `draggable="true" data-drag-resp-ci="${ci}" data-drag-resp-ri="${ri}"` : '';
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'oc-category-name';
+        nameSpan.dataset.ci = ci;
+        nameSpan.textContent = cat.name;
+        header.appendChild(nameSpan);
 
-            return `<tr class="oc-row" ${dragAttr}>
-                <td>
-                    ${canManage ? `<span class="oc-drag-handle" title="Drag to reorder">⠿</span>` : ''}
-                    <div class="oc-row-name">${escapeHtml(rp.name)}</div>
-                    ${rp.description ? `<div class="oc-row-desc">${escapeHtml(rp.description)}</div>` : ''}
-                </td>
-                <td style="white-space:nowrap;">${freqBadge(rp.frequency)}</td>
-                <td>
-                    <div class="oc-assignees">
-                        ${assigneeChips}
-                        ${addAssigneeBtn}
-                    </div>
-                </td>
-                <td>${rowActions}</td>
-            </tr>`;
-        }).join('');
+        if (canManage) {
+            const renameBtn = document.createElement('button');
+            renameBtn.className = 'btn btn-sm btn-secondary';
+            renameBtn.title = 'Rename';
+            renameBtn.textContent = '✎';
+            renameBtn.addEventListener('click', () => startRenameCategory(ci));
+            header.appendChild(renameBtn);
 
-        const catDragAttr = canManage ? `draggable="true" data-drag-cat="${ci}"` : '';
+            const delCatBtn = document.createElement('button');
+            delCatBtn.className = 'btn btn-sm btn-danger';
+            delCatBtn.title = 'Delete category';
+            delCatBtn.textContent = '🗑';
+            delCatBtn.addEventListener('click', () => {
+                delCatBtn.style.display = 'none';
+                const confirmSpan = document.createElement('span');
+                confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+                const label = document.createElement('span');
+                label.textContent = 'Sure?';
+                label.style.fontSize = '0.85rem';
+                const yesBtn = document.createElement('button');
+                yesBtn.className = 'btn btn-danger btn-sm';
+                yesBtn.textContent = 'Yes';
+                yesBtn.addEventListener('click', () => deleteCategory(ci));
+                const noBtn = document.createElement('button');
+                noBtn.className = 'btn btn-secondary btn-sm';
+                noBtn.textContent = 'No';
+                noBtn.addEventListener('click', () => { confirmSpan.remove(); delCatBtn.style.display = ''; });
+                confirmSpan.append(label, yesBtn, noBtn);
+                delCatBtn.insertAdjacentElement('afterend', confirmSpan);
+            });
+            header.appendChild(delCatBtn);
 
-        return `<div class="oc-category" ${catDragAttr} data-cat-idx="${ci}">
-            <div class="oc-category-header">
-                ${canManage ? `<span class="oc-drag-handle" title="Drag to reorder category">⠿</span>` : ''}
-                <span class="oc-category-name" data-ci="${ci}">${escapeHtml(cat.name)}</span>
-                ${canManage ? `
-                <button class="btn btn-sm btn-secondary" data-rename-cat="${ci}" title="Rename">✎</button>
-                <button class="btn btn-sm btn-danger" data-del-cat="${ci}" title="Delete category">🗑</button>
-                <button class="btn btn-sm btn-primary" data-add-resp="${ci}">+ Add Responsibility</button>
-                ` : ''}
-            </div>
-            ${visibleResps.length ? `
-            <table class="oc-table">
-                <thead><tr>
-                    <th>Responsibility</th>
-                    <th>Frequency</th>
-                    <th>Assigned To</th>
-                    ${canManage ? '<th></th>' : ''}
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table>` : `<div class="oc-empty">No responsibilities${frequency || leader ? ' match the current filters' : ''}.</div>`}
-        </div>`;
-    }).join('');
+            const addRespBtn = document.createElement('button');
+            addRespBtn.className = 'btn btn-sm btn-primary';
+            addRespBtn.textContent = '+ Add Responsibility';
+            addRespBtn.addEventListener('click', () => openRespModal(ci, null));
+            header.appendChild(addRespBtn);
+        }
 
-    container.innerHTML = html;
-    wireEvents(container);
-}
+        catDiv.appendChild(header);
 
-function wireEvents(container) {
-    // Category rename
-    container.querySelectorAll('[data-rename-cat]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const ci = parseInt(btn.dataset.renameCat);
-            startRenameCategory(ci);
-        });
+        // ── Responsibilities table or empty state ─────────────────
+        if (visibleResps.length) {
+            const tableScroll = document.createElement('div');
+            tableScroll.className = 'table-scroll';
+
+            const table = document.createElement('table');
+            table.className = 'oc-table';
+
+            const thead = table.createTHead();
+            const hr = thead.insertRow();
+            ['Responsibility', 'Frequency', 'Assigned To', ...(canManage ? [''] : [])].forEach(h => {
+                const th = document.createElement('th');
+                th.textContent = h;
+                hr.appendChild(th);
+            });
+
+            const tbody = table.createTBody();
+            visibleResps.forEach((rp, ri) => {
+                const tr = tbody.insertRow();
+                tr.className = 'oc-row';
+                if (canManage) {
+                    tr.draggable = true;
+                    tr.dataset.dragRespCi = ci;
+                    tr.dataset.dragRespRi = ri;
+                    tr.addEventListener('dragstart', e => {
+                        dragRespCatIdx = ci;
+                        dragRespIdx = ri;
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.stopPropagation();
+                    });
+                    tr.addEventListener('dragover', e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        tr.classList.add('drag-over-row');
+                    });
+                    tr.addEventListener('dragleave', () => tr.classList.remove('drag-over-row'));
+                    tr.addEventListener('drop', e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        tr.classList.remove('drag-over-row');
+                        if (dragRespCatIdx === null || (dragRespCatIdx === ci && dragRespIdx === ri)) return;
+                        if (dragRespCatIdx !== ci) { dragRespCatIdx = null; return; }
+                        const resps = categories[dragRespCatIdx].responsibilities;
+                        const moved = resps.splice(dragRespIdx, 1)[0];
+                        resps.splice(ri, 0, moved);
+                        dragRespCatIdx = null;
+                        dragRespIdx = null;
+                        render();
+                        saveRespOrder(ci);
+                    });
+                    tr.addEventListener('dragend', () => {
+                        dragRespCatIdx = null;
+                        dragRespIdx = null;
+                        tr.classList.remove('drag-over-row');
+                    });
+                }
+
+                // Cell 1: drag handle + name + optional description
+                const nameTd = tr.insertCell();
+                if (canManage) {
+                    const handle = document.createElement('span');
+                    handle.className = 'oc-drag-handle';
+                    handle.title = 'Drag to reorder';
+                    handle.textContent = '⠿';
+                    nameTd.appendChild(handle);
+                }
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'oc-row-name';
+                nameDiv.textContent = rp.name;
+                nameTd.appendChild(nameDiv);
+                if (rp.description) {
+                    const descDiv = document.createElement('div');
+                    descDiv.className = 'oc-row-desc';
+                    descDiv.textContent = rp.description;
+                    nameTd.appendChild(descDiv);
+                }
+
+                // Cell 2: frequency badge
+                const freqTd = tr.insertCell();
+                freqTd.style.whiteSpace = 'nowrap';
+                freqTd.appendChild(freqBadgeEl(rp.frequency));
+
+                // Cell 3: assignee chips + add button
+                const assigneesTd = tr.insertCell();
+                const assigneesDiv = document.createElement('div');
+                assigneesDiv.className = 'oc-assignees';
+                (rp.assignees || []).forEach(a => {
+                    const chip = document.createElement('span');
+                    chip.className = 'oc-chip';
+                    chip.appendChild(document.createTextNode(`${a.name} ${a.rank}`));
+                    if (canManage) {
+                        const removeBtn = document.createElement('button');
+                        removeBtn.className = 'oc-chip-remove';
+                        removeBtn.title = 'Remove';
+                        removeBtn.textContent = '×';
+                        removeBtn.addEventListener('click', () => removeAssignee(ci, ri, a.member_id));
+                        chip.appendChild(removeBtn);
+                    }
+                    assigneesDiv.appendChild(chip);
+                });
+                if (canManage) {
+                    const addAssigneeBtn = document.createElement('button');
+                    addAssigneeBtn.className = 'oc-add-assignee-btn';
+                    addAssigneeBtn.textContent = '+ Add';
+                    addAssigneeBtn.addEventListener('click', () => openAssigneeModal(ci, ri));
+                    assigneesDiv.appendChild(addAssigneeBtn);
+                }
+                assigneesTd.appendChild(assigneesDiv);
+
+                // Cell 4: row actions (canManage only)
+                if (canManage) {
+                    const actionsTd = tr.insertCell();
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.className = 'oc-row-actions';
+
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'btn btn-sm btn-secondary';
+                    editBtn.textContent = 'Edit';
+                    editBtn.addEventListener('click', () => openRespModal(ci, ri));
+                    actionsDiv.appendChild(editBtn);
+
+                    const delRespBtn = document.createElement('button');
+                    delRespBtn.className = 'btn btn-sm btn-danger';
+                    delRespBtn.textContent = 'Delete';
+                    delRespBtn.addEventListener('click', () => {
+                        delRespBtn.style.display = 'none';
+                        const confirmSpan = document.createElement('span');
+                        confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+                        const label = document.createElement('span');
+                        label.textContent = 'Sure?';
+                        label.style.fontSize = '0.85rem';
+                        const yesBtn = document.createElement('button');
+                        yesBtn.className = 'btn btn-danger btn-sm';
+                        yesBtn.textContent = 'Yes';
+                        yesBtn.addEventListener('click', () => deleteResponsibility(ci, ri));
+                        const noBtn = document.createElement('button');
+                        noBtn.className = 'btn btn-secondary btn-sm';
+                        noBtn.textContent = 'No';
+                        noBtn.addEventListener('click', () => { confirmSpan.remove(); delRespBtn.style.display = ''; });
+                        confirmSpan.append(label, yesBtn, noBtn);
+                        delRespBtn.insertAdjacentElement('afterend', confirmSpan);
+                    });
+                    actionsDiv.appendChild(delRespBtn);
+                    actionsTd.appendChild(actionsDiv);
+                }
+            });
+
+            tableScroll.appendChild(table);
+            catDiv.appendChild(tableScroll);
+        } else {
+            const emptyDiv = document.createElement('div');
+            emptyDiv.className = 'oc-empty';
+            emptyDiv.textContent = `No responsibilities${frequency || leader ? ' match the current filters' : ''}.`;
+            catDiv.appendChild(emptyDiv);
+        }
+
+        catEls.push(catDiv);
     });
 
-    // Category delete — button-swap confirmation
-    container.querySelectorAll('[data-del-cat]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const ci = parseInt(btn.dataset.delCat);
-            btn.style.display = 'none';
-            const confirmSpan = document.createElement('span');
-            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-            const label = document.createElement('span');
-            label.textContent = 'Sure?';
-            label.style.fontSize = '0.85rem';
-            const yesBtn = document.createElement('button');
-            yesBtn.className = 'btn btn-danger btn-sm';
-            yesBtn.textContent = 'Yes';
-            yesBtn.addEventListener('click', () => deleteCategory(ci));
-            const noBtn = document.createElement('button');
-            noBtn.className = 'btn btn-secondary btn-sm';
-            noBtn.textContent = 'No';
-            noBtn.addEventListener('click', () => { confirmSpan.remove(); btn.style.display = ''; });
-            confirmSpan.append(label, yesBtn, noBtn);
-            btn.insertAdjacentElement('afterend', confirmSpan);
-        });
-    });
-
-    // Add responsibility
-    container.querySelectorAll('[data-add-resp]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            openRespModal(parseInt(btn.dataset.addResp), null);
-        });
-    });
-
-    // Edit responsibility
-    container.querySelectorAll('[data-edit-resp]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            openRespModal(parseInt(btn.dataset.ci), parseInt(btn.dataset.ri));
-        });
-    });
-
-    // Delete responsibility — button-swap confirmation
-    container.querySelectorAll('[data-del-resp]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const ci = parseInt(btn.dataset.ci);
-            const ri = parseInt(btn.dataset.ri);
-            btn.style.display = 'none';
-            const confirmSpan = document.createElement('span');
-            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-            const label = document.createElement('span');
-            label.textContent = 'Sure?';
-            label.style.fontSize = '0.85rem';
-            const yesBtn = document.createElement('button');
-            yesBtn.className = 'btn btn-danger btn-sm';
-            yesBtn.textContent = 'Yes';
-            yesBtn.addEventListener('click', () => deleteResponsibility(ci, ri));
-            const noBtn = document.createElement('button');
-            noBtn.className = 'btn btn-secondary btn-sm';
-            noBtn.textContent = 'No';
-            noBtn.addEventListener('click', () => { confirmSpan.remove(); btn.style.display = ''; });
-            confirmSpan.append(label, yesBtn, noBtn);
-            btn.insertAdjacentElement('afterend', confirmSpan);
-        });
-    });
-
-    // Remove assignee
-    container.querySelectorAll('.oc-chip-remove').forEach(btn => {
-        btn.addEventListener('click', () => {
-            removeAssignee(parseInt(btn.dataset.ci), parseInt(btn.dataset.ri), parseInt(btn.dataset.mid));
-        });
-    });
-
-    // Add assignee
-    container.querySelectorAll('.oc-add-assignee-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            openAssigneeModal(parseInt(btn.dataset.ci), parseInt(btn.dataset.ri));
-        });
-    });
-
-    if (!canManage) return;
-
-    // Drag-and-drop: categories
-    container.querySelectorAll('[data-drag-cat]').forEach(el => {
-        el.addEventListener('dragstart', e => {
-            dragCatIdx = parseInt(el.dataset.dragCat);
-            e.dataTransfer.effectAllowed = 'move';
-        });
-        el.addEventListener('dragover', e => {
-            e.preventDefault();
-            el.classList.add('drag-over-cat');
-        });
-        el.addEventListener('dragleave', () => el.classList.remove('drag-over-cat'));
-        el.addEventListener('drop', e => {
-            e.preventDefault();
-            el.classList.remove('drag-over-cat');
-            const targetIdx = parseInt(el.dataset.catIdx);
-            if (dragCatIdx === null || dragCatIdx === targetIdx) return;
-            const moved = categories.splice(dragCatIdx, 1)[0];
-            categories.splice(targetIdx, 0, moved);
-            dragCatIdx = null;
-            render();
-            saveCategoryOrder();
-        });
-        el.addEventListener('dragend', () => {
-            dragCatIdx = null;
-            el.classList.remove('drag-over-cat');
-        });
-    });
-
-    // Drag-and-drop: responsibilities
-    container.querySelectorAll('[data-drag-resp-ci]').forEach(row => {
-        row.addEventListener('dragstart', e => {
-            dragRespCatIdx = parseInt(row.dataset.dragRespCi);
-            dragRespIdx = parseInt(row.dataset.dragRespRi);
-            e.dataTransfer.effectAllowed = 'move';
-            e.stopPropagation();
-        });
-        row.addEventListener('dragover', e => {
-            e.preventDefault();
-            e.stopPropagation();
-            row.classList.add('drag-over-row');
-        });
-        row.addEventListener('dragleave', () => row.classList.remove('drag-over-row'));
-        row.addEventListener('drop', e => {
-            e.preventDefault();
-            e.stopPropagation();
-            row.classList.remove('drag-over-row');
-            const targetCi = parseInt(row.dataset.dragRespCi);
-            const targetRi = parseInt(row.dataset.dragRespRi);
-            if (dragRespCatIdx === null || (dragRespCatIdx === targetCi && dragRespIdx === targetRi)) return;
-            if (dragRespCatIdx !== targetCi) {
-                dragRespCatIdx = null;
-                return; // cross-category reorder not supported
-            }
-            const resps = categories[dragRespCatIdx].responsibilities;
-            const moved = resps.splice(dragRespIdx, 1)[0];
-            resps.splice(targetRi, 0, moved);
-            dragRespCatIdx = null;
-            dragRespIdx = null;
-            render();
-            saveRespOrder(targetCi);
-        });
-        row.addEventListener('dragend', () => {
-            dragRespCatIdx = null;
-            dragRespIdx = null;
-            row.classList.remove('drag-over-row');
-        });
-    });
+    container.replaceChildren(...catEls);
 }
 
 // ── add category modal ───────────────────────────────────────────
@@ -569,20 +614,37 @@ function renderAssigneeList(filter, assigned) {
     const members = allMembers.filter(m =>
         !assigned.has(m.id) && m.name.toLowerCase().includes(lower)
     );
+
     if (!members.length) {
-        container.innerHTML = '<p style="color:var(--text-secondary);padding:0.5rem;font-size:0.9rem;">No members to add.</p>';
+        const p = document.createElement('p');
+        p.style.cssText = 'color:var(--text-secondary);padding:0.5rem;font-size:0.9rem;';
+        p.textContent = 'No members to add.';
+        container.replaceChildren(p);
         return;
     }
-    container.innerHTML = members.map(m =>
-        `<div class="assignee-row">
-            <span>${escapeHtml(m.name)} <small style="color:var(--text-secondary)">${escapeHtml(m.rank)}</small></span>
-            <button class="btn btn-sm btn-primary" data-pick-member="${m.id}">Add</button>
-        </div>`
-    ).join('');
 
-    container.querySelectorAll('[data-pick-member]').forEach(btn => {
-        btn.addEventListener('click', () => pickAssignee(parseInt(btn.dataset.pickMember)));
+    const rows = members.map(m => {
+        const row = document.createElement('div');
+        row.className = 'assignee-row';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.appendChild(document.createTextNode(m.name + ' '));
+        const rankSmall = document.createElement('small');
+        rankSmall.style.color = 'var(--text-secondary)';
+        rankSmall.textContent = m.rank;
+        nameSpan.appendChild(rankSmall);
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'btn btn-sm btn-primary';
+        addBtn.textContent = 'Add';
+        addBtn.addEventListener('click', () => pickAssignee(m.id));
+
+        row.appendChild(nameSpan);
+        row.appendChild(addBtn);
+        return row;
     });
+
+    container.replaceChildren(...rows);
 }
 
 async function pickAssignee(memberID) {

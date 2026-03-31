@@ -1,0 +1,178 @@
+/* allies.css — Allies Tracker page styles */
+
+#allies-page {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ── Ally Cards ─────────────────────────────────────────────────────────── */
+
+#allies-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ally-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.ally-card.inactive {
+    opacity: 0.55;
+}
+
+.ally-server-badge {
+    background: var(--accent-color);
+    color: #fff;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 2px;
+}
+
+.ally-card.inactive .ally-server-badge {
+    background: var(--text-secondary);
+}
+
+.ally-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.ally-header-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+
+.ally-tag {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-family: monospace;
+}
+
+.ally-name {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.ally-inactive-badge {
+    font-size: 0.72rem;
+    background: var(--text-secondary);
+    color: #fff;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.ally-agreements {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.agreement-pill {
+    background: var(--accent-color-faint, rgba(var(--accent-rgb, 100,149,237), 0.15));
+    color: var(--accent-color);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.ally-meta {
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ally-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+/* ── Agreement Types List ───────────────────────────────────────────────── */
+
+#types-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.type-row {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.type-row.inactive {
+    opacity: 0.55;
+}
+
+.type-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.type-inactive-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.type-actions {
+    display: flex;
+    gap: 6px;
+}
+
+/* ── Agreement checkboxes in modal ─────────────────────────────────────── */
+
+#ally-agreement-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin-top: 4px;
+}
+
+.agreement-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}

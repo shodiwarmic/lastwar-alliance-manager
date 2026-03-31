@@ -382,6 +382,8 @@ type RankPermissions struct {
 	ManageOfficerCommand bool   `json:"manage_officer_command"`
 	ViewRecruiting       bool   `json:"view_recruiting"`
 	ManageRecruiting     bool   `json:"manage_recruiting"`
+	ViewAllies           bool   `json:"view_allies"`
+	ManageAllies         bool   `json:"manage_allies"`
 }
 
 // --- Officer Command Models ---
@@ -574,4 +576,26 @@ type VSImportCommitRequest struct {
 	WeekDate    string            `json:"week_date"`
 	Records     []VSImportRow     `json:"records"`
 	SaveAliases []NewAliasMapping `json:"save_aliases"`
+}
+
+// --- Allies Models ---
+
+type AllyAgreementType struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Active    bool   `json:"active"`
+	SortOrder int    `json:"sort_order"`
+	CreatedAt string `json:"created_at"`
+}
+
+type Ally struct {
+	ID               int    `json:"id"`
+	Server           string `json:"server"`
+	Tag              string `json:"tag"`
+	Name             string `json:"name"`
+	Active           bool   `json:"active"`
+	Notes            string `json:"notes"`
+	Contact          string `json:"contact"`
+	CreatedAt        string `json:"created_at"`
+	AgreementTypeIDs []int  `json:"agreement_type_ids"`
 }

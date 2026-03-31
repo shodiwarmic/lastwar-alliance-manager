@@ -1,0 +1,120 @@
+{{define "header_text"}}
+    <h1>🤝 Allies</h1>
+    <h2>Alliance Agreements &amp; Contacts</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="/allies.css">
+{{end}}
+
+{{define "content"}}
+<div id="allies-page">
+
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="allies">Allies</button>
+        {{if .Permissions.ManageAllies}}
+        <button class="tab-btn" data-tab="types">Agreement Types</button>
+        {{end}}
+    </div>
+
+    <!-- Allies Tab -->
+    <div id="tab-allies" class="tab-content">
+        {{if .Permissions.ManageAllies}}
+        <div class="action-bar">
+            <button type="button" id="add-ally-btn" class="primary-action-btn">
+                <span class="btn-icon">➕</span>
+                <span class="btn-text">Add Ally</span>
+            </button>
+            <label class="toggle-label">
+                <input type="checkbox" id="show-inactive-toggle">
+                Show inactive
+            </label>
+        </div>
+        {{end}}
+        <div id="allies-list"></div>
+    </div>
+
+    {{if .Permissions.ManageAllies}}
+    <!-- Agreement Types Tab -->
+    <div id="tab-types" class="tab-content">
+        <div class="action-bar">
+            <button type="button" id="add-type-btn" class="primary-action-btn">
+                <span class="btn-icon">➕</span>
+                <span class="btn-text">Add Type</span>
+            </button>
+        </div>
+        <div id="types-list"></div>
+    </div>
+    {{end}}
+
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+window.CAN_MANAGE = {{if .Permissions.ManageAllies}}true{{else}}false{{end}};
+</script>
+<script src="/allies.js"></script>
+{{end}}
+
+{{define "modals"}}
+<div id="ally-modal" class="modal">
+    <div class="modal-content">
+        <h2 id="ally-modal-title">Add Ally</h2>
+        <form id="ally-form">
+            <div class="form-group">
+                <label for="ally-server">Server</label>
+                <input type="text" id="ally-server" placeholder="e.g. S123" required>
+            </div>
+            <div class="form-group">
+                <label for="ally-tag">Tag</label>
+                <input type="text" id="ally-tag" placeholder="e.g. WAR" required>
+            </div>
+            <div class="form-group">
+                <label for="ally-name">Alliance Name</label>
+                <input type="text" id="ally-name" placeholder="e.g. War Machine" required>
+            </div>
+            <div class="form-group">
+                <label for="ally-contact">Contact</label>
+                <input type="text" id="ally-contact" placeholder="Main point of contact">
+            </div>
+            <div class="form-group">
+                <label for="ally-notes">Notes</label>
+                <textarea id="ally-notes" rows="3" placeholder="Additional notes"></textarea>
+            </div>
+            <div class="form-group" id="ally-agreements-group">
+                <label>Agreements</label>
+                <div id="ally-agreement-checkboxes"></div>
+            </div>
+            <div class="form-group" id="ally-active-group" style="display:none;">
+                <label>
+                    <input type="checkbox" id="ally-active" checked>
+                    Active
+                </label>
+            </div>
+            <p class="status-msg" id="ally-modal-status"></p>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" id="ally-modal-cancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="type-modal" class="modal">
+    <div class="modal-content">
+        <h2 id="type-modal-title">Add Agreement Type</h2>
+        <form id="type-form">
+            <div class="form-group">
+                <label for="type-name">Name</label>
+                <input type="text" id="type-name" placeholder="e.g. Trucks" required>
+            </div>
+            <p class="status-msg" id="type-modal-status"></p>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" id="type-modal-cancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

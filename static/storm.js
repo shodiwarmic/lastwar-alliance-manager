@@ -490,7 +490,24 @@ function buildGroupCard(g) {
         deleteBtn.className = 'btn btn-danger';
         deleteBtn.style.cssText = 'padding:2px 8px;';
         deleteBtn.textContent = '✕';
-        deleteBtn.addEventListener('click', () => deleteGroup(g.id));
+        deleteBtn.addEventListener('click', () => {
+            deleteBtn.style.display = 'none';
+            const confirmSpan = document.createElement('span');
+            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+            const label = document.createElement('span');
+            label.textContent = 'Sure?';
+            label.style.fontSize = '0.85rem';
+            const yesBtn = document.createElement('button');
+            yesBtn.className = 'btn btn-danger btn-sm';
+            yesBtn.textContent = 'Yes';
+            yesBtn.addEventListener('click', () => deleteGroup(g.id));
+            const noBtn = document.createElement('button');
+            noBtn.className = 'btn btn-secondary btn-sm';
+            noBtn.textContent = 'No';
+            noBtn.addEventListener('click', () => { confirmSpan.remove(); deleteBtn.style.display = ''; });
+            confirmSpan.append(label, yesBtn, noBtn);
+            deleteBtn.insertAdjacentElement('afterend', confirmSpan);
+        });
         header.appendChild(deleteBtn);
     }
 
@@ -895,7 +912,6 @@ async function createGroup(name) {
 }
 
 async function deleteGroup(id) {
-    if (!confirm('Delete this group? This cannot be undone.')) return;
     try {
         const res = await apiFetch(`${API_BASE}/groups/${id}`, { method: 'DELETE' });
         if (!res.ok) {
@@ -1083,7 +1099,10 @@ function renderRegistrationView() {
     }
 
     table.appendChild(tbody);
-    container.replaceChildren(table);
+    const wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
+    wrap.appendChild(table);
+    container.replaceChildren(wrap);
 }
 
 async function cycleRegPill(el) {
@@ -1423,8 +1442,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnAddGroup = document.getElementById('btn-add-group');
     if (btnAddGroup) {
         btnAddGroup.addEventListener('click', () => {
-            const name = prompt('Group name:');
-            if (name && name.trim()) createGroup(name.trim());
+            btnAddGroup.style.display = 'none';
+            const inlineForm = document.createElement('span');
+            inlineForm.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.placeholder = 'Group name';
+            nameInput.style.cssText = 'padding:2px 6px;font-size:0.85rem;border-radius:4px;border:1px solid var(--border-color);background:var(--input-bg,var(--bg-secondary));color:var(--text-primary);width:120px;';
+            const createBtn = document.createElement('button');
+            createBtn.className = 'btn btn-primary btn-sm';
+            createBtn.textContent = 'Create';
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn btn-secondary btn-sm';
+            cancelBtn.textContent = 'Cancel';
+            const submit = () => {
+                const name = nameInput.value.trim();
+                if (name) createGroup(name);
+                inlineForm.remove();
+                btnAddGroup.style.display = '';
+            };
+            const cancel = () => { inlineForm.remove(); btnAddGroup.style.display = ''; };
+            createBtn.addEventListener('click', submit);
+            cancelBtn.addEventListener('click', cancel);
+            nameInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') submit();
+                if (e.key === 'Escape') cancel();
+            });
+            inlineForm.append(nameInput, createBtn, cancelBtn);
+            btnAddGroup.insertAdjacentElement('afterend', inlineForm);
+            nameInput.focus();
         });
     }
 
