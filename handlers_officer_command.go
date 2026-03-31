@@ -19,7 +19,7 @@ func getOfficerCommandData(w http.ResponseWriter, r *http.Request) {
 	defer catRows.Close()
 
 	var categories []OCCategory
-	catMap := map[int]*OCCategory{}
+	catMap := map[int]int{} // category ID -> index in categories slice
 	for catRows.Next() {
 		var c OCCategory
 		if err := catRows.Scan(&c.ID, &c.Name, &c.DisplayOrder); err != nil {
@@ -27,8 +27,8 @@ func getOfficerCommandData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		c.Responsibilities = []OCResponsibility{}
+		catMap[c.ID] = len(categories)
 		categories = append(categories, c)
-		catMap[c.ID] = &categories[len(categories)-1]
 	}
 
 	// Fetch all responsibilities
@@ -39,7 +39,8 @@ func getOfficerCommandData(w http.ResponseWriter, r *http.Request) {
 	}
 	defer respRows.Close()
 
-	respMap := map[int]*OCResponsibility{}
+	type respLocation struct{ catIdx, respIdx int }
+	respMap := map[int]respLocation{}
 	for respRows.Next() {
 		var rp OCResponsibility
 		if err := respRows.Scan(&rp.ID, &rp.CategoryID, &rp.Name, &rp.Description, &rp.Frequency, &rp.DisplayOrder); err != nil {
@@ -47,12 +48,13 @@ func getOfficerCommandData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rp.Assignees = []OCAssignee{}
-		cat, ok := catMap[rp.CategoryID]
+		catIdx, ok := catMap[rp.CategoryID]
 		if !ok {
 			continue
 		}
-		cat.Responsibilities = append(cat.Responsibilities, rp)
-		respMap[rp.ID] = &cat.Responsibilities[len(cat.Responsibilities)-1]
+		respIdx := len(categories[catIdx].Responsibilities)
+		categories[catIdx].Responsibilities = append(categories[catIdx].Responsibilities, rp)
+		respMap[rp.ID] = respLocation{catIdx, respIdx}
 	}
 
 	// Fetch all assignees
@@ -75,8 +77,10 @@ func getOfficerCommandData(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if rp, ok := respMap[respID]; ok {
-			rp.Assignees = append(rp.Assignees, a)
+		if loc, ok := respMap[respID]; ok {
+			categories[loc.catIdx].Responsibilities[loc.respIdx].Assignees = append(
+				categories[loc.catIdx].Responsibilities[loc.respIdx].Assignees, a,
+			)
 		}
 	}
 
