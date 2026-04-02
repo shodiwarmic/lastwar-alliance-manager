@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -89,6 +91,11 @@ func saveStormAssignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "storm_assignments", "TF "+request.TaskForce, false, strconv.Itoa(len(request.Assignments))+" assignments")
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -166,6 +173,20 @@ func saveStormConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	var tfParts []string
+	for _, c := range configs {
+		slot := "unset"
+		if c.TimeSlot != nil {
+			slot = "slot " + strconv.Itoa(*c.TimeSlot)
+		}
+		tfParts = append(tfParts, "TF "+c.TaskForce+": "+slot)
+	}
+	logActivity(actorID, actorName, "updated", "storm_config", "storm TF config", false, strings.Join(tfParts, "; "))
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -422,6 +443,12 @@ func createStormGroup(w http.ResponseWriter, r *http.Request) {
 	g.ID = int(id)
 	g.Buildings = []StormGroupBuilding{}
 	g.DirectMembers = []StormGroupMember{}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "created", "storm_group", g.Name, false, "TF "+g.TaskForce)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
 	json.NewEncoder(w).Encode(g)
@@ -434,21 +461,45 @@ func updateStormGroup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
+
+	var oldName, oldTF string
+	db.QueryRow(`SELECT name, task_force FROM storm_groups WHERE id=?`, id).Scan(&oldName, &oldTF)
+
 	_, err := db.Exec(`UPDATE storm_groups SET name=?,instructions=?,sort_order=? WHERE id=?`, g.Name, g.Instructions, g.SortOrder, id)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	details := "TF " + oldTF
+	if oldName != g.Name {
+		details += "; name: " + oldName + " → " + g.Name
+	}
+	logActivity(actorID, actorName, "updated", "storm_group", g.Name, false, details)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func deleteStormGroup(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
+
+	var groupName, tf string
+	db.QueryRow(`SELECT name, task_force FROM storm_groups WHERE id=?`, id).Scan(&groupName, &tf)
+
 	_, err := db.Exec(`DELETE FROM storm_groups WHERE id=?`, id)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "storm_group", groupName, false, "TF "+tf)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -529,6 +580,23 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+
+	// Collect all member IDs across all buildings for the log detail
+	var memberIDs []int
+	for _, b := range buildings {
+		for _, m := range b.Members {
+			memberIDs = append(memberIDs, m.MemberID)
+		}
+	}
+	var groupName string
+	db.QueryRow(`SELECT name FROM storm_groups WHERE id=?`, groupID).Scan(&groupName)
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "storm_group", groupName, false,
+		"TF "+tf+"; "+strconv.Itoa(len(memberIDs))+" members across "+strconv.Itoa(len(buildings))+" buildings")
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -587,6 +655,19 @@ func saveGroupDirectMembers(w http.ResponseWriter, r *http.Request) {
 		}
 		tx.Exec(`INSERT INTO storm_group_members (group_id,member_id,is_sub,position) VALUES (?,?,?,?)`, groupID, m.MemberID, isSub, m.Position)
 	}
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	var groupName string
+	db.QueryRow(`SELECT name FROM storm_groups WHERE id=?`, groupID).Scan(&groupName)
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "storm_group", groupName, false,
+		"TF "+tf+"; "+strconv.Itoa(len(members))+" direct members")
+
 	w.WriteHeader(http.StatusNoContent)
 }

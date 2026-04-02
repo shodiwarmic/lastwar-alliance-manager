@@ -32,7 +32,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 
 		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
 			data.IsAdmin = true
-			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true}
+			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true}
 		} else if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
 			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
@@ -107,6 +107,9 @@ func main() {
 	router.HandleFunc("/api/members/{id}/invite", authMiddleware(requirePermission("manage_members", generateInvite))).Methods("POST")
 	router.HandleFunc("/invite/{token}", showInvitePage).Methods("GET")
 	router.HandleFunc("/invite/{token}", claimInvite).Methods("POST")
+
+	// Activity log
+	router.HandleFunc("/api/activity", authMiddleware(getActivityLog)).Methods("GET")
 
 	// Admin routes (admin only)
 	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(getAdminUsers))).Methods("GET")
@@ -341,6 +344,7 @@ func main() {
 		"/train":           "train",
 		"/recruiting":      "recruiting",
 		"/allies":          "allies",
+		"/activity":        "activity",
 	}
 
 	for path, templateName := range pages {
@@ -368,6 +372,7 @@ func main() {
 				"train":           data.Permissions.ViewTrain,
 				"recruiting":      data.Permissions.ViewRecruiting,
 				"allies":          data.Permissions.ViewAllies,
+				"activity":        data.Permissions.ViewActivity || data.IsAdmin,
 			}
 
 			// 3. Custom 403 Handler for Access Denied

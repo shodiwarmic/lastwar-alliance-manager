@@ -1,0 +1,109 @@
+#activity-page {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.activity-entry {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface-color);
+    border-radius: 8px;
+    border-left: 3px solid var(--border-color);
+    font-size: 0.92rem;
+    line-height: 1.4;
+    flex-wrap: wrap;
+}
+
+.activity-entry__details {
+    width: 100%;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    padding-left: 2px;
+    margin-top: 2px;
+    font-style: italic;
+}
+
+.activity-entry__details--collapsed {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.activity-entry__details--expanded {
+    overflow: visible;
+    cursor: pointer;
+}
+
+.activity-entry__expand-btn {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 0.75rem;
+    color: var(--primary-color, #667eea);
+    cursor: pointer;
+    font-style: normal;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.activity-entry--sensitive {
+    border-left-color: var(--danger-color, #e53e3e);
+    opacity: 0.9;
+}
+
+.activity-entry__actor {
+    font-weight: 600;
+    color: var(--text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.activity-entry__text {
+    flex: 1;
+    color: var(--text-muted);
+}
+
+.activity-entry__name {
+    color: var(--text-color);
+    font-weight: 500;
+}
+
+.activity-entry__time {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: default;
+}
+
+.activity-entry__badge {
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--danger-color, #e53e3e);
+    color: #fff;
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+.loading-msg,
+.empty-msg,
+.error-msg {
+    color: var(--text-muted);
+    padding: 24px 0;
+    text-align: center;
+    font-size: 0.95rem;
+}
+
+.error-msg {
+    color: var(--danger-color, #e53e3e);
+}

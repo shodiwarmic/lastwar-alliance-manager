@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -112,6 +113,11 @@ func createOCCategory(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "created", "oc_category", body.Name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(OCCategory{
 		ID:               int(id),
@@ -132,17 +138,33 @@ func updateOCCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var oldName string
+	db.QueryRow(`SELECT name FROM oc_categories WHERE id = ?`, id).Scan(&oldName)
+
 	_, err := db.Exec(`UPDATE oc_categories SET name = ? WHERE id = ?`, body.Name, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	details := ""
+	if oldName != body.Name {
+		details = "name: " + oldName + " → " + body.Name
+	}
+	logActivity(actorID, actorName, "updated", "oc_category", body.Name, false, details)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // DELETE /api/officer-command/categories/{id}
 func deleteOCCategory(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(mux.Vars(r)["id"])
+
+	var catName string
+	db.QueryRow(`SELECT name FROM oc_categories WHERE id = ?`, id).Scan(&catName)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -159,6 +181,12 @@ func deleteOCCategory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "oc_category", catName, false)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -191,6 +219,11 @@ func createOCResponsibility(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "created", "oc_responsibility", body.Name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(OCResponsibility{
 		ID:           int(id),
@@ -219,6 +252,9 @@ func updateOCResponsibility(w http.ResponseWriter, r *http.Request) {
 		body.Frequency = "Weekly"
 	}
 
+	var oldName, oldFreq string
+	db.QueryRow(`SELECT name, frequency FROM oc_responsibilities WHERE id = ?`, id).Scan(&oldName, &oldFreq)
+
 	_, err := db.Exec(
 		`UPDATE oc_responsibilities SET name = ?, description = ?, frequency = ? WHERE id = ?`,
 		body.Name, body.Description, body.Frequency, id,
@@ -227,12 +263,29 @@ func updateOCResponsibility(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	var changes []string
+	if oldName != body.Name {
+		changes = append(changes, "name: "+oldName+" → "+body.Name)
+	}
+	if oldFreq != body.Frequency {
+		changes = append(changes, "frequency: "+oldFreq+" → "+body.Frequency)
+	}
+	details := strings.Join(changes, "; ")
+	logActivity(actorID, actorName, "updated", "oc_responsibility", body.Name, false, details)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // DELETE /api/officer-command/responsibilities/{id}
 func deleteOCResponsibility(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(mux.Vars(r)["id"])
+
+	var respName string
+	db.QueryRow(`SELECT name FROM oc_responsibilities WHERE id = ?`, id).Scan(&respName)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -249,6 +302,12 @@ func deleteOCResponsibility(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "oc_responsibility", respName, false)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -276,6 +335,14 @@ func addOCAssignee(w http.ResponseWriter, r *http.Request) {
 	a.MemberID = body.MemberID
 	db.QueryRow(`SELECT name, rank FROM members WHERE id = ?`, body.MemberID).Scan(&a.Name, &a.Rank)
 
+	var respName string
+	db.QueryRow(`SELECT name FROM oc_responsibilities WHERE id = ?`, respID).Scan(&respName)
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "created", "oc_assignee", a.Name, false, respName)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(a)
 }
@@ -286,6 +353,10 @@ func removeOCAssignee(w http.ResponseWriter, r *http.Request) {
 	respID, _ := strconv.Atoi(vars["id"])
 	memberID, _ := strconv.Atoi(vars["member_id"])
 
+	var memberName, respName string
+	db.QueryRow(`SELECT name FROM members WHERE id = ?`, memberID).Scan(&memberName)
+	db.QueryRow(`SELECT name FROM oc_responsibilities WHERE id = ?`, respID).Scan(&respName)
+
 	_, err := db.Exec(
 		`DELETE FROM oc_assignees WHERE responsibility_id = ? AND member_id = ?`,
 		respID, memberID,
@@ -294,6 +365,12 @@ func removeOCAssignee(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "oc_assignee", memberName, false, respName)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -127,6 +128,11 @@ func saveVSPoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "vs_points", data.WeekDate, false, strconv.Itoa(len(data.Points))+" members")
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "VS points saved successfully"})
 }
@@ -136,11 +142,17 @@ func deleteWeekVSPoints(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	weekDate := vars["week"]
 
-	_, err := db.Exec("DELETE FROM vs_points WHERE week_date = ?", weekDate)
+	result, err := db.Exec("DELETE FROM vs_points WHERE week_date = ?", weekDate)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	n, _ := result.RowsAffected()
+	logActivity(actorID, actorName, "deleted", "vs_points", weekDate, false, strconv.FormatInt(n, 10)+" records")
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -306,6 +318,12 @@ func processVSPointsScreenshot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to save changes", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "imported", "vs_points", weekDate+" ("+detectedDay+")", false,
+		strconv.Itoa(successCount)+" members updated via screenshot")
 
 	response := map[string]interface{}{
 		"message":         fmt.Sprintf("Successfully updated VS points for %d members on %s", successCount, detectedDay),
@@ -532,6 +550,12 @@ func processPowerScreenshot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to save records", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "imported", "power_records", "power screenshot", false,
+		strconv.Itoa(successCount)+" records saved, "+strconv.Itoa(failedCount)+" failed")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

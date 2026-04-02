@@ -188,6 +188,13 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	username, _ := session.Values["username"].(string)
+	details := strconv.Itoa(successCount) + " members"
+	if aliasCount > 0 {
+		details += ", " + strconv.Itoa(aliasCount) + " aliases saved"
+	}
+	logActivity(userID, username, "imported", "vs_points", req.WeekDate, false, details)
+
 	response := map[string]interface{}{
 		"message":          fmt.Sprintf("Import successful. Saved data for %d members and registered %d new aliases.", successCount, aliasCount),
 		"imported":         successCount,

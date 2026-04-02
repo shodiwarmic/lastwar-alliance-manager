@@ -126,6 +126,9 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	username, _ := session.Values["username"].(string)
+	logActivity(userID, username, "created", "file", title, false)
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -188,9 +191,9 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 	userID, _ := session.Values["user_id"].(int)
 	isAdmin, _ := session.Values["is_admin"].(bool)
 
-	var fileName string
+	var fileName, fileTitle string
 	var ownerID int
-	err := db.QueryRow("SELECT file_name, owner_user_id FROM files WHERE id = ?", fileID).Scan(&fileName, &ownerID)
+	err := db.QueryRow("SELECT file_name, title, owner_user_id FROM files WHERE id = ?", fileID).Scan(&fileName, &fileTitle, &ownerID)
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
@@ -213,6 +216,10 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 
 	os.Remove(filepath.Join(getStoragePath(), fileName))
 	db.Exec("DELETE FROM files WHERE id = ?", fileID)
+
+	username, _ := session.Values["username"].(string)
+	logActivity(userID, username, "deleted", "file", fileTitle, false)
+
 	w.WriteHeader(http.StatusOK)
 }
 

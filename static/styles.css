@@ -348,7 +348,7 @@ header .user-info {
 
 .nav-link {
     flex: 1;
-    min-width: 80px; /* Prevents squishing on small monitors */
+    min-width: 80px;
     padding: 12px 10px;
     text-decoration: none;
     color: var(--text-primary);
@@ -918,6 +918,20 @@ button {
 }
 
 /* ===== MOBILE RESPONSIVE STYLES ===== */
+
+/* Icon-only nav at intermediate widths — prevents wrapping when many items are present */
+@media (max-width: 1380px) {
+    .nav-text {
+        display: none;
+    }
+
+    .nav-link {
+        min-width: 44px;
+        max-width: 60px;
+        padding: 12px 6px;
+        gap: 0;
+    }
+}
 
 /* Tablet and below */
 @media (max-width: 1024px) {

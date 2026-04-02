@@ -21,8 +21,8 @@ import (
 func getRankPermissions(rank string) RankPermissions {
 	var p RankPermissions
 	p.Rank = rank
-	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings, view_files, upload_files, manage_files, view_anonymous_authors, view_schedule, manage_schedule, view_officer_command, manage_officer_command, view_recruiting, manage_recruiting, view_allies, manage_allies FROM rank_permissions WHERE rank = ?`, rank).Scan(
-		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings, &p.ViewFiles, &p.UploadFiles, &p.ManageFiles, &p.ViewAnonymousAuthors, &p.ViewSchedule, &p.ManageSchedule, &p.ViewOfficerCommand, &p.ManageOfficerCommand, &p.ViewRecruiting, &p.ManageRecruiting, &p.ViewAllies, &p.ManageAllies,
+	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings, view_files, upload_files, manage_files, view_anonymous_authors, view_schedule, manage_schedule, view_officer_command, manage_officer_command, view_recruiting, manage_recruiting, view_allies, manage_allies, view_activity FROM rank_permissions WHERE rank = ?`, rank).Scan(
+		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings, &p.ViewFiles, &p.UploadFiles, &p.ManageFiles, &p.ViewAnonymousAuthors, &p.ViewSchedule, &p.ManageSchedule, &p.ViewOfficerCommand, &p.ManageOfficerCommand, &p.ViewRecruiting, &p.ManageRecruiting, &p.ViewAllies, &p.ManageAllies, &p.ViewActivity,
 	)
 	return p
 }
@@ -50,13 +50,18 @@ func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=?, view_files=?, upload_files=?, manage_files=?, view_anonymous_authors=?, view_schedule=?, manage_schedule=?, view_officer_command=?, manage_officer_command=?, view_recruiting=?, manage_recruiting=?, view_allies=?, manage_allies=? WHERE rank=?`)
+	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=?, view_files=?, upload_files=?, manage_files=?, view_anonymous_authors=?, view_schedule=?, manage_schedule=?, view_officer_command=?, manage_officer_command=?, view_recruiting=?, manage_recruiting=?, view_allies=?, manage_allies=?, view_activity=? WHERE rank=?`)
 
 	for _, p := range matrix {
-		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.ViewFiles, p.UploadFiles, p.ManageFiles, p.ViewAnonymousAuthors, p.ViewSchedule, p.ManageSchedule, p.ViewOfficerCommand, p.ManageOfficerCommand, p.ViewRecruiting, p.ManageRecruiting, p.ViewAllies, p.ManageAllies, p.Rank)
+		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.ViewFiles, p.UploadFiles, p.ManageFiles, p.ViewAnonymousAuthors, p.ViewSchedule, p.ManageSchedule, p.ViewOfficerCommand, p.ManageOfficerCommand, p.ViewRecruiting, p.ManageRecruiting, p.ViewAllies, p.ManageAllies, p.ViewActivity, p.Rank)
 	}
 	stmt.Close()
 	tx.Commit()
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "permissions", "rank permissions matrix", true)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Permissions updated"})
@@ -202,6 +207,11 @@ func createAdminUser(w http.ResponseWriter, r *http.Request) {
 	id, _ := result.LastInsertId()
 	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", id, string(hashedPassword))
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "created", "user", req.Username, true)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "User created successfully",
@@ -240,6 +250,9 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var oldIsAdmin bool
+	db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&oldIsAdmin)
+
 	if req.Username != "" {
 		_, err = db.Exec("UPDATE users SET username = ?, member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
 			req.Username, req.MemberID, req.IsAdmin, req.ForcePasswordChange, userID)
@@ -253,6 +266,29 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to update user", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	targetUsername := existingUsername
+	if req.Username != "" {
+		targetUsername = req.Username
+	}
+	var userChanges []string
+	if req.Username != "" && req.Username != existingUsername {
+		userChanges = append(userChanges, "username: "+existingUsername+" → "+req.Username)
+	}
+	if oldIsAdmin != req.IsAdmin {
+		was, now := "standard", "standard"
+		if oldIsAdmin {
+			was = "admin"
+		}
+		if req.IsAdmin {
+			now = "admin"
+		}
+		userChanges = append(userChanges, "role: "+was+" → "+now)
+	}
+	logActivity(actorID, actorName, "updated", "user", targetUsername, true, strings.Join(userChanges, "; "))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "User updated successfully"})
@@ -278,12 +314,20 @@ func deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var deletedUsername string
+	db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&deletedUsername)
+
 	_, err = db.Exec("DELETE FROM users WHERE id = ?", userID)
 	if err != nil {
 		slog.Error("failed to delete user", "error", err, "userID", userID)
 		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "user", deletedUsername, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "User deleted successfully"})
@@ -325,6 +369,11 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", userID, string(hashedPassword))
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "reset_password", "user", username, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -505,6 +554,10 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "settings", "alliance settings", true)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Settings updated successfully"})
 }
@@ -589,6 +642,11 @@ func updatePasswordPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "settings", "password policy", true)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Password policy updated successfully"})
 }
@@ -614,6 +672,11 @@ func updateCVWorkerURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "settings", "CV worker URL", true)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Microservice routing updated successfully"})
 }
@@ -628,6 +691,11 @@ func deleteExternalCredential(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "credentials", serviceName, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Credential deleted successfully"})
@@ -680,6 +748,11 @@ func updateExternalCredentials(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "credentials", req.ServiceName, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Credential updated successfully"})

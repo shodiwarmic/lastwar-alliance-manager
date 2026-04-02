@@ -99,6 +99,9 @@ func putSchedule(w http.ResponseWriter, r *http.Request) {
 	s.ScheduleData = json.RawMessage(scheduleData)
 	s.IsActive = isActive == 1
 
+	username, _ := session.Values["username"].(string)
+	logActivity(userID, username, "updated", "schedule", name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(s)
 }

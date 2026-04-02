@@ -144,6 +144,9 @@ func postTrainLog(w http.ResponseWriter, r *http.Request) {
 
 	limitWarning := checkDailyLimit(req.Date, req.TrainType, int(id))
 
+	username, _ := session.Values["username"].(string)
+	logActivity(userID, username, "created", "train_log", req.Date+" "+req.TrainType, false, "conductor: "+tl.ConductorName)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"train_log":     tl,
@@ -196,6 +199,11 @@ func putTrainLog(w http.ResponseWriter, r *http.Request) {
 
 	limitWarning := checkDailyLimit(req.Date, req.TrainType, id)
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "train_log", req.Date+" "+req.TrainType, false, "conductor: "+tl.ConductorName)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"train_log":     tl,
@@ -209,6 +217,9 @@ func deleteTrainLog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
+
+	var logDate, trainType, conductorName string
+	db.QueryRow(`SELECT tl.date, tl.train_type, m.name FROM train_logs tl JOIN members m ON m.id = tl.conductor_id WHERE tl.id = ?`, id).Scan(&logDate, &trainType, &conductorName)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -229,6 +240,11 @@ func deleteTrainLog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "train_log", logDate+" "+trainType, false, "conductor: "+conductorName)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -289,6 +305,9 @@ func postEligibilityRule(w http.ResponseWriter, r *http.Request) {
 	rule.CreatedAt = now
 	rule.UpdatedAt = now
 
+	username, _ := session.Values["username"].(string)
+	logActivity(userID, username, "created", "eligibility_rule", rule.Name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rule)
 }
@@ -320,6 +339,11 @@ func putEligibilityRule(w http.ResponseWriter, r *http.Request) {
 	rule.ID = id
 	rule.UpdatedAt = now
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "eligibility_rule", rule.Name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rule)
 }
@@ -330,6 +354,9 @@ func deleteEligibilityRule(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
+
+	var ruleName string
+	db.QueryRow(`SELECT name FROM eligibility_rules WHERE id = ?`, id).Scan(&ruleName)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -350,6 +377,11 @@ func deleteEligibilityRule(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "eligibility_rule", ruleName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }

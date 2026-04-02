@@ -104,6 +104,17 @@ func saveAwards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	awardCount := 0
+	for _, a := range data.Awards {
+		if a.MemberID > 0 {
+			awardCount++
+		}
+	}
+	logActivity(actorID, actorName, "updated", "awards", data.WeekDate, false, strconv.Itoa(awardCount)+" awards")
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Awards saved successfully"})
 }
@@ -112,11 +123,17 @@ func deleteWeekAwards(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	weekDate := vars["week"]
 
-	_, err := db.Exec("DELETE FROM awards WHERE week_date = ?", weekDate)
+	result, err := db.Exec("DELETE FROM awards WHERE week_date = ?", weekDate)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	n, _ := result.RowsAffected()
+	logActivity(actorID, actorName, "deleted", "awards", weekDate, false, strconv.FormatInt(n, 10)+" awards removed")
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -186,6 +203,11 @@ func createAwardType(w http.ResponseWriter, r *http.Request) {
 	at.SortOrder = maxOrder + 1
 	at.CreatedAt = time.Now().Format(time.RFC3339)
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "created", "award_type", at.Name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(at)
@@ -205,6 +227,10 @@ func updateAwardType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var oldName string
+	var oldActive bool
+	db.QueryRow("SELECT name, active FROM award_types WHERE id = ?", id).Scan(&oldName, &oldActive)
+
 	_, err = db.Exec(
 		"UPDATE award_types SET active = ?, name = ? WHERE id = ?",
 		at.Active, at.Name, id)
@@ -212,6 +238,25 @@ func updateAwardType(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	var atChanges []string
+	if oldName != at.Name {
+		atChanges = append(atChanges, "name: "+oldName+" → "+at.Name)
+	}
+	if oldActive != at.Active {
+		was, now := "inactive", "inactive"
+		if oldActive {
+			was = "active"
+		}
+		if at.Active {
+			now = "active"
+		}
+		atChanges = append(atChanges, was+" → "+now)
+	}
+	logActivity(actorID, actorName, "updated", "award_type", at.Name, false, strings.Join(atChanges, "; "))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Award type updated"})
@@ -259,6 +304,11 @@ func deleteAwardType(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "award_type", name, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }

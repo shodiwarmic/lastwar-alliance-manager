@@ -1,0 +1,49 @@
+{{define "header_text"}}
+    <h1>📋 Activity Log</h1>
+    <h2>Recent alliance management actions</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="/activity.css">
+{{end}}
+
+{{define "content"}}
+<div id="activity-page">
+
+    <div class="form-row" style="align-items:flex-end; margin-bottom:20px;">
+        <div class="form-group">
+            <label for="user-filter">User</label>
+            <select id="user-filter" class="form-input">
+                <option value="">All users</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="limit-select">Show</label>
+            <select id="limit-select" class="form-input">
+                <option value="50">50 entries</option>
+                <option value="100" selected>100 entries</option>
+                <option value="200">200 entries</option>
+                <option value="500">500 entries</option>
+            </select>
+        </div>
+        {{if .IsAdmin}}
+        <div class="form-group--checkbox" style="padding-bottom:4px;">
+            <label class="checkbox-label">
+                <input type="checkbox" id="sensitive-toggle" checked>
+                Show sensitive events
+            </label>
+        </div>
+        {{end}}
+    </div>
+
+    <div id="activity-list" class="activity-list">
+        <p class="loading-msg">Loading activity...</p>
+    </div>
+
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>window.IS_ADMIN = {{if .IsAdmin}}true{{else}}false{{end}};</script>
+<script src="/activity.js"></script>
+{{end}}

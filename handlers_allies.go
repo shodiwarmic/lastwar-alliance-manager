@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -66,6 +67,11 @@ func createAllyAgreementType(w http.ResponseWriter, r *http.Request) {
 		&t.ID, &t.Name, &t.Active, &t.SortOrder, &t.CreatedAt,
 	)
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "created", "agreement_type", req.Name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(t)
@@ -121,6 +127,11 @@ func updateAllyAgreementType(w http.ResponseWriter, r *http.Request) {
 	)
 	t.Active = active == 1
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "agreement_type", t.Name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(t)
 }
@@ -148,11 +159,19 @@ func deleteAllyAgreementType(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var typeName string
+	db.QueryRow(`SELECT name FROM ally_agreement_types WHERE id = ?`, id).Scan(&typeName)
+
 	if _, err := db.Exec(`DELETE FROM ally_agreement_types WHERE id = ?`, id); err != nil {
 		slog.Error("deleteAllyAgreementType: delete failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "agreement_type", typeName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -270,6 +289,11 @@ func createAlly(w http.ResponseWriter, r *http.Request) {
 		a.AgreementTypeIDs = []int{}
 	}
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "created", "ally", req.Name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(a)
@@ -303,6 +327,11 @@ func updateAlly(w http.ResponseWriter, r *http.Request) {
 		t := true
 		req.Active = &t
 	}
+
+	// Fetch current values for diff
+	var oldName, oldServer, oldTag string
+	var oldActive int
+	db.QueryRow(`SELECT name, server, tag, active FROM allies WHERE id = ?`, id).Scan(&oldName, &oldServer, &oldTag, &oldActive)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -342,6 +371,31 @@ func updateAlly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	var allyChanges []string
+	if oldName != req.Name {
+		allyChanges = append(allyChanges, "name: "+oldName+" → "+req.Name)
+	}
+	if oldServer != req.Server {
+		allyChanges = append(allyChanges, "server: "+oldServer+" → "+req.Server)
+	}
+	if oldTag != req.Tag {
+		allyChanges = append(allyChanges, "tag: "+oldTag+" → "+req.Tag)
+	}
+	if oldActive != active {
+		was, now := "inactive", "inactive"
+		if oldActive == 1 {
+			was = "active"
+		}
+		if active == 1 {
+			now = "active"
+		}
+		allyChanges = append(allyChanges, was+" → "+now)
+	}
+	logActivity(actorID, actorName, "updated", "ally", req.Name, false, strings.Join(allyChanges, "; "))
+
 	var a Ally
 	var activeVal int
 	db.QueryRow(`SELECT id, server, tag, name, active, notes, contact, created_at FROM allies WHERE id = ?`, id).Scan(
@@ -364,6 +418,9 @@ func deleteAlly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var allyName string
+	db.QueryRow(`SELECT name FROM allies WHERE id = ?`, id).Scan(&allyName)
+
 	tx, err := db.Begin()
 	if err != nil {
 		slog.Error("deleteAlly: begin tx failed", "error", err)
@@ -383,6 +440,11 @@ func deleteAlly(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "ally", allyName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }

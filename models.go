@@ -384,6 +384,21 @@ type RankPermissions struct {
 	ManageRecruiting     bool   `json:"manage_recruiting"`
 	ViewAllies           bool   `json:"view_allies"`
 	ManageAllies         bool   `json:"manage_allies"`
+	ViewActivity         bool   `json:"view_activity"`
+}
+
+type ActivityLog struct {
+	ID          int    `json:"id"`
+	UserID      *int   `json:"user_id"`
+	Username    string `json:"username"`
+	Action      string `json:"action"`
+	EntityType  string `json:"entity_type"`
+	EntityName  string `json:"entity_name"`
+	Details     string `json:"details"`
+	EntityCount int    `json:"entity_count"`
+	IsSensitive bool   `json:"is_sensitive"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 // --- Officer Command Models ---

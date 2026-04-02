@@ -90,6 +90,9 @@ func generateInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	actorName, _ := session.Values["username"].(string)
+	logActivity(createdBy, actorName, "created", "invite", memberName, true, "expires in 48h")
+
 	inviteURL := "/invite/" + token
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -180,11 +183,13 @@ func claimInvite(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	var memberID int
+	var memberName string
 	err = tx.QueryRow(`
-		SELECT member_id FROM invite_tokens
-		WHERE token = ? AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP`,
+		SELECT it.member_id, m.name FROM invite_tokens it
+		JOIN members m ON m.id = it.member_id
+		WHERE it.token = ? AND it.used_at IS NULL AND it.expires_at > CURRENT_TIMESTAMP`,
 		token,
-	).Scan(&memberID)
+	).Scan(&memberID, &memberName)
 	if err != nil {
 		http.Error(w, "This invite link has already been used or has expired.", http.StatusGone)
 		return
@@ -248,6 +253,8 @@ func claimInvite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+
+	logActivity(int(newUserID), req.Username, "accepted", "invite", req.Username, true, "linked to member: "+memberName)
 
 	session, _ := store.Get(r, "session")
 	session.Values["authenticated"] = true

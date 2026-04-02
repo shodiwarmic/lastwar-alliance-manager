@@ -132,6 +132,11 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "created", "member", m.Name, false)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(m)
@@ -152,9 +157,19 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. NEW: Fetch the CURRENT name before we overwrite it
-	var oldName string
-	err = db.QueryRow("SELECT name FROM members WHERE id = ?", id).Scan(&oldName)
+	// 1. Fetch current values before overwriting so we can diff for the activity log
+	var old struct {
+		Name       string
+		Rank       string
+		Level      int
+		TroopLevel int
+		Profession string
+		SquadType  string
+		Eligible   bool
+	}
+	err = db.QueryRow("SELECT name, rank, level, troop_level, profession, squad_type, eligible FROM members WHERE id = ?", id).Scan(
+		&old.Name, &old.Rank, &old.Level, &old.TroopLevel, &old.Profession, &old.SquadType, &old.Eligible,
+	)
 	if err != nil {
 		log.Printf("Error fetching current member name: %v", err)
 		http.Error(w, "Member not found", http.StatusNotFound)
@@ -169,12 +184,48 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. NEW: If the update succeeded and the name actually changed, save the old name as a Global Alias
-	if m.Name != "" && oldName != m.Name {
-		_, aliasErr := db.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", id, oldName)
+	// 3. If the name changed, save the old name as a Global Alias
+	if m.Name != "" && old.Name != m.Name {
+		_, aliasErr := db.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", id, old.Name)
 		if aliasErr != nil {
 			log.Printf("Warning: Failed to auto-create global alias for name change (member %d): %v", id, aliasErr)
 		}
+	}
+
+	// Build activity details from changed fields
+	var changes []string
+	if old.Name != m.Name {
+		changes = append(changes, "name: "+old.Name+" → "+m.Name)
+	}
+	if old.Rank != m.Rank {
+		changes = append(changes, "rank: "+old.Rank+" → "+m.Rank)
+	}
+	if old.Level != m.Level {
+		changes = append(changes, "level: "+strconv.Itoa(old.Level)+" → "+strconv.Itoa(m.Level))
+	}
+	if old.TroopLevel != m.TroopLevel {
+		changes = append(changes, "troop level: "+strconv.Itoa(old.TroopLevel)+" → "+strconv.Itoa(m.TroopLevel))
+	}
+	if old.Profession != m.Profession && m.Profession != "" {
+		changes = append(changes, "profession: "+old.Profession+" → "+m.Profession)
+	}
+	if old.SquadType != m.SquadType && m.SquadType != "" {
+		changes = append(changes, "squad: "+old.SquadType+" → "+m.SquadType)
+	}
+	if old.Eligible != m.Eligible {
+		eligStr := func(b bool) string {
+			if b {
+				return "eligible"
+			}
+			return "ineligible"
+		}
+		changes = append(changes, eligStr(old.Eligible)+" → "+eligStr(m.Eligible))
+	}
+	if len(changes) > 0 {
+		session, _ := store.Get(r, "session")
+		actorID, _ := session.Values["user_id"].(int)
+		actorName, _ := session.Values["username"].(string)
+		logActivity(actorID, actorName, "updated", "member", m.Name, false, strings.Join(changes, "; "))
 	}
 
 	// Handle Power History
@@ -212,6 +263,9 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var memberName string
+	db.QueryRow("SELECT name FROM members WHERE id = ?", id).Scan(&memberName)
+
 	if _, err = db.Exec("DELETE FROM users WHERE member_id = ?", id); err != nil {
 		slog.Error("Failed to delete linked user for member", "member_id", id, "error", err)
 	}
@@ -230,6 +284,11 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "deleted", "member", memberName, false)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -246,6 +305,9 @@ func archiveMember(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&req) // soft decode — field is optional
 
+	var memberName string
+	db.QueryRow("SELECT name FROM members WHERE id = ?", id).Scan(&memberName)
+
 	result, err := db.Exec(
 		"UPDATE members SET rank = 'EX', eligible = 0, leave_reason = ? WHERE id = ? AND rank != 'EX'",
 		req.LeaveReason, id,
@@ -261,6 +323,11 @@ func archiveMember(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Member not found or already archived", http.StatusNotFound)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "archived", "member", memberName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -287,6 +354,9 @@ func reactivateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var memberName string
+	db.QueryRow("SELECT name FROM members WHERE id = ?", id).Scan(&memberName)
+
 	result, err := db.Exec("UPDATE members SET rank = ?, eligible = 1 WHERE id = ? AND rank = 'EX'", body.Rank, id)
 	if err != nil {
 		slog.Error("Failed to reactivate member", "member_id", id, "error", err)
@@ -299,6 +369,11 @@ func reactivateMember(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Member not found or not archived", http.StatusNotFound)
 		return
 	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "unarchived", "member", memberName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -624,6 +699,14 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	total := result.Added + result.Updated + result.Removed
+	if total > 0 {
+		session, _ := store.Get(r, "session")
+		actorID, _ := session.Values["user_id"].(int)
+		actorName, _ := session.Values["username"].(string)
+		logActivity(actorID, actorName, "imported", "member", strconv.Itoa(total)+" member updates", false)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
@@ -746,9 +829,15 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		req.TroopLevel = maxValid // Downgrade to the highest legal tier
 	}
 
+	// Fetch current values for diff
+	var oldName, oldSquadType, oldProfession string
+	var oldLevel, oldTroopLevel int
+	db.QueryRow(`SELECT name, level, troop_level, COALESCE(squad_type,''), COALESCE(profession,'') FROM members WHERE id = ?`, memberID).
+		Scan(&oldName, &oldLevel, &oldTroopLevel, &oldSquadType, &oldProfession)
+
 	// Execute database updates...
 	_, err := db.Exec(`
-		UPDATE members 
+		UPDATE members
 		SET name = ?, level = ?, troop_level = ?, squad_type = ?, profession = ?
 		WHERE id = ?`,
 		req.Name, req.Level, req.TroopLevel, req.SquadType, req.Profession, memberID)
@@ -764,6 +853,31 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.SquadPower > 0 {
 		db.Exec(`INSERT INTO squad_power_history (member_id, power) VALUES (?, ?)`, memberID, req.SquadPower)
+	}
+
+	var profileChanges []string
+	if oldName != req.Name && req.Name != "" {
+		profileChanges = append(profileChanges, "name: "+oldName+" → "+req.Name)
+	}
+	if oldLevel != req.Level {
+		profileChanges = append(profileChanges, "level: "+strconv.Itoa(oldLevel)+" → "+strconv.Itoa(req.Level))
+	}
+	if oldTroopLevel != req.TroopLevel {
+		profileChanges = append(profileChanges, "troop level: "+strconv.Itoa(oldTroopLevel)+" → "+strconv.Itoa(req.TroopLevel))
+	}
+	if oldSquadType != req.SquadType && req.SquadType != "" {
+		profileChanges = append(profileChanges, "squad: "+oldSquadType+" → "+req.SquadType)
+	}
+	if oldProfession != req.Profession && req.Profession != "" {
+		profileChanges = append(profileChanges, "profession: "+oldProfession+" → "+req.Profession)
+	}
+	if req.Power > 0 {
+		profileChanges = append(profileChanges, "power updated")
+	}
+	if len(profileChanges) > 0 {
+		username, _ := session.Values["username"].(string)
+		userID, _ := session.Values["user_id"].(int)
+		logActivity(userID, username, "updated", "member", req.Name, false, strings.Join(profileChanges, "; "))
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -857,6 +971,16 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to save alias. It may already exist.", http.StatusInternalServerError)
 		return
 	}
+
+	var memberName string
+	db.QueryRow("SELECT name FROM members WHERE id = ?", memberID).Scan(&memberName)
+	category := "personal"
+	if req.IsGlobal {
+		category = "global"
+	}
+	username, _ := session.Values["username"].(string)
+	logActivity(userID, username, "created", "alias", req.Alias, false, memberName+" ("+category+")")
+
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -877,9 +1001,13 @@ func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 		`, userID).Scan(&canManageGlobal)
 	}
 
-	var category string
+	var category, aliasText, memberName string
 	var ownerID *int
-	err := db.QueryRow("SELECT category, user_id FROM member_aliases WHERE id = ?", aliasID).Scan(&category, &ownerID)
+	err := db.QueryRow(`
+		SELECT ma.category, ma.user_id, ma.alias, m.name
+		FROM member_aliases ma
+		JOIN members m ON m.id = ma.member_id
+		WHERE ma.id = ?`, aliasID).Scan(&category, &ownerID, &aliasText, &memberName)
 	if err != nil {
 		http.Error(w, "Alias not found", http.StatusNotFound)
 		return
@@ -896,5 +1024,9 @@ func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db.Exec("DELETE FROM member_aliases WHERE id = ?", aliasID)
+
+	username, _ := session.Values["username"].(string)
+	logActivity(userID, username, "deleted", "alias", aliasText, false, memberName+" ("+category+")")
+
 	w.WriteHeader(http.StatusOK)
 }
