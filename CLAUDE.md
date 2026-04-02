@@ -15,6 +15,39 @@
 5. **Template** — `templates/feature.html`. Define `header_text`, `content`, `scripts`, and `modals` blocks (see below).
 6. **CSS** — `static/feature.css`, linked via `{{define "head_tags"}}`. Never embed `<style>` blocks in templates.
 7. **JS** — `static/feature.js`, loaded in `{{define "scripts"}}`.
+8. **Activity log** — call `logActivity` for every write operation (see section below).
+
+## Activity logging
+
+Every handler that creates, updates, or deletes data must call `logActivity`. The signature is:
+
+```go
+logActivity(userID int, username, action, entityType, entityName string, isSensitive bool, details ...string)
+```
+
+**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"reset_password"`
+
+**`isSensitive`**: `true` for user accounts, permissions matrix, settings, credentials, and invite events. These are hidden from non-admin users on the activity page.
+
+**`details`**: optional human-readable change summary. For updates, build a field-level diff and pass it as a single joined string:
+
+```go
+var changes []string
+if old.Name != new.Name {
+    changes = append(changes, "name: "+old.Name+" → "+new.Name)
+}
+// ... other fields ...
+logActivity(userID, username, "updated", "entity_type", new.Name, false, strings.Join(changes, "; "))
+```
+
+For updates, fetch the old values **before** the UPDATE/Exec call, then compare after.
+
+**Batching**: consecutive `"created"` calls for the same `entity_type` by the same user within 15 minutes are automatically merged (count increments). All other actions always create a new row.
+
+**`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`
+
+When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
 ## Known gotchas
 
