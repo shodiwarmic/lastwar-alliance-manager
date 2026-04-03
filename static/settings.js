@@ -56,6 +56,7 @@ async function loadSettings() {
         document.getElementById('train-purchased-limit').value = settings.train_purchased_daily_limit ?? 2;
         document.getElementById('alliance-max-members').value = settings.alliance_max_members ?? 100;
         document.getElementById('join-requirements').value = settings.join_requirements ?? '';
+        document.getElementById('vs-minimum-points').value = settings.vs_minimum_points ?? 2500000;
 
         const minLen = document.getElementById('pwd-min-length');
         if (minLen) {
@@ -173,6 +174,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 train_purchased_daily_limit: parseInt(document.getElementById('train-purchased-limit').value, 10) || 2,
                 alliance_max_members: parseInt(document.getElementById('alliance-max-members').value, 10) || 100,
                 join_requirements: document.getElementById('join-requirements').value.trim(),
+                vs_minimum_points: parseInt(document.getElementById('vs-minimum-points').value, 10) || 2500000,
             };
 
             const newMatrix = ['R5', 'R4', 'R3', 'R2', 'R1'].map(rank => {

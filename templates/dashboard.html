@@ -1,0 +1,36 @@
+{{define "head_tags"}}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<link rel="stylesheet" href="/dashboard.css">
+{{end}}
+
+{{define "header_text"}}
+<h1>🏠 Dashboard</h1>
+<h2>Alliance at a glance</h2>
+{{end}}
+
+{{define "content"}}
+<div class="dash-toolbar">
+    <button id="btn-customize" class="btn btn-secondary btn-sm">⚙️ Customize</button>
+</div>
+
+<div id="customize-panel" style="display:none">
+    <p class="help-text">Drag cards to reorder. Check to show, uncheck to hide.</p>
+    <ul id="customize-list"></ul>
+    <div class="button-group" style="margin-top:0.75rem">
+        <button id="btn-save-prefs" class="btn btn-primary btn-sm">Save</button>
+        <button id="btn-cancel-prefs" class="btn btn-secondary btn-sm">Cancel</button>
+        <span id="prefs-save-status" style="margin-left:8px;font-size:0.85em;"></span>
+    </div>
+</div>
+
+<div id="dashboard-grid"></div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    window.VS_MINIMUM = {{.VSMinimumPoints}};
+    window.USER_RANK  = "{{.Rank}}";
+    window.IS_ADMIN   = {{if .IsAdmin}}true{{else}}false{{end}};
+</script>
+<script src="/dashboard.js"></script>
+{{end}}

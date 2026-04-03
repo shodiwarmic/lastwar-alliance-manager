@@ -471,7 +471,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(pwd_validity_days, 180), COALESCE(squad_tracking_enabled, 0),
         COALESCE(cv_worker_url, ''),
         COALESCE(train_free_daily_limit, 1), COALESCE(train_purchased_daily_limit, 2),
-        COALESCE(alliance_max_members, 100), COALESCE(join_requirements, '')
+        COALESCE(alliance_max_members, 100), COALESCE(join_requirements, ''),
+        COALESCE(vs_minimum_points, 2500000)
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -482,6 +483,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.CVWorkerURL,
 		&s.TrainFreeDailyLimit, &s.TrainPurchasedDailyLimit,
 		&s.AllianceMaxMembers, &s.JoinRequirements,
+		&s.VSMinimumPoints,
 	)
 
 	if err != nil {
@@ -525,13 +527,15 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		daily_message_template = ?, power_tracking_enabled = ?, storm_timezones = ?,
 		storm_respect_dst = ?, login_message = ?, max_hq_level = ?, squad_tracking_enabled = ?,
 		train_free_daily_limit = ?, train_purchased_daily_limit = ?,
-		alliance_max_members = ?, join_requirements = ?
+		alliance_max_members = ?, join_requirements = ?,
+		vs_minimum_points = ?
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
 		settings.StormRespectDST, settings.LoginMessage, settings.MaxHQLevel, settings.SquadTrackingEnabled,
 		settings.TrainFreeDailyLimit, settings.TrainPurchasedDailyLimit,
 		settings.AllianceMaxMembers, settings.JoinRequirements,
+		settings.VSMinimumPoints,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)

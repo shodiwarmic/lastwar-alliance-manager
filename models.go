@@ -244,6 +244,7 @@ type Settings struct {
 	TrainPurchasedDailyLimit     int    `json:"train_purchased_daily_limit"`
 	AllianceMaxMembers           int    `json:"alliance_max_members"`
 	JoinRequirements             string `json:"join_requirements"`
+	VSMinimumPoints              int    `json:"vs_minimum_points"`
 }
 
 type StormAssignment struct {
@@ -549,6 +550,19 @@ type PageData struct {
 	CSRFToken         template.HTML
 	HasGCPCredentials bool
 	OCRPipelineReady  bool
+	VSMinimumPoints   int
+}
+
+// DashboardCard represents a single card in the dashboard with its visibility state.
+type DashboardCard struct {
+	ID      string `json:"id"`
+	Visible bool   `json:"visible"`
+}
+
+// DashboardPrefsResponse is returned by GET /api/dashboard/prefs.
+type DashboardPrefsResponse struct {
+	Prefs     []DashboardCard `json:"prefs"`
+	Available []DashboardCard `json:"available"`
 }
 
 type WeekAwards struct {

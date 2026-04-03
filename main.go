@@ -284,14 +284,11 @@ func main() {
 		renderTemplate(w, r, "404.html", data)
 	})
 
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		data := getPageData(r, "Members - Alliance Manager", "members")
-		if !data.IsAuthenticated {
-			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
-			return
-		}
-		renderTemplate(w, r, "members.html", data)
-	}).Methods("GET")
+	router.HandleFunc("/", dashboardHandler).Methods("GET")
+
+	// Dashboard prefs API
+	router.HandleFunc("/api/dashboard/prefs", authMiddleware(getDashboardPrefs)).Methods("GET")
+	router.HandleFunc("/api/dashboard/prefs", authMiddleware(saveDashboardPrefs)).Methods("POST")
 
 	// Custom Login Route (No Layout)
 	router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
@@ -329,7 +326,8 @@ func main() {
 
 	// 2. Updated Page Map (Removed Train, Awards, Recs)
 	pages := map[string]string{
-		"/dyno":     "dyno",
+		"/members": "members",
+		"/dyno":    "dyno",
 		"/rankings": "rankings",
 		"/storm":    "storm",
 		"/vs":       "vs",
