@@ -15,6 +15,15 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Smart CSV Ingestion**: Upload VS Points or roster CSVs with dynamic column mapping. Features a backend-driven "Preview & Confirm" modal allowing administrators to validate data, calculate missing values (e.g., deducing Saturday from Weekly Totals), and manually map unresolved names before committing.
 - **Advanced Player Stats**: Track optional fields including Player Profession and Troop Levels (dynamically validated against configurable HQ Level caps).
 
+### 🏠 Overview Dashboard
+- **Customizable Landing Page**: The default landing page is a per-user dashboard surfacing key alliance data at a glance without navigating between pages. Cards can be reordered via drag-and-drop and toggled on or off; preferences are saved per account.
+- **Alliance Health Card**: Active member count, total alliance power, and percentage of members currently eligible for train.
+- **VS Performance Card**: Current week total points, average per member, percentage meeting the configured minimum, and top/bottom 3 contributors. The minimum threshold is configurable in Settings.
+- **Schedule Card**: The next 3 upcoming events from the active alliance schedule.
+- **Diplomacy Card**: Active allies with their agreement type tags.
+- **Leader Flags Card** *(R4/R5 only)*: Members falling below the weekly VS minimum, sorted by total. Helps officers identify who needs follow-up without manually scanning the VS page.
+- **Members page** is still accessible via its own nav link at `/members`.
+
 ### 📈 Analytics & Activity Dashboard
 - **Commander Growth Tracking**: Instantly calculate and visualize 7-day and 30-day power deltas for every member to easily identify top grinders and stagnant accounts.
 - **VS Duel Leaderboards**: Track daily alliance duel contributions with massive, interactive stacked bar charts to see exactly where members excel (e.g., Radar vs. Tech day).
