@@ -1,0 +1,166 @@
+{{define "header_text"}}
+<h1>⚖️ Accountability</h1>
+<h2>Member performance tracker</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="/accountability.css">
+{{end}}
+
+{{define "content"}}
+<div id="accountability-page">
+
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="members">Members</button>
+        <button class="tab-btn" data-tab="strikes">Strikes</button>
+        {{if .Permissions.ManageAccountability}}
+        <button class="tab-btn" data-tab="storm">Storm Attendance</button>
+        {{end}}
+        <button class="tab-btn" data-tab="report">Report</button>
+    </div>
+
+    <!-- ── Members ───────────────────────────────────────────────────────── -->
+    <div id="tab-members" class="tab-panel">
+
+        <div class="acc-toolbar">
+            <div class="acc-toolbar-left">
+                <input type="text" id="member-search" class="form-input" placeholder="Search members…" style="width:220px;">
+            </div>
+        </div>
+
+        <div id="vs-flag-banner" style="display:none" class="acc-flag-banner">
+            <strong>⚠️ Members below VS minimum this week:</strong>
+            <span id="vs-flag-names"></span>
+            {{if .Permissions.ManageAccountability}}
+            <button id="btn-add-vs-strikes" class="btn btn-warning btn-sm" style="margin-left:8px;">Add VS Strikes</button>
+            {{end}}
+        </div>
+
+        <table class="data-table" id="members-table">
+            <thead>
+                <tr>
+                    <th>Member</th>
+                    <th>Rank</th>
+                    <th>Tag</th>
+                    <th>Active Strikes</th>
+                    <th>VS This Week</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="members-tbody">
+                <tr><td colspan="6" class="loading-msg">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── Strikes ───────────────────────────────────────────────────────── -->
+    <div id="tab-strikes" class="tab-panel hidden">
+
+        <div class="acc-toolbar">
+            <div class="acc-toolbar-left">
+                <select id="strikes-status-filter" class="form-input" style="width:160px;">
+                    <option value="">All strikes</option>
+                    <option value="active" selected>Active only</option>
+                    <option value="excused">Excused only</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="strikes-container">
+            <p class="loading-msg">Loading…</p>
+        </div>
+    </div>
+
+    <!-- ── Storm Attendance ──────────────────────────────────────────────── -->
+    {{if .Permissions.ManageAccountability}}
+    <div id="tab-storm" class="tab-panel hidden">
+
+        <div class="acc-toolbar">
+            <div class="acc-toolbar-left">
+                <label for="storm-date-input" style="font-size:0.9rem;color:var(--text-secondary);">Storm Date</label>
+                <input type="date" id="storm-date-input" class="form-input" style="width:180px;">
+                <button id="btn-storm-load" class="btn btn-secondary btn-sm">Load</button>
+            </div>
+            <div class="acc-toolbar-right">
+                <button id="btn-storm-save" class="btn btn-primary btn-sm" style="display:none;">Save Attendance</button>
+                <span id="storm-save-status" style="font-size:0.85rem;margin-left:8px;"></span>
+            </div>
+        </div>
+
+        <div id="storm-member-list">
+            <p style="color:var(--text-muted);font-size:0.9rem;">Select a date and click Load to view or log attendance.</p>
+        </div>
+    </div>
+    {{end}}
+
+    <!-- ── Report ────────────────────────────────────────────────────────── -->
+    <div id="tab-report" class="tab-panel hidden">
+        <div id="report-stat-cards" class="acc-stat-cards">
+            <p class="loading-msg">Loading…</p>
+        </div>
+        <div class="acc-report-grid">
+            <div class="acc-report-section">
+                <h3>⚔️ Top VS Performers</h3>
+                <div id="report-vs-leaders"><p class="loading-msg">Loading…</p></div>
+            </div>
+            <div class="acc-report-section">
+                <h3>⚠️ VS Underperformers</h3>
+                <div id="report-vs-under"><p class="loading-msg">Loading…</p></div>
+            </div>
+            <div class="acc-report-section">
+                <h3>📈 Power Growth</h3>
+                <div id="report-power-growth"><p class="loading-msg">Loading…</p></div>
+            </div>
+            <div class="acc-report-section">
+                <h3>🏷️ Members by Tag</h3>
+                <div id="report-tag-counts"><p class="loading-msg">Loading…</p></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{{end}}
+
+{{define "modals"}}
+{{if .Permissions.ManageAccountability}}
+<div id="add-strike-modal" class="modal">
+    <div class="modal-content">
+        <h2>Add Strike</h2>
+        <div class="form-group">
+            <label>Member</label>
+            <input type="text" id="strike-member-name" class="form-input" readonly>
+            <input type="hidden" id="strike-member-id">
+        </div>
+        <div class="form-group">
+            <label for="strike-type">Type</label>
+            <select id="strike-type" class="form-input">
+                <option value="vs_below_threshold">VS Below Threshold</option>
+                <option value="train_no_show">Train No-Show</option>
+                <option value="storm_no_show">Storm No-Show</option>
+                <option value="manual">Manual</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="strike-reason">Reason</label>
+            <textarea id="strike-reason" class="form-input" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="strike-ref-date">Reference Date <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+            <input type="date" id="strike-ref-date" class="form-input">
+        </div>
+        <p id="strike-modal-status" class="status-msg"></p>
+        <div class="button-group">
+            <button id="btn-strike-save" class="btn btn-primary">Save Strike</button>
+            <button id="btn-strike-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+{{end}}
+{{end}}
+
+{{define "scripts"}}
+<script>
+    window.CAN_MANAGE = {{if .Permissions.ManageAccountability}}true{{else}}false{{end}};
+</script>
+<script src="/accountability.js"></script>
+{{end}}

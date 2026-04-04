@@ -32,7 +32,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 
 		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
 			data.IsAdmin = true
-			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true}
+			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true, ViewAccountability: true, ManageAccountability: true}
 		} else if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
 			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
@@ -110,6 +110,22 @@ func main() {
 
 	// Activity log
 	router.HandleFunc("/api/activity", authMiddleware(getActivityLog)).Methods("GET")
+
+	// Accountability
+	router.HandleFunc("/accountability", authMiddleware(handleAccountability)).Methods("GET")
+	router.HandleFunc("/accountability/report", authMiddleware(handleAccountabilityReport)).Methods("GET")
+	router.HandleFunc("/accountability/{id:[0-9]+}", authMiddleware(handleAccountabilityProfile)).Methods("GET")
+	router.HandleFunc("/api/accountability/summary", authMiddleware(handleAccountabilitySummary)).Methods("GET")
+	router.HandleFunc("/api/accountability/strikes", authMiddleware(handleAllStrikes)).Methods("GET")
+	router.HandleFunc("/api/accountability/storm-attendance", authMiddleware(handleStormAttendanceForDate)).Methods("GET")
+	router.HandleFunc("/api/accountability/members", authMiddleware(handleAccountabilityMembers)).Methods("GET")
+	router.HandleFunc("/api/accountability/members/{id:[0-9]+}", authMiddleware(handleAccountabilityMemberProfile)).Methods("GET")
+	router.HandleFunc("/api/accountability/report-data", authMiddleware(handleAccountabilityReportData)).Methods("GET")
+	router.HandleFunc("/api/accountability/strikes", authMiddleware(requirePermission("manage_accountability", handleStrikeCreate))).Methods("POST")
+	router.HandleFunc("/api/accountability/strikes/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeUpdate))).Methods("PUT")
+	router.HandleFunc("/api/accountability/strikes/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeDelete))).Methods("DELETE")
+	router.HandleFunc("/api/accountability/storm-attendance", authMiddleware(requirePermission("manage_accountability", handleStormAttendanceUpsert))).Methods("POST")
+	router.HandleFunc("/api/train-logs/{id:[0-9]+}/showed-up", authMiddleware(requirePermission("manage_accountability", handleTrainNoShow))).Methods("PUT")
 
 	// Admin routes (admin only)
 	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(getAdminUsers))).Methods("GET")
@@ -371,6 +387,7 @@ func main() {
 				"recruiting":      data.Permissions.ViewRecruiting,
 				"allies":          data.Permissions.ViewAllies,
 				"activity":        data.Permissions.ViewActivity || data.IsAdmin,
+			"accountability":  data.Permissions.ViewAccountability,
 			}
 
 			// 3. Custom 403 Handler for Access Denied

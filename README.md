@@ -67,6 +67,16 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Officer Notes**: Each active member now has an internal notes field visible only to officers with `manage_members`. Notes are displayed in the member edit modal and never shown to standard members.
 - **Permission-Gated Access**: `manage_members` controls archive/reactivate and viewing former members. Separate `view_recruiting` and `manage_recruiting` permissions (R4–R5 default) gate the Recruiting page and prospect CRUD. Hard-deleting archived members is admin-only.
 
+### ⚖️ Member Accountability
+- **Tag System**: Each active member is automatically tagged as Reliable, Needs Improvement, or At Risk based on their current active strike count. The strike thresholds for each tag are configurable in Alliance Settings.
+- **Hybrid Strike System**: VS performance is auto-flagged against the configurable weekly minimum (set in Alliance Settings). Officers review flagged members and add strikes with one click — duplicate VS strikes for the same week are blocked. Storm no-shows and train no-shows are manually logged by officers post-event; all other strikes can be added manually with a reason and optional reference date.
+- **Train No-Show Tracking**: Officers can mark any train log entry as a no-show directly from the Train Tracker page. Doing so auto-creates an accountability strike; toggling it back removes the strike.
+- **Storm Attendance Logging**: Officers log post-event storm attendance from the Accountability page — select the storm date, then mark each member as attended, no-show, or excused with an optional reason.
+- **Member Profile**: Each member has a dedicated accountability profile showing their current tag and strike count, full strike history (with excuse/delete controls for officers), VS history for the last 8 weeks, storm attendance history, and train log.
+- **Weekly Report**: A summary page showing top VS performers, members below the VS minimum, top power growth, and a breakdown of members by tag.
+- **Dashboard Card**: An Accountability card on the dashboard surfaces the At Risk / Needs Improvement / Reliable counts and the three members with the most active strikes at a glance.
+- **Permission-Gated Access**: `view_accountability` and `manage_accountability` default to R4/R5. Members cannot view their own accountability profile.
+
 ### 🚂 Train Tracker
 - **Eligibility Rule Engine**: Officers create and save named eligibility rules using flexible OR-group / AND-condition logic to define who qualifies to conduct a train. Conditions can filter on member rank, current/previous week VS points, individual VS day columns, and days since last FREE or any train conducted.
 - **Configurable Selection**: Each rule stores a selection method — Random, Greatest, or Least — applied to any tracked field (e.g. "prioritise members who have gone longest without conducting a FREE train").

@@ -245,6 +245,8 @@ type Settings struct {
 	AllianceMaxMembers           int    `json:"alliance_max_members"`
 	JoinRequirements             string `json:"join_requirements"`
 	VSMinimumPoints              int    `json:"vs_minimum_points"`
+	StrikeNeedsImprovementThreshold int `json:"strike_needs_improvement_threshold"`
+	StrikeAtRiskThreshold           int `json:"strike_at_risk_threshold"`
 }
 
 type StormAssignment struct {
@@ -386,6 +388,8 @@ type RankPermissions struct {
 	ViewAllies           bool   `json:"view_allies"`
 	ManageAllies         bool   `json:"manage_allies"`
 	ViewActivity         bool   `json:"view_activity"`
+	ViewAccountability   bool   `json:"view_accountability"`
+	ManageAccountability bool   `json:"manage_accountability"`
 }
 
 type ActivityLog struct {
@@ -551,6 +555,7 @@ type PageData struct {
 	HasGCPCredentials bool
 	OCRPipelineReady  bool
 	VSMinimumPoints   int
+	MemberID          int
 }
 
 // DashboardCard represents a single card in the dashboard with its visibility state.

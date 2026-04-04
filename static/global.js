@@ -30,25 +30,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Handle Logout
+    // Handle Logout — inline confirm swap, no browser confirm()
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', async (event) => {
+        logoutBtn.addEventListener('click', (event) => {
             event.preventDefault();
-            if (!confirm('Are you sure you want to logout?')) return;
-            
-            try {
-                const response = await fetch('/api/logout', { method: 'POST' });
-                
-                // NEW: Force an error if the server rejected the logout
-                if (!response.ok) {
-                    throw new Error(`Server rejected logout: ${response.status} ${response.statusText}`);
+            event.stopPropagation(); // keep dropdown open
+
+            // Replace the logout item with Sure? Yes / No
+            logoutBtn.style.display = 'none';
+            const confirmSpan = document.createElement('span');
+            confirmSpan.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 16px;font-size:0.9em;';
+            const label = document.createElement('span');
+            label.textContent = 'Log out?';
+            const yesBtn = document.createElement('button');
+            yesBtn.className = 'btn btn-danger btn-sm';
+            yesBtn.textContent = 'Yes';
+            yesBtn.addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/api/logout', { method: 'POST' });
+                    if (!response.ok) throw new Error('logout failed');
+                    window.location.href = '/login';
+                } catch (error) {
+                    console.error('Logout failed:', error);
+                    confirmSpan.remove();
+                    logoutBtn.style.display = '';
+                    // Show inline error in the dropdown
+                    const errMsg = document.createElement('span');
+                    errMsg.style.cssText = 'display:block;padding:6px 16px;font-size:0.8em;color:#dc3545;';
+                    errMsg.textContent = 'Logout failed — check console.';
+                    logoutBtn.parentNode.insertBefore(errMsg, logoutBtn.nextSibling);
+                    setTimeout(() => errMsg.remove(), 4000);
                 }
-                
-                window.location.href = '/login'; 
-            } catch (error) {
-                console.error('Logout failed:', error);
-                alert('Logout failed! Check the F12 Developer Console for the exact error.');
-            }
+            });
+            const noBtn = document.createElement('button');
+            noBtn.className = 'btn btn-secondary btn-sm';
+            noBtn.textContent = 'No';
+            noBtn.addEventListener('click', () => {
+                confirmSpan.remove();
+                logoutBtn.style.display = '';
+            });
+            confirmSpan.append(label, yesBtn, noBtn);
+            logoutBtn.parentNode.insertBefore(confirmSpan, logoutBtn);
         });
     }
 });

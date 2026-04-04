@@ -45,11 +45,42 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 **Batching**: consecutive `"created"` calls for the same `entity_type` by the same user within 15 minutes are automatically merged (count increments). All other actions always create a new row.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
 ## Known gotchas
+
+### Nav hamburger breakpoint must account for body padding
+The hamburger media query threshold is **not** simply `(nav items × min item width) / 0.95`. The base `body` has `padding: 20px`, and the `@media (max-width: 1024px)` rule overrides this to `padding: 10px`. In the icon-only viewport range (≤1024px) the correct formula is:
+
+```
+container_needed = items × min_item_width          (e.g. 19 × 44px = 836px)
+container = 0.95 × (viewport − 20px)              (body padding 10px each side)
+viewport  = (container_needed + 19) / 0.95        (19 = 0.95 × 20)
+         = 855 / 0.95 ≈ 900px
+```
+
+The current hamburger breakpoint is `@media (max-width: 900px)`. If the item count or min-width changes, recalculate using this formula. Note: users may report the wrapping threshold as ~18px higher than the CSS viewport because browser window width includes the scrollbar.
+
+### Former/archived members have rank `'EX'`, not `'Former'`
+Members removed from the alliance are stored with `rank = 'EX'`. Any query or JS filter that needs only active members must exclude this rank explicitly. Filtering by `'Former'` silently does nothing — that string does not exist in the data.
+
+```sql
+-- Wrong — 'Former' never matches anything
+WHERE m.rank != 'Former'
+
+-- Correct
+WHERE m.rank != 'EX'
+```
+
+```javascript
+// Wrong
+members.filter(m => m.rank !== 'Former')
+
+// Correct
+members.filter(m => m.rank !== 'EX')
+```
 
 ### rank is TEXT, not INTEGER
 `rank_permissions.rank` is `TEXT PRIMARY KEY` with values `'R1'`–`'R5'`. Integer comparisons silently do nothing.

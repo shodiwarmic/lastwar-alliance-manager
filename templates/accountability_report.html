@@ -1,0 +1,45 @@
+{{define "header_text"}}
+<h1>📊 Accountability Report</h1>
+<h2>Weekly performance summary</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="/accountability.css">
+{{end}}
+
+{{define "content"}}
+<div id="accountability-report-page">
+
+    <div class="acc-back-link">
+        <a href="/accountability">← Back to Accountability</a>
+    </div>
+
+    <div id="report-stat-cards" class="acc-stat-cards">
+        <div class="loading-msg">Loading…</div>
+    </div>
+
+    <div class="acc-report-grid">
+        <div class="acc-report-section">
+            <h3>⚔️ Top VS Performers</h3>
+            <div id="report-vs-leaders"><div class="loading-msg">Loading…</div></div>
+        </div>
+        <div class="acc-report-section">
+            <h3>⚠️ VS Underperformers</h3>
+            <div id="report-vs-under"><div class="loading-msg">Loading…</div></div>
+        </div>
+        <div class="acc-report-section">
+            <h3>📈 Power Growth</h3>
+            <div id="report-power-growth"><div class="loading-msg">Loading…</div></div>
+        </div>
+        <div class="acc-report-section">
+            <h3>🏷️ Members by Tag</h3>
+            <div id="report-tag-counts"><div class="loading-msg">Loading…</div></div>
+        </div>
+    </div>
+
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script src="/accountability_report.js"></script>
+{{end}}

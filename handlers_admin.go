@@ -21,8 +21,8 @@ import (
 func getRankPermissions(rank string) RankPermissions {
 	var p RankPermissions
 	p.Rank = rank
-	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings, view_files, upload_files, manage_files, view_anonymous_authors, view_schedule, manage_schedule, view_officer_command, manage_officer_command, view_recruiting, manage_recruiting, view_allies, manage_allies, view_activity FROM rank_permissions WHERE rank = ?`, rank).Scan(
-		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings, &p.ViewFiles, &p.UploadFiles, &p.ManageFiles, &p.ViewAnonymousAuthors, &p.ViewSchedule, &p.ManageSchedule, &p.ViewOfficerCommand, &p.ManageOfficerCommand, &p.ViewRecruiting, &p.ManageRecruiting, &p.ViewAllies, &p.ManageAllies, &p.ViewActivity,
+	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings, view_files, upload_files, manage_files, view_anonymous_authors, view_schedule, manage_schedule, view_officer_command, manage_officer_command, view_recruiting, manage_recruiting, view_allies, manage_allies, view_activity, view_accountability, manage_accountability FROM rank_permissions WHERE rank = ?`, rank).Scan(
+		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings, &p.ViewFiles, &p.UploadFiles, &p.ManageFiles, &p.ViewAnonymousAuthors, &p.ViewSchedule, &p.ManageSchedule, &p.ViewOfficerCommand, &p.ManageOfficerCommand, &p.ViewRecruiting, &p.ManageRecruiting, &p.ViewAllies, &p.ManageAllies, &p.ViewActivity, &p.ViewAccountability, &p.ManageAccountability,
 	)
 	return p
 }
@@ -50,10 +50,10 @@ func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=?, view_files=?, upload_files=?, manage_files=?, view_anonymous_authors=?, view_schedule=?, manage_schedule=?, view_officer_command=?, manage_officer_command=?, view_recruiting=?, manage_recruiting=?, view_allies=?, manage_allies=?, view_activity=? WHERE rank=?`)
+	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=?, view_files=?, upload_files=?, manage_files=?, view_anonymous_authors=?, view_schedule=?, manage_schedule=?, view_officer_command=?, manage_officer_command=?, view_recruiting=?, manage_recruiting=?, view_allies=?, manage_allies=?, view_activity=?, view_accountability=?, manage_accountability=? WHERE rank=?`)
 
 	for _, p := range matrix {
-		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.ViewFiles, p.UploadFiles, p.ManageFiles, p.ViewAnonymousAuthors, p.ViewSchedule, p.ManageSchedule, p.ViewOfficerCommand, p.ManageOfficerCommand, p.ViewRecruiting, p.ManageRecruiting, p.ViewAllies, p.ManageAllies, p.ViewActivity, p.Rank)
+		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.ViewFiles, p.UploadFiles, p.ManageFiles, p.ViewAnonymousAuthors, p.ViewSchedule, p.ManageSchedule, p.ViewOfficerCommand, p.ManageOfficerCommand, p.ViewRecruiting, p.ManageRecruiting, p.ViewAllies, p.ManageAllies, p.ViewActivity, p.ViewAccountability, p.ManageAccountability, p.Rank)
 	}
 	stmt.Close()
 	tx.Commit()
@@ -472,7 +472,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(cv_worker_url, ''),
         COALESCE(train_free_daily_limit, 1), COALESCE(train_purchased_daily_limit, 2),
         COALESCE(alliance_max_members, 100), COALESCE(join_requirements, ''),
-        COALESCE(vs_minimum_points, 2500000)
+        COALESCE(vs_minimum_points, 2500000),
+        COALESCE(strike_needs_improvement_threshold, 1), COALESCE(strike_at_risk_threshold, 3)
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -484,6 +485,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.TrainFreeDailyLimit, &s.TrainPurchasedDailyLimit,
 		&s.AllianceMaxMembers, &s.JoinRequirements,
 		&s.VSMinimumPoints,
+		&s.StrikeNeedsImprovementThreshold, &s.StrikeAtRiskThreshold,
 	)
 
 	if err != nil {
@@ -528,7 +530,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		storm_respect_dst = ?, login_message = ?, max_hq_level = ?, squad_tracking_enabled = ?,
 		train_free_daily_limit = ?, train_purchased_daily_limit = ?,
 		alliance_max_members = ?, join_requirements = ?,
-		vs_minimum_points = ?
+		vs_minimum_points = ?,
+		strike_needs_improvement_threshold = ?, strike_at_risk_threshold = ?
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -536,6 +539,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.TrainFreeDailyLimit, settings.TrainPurchasedDailyLimit,
 		settings.AllianceMaxMembers, settings.JoinRequirements,
 		settings.VSMinimumPoints,
+		settings.StrikeNeedsImprovementThreshold, settings.StrikeAtRiskThreshold,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)

@@ -763,3 +763,82 @@ func toStringSlice(v interface{}) ([]string, bool) {
 	}
 	return out, true
 }
+
+// handleTrainNoShow updates showed_up on a train log and auto-manages the
+// corresponding accountability_strike for train_no_show.
+func handleTrainNoShow(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+	username, _ := session.Values["username"].(string)
+
+	logID, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	var body struct {
+		ShowedUp int `json:"showed_up"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.ShowedUp != 0 && body.ShowedUp != 1 {
+		http.Error(w, "showed_up must be 0 or 1", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch log for member info and current state
+	var conductorID int
+	var conductorName, trainDate string
+	var currentShowedUp int
+	if err := db.QueryRow(`
+		SELECT tl.conductor_id, m.name, tl.date, tl.showed_up
+		FROM train_logs tl
+		JOIN members m ON m.id = tl.conductor_id
+		WHERE tl.id = ?
+	`, logID).Scan(&conductorID, &conductorName, &trainDate, &currentShowedUp); err != nil {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	if _, err := db.Exec("UPDATE train_logs SET showed_up = ? WHERE id = ?", body.ShowedUp, logID); err != nil {
+		slog.Error("handleTrainNoShow: update failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Marking as no-show: auto-create a strike if one doesn't already exist for this log
+	if body.ShowedUp == 0 {
+		var existing int
+		db.QueryRow(`
+			SELECT COUNT(*) FROM accountability_strikes
+			WHERE member_id = ? AND strike_type = 'train_no_show' AND ref_date = ?
+		`, conductorID, trainDate).Scan(&existing)
+		if existing == 0 {
+			if _, err := db.Exec(`
+				INSERT INTO accountability_strikes (member_id, strike_type, reason, ref_date, created_by)
+				VALUES (?, 'train_no_show', ?, ?, ?)
+			`, conductorID, "Train no-show on "+trainDate, trainDate, userID); err != nil {
+				slog.Error("handleTrainNoShow: strike insert failed", "error", err)
+				// Non-fatal — attendance update already succeeded
+			}
+		}
+	} else {
+		// Toggled back to showed_up: remove any matching active train_no_show strike
+		if _, err := db.Exec(`
+			DELETE FROM accountability_strikes
+			WHERE member_id = ? AND strike_type = 'train_no_show' AND ref_date = ? AND status = 'active'
+		`, conductorID, trainDate); err != nil {
+			slog.Error("handleTrainNoShow: strike delete failed", "error", err)
+		}
+	}
+
+	action := "updated"
+	details := "showed_up: " + strconv.Itoa(currentShowedUp) + " → " + strconv.Itoa(body.ShowedUp)
+	logActivity(userID, username, action, "train_log", conductorName+" ("+trainDate+")", false, details)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Updated"})
+}

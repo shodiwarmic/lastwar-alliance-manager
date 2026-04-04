@@ -1,0 +1,207 @@
+/* accountability.css */
+
+/* --- Toolbar --- */
+.acc-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.acc-toolbar-left,
+.acc-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* --- Flag banner for VS underperformers --- */
+.acc-flag-banner {
+    background: rgba(220, 53, 69, 0.12);
+    border: 1px solid rgba(220, 53, 69, 0.4);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* --- Tag badges --- */
+.acc-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.acc-tag--reliable {
+    background: rgba(40, 167, 69, 0.18);
+    color: #28a745;
+}
+.acc-tag--needs-improvement {
+    background: rgba(255, 193, 7, 0.22);
+    color: #b8860b;
+}
+.acc-tag--at-risk {
+    background: rgba(220, 53, 69, 0.18);
+    color: #dc3545;
+}
+
+/* --- Row highlight for below-threshold members --- */
+tr.acc-row--below-vs {
+    background: rgba(220, 53, 69, 0.06) !important;
+}
+
+/* --- VS value colouring --- */
+.acc-vs--below {
+    color: #dc3545;
+    font-weight: 600;
+}
+.acc-vs--ok {
+    color: #28a745;
+}
+
+/* --- Profile header --- */
+.acc-profile-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+}
+.acc-profile-name {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.acc-profile-sub {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+.acc-profile-actions {
+    margin-left: auto;
+}
+
+/* --- Back link --- */
+.acc-back-link {
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+.acc-back-link a {
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+.acc-back-link a:hover {
+    color: var(--text-primary);
+}
+
+/* --- Strike table status --- */
+.acc-status--active {
+    color: #dc3545;
+    font-weight: 600;
+}
+.acc-status--excused {
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+/* --- Storm attendance status --- */
+.acc-attend--attended  { color: #28a745; font-weight: 600; }
+.acc-attend--no-show   { color: #dc3545; font-weight: 600; }
+.acc-attend--excused   { color: var(--text-muted); }
+
+/* --- Storm attendance modal checklist --- */
+.storm-member-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+.storm-member-row:last-child { border-bottom: none; }
+.storm-member-name {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+.storm-member-row select {
+    width: 130px;
+}
+.storm-member-row input[type=text] {
+    flex: 1;
+    min-width: 120px;
+}
+
+/* --- Report page --- */
+.acc-stat-cards {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+}
+.acc-stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 20px;
+    min-width: 140px;
+    flex: 1;
+    text-align: center;
+}
+.acc-stat-card-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.acc-stat-card-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+.acc-report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+.acc-report-section {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+.acc-report-section h3 {
+    font-size: 0.95rem;
+    margin: 0 0 10px 0;
+    color: var(--text-primary);
+}
+
+/* --- Warning button (not in global styles) --- */
+.btn-warning {
+    background: #ffc107;
+    color: #212529;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-warning:hover {
+    background: #e0a800;
+    transform: translateY(-1px);
+}
+.btn-sm.btn-warning {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}

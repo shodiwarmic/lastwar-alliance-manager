@@ -116,6 +116,20 @@
                     </div>
 
                     <div class="settings-group">
+                        <h4>⚖️ Accountability Strike Thresholds</h4>
+                        <div class="form-group">
+                            <label for="strike-needs-improvement-threshold">Needs Improvement (strikes ≥):</label>
+                            <input type="number" id="strike-needs-improvement-threshold" min="1" max="10" required>
+                            <span class="help-text">Members with this many or more active strikes are tagged Needs Improvement.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="strike-at-risk-threshold">At Risk (strikes ≥):</label>
+                            <input type="number" id="strike-at-risk-threshold" min="1" max="10" required>
+                            <span class="help-text">Members with this many or more active strikes are tagged At Risk.</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
                         <h4>🎯 Recruiting</h4>
                         <div class="form-group">
                             <label for="alliance-max-members">Alliance Max Members:</label>

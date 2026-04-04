@@ -25,8 +25,10 @@ const ENTITY_LABELS = {
     vs_points:        'VS points',
     power_records:    'power records',
     permissions:      'permissions',
-    settings:         'settings',
-    credentials:      'credentials',
+    settings:              'settings',
+    credentials:           'credentials',
+    accountability_strike: 'accountability strike',
+    storm_attendance:      'storm attendance',
 };
 
 const ENTITY_LABELS_PLURAL = {
@@ -44,8 +46,9 @@ const ENTITY_LABELS_PLURAL = {
     award_type:       'award types',
     file:             'files',
     storm_group:      'storm groups',
-    vs_points:        'VS points',
-    power_records:    'power records',
+    vs_points:             'VS points',
+    power_records:         'power records',
+    accountability_strike: 'accountability strikes',
 };
 
 function entityLabel(type, count) {

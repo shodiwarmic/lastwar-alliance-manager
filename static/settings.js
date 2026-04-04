@@ -57,6 +57,8 @@ async function loadSettings() {
         document.getElementById('alliance-max-members').value = settings.alliance_max_members ?? 100;
         document.getElementById('join-requirements').value = settings.join_requirements ?? '';
         document.getElementById('vs-minimum-points').value = settings.vs_minimum_points ?? 2500000;
+        document.getElementById('strike-needs-improvement-threshold').value = settings.strike_needs_improvement_threshold ?? 1;
+        document.getElementById('strike-at-risk-threshold').value = settings.strike_at_risk_threshold ?? 3;
 
         const minLen = document.getElementById('pwd-min-length');
         if (minLen) {
@@ -175,6 +177,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alliance_max_members: parseInt(document.getElementById('alliance-max-members').value, 10) || 100,
                 join_requirements: document.getElementById('join-requirements').value.trim(),
                 vs_minimum_points: parseInt(document.getElementById('vs-minimum-points').value, 10) || 2500000,
+                strike_needs_improvement_threshold: parseInt(document.getElementById('strike-needs-improvement-threshold').value, 10) || 1,
+                strike_at_risk_threshold: parseInt(document.getElementById('strike-at-risk-threshold').value, 10) || 3,
             };
 
             const newMatrix = ['R5', 'R4', 'R3', 'R2', 'R1'].map(rank => {

@@ -1,0 +1,87 @@
+{{define "header_text"}}
+<h1>⚖️ Member Profile</h1>
+<h2>Accountability history</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="/accountability.css">
+{{end}}
+
+{{define "content"}}
+<div id="accountability-profile-page">
+
+    <div class="acc-back-link">
+        <a href="/accountability">← Back to Accountability</a>
+    </div>
+
+    <div id="profile-header" class="acc-profile-header">
+        <div class="loading-msg">Loading…</div>
+    </div>
+
+    <div class="tab-bar" style="margin-top:1.5rem;">
+        <button class="tab-btn active" data-tab="strikes">Strikes</button>
+        <button class="tab-btn" data-tab="vs">VS History</button>
+        <button class="tab-btn" data-tab="storm">Storm Attendance</button>
+        <button class="tab-btn" data-tab="train">Train Record</button>
+    </div>
+
+    <div id="tab-strikes" class="tab-content">
+        <div class="loading-msg">Loading…</div>
+    </div>
+    <div id="tab-vs" class="tab-content">
+        <div class="loading-msg">Loading…</div>
+    </div>
+    <div id="tab-storm" class="tab-content">
+        <div class="loading-msg">Loading…</div>
+    </div>
+    <div id="tab-train" class="tab-content">
+        <div class="loading-msg">Loading…</div>
+    </div>
+
+</div>
+{{end}}
+
+{{define "modals"}}
+{{if .Permissions.ManageAccountability}}
+<div id="add-strike-modal" class="modal">
+    <div class="modal-content">
+        <h2>Add Strike</h2>
+        <div class="form-group">
+            <label>Member</label>
+            <input type="text" id="strike-member-name" class="form-input" readonly>
+            <input type="hidden" id="strike-member-id">
+        </div>
+        <div class="form-group">
+            <label for="strike-type">Type</label>
+            <select id="strike-type" class="form-input">
+                <option value="vs_below_threshold">VS Below Threshold</option>
+                <option value="train_no_show">Train No-Show</option>
+                <option value="storm_no_show">Storm No-Show</option>
+                <option value="manual">Manual</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="strike-reason">Reason</label>
+            <textarea id="strike-reason" class="form-input" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="strike-ref-date">Reference Date <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+            <input type="date" id="strike-ref-date" class="form-input">
+        </div>
+        <p id="strike-modal-status" class="status-msg"></p>
+        <div class="button-group">
+            <button id="btn-strike-save" class="btn btn-primary">Save Strike</button>
+            <button id="btn-strike-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+{{end}}
+{{end}}
+
+{{define "scripts"}}
+<script>
+    window.MEMBER_ID   = {{.MemberID}};
+    window.CAN_MANAGE  = {{if .Permissions.ManageAccountability}}true{{else}}false{{end}};
+</script>
+<script src="/accountability_profile.js"></script>
+{{end}}

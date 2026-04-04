@@ -11,7 +11,8 @@ const CARD_META = {
     'vs':           { label: 'VS Performance',   icon: '⚔️' },
     'schedule':     { label: 'Schedule',         icon: '📅' },
     'diplomacy':    { label: 'Diplomacy',        icon: '🤝' },
-    'leader-flags': { label: 'Leader Flags',     icon: '⚠️' },
+    'leader-flags':    { label: 'Leader Flags',    icon: '⚠️' },
+    'accountability':  { label: 'Accountability',  icon: '⚖️' },
 };
 
 // --- Formatting helpers ---
@@ -163,7 +164,7 @@ function buildCard(id) {
 // --- Card renderers ---
 
 function renderHealth(card, members) {
-    const active = members.filter(m => m.rank !== 'Former');
+    const active = members.filter(m => m.rank !== 'EX');
     const totalPower = active.reduce((s, m) => s + (m.power || 0), 0);
     const eligCount = active.filter(m => m.eligible).length;
 
@@ -177,7 +178,9 @@ function renderHealth(card, members) {
 }
 
 function renderVS(card, vsRows) {
-    const totals = vsRows.map(r => ({ name: r.member_name, rank: r.member_rank, total: vsTotal(r) }));
+    const totals = vsRows
+        .filter(r => r.member_rank !== 'EX')
+        .map(r => ({ name: r.member_name, rank: r.member_rank, total: vsTotal(r) }));
     totals.sort((a, b) => b.total - a.total);
 
     const weekTotal = totals.reduce((s, r) => s + r.total, 0);
@@ -290,7 +293,7 @@ function renderLeaderFlags(card, members, vsRows) {
     vsRows.forEach(r => { totals[r.member_id] = vsTotal(r); });
 
     const below = members
-        .filter(m => m.rank !== 'Former')
+        .filter(m => m.rank !== 'EX')
         .filter(m => {
             const t = totals[m.id] ?? null;
             return t !== null && t < VS_MINIMUM;
@@ -317,6 +320,28 @@ function renderLeaderFlags(card, members, vsRows) {
         list.appendChild(li);
     });
     card.appendChild(list);
+}
+
+function renderAccountability(card, data) {
+    const grid = el('div', { className: 'dash-stat-grid' });
+    grid.appendChild(statCell(String(data.at_risk),           'At Risk'));
+    grid.appendChild(statCell(String(data.needs_improvement), 'Needs Improvement'));
+    grid.appendChild(statCell(String(data.reliable),          'Reliable'));
+
+    card.querySelector('.dash-card-loading')?.remove();
+    card.appendChild(grid);
+
+    if (data.top_at_risk && data.top_at_risk.length) {
+        card.appendChild(el('p', { className: 'dash-section-label', textContent: 'Most Strikes' }));
+        const list = el('ul', { className: 'dash-list' });
+        data.top_at_risk.forEach(m => {
+            const li = el('li');
+            li.appendChild(el('span', { className: 'dash-list-name', textContent: m.name + ' (' + m.rank + ')' }));
+            li.appendChild(el('span', { className: 'dash-list-value', textContent: m.active_strikes + ' strike' + (m.active_strikes !== 1 ? 's' : '') }));
+            list.appendChild(li);
+        });
+        card.appendChild(list);
+    }
 }
 
 // --- Preferences ---
@@ -422,10 +447,11 @@ async function boot() {
 
     // Determine which cards we need data for
     const visibleIds = new Set(currentPrefs.filter(p => p.visible !== false).map(p => p.id));
-    const needMembers  = visibleIds.has('health') || visibleIds.has('leader-flags');
-    const needVS       = visibleIds.has('vs')     || visibleIds.has('leader-flags');
-    const needSchedule = visibleIds.has('schedule');
-    const needAllies   = visibleIds.has('diplomacy');
+    const needMembers       = visibleIds.has('health') || visibleIds.has('leader-flags');
+    const needVS            = visibleIds.has('vs')     || visibleIds.has('leader-flags');
+    const needSchedule      = visibleIds.has('schedule');
+    const needAllies        = visibleIds.has('diplomacy');
+    const needAccountability = visibleIds.has('accountability');
 
     // Render card shells in prefs order (visible only)
     const cardEls = {};
@@ -446,6 +472,7 @@ async function boot() {
         fetches.allies = fetch('/api/allies').then(r => r.ok ? r.json() : Promise.reject());
         fetches.agreementTypes = fetch('/api/ally-agreement-types').then(r => r.ok ? r.json() : Promise.reject());
     }
+    if (needAccountability) fetches.accountability = fetch('/api/accountability/summary').then(r => r.ok ? r.json() : Promise.reject());
 
     const results = {};
     await Promise.allSettled(
@@ -472,6 +499,10 @@ async function boot() {
     if (cardEls['leader-flags']) {
         if (results.members && results.vs) renderLeaderFlags(cardEls['leader-flags'], results.members, results.vs);
         else { cardEls['leader-flags'].querySelector('.dash-card-loading')?.remove(); cardEls['leader-flags'].appendChild(errorEl('Failed to load leader flag data.')); }
+    }
+    if (cardEls['accountability']) {
+        if (results.accountability) renderAccountability(cardEls['accountability'], results.accountability);
+        else { cardEls['accountability'].querySelector('.dash-card-loading')?.remove(); cardEls['accountability'].appendChild(errorEl('Failed to load accountability data.')); }
     }
 
     initGridSortable(grid);

@@ -48,103 +48,109 @@
         </header>
 
         <nav class="nav-menu" id="main-nav">
-            <a href="/" class="nav-link {{if eq .ActivePage "dashboard"}}active{{end}}">
+            <a href="/" class="nav-link {{if eq .ActivePage "dashboard"}}active{{end}}" data-label="Dashboard">
                 <span class="nav-icon">🏠</span><span class="nav-text">Dashboard</span>
             </a>
-            <a href="/members" class="nav-link {{if eq .ActivePage "members"}}active{{end}}">
+            <a href="/members" class="nav-link {{if eq .ActivePage "members"}}active{{end}}" data-label="Members">
                 <span class="nav-icon">👥</span><span class="nav-text">Members</span>
             </a>
-            
+
             {{if .Permissions.ViewFiles}}
-            <a href="/files" class="nav-link {{if eq .ActivePage "files"}}active{{end}}">
+            <a href="/files" class="nav-link {{if eq .ActivePage "files"}}active{{end}}" data-label="Files">
                 <span class="nav-icon">📁</span><span class="nav-text">Files</span>
             </a>
             {{end}}
-            
+
             {{if .Permissions.ViewDyno}}
-            <a href="/dyno" class="nav-link {{if eq .ActivePage "dyno"}}active{{end}}">
+            <a href="/dyno" class="nav-link {{if eq .ActivePage "dyno"}}active{{end}}" data-label="Shoutouts">
                 <span class="nav-icon">📢</span><span class="nav-text">Shoutouts</span>
             </a>
             {{end}}
-            
+
             {{if .Permissions.ViewRankings}}
-            <a href="/rankings" class="nav-link {{if eq .ActivePage "rankings"}}active{{end}}">
+            <a href="/rankings" class="nav-link {{if eq .ActivePage "rankings"}}active{{end}}" data-label="Rankings">
                 <span class="nav-icon">📊</span><span class="nav-text">Rankings</span>
             </a>
             {{end}}
-            
+
             {{if .Permissions.ViewStorm}}
-            <a href="/storm" class="nav-link {{if eq .ActivePage "storm"}}active{{end}}">
+            <a href="/storm" class="nav-link {{if eq .ActivePage "storm"}}active{{end}}" data-label="Storm">
                 <span class="nav-icon">🏜️</span><span class="nav-text">Storm</span>
             </a>
             {{end}}
-            
+
             {{if .Permissions.ViewVSPoints}}
-            <a href="/vs" class="nav-link {{if eq .ActivePage "vs"}}active{{end}}">
+            <a href="/vs" class="nav-link {{if eq .ActivePage "vs"}}active{{end}}" data-label="VS Points">
                 <span class="nav-icon">⚔️</span><span class="nav-text">VS Points</span>
             </a>
             {{end}}
 
             {{if .Permissions.ViewSchedule}}
-            <a href="/schedule" class="nav-link {{if eq .ActivePage "schedule"}}active{{end}}">
+            <a href="/schedule" class="nav-link {{if eq .ActivePage "schedule"}}active{{end}}" data-label="Schedule">
                 <span class="nav-icon">📅</span><span class="nav-text">Schedule</span>
             </a>
             {{end}}
 
             {{if .Permissions.ViewTrain}}
-            <a href="/train" class="nav-link {{if eq .ActivePage "train"}}active{{end}}">
+            <a href="/train" class="nav-link {{if eq .ActivePage "train"}}active{{end}}" data-label="Train">
                 <span class="nav-icon">🚂</span><span class="nav-text">Train</span>
             </a>
             {{end}}
 
             {{if .Permissions.ViewOfficerCommand}}
-            <a href="/officer-command" class="nav-link {{if eq .ActivePage "officer-command"}}active{{end}}">
+            <a href="/officer-command" class="nav-link {{if eq .ActivePage "officer-command"}}active{{end}}" data-label="Officers">
                 <span class="nav-icon">🎖️</span><span class="nav-text">Officers</span>
             </a>
             {{end}}
 
             {{if .Permissions.ViewRecruiting}}
-            <a href="/recruiting" class="nav-link {{if eq .ActivePage "recruiting"}}active{{end}}">
+            <a href="/recruiting" class="nav-link {{if eq .ActivePage "recruiting"}}active{{end}}" data-label="Recruiting">
                 <span class="nav-icon">🎯</span><span class="nav-text">Recruiting</span>
             </a>
             {{end}}
 
             {{if .Permissions.ViewAllies}}
-            <a href="/allies" class="nav-link {{if eq .ActivePage "allies"}}active{{end}}">
+            <a href="/allies" class="nav-link {{if eq .ActivePage "allies"}}active{{end}}" data-label="Allies">
                 <span class="nav-icon">🤝</span><span class="nav-text">Allies</span>
             </a>
             {{end}}
 
             {{if or .Permissions.ViewActivity .IsAdmin}}
-            <a href="/activity" class="nav-link {{if eq .ActivePage "activity"}}active{{end}}">
+            <a href="/activity" class="nav-link {{if eq .ActivePage "activity"}}active{{end}}" data-label="Activity">
                 <span class="nav-icon">📋</span><span class="nav-text">Activity</span>
             </a>
             {{end}}
 
+            {{if .Permissions.ViewAccountability}}
+            <a href="/accountability" class="nav-link {{if eq .ActivePage "accountability"}}active{{end}}" data-label="Accountability">
+                <span class="nav-icon">⚖️</span><span class="nav-text">Accountability</span>
+            </a>
+            {{end}}
+
             {{if .Permissions.ManageMembers}}
-            <a href="/alias-audit" class="nav-link {{if eq .ActivePage "alias-audit"}}active{{end}}">
+            <a href="/alias-audit" class="nav-link {{if eq .ActivePage "alias-audit"}}active{{end}}" data-label="Aliases">
                 <span class="nav-icon">🏷️</span><span class="nav-text">Aliases</span>
             </a>
             {{end}}
-            
+
             {{if and .Permissions.ViewUpload .OCRPipelineReady}}
-            <a href="/upload" class="nav-link {{if eq .ActivePage "upload"}}active{{end}}">
+            <a href="/upload" class="nav-link {{if eq .ActivePage "upload"}}active{{end}}" data-label="Upload">
                 <span class="nav-icon">📸</span><span class="nav-text">Upload</span>
             </a>
             {{end}}
 
-            <a href="/profile" class="nav-link {{if eq .ActivePage "profile"}}active{{end}}">
+            <a href="/profile" class="nav-link {{if eq .ActivePage "profile"}}active{{end}}" data-label="My Profile">
                 <span class="nav-icon">👤</span><span class="nav-text">My Profile</span>
             </a>
-            
+
             {{if .Permissions.ManageSettings}}
-            <a href="/settings" class="nav-link {{if eq .ActivePage "settings"}}active{{end}}">
+            <a href="/settings" class="nav-link {{if eq .ActivePage "settings"}}active{{end}}" data-label="Settings">
                 <span class="nav-icon">⚙️</span><span class="nav-text">Settings</span>
             </a>
             {{end}}
 
             {{if .IsAdmin}}
-            <a href="/admin" class="nav-link admin-link {{if eq .ActivePage "admin"}}active{{end}}">
+            <a href="/admin" class="nav-link admin-link {{if eq .ActivePage "admin"}}active{{end}}" data-label="Admin">
                 <span class="nav-icon">🔐</span><span class="nav-text">Admin</span>
             </a>
             {{end}}

@@ -23,6 +23,9 @@ func allowedCards(data PageData) []DashboardCard {
 	if data.Rank == "R4" || data.Rank == "R5" || data.IsAdmin {
 		cards = append(cards, DashboardCard{ID: "leader-flags", Visible: true})
 	}
+	if data.Permissions.ViewAccountability {
+		cards = append(cards, DashboardCard{ID: "accountability", Visible: true})
+	}
 	return cards
 }
 
