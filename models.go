@@ -612,6 +612,68 @@ type VSImportCommitRequest struct {
 	SaveAliases []NewAliasMapping `json:"save_aliases"`
 }
 
+// --- Mobile API Payloads ---
+
+type MobileTokenClaims struct {
+	UserID        int    `json:"user_id"`
+	Username      string `json:"username"`
+	MemberID      *int   `json:"member_id,omitempty"`
+	IsAdmin       bool   `json:"is_admin"`
+	ManageVS      bool   `json:"manage_vs"`
+	ManageMembers bool   `json:"manage_members"`
+	jwt.RegisteredClaims
+}
+
+type MobileScanEntry struct {
+	Name     string `json:"name"`
+	Score    int64  `json:"score"`
+	Category string `json:"category"`
+}
+
+type MobilePreviewRequest struct {
+	WeekDate string            `json:"week_date"`
+	Entries  []MobileScanEntry `json:"entries"`
+}
+
+type MobilePreviewMatch struct {
+	OriginalName  string  `json:"original_name"`
+	MatchedMember *Member `json:"matched_member,omitempty"`
+	MatchType     string  `json:"match_type"`
+	Category      string  `json:"category"`
+	Score         int64   `json:"score"`
+}
+
+type MobilePreviewResponse struct {
+	WeekDate        string               `json:"week_date"`
+	Matched         []MobilePreviewMatch `json:"matched"`
+	Unresolved      []MobilePreviewMatch `json:"unresolved"`
+	AllMembers      []Member             `json:"all_members"`
+	TotalSubmitted  int                  `json:"total_submitted"`
+	TotalMatched    int                  `json:"total_matched"`
+	TotalUnresolved int                  `json:"total_unresolved"`
+}
+
+type MobileCommitRecord struct {
+	MemberID     int    `json:"member_id"`
+	OriginalName string `json:"original_name"`
+	Category     string `json:"category"`
+	Score        int64  `json:"score"`
+}
+
+type MobileCommitRequest struct {
+	WeekDate    string               `json:"week_date"`
+	Records     []MobileCommitRecord `json:"records"`
+	SaveAliases []NewAliasMapping    `json:"save_aliases"`
+}
+
+type MobileCommitResponse struct {
+	Message           string   `json:"message"`
+	VSRecordsSaved    int      `json:"vs_records_saved"`
+	PowerRecordsSaved int      `json:"power_records_saved"`
+	AliasesSaved      int      `json:"aliases_saved"`
+	Errors            []string `json:"errors"`
+}
+
 // --- Allies Models ---
 
 type AllyAgreementType struct {

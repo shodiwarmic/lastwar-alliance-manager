@@ -225,6 +225,12 @@ func main() {
 	router.HandleFunc("/api/vs-points/import/preview", authMiddleware(requirePermission("manage_members", previewCSVImport))).Methods("POST")
 	router.HandleFunc("/api/vs-points/import/commit", authMiddleware(requirePermission("manage_members", commitCSVImport))).Methods("POST")
 
+	// Mobile API (bearer token auth, CSRF exempt)
+	router.HandleFunc("/api/mobile/login", mobileLogin).Methods("POST")
+	router.HandleFunc("/api/mobile/members", mobileBearerMiddleware(getMobileMembers)).Methods("GET")
+	router.HandleFunc("/api/mobile/preview", mobileBearerMiddleware(requireMobilePermission("manage_vs", mobilePreview))).Methods("POST")
+	router.HandleFunc("/api/mobile/commit", mobileBearerMiddleware(requireMobilePermission("manage_vs", mobileCommit))).Methods("POST")
+
 	// Dyno
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(getDynoRecommendations)).Methods("GET")
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(createDynoRecommendation)).Methods("POST")
@@ -467,8 +473,9 @@ func main() {
 
 	// Create a conditional handler to bypass CSRF for WOPI webhooks
 	appHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/wopi/") {
-			// Send WOPI traffic directly to the router (bypassing CSRF)
+		if strings.HasPrefix(r.URL.Path, "/wopi/") ||
+			strings.HasPrefix(r.URL.Path, "/api/mobile/") {
+			// Send WOPI and mobile API traffic directly to the router (bypassing CSRF)
 			router.ServeHTTP(w, r)
 		} else {
 			// Send all other traffic through the CSRF middleware
