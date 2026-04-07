@@ -51,6 +51,33 @@ When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_L
 
 ## Known gotchas
 
+### CSP `'unsafe-inline'` must be removed as inline config blocks are migrated
+The deployed `Content-Security-Policy` header currently includes `'unsafe-inline'` in `script-src` because 13+ templates use inline `window.VAR = ...` config blocks in `{{define "scripts"}}`. This weakens XSS protection.
+
+**When touching a template's `{{define "scripts"}}` block**, migrate any inline `window.VAR = ...` assignments to `data-*` attributes on a container element and read them from JS via `dataset`. Example:
+
+```html
+<!-- Before (in template) -->
+{{define "scripts"}}
+<script>window.CAN_MANAGE = {{if .CanManage}}true{{else}}false{{end}};</script>
+<script src="/feature.js"></script>
+{{end}}
+
+<!-- After (in template) -->
+{{define "scripts"}}
+<div id="page-config" data-can-manage="{{if .CanManage}}true{{else}}false{{end}}" hidden></div>
+<script src="/feature.js"></script>
+{{end}}
+```
+
+```javascript
+// After (in JS)
+const cfg = document.getElementById('page-config').dataset;
+const CAN_MANAGE = cfg.canManage === 'true';
+```
+
+Once **all** templates are migrated, remove `'unsafe-inline'` from `script-src` in `install.sh`, `update.sh`, and `Caddyfile`.
+
 ### Nav hamburger breakpoint must account for body padding
 The hamburger media query threshold is **not** simply `(nav items × min item width) / 0.95`. The base `body` has `padding: 20px`, and the `@media (max-width: 1024px)` rule overrides this to `padding: 10px`. In the icon-only viewport range (≤1024px) the correct formula is:
 
