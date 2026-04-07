@@ -76,12 +76,37 @@
                         <h4>🕒 Desert Storm Timezone Display</h4>
                         <p class="help-text">Select which local times are shown on the Storm page dropdown to help international members coordinate.</p>
                         
-                        <div class="checkbox-group" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 15px;">
-                            <label><input type="checkbox" class="tz-checkbox" value="America/New_York"> US Eastern (EST/EDT)</label>
-                            <label><input type="checkbox" class="tz-checkbox" value="America/Los_Angeles"> US Pacific (PST/PDT)</label>
-                            <label><input type="checkbox" class="tz-checkbox" value="Europe/London"> UK (GMT/BST)</label>
-                            <label><input type="checkbox" class="tz-checkbox" value="Europe/Berlin"> Central Europe (CET/CEST)</label>
-                            <label><input type="checkbox" class="tz-checkbox" value="Australia/Perth"> Western Australia (AWST)</label>
+                        <div style="margin-bottom: 15px;">
+                            <p style="font-weight: 600; margin: 0 0 8px 0; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Americas</p>
+                            <div class="checkbox-group" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-bottom: 14px;">
+                                <label><input type="checkbox" class="tz-checkbox" value="America/New_York"> US Eastern (EST/EDT)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="America/Chicago"> US Central (CST/CDT)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="America/Denver"> US Mountain (MST/MDT)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="America/Los_Angeles"> US Pacific (PST/PDT)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="America/Anchorage"> Alaska (AKST/AKDT)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="America/Sao_Paulo"> Brazil (BRT/BRST)</label>
+                            </div>
+                            <p style="font-weight: 600; margin: 0 0 8px 0; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Europe</p>
+                            <div class="checkbox-group" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-bottom: 14px;">
+                                <label><input type="checkbox" class="tz-checkbox" value="Europe/London"> UK (GMT/BST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Europe/Paris"> Paris (CET/CEST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Europe/Berlin"> Central Europe (CET/CEST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Europe/Helsinki"> Helsinki (EET/EEST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Europe/Moscow"> Moscow (MSK)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Europe/Istanbul"> Istanbul (TRT)</label>
+                            </div>
+                            <p style="font-weight: 600; margin: 0 0 8px 0; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Asia-Pacific</p>
+                            <div class="checkbox-group" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
+                                <label><input type="checkbox" class="tz-checkbox" value="Asia/Dubai"> Dubai (GST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Asia/Kolkata"> India (IST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Asia/Bangkok"> Bangkok (ICT)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Asia/Shanghai"> China (CST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Asia/Tokyo"> Japan (JST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Asia/Seoul"> Korea (KST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Australia/Sydney"> Sydney (AEST/AEDT)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Australia/Perth"> Western Australia (AWST)</label>
+                                <label><input type="checkbox" class="tz-checkbox" value="Pacific/Auckland"> New Zealand (NZST/NZDT)</label>
+                            </div>
                         </div>
 
                         <div style="border-top: 1px solid var(--border-color); padding-top: 15px;">

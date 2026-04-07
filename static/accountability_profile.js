@@ -3,6 +3,9 @@
 const MEMBER_ID  = window.MEMBER_ID  || 0;
 const CAN_MANAGE = window.CAN_MANAGE || false;
 
+// Flatpickr instance — initialised in DOMContentLoaded
+let strikeRefDateFP = null;
+
 function fmtNumber(n) {
     if (n == null) return '—';
     if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
@@ -33,13 +36,17 @@ function openStrikeModal(preType) {
     document.getElementById('strike-member-name').value = window._profileName || '';
     if (preType) document.getElementById('strike-type').value = preType;
     document.getElementById('strike-reason').value = '';
-    document.getElementById('strike-ref-date').value = '';
+    strikeRefDateFP.clear(false);
     document.getElementById('strike-modal-status').textContent = '';
-    document.getElementById('add-strike-modal').style.display = 'flex';
+    const strikeModal = document.getElementById('add-strike-modal');
+    strikeModal.style.display = 'flex';
+    trapFocus(strikeModal);
 }
 
 function closeStrikeModal() {
-    document.getElementById('add-strike-modal').style.display = '';
+    const strikeModal = document.getElementById('add-strike-modal');
+    releaseFocus(strikeModal);
+    strikeModal.style.display = '';
 }
 
 async function saveStrike() {
@@ -363,6 +370,8 @@ async function boot() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    strikeRefDateFP = flatpickr('#strike-ref-date', { dateFormat: 'Y-m-d', allowInput: true });
+
     initTabs();
     boot();
     if (CAN_MANAGE) {

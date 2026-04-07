@@ -1,0 +1,72 @@
+/* ── Choices.js theme — aligns with app CSS variables for light & dark mode ── */
+
+.choices__inner {
+    background: var(--input-bg);
+    border: 2px solid var(--input-border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    min-height: 38px;
+    padding: 4px 8px;
+    font-size: 0.95rem;
+}
+
+.choices.is-focused .choices__inner,
+.choices.is-open .choices__inner {
+    border-color: #667eea;
+    outline: none;
+}
+
+.choices__list--single .choices__item {
+    color: var(--text-primary);
+}
+
+.choices__placeholder {
+    color: var(--text-muted);
+    opacity: 1;
+}
+
+/* Dropdown panel */
+.choices__list--dropdown,
+.choices__list[aria-expanded] {
+    background: var(--input-bg);
+    border: 2px solid #667eea;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    z-index: 1000;
+}
+
+/* Search input inside dropdown */
+.choices__input {
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.9rem;
+    padding: 6px 8px;
+    margin: 0;
+    width: 100%;
+}
+
+.choices__input::placeholder {
+    color: var(--text-muted);
+}
+
+/* Dropdown items */
+.choices__list--dropdown .choices__item,
+.choices__list[aria-expanded] .choices__item {
+    color: var(--text-primary);
+    padding: 7px 10px;
+    font-size: 0.9rem;
+}
+
+/* Hover / keyboard-focused item */
+.choices__list--dropdown .choices__item--highlighted,
+.choices__list[aria-expanded] .choices__item--highlighted {
+    background: #667eea;
+    color: #fff;
+}
+
+/* "No results found" */
+.choices__list--dropdown .choices__item.has-no-results,
+.choices__list--dropdown .choices__notice {
+    color: var(--text-muted);
+}

@@ -20,13 +20,34 @@ const BUILDINGS = [
 // The game server is UTC-2 (0:00 Server = 02:00 UTC = 22:00 EDT)
 const SERVER_UTC_OFFSET = -2;
 
-const TIMEZONE_MAP = {
-    "America/New_York": { label: "US Eastern", stdOffset: -5, stdName: "EST" },
-    "America/Los_Angeles": { label: "US Pacific", stdOffset: -8, stdName: "PST" },
-    "Europe/London": { label: "UK", stdOffset: 0, stdName: "GMT" },
-    "Europe/Berlin": { label: "CET", stdOffset: 1, stdName: "CET" },
-    "Australia/Perth": { label: "AWST", stdOffset: 8, stdName: "AWST" }
+// Human-readable labels for zone display (display only — offsets handled by Day.js)
+const ZONE_LABELS = {
+    "America/New_York":      "US Eastern",
+    "America/Chicago":       "US Central",
+    "America/Denver":        "US Mountain",
+    "America/Los_Angeles":   "US Pacific",
+    "America/Anchorage":     "Alaska",
+    "America/Sao_Paulo":     "Brazil",
+    "Europe/London":         "UK",
+    "Europe/Paris":          "Paris",
+    "Europe/Berlin":         "CET",
+    "Europe/Helsinki":       "Helsinki",
+    "Europe/Moscow":         "Moscow",
+    "Europe/Istanbul":       "Istanbul",
+    "Asia/Dubai":            "Dubai",
+    "Asia/Kolkata":          "India",
+    "Asia/Bangkok":          "Bangkok",
+    "Asia/Shanghai":         "China",
+    "Asia/Tokyo":            "Japan",
+    "Asia/Seoul":            "Korea",
+    "Australia/Sydney":      "Sydney",
+    "Australia/Perth":       "Perth",
+    "Pacific/Auckland":      "New Zealand"
 };
+
+dayjs.extend(dayjs_plugin_utc);
+dayjs.extend(dayjs_plugin_timezone);
+dayjs.extend(dayjs_plugin_advancedFormat);
 
 const STORM_SLOTS = [
     { id: 1, start: "09:00", end: "09:30" },
@@ -34,49 +55,27 @@ const STORM_SLOTS = [
     { id: 3, start: "23:00", end: "23:30" }
 ];
 
-function formatStormTimes(selectedZonesStr, respectDST, elementId) {
+function formatStormTimes(selectedZonesStr, _respectDST, elementId) {
     if (!elementId) elementId = 'storm-time-select-a';
     const selectedZones = selectedZonesStr ? selectedZonesStr.split(',') : ["America/New_York"];
     const dropdown = document.getElementById(elementId);
     if (!dropdown) return;
 
     dropdown.replaceChildren();
-    const refDate = new Date();
+    const now = dayjs();
 
     STORM_SLOTS.forEach(slot => {
-        let labelParts = [`${slot.start} Server Time`];
+        const [hours, minutes] = slot.start.split(':').map(Number);
+        // Build the server time moment: set hour/minute in UTC, then shift by SERVER_UTC_OFFSET
+        // Server is UTC-2, so server 09:00 = UTC 11:00
+        const serverTime = now.utc().hour(hours - SERVER_UTC_OFFSET).minute(minutes).second(0);
+
+        let labelParts = [`${slot.start} Server`];
 
         selectedZones.forEach(zoneKey => {
-            const tzInfo = TIMEZONE_MAP[zoneKey];
-            if (!tzInfo) return;
-
-            const [hours, minutes] = slot.start.split(':');
-            const utcDate = new Date(Date.UTC(
-                refDate.getUTCFullYear(),
-                refDate.getUTCMonth(),
-                refDate.getUTCDate(),
-                parseInt(hours) - SERVER_UTC_OFFSET,
-                parseInt(minutes)
-            ));
-
-            let timeString = '';
-            if (respectDST) {
-                const formatter = new Intl.DateTimeFormat('en-US', {
-                    timeZone: zoneKey,
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                    timeZoneName: 'short'
-                });
-                timeString = formatter.format(utcDate);
-            } else {
-                const stdDate = new Date(utcDate.getTime() + (tzInfo.stdOffset * 3600000));
-                const formattedHour = String(stdDate.getUTCHours()).padStart(2, '0');
-                const formattedMin = String(stdDate.getUTCMinutes()).padStart(2, '0');
-                timeString = `${formattedHour}:${formattedMin} ${tzInfo.stdName}`;
-            }
-
-            labelParts.push(timeString);
+            if (!ZONE_LABELS[zoneKey]) return;
+            const local = serverTime.tz(zoneKey);
+            labelParts.push(local.format('HH:mm z'));
         });
 
         const option = document.createElement('option');

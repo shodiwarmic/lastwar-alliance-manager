@@ -111,7 +111,9 @@ async function openFile(id, type, title, ext) {
     if (type === 'image') {
         document.getElementById('image-modal-title').textContent = title;
         document.getElementById('image-modal-img').src = `/api/files/download/${id}`;
-        document.getElementById('image-modal').style.display = 'flex';
+        const imageModal = document.getElementById('image-modal');
+        imageModal.style.display = 'flex';
+        trapFocus(imageModal);
     } else if (!COLLABORA_SUPPORTED.has(ext)) {
         // CSV and other plain-text formats can't be opened in Collabora Online — download instead
         window.location.href = `/api/files/download/${id}`;
@@ -155,20 +157,38 @@ async function openFile(id, type, title, ext) {
         iframe.style.cssText = 'width:100%; height:100%; border:none; border-radius: 8px;';
 
         document.getElementById('document-modal-body').replaceChildren(form, iframe);
-        document.getElementById('document-modal').style.display = 'flex';
+        const documentModal = document.getElementById('document-modal');
+        documentModal.style.display = 'flex';
+        trapFocus(documentModal);
 
         // Submit the hidden form to securely pass the token into the iframe
         form.submit();
     }
 }
 
+function closeImageModal() {
+    const m = document.getElementById('image-modal');
+    releaseFocus(m);
+    m.style.display = 'none';
+}
+
+function closeDocumentModal() {
+    const m = document.getElementById('document-modal');
+    releaseFocus(m);
+    m.style.display = 'none';
+}
+
 function showUploadModal() {
     document.getElementById('upload-form').reset();
-    document.getElementById('upload-modal').style.display = 'flex';
+    const uploadModal = document.getElementById('upload-modal');
+    uploadModal.style.display = 'flex';
+    trapFocus(uploadModal);
 }
 
 function closeUploadModal() {
-    document.getElementById('upload-modal').style.display = 'none';
+    const uploadModal = document.getElementById('upload-modal');
+    releaseFocus(uploadModal);
+    uploadModal.style.display = 'none';
 }
 
 async function handleUpload(e) {
@@ -213,11 +233,15 @@ function showEditModal(id) {
     document.getElementById('edit-file-min-rank').value = file.min_rank;
     document.getElementById('edit-file-min-edit-rank').value = file.min_edit_rank;
 
-    document.getElementById('edit-modal').style.display = 'flex';
+    const editModal = document.getElementById('edit-modal');
+    editModal.style.display = 'flex';
+    trapFocus(editModal);
 }
 
 function closeEditModal() {
-    document.getElementById('edit-modal').style.display = 'none';
+    const editModal = document.getElementById('edit-modal');
+    releaseFocus(editModal);
+    editModal.style.display = 'none';
     currentEditFileId = null;
 }
 

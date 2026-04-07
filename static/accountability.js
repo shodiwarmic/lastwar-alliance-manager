@@ -70,18 +70,26 @@ function onTabActivated(tab) {
 
 let allMembers = [];
 
+// Flatpickr instances — initialised in DOMContentLoaded
+let stormDateFP = null;
+let strikeRefDateFP = null;
+
 function openStrikeModal(memberID, memberName, preType) {
     document.getElementById('strike-member-id').value = memberID;
     document.getElementById('strike-member-name').value = memberName;
     if (preType) document.getElementById('strike-type').value = preType;
     document.getElementById('strike-reason').value = '';
-    document.getElementById('strike-ref-date').value = '';
+    strikeRefDateFP.clear(false);
     document.getElementById('strike-modal-status').textContent = '';
-    document.getElementById('add-strike-modal').style.display = 'flex';
+    const strikeModal = document.getElementById('add-strike-modal');
+    strikeModal.style.display = 'flex';
+    trapFocus(strikeModal);
 }
 
 function closeStrikeModal() {
-    document.getElementById('add-strike-modal').style.display = '';
+    const strikeModal = document.getElementById('add-strike-modal');
+    releaseFocus(strikeModal);
+    strikeModal.style.display = '';
 }
 
 async function saveStrike() {
@@ -592,6 +600,14 @@ async function loadReport() {
 // --- Boot ---
 
 document.addEventListener('DOMContentLoaded', () => {
+    stormDateFP    = flatpickr('#storm-date-input', {
+        dateFormat: 'Y-m-d',
+        allowInput: true,
+        disable: [date => date.getDay() !== 5],  // Fridays only (0=Sun … 5=Fri)
+        locale: { firstDayOfWeek: 1 }
+    });
+    strikeRefDateFP = flatpickr('#strike-ref-date', { dateFormat: 'Y-m-d', allowInput: true });
+
     setupTabs();
     loadMembers();
 

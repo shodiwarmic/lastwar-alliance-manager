@@ -128,7 +128,9 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
                 // Evaluate immediately in case browser auto-filled it
                 checkForcePasswordRequirements();
 
-                document.getElementById('force-password-modal').style.display = 'flex';
+                const fpModal = document.getElementById('force-password-modal');
+                fpModal.style.display = 'flex';
+                trapFocus(fpModal);
 
                 loginBtn.disabled = false;
                 loginBtn.textContent = 'Login';

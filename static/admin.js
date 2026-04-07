@@ -6,11 +6,29 @@ let allLogins = [];
 let currentEditUserId = null;
 let currentResetUserId = null;
 
+// Choices.js instances — initialised in DOMContentLoaded
+let memberIdChoices = null;
+let newOwnerChoices = null;
+let loginFilterChoices = null;
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     // Check if we are actually on the admin page
     const usersList = document.getElementById('users-list');
     if (usersList) {
+        memberIdChoices = new Choices('#member-id', {
+            searchEnabled: true, searchPlaceholderValue: 'Search…',
+            itemSelectText: '', shouldSort: false,
+        });
+        newOwnerChoices = new Choices('#new-owner-select', {
+            searchEnabled: true, searchPlaceholderValue: 'Search…',
+            itemSelectText: '', shouldSort: false,
+        });
+        loginFilterChoices = new Choices('#login-filter', {
+            searchEnabled: true, searchPlaceholderValue: 'Search…',
+            itemSelectText: '', shouldSort: false,
+        });
+
         // Load initial data
         await loadUsers();
         await loadMembers();
@@ -215,19 +233,14 @@ async function loadMembers() {
 
 // Populate member dropdown
 function populateMemberDropdown() {
-    const select = document.getElementById('member-id');
-    if (select) {
-        const defaultOpt = document.createElement('option');
-        defaultOpt.value = '';
-        defaultOpt.textContent = 'No member linked';
-        const opts = allMembers.map(m => {
-            const opt = document.createElement('option');
-            opt.value = m.id;
-            opt.textContent = `${m.name} (${m.rank})`;
-            return opt;
-        });
-        select.replaceChildren(defaultOpt, ...opts);
-    }
+    if (!memberIdChoices) return;
+    memberIdChoices.setChoices(
+        [
+            { value: '', label: 'No member linked', placeholder: true },
+            ...allMembers.map(m => ({ value: String(m.id), label: `${m.name} (${m.rank})` })),
+        ],
+        'value', 'label', true
+    );
 }
 
 // Show Create User Modal
@@ -236,13 +249,16 @@ function showCreateUserModal() {
     document.getElementById('modal-title').textContent = 'Create New User';
     document.getElementById('user-form').reset();
     document.getElementById('user-id').value = '';
+    memberIdChoices.setChoiceByValue('');
 
     // Default to true for new users
     document.getElementById('force-password-change').checked = true;
 
     document.getElementById('password-group').style.display = 'block';
     document.getElementById('password').required = true;
-    document.getElementById('user-modal').style.display = 'flex';
+    const userModal = document.getElementById('user-modal');
+    userModal.style.display = 'flex';
+    trapFocus(userModal);
 }
 
 // Edit User
@@ -254,7 +270,7 @@ function editUser(userId) {
     document.getElementById('modal-title').textContent = 'Edit User';
     document.getElementById('user-id').value = user.id;
     document.getElementById('username').value = user.username;
-    document.getElementById('member-id').value = user.member_id || '';
+    memberIdChoices.setChoiceByValue(user.member_id ? String(user.member_id) : '');
     document.getElementById('is-admin').checked = user.is_admin;
 
     // Check the box if the user is currently flagged in the DB
@@ -262,12 +278,16 @@ function editUser(userId) {
 
     document.getElementById('password-group').style.display = 'none';
     document.getElementById('password').required = false;
-    document.getElementById('user-modal').style.display = 'flex';
+    const userModal = document.getElementById('user-modal');
+    userModal.style.display = 'flex';
+    trapFocus(userModal);
 }
 
 // Close User Modal
 function closeUserModal() {
-    document.getElementById('user-modal').style.display = 'none';
+    const userModal = document.getElementById('user-modal');
+    releaseFocus(userModal);
+    userModal.style.display = 'none';
     currentEditUserId = null;
 }
 
@@ -342,18 +362,16 @@ async function deleteUser(userId, username) {
             document.getElementById('transfer-username').textContent = username;
             document.getElementById('transfer-file-count').textContent = data.count;
 
-            const select = document.getElementById('new-owner-select');
-            const opts = allUsers
-                .filter(u => u.id !== userId)
-                .map(u => {
-                    const opt = document.createElement('option');
-                    opt.value = u.id;
-                    opt.textContent = u.username;
-                    return opt;
-                });
-            select.replaceChildren(...opts);
+            newOwnerChoices.setChoices(
+                allUsers
+                    .filter(u => u.id !== userId)
+                    .map(u => ({ value: String(u.id), label: u.username })),
+                'value', 'label', true
+            );
 
-            document.getElementById('transfer-files-modal').style.display = 'flex';
+            const transferModal = document.getElementById('transfer-files-modal');
+            transferModal.style.display = 'flex';
+            trapFocus(transferModal);
             return;
         }
     } catch (error) {
@@ -366,7 +384,9 @@ async function deleteUser(userId, username) {
 }
 
 function closeTransferFilesModal() {
-    document.getElementById('transfer-files-modal').style.display = 'none';
+    const transferModal = document.getElementById('transfer-files-modal');
+    releaseFocus(transferModal);
+    transferModal.style.display = 'none';
     pendingDeleteUserId = null;
 }
 
@@ -409,12 +429,16 @@ function showResetPasswordModal(userId, username) {
     document.getElementById('reset-password-info').style.display = 'block';
     document.getElementById('reset-password-result').style.display = 'none';
     document.getElementById('confirm-reset-btn').style.display = 'inline-block';
-    document.getElementById('reset-password-modal').style.display = 'flex';
+    const resetModal = document.getElementById('reset-password-modal');
+    resetModal.style.display = 'flex';
+    trapFocus(resetModal);
 }
 
 // Close Reset Password Modal
 function closeResetPasswordModal() {
-    document.getElementById('reset-password-modal').style.display = 'none';
+    const resetModal = document.getElementById('reset-password-modal');
+    releaseFocus(resetModal);
+    resetModal.style.display = 'none';
     currentResetUserId = null;
 }
 
@@ -486,15 +510,15 @@ async function loadLoginHistory() {
 
 // Populate login filter
 function populateLoginFilter() {
-    const select = document.getElementById('login-filter');
+    if (!loginFilterChoices) return;
     const uniqueUsers = [...new Map(allLogins.map(l => [l.user_id, l])).values()];
-
-    uniqueUsers.forEach(login => {
-        const option = document.createElement('option');
-        option.value = login.user_id;
-        option.textContent = login.username;
-        select.appendChild(option);
-    });
+    loginFilterChoices.setChoices(
+        [
+            { value: '', label: 'All Users', placeholder: true },
+            ...uniqueUsers.map(login => ({ value: String(login.user_id), label: login.username })),
+        ],
+        'value', 'label', true
+    );
 }
 
 function buildStatCard(icon, value, label) {
@@ -788,11 +812,15 @@ async function uploadGCPCredentials(event) {
 
 // GCP Deletion Modal Logic
 function showDeleteGCPModal() {
-    document.getElementById('delete-gcp-modal').style.display = 'flex';
+    const gcpModal = document.getElementById('delete-gcp-modal');
+    gcpModal.style.display = 'flex';
+    trapFocus(gcpModal);
 }
 
 function closeDeleteGCPModal() {
-    document.getElementById('delete-gcp-modal').style.display = 'none';
+    const gcpModal = document.getElementById('delete-gcp-modal');
+    releaseFocus(gcpModal);
+    gcpModal.style.display = 'none';
 }
 
 async function confirmDeleteGCP() {

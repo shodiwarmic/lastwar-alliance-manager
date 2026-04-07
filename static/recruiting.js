@@ -9,6 +9,12 @@ let allMembers = [];        // for recruiter dropdown and capacity header
 let editingProspectId = null;
 let reactivatingMemberId = null;
 
+// Flatpickr instance — initialised in DOMContentLoaded
+let prospectContactedFP = null;
+
+// Choices.js instance — initialised in DOMContentLoaded
+let recruiterChoices = null;
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
 function setupTabs() {
@@ -159,7 +165,7 @@ function openReactivateModal(id, name) {
     const statusEl = document.getElementById('reactivate-status');
     if (nameEl) nameEl.textContent = `Reactivating: ${name}`;
     if (statusEl) statusEl.textContent = '';
-    if (modal) modal.style.display = 'flex';
+    if (modal) { modal.style.display = 'flex'; trapFocus(modal); }
 }
 
 async function permanentlyDeleteMember(id, name, actionsCell, delBtn) {
@@ -369,8 +375,8 @@ function openProspectModal(prospect = null) {
     document.getElementById('prospect-alliance').value = prospect ? prospect.source_alliance : '';
     document.getElementById('prospect-power').value = (prospect && prospect.power) ? prospect.power : '';
     document.getElementById('prospect-rank').value = prospect ? prospect.rank_in_alliance : '';
-    document.getElementById('prospect-recruiter').value = (prospect && prospect.recruiter_id) ? prospect.recruiter_id : '';
-    document.getElementById('prospect-contacted').value = prospect ? prospect.first_contacted : '';
+    recruiterChoices.setChoiceByValue(prospect && prospect.recruiter_id ? String(prospect.recruiter_id) : '');
+    prospectContactedFP.setDate(prospect && prospect.first_contacted ? prospect.first_contacted : null, false);
     document.getElementById('prospect-notes').value = prospect ? prospect.notes : '';
     document.getElementById('prospect-hero-power').value = (prospect && prospect.hero_power != null) ? prospect.hero_power : '';
     document.getElementById('prospect-seat-color').value = prospect ? (prospect.seat_color || '') : '';
@@ -378,7 +384,7 @@ function openProspectModal(prospect = null) {
 
     if (title) title.textContent = prospect ? 'Edit Prospect' : 'Add Prospect';
     if (submitBtn) submitBtn.textContent = prospect ? 'Save Changes' : 'Add Prospect';
-    if (modal) modal.style.display = 'flex';
+    if (modal) { modal.style.display = 'flex'; trapFocus(modal); }
 }
 
 async function handleProspectSubmit(e) {
@@ -424,7 +430,9 @@ async function handleProspectSubmit(e) {
             });
         }
         if (!res.ok) throw new Error('Failed to save prospect');
-        document.getElementById('prospect-modal').style.display = 'none';
+        const pm = document.getElementById('prospect-modal');
+        releaseFocus(pm);
+        pm.style.display = 'none';
         await loadProspects();
     } catch (err) {
         console.error(err);
@@ -446,15 +454,15 @@ async function loadMembersForRecruiter() {
         const res = await fetch('/api/members');
         if (!res.ok) return;
         allMembers = await res.json();
-        const select = document.getElementById('prospect-recruiter');
-        if (select) {
+        if (recruiterChoices) {
             const activeMembers = allMembers.filter(m => m.rank !== 'EX' && m.rank !== 'PROSPECT');
-            activeMembers.forEach(m => {
-                const opt = document.createElement('option');
-                opt.value = m.id;
-                opt.textContent = `${m.name} (${m.rank})`;
-                select.appendChild(opt);
-            });
+            recruiterChoices.setChoices(
+                [
+                    { value: '', label: 'None', placeholder: true },
+                    ...activeMembers.map(m => ({ value: String(m.id), label: `${m.name} (${m.rank})` })),
+                ],
+                'value', 'label', true
+            );
         }
     } catch (err) {
         console.error('Failed to load members for recruiter dropdown:', err);
@@ -475,6 +483,13 @@ async function loadSettingsForHeader() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
+    prospectContactedFP = flatpickr('#prospect-contacted', { dateFormat: 'Y-m-d', allowInput: true });
+
+    recruiterChoices = new Choices('#prospect-recruiter', {
+        searchEnabled: true, searchPlaceholderValue: 'Search…',
+        itemSelectText: '', shouldSort: false,
+    });
+
     setupTabs();
 
     // Prospects is default tab — load it first
@@ -499,15 +514,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Reactivate modal
     const reactivateModal = document.getElementById('reactivate-modal');
-    document.getElementById('close-reactivate-modal')?.addEventListener('click', () => {
-        reactivateModal.style.display = 'none';
-    });
-    document.getElementById('cancel-reactivate-btn')?.addEventListener('click', () => {
-        reactivateModal.style.display = 'none';
-    });
-    window.addEventListener('click', e => {
-        if (e.target === reactivateModal) reactivateModal.style.display = 'none';
-    });
+    const closeReactivateModal = () => { releaseFocus(reactivateModal); reactivateModal.style.display = 'none'; };
+    document.getElementById('close-reactivate-modal')?.addEventListener('click', closeReactivateModal);
+    document.getElementById('cancel-reactivate-btn')?.addEventListener('click', closeReactivateModal);
+    window.addEventListener('click', e => { if (e.target === reactivateModal) closeReactivateModal(); });
 
     document.getElementById('confirm-reactivate-btn')?.addEventListener('click', async () => {
         if (!reactivatingMemberId) return;
@@ -520,7 +530,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 body: JSON.stringify({ rank }),
             });
             if (!res.ok) throw new Error('Failed to reactivate member');
-            reactivateModal.style.display = 'none';
+            closeReactivateModal();
             reactivatingMemberId = null;
             await loadFormerMembers();
         } catch (err) {
@@ -535,14 +545,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Prospect modal
     const prospectModal = document.getElementById('prospect-modal');
     document.getElementById('add-prospect-btn')?.addEventListener('click', () => openProspectModal(null));
-    document.getElementById('close-prospect-modal')?.addEventListener('click', () => {
-        prospectModal.style.display = 'none';
-    });
-    document.getElementById('cancel-prospect-btn')?.addEventListener('click', () => {
-        prospectModal.style.display = 'none';
-    });
-    window.addEventListener('click', e => {
-        if (e.target === prospectModal) prospectModal.style.display = 'none';
-    });
+    const closeProspectModal = () => { releaseFocus(prospectModal); prospectModal.style.display = 'none'; };
+    document.getElementById('close-prospect-modal')?.addEventListener('click', closeProspectModal);
+    document.getElementById('cancel-prospect-btn')?.addEventListener('click', closeProspectModal);
+    window.addEventListener('click', e => { if (e.target === prospectModal) closeProspectModal(); });
     document.getElementById('prospect-form')?.addEventListener('submit', handleProspectSubmit);
 });

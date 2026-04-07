@@ -2,6 +2,9 @@
 
 const IS_ADMIN = window.IS_ADMIN === true;
 
+// Choices.js instance — initialised in DOMContentLoaded
+let userFilterChoices = null;
+
 const ENTITY_LABELS = {
     member:           'member',
     alias:            'alias',
@@ -175,17 +178,19 @@ function renderEntry(entry) {
 }
 
 function populateUserFilter(entries) {
-    const select = document.getElementById('user-filter');
+    if (!userFilterChoices) return;
     const seen = new Set();
+    const userOpts = [];
     entries.forEach(e => {
         if (!seen.has(e.username)) {
             seen.add(e.username);
-            const opt = document.createElement('option');
-            opt.value = e.user_id != null ? e.user_id : '';
-            opt.textContent = e.username;
-            select.appendChild(opt);
+            userOpts.push({ value: e.user_id != null ? String(e.user_id) : '', label: e.username });
         }
     });
+    userFilterChoices.setChoices(
+        [{ value: '', label: 'All users', placeholder: true }, ...userOpts],
+        'value', 'label', true
+    );
 }
 
 let allEntries = [];
@@ -239,12 +244,18 @@ async function loadActivity() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    userFilterChoices = new Choices('#user-filter', {
+        searchEnabled: true, searchPlaceholderValue: 'Search…',
+        itemSelectText: '', shouldSort: false,
+    });
+
     loadActivity();
 
     document.getElementById('limit-select').addEventListener('change', () => {
         userFilterPopulated = false;
-        document.getElementById('user-filter').replaceChildren(
-            Object.assign(document.createElement('option'), { value: '', textContent: 'All users' })
+        userFilterChoices.setChoices(
+            [{ value: '', label: 'All users', placeholder: true }],
+            'value', 'label', true
         );
         loadActivity();
     });

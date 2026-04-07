@@ -58,6 +58,7 @@ function setupModal() {
 
     const openModal = () => {
         modal.style.display = 'flex';
+        trapFocus(modal);
 
         document.getElementById('modal-title').textContent = '➕ Add a Shoutout';
         document.getElementById('edit-shoutout-id').value = '';
@@ -76,6 +77,7 @@ function setupModal() {
     };
 
     const closeModal = () => {
+        releaseFocus(modal);
         modal.style.display = 'none';
         document.getElementById('shoutout-form').reset();
         document.getElementById('selected-member-display').style.display = 'none';
@@ -693,7 +695,9 @@ async function submitDynoRecommendation(e) {
 
         if (!response.ok) throw new Error(await response.text());
 
-        document.getElementById('shoutout-modal').style.display = 'none';
+        const shoutoutModal = document.getElementById('shoutout-modal');
+        releaseFocus(shoutoutModal);
+        shoutoutModal.style.display = 'none';
         document.getElementById('shoutout-form').reset();
         document.getElementById('selected-member-display').style.display = 'none';
         document.getElementById('edit-shoutout-id').value = '';
@@ -747,6 +751,7 @@ function editDynoRecommendation(id) {
     // Open modal and set ranks
     const modal = document.getElementById('shoutout-modal');
     modal.style.display = 'flex';
+    trapFocus(modal);
 
     // Ensure visibility ranks are populated, then select the value
     const ranks = [...new Set(allMembers.map(m => m.rank).filter(r => r))].sort();

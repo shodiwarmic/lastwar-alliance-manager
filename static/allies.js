@@ -325,12 +325,15 @@ function openAllyModal(ally) {
         checkboxContainer.appendChild(label);
     });
 
-    document.getElementById('ally-modal').style.display = 'flex';
-    document.getElementById('ally-server').focus();
+    const allyModal = document.getElementById('ally-modal');
+    allyModal.style.display = 'flex';
+    trapFocus(allyModal);
 }
 
 function closeAllyModal() {
-    document.getElementById('ally-modal').style.display = '';
+    const allyModal = document.getElementById('ally-modal');
+    releaseFocus(allyModal);
+    allyModal.style.display = '';
 }
 
 async function saveAlly() {
@@ -382,12 +385,15 @@ function openTypeModal(t) {
     document.getElementById('type-modal-title').textContent = t ? 'Edit Agreement Type' : 'Add Agreement Type';
     document.getElementById('type-name').value = t ? t.name : '';
     document.getElementById('type-modal-status').textContent = '';
-    document.getElementById('type-modal').style.display = 'flex';
-    document.getElementById('type-name').focus();
+    const typeModal = document.getElementById('type-modal');
+    typeModal.style.display = 'flex';
+    trapFocus(typeModal);
 }
 
 function closeTypeModal() {
-    document.getElementById('type-modal').style.display = '';
+    const typeModal = document.getElementById('type-modal');
+    releaseFocus(typeModal);
+    typeModal.style.display = '';
 }
 
 async function saveType() {

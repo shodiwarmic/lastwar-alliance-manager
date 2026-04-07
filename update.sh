@@ -157,7 +157,7 @@ sudo docker ps -a --filter "ancestor=collabora/code" --format '{{.ID}}\t{{.Label
 echo -e "${YELLOW}Checking reverse proxy security configurations...${NC}"
 if [ -f "/etc/caddy/Caddyfile" ]; then
     # Check if the modern CSP frame-ancestors rule is missing
-    if ! grep -q "frame-ancestors" /etc/caddy/Caddyfile; then
+    if ! grep -q "default-src" /etc/caddy/Caddyfile; then
         echo -e "${YELLOW}Legacy Caddyfile detected. Upgrading security headers...${NC}"
         
         # Load environment variables so we know the domains
@@ -176,6 +176,7 @@ $APP_DOMAIN {
         X-XSS-Protection "1; mode=block"
         Referrer-Policy "strict-origin-when-cross-origin"
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"
         -Server
     }
 }

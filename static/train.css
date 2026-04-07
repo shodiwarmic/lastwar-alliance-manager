@@ -270,6 +270,11 @@
     gap: 8px;
 }
 
+/* Choices.js wrapper in vip-row needs flex:1 since the native select had it */
+.vip-row .choices {
+    flex: 1;
+}
+
 /* ── Misc ─────────────────────────────────────────────────────────────────── */
 
 .empty-state {

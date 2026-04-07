@@ -575,7 +575,9 @@ function renderPreviewModal(data) {
     const unresolvedRows = (data.unresolved || []).map((row, idx) => buildUnresolvedRow(row, idx, availableMembers));
     unresolvedBody.replaceChildren(...unresolvedRows);
 
-    document.getElementById('import-preview-modal').style.display = 'flex';
+    const previewModal = document.getElementById('import-preview-modal');
+    previewModal.style.display = 'flex';
+    trapFocus(previewModal);
 }
 
 function refreshUpdatesCell(unresolvedIndex) {
@@ -695,6 +697,8 @@ async function commitImport() {
 }
 
 function closePreviewModal() {
-    document.getElementById('import-preview-modal').style.display = '';
+    const previewModal = document.getElementById('import-preview-modal');
+    releaseFocus(previewModal);
+    previewModal.style.display = '';
     currentImportPayload = null;
 }

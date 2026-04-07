@@ -376,12 +376,15 @@ function render() {
 function openAddCatModal() {
     document.getElementById('add-cat-name').value = '';
     document.getElementById('add-cat-error').style.display = 'none';
-    document.getElementById('add-cat-modal').style.display = 'flex';
-    document.getElementById('add-cat-name').focus();
+    const addCatModal = document.getElementById('add-cat-modal');
+    addCatModal.style.display = 'flex';
+    trapFocus(addCatModal);
 }
 
 function closeAddCatModal() {
-    document.getElementById('add-cat-modal').style.display = '';
+    const addCatModal = document.getElementById('add-cat-modal');
+    releaseFocus(addCatModal);
+    addCatModal.style.display = '';
 }
 
 async function saveAddCatModal() {
@@ -500,12 +503,15 @@ function openRespModal(ci, ri) {
         document.getElementById('resp-freq').value = 'Weekly';
     }
 
-    document.getElementById('resp-modal').style.display = 'flex';
-    document.getElementById('resp-name').focus();
+    const respModal = document.getElementById('resp-modal');
+    respModal.style.display = 'flex';
+    trapFocus(respModal);
 }
 
 function closeRespModal() {
-    document.getElementById('resp-modal').style.display = '';
+    const respModal = document.getElementById('resp-modal');
+    releaseFocus(respModal);
+    respModal.style.display = '';
     document.getElementById('resp-name-error').style.display = 'none';
     respModalCatIdx = null;
     respModalRespIdx = null;
@@ -597,13 +603,15 @@ function openAssigneeModal(ci, ri) {
     const assigned = new Set(rp.assignees.map(a => a.member_id));
 
     renderAssigneeList('', assigned);
-    document.getElementById('assignee-modal').style.display = 'flex';
-    document.getElementById('assignee-search').value = '';
-    document.getElementById('assignee-search').focus();
+    const assigneeModal = document.getElementById('assignee-modal');
+    assigneeModal.style.display = 'flex';
+    trapFocus(assigneeModal);
 }
 
 function closeAssigneeModal() {
-    document.getElementById('assignee-modal').style.display = '';
+    const assigneeModal = document.getElementById('assignee-modal');
+    releaseFocus(assigneeModal);
+    assigneeModal.style.display = '';
     assigneeModalCatIdx = null;
     assigneeModalRespIdx = null;
 }

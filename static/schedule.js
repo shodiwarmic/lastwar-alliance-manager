@@ -622,7 +622,9 @@ function openDayModal(dayIndex) {
     renderCustomEventsList(day.custom_events || []);
 
     document.getElementById('day-notes').value = day.notes || '';
-    document.getElementById('day-modal').style.display = 'flex';
+    const dayModal = document.getElementById('day-modal');
+    dayModal.style.display = 'flex';
+    trapFocus(dayModal);
 }
 
 function renderCustomEventsList(events) {
@@ -689,7 +691,9 @@ function renderCustomEventsList(events) {
 }
 
 function closeDayModal() {
-    document.getElementById('day-modal').style.display = 'none';
+    const dayModal = document.getElementById('day-modal');
+    releaseFocus(dayModal);
+    dayModal.style.display = 'none';
     _editDayIndex = null;
 }
 

@@ -182,7 +182,9 @@ async function addAlias(aliasText, isGlobal) {
 // ── Modals ────────────────────────────────────────────────────────────────────
 
 function closeAddAliasModal() {
-    document.getElementById('add-alias-modal').style.display = 'none';
+    const m = document.getElementById('add-alias-modal');
+    releaseFocus(m);
+    m.style.display = 'none';
 }
 
 document.getElementById('add-alias-modal').addEventListener('click', e => {
@@ -223,7 +225,9 @@ document.querySelectorAll('[data-filter]').forEach(btn => {
 document.getElementById('btn-add-alias').addEventListener('click', () => {
     document.getElementById('new-alias-text').value = '';
     document.querySelector('input[name="alias-scope"][value="false"]').checked = true;
-    document.getElementById('add-alias-modal').style.display = 'flex';
+    const aliasModal = document.getElementById('add-alias-modal');
+    aliasModal.style.display = 'flex';
+    trapFocus(aliasModal);
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────

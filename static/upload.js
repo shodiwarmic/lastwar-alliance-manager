@@ -422,7 +422,9 @@ function renderPreviewModal(data) {
         });
     }
 
-    document.getElementById('import-preview-modal').style.display = 'flex';
+    const previewModal = document.getElementById('import-preview-modal');
+    previewModal.style.display = 'flex';
+    trapFocus(previewModal);
 }
 
 function mapUnresolved(bucketType, unresolvedIndex, memberId) {
@@ -441,7 +443,9 @@ function mapUnresolved(bucketType, unresolvedIndex, memberId) {
 }
 
 function closePreviewModal() {
-    document.getElementById('import-preview-modal').style.display = 'none';
+    const previewModal = document.getElementById('import-preview-modal');
+    releaseFocus(previewModal);
+    previewModal.style.display = 'none';
     currentImportPayload = null;
 }
 

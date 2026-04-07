@@ -23,9 +23,31 @@ let allRules = [];     // EligibilityRule[]
 let editingLogId = null;
 let editingRuleId = null;
 
+// Flatpickr instances — initialised in DOMContentLoaded
+let logDateFP = null;
+let filterFromFP = null;
+let filterToFP = null;
+
+// Choices.js instances — initialised in DOMContentLoaded
+let conductorChoices = null;
+let vipChoices = null;
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+    logDateFP    = flatpickr('#log-date',    { dateFormat: 'Y-m-d', allowInput: true });
+    filterFromFP = flatpickr('#filter-from', { dateFormat: 'Y-m-d', allowInput: true });
+    filterToFP   = flatpickr('#filter-to',   { dateFormat: 'Y-m-d', allowInput: true });
+
+    conductorChoices = new Choices('#log-conductor', {
+        searchEnabled: true, searchPlaceholderValue: 'Search…',
+        itemSelectText: '', shouldSort: false,
+    });
+    vipChoices = new Choices('#log-vip', {
+        searchEnabled: true, searchPlaceholderValue: 'Search…',
+        itemSelectText: '', shouldSort: false,
+    });
+
     setupTabs();
     loadMembers().then(() => {
         loadTrainLogs(null, null);
@@ -86,18 +108,18 @@ async function loadMembers() {
 }
 
 function populateMemberDropdowns() {
-    const conductorSel = document.getElementById('log-conductor');
-    const vipSel = document.getElementById('log-vip');
-    if (!conductorSel) return;
+    if (!conductorChoices) return;
 
-    // Clear and repopulate
-    conductorSel.replaceChildren(makeOpt('', '— select member —'));
-    vipSel.replaceChildren(makeOpt('', '— none —'));
+    const memberOpts = allMembers.map(m => ({ value: String(m.id), label: `[${m.rank}] ${m.name}` }));
 
-    allMembers.forEach(m => {
-        conductorSel.appendChild(makeOpt(m.id, `[${m.rank}] ${m.name}`));
-        vipSel.appendChild(makeOpt(m.id, `[${m.rank}] ${m.name}`));
-    });
+    conductorChoices.setChoices(
+        [{ value: '', label: '— select member —', placeholder: true }, ...memberOpts],
+        'value', 'label', true
+    );
+    vipChoices.setChoices(
+        [{ value: '', label: '— none —', placeholder: true }, ...memberOpts],
+        'value', 'label', true
+    );
 }
 
 function makeOpt(value, text) {
@@ -229,8 +251,8 @@ function applyFilter() {
 }
 
 function clearFilter() {
-    document.getElementById('filter-from').value = '';
-    document.getElementById('filter-to').value = '';
+    filterFromFP.clear(false);
+    filterToFP.clear(false);
     loadTrainLogs(null, null);
 }
 
@@ -239,21 +261,25 @@ function clearFilter() {
 function openLogModal(log) {
     editingLogId = log ? log.id : null;
     document.getElementById('log-modal-title').textContent = log ? 'Edit Train' : 'Log Train';
-    document.getElementById('log-date').value = log ? log.date : gameToday();
+    logDateFP.setDate(log ? log.date : gameToday(), false);
     document.getElementById('log-type').value = log ? log.train_type : 'FREE';
-    document.getElementById('log-conductor').value = log ? log.conductor_id : '';
-    document.getElementById('log-vip').value = log && log.vip_id ? log.vip_id : '';
+    conductorChoices.setChoiceByValue(log ? String(log.conductor_id) : '');
+    vipChoices.setChoiceByValue(log && log.vip_id ? String(log.vip_id) : '');
     document.getElementById('log-vip-type').value = (log && log.vip_type) ? log.vip_type : 'SPECIAL_GUEST';
     document.getElementById('log-notes').value = log ? log.notes : '';
     document.getElementById('log-edit-id').value = log ? log.id : '';
     document.getElementById('log-limit-warning').classList.add('hidden');
     document.getElementById('log-modal-status').textContent = '';
     onVIPChange();
-    document.getElementById('log-modal').style.display = 'flex';
+    const logModal = document.getElementById('log-modal');
+    logModal.style.display = 'flex';
+    trapFocus(logModal);
 }
 
 function closeLogModal() {
-    document.getElementById('log-modal').style.display = '';
+    const logModal = document.getElementById('log-modal');
+    releaseFocus(logModal);
+    logModal.style.display = '';
     editingLogId = null;
 }
 
@@ -536,11 +562,15 @@ function openRuleModal(rule) {
     }
 
     document.getElementById('rule-modal-status').textContent = '';
-    document.getElementById('rule-modal').style.display = 'flex';
+    const ruleModal = document.getElementById('rule-modal');
+    ruleModal.style.display = 'flex';
+    trapFocus(ruleModal);
 }
 
 function closeRuleModal() {
-    document.getElementById('rule-modal').style.display = '';
+    const ruleModal = document.getElementById('rule-modal');
+    releaseFocus(ruleModal);
+    ruleModal.style.display = '';
     editingRuleId = null;
 }
 

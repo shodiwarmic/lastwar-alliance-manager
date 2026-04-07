@@ -239,6 +239,7 @@ function openMemberModal(editing = false) {
     const memberModal = document.getElementById('member-modal');
     if (memberModal) {
         memberModal.style.display = 'flex';
+        trapFocus(memberModal);
         document.getElementById('member-name').focus();
     }
 }
@@ -246,6 +247,7 @@ function openMemberModal(editing = false) {
 function closeMemberModalFunc() {
     const memberModal = document.getElementById('member-modal');
     if (memberModal) {
+        releaseFocus(memberModal);
         memberModal.style.display = 'none';
         resetMemberForm();
     }
@@ -921,6 +923,7 @@ function setupCSVImport() {
                 selectedRemoveMembers = new Set();
                 showCSVPreview(result);
                 modal.style.display = 'flex';
+                trapFocus(modal);
             } else {
                 displayImportError('No valid members found in CSV file');
             }
@@ -933,8 +936,9 @@ function setupCSVImport() {
         }
     });
 
-    closeModal.addEventListener('click', () => modal.style.display = 'none');
-    cancelBtn.addEventListener('click', () => modal.style.display = 'none');
+    const closeCSVModal = () => { releaseFocus(modal); modal.style.display = 'none'; };
+    closeModal.addEventListener('click', closeCSVModal);
+    cancelBtn.addEventListener('click', closeCSVModal);
 
     confirmBtn.addEventListener('click', async () => {
         const selectedMembers = detectedCSVMembers.filter((_, i) => selectedCSVMembers.has(i));
@@ -988,7 +992,7 @@ async function doImport(selectedMembers, removeMemberIDs, renames, confirmBtn, m
         });
         if (!response.ok) throw new Error('Failed to import members');
         const result = await response.json();
-        modal.style.display = 'none';
+        closeCSVModal();
 
         const resultDiv = document.getElementById('import-result');
         resultDiv.style.display = 'block';
@@ -1240,7 +1244,9 @@ async function openAliasModal(memberId, memberName) {
         globalWrapper.style.display = (isAdmin || canManageRanks) ? 'block' : 'none';
     }
 
-    document.getElementById('alias-modal').style.display = 'flex';
+    const aliasModal = document.getElementById('alias-modal');
+    aliasModal.style.display = 'flex';
+    trapFocus(aliasModal);
     await loadAliases();
 }
 
@@ -1371,5 +1377,7 @@ window.deleteAlias = function (aliasId, rowEl, deleteBtn) {
 };
 
 document.getElementById('close-alias-modal')?.addEventListener('click', () => {
-    document.getElementById('alias-modal').style.display = 'none';
+    const aliasModal = document.getElementById('alias-modal');
+    releaseFocus(aliasModal);
+    aliasModal.style.display = 'none';
 });
