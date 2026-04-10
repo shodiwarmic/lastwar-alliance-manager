@@ -45,10 +45,22 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Group & Building Management**: Organize registered members into groups, assign them to specific buildings, and track assignments in real time.
 - **Permission-Gated Access**: Separate `view_storm` and `manage_storm` permissions let you control who can see vs. administer the planner.
 
-### 🗓️ Schedule Builder
-- **Dynamic Policy Engine**: Build reusable weekly schedules with configurable time overrides, week offsets, and custom events.
-- **Delta Spec Support**: Define relative adjustments on top of a base schedule for recurring edge cases.
-- **Infographic Export**: Export finished schedules as shareable infographics.
+### 🗓️ Alliance Schedule
+- **Calendar-Based Events**: Schedule Marshal's Guard, Zombie Siege, and custom events on specific dates with exact server times. No more repeating templates — every event lives on a real calendar date.
+- **Event Types**: A managed registry of event types. MG and ZS are built-in system types; officers can add custom types (SVS, etc.) with a name, short name, and icon.
+- **All-Day Events**: Mark any event as all-day when no specific time applies; all-day events sort to the top of each day column.
+- **Smart Validation**: MG events are blocked from starting at or after 22:00 ST (hard game rule). ZS events enforce the 71.5-hour cooldown — the UI shows the next eligible time if the cooldown hasn't elapsed.
+- **Level Tracking**: MG and ZS events store a concrete level at creation time (defaults to the configured baseline). Updating the baseline never retroactively changes past events.
+- **Event Generation**: Bulk-generate MG events (every-other-day cycle from an anchor date) and ZS events (fixed weekdays or ASAP 71.5h chain) across a date range, skipping dates that already have an event.
+- **Server Events**: Repeating game-wide events (Ironclad Vehicle, Zombie Invasion, Rampage Bosses, General's Trial, Doomsday, and any custom entries) shown as banners at the top of each day column. Supports weekly, biweekly, and every-N-days recurrence.
+- **VS Alliance Duel Themes**: The fixed 7-theme weekly cycle (Radar Training → Alliance Star) is shown per day automatically — no configuration required.
+- **Season Tracking**: Set the current season number and start date; each day column shows the season day (e.g. S3 D47).
+- **Week Grid**: 4+3 two-row layout (Mon–Thu on row 1, Fri–Sun on row 2) giving each day enough space for event cards and action buttons. Collapses to a single-day swipe view on mobile — the existing ← / → week nav buttons navigate days on small screens.
+- **Desert Storm Integration**: Friday columns automatically show the two active Task Force battle slots (pulled from the Storm page TF configuration and admin-configured slot times).
+- **Week Image**: Generate a canvas-rendered PNG of any week in the site's dark theme — suitable for sharing in Discord. Includes server banners, VS themes, event levels, season days, and storm pills.
+- **Day Card**: Generate a single-day PNG (Discord-friendly proportions) for any day in the currently viewed week.
+- **Text Output**: Plain-text block for each day, formatted for pasting into chat or Discord.
+- **Advanced Settings**: Storm battle slot times (Slot 1/2/3 → clock time) are configurable by admins via a dedicated section on the `/admin` page.
 - **Permission-Gated Access**: Separate `view_schedule` and `manage_schedule` permissions.
 
 ### 🎖️ Officer Command
