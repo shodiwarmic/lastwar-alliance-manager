@@ -49,7 +49,8 @@ dayjs.extend(dayjs_plugin_utc);
 dayjs.extend(dayjs_plugin_timezone);
 dayjs.extend(dayjs_plugin_advancedFormat);
 
-const STORM_SLOTS = [
+// Default slot times — overridden at init from /api/storm/slot-times
+let STORM_SLOTS = [
     { id: 1, start: "09:00", end: "09:30" },
     { id: 2, start: "18:00", end: "18:30" },
     { id: 3, start: "23:00", end: "23:30" }
@@ -1323,7 +1324,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     canManage = root.dataset.canManage === 'true';
 
     try {
-        const settingsRes = await fetch('/api/settings');
+        const [settingsRes, slotsRes] = await Promise.all([
+            fetch('/api/settings'),
+            fetch('/api/storm/slot-times'),
+        ]);
+
+        if (slotsRes.ok) {
+            const dbSlots = await slotsRes.json();
+            if (Array.isArray(dbSlots) && dbSlots.length) {
+                STORM_SLOTS = dbSlots.map(s => ({
+                    id:    s.slot,
+                    start: s.time_st,
+                    end:   s.time_st, // end not stored; display as start time only
+                }));
+            }
+        }
+
         if (settingsRes.ok) {
             const settings = await settingsRes.json();
             formatStormTimes(settings.storm_timezones, settings.storm_respect_dst, 'storm-time-select-a');

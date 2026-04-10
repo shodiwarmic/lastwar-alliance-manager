@@ -290,19 +290,19 @@ function buildDayCol(dateStr, idx) {
 
     col.appendChild(header);
 
-    // Events for this day, sorted by time
-    const dayEvents = weekEvents
-        .filter(e => e.event_date === dateStr)
-        .sort((a, b) => a.event_time.localeCompare(b.event_time));
+    // Merge regular events + storm entries (Fridays), sort by time (all-day first)
+    const dayEvents = weekEvents.filter(e => e.event_date === dateStr);
+    const stormEntries = isFriday ? buildStormEntries() : [];
+    const allEntries = [...dayEvents, ...stormEntries]
+        .sort((a, b) => {
+            if (a.all_day && !b.all_day) return -1;
+            if (!a.all_day && b.all_day) return 1;
+            return a.event_time.localeCompare(b.event_time);
+        });
 
-    dayEvents.forEach(evt => {
-        col.appendChild(buildEventCard(evt, dateStr));
+    allEntries.forEach(entry => {
+        col.appendChild(entry._isStorm ? buildStormCard(entry) : buildEventCard(entry, dateStr));
     });
-
-    // Storm pills on Fridays
-    if (isFriday) {
-        buildStormPills().forEach(pill => col.appendChild(pill));
-    }
 
     // Add Event button
     if (CAN_MANAGE) {
@@ -384,26 +384,51 @@ function buildEventCard(evt, dateStr) {
     return card;
 }
 
-function buildStormPills() {
-    const pills = [];
+// Returns synthetic storm event objects for sorting alongside real events.
+// Name fallback: "Desert Storm Task Force A" → "Desert Storm TF A" → "DS TF A"
+function buildStormEntries() {
+    const entries = [];
     try {
-        // TF A and TF B
         ['A', 'B'].forEach(tf => {
             const slotNum = stormTFConfig['tf_' + tf.toLowerCase() + '_slot'];
             if (!slotNum) return;
             const slotInfo = stormSlotTimes.find(s => s.slot === slotNum);
             if (!slotInfo) return;
-
-            const pill = document.createElement('div');
-            pill.className = 'storm-pill';
-            pill.textContent = '⚡ TF ' + tf + ' – ' + formatTime(slotInfo.time_st) + ' ST';
-            if (slotInfo.label) pill.title = slotInfo.label;
-            pills.push(pill);
+            entries.push({
+                _isStorm:  true,
+                event_time: slotInfo.time_st,
+                all_day:   false,
+                nameFull:  'Desert Storm Task Force ' + tf,
+                nameMid:   'Desert Storm TF ' + tf,
+                nameShort: 'DS TF ' + tf,
+            });
         });
-    } catch {
-        // graceful fallback: no storm pills
-    }
-    return pills;
+    } catch { /* graceful fallback */ }
+    return entries;
+}
+
+function buildStormCard(entry) {
+    const card = document.createElement('div');
+    card.className = 'event-card';
+
+    const row = document.createElement('div');
+    row.className = 'event-card-row';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'event-card-name storm-name';
+    nameSpan.dataset.full  = entry.nameFull;
+    nameSpan.dataset.mid   = entry.nameMid;
+    nameSpan.dataset.short = entry.nameShort;
+    nameSpan.textContent   = '⚡ ' + entry.nameFull;
+    row.appendChild(nameSpan);
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'event-card-time';
+    timeSpan.textContent = formatTime(entry.event_time) + ' ST';
+    row.appendChild(timeSpan);
+
+    card.appendChild(row);
+    return card;
 }
 
 // ── Mobile navigation ─────────────────────────────────────────────────────────
@@ -1122,29 +1147,25 @@ function buildTextOutput() {
         }
         lines.push(header);
 
-        const dayEvts = weekEvents
-            .filter(e => e.event_date === d)
-            .sort((a, b) => a.event_time.localeCompare(b.event_time));
+        const dayEvts = weekEvents.filter(e => e.event_date === d);
+        const stormTxt = isFriday ? buildStormEntries() : [];
+        const allTxtEntries = [...dayEvts, ...stormTxt]
+            .sort((a, b) => {
+                if (a.all_day && !b.all_day) return -1;
+                if (!a.all_day && b.all_day) return 1;
+                return a.event_time.localeCompare(b.event_time);
+            });
 
-        dayEvts.forEach(evt => {
-            let line = '  ' + evt.type_icon + ' ' + evt.type_name + (evt.all_day ? ' — All Day' : ' @ ' + formatTime(evt.event_time) + ' ST');
-            if (evt.level != null) line += '  Lv.' + evt.level;
-            if (evt.notes) line += '  — ' + evt.notes;
-            lines.push(line);
+        allTxtEntries.forEach(entry => {
+            if (entry._isStorm) {
+                lines.push('  ⚡ ' + entry.nameFull + ' @ ' + formatTime(entry.event_time) + ' ST');
+            } else {
+                let line = '  ' + entry.type_icon + ' ' + entry.type_name + (entry.all_day ? ' — All Day' : ' @ ' + formatTime(entry.event_time) + ' ST');
+                if (entry.level != null) line += '  Lv.' + entry.level;
+                if (entry.notes) line += '  — ' + entry.notes;
+                lines.push(line);
+            }
         });
-
-        // Storm pills
-        if (isFriday) {
-            try {
-                ['A', 'B'].forEach(tf => {
-                    const slotNum = stormTFConfig['tf_' + tf.toLowerCase() + '_slot'];
-                    if (!slotNum) return;
-                    const slot = stormSlotTimes.find(s => s.slot === slotNum);
-                    if (!slot) return;
-                    lines.push('  ⚡ TF ' + tf + ' @ ' + formatTime(slot.time_st) + ' ST');
-                });
-            } catch { /* no storm info */ }
-        }
 
         // Server event banners
         const seBanners = serverEvents.filter(evt => {
@@ -1303,62 +1324,49 @@ function drawWeekImage() {
         ctx.lineTo(x + colW - 8, divY);
         ctx.stroke();
 
-        // Events
-        const dayEvts = weekEvents
-            .filter(e => e.event_date === d)
-            .sort((a, b) => a.event_time.localeCompare(b.event_time));
+        // Events + storm entries merged and sorted
+        const isFri = (new Date(d + 'T12:00:00Z').getUTCDay() + 6) % 7 === 4;
+        const dayEvts = weekEvents.filter(e => e.event_date === d);
+        const stormImgEntries = isFri ? buildStormEntries() : [];
+        const allImgEntries = [...dayEvts, ...stormImgEntries]
+            .sort((a, b) => {
+                if (a.all_day && !b.all_day) return -1;
+                if (!a.all_day && b.all_day) return 1;
+                return a.event_time.localeCompare(b.event_time);
+            });
 
         ctx.font = '12px ' + font;
-        const timeW     = Math.ceil(ctx.measureText('00:00').width) + 4;
+        const timeW      = Math.ceil(ctx.measureText('00:00').width) + 4;
         const nameAvailW = colW - padX * 2 - timeW - 6;
 
         let evtY = divY + rowH - 6;
-        dayEvts.forEach(evt => {
+        allImgEntries.forEach(entry => {
             ctx.font = '12px ' + font;
 
-            // Name + level — left
-            ctx.fillStyle = C.evtName;
-            ctx.textAlign = 'left';
-            const lvl      = evt.level != null ? ' Lv.' + evt.level : '';
-            const nameFull  = evt.type_icon + ' ' + evt.type_name  + lvl;
-            const nameShort = evt.type_icon + ' ' + evt.type_short + lvl;
-            ctx.fillText(fitText(nameFull, nameShort, nameAvailW), x + padX, evtY, nameAvailW);
-
-            // Time — right
-            ctx.fillStyle = C.evtTime;
-            ctx.textAlign = 'right';
-            ctx.fillText(evt.all_day ? 'All Day' : formatTime(evt.event_time), x + colW - padX, evtY);
+            if (entry._isStorm) {
+                // Storm entry — amber styling, same row layout
+                ctx.fillStyle = C.stormText;
+                ctx.textAlign = 'left';
+                const sLabel = fitText('⚡ ' + entry.nameFull, fitText('⚡ ' + entry.nameMid, '⚡ ' + entry.nameShort, nameAvailW), nameAvailW);
+                ctx.fillText(sLabel, x + padX, evtY, nameAvailW);
+                ctx.fillStyle = C.stormText;
+                ctx.textAlign = 'right';
+                ctx.fillText(formatTime(entry.event_time), x + colW - padX, evtY);
+            } else {
+                // Regular event
+                ctx.fillStyle = C.evtName;
+                ctx.textAlign = 'left';
+                const lvl       = entry.level != null ? ' Lv.' + entry.level : '';
+                const nameFull  = entry.type_icon + ' ' + entry.type_name  + lvl;
+                const nameShort = entry.type_icon + ' ' + entry.type_short + lvl;
+                ctx.fillText(fitText(nameFull, nameShort, nameAvailW), x + padX, evtY, nameAvailW);
+                ctx.fillStyle = C.evtTime;
+                ctx.textAlign = 'right';
+                ctx.fillText(entry.all_day ? 'All Day' : formatTime(entry.event_time), x + colW - padX, evtY);
+            }
 
             evtY += rowH;
         });
-
-        // Storm pills (Friday only)
-        const dow = (new Date(d + 'T12:00:00Z').getUTCDay() + 6) % 7;
-        if (dow === 4) {
-            try {
-                ['A', 'B'].forEach(tf => {
-                    const slotNum = stormTFConfig['tf_' + tf.toLowerCase() + '_slot'];
-                    if (!slotNum) return;
-                    const slot = stormSlotTimes.find(s => s.slot === slotNum);
-                    if (!slot) return;
-
-                    const pillW = colW - padX * 2;
-                    ctx.fillStyle = C.stormBg;
-                    roundRect(ctx, x + padX, evtY - 16, pillW, 18, 4);
-                    ctx.fill();
-                    ctx.strokeStyle = C.stormBorder;
-                    ctx.lineWidth = 1;
-                    roundRect(ctx, x + padX, evtY - 16, pillW, 18, 4);
-                    ctx.stroke();
-
-                    ctx.fillStyle = C.stormText;
-                    ctx.font = 'bold 10px ' + font;
-                    ctx.textAlign = 'center';
-                    ctx.fillText('⚡ TF ' + tf + '  ' + formatTime(slot.time_st) + ' ST', x + colW / 2, evtY - 3, pillW - 4);
-                    evtY += rowH;
-                });
-            } catch { /* no storm info */ }
-        }
     }
 
     ROWS[0].forEach((dayIdx, colIdx) => drawDayColumn(dates[dayIdx], colIdx, 0));
@@ -1399,16 +1407,20 @@ function drawDayCard(dateStr) {
 
     const dates     = weekDates(currentWeekStart);
     const seBanners = serverEvents.filter(e => getServerEventOccurrencesInWeek(e, dates).has(dateStr));
-    const dayEvts   = weekEvents
-        .filter(e => e.event_date === dateStr)
-        .sort((a, b) => a.event_time.localeCompare(b.event_time));
+    const dayEvts = [
+        ...weekEvents.filter(e => e.event_date === dateStr),
+        ...(isFri ? buildStormEntries() : []),
+    ].sort((a, b) => {
+        if (a.all_day && !b.all_day) return -1;
+        if (!a.all_day && b.all_day) return 1;
+        return a.event_time.localeCompare(b.event_time);
+    });
 
     // ── Dynamic height ─────────────────────────────────────────────────────
     const hdrH    = 80;
     const banH    = seBanners.length ? 28 : 0;
     const evtRowH = 28;
     const noteLineH = 15;
-    const stormH  = isFri ? 28 : 0;
     const W = 600;
     const noteMaxW = W - pad * 2 - 20;
 
@@ -1423,7 +1435,7 @@ function drawDayCard(dateStr) {
 
     let eventsH = dayEvts.reduce((s, e) => s + evtRowH + countNoteLines(e) * noteLineH, 0);
     if (!dayEvts.length) eventsH = evtRowH; // "No events" placeholder
-    const H = 16 + hdrH + 12 + eventsH + stormH + banH + 24;
+    const H = 16 + hdrH + 12 + eventsH + banH + 24;
     const canvas = document.getElementById('schedule-canvas');
     canvas.width  = W;
     canvas.height = Math.max(H, 220);
@@ -1499,66 +1511,51 @@ function drawDayCard(dateStr) {
         y += evtRowH;
     }
 
-    dayEvts.forEach(evt => {
+    dayEvts.forEach(entry => {
         ctx.font = '14px ' + font;
 
-        // Name + level — left
-        ctx.fillStyle = C.evtName;
-        ctx.textAlign = 'left';
-        const lvl       = evt.level != null ? ' Lv.' + evt.level : '';
-        const nameFull  = evt.type_icon + ' ' + evt.type_name  + lvl;
-        const nameShort = evt.type_icon + ' ' + evt.type_short + lvl;
-        const nameLabel = ctx.measureText(nameFull).width <= nameAvailW ? nameFull : nameShort;
-        ctx.fillText(nameLabel, pad, y, nameAvailW);
+        if (entry._isStorm) {
+            // Storm entry — amber text, same row layout as regular events
+            ctx.fillStyle = C.stormText;
+            ctx.textAlign = 'left';
+            const sLong  = '⚡ ' + entry.nameFull;
+            const sMid   = '⚡ ' + entry.nameMid;
+            const sShort = '⚡ ' + entry.nameShort;
+            const sLabel = ctx.measureText(sLong).width <= nameAvailW ? sLong
+                         : ctx.measureText(sMid).width  <= nameAvailW ? sMid : sShort;
+            ctx.fillText(sLabel, pad, y, nameAvailW);
+            ctx.font = '13px ' + font;
+            ctx.textAlign = 'right';
+            ctx.fillText(formatTime(entry.event_time) + ' ST', W - pad, y);
+        } else {
+            // Regular event
+            ctx.fillStyle = C.evtName;
+            ctx.textAlign = 'left';
+            const lvl       = entry.level != null ? ' Lv.' + entry.level : '';
+            const nameFull  = entry.type_icon + ' ' + entry.type_name  + lvl;
+            const nameShort = entry.type_icon + ' ' + entry.type_short + lvl;
+            ctx.fillText(ctx.measureText(nameFull).width <= nameAvailW ? nameFull : nameShort, pad, y, nameAvailW);
+            ctx.fillStyle = C.evtTime;
+            ctx.font = '13px ' + font;
+            ctx.textAlign = 'right';
+            ctx.fillText(entry.all_day ? 'All Day' : formatTime(entry.event_time) + ' ST', W - pad, y);
 
-        // Time — right
-        ctx.fillStyle = C.evtTime;
-        ctx.font = '13px ' + font;
-        ctx.textAlign = 'right';
-        ctx.fillText(evt.all_day ? 'All Day' : formatTime(evt.event_time) + ' ST', W - pad, y);
+            if (entry.notes) {
+                y += evtRowH;
+                ctx.fillStyle = C.notesText;
+                ctx.font = '11px ' + font;
+                ctx.textAlign = 'left';
+                const noteLines = wrapNoteLines(ctx, entry.notes, noteMaxW);
+                noteLines.forEach((line, li) => {
+                    ctx.fillText(line, pad + 20, y - 4 + li * noteLineH);
+                });
+                y += noteLines.length * noteLineH;
+                return;
+            }
+        }
 
         y += evtRowH;
-
-        if (evt.notes) {
-            ctx.fillStyle = C.notesText;
-            ctx.font = '11px ' + font;
-            ctx.textAlign = 'left';
-            const noteLines = wrapNoteLines(ctx, evt.notes, noteMaxW);
-            noteLines.forEach((line, li) => {
-                ctx.fillText(line, pad + 20, y - 4 + li * noteLineH);
-            });
-            y += noteLines.length * noteLineH;
-        }
     });
-
-    // ── Storm pills ────────────────────────────────────────────────────────
-    if (isFri) {
-        try {
-            ['A', 'B'].forEach(tf => {
-                const slotNum = stormTFConfig['tf_' + tf.toLowerCase() + '_slot'];
-                if (!slotNum) return;
-                const slot = stormSlotTimes.find(s => s.slot === slotNum);
-                if (!slot) return;
-
-                const pillW = (W - pad * 2 - 8) / 2;
-                const pillX = tf === 'A' ? pad : pad + pillW + 8;
-
-                ctx.fillStyle = C.stormBg;
-                roundRect(ctx, pillX, y - 2, pillW, 22, 5);
-                ctx.fill();
-                ctx.strokeStyle = C.stormBorder;
-                ctx.lineWidth = 1;
-                roundRect(ctx, pillX, y - 2, pillW, 22, 5);
-                ctx.stroke();
-
-                ctx.fillStyle = C.stormText;
-                ctx.font = 'bold 11px ' + font;
-                ctx.textAlign = 'center';
-                ctx.fillText('⚡ TF ' + tf + '  ' + formatTime(slot.time_st) + ' ST', pillX + pillW / 2, y + 13, pillW - 8);
-            });
-            y += 28;
-        } catch { /* no storm */ }
-    }
 
     // ── Server event banner (bottom) ───────────────────────────────────────
     if (seBanners.length) {
@@ -1636,7 +1633,15 @@ async function init() {
 
     try { settings = settingsRes && settingsRes.ok ? await settingsRes.json() : {}; } catch { settings = {}; }
     try { stormSlotTimes = slotTimesRes && slotTimesRes.ok ? await slotTimesRes.json() : []; } catch { stormSlotTimes = []; }
-    try { stormTFConfig  = stormConfigRes && stormConfigRes.ok ? await stormConfigRes.json() : {}; } catch { stormTFConfig = {}; }
+    try {
+        const tfArr = stormConfigRes && stormConfigRes.ok ? await stormConfigRes.json() : [];
+        stormTFConfig = {};
+        if (Array.isArray(tfArr)) {
+            tfArr.forEach(c => {
+                stormTFConfig['tf_' + c.task_force.toLowerCase() + '_slot'] = c.time_slot;
+            });
+        }
+    } catch { stormTFConfig = {}; }
     try { eventTypes     = typesRes && typesRes.ok ? await typesRes.json() : []; } catch { eventTypes = []; }
     try { serverEvents   = serverEventsRes && serverEventsRes.ok ? await serverEventsRes.json() : []; } catch { serverEvents = []; }
 
