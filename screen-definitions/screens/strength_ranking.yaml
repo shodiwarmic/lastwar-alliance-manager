@@ -1,0 +1,177 @@
+# Strength Ranking screen definition
+# Player power, kills, and donation leaderboard.
+# Has three sub-tabs (Power / Kills / Donation) with orange active-tab highlight.
+# The layout has a taller header than Daily/Weekly screens (three column groups).
+
+id: strength_ranking
+version: 1
+name: Strength Ranking
+description: >
+  Alliance member leaderboard showing raw power, kills, or donation.
+  Three sub-tabs select the active metric. The "Power" tab maps to the
+  "power" backend category; "Kills" and "Donation" have no current mobile
+  sync path and should be filtered before submission.
+
+
+# ---------------------------------------------------------------------------
+# Screen identification
+# ---------------------------------------------------------------------------
+identification:
+  # "Strength Ranking" is unique to this screen; no other layout contains it.
+  # "STRENGTH" catches all-caps variants seen on some device locale settings.
+  page_signals:
+    - "Strength Ranking"
+    - "STRENGTH"
+
+  # No negative signals needed — these markers are exclusive to this screen.
+
+  # Pre-OCR fast-path: the "Power" tab on the Strength Ranking screen sits
+  # at roughly x=0.15, y=0.20. It is orange when the Power sub-tab is active.
+  # If the Power tab is NOT currently selected (Kills or Donation is active),
+  # the pre-OCR hint will fail and the classifier will fall back to OCR text
+  # matching — which will still work via page_signals.
+  pre_ocr_hint:
+    x_hint: 0.15
+    y_hint: 0.20
+    color:
+      named: orange
+      hsv_override:
+        h_min: 0.014
+        h_max: 0.153
+        s_min: 0.40
+        v_min: 0.55
+    confidence: 0.90
+
+
+# ---------------------------------------------------------------------------
+# Data region boundaries
+# ---------------------------------------------------------------------------
+boundaries:
+  header:
+    # Column headers on the Strength Ranking screen include "Power", "Kills",
+    # and "Donation" in addition to "Commander". Any of these is sufficient
+    # to locate the header row.
+    signals:
+      - "Commander"
+      - "Power"
+      - "Kills"
+      - "Donation"
+    search_region:
+      y_min: 0.0
+      y_max: 0.40
+    anchor_offset:
+      type: below_bottom_edge
+      offset_fraction: 0.0
+
+  footer:
+    signals:
+      - "Your Alliance"
+    search_region:
+      y_min: 0.60
+      y_max: 1.0
+    anchor_offset:
+      type: above_top_edge
+      offset_fraction: 0.0
+
+
+# ---------------------------------------------------------------------------
+# Chrome removal (server-side stitcher only)
+# ---------------------------------------------------------------------------
+# The Strength Ranking header is taller than Daily/Weekly (three column groups
+# vs two) so the top crop fraction is the same as Daily Rank.
+chrome:
+  top_fraction: 0.22
+  bottom_fraction: 0.12
+
+
+# ---------------------------------------------------------------------------
+# Sub-tabs (metric selector)
+# ---------------------------------------------------------------------------
+tabs:
+  search_region:
+    y_min: 0.00
+    y_max: 0.25
+
+  y_hint: 0.20
+
+  active_indicator:
+    # Strength Ranking uses an orange background on the active sub-tab,
+    # same as the top-level tab bar. Use color_fraction strategy.
+    strategy: color_fraction
+    min_fraction: 0.10
+    color:
+      named: orange
+      hsv_override:
+        h_min: 0.014
+        h_max: 0.153
+        s_min: 0.40
+        v_min: 0.55
+    bbox_padding_fraction: 0.007
+
+  items:
+    - id: power
+      category: power
+      # "Power" appears as both a column header and a tab label.
+      # The search_region constraint (top 25%) ensures only the tab is matched.
+      signals: ["Power"]
+      x_hint: 0.15
+
+    - id: kills
+      category: kills
+      signals: ["Kills"]
+      x_hint: 0.50
+
+    - id: donation
+      category: donation
+      signals: ["Donation"]
+      x_hint: 0.85
+
+
+# ---------------------------------------------------------------------------
+# Column layout
+# ---------------------------------------------------------------------------
+# The Strength Ranking column layout is visually identical to Daily/Weekly:
+# rank on the left, name in the middle, score on the right. The "score"
+# column holds whichever metric the active tab represents (power value,
+# kill count, or donation amount).
+columns:
+  - id: rank
+    type: ignore
+    x_min: 0.00
+    x_max: 0.15
+
+  - id: name
+    type: name
+    x_min: 0.15
+    x_max: 0.60
+    # Player names on the Strength Ranking screen often have an R-badge
+    # prefix (e.g. "R4 ShodiWarmic"). The adapter's text cleaning step
+    # should strip leading R1–R5 tokens; this is not modelled in the
+    # schema because it is a text cleaning concern, not a layout concern.
+
+  - id: score
+    type: score
+    x_min: 0.60
+    x_max: 1.00
+
+
+# ---------------------------------------------------------------------------
+# Row clustering
+# ---------------------------------------------------------------------------
+row_clustering:
+  strategy: score_anchored
+
+  score_anchored:
+    up_band_fraction: 0.021
+    down_band_fraction: 0.002
+
+  y_proximity:
+    tolerance_fraction: 0.02
+    min_tolerance_px: 20
+
+  # Power values, kill counts, and donation totals all exceed 1000 for
+  # meaningful alliance members, so the same floor applies.
+  min_score: 1000
+
+  word_gap_fraction: 0.015
+  min_word_gap_px: 8

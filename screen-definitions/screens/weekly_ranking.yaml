@@ -1,0 +1,157 @@
+# Weekly Ranking screen definition
+# 7-day cumulative VS points leaderboard. Single view with no day sub-tabs.
+# The "Weekly Rank" tab in the top bar has an orange background when active.
+
+id: weekly_ranking
+version: 1
+name: Weekly Ranking
+description: >
+  Alliance VS points leaderboard showing the 7-day cumulative total.
+  Unlike the Daily Rank screen there are no day sub-tabs — the output
+  category is always "weekly". Identified by the "Weekly Rank" tab label
+  in the top bar being highlighted orange.
+
+
+# ---------------------------------------------------------------------------
+# Screen identification
+# ---------------------------------------------------------------------------
+identification:
+  page_signals:
+    - "Weekly Rank"
+    - "Weekly Ranking"
+
+  # Disambiguation: both Daily and Weekly screens render the word "Weekly"
+  # in the tab bar. The Daily screen ALSO shows day tab abbreviations
+  # (Mon. / Tues. / etc.) in the sub-tab row. If any of these are present,
+  # this screenshot is a Daily screen, not a Weekly one.
+  negative_signals:
+    - "Mon."
+    - "Tues."
+    - "Wed."
+    - "Thur."
+    - "Fri."
+    - "Sat."
+
+  # Pre-OCR fast-path: the "Weekly Rank" tab sits at roughly x=0.65 on the
+  # top tab bar and has an orange background when active. Sample it before
+  # running OCR. Slightly higher than the day bar (y=0.15 vs 0.20) because
+  # the Weekly/Daily selector sits above the day sub-tab row.
+  pre_ocr_hint:
+    x_hint: 0.65
+    y_hint: 0.15
+    color:
+      named: orange
+      hsv_override:
+        h_min: 0.014
+        h_max: 0.153
+        s_min: 0.40
+        v_min: 0.55
+    confidence: 0.88
+
+
+# ---------------------------------------------------------------------------
+# Data region boundaries
+# ---------------------------------------------------------------------------
+boundaries:
+  header:
+    signals:
+      - "Commander"
+      - "Points"
+    search_region:
+      y_min: 0.0
+      y_max: 0.40
+    anchor_offset:
+      type: below_bottom_edge
+      offset_fraction: 0.0
+
+  footer:
+    signals:
+      - "Your Alliance"
+    search_region:
+      y_min: 0.60
+      y_max: 1.0
+    anchor_offset:
+      type: above_top_edge
+      offset_fraction: 0.0
+
+
+# ---------------------------------------------------------------------------
+# Chrome removal (server-side stitcher only)
+# ---------------------------------------------------------------------------
+# The Weekly Rank header is slightly shorter than the Daily Rank header
+# (it has no day sub-tab row), so the top crop fraction is smaller.
+chrome:
+  top_fraction: 0.18
+  bottom_fraction: 0.12
+
+
+# ---------------------------------------------------------------------------
+# Tabs
+# ---------------------------------------------------------------------------
+# There is only one output category ("weekly") for this screen. The tabs
+# section is still present so adapters have a consistent lookup structure,
+# but no active-tab detection logic is needed — the single item is always
+# the active category.
+tabs:
+  search_region:
+    y_min: 0.00
+    y_max: 0.25
+
+  y_hint: 0.15
+
+  active_indicator:
+    strategy: color_fraction
+    min_fraction: 0.10
+    color:
+      named: orange
+      hsv_override:
+        h_min: 0.014
+        h_max: 0.153
+        s_min: 0.40
+        v_min: 0.55
+    bbox_padding_fraction: 0.007
+
+  items:
+    - id: weekly
+      category: weekly
+      signals: ["Weekly", "Weekly Rank"]
+      x_hint: 0.65
+
+
+# ---------------------------------------------------------------------------
+# Column layout
+# ---------------------------------------------------------------------------
+columns:
+  - id: rank
+    type: ignore
+    x_min: 0.00
+    x_max: 0.15
+
+  - id: name
+    type: name
+    x_min: 0.15
+    x_max: 0.60
+
+  - id: score
+    type: score
+    x_min: 0.60
+    x_max: 1.00
+
+
+# ---------------------------------------------------------------------------
+# Row clustering
+# ---------------------------------------------------------------------------
+row_clustering:
+  strategy: score_anchored
+
+  score_anchored:
+    up_band_fraction: 0.021
+    down_band_fraction: 0.002
+
+  y_proximity:
+    tolerance_fraction: 0.02
+    min_tolerance_px: 20
+
+  min_score: 1000
+  word_gap_fraction: 0.015
+  min_word_gap_px: 8

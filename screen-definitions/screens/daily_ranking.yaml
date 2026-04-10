@@ -1,0 +1,223 @@
+# Daily Ranking screen definition
+# VS points leaderboard. Shows one day at a time with six day sub-tabs.
+# The active day is identified by brightness comparison across the tab backgrounds:
+# the active tab has a white/light background; inactive tabs are grey.
+
+id: daily_ranking
+version: 1
+name: Daily Ranking
+description: >
+  Alliance VS points leaderboard for a single day. Displays columns for
+  rank, commander name, and daily points. Six day sub-tabs (Mon–Sat)
+  select which day's data is shown.
+
+
+# ---------------------------------------------------------------------------
+# Screen identification
+# ---------------------------------------------------------------------------
+identification:
+  page_signals:
+    - "Daily Rank"
+    - "Daily Ranking"
+
+  # Negative signals: these text strings appearing anywhere on screen mean
+  # this is NOT a daily ranking screenshot, even if page_signals matched.
+  # Both Strength Ranking and the tab bar of any screen contain sub-strings
+  # that could trigger page_signals; the negative list is the safety net.
+  negative_signals:
+    - "Strength Ranking"
+    - "STRENGTH"
+
+  # Pre-OCR fast-path hint: sample the orange active tab on the top-level
+  # "Daily Rank" / "Weekly Rank" bar. The Daily Rank tab sits at ~x=0.35,
+  # y=0.20 when it is active (orange background). If that sample is NOT
+  # orange then this is probably not a Daily Rank screen — fall through to
+  # OCR classification.
+  #
+  # NOTE: This hint is used to confirm the screen type in Pass 1, not to
+  # determine which DAY is active. Day detection is handled by tabs below.
+  pre_ocr_hint:
+    x_hint: 0.35
+    y_hint: 0.20
+    color:
+      named: orange
+      hsv_override:
+        h_min: 0.014   # ~5°  — catches warm red-orange
+        h_max: 0.153   # ~55° — catches yellow-orange/amber
+        s_min: 0.40
+        v_min: 0.55
+    confidence: 0.85
+
+
+# ---------------------------------------------------------------------------
+# Data region boundaries
+# ---------------------------------------------------------------------------
+# The adapter locates these OCR strings and uses their bounding boxes to
+# determine where player rows begin and end. No hardcoded pixel values.
+boundaries:
+  header:
+    # The column header row "Ranking  Commander  Points" marks the start
+    # of player data. Search only in the upper 40% of the screen.
+    signals:
+      - "Commander"
+      - "Points"
+    search_region:
+      y_min: 0.0
+      y_max: 0.40
+    anchor_offset:
+      # Data rows start immediately below the column header bounding box.
+      type: below_bottom_edge
+      offset_fraction: 0.0
+
+  footer:
+    # "Your Alliance" row at the bottom highlights the scanning user's own
+    # alliance and marks the end of the ranked player list.
+    signals:
+      - "Your Alliance"
+    search_region:
+      y_min: 0.60
+      y_max: 1.0
+    anchor_offset:
+      type: above_top_edge
+      offset_fraction: 0.0
+
+
+# ---------------------------------------------------------------------------
+# Chrome removal (server-side stitcher only)
+# ---------------------------------------------------------------------------
+# When multiple Daily Rank screenshots are stitched into one tall image for
+# batch OCR, these fractions of each interior image's height are cropped to
+# remove duplicated UI elements (tab bar, column headers, self-player row).
+chrome:
+  top_fraction: 0.22
+  bottom_fraction: 0.12
+
+
+# ---------------------------------------------------------------------------
+# Day sub-tabs
+# ---------------------------------------------------------------------------
+tabs:
+  # Only search the top 25% of the screen for tab text. Prevents day
+  # abbreviations in player names (rare but possible) from being detected
+  # as tabs.
+  search_region:
+    y_min: 0.00
+    y_max: 0.25
+
+  # Y hint for the pre-OCR colour sampling pass (when no OCR bbox exists).
+  y_hint: 0.20
+
+  active_indicator:
+    # The active day tab has a WHITE/LIGHT background; inactive tabs are grey.
+    # Strategy: sample the background behind each tab's text and return the
+    # tab with the highest brightness (HSV V value). Require a minimum gap
+    # to avoid returning a false result from image compression noise.
+    #
+    # Observed values (from real screenshots at 1080×2400):
+    #   Active tab:   V ≈ 0.74–0.81, S ≈ 0.02–0.03  (white/light)
+    #   Inactive tab: V ≈ 0.67–0.70, S ≈ 0.09–0.09  (warm grey)
+    strategy: brightest
+    min_gap: 0.04
+
+    # Expand the OCR bounding box by this fraction of image width before
+    # sampling. Ensures background pixels — not text glyphs — are measured.
+    bbox_padding_fraction: 0.007   # ≈ 7–8px at 1080px wide
+
+  items:
+    - id: monday
+      category: monday
+      # Both the no-period form (active tab) and period form (inactive)
+      # must be listed so the tab is located regardless of its state.
+      signals: ["Mon", "Mon."]
+      x_hint: 0.10   # fallback if OCR bbox unavailable
+
+    - id: tuesday
+      category: tuesday
+      signals: ["Tues", "Tues."]
+      x_hint: 0.26
+
+    - id: wednesday
+      category: wednesday
+      signals: ["Wed", "Wed."]
+      x_hint: 0.42
+
+    - id: thursday
+      category: thursday
+      signals: ["Thur", "Thur."]
+      x_hint: 0.58
+
+    - id: friday
+      category: friday
+      signals: ["Fri", "Fri."]
+      x_hint: 0.74
+
+    - id: saturday
+      category: saturday
+      signals: ["Sat", "Sat."]
+      x_hint: 0.90
+
+
+# ---------------------------------------------------------------------------
+# Column layout
+# ---------------------------------------------------------------------------
+# All X boundaries are normalized fractions of image width. These values
+# are consistent across 1080p, 1440p, and notched/tall aspect ratios because
+# the game UI scales proportionally.
+columns:
+  - id: rank
+    type: ignore
+    x_min: 0.00
+    x_max: 0.15
+    # Rank numbers (1–50) sit in this leftmost column. Marked ignore to
+    # avoid the rank number being mistaken for part of the player name.
+
+  - id: name
+    type: name
+    x_min: 0.15
+    x_max: 0.60
+    # Player name column. May contain multi-word names ("gabriel garage"),
+    # names with numbers ("Charlie9042"), and alliance tag prefixes
+    # ("[PoWr]Pantheon") that are stripped during text cleaning.
+
+  - id: score
+    type: score
+    x_min: 0.60
+    x_max: 1.00
+    # VS points column. The rightmost purely-numeric token in this region
+    # is the score. All real point values are >= 1000 (see min_score below).
+
+
+# ---------------------------------------------------------------------------
+# Row clustering
+# ---------------------------------------------------------------------------
+row_clustering:
+  # Score-anchored strategy: locate each numeric score token first, then
+  # collect name tokens within a vertical band above it. This prevents the
+  # alliance subtitle line (~28px below the score in the original 2400px
+  # layout) from accidentally merging into the player's name row.
+  strategy: score_anchored
+
+  score_anchored:
+    # How far above the score token to search for name tokens.
+    # Original tuning: 50px at 2400px image height = 50/2400 ≈ 0.021.
+    up_band_fraction: 0.021
+
+    # Small downward buffer to absorb OCR vertical jitter on the score.
+    # Original tuning: 5px at 2400px image height = 5/2400 ≈ 0.002.
+    down_band_fraction: 0.002
+
+  # Y-proximity parameters are provided for adapters that prefer that
+  # strategy (e.g. when score tokens are not reliably detected first).
+  y_proximity:
+    tolerance_fraction: 0.02
+    min_tolerance_px: 20
+
+  # Floor for numeric values to be treated as a score.
+  # Rank numbers (1–50) are well below this; all game scores are above it.
+  min_score: 1000
+
+  # Insert a space between consecutive name tokens when the pixel gap
+  # between their bounding boxes exceeds (word_gap_fraction * image_width).
+  # At 1080px: 0.015 * 1080 ≈ 16px (typical inter-word gap in this UI font).
+  word_gap_fraction: 0.015
+  min_word_gap_px: 8

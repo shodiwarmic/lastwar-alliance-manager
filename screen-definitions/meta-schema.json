@@ -1,0 +1,358 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lastwar-tools/screen-definition/v1",
+  "title": "Last War Screen Definition",
+  "description": "Describes a single game screen that any platform adapter can consume to locate, classify, and extract player data from screenshots.",
+  "type": "object",
+  "required": ["id", "version", "name", "identification", "boundaries", "columns", "row_clustering"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Canonical identifier. Maps directly to the backend category key (e.g. 'daily_ranking', 'weekly_ranking', 'strength_ranking')."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Incremented when the definition changes in a backward-incompatible way."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable label used in logs and debug output."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional prose description of what this screen shows."
+    },
+
+    "identification": {
+      "type": "object",
+      "description": "Signals used to decide whether a given screenshot is this screen type.",
+      "required": ["page_signals"],
+      "additionalProperties": false,
+      "properties": {
+        "page_signals": {
+          "type": "array",
+          "description": "OCR text strings (case-insensitive substring match) that, if any one is found anywhere on screen, indicate this layout. Used as the primary classification signal after OCR.",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "negative_signals": {
+          "type": "array",
+          "description": "OCR text strings whose presence rules OUT this screen type even when page_signals match. Allows coarse signals like 'Weekly' to be disambiguated from daily screens that also render the word.",
+          "items": {"type": "string"}
+        },
+        "pre_ocr_hint": {
+          "$ref": "#/$defs/pre_ocr_hint",
+          "description": "Optional fast-path classifier hint. Samples a small pixel region BEFORE OCR and checks its colour. Allows classifying ≥80% of real-world screenshots without an API call."
+        }
+      }
+    },
+
+    "boundaries": {
+      "type": "object",
+      "description": "OCR text anchors that delimit the player data table within the screenshot. The adapter uses the bounding boxes of these matched strings to compute the data region, making the boundaries independent of any hardcoded pixel positions.",
+      "required": ["header", "footer"],
+      "additionalProperties": false,
+      "properties": {
+        "header": {"$ref": "#/$defs/boundary_anchor"},
+        "footer": {"$ref": "#/$defs/boundary_anchor"}
+      }
+    },
+
+    "chrome": {
+      "type": "object",
+      "description": "Fractions of image height to crop from the top and bottom of interior screenshots before stitching them into a single tall image. Only used by the server-side stitcher; live-capture adapters (Android, iOS) ignore this field.",
+      "additionalProperties": false,
+      "properties": {
+        "top_fraction": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "Fraction of image height to remove from the top (navigation/tab chrome)."
+        },
+        "bottom_fraction": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "Fraction of image height to remove from the bottom (self-player highlight row)."
+        }
+      }
+    },
+
+    "tabs": {
+      "$ref": "#/$defs/tabs_definition",
+      "description": "Definition of the day/category sub-tabs that determine which data slice is currently displayed. Absent for screens with only one output category."
+    },
+
+    "columns": {
+      "type": "array",
+      "description": "Column layout as normalized X-axis ranges. The adapter maps each OCR word's horizontal centre to the first column whose [x_min, x_max] range it falls within.",
+      "items": {"$ref": "#/$defs/column_definition"},
+      "minItems": 1
+    },
+
+    "row_clustering": {
+      "$ref": "#/$defs/row_clustering",
+      "description": "Parameters that control how OCR word tokens are assembled into player rows."
+    }
+  },
+
+  "$defs": {
+
+    "normalized_region": {
+      "type": "object",
+      "description": "An axis-aligned rectangle expressed as fractions of image dimensions (0.0 = left/top edge, 1.0 = right/bottom edge).",
+      "additionalProperties": false,
+      "properties": {
+        "x_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "x_max": {"type": "number", "minimum": 0, "maximum": 1},
+        "y_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "y_max": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+
+    "color_definition": {
+      "type": "object",
+      "description": "Colour specification for pixel-level tab detection. Prefer the named preset for portability; supply explicit HSV ranges only when the game UI uses a non-standard variant.",
+      "additionalProperties": false,
+      "properties": {
+        "named": {
+          "type": "string",
+          "enum": ["orange", "white"],
+          "description": "Named preset understood by all adapters. 'orange' targets the Last War amber/orange active-tab highlight. 'white' targets the bright-white active day-tab background."
+        },
+        "hsv_override": {
+          "type": "object",
+          "description": "Explicit HSV thresholds. H is normalized 0.0–1.0 (0.0=red, 0.167=orange, 0.333=yellow, 1.0=red again). Adapters use these when provided, falling back to the named preset's built-in thresholds otherwise.",
+          "additionalProperties": false,
+          "properties": {
+            "h_min": {"type": "number", "minimum": 0, "maximum": 1},
+            "h_max": {"type": "number", "minimum": 0, "maximum": 1},
+            "s_min": {"type": "number", "minimum": 0, "maximum": 1},
+            "v_min": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        }
+      }
+    },
+
+    "pre_ocr_hint": {
+      "type": "object",
+      "description": "A single-point colour sample used to classify the screen before OCR runs. The adapter samples a small region centred at (x_hint, y_hint) and checks it against the named colour. A confident match skips the OCR classification pass entirely.",
+      "required": ["x_hint", "y_hint", "color"],
+      "additionalProperties": false,
+      "properties": {
+        "x_hint": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "Horizontal centre of the sample region as a fraction of image width."
+        },
+        "y_hint": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "Vertical centre of the sample region as a fraction of image height."
+        },
+        "color": {"$ref": "#/$defs/color_definition"},
+        "confidence": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "Confidence value to return on a successful pre-OCR match. Adapters should fall back to OCR classification when the returned confidence is below their threshold (typically 0.80).",
+          "default": 0.88
+        }
+      }
+    },
+
+    "boundary_anchor": {
+      "type": "object",
+      "description": "Locates one edge of the data region by finding an OCR text match. The data boundary is placed at the bounding box edge of the matched text, optionally shifted by anchor_offset.",
+      "required": ["signals"],
+      "additionalProperties": false,
+      "properties": {
+        "signals": {
+          "type": "array",
+          "description": "One or more OCR strings. The FIRST line containing ANY of these signals is used as the anchor. All matching is case-insensitive substring.",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "search_region": {
+          "$ref": "#/$defs/normalized_region",
+          "description": "Optional region to constrain the text search. Speeds up matching and avoids false positives when signal words appear elsewhere on screen."
+        },
+        "anchor_offset": {
+          "type": "object",
+          "description": "Shifts the effective boundary relative to the matched text's bounding box edge. Useful when the data rows start some distance below the column header.",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["below_bottom_edge", "above_top_edge"],
+              "description": "'below_bottom_edge': boundary = matched_box.bottom + offset_fraction * image_height. 'above_top_edge': boundary = matched_box.top - offset_fraction * image_height."
+            },
+            "offset_fraction": {
+              "type": "number",
+              "description": "Signed offset as a fraction of image height. 0.0 places the boundary exactly at the matched box edge.",
+              "default": 0.0
+            }
+          }
+        }
+      }
+    },
+
+    "tab_active_indicator": {
+      "type": "object",
+      "description": "Specifies how to determine which tab is the active (currently selected) one.",
+      "required": ["strategy"],
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["brightest", "color_fraction"],
+          "description": "'brightest': samples each tab's background and picks the one with the highest brightness (HSV V value). Best for daily tabs that go white-on-grey. 'color_fraction': picks the tab with the highest fraction of pixels matching the target color. Best for orange highlighted tabs."
+        },
+        "min_gap": {
+          "type": "number",
+          "description": "For 'brightest' strategy: minimum brightness advantage (0.0–1.0) the winning tab must have over the second-place tab to avoid returning a false result from image noise.",
+          "default": 0.04
+        },
+        "min_fraction": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "For 'color_fraction' strategy: minimum fraction of sampled pixels that must match the target color for any candidate to be accepted.",
+          "default": 0.10
+        },
+        "color": {
+          "$ref": "#/$defs/color_definition",
+          "description": "Target color for 'color_fraction' strategy. Ignored for 'brightest'."
+        },
+        "bbox_padding_fraction": {
+          "type": "number",
+          "description": "Expands the OCR bounding box of each tab text outward by this fraction of image width before sampling. Ensures the background is sampled rather than the text glyphs themselves.",
+          "default": 0.007
+        }
+      }
+    },
+
+    "tab_item": {
+      "type": "object",
+      "description": "A single day or category tab within the tab bar.",
+      "required": ["id", "category", "signals"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short stable identifier for this tab, used in logs and as a local key."
+        },
+        "category": {
+          "type": "string",
+          "description": "Backend category key this tab maps to (e.g. 'monday', 'power'). This is the value submitted to the alliance manager API."
+        },
+        "signals": {
+          "type": "array",
+          "description": "OCR text strings used to locate this tab's bounding box. Include both the period variant (inactive, 'Mon.') and the no-period variant (active, 'Mon') so the tab is found regardless of active state.",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "x_hint": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "Approximate horizontal centre of this tab as a fraction of image width. Used ONLY when no OCR bounding box is available (pre-OCR fast pass or OCR failure). Not used when a bounding box is available — the real pixel position is always preferred."
+        }
+      }
+    },
+
+    "tabs_definition": {
+      "type": "object",
+      "required": ["active_indicator", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "search_region": {
+          "$ref": "#/$defs/normalized_region",
+          "description": "Vertical band to search for tab text. Prevents day abbreviations that appear in player names or banners from being mistaken for tabs."
+        },
+        "y_hint": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "Approximate Y position of the tab bar as a fraction of image height. Used only for the pre-OCR colour sampling pass when OCR bboxes are unavailable."
+        },
+        "active_indicator": {"$ref": "#/$defs/tab_active_indicator"},
+        "items": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/tab_item"},
+          "minItems": 1
+        }
+      }
+    },
+
+    "column_definition": {
+      "type": "object",
+      "description": "A single logical column. Words whose horizontal centre falls within [x_min * image_width, x_max * image_width] are assigned to this column.",
+      "required": ["id", "type", "x_min", "x_max"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "type": {
+          "type": "string",
+          "enum": ["name", "score", "ignore"],
+          "description": "'name': concatenate matching tokens to build the player name string. 'score': the rightmost numeric token in this range is the score. 'ignore': discard tokens (used for rank numbers on the left)."
+        },
+        "x_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "x_max": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+
+    "row_clustering": {
+      "type": "object",
+      "description": "Controls how OCR word tokens are grouped into player rows. Two strategies are supported; both use normalized fractions so they work across all device resolutions.",
+      "required": ["strategy", "min_score"],
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["score_anchored", "y_proximity"],
+          "description": "'score_anchored': find score tokens first (numeric values >= min_score), then collect name tokens in a vertical band relative to each score's Y position. Prevents alliance subtitle lines from merging into the player row. 'y_proximity': group all tokens whose Y centres are within tolerance_fraction of each other into the same row."
+        },
+        "score_anchored": {
+          "type": "object",
+          "description": "Parameters for the score_anchored strategy.",
+          "additionalProperties": false,
+          "properties": {
+            "up_band_fraction": {
+              "type": "number",
+              "description": "Fraction of image height to search ABOVE the score token for name tokens. Tuned so the player name (above the score in the UI) is captured while the alliance subtitle (below the score) is excluded. Original absolute value: 50px at 2400px height = 0.021.",
+              "default": 0.021
+            },
+            "down_band_fraction": {
+              "type": "number",
+              "description": "Fraction of image height to search BELOW the score token. A small buffer to absorb OCR vertical jitter. Original absolute value: 5px at 2400px height = 0.002.",
+              "default": 0.002
+            }
+          }
+        },
+        "y_proximity": {
+          "type": "object",
+          "description": "Parameters for the y_proximity strategy.",
+          "additionalProperties": false,
+          "properties": {
+            "tolerance_fraction": {
+              "type": "number",
+              "description": "Two words are considered to be on the same row if their Y centres are within (tolerance_fraction * image_height) of each other.",
+              "default": 0.02
+            },
+            "min_tolerance_px": {
+              "type": "integer",
+              "description": "Minimum absolute pixel tolerance, applied as a floor so that very small screenshots still cluster correctly.",
+              "default": 20
+            }
+          }
+        },
+        "min_score": {
+          "type": "integer",
+          "description": "Minimum integer value for a token to be treated as a score. Filters out rank numbers (1–100) and small OCR noise. All real game scores (VS points, power values) are well above 1000.",
+          "default": 1000
+        },
+        "word_gap_fraction": {
+          "type": "number",
+          "description": "When reconstructing multi-word player names, insert a space between consecutive tokens if the pixel gap between their bounding boxes exceeds (word_gap_fraction * image_width). At 1080px wide: 0.015 * 1080 = ~16px.",
+          "default": 0.015
+        },
+        "min_word_gap_px": {
+          "type": "integer",
+          "description": "Floor for the word gap threshold in pixels. Ensures correct behaviour at very low resolutions.",
+          "default": 8
+        }
+      }
+    }
+
+  }
+}
