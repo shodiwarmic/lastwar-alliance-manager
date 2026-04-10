@@ -247,6 +247,19 @@ type Settings struct {
 	VSMinimumPoints              int    `json:"vs_minimum_points"`
 	StrikeNeedsImprovementThreshold int `json:"strike_needs_improvement_threshold"`
 	StrikeAtRiskThreshold           int `json:"strike_at_risk_threshold"`
+	// Schedule defaults
+	MGBaseline     int    `json:"mg_baseline"`
+	ZSBaseline     int    `json:"zs_baseline"`
+	MGDefaultTime  string `json:"mg_default_time"`
+	ZSDefaultTime  string `json:"zs_default_time"`
+	CurrentSeason  *int   `json:"current_season"`
+	SeasonStartDate string `json:"season_start_date"`
+	// Event generation rules
+	MGAnchorDate   string `json:"mg_anchor_date"`
+	ZSScheduleMode string `json:"zs_schedule_mode"`
+	ZSWeekdays     string `json:"zs_weekdays"`
+	ZSAnchorDate   string `json:"zs_anchor_date"`
+	ZSAnchorTime   string `json:"zs_anchor_time"`
 }
 
 type StormAssignment struct {
@@ -431,15 +444,56 @@ type OCCategory struct {
 	Responsibilities []OCResponsibility `json:"responsibilities"`
 }
 
-type Schedule struct {
-	ID           int             `json:"id"`
-	Name         string          `json:"name"`
-	DurationDays int             `json:"duration_days"`
-	IsActive     bool            `json:"is_active"`
-	ScheduleData json.RawMessage `json:"schedule_data"`
-	CreatedBy    int             `json:"created_by"`
-	CreatedAt    string          `json:"created_at"`
-	UpdatedAt    string          `json:"updated_at"`
+// --- Schedule Models ---
+
+type ScheduleEventType struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	ShortName string `json:"short_name"`
+	Icon      string `json:"icon"`
+	IsSystem  bool   `json:"is_system"`
+	Active    bool   `json:"active"`
+	SortOrder int    `json:"sort_order"`
+	CreatedAt string `json:"created_at"`
+}
+
+type ScheduleEvent struct {
+	ID          int    `json:"id"`
+	EventDate   string `json:"event_date"`
+	EventTypeID int    `json:"event_type_id"`
+	TypeName    string `json:"type_name"`
+	TypeShort   string `json:"type_short"`
+	TypeIcon    string `json:"type_icon"`
+	IsSystem    bool   `json:"is_system"`
+	EventTime   string `json:"event_time"`
+	AllDay      bool   `json:"all_day"`
+	Level       *int   `json:"level"`
+	Notes       string `json:"notes"`
+	CreatedBy   int    `json:"created_by"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type ServerEvent struct {
+	ID             int    `json:"id"`
+	Name           string `json:"name"`
+	ShortName      string `json:"short_name"`
+	Icon           string `json:"icon"`
+	DurationDays   int    `json:"duration_days"`
+	RepeatType     string `json:"repeat_type"`
+	RepeatInterval *int   `json:"repeat_interval"`
+	RepeatWeekday  *int   `json:"repeat_weekday"`
+	AnchorDate     string `json:"anchor_date"`
+	Active         bool   `json:"active"`
+	SortOrder      int    `json:"sort_order"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+}
+
+type StormSlotTime struct {
+	Slot   int    `json:"slot"`
+	Label  string `json:"label"`
+	TimeST string `json:"time_st"`
 }
 
 type TrainLog struct {

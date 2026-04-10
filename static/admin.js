@@ -32,6 +32,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Load initial data
         await loadUsers();
         await loadMembers();
+        await loadStormSlots();
+    }
+
+    // Wire storm slots save button (only present on admin page)
+    const slotSaveBtn = document.getElementById('btn-save-storm-slots');
+    if (slotSaveBtn) {
+        slotSaveBtn.addEventListener('click', saveStormSlots);
     }
 });
 
@@ -835,5 +842,91 @@ async function confirmDeleteGCP() {
         closeDeleteGCPModal();
     } catch (error) {
         alert("Error: " + error.message);
+    }
+}
+
+// ── Advanced Settings: Storm Slot Times ───────────────────────────────────────
+
+async function loadStormSlots() {
+    const container = document.getElementById('storm-slots-rows');
+    if (!container) return;
+
+    let slots = [];
+    try {
+        const res = await fetch('/api/storm/slot-times');
+        if (res.ok) slots = await res.json();
+    } catch { /* ignore */ }
+
+    container.replaceChildren();
+
+    if (!slots.length) {
+        const p = document.createElement('p');
+        p.className = 'help-text';
+        p.textContent = 'No slot data.';
+        container.appendChild(p);
+        return;
+    }
+
+    slots.forEach(slot => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:grid;grid-template-columns:60px 1fr 100px;gap:8px;align-items:center;margin-bottom:6px;';
+
+        const numLabel = document.createElement('span');
+        numLabel.textContent = 'Slot ' + slot.slot;
+        numLabel.style.fontWeight = '600';
+        row.appendChild(numLabel);
+
+        const labelInput = document.createElement('input');
+        labelInput.type = 'text';
+        labelInput.id = 'storm-slot-label-' + slot.slot;
+        labelInput.className = 'form-input';
+        labelInput.value = slot.label || '';
+        labelInput.maxLength = 40;
+        labelInput.placeholder = 'e.g. Early';
+        row.appendChild(labelInput);
+
+        const timeInput = document.createElement('input');
+        timeInput.type = 'text';
+        timeInput.id = 'storm-slot-time-' + slot.slot;
+        timeInput.className = 'form-input';
+        timeInput.value = slot.time_st || '00:00';
+        timeInput.maxLength = 5;
+        timeInput.placeholder = 'HH:MM';
+        row.appendChild(timeInput);
+
+        container.appendChild(row);
+    });
+}
+
+async function saveStormSlots() {
+    const statusEl = document.getElementById('storm-slots-status');
+    if (!statusEl) return;
+
+    const slots = [1, 2, 3].map(n => ({
+        slot:    n,
+        label:   (document.getElementById('storm-slot-label-' + n)?.value || '').trim(),
+        time_st: (document.getElementById('storm-slot-time-' + n)?.value || '00:00').trim(),
+    }));
+
+    statusEl.textContent = '';
+
+    try {
+        const res = await fetch('/api/admin/advanced/storm-slots', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slots }),
+        });
+        if (!res.ok) {
+            const msg = await res.text();
+            statusEl.textContent = msg || 'Save failed';
+            statusEl.style.color = 'var(--danger-color, #e74c3c)';
+            return;
+        }
+        statusEl.textContent = 'Saved';
+        statusEl.style.color = 'var(--success-color, #27ae60)';
+        setTimeout(() => { statusEl.textContent = ''; }, 3000);
+    } catch {
+        statusEl.textContent = 'Network error';
+        statusEl.style.color = 'var(--danger-color, #e74c3c)';
     }
 }

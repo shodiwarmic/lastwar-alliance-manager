@@ -1,0 +1,428 @@
+/* ── Week navigator ─────────────────────────────────────────────────────── */
+.week-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.week-range-label {
+    font-weight: 600;
+    font-size: 1rem;
+    flex: 1;
+    text-align: center;
+    min-width: 160px;
+}
+
+/* Mobile day label — hidden on desktop, shown on mobile inside .week-nav */
+.mobile-day-label {
+    display: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-align: center;
+    flex: 1;
+    min-width: 140px;
+}
+
+/* ── Server event banner strips (inline in each day-col) ───────────────── */
+.server-banner-strip {
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: #667eea;
+    color: #fff;
+}
+
+/* ── Week grid — 4+3 two-row layout ─────────────────────────────────────── */
+.week-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: auto auto;
+    gap: 8px;
+}
+
+/* Fri–Sun (last 3) sit on the second row, centred under the 4-col top row */
+.week-grid .day-col:nth-child(5),
+.week-grid .day-col:nth-child(6),
+.week-grid .day-col:nth-child(7) {
+    grid-row: 2;
+}
+
+.week-grid .day-col:nth-child(5) { grid-column: 1; }
+.week-grid .day-col:nth-child(6) { grid-column: 2; }
+.week-grid .day-col:nth-child(7) { grid-column: 3; }
+
+.day-col {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.day-col-header {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 6px;
+    margin-bottom: 4px;
+}
+
+.day-col-date {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.day-col-season {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.day-col-vs {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Event cards ────────────────────────────────────────────────────────── */
+.event-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 0.85rem;
+}
+
+.event-card-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.event-card-name {
+    font-weight: 600;
+}
+
+.event-card-time {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.event-card-level {
+    background: var(--accent-color, #667eea);
+    color: #fff;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.event-card-notes {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    white-space: pre-wrap;
+}
+
+.event-card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    width: 100%;
+    container-type: inline-size;
+}
+
+.event-card-action-btn {
+    flex: 1;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding-left: 6px;
+    padding-right: 6px;
+    overflow: hidden;
+}
+
+/* Hide text label when buttons are too narrow to fit it */
+@container (max-width: 120px) {
+    .event-card-action-btn .btn-label {
+        display: none;
+    }
+}
+
+/* ── Storm pills ────────────────────────────────────────────────────────── */
+.storm-pill {
+    background: #f59e0b;
+    color: #000;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* ── Add event button ───────────────────────────────────────────────────── */
+.btn-add-event-day {
+    margin-top: 4px;
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    align-self: flex-start;
+}
+
+/* ── Output bar ─────────────────────────────────────────────────────────── */
+.schedule-output-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    align-items: center;
+}
+
+.day-card-picker {
+    font-size: 0.82rem;
+    padding: 3px 6px;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    color-scheme: light;
+}
+
+html.theme-dark .day-card-picker,
+html.theme-auto .day-card-picker {
+    color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+    html.theme-auto .day-card-picker {
+        color-scheme: dark;
+    }
+}
+
+/* Flatpickr dark-mode overrides */
+.flatpickr-calendar {
+    background: var(--card-bg, #1a2540);
+    border-color: var(--border-color, #2e3f6e);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    color: var(--text-primary, #e9ecef);
+}
+.flatpickr-months .flatpickr-month,
+.flatpickr-weekdays,
+span.flatpickr-weekday {
+    background: var(--card-bg, #1a2540);
+    color: var(--text-muted, #a0aec0);
+}
+.flatpickr-day {
+    color: var(--text-primary, #e9ecef);
+}
+.flatpickr-day:hover,
+.flatpickr-day:focus {
+    background: var(--bg-secondary, #0d1b35);
+    border-color: var(--border-color, #2e3f6e);
+}
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover {
+    background: #667eea;
+    border-color: #667eea;
+    color: #fff;
+}
+.flatpickr-day.disabled,
+.flatpickr-day.disabled:hover {
+    color: var(--text-muted, #a0aec0);
+    opacity: 0.35;
+}
+.flatpickr-time input,
+.flatpickr-time .flatpickr-am-pm {
+    background: var(--bg-secondary, #0d1b35);
+    color: var(--text-primary, #e9ecef);
+}
+.flatpickr-time input:hover,
+.flatpickr-time .flatpickr-am-pm:hover {
+    background: var(--card-bg, #1a2540);
+}
+.numInputWrapper span.arrowUp,
+.numInputWrapper span.arrowDown {
+    border-color: var(--border-color, #2e3f6e);
+}
+.flatpickr-current-month input.cur-year,
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+    color: var(--text-primary, #e9ecef);
+    background: transparent;
+}
+.flatpickr-prev-month svg,
+.flatpickr-next-month svg {
+    fill: var(--text-muted, #a0aec0);
+}
+
+/* ── Settings tab ───────────────────────────────────────────────────────── */
+.generate-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.generate-section h4 {
+    margin: 0 0 12px;
+    font-size: 0.95rem;
+}
+
+.weekday-checks {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.weekday-checks label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+/* ── Server events list ─────────────────────────────────────────────────── */
+.server-event-row,
+.event-type-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+
+.server-event-row-info,
+.event-type-row-info {
+    flex: 1;
+    min-width: 140px;
+}
+
+.server-event-row-name,
+.event-type-row-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.server-event-row-meta,
+.event-type-row-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.server-event-row-actions,
+.event-type-row-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* ── Time + All Day row ─────────────────────────────────────────────────── */
+.event-time-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.event-time-row input[type="text"],
+.event-time-row .flatpickr-wrapper {
+    flex: 0 0 50%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.event-time-row .flatpickr-wrapper input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Time-only flatpickr popup: match input width, not full calendar width */
+.flatpickr-calendar.hasTime.noCalendar {
+    width: auto !important;
+    min-width: 120px;
+}
+
+.form-group .event-allday-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-weight: normal;
+    white-space: nowrap;
+    margin-bottom: 0;
+    width: calc(50% - 10px);
+}
+
+.form-group .event-allday-label input[type="checkbox"] {
+    width: auto;
+    min-height: auto;
+    padding: 0;
+}
+
+#event-time-input:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    text-decoration: line-through;
+}
+
+/* ── Status messages ────────────────────────────────────────────────────── */
+.status-msg {
+    font-size: 0.85rem;
+}
+
+.error-msg {
+    color: var(--danger-color, #e74c3c);
+}
+
+/* ── Mobile: single-day view ────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .week-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+    }
+
+    /* Reset the 4+3 row/column placements so every day spans the full width */
+    .week-grid .day-col:nth-child(5),
+    .week-grid .day-col:nth-child(6),
+    .week-grid .day-col:nth-child(7) {
+        grid-row: auto;
+        grid-column: 1;
+    }
+
+    .day-col {
+        display: none;
+    }
+
+    .day-col.mobile-active {
+        display: flex;
+    }
+
+    .week-nav .week-range-label {
+        display: none;
+    }
+
+    .week-nav .mobile-day-label {
+        display: block;
+    }
+}

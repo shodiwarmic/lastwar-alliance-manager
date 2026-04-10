@@ -462,6 +462,7 @@ func getLoginHistory(w http.ResponseWriter, r *http.Request) {
 func getSettings(w http.ResponseWriter, r *http.Request) {
 	var s Settings
 
+	var currentSeason sql.NullInt64
 	err := db.QueryRow(`SELECT
         id, schedule_message_template, daily_message_template, power_tracking_enabled,
         COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''), COALESCE(max_hq_level, 35),
@@ -473,7 +474,12 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(train_free_daily_limit, 1), COALESCE(train_purchased_daily_limit, 2),
         COALESCE(alliance_max_members, 100), COALESCE(join_requirements, ''),
         COALESCE(vs_minimum_points, 2500000),
-        COALESCE(strike_needs_improvement_threshold, 1), COALESCE(strike_at_risk_threshold, 3)
+        COALESCE(strike_needs_improvement_threshold, 1), COALESCE(strike_at_risk_threshold, 3),
+        COALESCE(mg_baseline, 11), COALESCE(zs_baseline, 7),
+        COALESCE(mg_default_time, '00:30'), COALESCE(zs_default_time, '23:00'),
+        current_season, COALESCE(season_start_date, ''),
+        COALESCE(mg_anchor_date, ''), COALESCE(zs_schedule_mode, 'weekdays'),
+        COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00')
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -486,7 +492,16 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.AllianceMaxMembers, &s.JoinRequirements,
 		&s.VSMinimumPoints,
 		&s.StrikeNeedsImprovementThreshold, &s.StrikeAtRiskThreshold,
+		&s.MGBaseline, &s.ZSBaseline,
+		&s.MGDefaultTime, &s.ZSDefaultTime,
+		&currentSeason, &s.SeasonStartDate,
+		&s.MGAnchorDate, &s.ZSScheduleMode,
+		&s.ZSWeekdays, &s.ZSAnchorDate, &s.ZSAnchorTime,
 	)
+	if currentSeason.Valid {
+		v := int(currentSeason.Int64)
+		s.CurrentSeason = &v
+	}
 
 	if err != nil {
 		http.Error(w, "Failed to load settings", http.StatusInternalServerError)
@@ -531,7 +546,12 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		train_free_daily_limit = ?, train_purchased_daily_limit = ?,
 		alliance_max_members = ?, join_requirements = ?,
 		vs_minimum_points = ?,
-		strike_needs_improvement_threshold = ?, strike_at_risk_threshold = ?
+		strike_needs_improvement_threshold = ?, strike_at_risk_threshold = ?,
+		mg_baseline = ?, zs_baseline = ?,
+		mg_default_time = ?, zs_default_time = ?,
+		current_season = ?, season_start_date = ?,
+		mg_anchor_date = ?, zs_schedule_mode = ?,
+		zs_weekdays = ?, zs_anchor_date = ?, zs_anchor_time = ?
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -540,6 +560,11 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.AllianceMaxMembers, settings.JoinRequirements,
 		settings.VSMinimumPoints,
 		settings.StrikeNeedsImprovementThreshold, settings.StrikeAtRiskThreshold,
+		settings.MGBaseline, settings.ZSBaseline,
+		settings.MGDefaultTime, settings.ZSDefaultTime,
+		settings.CurrentSeason, settings.SeasonStartDate,
+		settings.MGAnchorDate, settings.ZSScheduleMode,
+		settings.ZSWeekdays, settings.ZSAnchorDate, settings.ZSAnchorTime,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)
@@ -764,4 +789,80 @@ func updateExternalCredentials(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Credential updated successfully"})
+}
+
+// --- ADVANCED SETTINGS: STORM SLOT TIMES ---
+
+// getAdvancedStormSlots returns all 3 storm slot time definitions.
+// Available to all authenticated users (schedule page needs it).
+func getAdvancedStormSlots(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query(`SELECT slot, label, time_st FROM storm_slot_times ORDER BY slot`)
+	if err != nil {
+		slog.Error("getAdvancedStormSlots query", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	slots := []StormSlotTime{}
+	for rows.Next() {
+		var s StormSlotTime
+		if err := rows.Scan(&s.Slot, &s.Label, &s.TimeST); err != nil {
+			slog.Error("getAdvancedStormSlots scan", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		slots = append(slots, s)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(slots)
+}
+
+// putAdvancedStormSlots updates all 3 storm slot time definitions. Admin only.
+func putAdvancedStormSlots(w http.ResponseWriter, r *http.Request) {
+	var slots []StormSlotTime
+	if err := json.NewDecoder(r.Body).Decode(&slots); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	for _, s := range slots {
+		if s.Slot < 1 || s.Slot > 3 {
+			http.Error(w, "slot must be 1, 2, or 3", http.StatusBadRequest)
+			return
+		}
+		if !reHHMM.MatchString(s.TimeST) {
+			http.Error(w, "time_st must be HH:MM", http.StatusBadRequest)
+			return
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("putAdvancedStormSlots begin tx", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	for _, s := range slots {
+		if _, err := tx.Exec(`UPDATE storm_slot_times SET label=?, time_st=? WHERE slot=?`,
+			s.Label, s.TimeST, s.Slot); err != nil {
+			slog.Error("putAdvancedStormSlots update", "error", err, "slot", s.Slot)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("putAdvancedStormSlots commit", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	session, _ := store.Get(r, "session")
+	actorID, _ := session.Values["user_id"].(int)
+	actorName, _ := session.Values["username"].(string)
+	logActivity(actorID, actorName, "updated", "settings", "storm slot times", true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Storm slot times updated"})
 }

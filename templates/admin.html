@@ -116,7 +116,7 @@
                     <div class="settings-group">
                         <h4>☁️ Google Cloud Vision (OCR)</h4>
                         <p class="help-text">Upload a Service Account JSON key to enable automated data extraction from game screenshots.</p>
-                        
+
                         <div style="background: var(--bg-secondary); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
                             <form id="gcp-upload-form" onsubmit="uploadGCPCredentials(event)">
                                 <div class="form-group">
@@ -128,6 +128,26 @@
                                     <button type="button" id="delete-gcp-btn" class="btn btn-danger" onclick="showDeleteGCPModal()">🗑️ Delete Active Key</button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+
+                    <div class="settings-group" style="margin-top:30px;padding-top:20px;border-top:1px solid var(--border-color);">
+                        <h4>⚙️ Advanced Settings</h4>
+                        <p class="help-text">⚠️ These values reflect game constants. Only change if the game updates them.</p>
+
+                        <h5 style="margin:16px 0 8px;">Desert Storm Battle Slots</h5>
+                        <p class="help-text">Configure the server time for each numbered slot. Officers assign task forces to slots on the Storm page.</p>
+                        <div id="storm-slots-form">
+                            <div class="storm-slot-row" style="display:grid;grid-template-columns:60px 1fr 100px;gap:8px;align-items:center;margin-bottom:6px;font-weight:600;font-size:0.85em;color:var(--text-muted);">
+                                <span>Slot</span><span>Label</span><span>Time (ST)</span>
+                            </div>
+                            <div id="storm-slots-rows">
+                                <p class="help-text">Loading…</p>
+                            </div>
+                        </div>
+                        <div style="margin-top:12px;display:flex;align-items:center;gap:12px;">
+                            <button class="btn btn-primary" id="btn-save-storm-slots">💾 Save Slot Times</button>
+                            <span id="storm-slots-status" class="status-msg"></span>
                         </div>
                     </div>
                 </div>

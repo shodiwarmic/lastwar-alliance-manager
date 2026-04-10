@@ -50,71 +50,27 @@ function getWeekStart() {
     return monday;
 }
 
-// Returns a Date for a given day_number in the schedule, anchored to the current week.
-// day_number cycles: 1=Monday of week 1, 8=Monday of week 2, etc.
-function dateForDayNumber(dayNum) {
-    const monday = getWeekStart();
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + (dayNum - 1));
-    return d;
+function todayGameDateStr() {
+    // Game time = UTC-2
+    const d = new Date(Date.now() - 2 * 3600 * 1000);
+    return d.toISOString().slice(0, 10);
 }
 
-// Given a date, what day_number(s) in a schedule of durationDays correspond to it?
-function dayNumbersForDate(date, durationDays) {
-    const monday = getWeekStart();
-    const diffDays = Math.round((date - monday) / 86400000);
-    const result = [];
-    for (let dn = 1; dn <= durationDays; dn++) {
-        if ((dn - 1) % 7 === ((diffDays % 7) + 7) % 7) {
-            result.push(dn);
-        }
-    }
-    return result;
+function addGameDays(dateStr, n) {
+    const d = new Date(dateStr + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
 }
 
-// Find the next N events starting from today
-function nextEvents(policy, n) {
-    if (!policy || !policy.days || !policy.days.length) return [];
-
-    const events = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Build a flat list of (date, label, time) for the next ~60 days
-    for (let offset = 0; offset < 60 && events.length < n; offset++) {
-        const d = new Date(today);
-        d.setDate(today.getDate() + offset);
-
-        const monday = getWeekStart();
-        const diffDays = Math.round((d - monday) / 86400000);
-        const posInCycle = ((diffDays % policy.duration_days) + policy.duration_days) % policy.duration_days;
-
-        // Find the matching day in the policy
-        const dayObj = policy.days.find(day => (day.day_number - 1) === posInCycle);
-        if (!dayObj) continue;
-
-        if (dayObj.mg && dayObj.mg.active) {
-            events.push({ date: d, label: 'MG', time: policy.mg_time || '20:00' });
-        }
-        if (dayObj.zs && dayObj.zs.active) {
-            events.push({ date: d, label: 'ZS', time: policy.zs_time || '20:00' });
-        }
-        (dayObj.custom_events || []).forEach(ev => {
-            events.push({ date: d, label: ev.label || ev.icon, time: ev.time || null });
-        });
-    }
-    return events.slice(0, n);
-}
-
-function formatEventDate(date) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-
-    if (date.getTime() === today.getTime()) return 'Today';
-    if (date.getTime() === tomorrow.getTime()) return 'Tomorrow';
-    return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+function formatEventDate(dateStr) {
+    const today = todayGameDateStr();
+    const tomorrow = addGameDays(today, 1);
+    if (dateStr === today) return 'Today';
+    if (dateStr === tomorrow) return 'Tomorrow';
+    const d = new Date(dateStr + 'T12:00:00Z');
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return days[d.getUTCDay()] + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCDate();
 }
 
 // --- DOM helpers ---
@@ -214,43 +170,32 @@ function renderVS(card, vsRows) {
     card.append(grid, topLabel, topList, botLabel, botList);
 }
 
-function renderSchedule(card, schedule) {
-    if (!schedule || !schedule.schedule_data) {
-        card.querySelector('.dash-card-loading')?.remove();
-        card.appendChild(el('p', { className: 'dash-card-error', textContent: 'No active schedule.' }));
-        return;
-    }
-
-    let policy;
-    try {
-        policy = typeof schedule.schedule_data === 'string'
-            ? JSON.parse(schedule.schedule_data)
-            : schedule.schedule_data;
-        policy.duration_days = schedule.duration_days;
-    } catch {
-        card.querySelector('.dash-card-loading')?.remove();
-        card.appendChild(errorEl('Could not parse schedule.'));
-        return;
-    }
-
-    const events = nextEvents(policy, 3);
+function renderSchedule(card, events) {
     card.querySelector('.dash-card-loading')?.remove();
 
-    if (!events.length) {
-        card.appendChild(el('p', { textContent: 'No upcoming events found.' }));
+    if (!Array.isArray(events) || !events.length) {
+        card.appendChild(el('p', { textContent: 'No upcoming events.' }));
         return;
     }
 
+    // Show next 3 events sorted by date+time
+    const sorted = events
+        .slice()
+        .sort((a, b) => (a.event_date + a.event_time).localeCompare(b.event_date + b.event_time))
+        .slice(0, 3);
+
     const list = el('ul', { className: 'dash-list' });
-    events.forEach(ev => {
+    sorted.forEach(ev => {
         const li = el('li');
+
         const nameSpan = el('span', { className: 'dash-list-name' });
-        nameSpan.textContent = ev.label;
+        nameSpan.textContent = ev.type_icon + ' ' + ev.type_name;
         li.appendChild(nameSpan);
 
         const right = el('span', { className: 'dash-list-value' });
-        right.textContent = formatEventDate(ev.date) + (ev.time ? ' ' + ev.time : '');
+        right.textContent = formatEventDate(ev.event_date) + ' ' + ev.event_time;
         li.appendChild(right);
+
         list.appendChild(li);
     });
     card.appendChild(list);
@@ -467,7 +412,12 @@ async function boot() {
     const fetches = {};
     if (needMembers)  fetches.members  = fetch('/api/members').then(r => r.ok ? r.json() : Promise.reject());
     if (needVS)       fetches.vs       = fetch('/api/vs-points').then(r => r.ok ? r.json() : Promise.reject());
-    if (needSchedule) fetches.schedule = fetch('/api/schedule').then(r => r.ok ? r.json() : Promise.reject());
+    if (needSchedule) {
+        const today = todayGameDateStr();
+        const to13  = addGameDays(today, 13);
+        fetches.schedule = fetch('/api/schedule/events?from=' + today + '&to=' + to13)
+            .then(r => r.ok ? r.json() : Promise.reject());
+    }
     if (needAllies) {
         fetches.allies = fetch('/api/allies').then(r => r.ok ? r.json() : Promise.reject());
         fetches.agreementTypes = fetch('/api/ally-agreement-types').then(r => r.ok ? r.json() : Promise.reject());

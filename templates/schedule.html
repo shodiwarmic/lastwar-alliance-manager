@@ -1,200 +1,403 @@
 {{define "header_text"}}
     <h1>📅 Alliance Schedule</h1>
-    <h2>Schedule Policy Builder</h2>
+    <h2 id="season-subtitle"></h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="/schedule.css">
 {{end}}
 
 {{define "content"}}
 <div id="schedule-page">
 
-    <!-- Validation Banner -->
-    <div id="validation-banner" class="warning-message hidden">
-        <strong>Schedule Warnings:</strong>
-        <ul id="validation-list"></ul>
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="schedule">📅 Schedule</button>
+        <button class="tab-btn" data-tab="server-events">🌐 Server Events</button>
+        <button class="tab-btn" data-tab="event-types">🏷️ Event Types</button>
+        {{if .Permissions.ManageSchedule}}
+        <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+        {{end}}
     </div>
 
-    <!-- Baseline Settings -->
-    <section class="form-section" id="baseline-section" style="display:none;">
-        <h3>⚙️ Policy Settings</h3>
-        <div class="form-group" style="margin-bottom:12px;">
-            <label for="schedule-title-input">Output Title</label>
-            <input type="text" id="schedule-title-input" maxlength="80" style="width:100%;"
-                placeholder="Alliance Schedule">
+    <!-- ── Tab: Schedule ──────────────────────────────────────────────────── -->
+    <div id="tab-schedule" class="tab-content">
+
+        <!-- Week Navigator (also used as day navigator on mobile) -->
+        <div class="week-nav">
+            <button class="btn btn-secondary btn-sm" id="btn-prev-week">← Prev</button>
+            <span id="week-range-label" class="week-range-label"></span>
+            <span id="mobile-day-label" class="mobile-day-label"></span>
+            <button class="btn btn-secondary btn-sm" id="btn-next-week">Next →</button>
+            <button class="btn btn-ghost btn-sm" id="btn-today">Today</button>
         </div>
-        <div class="form-row" style="flex-wrap:wrap; gap:16px;">
-            <div class="form-group">
-                <label for="mg-baseline">MG Baseline Level</label>
-                <input type="number" id="mg-baseline" min="1" max="30" style="width:80px;">
-            </div>
-            <div class="form-group">
-                <label for="zs-baseline">ZS Baseline Level</label>
-                <input type="number" id="zs-baseline" min="1" max="30" style="width:80px;">
-            </div>
-            <div class="form-group">
-                <label for="mg-time">MG Time (Server)</label>
-                <input type="text" id="mg-time" pattern="([0-1][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" style="width:90px;">
-            </div>
-            <div class="form-group">
-                <label for="zs-time">ZS Time (Server)</label>
-                <input type="text" id="zs-time" pattern="([0-1][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" style="width:90px;">
-            </div>
-            <div class="form-group">
-                <label for="week-offset">Week Offset</label>
-                <input type="number" id="week-offset" min="0" max="52" style="width:70px;"
-                    title="Shift displayed week labels (e.g. 6 → Week 1 shows as Week 7)">
-            </div>
+
+        <!-- Week grid -->
+        <div id="week-grid" class="week-grid"></div>
+
+        <!-- Output buttons -->
+        <div class="schedule-output-bar">
+            <button class="btn btn-secondary btn-sm" id="btn-text-output">📄 Text</button>
+            <button class="btn btn-secondary btn-sm" id="btn-week-image">🖼️ Week Image</button>
+            <span style="display:inline-flex;align-items:center;gap:4px;">
+                <button class="btn btn-secondary btn-sm" id="btn-day-card">📅 Day Card</button>
+                <select id="day-card-picker" class="day-card-picker" title="Select day for card"></select>
+            </span>
         </div>
-    </section>
 
-    <!-- Day Grid -->
-    <section class="form-section" id="day-grid-section" style="display:none;">
-        <h3 id="schedule-title-display">Schedule</h3>
-        <div id="day-grid"></div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:16px;">
-            {{if .Permissions.ManageSchedule}}
-            <button class="btn btn-secondary" id="btn-save"   disabled>Save</button>
-            {{end}}
-            <button class="btn btn-secondary" id="btn-text"        disabled>📄 Text</button>
-            <button class="btn btn-secondary" id="btn-infographic" disabled>🖼️ Infographic</button>
-            <button class="btn btn-secondary" id="btn-export"      disabled>⬇️ Export JSON</button>
-            {{if .Permissions.ManageSchedule}}
-            <button class="btn btn-secondary" id="btn-import" disabled>⬆️ Import JSON</button>
-            <button class="btn btn-danger"    id="btn-clear"  disabled>🗑️ Clear All</button>
-            {{end}}
-        </div>
-        <input type="file" id="import-file-input" accept=".json,application/json" style="display:none;">
-    </section>
-
-    <!-- Text Output -->
-    <section class="form-section hidden" id="text-section">
-        <h3>📄 Discord / Chat Text</h3>
-        <textarea id="text-output" rows="20" readonly
-            style="width:100%; font-family:monospace; font-size:13px;"></textarea>
-        <div class="modal-actions">
-            <button class="btn btn-secondary" id="btn-copy-text">Copy to Clipboard</button>
-        </div>
-    </section>
-
-    <!-- Infographic Preview -->
-    <section class="form-section hidden" id="infographic-section">
-        <h3>🖼️ Infographic Preview</h3>
-        <div style="overflow-x:auto;">
-            <canvas id="schedule-canvas"></canvas>
-        </div>
-        <div class="modal-actions" style="margin-top:12px;">
-            <button class="btn btn-primary"   id="btn-download-png">⬇️ Download PNG</button>
-            <button class="btn btn-secondary" id="btn-download-jpg">⬇️ Download JPEG</button>
-        </div>
-    </section>
-
-</div>
-
-<!-- Edit Day Modal -->
-<div id="day-modal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <h2 id="day-modal-title">Edit Day</h2>
-        <form id="day-form">
-
-            <!-- MG -->
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="mg-active">
-                    🛡️ Marshal's Guard (MG)
-                </label>
-                <div id="mg-options" style="margin-left:24px; margin-top:8px; display:none;">
-                    <div class="form-row" style="gap:12px; flex-wrap:wrap;">
-                        <div class="form-group">
-                            <label>Vibe</label>
-                            <select id="mg-vibe">
-                                <option value="extra_chill">Extra Chill (-2)</option>
-                                <option value="chill">Chill (-1)</option>
-                                <option value="base" selected>Base (±0)</option>
-                                <option value="push">Push (+1)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="mg-time-override">Time Override
-                                <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
-                            </label>
-                            <input type="text" id="mg-time-override" pattern="([0-1][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" style="width:90px;"
-                                title="Override the policy MG time for this day only">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="mg-conditional">Conditional Note
-                            <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
-                        </label>
-                        <input type="text" id="mg-conditional" maxlength="120"
-                            placeholder="e.g. If SVS/Meteorite/Sky: Post-Event @ Extra Chill">
-                    </div>
-                </div>
-            </div>
-
-            <!-- ZS -->
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="zs-active">
-                    🧟 Zombie Siege (ZS)
-                </label>
-                <div id="zs-options" style="margin-left:24px; margin-top:8px; display:none;">
-                    <div class="form-row" style="gap:12px; flex-wrap:wrap;">
-                        <div class="form-group">
-                            <label>Vibe</label>
-                            <select id="zs-vibe">
-                                <option value="extra_chill">Extra Chill (-2)</option>
-                                <option value="chill">Chill (-1)</option>
-                                <option value="base" selected>Base (±0)</option>
-                                <option value="push">Push (+1)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="zs-time-override">Time Override
-                                <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
-                            </label>
-                            <input type="text" id="zs-time-override" pattern="([0-1][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" style="width:90px;"
-                                title="Override the policy ZS time for this day only">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="zs-conditional">Conditional Note
-                            <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
-                        </label>
-                        <input type="text" id="zs-conditional" maxlength="120"
-                            placeholder="optional conditional instruction">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Custom Events -->
-            <div class="form-group">
-                <label>Custom Events
-                    <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
-                </label>
-                <div id="custom-events-list" style="margin-bottom:8px;"></div>
-                <button type="button" class="btn btn-secondary" id="btn-add-custom-event"
-                    style="padding:4px 12px; font-size:0.9em;">+ Add Event</button>
-            </div>
-
-            <!-- Day Notes -->
-            <div class="form-group">
-                <label for="day-notes">Day Notes
-                    <span style="font-weight:normal; font-size:0.85em;">(optional)</span>
-                </label>
-                <input type="text" id="day-notes" maxlength="160">
-            </div>
-
+        <!-- Text output area -->
+        <div id="text-output-section" class="form-section hidden">
+            <h3>📄 Discord / Chat Text</h3>
+            <textarea id="text-output" rows="20" readonly
+                style="width:100%;font-family:monospace;font-size:13px;"></textarea>
             <div class="modal-actions">
-                <button type="submit" class="btn btn-primary">Save Day</button>
-                <button type="button" class="btn btn-secondary"
-                    onclick="closeDayModal()">Cancel</button>
+                <button class="btn btn-secondary" id="btn-copy-text">Copy to Clipboard</button>
+                <button class="btn btn-ghost btn-sm" id="btn-close-text">✕ Close</button>
             </div>
-        </form>
+        </div>
+
+        <!-- Canvas area (Week Image + Day Card) -->
+        <div id="canvas-section" class="form-section hidden">
+            <h3 id="canvas-section-title">🖼️ Week Image</h3>
+            <div style="overflow-x:auto;">
+                <canvas id="schedule-canvas"></canvas>
+            </div>
+            <div class="modal-actions" style="margin-top:12px;">
+                <button class="btn btn-primary" id="btn-download-png">⬇️ Download PNG</button>
+                <button class="btn btn-ghost btn-sm" id="btn-close-canvas">✕ Close</button>
+            </div>
+        </div>
+
+    </div><!-- /tab-schedule -->
+
+    <!-- ── Tab: Server Events ─────────────────────────────────────────────── -->
+    <div id="tab-server-events" class="tab-content">
+        <div class="panel-header">
+            <h3>🌐 Server Events</h3>
+            {{if .Permissions.ManageSchedule}}
+            <button class="btn btn-primary" id="btn-add-server-event">+ Add</button>
+            {{end}}
+        </div>
+        <p class="help-text">Repeating game-wide events displayed as banners on the calendar.</p>
+        <div id="server-events-list">
+            <p class="empty-state">Loading…</p>
+        </div>
     </div>
-</div>
+
+    <!-- ── Tab: Event Types ───────────────────────────────────────────────── -->
+    <div id="tab-event-types" class="tab-content">
+        <div class="panel-header">
+            <h3>🏷️ Event Types</h3>
+            {{if .Permissions.ManageSchedule}}
+            <button class="btn btn-primary" id="btn-add-event-type">+ Add</button>
+            {{end}}
+        </div>
+        <p class="help-text">System types (MG, ZS) cannot be deleted or renamed.</p>
+        <div id="event-types-list">
+            <p class="empty-state">Loading…</p>
+        </div>
+    </div>
+
+    <!-- ── Tab: Settings ─────────────────────────────────────────────────── -->
+    {{if .Permissions.ManageSchedule}}
+    <div id="tab-settings" class="tab-content">
+
+        <div class="form-section">
+            <h3>Schedule Defaults</h3>
+            <div class="form-row" style="flex-wrap:wrap;gap:16px;">
+                <div class="form-group">
+                    <label for="set-mg-baseline">MG Baseline Level</label>
+                    <input type="number" id="set-mg-baseline" min="1" max="30" style="width:80px;">
+                </div>
+                <div class="form-group">
+                    <label for="set-zs-baseline">ZS Baseline Level</label>
+                    <input type="number" id="set-zs-baseline" min="1" max="30" style="width:80px;">
+                </div>
+                <div class="form-group">
+                    <label for="set-mg-time">MG Default Time (ST)</label>
+                    <input type="text" id="set-mg-time" placeholder="HH:MM" maxlength="5">
+                </div>
+                <div class="form-group">
+                    <label for="set-zs-time">ZS Default Time (ST)</label>
+                    <input type="text" id="set-zs-time" placeholder="HH:MM" maxlength="5">
+                </div>
+            </div>
+
+            <h3 style="margin-top:24px;">Season Tracking</h3>
+            <div class="form-row" style="flex-wrap:wrap;gap:16px;">
+                <div class="form-group">
+                    <label for="set-season">Current Season</label>
+                    <input type="number" id="set-season" min="1" max="999" style="width:80px;">
+                </div>
+                <div class="form-group">
+                    <label for="set-season-start">Season Start Date</label>
+                    <input type="date" id="set-season-start">
+                    <span class="help-text" style="font-size:0.8em;">Must be a Monday.</span>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top:16px;">
+                <button class="btn btn-primary" id="btn-save-settings">💾 Save Settings</button>
+                <span id="settings-status" class="status-msg"></span>
+            </div>
+        </div>
+
+        <hr style="border-color:var(--border-color);margin:24px 0;">
+
+        <div class="form-section">
+            <h3>⚡ Generate Events</h3>
+
+            <div class="generate-section">
+                <h4>MG Rules</h4>
+                <div class="form-group">
+                    <label for="gen-mg-anchor">Anchor Date
+                        <span class="help-text">(reference point for every-other-day cycle)</span>
+                    </label>
+                    <input type="date" id="gen-mg-anchor">
+                </div>
+            </div>
+
+            <div class="generate-section" style="margin-top:20px;">
+                <h4>ZS Rules</h4>
+                <div class="form-group">
+                    <label>Schedule Mode</label>
+                    <div style="display:flex;gap:16px;margin-top:4px;">
+                        <label><input type="radio" name="zs-mode" value="weekdays" checked id="zs-mode-weekdays"> Fixed weekdays</label>
+                        <label><input type="radio" name="zs-mode" value="asap" id="zs-mode-asap"> ASAP (71.5h chain)</label>
+                    </div>
+                </div>
+
+                <div id="zs-weekdays-config" class="form-group">
+                    <label>Active Weekdays</label>
+                    <div class="weekday-checks">
+                        <label><input type="checkbox" name="zs-wd" value="1"> Mon</label>
+                        <label><input type="checkbox" name="zs-wd" value="2"> Tue</label>
+                        <label><input type="checkbox" name="zs-wd" value="3"> Wed</label>
+                        <label><input type="checkbox" name="zs-wd" value="4"> Thu</label>
+                        <label><input type="checkbox" name="zs-wd" value="5"> Fri</label>
+                        <label><input type="checkbox" name="zs-wd" value="6"> Sat</label>
+                        <label><input type="checkbox" name="zs-wd" value="7"> Sun</label>
+                    </div>
+                </div>
+
+                <div id="zs-asap-config" class="form-row" style="gap:16px;flex-wrap:wrap;display:none;">
+                    <div class="form-group">
+                        <label for="gen-zs-anchor">Anchor Date</label>
+                        <input type="date" id="gen-zs-anchor">
+                    </div>
+                    <div class="form-group">
+                        <label for="gen-zs-anchor-time">Anchor Time (ST)</label>
+                        <input type="text" id="gen-zs-anchor-time" placeholder="HH:MM" style="width:90px;" maxlength="5">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section" style="margin-top:20px;padding:0;">
+                <div class="form-row" style="gap:16px;flex-wrap:wrap;align-items:flex-end;">
+                    <div class="form-group">
+                        <label for="gen-from">Generate From</label>
+                        <input type="date" id="gen-from">
+                    </div>
+                    <div class="form-group">
+                        <label for="gen-to">To</label>
+                        <input type="date" id="gen-to">
+                    </div>
+                </div>
+                <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">
+                    <label><input type="checkbox" id="gen-mg" checked> Generate MG</label>
+                    <label><input type="checkbox" id="gen-zs" checked> Generate ZS</label>
+                </div>
+                <div class="modal-actions" style="margin-top:12px;">
+                    <button class="btn btn-primary" id="btn-generate">⚡ Generate Events</button>
+                    <span id="generate-status" class="status-msg"></span>
+                </div>
+            </div>
+
+            <p class="help-text" style="margin-top:8px;">
+                Storm slot times are configured in
+                <a href="/admin" style="color:var(--accent-color);">Admin → Advanced Settings</a>.
+            </p>
+        </div>
+
+    </div><!-- /tab-settings -->
+    {{end}}
+
+</div><!-- /schedule-page -->
 {{end}}
 
 {{define "scripts"}}
-<script>
-    window.CAN_MANAGE = {{if .Permissions.ManageSchedule}}true{{else}}false{{end}};
-</script>
+<div id="page-config"
+    data-can-manage="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
+    hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="/schedule.js"></script>
+{{end}}
+
+{{define "modals"}}
+
+<!-- ── Add / Edit Event Modal ─────────────────────────────────────────────── -->
+<div id="event-modal" class="modal">
+    <div class="modal-content">
+        <h2 id="event-modal-title">Add Event</h2>
+        <form id="event-form">
+            <input type="hidden" id="event-modal-id">
+
+            <div class="form-group">
+                <label for="event-type-select">Event Type</label>
+                <select id="event-type-select" required></select>
+            </div>
+
+            <div class="form-group">
+                <label for="event-date-input">Date</label>
+                <input type="date" id="event-date-input" required>
+            </div>
+
+            <div class="form-group">
+                <label for="event-time-input">Time (ST, HH:MM)</label>
+                <div class="event-time-row">
+                    <input type="text" id="event-time-input" placeholder="HH:MM" maxlength="5">
+                    <label class="event-allday-label" for="event-allday-input">
+                        <input type="checkbox" id="event-allday-input">
+                        All Day
+                    </label>
+                </div>
+                <span id="event-time-hint" class="help-text" style="margin-top:4px;display:block;"></span>
+            </div>
+
+            <!-- Level: shown for system types only -->
+            <div class="form-group" id="event-level-group" style="display:none;">
+                <label for="event-level-input">Level Override
+                    <span class="help-text">(leave blank to use baseline)</span>
+                </label>
+                <input type="number" id="event-level-input" min="1" max="30" style="width:80px;">
+            </div>
+
+            <div class="form-group">
+                <label for="event-notes-input">Notes <span class="help-text">(optional)</span></label>
+                <textarea id="event-notes-input" maxlength="500" rows="3" style="resize:vertical;width:100%;box-sizing:border-box;"></textarea>
+            </div>
+
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" id="btn-close-event-modal">Cancel</button>
+            </div>
+            <p id="event-form-error" class="status-msg error-msg" style="margin-top:8px;"></p>
+        </form>
+    </div>
+</div>
+
+<!-- ── Add / Edit Event Type Modal ───────────────────────────────────────── -->
+<div id="event-type-modal" class="modal">
+    <div class="modal-content">
+        <h2 id="event-type-modal-title">Add Event Type</h2>
+        <form id="event-type-form">
+            <input type="hidden" id="event-type-modal-id">
+
+            <div class="form-group">
+                <label for="et-name">Full Name</label>
+                <input type="text" id="et-name" maxlength="60" required>
+            </div>
+
+            <div class="form-group">
+                <label for="et-short">Short Name</label>
+                <input type="text" id="et-short" maxlength="8" required>
+            </div>
+
+            <div class="form-group">
+                <label for="et-icon">Icon (emoji)</label>
+                <input type="text" id="et-icon" maxlength="8" placeholder="📅">
+            </div>
+
+            <div class="form-group">
+                <label><input type="checkbox" id="et-active" checked> Active</label>
+            </div>
+
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" id="btn-close-event-type-modal">Cancel</button>
+            </div>
+            <p id="event-type-form-error" class="status-msg error-msg" style="margin-top:8px;"></p>
+        </form>
+    </div>
+</div>
+
+<!-- ── Add / Edit Server Event Modal ─────────────────────────────────────── -->
+<div id="server-event-modal" class="modal">
+    <div class="modal-content" style="max-width:520px;">
+        <h2 id="server-event-modal-title">Add Server Event</h2>
+        <form id="server-event-form">
+            <input type="hidden" id="se-modal-id">
+
+            <div class="form-row" style="gap:12px;flex-wrap:wrap;">
+                <div class="form-group" style="flex:1;min-width:160px;">
+                    <label for="se-name">Name</label>
+                    <input type="text" id="se-name" maxlength="60" required>
+                </div>
+                <div class="form-group" style="width:100px;">
+                    <label for="se-short">Short Name</label>
+                    <input type="text" id="se-short" maxlength="8" required>
+                </div>
+                <div class="form-group" style="width:80px;">
+                    <label for="se-icon">Icon</label>
+                    <input type="text" id="se-icon" maxlength="8" placeholder="🌐">
+                </div>
+            </div>
+
+            <div class="form-row" style="gap:12px;flex-wrap:wrap;">
+                <div class="form-group">
+                    <label for="se-duration">Duration (days)</label>
+                    <input type="number" id="se-duration" min="1" max="30" value="1" style="width:70px;" required>
+                </div>
+                <div class="form-group">
+                    <label for="se-repeat">Repeat</label>
+                    <select id="se-repeat" required>
+                        <option value="none">None (single)</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="biweekly">Biweekly</option>
+                        <option value="every_n_days">Every N days</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Weekday (weekly / biweekly) -->
+            <div class="form-group" id="se-weekday-group" style="display:none;">
+                <label for="se-weekday">Day of week</label>
+                <select id="se-weekday">
+                    <option value="0">Monday</option>
+                    <option value="1">Tuesday</option>
+                    <option value="2">Wednesday</option>
+                    <option value="3">Thursday</option>
+                    <option value="4">Friday</option>
+                    <option value="5">Saturday</option>
+                    <option value="6">Sunday</option>
+                </select>
+            </div>
+
+            <!-- Every N days -->
+            <div class="form-group" id="se-interval-group" style="display:none;">
+                <label for="se-interval">Interval (days)</label>
+                <input type="number" id="se-interval" min="2" max="365" style="width:80px;">
+            </div>
+
+            <!-- Anchor date (always shown for non-none) -->
+            <div class="form-group" id="se-anchor-group" style="display:none;">
+                <label for="se-anchor">Anchor Date</label>
+                <input type="date" id="se-anchor">
+                <span class="help-text">First/reference occurrence date.</span>
+            </div>
+
+            <div class="form-group">
+                <label><input type="checkbox" id="se-active" checked> Active</label>
+            </div>
+
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" id="btn-close-server-event-modal">Cancel</button>
+            </div>
+            <p id="server-event-form-error" class="status-msg error-msg" style="margin-top:8px;"></p>
+        </form>
+    </div>
+</div>
+
 {{end}}

@@ -160,9 +160,30 @@ func main() {
 	wopiRouter.HandleFunc("/files/{id}", wopiAuthMiddleware(wopiActionHandler)).Methods("POST")
 	wopiRouter.HandleFunc("/files/{id}/contents", wopiAuthMiddleware(wopiPutFile)).Methods("POST")
 
-	// Schedule API (single alliance schedule)
-	router.HandleFunc("/api/schedule", authMiddleware(requirePermission("view_schedule", getSchedule))).Methods("GET")
-	router.HandleFunc("/api/schedule", authMiddleware(requirePermission("manage_schedule", putSchedule))).Methods("PUT")
+	// Schedule event types
+	router.HandleFunc("/api/schedule/event-types", authMiddleware(requirePermission("view_schedule", getScheduleEventTypes))).Methods("GET")
+	router.HandleFunc("/api/schedule/event-types", authMiddleware(requirePermission("manage_schedule", createScheduleEventType))).Methods("POST")
+	router.HandleFunc("/api/schedule/event-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", updateScheduleEventType))).Methods("PUT")
+	router.HandleFunc("/api/schedule/event-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", deleteScheduleEventType))).Methods("DELETE")
+
+	// Calendar events
+	router.HandleFunc("/api/schedule/events", authMiddleware(requirePermission("view_schedule", getScheduleEvents))).Methods("GET")
+	router.HandleFunc("/api/schedule/events", authMiddleware(requirePermission("manage_schedule", createScheduleEvent))).Methods("POST")
+	router.HandleFunc("/api/schedule/events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", updateScheduleEvent))).Methods("PUT")
+	router.HandleFunc("/api/schedule/events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", deleteScheduleEvent))).Methods("DELETE")
+
+	// Event generation (must be registered before the bare /events route; gorilla/mux matches most specific first)
+	router.HandleFunc("/api/schedule/events/generate", authMiddleware(requirePermission("manage_schedule", generateScheduleEvents))).Methods("POST")
+
+	// Server events
+	router.HandleFunc("/api/schedule/server-events", authMiddleware(requirePermission("view_schedule", getServerEvents))).Methods("GET")
+	router.HandleFunc("/api/schedule/server-events", authMiddleware(requirePermission("manage_schedule", createServerEvent))).Methods("POST")
+	router.HandleFunc("/api/schedule/server-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", updateServerEvent))).Methods("PUT")
+	router.HandleFunc("/api/schedule/server-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", deleteServerEvent))).Methods("DELETE")
+
+	// Storm slot times (read: all authenticated; write: admin only)
+	router.HandleFunc("/api/storm/slot-times", authMiddleware(getAdvancedStormSlots)).Methods("GET")
+	router.HandleFunc("/api/admin/advanced/storm-slots", authMiddleware(adminMiddleware(putAdvancedStormSlots))).Methods("PUT")
 
 	// Train Tracker API
 	router.HandleFunc("/api/train-logs", authMiddleware(requirePermission("view_train", getTrainLogs))).Methods("GET")
