@@ -68,6 +68,18 @@ function clearAllFieldErrors(formEl) {
     formEl.querySelectorAll('.field-error').forEach(el => clearFieldError(el));
 }
 
+// ---- Button loading state ----
+function setButtonLoading(btn, loadingText = 'Saving…') {
+    btn.disabled = true;
+    btn._originalText = btn.textContent;
+    btn.textContent = loadingText;
+}
+
+function clearButtonLoading(btn) {
+    btn.disabled = false;
+    btn.textContent = btn._originalText ?? btn.textContent;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Mobile Menu Toggle
     const menuBtn = document.getElementById("mobile-menu-btn");

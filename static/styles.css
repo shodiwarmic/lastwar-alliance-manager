@@ -5799,6 +5799,7 @@ html.theme-dark .import-result.warning {
 }
 .toast-success { background: #28a745; }
 .toast-error   { background: #dc3545; }
+.toast-warning { background: #e08000; }
 .toast-info    { background: #2980b9; }
 
 /* ---- Inline field validation ---- */
