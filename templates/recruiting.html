@@ -84,6 +84,57 @@
         </div>
     </div>
 
+    <!-- Edit Former Member Modal -->
+    <div id="edit-former-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 420px;">
+            <span class="close" id="close-edit-former-modal">&times;</span>
+            <h2>Edit Former Member</h2>
+            <form id="edit-former-form">
+                <div class="form-group">
+                    <label for="edit-former-name">Name:</label>
+                    <input type="text" id="edit-former-name" required class="form-input" placeholder="In-game name">
+                </div>
+                <div class="form-group">
+                    <label for="edit-former-reason">Reason for Leaving:</label>
+                    <input type="text" id="edit-former-reason" class="form-input" placeholder="e.g. Moved to another alliance">
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary" id="edit-former-submit-btn">Save Changes</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-edit-former-btn">Cancel</button>
+                </div>
+            </form>
+            <p id="edit-former-status" class="status-msg" style="margin-top: 10px;"></p>
+        </div>
+    </div>
+
+    <!-- Former Member Alias Modal -->
+    <div id="former-alias-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" id="close-former-alias-modal">&times;</span>
+            <h2 id="former-alias-modal-title">Manage Nicknames</h2>
+            <p class="help-text">Set custom nicknames to help OCR Image Recognition match screenshots to the correct player.</p>
+
+            <div style="margin: 20px 0; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+                <form id="former-add-alias-form" style="display: flex; gap: 10px; align-items: flex-end;">
+                    <div style="flex: 1;">
+                        <label for="former-new-alias-input">New Nickname:</label>
+                        <input type="text" id="former-new-alias-input" class="form-input" required placeholder="e.g. StarLord">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">➕ Add</button>
+                </form>
+                <p id="former-alias-add-status" class="status-msg" style="color: var(--danger-color); margin: 6px 0 0;"></p>
+                <div id="former-global-alias-checkbox-wrapper" style="margin-top: 10px; display: none;">
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-muted); font-size: 0.9em;">
+                        <input type="checkbox" id="former-new-alias-global" style="width: 16px; height: 16px;">
+                        Make this a Global Alias (Applies to all users)
+                    </label>
+                </div>
+            </div>
+
+            <div id="former-aliases-list" style="max-height: 300px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
     <!-- Add/Edit Prospect Modal -->
     <div id="prospect-modal" class="modal" style="display: none;">
         <div class="modal-content">

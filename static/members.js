@@ -41,10 +41,6 @@ async function fetchPermissions() {
                 modalEligibleWrapper.style.display = permissions.manage_train ? 'flex' : 'none';
             }
 
-            // Show Former chip and notes field only to officers who can manage members
-            const formerChip = document.getElementById('former-chip');
-            if (formerChip) formerChip.style.display = canManageRanks ? '' : 'none';
-
             const notesSection = document.getElementById('modal-notes-section');
             if (notesSection) notesSection.style.display = canManageRanks ? 'block' : 'none';
         }
@@ -132,8 +128,7 @@ function updateDisplayedMembers() {
             (member.personal_aliases && member.personal_aliases.toLowerCase().includes(searchTerm));
 
         const matchesEligible = !eligibleOnly || member.eligible !== false;
-        // "All" excludes former members — they only appear when "Former" chip is explicitly selected
-        const matchesRank = (activeRanks.includes('all') && member.rank !== 'EX') || activeRanks.includes(member.rank);
+        const matchesRank = activeRanks.includes('all') || activeRanks.includes(member.rank);
 
         const memProf = member.profession || 'none';
         const matchesProf = activeProfs.includes('all') || activeProfs.includes(memProf);
@@ -163,8 +158,7 @@ function updateDisplayedMembers() {
     });
 
     displayMembers(filtered);
-    const isFormerView = activeRanks.length > 0 && activeRanks.every(r => r === 'EX');
-    updateMemberCount(filtered.length, isFormerView);
+    updateMemberCount(filtered.length);
 
     const clearBtn = document.getElementById('clear-search');
     if (clearBtn) clearBtn.style.display = searchTerm ? 'flex' : 'none';
@@ -823,9 +817,9 @@ function formatPower(power) {
     return power.toString();
 }
 
-function updateMemberCount(count, isFormerView = false) {
+function updateMemberCount(count) {
     const heading = document.querySelector('.members-section h3');
-    if (heading) heading.textContent = isFormerView ? `Former Members (${count})` : `Alliance Members (${count})`;
+    if (heading) heading.textContent = `Alliance Members (${count})`;
 }
 
 function setupSearch() {

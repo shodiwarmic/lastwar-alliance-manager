@@ -390,7 +390,9 @@ function buildStormEntries() {
     const entries = [];
     try {
         ['A', 'B'].forEach(tf => {
-            const slotNum = stormTFConfig['tf_' + tf.toLowerCase() + '_slot'];
+            const key = 'tf_' + tf.toLowerCase();
+            if (stormTFConfig[key + '_participating'] === 0) return;
+            const slotNum = stormTFConfig[key + '_slot'];
             if (!slotNum) return;
             const slotInfo = stormSlotTimes.find(s => s.slot === slotNum);
             if (!slotInfo) return;
@@ -1638,7 +1640,9 @@ async function init() {
         stormTFConfig = {};
         if (Array.isArray(tfArr)) {
             tfArr.forEach(c => {
-                stormTFConfig['tf_' + c.task_force.toLowerCase() + '_slot'] = c.time_slot;
+                const key = 'tf_' + c.task_force.toLowerCase();
+                stormTFConfig[key + '_slot'] = c.time_slot;
+                stormTFConfig[key + '_participating'] = c.participating ?? 1;
             });
         }
     } catch { stormTFConfig = {}; }

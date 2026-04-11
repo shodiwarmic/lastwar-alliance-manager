@@ -34,6 +34,12 @@
             </div>
             {{if .Permissions.ManageStorm}}
             <div class="form-group">
+                <label>TF-B Status</label>
+                <button class="btn btn-secondary btn-sm" id="tfb-participating-toggle" data-value="1">Loading...</button>
+            </div>
+            {{end}}
+            {{if .Permissions.ManageStorm}}
+            <div class="form-group">
                 <button class="btn btn-secondary" id="btn-save-config">Save Config</button>
             </div>
             {{end}}
@@ -77,7 +83,10 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <h3 style="margin:0;">📋 Groups</h3>
                     {{if .Permissions.ManageStorm}}
-                    <button class="btn btn-primary btn-sm" id="btn-add-group">+ Add Group</button>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-primary btn-sm" id="btn-add-group">+ Add Group</button>
+                        <button class="btn btn-secondary btn-sm" id="btn-clear-members">Clear All Members</button>
+                    </div>
                     {{end}}
                 </div>
                 <div id="groups-container"></div>

@@ -61,6 +61,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN latest_squad_power lsp ON lsp.member_id = m.id
 		LEFT JOIN global_aliases ga ON ga.member_id = m.id
 		LEFT JOIN personal_aliases pa ON pa.member_id = m.id
+		WHERE m.rank != 'EX'
 		ORDER BY m.name
 	`
 
@@ -374,6 +375,66 @@ func reactivateMember(w http.ResponseWriter, r *http.Request) {
 	actorID, _ := session.Values["user_id"].(int)
 	actorName, _ := session.Values["username"].(string)
 	logActivity(actorID, actorName, "unarchived", "member", memberName, false)
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func updateFormerMember(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid member ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		LeaveReason string `json:"leave_reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" {
+		http.Error(w, "Name is required", http.StatusBadRequest)
+		return
+	}
+
+	var oldName, oldLeaveReason string
+	err = db.QueryRow("SELECT name, COALESCE(leave_reason, '') FROM members WHERE id = ? AND rank = 'EX'", id).Scan(&oldName, &oldLeaveReason)
+	if err != nil {
+		http.Error(w, "Former member not found", http.StatusNotFound)
+		return
+	}
+
+	_, err = db.Exec("UPDATE members SET name = ?, leave_reason = ? WHERE id = ? AND rank = 'EX'", req.Name, req.LeaveReason, id)
+	if err != nil {
+		slog.Error("Failed to update former member", "member_id", id, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if oldName != req.Name {
+		_, aliasErr := db.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", id, oldName)
+		if aliasErr != nil {
+			slog.Warn("Failed to auto-create global alias for former member name change", "member_id", id, "error", aliasErr)
+		}
+	}
+
+	var changes []string
+	if oldName != req.Name {
+		changes = append(changes, "name: "+oldName+" → "+req.Name)
+	}
+	if oldLeaveReason != req.LeaveReason {
+		changes = append(changes, "leave reason: "+oldLeaveReason+" → "+req.LeaveReason)
+	}
+	if len(changes) > 0 {
+		session, _ := store.Get(r, "session")
+		actorID, _ := session.Values["user_id"].(int)
+		actorName, _ := session.Values["username"].(string)
+		logActivity(actorID, actorName, "updated", "member", req.Name, false, strings.Join(changes, "; "))
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -8,6 +8,8 @@ const HAS_FORMER_TAB = window.HAS_FORMER_TAB === true;
 let allMembers = [];        // for recruiter dropdown and capacity header
 let editingProspectId = null;
 let reactivatingMemberId = null;
+let editingFormerMemberId = null;
+let currentFormerAliasMemberId = null;
 
 // Flatpickr instance — initialised in DOMContentLoaded
 let prospectContactedFP = null;
@@ -140,6 +142,21 @@ function renderFormerMembers(members, container) {
         reactivateBtn.addEventListener('click', () => openReactivateModal(m.id, m.name));
         actionsTd.appendChild(reactivateBtn);
 
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-secondary btn-sm';
+        editBtn.style.marginLeft = '6px';
+        editBtn.textContent = 'Edit';
+        editBtn.addEventListener('click', () => openFormerEditModal(m));
+        actionsTd.appendChild(editBtn);
+
+        const aliasBtn = document.createElement('button');
+        aliasBtn.className = 'btn btn-secondary btn-sm';
+        aliasBtn.style.marginLeft = '6px';
+        aliasBtn.textContent = '🏷️';
+        aliasBtn.title = 'Manage Nicknames';
+        aliasBtn.addEventListener('click', () => openFormerAliasModal(m.id, m.name));
+        actionsTd.appendChild(aliasBtn);
+
         if (IS_ADMIN) {
             const delBtn = document.createElement('button');
             delBtn.className = 'btn btn-danger btn-sm';
@@ -198,6 +215,160 @@ async function permanentlyDeleteMember(id, name, actionsCell, delBtn) {
     noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
     confirmSpan.append(label, yesBtn, noBtn);
     actionsCell.appendChild(confirmSpan);
+}
+
+// ── Edit Former Member ────────────────────────────────────────────────────────
+
+function openFormerEditModal(m) {
+    editingFormerMemberId = m.id;
+    document.getElementById('edit-former-name').value = m.name;
+    document.getElementById('edit-former-reason').value = m.leave_reason || '';
+    const statusEl = document.getElementById('edit-former-status');
+    if (statusEl) statusEl.textContent = '';
+    const modal = document.getElementById('edit-former-modal');
+    if (modal) { modal.style.display = 'flex'; trapFocus(modal); }
+}
+
+async function handleFormerEditSubmit(e) {
+    e.preventDefault();
+    if (!editingFormerMemberId) return;
+
+    const name = document.getElementById('edit-former-name').value.trim();
+    const leave_reason = document.getElementById('edit-former-reason').value.trim();
+    const statusEl = document.getElementById('edit-former-status');
+
+    if (!name) return;
+
+    try {
+        const res = await fetch(`/api/former-members/${editingFormerMemberId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, leave_reason }),
+        });
+        if (!res.ok) throw new Error('Failed to save');
+        const modal = document.getElementById('edit-former-modal');
+        releaseFocus(modal);
+        modal.style.display = 'none';
+        editingFormerMemberId = null;
+        await loadFormerMembers();
+    } catch (err) {
+        console.error(err);
+        if (statusEl) {
+            statusEl.textContent = 'Failed to save changes. Please try again.';
+            statusEl.style.color = 'var(--color-danger)';
+        }
+    }
+}
+
+// ── Former Member Aliases ─────────────────────────────────────────────────────
+
+async function openFormerAliasModal(memberId, memberName) {
+    currentFormerAliasMemberId = memberId;
+    const titleEl = document.getElementById('former-alias-modal-title');
+    if (titleEl) titleEl.textContent = `Nicknames for ${memberName}`;
+
+    const globalWrapper = document.getElementById('former-global-alias-checkbox-wrapper');
+    if (globalWrapper) {
+        globalWrapper.style.display = CAN_MANAGE_MEMBERS ? 'block' : 'none';
+    }
+
+    const modal = document.getElementById('former-alias-modal');
+    if (modal) { modal.style.display = 'flex'; trapFocus(modal); }
+    await loadFormerAliases();
+}
+
+async function loadFormerAliases() {
+    const list = document.getElementById('former-aliases-list');
+    if (!list) return;
+
+    const loadingP = document.createElement('p');
+    loadingP.style.cssText = 'text-align:center;color:var(--text-muted);';
+    loadingP.textContent = 'Loading...';
+    list.replaceChildren(loadingP);
+
+    try {
+        const res = await fetch(`/api/members/${currentFormerAliasMemberId}/aliases`);
+        const aliases = await res.json();
+
+        if (!aliases || aliases.length === 0) {
+            const p = document.createElement('p');
+            p.style.cssText = 'text-align:center;color:var(--text-muted);';
+            p.textContent = 'No nicknames set for this commander.';
+            list.replaceChildren(p);
+            return;
+        }
+
+        const rows = aliases.map(a => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border-color);';
+
+            const left = document.createElement('div');
+            const badgeStyles = {
+                global:   'background:#e2e8f0;color:#4a5568;',
+                personal: 'background:#bee3f8;color:#2b6cb0;',
+                ocr:      'background:#fed7d7;color:#c53030;',
+            };
+            if (badgeStyles[a.category]) {
+                const badge = document.createElement('span');
+                badge.style.cssText = badgeStyles[a.category] + 'padding:2px 6px;border-radius:4px;font-size:0.8em;margin-right:8px;';
+                badge.textContent = a.category.charAt(0).toUpperCase() + a.category.slice(1);
+                left.appendChild(badge);
+            }
+            const strong = document.createElement('strong');
+            strong.textContent = a.alias;
+            left.appendChild(strong);
+            row.appendChild(left);
+
+            const canDelete = a.is_mine || IS_ADMIN || ((a.category === 'global' || a.category === 'ocr') && CAN_MANAGE_MEMBERS);
+            if (canDelete) {
+                const deleteBtn = document.createElement('button');
+                deleteBtn.style.cssText = 'background:none;border:none;color:#e53e3e;cursor:pointer;';
+                deleteBtn.title = 'Remove Nickname';
+                deleteBtn.textContent = '✖';
+                deleteBtn.addEventListener('click', () => deleteFormerAlias(a.id, row, deleteBtn));
+                row.appendChild(deleteBtn);
+            }
+
+            return row;
+        });
+
+        list.replaceChildren(...rows);
+    } catch (e) {
+        const p = document.createElement('p');
+        p.style.cssText = 'color:#e53e3e;text-align:center;';
+        p.textContent = 'Error loading aliases.';
+        list.replaceChildren(p);
+    }
+}
+
+function deleteFormerAlias(aliasId, rowEl, deleteBtn) {
+    deleteBtn.style.display = 'none';
+    const confirmSpan = document.createElement('span');
+    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
+    const label = document.createElement('span');
+    label.textContent = 'Remove?';
+    label.style.fontSize = '0.85rem';
+    const yesBtn = document.createElement('button');
+    yesBtn.className = 'btn btn-danger btn-sm';
+    yesBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
+    yesBtn.textContent = 'Yes';
+    yesBtn.addEventListener('click', async () => {
+        try {
+            const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(await res.text());
+            await loadFormerAliases();
+        } catch (err) {
+            confirmSpan.remove();
+            deleteBtn.style.display = '';
+        }
+    });
+    const noBtn = document.createElement('button');
+    noBtn.className = 'btn btn-secondary btn-sm';
+    noBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
+    noBtn.textContent = 'No';
+    noBtn.addEventListener('click', () => { confirmSpan.remove(); deleteBtn.style.display = ''; });
+    confirmSpan.append(label, yesBtn, noBtn);
+    rowEl.appendChild(confirmSpan);
 }
 
 // ── Prospects ─────────────────────────────────────────────────────────────────
@@ -538,6 +709,44 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (statusEl) {
                 statusEl.textContent = 'Failed to reactivate. Please try again.';
                 statusEl.style.color = 'var(--danger-color)';
+            }
+        }
+    });
+
+    // Edit former member modal
+    const editFormerModal = document.getElementById('edit-former-modal');
+    const closeEditFormerModal = () => { releaseFocus(editFormerModal); editFormerModal.style.display = 'none'; editingFormerMemberId = null; };
+    document.getElementById('close-edit-former-modal')?.addEventListener('click', closeEditFormerModal);
+    document.getElementById('cancel-edit-former-btn')?.addEventListener('click', closeEditFormerModal);
+    window.addEventListener('click', e => { if (e.target === editFormerModal) closeEditFormerModal(); });
+    document.getElementById('edit-former-form')?.addEventListener('submit', handleFormerEditSubmit);
+
+    // Former alias modal
+    const formerAliasModal = document.getElementById('former-alias-modal');
+    const closeFormerAliasModal = () => { releaseFocus(formerAliasModal); formerAliasModal.style.display = 'none'; };
+    document.getElementById('close-former-alias-modal')?.addEventListener('click', closeFormerAliasModal);
+    window.addEventListener('click', e => { if (e.target === formerAliasModal) closeFormerAliasModal(); });
+    document.getElementById('former-add-alias-form')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const input = document.getElementById('former-new-alias-input');
+        const isGlobal = document.getElementById('former-new-alias-global')?.checked || false;
+        try {
+            const res = await fetch(`/api/members/${currentFormerAliasMemberId}/aliases`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ alias: input.value.trim(), is_global: isGlobal }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            input.value = '';
+            const globalCheckbox = document.getElementById('former-new-alias-global');
+            if (globalCheckbox) globalCheckbox.checked = false;
+            await loadFormerAliases();
+        } catch (err) {
+            const statusEl = document.getElementById('former-alias-add-status');
+            if (statusEl) {
+                statusEl.textContent = 'Failed to add nickname.';
+                clearTimeout(statusEl._timer);
+                statusEl._timer = setTimeout(() => { statusEl.textContent = ''; }, 4000);
             }
         }
     });

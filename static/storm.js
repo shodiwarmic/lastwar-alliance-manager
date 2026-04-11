@@ -91,6 +91,7 @@ const API_BASE = '/api/storm';
 let allMembers = [];
 let currentTF = 'A';
 let tfConfig = { A: null, B: null };
+let tfParticipating = { A: 1, B: 1 };
 let groups = [];
 let myRegistration = null;
 let registrations = [];
@@ -573,10 +574,36 @@ function buildGroupCard(g) {
     return card;
 }
 
+// ── TF chip + toggle state ────────────────────────────────────────
+function updateTFChips() {
+    document.querySelectorAll('.filter-chip[data-tf]').forEach(chip => {
+        const tf = chip.dataset.tf;
+        const inactive = tfParticipating[tf] === 0;
+        chip.classList.toggle('tf-skip', inactive);
+        const base = tf === 'A' ? 'Task Force A' : 'Task Force B';
+        chip.textContent = inactive ? base + ' (Skip)' : base;
+    });
+    const toggleBtn = document.getElementById('tfb-participating-toggle');
+    if (toggleBtn) {
+        const active = tfParticipating.B === 1;
+        toggleBtn.dataset.value = active ? '1' : '0';
+        toggleBtn.textContent = active ? 'Participating' : 'Skipping';
+        toggleBtn.className = 'btn btn-sm ' + (active ? 'btn-secondary' : 'btn-danger');
+    }
+}
+
 // ── Render groups ─────────────────────────────────────────────────
 function renderGroups() {
     const container = document.getElementById('groups-container');
     if (!container) return;
+
+    if (tfParticipating[currentTF] === 0) {
+        const p = document.createElement('p');
+        p.style.cssText = 'color:var(--text-secondary);';
+        p.textContent = `Task Force ${currentTF} is not participating this week.`;
+        container.replaceChildren(p);
+        return;
+    }
 
     if (groups.length === 0) {
         const p = document.createElement('p');
@@ -841,6 +868,19 @@ async function saveAllGroups() {
             showError('Failed to save members: ' + e.message);
         }
     }
+}
+
+async function clearAllGroupMembers() {
+    if (!await showConfirm('Remove all members from all groups? Groups and buildings will be kept.', 'Clear Members', 'Clear All Members')) return;
+    for (const g of groups) {
+        for (const b of g.buildings) {
+            b.members = [];
+        }
+        g.direct_members = [];
+    }
+    await saveAllGroups();
+    renderAll();
+    showToast('All members cleared from groups.');
 }
 
 // ── Capacity bar ──────────────────────────────────────────────────
@@ -1147,10 +1187,12 @@ async function saveConfig() {
     const selB = document.getElementById('storm-time-select-b');
     const slotA = selA && selA.value ? parseInt(selA.value) : null;
     const slotB = selB && selB.value ? parseInt(selB.value) : null;
+    const partB = document.getElementById('tfb-participating-toggle');
+    const newPartB = partB ? (partB.dataset.value === '1' ? 1 : 0) : tfParticipating.B;
 
     const payload = [
-        { task_force: 'A', time_slot: slotA },
-        { task_force: 'B', time_slot: slotB }
+        { task_force: 'A', time_slot: slotA, participating: tfParticipating.A },
+        { task_force: 'B', time_slot: slotB, participating: newPartB }
     ];
 
     try {
@@ -1166,6 +1208,8 @@ async function saveConfig() {
         }
         tfConfig.A = slotA;
         tfConfig.B = slotB;
+        tfParticipating.B = newPartB;
+        updateTFChips();
         renderAll();
     } catch (e) {
         console.error('Save config error:', e);
@@ -1367,11 +1411,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const configs = await res.json();
             for (const c of configs) {
                 tfConfig[c.task_force] = c.time_slot;
+                tfParticipating[c.task_force] = c.participating ?? 1;
             }
             const selA = document.getElementById('storm-time-select-a');
             const selB = document.getElementById('storm-time-select-b');
             if (selA && tfConfig.A) selA.value = tfConfig.A;
             if (selB && tfConfig.B) selB.value = tfConfig.B;
+            updateTFChips();
         }
     } catch (e) {
         console.error('Error loading TF config:', e);
@@ -1486,6 +1532,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             inlineForm.append(nameInput, createBtn, cancelBtn);
             btnAddGroup.insertAdjacentElement('afterend', inlineForm);
             nameInput.focus();
+        });
+    }
+
+    const btnClearMembers = document.getElementById('btn-clear-members');
+    if (btnClearMembers) btnClearMembers.addEventListener('click', clearAllGroupMembers);
+
+    const tfbToggle = document.getElementById('tfb-participating-toggle');
+    if (tfbToggle) {
+        tfbToggle.addEventListener('click', () => {
+            tfbToggle.dataset.value = tfbToggle.dataset.value === '1' ? '0' : '1';
+            tfParticipating.B = tfbToggle.dataset.value === '1' ? 1 : 0;
+            updateTFChips();
+            renderAll();
         });
     }
 

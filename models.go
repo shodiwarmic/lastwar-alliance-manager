@@ -271,8 +271,9 @@ type StormAssignment struct {
 }
 
 type StormTFConfig struct {
-	TaskForce string `json:"task_force"`
-	TimeSlot  *int   `json:"time_slot"`
+	TaskForce    string `json:"task_force"`
+	TimeSlot     *int   `json:"time_slot"`
+	Participating int   `json:"participating"`
 }
 
 type StormRegistration struct {

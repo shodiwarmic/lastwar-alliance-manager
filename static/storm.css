@@ -255,3 +255,14 @@
     background: var(--bg-secondary);
     color: var(--text-primary);
 }
+
+/* ── TF skip chip ─────────────────────────────────────────────────────────── */
+.filter-chip.tf-skip {
+    opacity: 0.55;
+    border-style: dashed;
+}
+.filter-chip.tf-skip.active {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+}

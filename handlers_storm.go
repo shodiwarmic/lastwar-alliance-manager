@@ -124,7 +124,7 @@ func deleteStormAssignments(w http.ResponseWriter, r *http.Request) {
 // --- Storm TF Config ---
 
 func getStormConfig(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query(`SELECT task_force, time_slot FROM storm_tf_config ORDER BY task_force`)
+	rows, err := db.Query(`SELECT task_force, time_slot, participating FROM storm_tf_config ORDER BY task_force`)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -133,7 +133,7 @@ func getStormConfig(w http.ResponseWriter, r *http.Request) {
 	var configs []StormTFConfig
 	for rows.Next() {
 		var c StormTFConfig
-		if err := rows.Scan(&c.TaskForce, &c.TimeSlot); err != nil {
+		if err := rows.Scan(&c.TaskForce, &c.TimeSlot, &c.Participating); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
@@ -164,7 +164,11 @@ func saveStormConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid time_slot", 400)
 			return
 		}
-		if _, err := tx.Exec(`INSERT OR REPLACE INTO storm_tf_config (task_force, time_slot) VALUES (?,?)`, c.TaskForce, c.TimeSlot); err != nil {
+		if c.Participating != 0 && c.Participating != 1 {
+			http.Error(w, "invalid participating value", 400)
+			return
+		}
+		if _, err := tx.Exec(`INSERT OR REPLACE INTO storm_tf_config (task_force, time_slot, participating) VALUES (?,?,?)`, c.TaskForce, c.TimeSlot, c.Participating); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}

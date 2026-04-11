@@ -33,6 +33,9 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
 			data.IsAdmin = true
 			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true, ViewAccountability: true, ManageAccountability: true}
+			if memberID, ok := session.Values["member_id"].(int); ok && memberID > 0 {
+				db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&data.Rank)
+			}
 		} else if memberID, ok := session.Values["member_id"].(int); ok {
 			var rank string
 			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
@@ -211,6 +214,7 @@ func main() {
 	router.HandleFunc("/api/members/{id:[0-9]+}/archive", authMiddleware(requirePermission("manage_members", archiveMember))).Methods("PUT")
 	router.HandleFunc("/api/members/{id:[0-9]+}/reactivate", authMiddleware(requirePermission("manage_members", reactivateMember))).Methods("PUT")
 	router.HandleFunc("/api/former-members", authMiddleware(requirePermission("manage_members", getFormerMembers))).Methods("GET")
+	router.HandleFunc("/api/former-members/{id:[0-9]+}", authMiddleware(requirePermission("manage_members", updateFormerMember))).Methods("PUT")
 	router.HandleFunc("/api/members/import", authMiddleware(requirePermission("manage_members", importCSV))).Methods("POST")
 	router.HandleFunc("/api/members/import/confirm", authMiddleware(requirePermission("manage_members", confirmMemberUpdates))).Methods("POST")
 
