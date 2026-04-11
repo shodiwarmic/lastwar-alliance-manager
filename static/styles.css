@@ -429,8 +429,9 @@ header .user-info {
 }
 
 .nav-text {
-    line-height: 1;
-    white-space: nowrap;
+    line-height: 1.2;
+    white-space: normal;
+    text-align: center;
 }
 
 .nav-link:hover {
@@ -973,59 +974,56 @@ button {
     font-size: 1.1em;
 }
 
-/* ===== MOBILE RESPONSIVE STYLES ===== */
+/* ===== RESPONSIVE STYLES ===== */
 
-/* Tablet and below */
-@media (max-width: 1024px) {
-    body {
-        padding: 10px;
+/* Icon-only nav — hides labels to keep everything on one row.
+   Threshold: full-text layout needs ~19 items × ~80px = ~1520px inside the
+   container, so switch to icons below 1600px viewport width. */
+@media (max-width: 1600px) {
+    .nav-text {
+        display: none;
     }
 
-    .container {
-        border-radius: 10px;
+    .nav-link {
+        min-width: 44px;
+        max-width: 56px;
+        padding: 12px 6px;
+        gap: 0;
+        position: relative;
     }
 
-    header {
-        padding: 20px 15px;
+    /* Tooltip on hover so icon meaning is always discoverable */
+    .nav-link::after {
+        content: attr(data-label);
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.82);
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 500;
+        padding: 3px 7px;
+        border-radius: 4px;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s;
+        z-index: 200;
     }
 
-    header h1 {
-        font-size: 2em;
-    }
-
-    header h2 {
-        font-size: 1.1em;
-    }
-
-    main {
-        padding: 20px;
+    .nav-link:hover::after {
+        opacity: 1;
     }
 }
 
-/* Mobile devices */
-@media (max-width: 768px) {
-    body {
-        padding: 5px;
-    }
-
-    .container {
-        border-radius: 8px;
-    }
-
-    /* Header adjustments to fit hamburger button */
-    header {
-        padding: 60px 10px 20px 10px;
-    }
-
-    header h1 {
-        font-size: 1.5em;
-        margin-bottom: 5px;
-    }
-
-    header h2 {
-        font-size: 0.9em;
-    }
-
+/* Hamburger nav — kicks in when icon-only would wrap to two rows.
+   Min icon-only width: 19 items × 44px = 836px inside the container.
+   Container = 95% of body content area. At this viewport range (≤1024px) body
+   has padding: 10px, so content area = viewport − 20px.
+   836 = 0.95 × (viewport − 20) → 0.95×viewport = 855 → viewport ≈ 900px.
+   (Browser window width is ~18px higher than CSS viewport due to scrollbar.) */
+@media (max-width: 900px) {
     .hamburger-btn {
         display: block;
         position: absolute;
@@ -1045,6 +1043,108 @@ button {
 
     .hamburger-btn:hover {
         background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Extra top padding so the hamburger button doesn't overlap the page title */
+    header {
+        padding: 60px 15px 20px 15px;
+    }
+
+    /* Collapsible nav */
+    .nav-menu {
+        display: none;
+        flex-direction: column;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .nav-menu.show {
+        display: flex;
+        animation: slideDown 0.3s ease-out;
+    }
+
+    .nav-link {
+        flex-direction: row;
+        justify-content: flex-start;
+        padding: 15px 20px;
+        font-size: 1em;
+        border-bottom: 1px solid var(--border-color);
+        border-left: 4px solid transparent;
+        min-width: 100%;
+        max-width: none;
+    }
+
+    /* Re-show labels in the list layout */
+    .nav-text {
+        display: block;
+        text-align: left;
+    }
+
+    /* No tooltip needed — labels are visible */
+    .nav-link::after {
+        display: none;
+    }
+
+    .nav-icon {
+        width: 30px;
+        text-align: center;
+        margin-right: 15px;
+    }
+
+    .nav-link.active {
+        border-bottom: 1px solid var(--border-color);
+        border-left-color: #667eea;
+        background: var(--container-bg);
+    }
+}
+
+/* Tablet and below */
+@media (max-width: 1024px) {
+    body {
+        padding: 10px;
+    }
+
+    .container {
+        border-radius: 10px;
+    }
+
+    header h1 {
+        font-size: 2em;
+    }
+
+    header h2 {
+        font-size: 1.1em;
+    }
+
+    main {
+        padding: 20px;
+    }
+}
+
+/* Tighter header padding for tablet range — only where hamburger isn't shown */
+@media (min-width: 901px) and (max-width: 1024px) {
+    header {
+        padding: 20px 15px;
+    }
+}
+
+/* Small screens */
+@media (max-width: 768px) {
+    body {
+        padding: 5px;
+    }
+
+    .container {
+        border-radius: 8px;
+    }
+
+    header h1 {
+        font-size: 1.5em;
+        margin-bottom: 5px;
+    }
+
+    header h2 {
+        font-size: 0.9em;
     }
 
     /* User info - move below header */
@@ -1088,41 +1188,6 @@ button {
     .logout-btn {
         font-size: 0.85em;
         padding: 6px 15px;
-    }
-
-    /* Navigation menu - Collapsible for mobile */
-    .nav-menu {
-        display: none; /* Hidden by default */
-        flex-direction: column;
-        width: 100%;
-        overflow: hidden;
-    }
-
-    .nav-menu.show {
-        display: flex;
-        animation: slideDown 0.3s ease-out;
-    }
-
-    .nav-link {
-        flex-direction: row; /* Switch back to row for list layout */
-        justify-content: flex-start;
-        padding: 15px 20px;
-        font-size: 1.1em;
-        border-bottom: 1px solid var(--border-color);
-        border-left: 4px solid transparent;
-        min-width: 100%;
-    }
-
-    .nav-icon {
-        width: 30px; /* Fixed width ensures text aligns perfectly */
-        text-align: center;
-        margin-right: 15px;
-    }
-    
-    .nav-link.active {
-        border-bottom: 1px solid var(--border-color);
-        border-left-color: #667eea;
-        background: var(--container-bg);
     }
 
     /* Main content */
