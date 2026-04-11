@@ -162,6 +162,21 @@
 
     </div> {{block "modals" .}}{{end}}
 
+    <!-- Toast container -->
+    <div id="toast-container" aria-live="polite"></div>
+
+    <!-- Global confirmation modal -->
+    <div id="confirm-modal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:420px;">
+            <h2 id="confirm-modal-title">Are you sure?</h2>
+            <p id="confirm-modal-message" style="margin: 12px 0 24px;"></p>
+            <div class="modal-actions">
+                <button id="confirm-modal-confirm" class="btn btn-danger">Confirm</button>
+                <button id="confirm-modal-cancel"  class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/global.js"></script>
     <script src="/csrf.js"></script>
     <script src="/modal-focus.js"></script>

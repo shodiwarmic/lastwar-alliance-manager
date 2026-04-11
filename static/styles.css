@@ -16,6 +16,19 @@
     --border-color: #e9ecef;
     --input-bg: white;
     --input-border: #dee2e6;
+    /* Semantic layer aliases */
+    --bg-primary: white;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #edf2f7;
+    --color-primary: #667eea;
+    --color-info-bg: #dbeafe;
+    --color-info: #1d4ed8;
+    --color-success-bg: #dcfce7;
+    --color-success: #15803d;
+    --color-danger-bg: #fee2e2;
+    --color-danger: #dc2626;
+    --color-purple-bg: #ede9fe;
+    --color-purple: #6d28d9;
 }
 
 /* Auto theme - respects browser preference */
@@ -32,6 +45,17 @@
         --border-color: rgba(255, 255, 255, 0.1);
         --input-bg: #252b3b;
         --input-border: rgba(255, 255, 255, 0.2);
+        --bg-primary: #1a1f2e;
+        --bg-secondary: rgba(255, 255, 255, 0.05);
+        --bg-tertiary: rgba(255, 255, 255, 0.08);
+        --color-info-bg: rgba(59, 130, 246, 0.15);
+        --color-info: #93c5fd;
+        --color-success-bg: rgba(34, 197, 94, 0.15);
+        --color-success: #86efac;
+        --color-danger-bg: rgba(220, 53, 69, 0.15);
+        --color-danger: #f87171;
+        --color-purple-bg: rgba(109, 40, 217, 0.15);
+        --color-purple: #c4b5fd;
     }
 }
 
@@ -48,6 +72,17 @@ html.theme-dark {
     --border-color: rgba(255, 255, 255, 0.1);
     --input-bg: #252b3b;
     --input-border: rgba(255, 255, 255, 0.2);
+    --bg-primary: #1a1f2e;
+    --bg-secondary: rgba(255, 255, 255, 0.05);
+    --bg-tertiary: rgba(255, 255, 255, 0.08);
+    --color-info-bg: rgba(59, 130, 246, 0.15);
+    --color-info: #93c5fd;
+    --color-success-bg: rgba(34, 197, 94, 0.15);
+    --color-success: #86efac;
+    --color-danger-bg: rgba(220, 53, 69, 0.15);
+    --color-danger: #f87171;
+    --color-purple-bg: rgba(109, 40, 217, 0.15);
+    --color-purple: #c4b5fd;
 }
 
 /* Explicit light theme */
@@ -63,6 +98,18 @@ html.theme-light {
     --border-color: #e9ecef;
     --input-bg: white;
     --input-border: #dee2e6;
+    --bg-primary: white;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #edf2f7;
+    --color-primary: #667eea;
+    --color-info-bg: #dbeafe;
+    --color-info: #1d4ed8;
+    --color-success-bg: #dcfce7;
+    --color-success: #15803d;
+    --color-danger-bg: #fee2e2;
+    --color-danger: #dc2626;
+    --color-purple-bg: #ede9fe;
+    --color-purple: #6d28d9;
 }
 
 body {
@@ -344,15 +391,11 @@ header .user-info {
     padding: 0;
     flex-wrap: wrap;
     justify-content: center;
-    /* Allow tooltips to overflow below the nav bar */
-    overflow: visible;
-    position: relative;
-    z-index: 100;
 }
 
 .nav-link {
     flex: 1;
-    min-width: 80px;
+    min-width: 80px; /* Prevents squishing on small monitors */
     padding: 12px 10px;
     text-decoration: none;
     color: var(--text-primary);
@@ -408,7 +451,6 @@ main {
 /* Action Bar */
 .action-bar {
     display: flex;
-    align-items: center;
     gap: 15px;
     margin-bottom: 30px;
     flex-wrap: wrap;
@@ -791,7 +833,7 @@ button {
 
 .rank-R5 {
     background: #ffd700;
-    color: #856404;
+    color: #5d4400;
 }
 
 .rank-R4 {
@@ -902,7 +944,6 @@ button {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-weight: normal;
     cursor: pointer;
     user-select: none;
 }
@@ -923,55 +964,57 @@ button {
 
 /* ===== MOBILE RESPONSIVE STYLES ===== */
 
-/* Icon-only nav — hides labels to keep everything on one row.
-   Threshold: full-text layout needs ~19 items × ~80px = ~1520px inside the
-   container, so switch to icons below 1600px viewport width. */
-@media (max-width: 1600px) {
-    .nav-text {
-        display: none;
+/* Tablet and below */
+@media (max-width: 1024px) {
+    body {
+        padding: 10px;
     }
 
-    .nav-link {
-        min-width: 44px;
-        max-width: 56px;
-        padding: 12px 6px;
-        gap: 0;
-        position: relative;
+    .container {
+        border-radius: 10px;
     }
 
-    /* Tooltip on hover so icon meaning is always discoverable */
-    .nav-link::after {
-        content: attr(data-label);
-        position: absolute;
-        top: calc(100% + 4px);
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.82);
-        color: #fff;
-        font-size: 0.72rem;
-        font-weight: 500;
-        padding: 3px 7px;
-        border-radius: 4px;
-        white-space: nowrap;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 0.15s;
-        z-index: 200;
+    header {
+        padding: 20px 15px;
     }
 
-    .nav-link:hover::after {
-        opacity: 1;
+    header h1 {
+        font-size: 2em;
+    }
+
+    header h2 {
+        font-size: 1.1em;
+    }
+
+    main {
+        padding: 20px;
     }
 }
 
-/* Hamburger nav — kicks in when icon-only would wrap to two rows.
-   Min icon-only width: 19 items × 44px = 836px inside the container.
-   Container = 95% of body content area. At this viewport range (≤1024px) body
-   has padding: 10px, so content area = viewport − 20px.
-   836 = 0.95 × (viewport − 20) → 0.95×viewport = 855 → viewport ≈ 900px.
-   (Browser window width is ~18px higher than CSS viewport due to scrollbar.) */
-@media (max-width: 900px) {
-    /* Show hamburger button */
+/* Mobile devices */
+@media (max-width: 768px) {
+    body {
+        padding: 5px;
+    }
+
+    .container {
+        border-radius: 8px;
+    }
+
+    /* Header adjustments to fit hamburger button */
+    header {
+        padding: 60px 10px 20px 10px;
+    }
+
+    header h1 {
+        font-size: 1.5em;
+        margin-bottom: 5px;
+    }
+
+    header h2 {
+        font-size: 0.9em;
+    }
+
     .hamburger-btn {
         display: block;
         position: absolute;
@@ -993,16 +1036,52 @@ button {
         background: rgba(255, 255, 255, 0.3);
     }
 
-    /* Extra top padding so the hamburger button doesn't overlap the page title */
-    header {
-        padding: 60px 15px 20px 15px;
+    /* User info - move below header */
+    header .user-info {
+        position: static;
+        width: 100%;
+        justify-content: center;
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid rgba(255, 255, 255, 0.3);
     }
 
-    /* User badge stays top-right — never moves below the title */
+    .user-dropdown {
+        width: 100%;
+        max-width: 300px;
+    }
 
-    /* Collapsible nav */
+    .username-btn {
+        width: 100%;
+        justify-content: center;
+        font-size: 0.85em;
+        padding: 10px 15px;
+    }
+
+    .dropdown-menu {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%) translateY(-10px);
+        min-width: 250px;
+    }
+
+    .dropdown-menu.show {
+        transform: translateX(-50%) translateY(0);
+    }
+
+    #username-display {
+        font-size: 0.85em;
+        padding: 6px 12px;
+    }
+
+    .logout-btn {
+        font-size: 0.85em;
+        padding: 6px 15px;
+    }
+
+    /* Navigation menu - Collapsible for mobile */
     .nav-menu {
-        display: none;
+        display: none; /* Hidden by default */
         flex-direction: column;
         width: 100%;
         overflow: hidden;
@@ -1014,96 +1093,25 @@ button {
     }
 
     .nav-link {
-        flex-direction: row;
+        flex-direction: row; /* Switch back to row for list layout */
         justify-content: flex-start;
         padding: 15px 20px;
-        font-size: 1em;
+        font-size: 1.1em;
         border-bottom: 1px solid var(--border-color);
         border-left: 4px solid transparent;
         min-width: 100%;
-        max-width: none;
-    }
-
-    /* Re-show labels in the list layout */
-    .nav-text {
-        display: block;
-    }
-
-    /* No tooltip needed — labels are visible */
-    .nav-link::after {
-        display: none;
     }
 
     .nav-icon {
-        width: 30px;
+        width: 30px; /* Fixed width ensures text aligns perfectly */
         text-align: center;
         margin-right: 15px;
     }
-
+    
     .nav-link.active {
         border-bottom: 1px solid var(--border-color);
         border-left-color: #667eea;
         background: var(--container-bg);
-    }
-}
-
-/* Tablet and below */
-@media (max-width: 1024px) {
-    body {
-        padding: 10px;
-    }
-
-    .container {
-        border-radius: 10px;
-    }
-
-    header h1 {
-        font-size: 2em;
-    }
-
-    header h2 {
-        font-size: 1.1em;
-    }
-
-    main {
-        padding: 20px;
-    }
-}
-
-/* Tighter header padding for tablet range — only where hamburger isn't shown */
-@media (min-width: 901px) and (max-width: 1024px) {
-    header {
-        padding: 20px 15px;
-    }
-}
-
-/* Small screens — tighter padding, smaller type */
-@media (max-width: 768px) {
-    body {
-        padding: 5px;
-    }
-
-    .container {
-        border-radius: 8px;
-    }
-
-    header {
-        padding: 60px 10px 15px 10px;
-    }
-
-    header h1 {
-        font-size: 1.5em;
-        margin-bottom: 5px;
-    }
-
-    header h2 {
-        font-size: 0.9em;
-    }
-
-    /* Shrink user badge so it fits top-right on small screens */
-    .username-btn {
-        font-size: 0.78em;
-        padding: 6px 10px;
     }
 
     /* Main content */
@@ -1924,7 +1932,7 @@ button {
 
 .status-badge.warning {
     background: #ffc107;
-    color: #856404;
+    color: #4a3700;
 }
 
 .status-badge.active {
@@ -5021,44 +5029,6 @@ button {
     }
 }
 
-/* ── Scrollable table wrapper ────────────────────────────────────────────── */
-
-.table-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-}
-
-/* ── Tab component (shared across all tabbed pages) ─────────────────────── */
-
-.tab-bar {
-    display: flex;
-    gap: 4px;
-    border-bottom: 2px solid var(--border-color);
-    margin-bottom: 24px;
-}
-
-.tab-btn {
-    padding: 8px 20px;
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
-    cursor: pointer;
-    font-size: 0.95rem;
-    color: var(--text-secondary);
-    transition: color 0.15s, border-color 0.15s;
-}
-
-.tab-btn:hover {
-    color: var(--text-primary);
-}
-
-.tab-btn.active {
-    color: var(--accent-color);
-    border-bottom-color: var(--accent-color);
-    font-weight: 600;
-}
-
 .tab-content {
     display: none;
 }
@@ -5720,145 +5690,113 @@ code {
     text-decoration: none;
     padding: 12px 24px;
 }
-/* ── Flatpickr dark mode theme ─────────────────────────────────────────────── */
-/* .flatpickr-calendar is appended to <body> so we target via html class */
 
+/* ---- Dark mode: amber/yellow info boxes ---- */
 @media (prefers-color-scheme: dark) {
-    html.theme-auto .flatpickr-calendar {
-        background: var(--input-bg);
-        border-color: var(--input-border);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-        color: var(--text-primary);
+    .warning-message,
+    .system-note {
+        background: rgba(255, 193, 7, 0.1);
+        color: #ffd54f;
+        border-left-color: #ffc107;
     }
-    html.theme-auto .flatpickr-calendar.arrowTop::before,
-    html.theme-auto .flatpickr-calendar.arrowTop::after {
-        border-bottom-color: var(--input-bg);
+    .permission-notice {
+        background: rgba(255, 193, 7, 0.1);
+        border-color: #ffc107;
     }
-    html.theme-auto .flatpickr-months,
-    html.theme-auto .flatpickr-month {
-        background: var(--input-bg);
-        color: var(--text-primary);
-        fill: var(--text-primary);
+    .permission-notice p {
+        color: #ffd54f;
     }
-    html.theme-auto .flatpickr-current-month .flatpickr-monthDropdown-months,
-    html.theme-auto .flatpickr-current-month input.cur-year {
-        background: transparent;
-        color: var(--text-primary);
+    .import-result.success {
+        background: rgba(40, 167, 69, 0.12);
+        color: #75d99f;
+        border-color: rgba(40, 167, 69, 0.3);
     }
-    html.theme-auto .flatpickr-prev-month,
-    html.theme-auto .flatpickr-next-month {
-        fill: var(--text-primary);
+    .import-result.error {
+        background: rgba(220, 53, 69, 0.12);
+        color: #f08080;
+        border-color: rgba(220, 53, 69, 0.3);
     }
-    html.theme-auto .flatpickr-prev-month:hover svg,
-    html.theme-auto .flatpickr-next-month:hover svg {
-        fill: #667eea;
+    .import-result.warning {
+        background: rgba(255, 193, 7, 0.1);
+        color: #ffd54f;
+        border-color: rgba(255, 193, 7, 0.3);
     }
-    html.theme-auto span.flatpickr-weekday {
-        background: var(--input-bg);
-        color: var(--text-muted);
-    }
-    html.theme-auto .flatpickr-days {
-        border-color: var(--input-border);
-    }
-    html.theme-auto .dayContainer {
-        background: var(--input-bg);
-    }
-    html.theme-auto .flatpickr-day {
-        color: var(--text-primary);
-    }
-    html.theme-auto .flatpickr-day:hover,
-    html.theme-auto .flatpickr-day:focus {
-        background: rgba(102, 126, 234, 0.2);
-        border-color: rgba(102, 126, 234, 0.4);
-        color: var(--text-primary);
-    }
-    html.theme-auto .flatpickr-day.today {
-        border-color: rgba(102, 126, 234, 0.6);
-    }
-    html.theme-auto .flatpickr-day.today:hover {
-        background: rgba(102, 126, 234, 0.3);
-        border-color: #667eea;
-        color: var(--text-primary);
-    }
-    html.theme-auto .flatpickr-day.selected,
-    html.theme-auto .flatpickr-day.selected:hover {
-        background: #667eea;
-        border-color: #667eea;
-        color: #fff;
-    }
-    html.theme-auto .flatpickr-day.flatpickr-disabled,
-    html.theme-auto .flatpickr-day.prevMonthDay,
-    html.theme-auto .flatpickr-day.nextMonthDay {
-        color: var(--text-muted);
-        opacity: 0.4;
-    }
+}
+html.theme-dark .warning-message,
+html.theme-dark .system-note {
+    background: rgba(255, 193, 7, 0.1);
+    color: #ffd54f;
+    border-left-color: #ffc107;
+}
+html.theme-dark .permission-notice {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: #ffc107;
+}
+html.theme-dark .permission-notice p {
+    color: #ffd54f;
+}
+html.theme-dark .import-result.success {
+    background: rgba(40, 167, 69, 0.12);
+    color: #75d99f;
+    border-color: rgba(40, 167, 69, 0.3);
+}
+html.theme-dark .import-result.error {
+    background: rgba(220, 53, 69, 0.12);
+    color: #f08080;
+    border-color: rgba(220, 53, 69, 0.3);
+}
+html.theme-dark .import-result.warning {
+    background: rgba(255, 193, 7, 0.1);
+    color: #ffd54f;
+    border-color: rgba(255, 193, 7, 0.3);
 }
 
-html.theme-dark .flatpickr-calendar {
-    background: var(--input-bg);
-    border-color: var(--input-border);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-    color: var(--text-primary);
+/* ---- Confirm modal message ---- */
+#confirm-modal-message {
+    white-space: pre-line;
+    margin: 12px 0 24px;
 }
-html.theme-dark .flatpickr-calendar.arrowTop::before,
-html.theme-dark .flatpickr-calendar.arrowTop::after {
-    border-bottom-color: var(--input-bg);
+
+/* ---- Toast notifications ---- */
+#toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 1000;
+    pointer-events: none;
 }
-html.theme-dark .flatpickr-months,
-html.theme-dark .flatpickr-month {
-    background: var(--input-bg);
-    color: var(--text-primary);
-    fill: var(--text-primary);
-}
-html.theme-dark .flatpickr-current-month .flatpickr-monthDropdown-months,
-html.theme-dark .flatpickr-current-month input.cur-year {
-    background: transparent;
-    color: var(--text-primary);
-}
-html.theme-dark .flatpickr-prev-month,
-html.theme-dark .flatpickr-next-month {
-    fill: var(--text-primary);
-}
-html.theme-dark .flatpickr-prev-month:hover svg,
-html.theme-dark .flatpickr-next-month:hover svg {
-    fill: #667eea;
-}
-html.theme-dark span.flatpickr-weekday {
-    background: var(--input-bg);
-    color: var(--text-muted);
-}
-html.theme-dark .flatpickr-days {
-    border-color: var(--input-border);
-}
-html.theme-dark .dayContainer {
-    background: var(--input-bg);
-}
-html.theme-dark .flatpickr-day {
-    color: var(--text-primary);
-}
-html.theme-dark .flatpickr-day:hover,
-html.theme-dark .flatpickr-day:focus {
-    background: rgba(102, 126, 234, 0.2);
-    border-color: rgba(102, 126, 234, 0.4);
-    color: var(--text-primary);
-}
-html.theme-dark .flatpickr-day.today {
-    border-color: rgba(102, 126, 234, 0.6);
-}
-html.theme-dark .flatpickr-day.today:hover {
-    background: rgba(102, 126, 234, 0.3);
-    border-color: #667eea;
-    color: var(--text-primary);
-}
-html.theme-dark .flatpickr-day.selected,
-html.theme-dark .flatpickr-day.selected:hover {
-    background: #667eea;
-    border-color: #667eea;
+
+.toast {
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 0.925em;
     color: #fff;
+    min-width: 220px;
+    max-width: 360px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: auto;
 }
-html.theme-dark .flatpickr-day.flatpickr-disabled,
-html.theme-dark .flatpickr-day.prevMonthDay,
-html.theme-dark .flatpickr-day.nextMonthDay {
-    color: var(--text-muted);
-    opacity: 0.4;
+.toast.toast-show {
+    opacity: 1;
+    transform: translateY(0);
+}
+.toast-success { background: #28a745; }
+.toast-error   { background: #dc3545; }
+.toast-info    { background: #2980b9; }
+
+/* ---- Inline field validation ---- */
+.field-error {
+    border-color: #dc3545 !important;
+}
+.field-error-message {
+    display: block;
+    color: #dc3545;
+    font-size: 0.85em;
+    margin-top: 4px;
 }

@@ -493,9 +493,10 @@ async function commitImport() {
 
         const result = await response.json();
         if (result.errors && result.errors.length > 0) {
-            alert(`Backend received ${result.aliases_received} aliases.\n\n${result.message}\n\nErrors:\n${result.errors.join("\n")}`);
+            console.error('Import errors:', result.errors);
+            showToast(result.message + ` (${result.errors.length} error(s) — see console)`, 'error');
         } else {
-            alert(result.message);
+            showToast(result.message || 'Import complete.');
         }
 
         closePreviewModal();
@@ -509,7 +510,7 @@ async function commitImport() {
         document.getElementById('result-container').replaceChildren();
 
     } catch (error) {
-        alert('Error saving data: ' + error.message);
+        showToast('Error saving data: ' + error.message, 'error');
     }
 }
 
@@ -594,7 +595,7 @@ function renderManualCategoryUI(uncategorizedFiles) {
         });
 
         if (!allFilled) {
-            alert("Please select a category for all images, or choose 'Ignore'.");
+            showToast("Please select a category for all images, or choose 'Ignore'.", 'error');
             return;
         }
 

@@ -345,11 +345,11 @@ async function saveUser(event) {
         }
 
         const result = await response.json();
-        alert(result.message);
+        showToast(result.message || 'User saved.');
         closeUserModal();
         loadUsers();
     } catch (error) {
-        alert('Error: ' + error.message);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
@@ -386,7 +386,7 @@ async function deleteUser(userId, username) {
         return;
     }
 
-    if (!confirm(`Are you sure you want to delete user "${username}"?\n\nThis action cannot be undone.`)) return;
+    if (!await showConfirm(`Delete user "${username}"? This action cannot be undone.`, 'Delete User')) return;
     executeUserDelete(userId);
 }
 
@@ -399,7 +399,7 @@ function closeTransferFilesModal() {
 
 async function confirmTransferFiles() {
     const newOwnerId = document.getElementById('new-owner-select').value;
-    if (!newOwnerId) return alert('Select a new owner');
+    if (!newOwnerId) { showToast('Select a new owner.', 'error'); return; }
 
     try {
         const res = await fetch(`/api/admin/users/${pendingDeleteUserId}/transfer-files`, {
@@ -412,7 +412,7 @@ async function confirmTransferFiles() {
         closeTransferFilesModal();
         executeUserDelete(pendingDeleteUserId);
     } catch (error) {
-        alert('Error: ' + error.message);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
@@ -422,10 +422,10 @@ async function executeUserDelete(userId) {
         if (!response.ok) throw new Error(await response.text());
 
         const result = await response.json();
-        alert(result.message);
+        showToast(result.message || 'User deleted.');
         loadUsers();
     } catch (error) {
-        alert('Error: ' + error.message);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
@@ -472,7 +472,7 @@ async function confirmResetPassword() {
 
         loadUsers();
     } catch (error) {
-        alert('Error: ' + error.message);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
@@ -480,7 +480,7 @@ async function confirmResetPassword() {
 function copyPassword() {
     const password = document.getElementById('result-password').textContent;
     navigator.clipboard.writeText(password).then(() => {
-        alert('Password copied to clipboard!');
+        showToast('Password copied to clipboard.');
     });
 }
 
@@ -743,9 +743,9 @@ async function saveCVWorkerUrl(event) {
         });
 
         if (!response.ok) throw new Error(await response.text());
-        alert("Microservice routing updated successfully.");
+        showToast('Microservice routing updated.');
     } catch (error) {
-        alert("Error: " + error.message);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
@@ -769,9 +769,9 @@ async function savePasswordPolicy(event) {
         });
 
         if (!response.ok) throw new Error(await response.text());
-        alert("Password Policy updated successfully.");
+        showToast('Password policy updated.');
     } catch (error) {
-        alert("Error: " + error.message);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
@@ -781,7 +781,7 @@ async function uploadGCPCredentials(event) {
     const fileInput = document.getElementById('gcp-json-file');
 
     if (fileInput.files.length === 0) {
-        alert("Please select a JSON file.");
+        showToast('Please select a JSON file.', 'error');
         return;
     }
 
@@ -806,11 +806,11 @@ async function uploadGCPCredentials(event) {
 
             if (!response.ok) throw new Error(await response.text());
 
-            alert("✅ GCP Credentials securely encrypted and stored.");
+            showToast('GCP credentials stored.');
             document.getElementById('gcp-upload-form').reset();
 
         } catch (error) {
-            alert("Invalid JSON or Upload Error: " + error.message);
+            showToast('Invalid JSON or upload error: ' + error.message, 'error');
         }
     };
 
@@ -838,10 +838,10 @@ async function confirmDeleteGCP() {
 
         if (!response.ok) throw new Error(await response.text());
 
-        alert("🗑️ Credentials deleted. OCR Pipelines disabled.");
+        showToast('Credentials deleted. OCR pipelines disabled.');
         closeDeleteGCPModal();
     } catch (error) {
-        alert("Error: " + error.message);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 

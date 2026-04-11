@@ -37,7 +37,7 @@ function checkForcePasswordRequirements() {
         const listItems = rulesList.getElementsByTagName('li');
         for (let li of listItems) {
             li.textContent = `⚪ ${li.getAttribute('data-text')}`;
-            li.style.color = '#666';
+            li.style.color = 'var(--text-secondary)';
         }
     }
 
@@ -120,7 +120,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
                     const li = document.createElement('li');
                     li.id = r.id;
                     li.dataset.text = r.text;
-                    li.style.cssText = 'color: #666; transition: color 0.3s;';
+                    li.style.cssText = 'color: var(--text-secondary); transition: color 0.3s;';
                     li.textContent = `⚪ ${r.text}`;
                     return li;
                 }));

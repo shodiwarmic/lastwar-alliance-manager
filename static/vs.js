@@ -315,15 +315,6 @@ function handleSort(e) {
  * 5. CSV IMPORT & SAVE LOGIC
  */
 
-function showStatus(container, msg, isError = false) {
-    const p = document.createElement('p');
-    p.className = 'status-msg';
-    p.style.cssText = `margin:4px 0 0; font-size:0.85rem; color:${isError ? '#dc3545' : '#28a745'};`;
-    p.textContent = msg;
-    container.appendChild(p);
-    setTimeout(() => p.remove(), 4000);
-}
-
 async function saveVSPoints() {
     const weekDate = formatDate(currentWeekDate);
     const points = allMembers.map(member => {
@@ -346,42 +337,22 @@ async function saveVSPoints() {
             body: JSON.stringify({ week_date: weekDate, points })
         });
         if (!response.ok) throw new Error('Failed to save');
-        showStatus(document.getElementById('admin-actions'), '✓ Saved successfully!');
+        showToast('VS Points saved.');
         await loadVSPoints();
     } catch (error) {
-        showStatus(document.getElementById('admin-actions'), 'Error saving points', true);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
-function clearVSPoints() {
-    const clearBtn = document.getElementById('clear-btn');
-    clearBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Sure?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); clearBtn.style.display = ''; });
-    yesBtn.addEventListener('click', async () => {
-        confirmSpan.remove();
-        clearBtn.style.display = '';
-        const weekDate = formatDate(currentWeekDate);
-        try {
-            await fetch(`${API_URL}/${weekDate}`, { method: 'DELETE' });
-            currentVSPoints = {};
-            renderTable();
-        } catch {
-            showStatus(document.getElementById('admin-actions'), 'Error clearing week', true);
-        }
-    });
-    confirmSpan.append(label, yesBtn, noBtn);
-    clearBtn.insertAdjacentElement('afterend', confirmSpan);
+async function clearVSPoints() {
+    const weekDate = formatDate(currentWeekDate);
+    if (!await showConfirm('Clear all points for this week?', 'Clear Week')) return;
+    try {
+        await fetch(`${API_URL}/${weekDate}`, { method: 'DELETE' });
+        currentVSPoints = {};
+        renderTable();
+        showToast('Points cleared.');
+    } catch (error) { showToast('Error: ' + error.message, 'error'); }
 }
 
 /**
@@ -408,9 +379,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const nextWeek = new Date(currentWeekDate);
             nextWeek.setDate(nextWeek.getDate() + 7);
 
-            // Prevent going past the actual current week (button is also disabled by updateWeekDisplay)
+            // Prevent going past the actual current week
             const todayMonday = getMostRecentMonday();
-            if (nextWeek > todayMonday) return;
+            if (nextWeek > todayMonday) {
+                showToast('Cannot navigate to a future week.', 'error');
+                return;
+            }
 
             currentWeekDate.setDate(currentWeekDate.getDate() + 7);
             updateWeekDisplay();
@@ -470,8 +444,8 @@ async function handleCSVUpload(event) {
 
         currentImportPayload = await response.json();
         renderPreviewModal(currentImportPayload);
-    } catch {
-        showStatus(document.getElementById('admin-actions'), 'Error parsing CSV — check file format', true);
+    } catch (error) {
+        showToast('Error parsing CSV: ' + error.message, 'error');
     }
 
     event.target.value = ''; // Reset input
@@ -575,9 +549,7 @@ function renderPreviewModal(data) {
     const unresolvedRows = (data.unresolved || []).map((row, idx) => buildUnresolvedRow(row, idx, availableMembers));
     unresolvedBody.replaceChildren(...unresolvedRows);
 
-    const previewModal = document.getElementById('import-preview-modal');
-    previewModal.style.display = 'flex';
-    trapFocus(previewModal);
+    document.getElementById('import-preview-modal').style.display = 'flex';
 }
 
 function refreshUpdatesCell(unresolvedIndex) {
@@ -682,23 +654,19 @@ async function commitImport() {
         // Display errors if the backend caught any SQL issues
         if (result.errors && result.errors.length > 0) {
             console.error("Backend SQL Errors:", result.errors);
-            const modalActions = document.querySelector('#import-preview-modal .modal-actions');
-            showStatus(modalActions, `Saved with errors — ${result.errors.length} DB error(s), see console`, true);
+            showToast(result.message + ` (${result.errors.length} error(s) — see console)`, 'error');
         } else {
-            closePreviewModal();
-            showStatus(document.getElementById('admin-actions'), result.message || '✓ Import saved');
+            showToast(result.message || 'Import complete.');
         }
 
+        closePreviewModal();
         loadVSPoints();
-    } catch {
-        const modalActions = document.querySelector('#import-preview-modal .modal-actions');
-        showStatus(modalActions, 'Error saving data', true);
+    } catch (error) {
+        showToast('Error saving data: ' + error.message, 'error');
     }
 }
 
 function closePreviewModal() {
-    const previewModal = document.getElementById('import-preview-modal');
-    releaseFocus(previewModal);
-    previewModal.style.display = '';
+    document.getElementById('import-preview-modal').style.display = 'none';
     currentImportPayload = null;
 }
