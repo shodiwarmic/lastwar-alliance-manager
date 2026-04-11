@@ -898,7 +898,7 @@ function updateServerEventRepeatUI() {
     const rt = document.getElementById('se-repeat').value;
     document.getElementById('se-weekday-group').style.display  = (rt === 'weekly' || rt === 'biweekly') ? '' : 'none';
     document.getElementById('se-interval-group').style.display = (rt === 'every_n_days') ? '' : 'none';
-    document.getElementById('se-anchor-group').style.display   = (rt !== 'none') ? '' : 'none';
+    document.getElementById('se-anchor-label').textContent     = (rt === 'none') ? 'Event Date' : 'Anchor Date';
 }
 
 async function saveServerEvent(e) {
