@@ -1,0 +1,462 @@
+{{define "header_text"}}
+<h1>🏆 Season Hub</h1>
+<h2>Season tracking &amp; rewards</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="/season-hub.css">
+{{end}}
+
+{{define "content"}}
+<div id="season-hub-page">
+
+    <!-- Season header bar -->
+    <div class="season-header" id="season-header">
+        <div class="season-title-area">
+            <select id="season-select" class="form-input season-select">
+                <option value="">No seasons</option>
+            </select>
+            <span id="season-status-badge" class="season-badge" style="display:none"></span>
+        </div>
+        {{if .Permissions.ManageSeasonRewards}}
+        <div class="season-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-create-season">+ New Season</button>
+            <button class="btn btn-secondary btn-sm" id="btn-edit-season" style="display:none">Edit</button>
+            <button class="btn btn-danger btn-sm" id="btn-archive-season" style="display:none">Archive</button>
+            <button class="btn btn-danger btn-sm" id="btn-delete-season" style="display:none">Delete</button>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="rankings">Rankings</button>
+        {{if .Permissions.ManageSeasonHub}}
+        <button class="tab-btn" data-tab="participation">Participation</button>
+        <button class="tab-btn" data-tab="contributions">Contributions</button>
+        {{end}}
+        <button class="tab-btn" data-tab="rewards">Rewards</button>
+        <button class="tab-btn" data-tab="season-mail">Season Mail</button>
+    </div>
+
+    <!-- ── Rankings ──────────────────────────────────────────────────────── -->
+    <div id="tab-rankings" class="tab-content">
+        <div class="tab-toolbar">
+            <input type="text" id="rankings-search" class="form-input" placeholder="Search members…" style="width:220px;">
+            <span id="rankings-count" class="tab-count"></span>
+        </div>
+        <div id="no-season-msg" class="info-panel" style="display:none">
+            No active season. {{if .Permissions.ManageSeasonRewards}}Create one above to get started.{{end}}
+        </div>
+        <table class="data-table sortable-table" id="rankings-table" style="display:none">
+            <thead>
+                <tr>
+                    <th class="col-rank" data-sort="rank_position">#</th>
+                    <th data-sort="name">Member</th>
+                    <th data-sort="rank">Rank</th>
+                    <th data-sort="participation_pct" class="sort-desc">Participation</th>
+                    <th data-sort="contribution_pct">Contribution</th>
+                    <th data-sort="key_event_attendance" id="key-event-col-header">Key Event</th>
+                    <th data-sort="class_tag">Tag</th>
+                    <th data-sort="reward_tier">Reward Tier</th>
+                </tr>
+            </thead>
+            <tbody id="rankings-tbody">
+                <tr><td colspan="8" class="loading-msg">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── Participation ─────────────────────────────────────────────────── -->
+    {{if .Permissions.ManageSeasonHub}}
+    <div id="tab-participation" class="tab-content" style="display:none">
+        <div class="tab-toolbar">
+            <div class="participation-week-nav">
+                <label for="week-select">Week:</label>
+                <select id="week-select" class="form-input week-select"></select>
+            </div>
+            <button class="btn btn-primary" id="btn-save-participation">Save Week</button>
+            <span id="participation-status" class="status-msg"></span>
+        </div>
+        <div id="participation-grid-wrap">
+            <table class="data-table" id="participation-table">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Rank</th>
+                        <th>Score</th>
+                        <th id="key-event-participation-header">Key Event</th>
+                        <th>Note</th>
+                    </tr>
+                </thead>
+                <tbody id="participation-tbody">
+                    <tr><td colspan="5" class="loading-msg">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {{end}}
+
+    <!-- ── Contributions ─────────────────────────────────────────────────── -->
+    {{if .Permissions.ManageSeasonHub}}
+    <div id="tab-contributions" class="tab-content" style="display:none">
+
+        <div class="tab-toolbar">
+            <div class="participation-week-nav">
+                <label for="contrib-week">Week:</label>
+                <select id="contrib-week" class="form-input week-select">
+                    <option value="0">Season Total</option>
+                </select>
+            </div>
+            <input type="text" id="contrib-manual-search" class="form-input" placeholder="Search members…" style="width:200px;">
+            <button class="btn btn-primary" id="btn-contrib-manual-save">Save</button>
+            {{/* OCR screenshot import — pending microservice support for season contribution screens */}}
+            {{/* <button class="btn btn-secondary" id="btn-contrib-ocr">Import from Screenshots</button> */}}
+            <span id="contrib-manual-status" class="status-msg"></span>
+        </div>
+
+        <table class="data-table" id="contrib-manual-table">
+            <thead>
+                <tr>
+                    <th>Member</th>
+                    <th>Rank</th>
+                    <th>Mutual Assistance</th>
+                    <th>Siege</th>
+                    <th>Rare Soil War</th>
+                    <th>Defeat</th>
+                </tr>
+            </thead>
+            <tbody id="contrib-manual-tbody">
+                <tr><td colspan="6" class="loading-msg">Loading…</td></tr>
+            </tbody>
+        </table>
+
+    </div>
+    {{end}}
+
+    <!-- ── Rewards ───────────────────────────────────────────────────────── -->
+    <div id="tab-rewards" class="tab-content" style="display:none">
+        {{if .Permissions.ManageSeasonRewards}}
+        <div class="tab-toolbar">
+            <button class="btn btn-primary btn-sm" id="btn-assign-reward">+ Assign Reward</button>
+        </div>
+        {{end}}
+        <table class="data-table" id="rewards-table">
+            <thead>
+                <tr>
+                    <th>Member</th>
+                    <th>Rank</th>
+                    <th>Tier</th>
+                    <th>Participation %</th>
+                    <th>Contribution %</th>
+                    <th>Note</th>
+                    <th>Logged By</th>
+                    {{if .Permissions.ManageSeasonRewards}}<th></th>{{end}}
+                </tr>
+            </thead>
+            <tbody id="rewards-tbody">
+                <tr><td colspan="8" class="loading-msg">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── Season Mail ───────────────────────────────────────────────────── -->
+    <div id="tab-season-mail" class="tab-content" style="display:none">
+        {{if .Permissions.ManageSeasonHub}}
+        <div class="tab-toolbar">
+            <button class="btn btn-primary btn-sm" id="btn-upload-mail">+ Post Mail</button>
+        </div>
+        {{end}}
+        <div id="season-mail-list" class="file-list">
+            <p class="loading-msg">Loading…</p>
+        </div>
+    </div>
+
+</div>
+{{end}}
+
+{{define "scripts"}}
+<div id="page-config"
+    data-can-manage="{{if .Permissions.ManageSeasonHub}}true{{else}}false{{end}}"
+    data-can-manage-rewards="{{if .Permissions.ManageSeasonRewards}}true{{else}}false{{end}}"
+    data-member-id="{{.MemberID}}"
+    hidden></div>
+<script src="/season-hub.js"></script>
+{{end}}
+
+{{define "modals"}}
+
+<!-- Create Season Modal -->
+<div id="modal-create-season" class="modal">
+    <div class="modal-content" style="max-width:540px;">
+        <h3>Create Season</h3>
+        <form id="form-create-season">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="cs-name">Season Name</label>
+                    <input type="text" id="cs-name" class="form-input" placeholder="e.g. Season II" required>
+                </div>
+                <div class="form-group">
+                    <label for="cs-number">Season Number</label>
+                    <input type="number" id="cs-number" class="form-input" min="1" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="cs-start-date">Start Date</label>
+                    <input type="date" id="cs-start-date" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label for="cs-week-count">Weeks</label>
+                    <input type="number" id="cs-week-count" class="form-input" value="8" min="1" max="52" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="cs-key-event-name">Key Event Name</label>
+                    <input type="text" id="cs-key-event-name" class="form-input" value="Rare Soil War" required>
+                </div>
+                <div class="form-group">
+                    <label for="cs-key-event-required">Key Event Required</label>
+                    <input type="number" id="cs-key-event-required" class="form-input" value="4" min="0">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="cs-tier-active">Active % Floor</label>
+                    <input type="number" id="cs-tier-active" class="form-input" value="70" min="0" max="100">
+                </div>
+                <div class="form-group">
+                    <label for="cs-tier-at-risk">At-Risk % Floor</label>
+                    <input type="number" id="cs-tier-at-risk" class="form-input" value="60" min="0" max="100">
+                </div>
+            </div>
+            <h4 style="margin:12px 0 6px;">Reward Tier Slots</h4>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="cs-tier-leader">Alliance Leader</label>
+                    <input type="number" id="cs-tier-leader" class="form-input" value="1" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="cs-tier-core">Core</label>
+                    <input type="number" id="cs-tier-core" class="form-input" value="10" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="cs-tier-elite">Elite</label>
+                    <input type="number" id="cs-tier-elite" class="form-input" value="20" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="cs-tier-valued">Valued</label>
+                    <input type="number" id="cs-tier-valued" class="form-input" value="69" min="0">
+                </div>
+            </div>
+            <h4 style="margin:12px 0 6px;">Score Levels</h4>
+            <table class="data-table" id="cs-score-levels-table">
+                <thead><tr><th>Key</th><th>Label</th><th>Points</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><input type="text" class="form-input sl-key" value="full" required></td>
+                        <td><input type="text" class="form-input sl-label" value="FULL" required></td>
+                        <td><input type="number" class="form-input sl-points" value="10" min="0" required></td>
+                    </tr>
+                    <tr>
+                        <td><input type="text" class="form-input sl-key" value="partial" required></td>
+                        <td><input type="text" class="form-input sl-label" value="PARTIAL" required></td>
+                        <td><input type="number" class="form-input sl-points" value="5" min="0" required></td>
+                    </tr>
+                    <tr>
+                        <td><input type="text" class="form-input sl-key" value="absent" required></td>
+                        <td><input type="text" class="form-input sl-label" value="ABSENT" required></td>
+                        <td><input type="number" class="form-input sl-points" value="0" min="0" required></td>
+                    </tr>
+                </tbody>
+            </table>
+            <div id="cs-archive-warning" class="field-warning" style="display:none"></div>
+            <div id="cs-error" class="field-error" style="display:none"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-create-season">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Season</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Season Modal -->
+<div id="modal-edit-season" class="modal">
+    <div class="modal-content" style="max-width:540px;">
+        <h3>Edit Season</h3>
+        <form id="form-edit-season">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-name">Season Name</label>
+                    <input type="text" id="es-name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label for="es-number">Season Number</label>
+                    <input type="number" id="es-number" class="form-input" min="1" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-start-date">Start Date</label>
+                    <input type="date" id="es-start-date" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label for="es-week-count">Weeks</label>
+                    <input type="number" id="es-week-count" class="form-input" min="1" max="52" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-key-event-name">Key Event Name</label>
+                    <input type="text" id="es-key-event-name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label for="es-key-event-required">Key Event Required</label>
+                    <input type="number" id="es-key-event-required" class="form-input" min="0">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-tier-active">Active % Floor</label>
+                    <input type="number" id="es-tier-active" class="form-input" min="0" max="100">
+                </div>
+                <div class="form-group">
+                    <label for="es-tier-at-risk">At-Risk % Floor</label>
+                    <input type="number" id="es-tier-at-risk" class="form-input" min="0" max="100">
+                </div>
+            </div>
+            <h4 style="margin:12px 0 6px;">Reward Tier Slots</h4>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-tier-leader">Alliance Leader</label>
+                    <input type="number" id="es-tier-leader" class="form-input" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="es-tier-core">Core</label>
+                    <input type="number" id="es-tier-core" class="form-input" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="es-tier-elite">Elite</label>
+                    <input type="number" id="es-tier-elite" class="form-input" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="es-tier-valued">Valued</label>
+                    <input type="number" id="es-tier-valued" class="form-input" min="0">
+                </div>
+            </div>
+            <div id="es-error" class="field-error" style="display:none"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-edit-season">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Assign Reward Modal -->
+<div id="modal-assign-reward" class="modal">
+    <div class="modal-content" style="max-width:480px;">
+        <h3 id="reward-modal-title">Assign Reward</h3>
+        <form id="form-assign-reward">
+            <input type="hidden" id="reward-id">
+            <div class="form-group">
+                <label for="reward-member">Member</label>
+                <select id="reward-member" class="form-input" required></select>
+            </div>
+            <div class="form-group">
+                <label for="reward-tier">Reward Tier</label>
+                <select id="reward-tier" class="form-input" required>
+                    <option value="alliance_leader">Alliance Leader</option>
+                    <option value="core">Core</option>
+                    <option value="elite">Elite</option>
+                    <option value="valued">Valued</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="reward-participation-pct">Participation %</label>
+                    <input type="number" id="reward-participation-pct" class="form-input" step="0.1" min="0" max="100" required>
+                </div>
+                <div class="form-group">
+                    <label for="reward-contribution-pct">Contribution %</label>
+                    <input type="number" id="reward-contribution-pct" class="form-input" step="0.1" min="0" max="100">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="reward-note">Note</label>
+                <textarea id="reward-note" class="form-input" rows="2"></textarea>
+            </div>
+            <div id="reward-error" class="field-error" style="display:none"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-reward">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="btn-submit-reward">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- OCR Import Modal -->
+<div id="modal-ocr-import" class="modal">
+    <div class="modal-content" style="max-width:640px;">
+        <h3>Import from Screenshots</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="contrib-category">Category</label>
+                <select id="contrib-category" class="form-input">
+                    <option value="mutual_assistance">Mutual Assistance</option>
+                    <option value="siege">Siege</option>
+                    <option value="rare_soil_war">Rare Soil War</option>
+                    <option value="defeat">Defeat</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="contrib-images">Screenshots</label>
+                <input type="file" id="contrib-images" class="form-input" accept="image/*" multiple>
+            </div>
+        </div>
+        <div id="contrib-import-status" class="status-msg" style="min-height:1.2em;"></div>
+        <div id="contrib-preview-card" style="display:none;margin-top:8px;">
+            <p id="contrib-preview-summary" style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 8px;"></p>
+            <table class="data-table">
+                <thead>
+                    <tr><th>OCR Name</th><th>Matched Member</th><th>Match Type</th><th>Points</th></tr>
+                </thead>
+                <tbody id="contrib-preview-tbody"></tbody>
+            </table>
+            <div id="contrib-unresolved-wrap" style="display:none;margin-top:8px;">
+                <p class="contrib-unresolved-title">Unresolved names:</p>
+                <ul id="contrib-unresolved-list"></ul>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="btn-contrib-cancel">Cancel</button>
+            <button type="button" class="btn btn-secondary" id="btn-contrib-preview">Preview</button>
+            <button type="button" class="btn btn-primary" id="btn-contrib-commit" style="display:none">Commit</button>
+        </div>
+    </div>
+</div>
+
+<!-- Post Season Mail Modal -->
+<div id="modal-upload-mail" class="modal">
+    <div class="modal-content" style="max-width:520px;">
+        <h3>Post Mail</h3>
+        <form id="form-upload-mail">
+            <div class="form-group">
+                <label for="mail-title">Title</label>
+                <input type="text" id="mail-title" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label for="mail-content">Content</label>
+                <textarea id="mail-content" class="form-input" rows="8" style="resize:vertical;" placeholder="Paste the mail text here…"></textarea>
+            </div>
+            <div id="mail-error" class="field-error" style="display:none"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-mail">Cancel</button>
+                <button type="submit" class="btn btn-primary">Post</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{end}}

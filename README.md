@@ -54,7 +54,7 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Event Generation**: Bulk-generate MG events (every-other-day cycle from an anchor date) and ZS events (fixed weekdays or ASAP 71.5h chain) across a date range, skipping dates that already have an event.
 - **Server Events**: Repeating game-wide events (Ironclad Vehicle, Zombie Invasion, Rampage Bosses, General's Trial, Doomsday, and any custom entries) shown as banners at the top of each day column. Supports weekly, biweekly, and every-N-days recurrence.
 - **VS Alliance Duel Themes**: The fixed 7-theme weekly cycle (Radar Training → Alliance Star) is shown per day automatically — no configuration required.
-- **Season Tracking**: Set the current season number and start date; each day column shows the season day (e.g. S3 D47).
+- **Season Tracking**: Each day column shows the current season day (e.g. S3 D47), derived automatically from the active season's start date. The day counter continues incrementing through archived seasons so historical weeks stay accurate.
 - **Week Grid**: 4+3 two-row layout (Mon–Thu on row 1, Fri–Sun on row 2) giving each day enough space for event cards and action buttons. Collapses to a single-day swipe view on mobile — the existing ← / → week nav buttons navigate days on small screens.
 - **Desert Storm Integration**: Friday columns automatically show the two active Task Force battle slots (pulled from the Storm page TF configuration and admin-configured slot times).
 - **Week Image**: Generate a canvas-rendered PNG of any week in the site's dark theme — suitable for sharing in Discord. Includes server banners, VS themes, event levels, season days, and storm pills.
@@ -78,6 +78,16 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Prospect Tracking**: Officers can log potential recruits with fields for in-game name, server, current alliance, power, rank in their alliance, recruiter, first contact date, notes, and status (Interested / Pending / Declined).
 - **Officer Notes**: Each active member now has an internal notes field visible only to officers with `manage_members`. Notes are displayed in the member edit modal and never shown to standard members.
 - **Permission-Gated Access**: `manage_members` controls archive/reactivate and viewing former members. Separate `view_recruiting` and `manage_recruiting` permissions (R4–R5 default) gate the Recruiting page and prospect CRUD. Hard-deleting archived members is admin-only.
+
+### 🏆 Season Hub
+A season-scoped tracking and reward distribution system for structured in-game competition seasons.
+- **Season Management**: Create and archive seasons with configurable parameters — week count, key event name and attendance requirement, participation tier thresholds, and reward tier slot counts. Future-dated seasons are created in an upcoming state and activate automatically when their start date arrives. R5-only: edit or delete any non-active season.
+- **Rankings Tab**: Sortable member standings showing participation percentage (with a per-week dot grid), contribution percentage (relative to the top contributor), key event attendance count, class tag (Active Member / At Risk / Dead Weight), and assigned reward tier. Visible to all members; R1–R3 see only their own row.
+- **Participation Tab** *(R4/R5)*: Log weekly scores per member using configurable score levels (e.g. FULL / PARTIAL / ABSENT) and a key event attendance counter. Scores are saved per week with bulk-save and week navigation.
+- **Contributions Tab** *(R4/R5)*: Manually enter season contribution totals across four categories (Mutual Assistance, Siege, Rare Soil War, Defeat) with week-level granularity. The season-end snapshot (week 0) is used as the canonical tie-breaker for rankings; weekly tracking is optional.
+- **Rewards Tab** *(R4/R5 view, R5 assign)*: Assign reward tiers (Alliance Leader, Core, Elite, Valued) to members with an audit trail of who assigned what and when.
+- **Season Mail Tab**: Upload and manage season-specific communications (documents, images) scoped to each season and isolated from the global Alliance Files page.
+- **Permission-Gated Access**: `view_season_hub` (R1–R5), `manage_season_hub` (R4–R5), `manage_season_rewards` (R5) — all configurable via the permissions matrix.
 
 ### ⚖️ Member Accountability
 - **Tag System**: Each active member is automatically tagged as Reliable, Needs Improvement, or At Risk based on their current active strike count. The strike thresholds for each tag are configurable in Alliance Settings.

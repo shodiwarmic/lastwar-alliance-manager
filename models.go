@@ -404,6 +404,9 @@ type RankPermissions struct {
 	ViewActivity         bool   `json:"view_activity"`
 	ViewAccountability   bool   `json:"view_accountability"`
 	ManageAccountability bool   `json:"manage_accountability"`
+	ViewSeasonHub        bool   `json:"view_season_hub"`
+	ManageSeasonHub      bool   `json:"manage_season_hub"`
+	ManageSeasonRewards  bool   `json:"manage_season_rewards"`
 }
 
 type ActivityLog struct {

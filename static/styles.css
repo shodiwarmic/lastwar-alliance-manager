@@ -1026,9 +1026,9 @@ button {
    Min icon-only width: 19 items × 44px = 836px inside the container.
    Container = 95% of body content area. At this viewport range (≤1024px) body
    has padding: 10px, so content area = viewport − 20px.
-   836 = 0.95 × (viewport − 20) → 0.95×viewport = 855 → viewport ≈ 900px.
+   880 = 0.95 × (viewport − 20) → 0.95×viewport = 899 → viewport ≈ 946px.
    (Browser window width is ~18px higher than CSS viewport due to scrollbar.) */
-@media (max-width: 900px) {
+@media (max-width: 946px) {
     .hamburger-btn {
         display: block;
         position: absolute;

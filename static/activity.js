@@ -35,6 +35,11 @@ const ENTITY_LABELS = {
     credentials:           'credentials',
     accountability_strike: 'accountability strike',
     storm_attendance:      'storm attendance',
+    season_attendance:     'season attendance',
+    season_contributions:  'season contributions',
+    season_rewards:        'season reward',
+    season_mail:           'season mail',
+    season_config:         'season config',
 };
 
 const ENTITY_LABELS_PLURAL = {
@@ -55,6 +60,9 @@ const ENTITY_LABELS_PLURAL = {
     vs_points:             'VS points',
     power_records:         'power records',
     accountability_strike: 'accountability strikes',
+    season_contributions:  'season contributions',
+    season_rewards:        'season rewards',
+    season_mail:           'season mail items',
 };
 
 function entityLabel(type, count) {

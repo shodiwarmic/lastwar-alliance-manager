@@ -990,9 +990,6 @@ function populateSettingsForm() {
     document.getElementById('set-zs-baseline').value   = settings.zs_baseline ?? '';
     document.getElementById('set-mg-time').value       = settings.mg_default_time ?? '';
     document.getElementById('set-zs-time').value       = settings.zs_default_time ?? '';
-    document.getElementById('set-season').value        = settings.current_season ?? '';
-    document.getElementById('set-season-start').value  = settings.season_start_date ?? '';
-
     // Generation rule settings
     document.getElementById('gen-mg-anchor').value     = settings.mg_anchor_date ?? '';
     const mode = settings.zs_schedule_mode || 'weekdays';
@@ -1051,8 +1048,6 @@ async function saveSettings() {
         zs_baseline:      zsBaselineVal !== '' ? parseInt(zsBaselineVal, 10) : (settings.zs_baseline ?? 7),
         mg_default_time:  document.getElementById('set-mg-time').value || settings.mg_default_time || '00:30',
         zs_default_time:  document.getElementById('set-zs-time').value || settings.zs_default_time || '23:00',
-        current_season:   document.getElementById('set-season').value ? parseInt(document.getElementById('set-season').value, 10) : null,
-        season_start_date: document.getElementById('set-season-start').value || null,
         mg_anchor_date:   document.getElementById('gen-mg-anchor').value || null,
         zs_schedule_mode: document.querySelector('input[name="zs-mode"]:checked')?.value || 'weekdays',
         zs_weekdays:      Array.from(document.querySelectorAll('input[name="zs-wd"]:checked')).map(cb => cb.value).join(',') || '1,4',

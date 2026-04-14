@@ -32,7 +32,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 
 		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
 			data.IsAdmin = true
-			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true, ViewAccountability: true, ManageAccountability: true}
+			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true, ViewAccountability: true, ManageAccountability: true, ViewSeasonHub: true, ManageSeasonHub: true, ManageSeasonRewards: true}
 			if memberID, ok := session.Values["member_id"].(int); ok && memberID > 0 {
 				db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&data.Rank)
 			}
@@ -129,6 +129,27 @@ func main() {
 	router.HandleFunc("/api/accountability/strikes/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeDelete))).Methods("DELETE")
 	router.HandleFunc("/api/accountability/storm-attendance", authMiddleware(requirePermission("manage_accountability", handleStormAttendanceUpsert))).Methods("POST")
 	router.HandleFunc("/api/train-logs/{id:[0-9]+}/showed-up", authMiddleware(requirePermission("manage_accountability", handleTrainNoShow))).Methods("PUT")
+
+	// Season Hub routes
+	router.HandleFunc("/api/season-hub/data", authMiddleware(requirePermission("view_season_hub", handleSeasonHubData))).Methods("GET")
+	router.HandleFunc("/api/season-hub/seasons", authMiddleware(requirePermission("view_season_hub", handleSeasonList))).Methods("GET")
+	router.HandleFunc("/api/season-hub/seasons", authMiddleware(requirePermission("manage_season_rewards", handleSeasonCreate))).Methods("POST")
+	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}/archive", authMiddleware(requirePermission("manage_season_rewards", handleSeasonArchive))).Methods("POST")
+	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleSeasonUpdate))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleSeasonDelete))).Methods("DELETE")
+	router.HandleFunc("/api/season-hub/participation", authMiddleware(requirePermission("view_season_hub", handleParticipationGet))).Methods("GET")
+	router.HandleFunc("/api/season-hub/participation", authMiddleware(requirePermission("manage_season_hub", handleParticipationSave))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/contributions", authMiddleware(requirePermission("manage_season_hub", handleContributionsGet))).Methods("GET")
+	router.HandleFunc("/api/season-hub/contributions/import", authMiddleware(requirePermission("manage_season_hub", handleContributionsImport))).Methods("POST")
+	router.HandleFunc("/api/season-hub/contributions/manual", authMiddleware(requirePermission("manage_season_hub", handleContributionsManual))).Methods("POST")
+	router.HandleFunc("/api/season-hub/rewards", authMiddleware(requirePermission("view_season_hub", handleRewardsGet))).Methods("GET")
+	router.HandleFunc("/api/season-hub/rewards", authMiddleware(requirePermission("manage_season_rewards", handleRewardSave))).Methods("POST")
+	router.HandleFunc("/api/season-hub/rewards/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleRewardUpdate))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/rewards/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleRewardDelete))).Methods("DELETE")
+	router.HandleFunc("/api/season-hub/season-mail", authMiddleware(requirePermission("view_season_hub", handleSeasonMailList))).Methods("GET")
+	router.HandleFunc("/api/season-hub/season-mail/upload", authMiddleware(requirePermission("manage_season_hub", handleSeasonMailUpload))).Methods("POST")
+	router.HandleFunc("/api/season-hub/season-mail/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_hub", handleSeasonMailUpdate))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/season-mail/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_hub", handleSeasonMailDelete))).Methods("DELETE")
 
 	// Admin routes (admin only)
 	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(getAdminUsers))).Methods("GET")
@@ -390,6 +411,7 @@ func main() {
 		"/recruiting":      "recruiting",
 		"/allies":          "allies",
 		"/activity":        "activity",
+		"/season-hub":      "season-hub",
 	}
 
 	for path, templateName := range pages {
@@ -419,6 +441,7 @@ func main() {
 				"allies":          data.Permissions.ViewAllies,
 				"activity":        data.Permissions.ViewActivity || data.IsAdmin,
 			"accountability":  data.Permissions.ViewAccountability,
+			"season-hub":      data.Permissions.ViewSeasonHub,
 			}
 
 			// 3. Custom 403 Handler for Access Denied

@@ -21,8 +21,8 @@ import (
 func getRankPermissions(rank string) RankPermissions {
 	var p RankPermissions
 	p.Rank = rank
-	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings, view_files, upload_files, manage_files, view_anonymous_authors, view_schedule, manage_schedule, view_officer_command, manage_officer_command, view_recruiting, manage_recruiting, view_allies, manage_allies, view_activity, view_accountability, manage_accountability FROM rank_permissions WHERE rank = ?`, rank).Scan(
-		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings, &p.ViewFiles, &p.UploadFiles, &p.ManageFiles, &p.ViewAnonymousAuthors, &p.ViewSchedule, &p.ManageSchedule, &p.ViewOfficerCommand, &p.ManageOfficerCommand, &p.ViewRecruiting, &p.ManageRecruiting, &p.ViewAllies, &p.ManageAllies, &p.ViewActivity, &p.ViewAccountability, &p.ManageAccountability,
+	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings, view_files, upload_files, manage_files, view_anonymous_authors, view_schedule, manage_schedule, view_officer_command, manage_officer_command, view_recruiting, manage_recruiting, view_allies, manage_allies, view_activity, view_accountability, manage_accountability, view_season_hub, manage_season_hub, manage_season_rewards FROM rank_permissions WHERE rank = ?`, rank).Scan(
+		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings, &p.ViewFiles, &p.UploadFiles, &p.ManageFiles, &p.ViewAnonymousAuthors, &p.ViewSchedule, &p.ManageSchedule, &p.ViewOfficerCommand, &p.ManageOfficerCommand, &p.ViewRecruiting, &p.ManageRecruiting, &p.ViewAllies, &p.ManageAllies, &p.ViewActivity, &p.ViewAccountability, &p.ManageAccountability, &p.ViewSeasonHub, &p.ManageSeasonHub, &p.ManageSeasonRewards,
 	)
 	return p
 }
@@ -50,10 +50,10 @@ func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=?, view_files=?, upload_files=?, manage_files=?, view_anonymous_authors=?, view_schedule=?, manage_schedule=?, view_officer_command=?, manage_officer_command=?, view_recruiting=?, manage_recruiting=?, view_allies=?, manage_allies=?, view_activity=?, view_accountability=?, manage_accountability=? WHERE rank=?`)
+	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=?, view_files=?, upload_files=?, manage_files=?, view_anonymous_authors=?, view_schedule=?, manage_schedule=?, view_officer_command=?, manage_officer_command=?, view_recruiting=?, manage_recruiting=?, view_allies=?, manage_allies=?, view_activity=?, view_accountability=?, manage_accountability=?, view_season_hub=?, manage_season_hub=?, manage_season_rewards=? WHERE rank=?`)
 
 	for _, p := range matrix {
-		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.ViewFiles, p.UploadFiles, p.ManageFiles, p.ViewAnonymousAuthors, p.ViewSchedule, p.ManageSchedule, p.ViewOfficerCommand, p.ManageOfficerCommand, p.ViewRecruiting, p.ManageRecruiting, p.ViewAllies, p.ManageAllies, p.ViewActivity, p.ViewAccountability, p.ManageAccountability, p.Rank)
+		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.ViewFiles, p.UploadFiles, p.ManageFiles, p.ViewAnonymousAuthors, p.ViewSchedule, p.ManageSchedule, p.ViewOfficerCommand, p.ManageOfficerCommand, p.ViewRecruiting, p.ManageRecruiting, p.ViewAllies, p.ManageAllies, p.ViewActivity, p.ViewAccountability, p.ManageAccountability, p.ViewSeasonHub, p.ManageSeasonHub, p.ManageSeasonRewards, p.Rank)
 	}
 	stmt.Close()
 	tx.Commit()
@@ -462,7 +462,6 @@ func getLoginHistory(w http.ResponseWriter, r *http.Request) {
 func getSettings(w http.ResponseWriter, r *http.Request) {
 	var s Settings
 
-	var currentSeason sql.NullInt64
 	err := db.QueryRow(`SELECT
         id, schedule_message_template, daily_message_template, power_tracking_enabled,
         COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''), COALESCE(max_hq_level, 35),
@@ -477,7 +476,6 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(strike_needs_improvement_threshold, 1), COALESCE(strike_at_risk_threshold, 3),
         COALESCE(mg_baseline, 11), COALESCE(zs_baseline, 7),
         COALESCE(mg_default_time, '00:30'), COALESCE(zs_default_time, '23:00'),
-        current_season, COALESCE(season_start_date, ''),
         COALESCE(mg_anchor_date, ''), COALESCE(zs_schedule_mode, 'weekdays'),
         COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00')
         FROM settings WHERE id = 1`).Scan(
@@ -494,18 +492,27 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.StrikeNeedsImprovementThreshold, &s.StrikeAtRiskThreshold,
 		&s.MGBaseline, &s.ZSBaseline,
 		&s.MGDefaultTime, &s.ZSDefaultTime,
-		&currentSeason, &s.SeasonStartDate,
 		&s.MGAnchorDate, &s.ZSScheduleMode,
 		&s.ZSWeekdays, &s.ZSAnchorDate, &s.ZSAnchorTime,
 	)
-	if currentSeason.Valid {
-		v := int(currentSeason.Int64)
-		s.CurrentSeason = &v
-	}
 
 	if err != nil {
 		http.Error(w, "Failed to load settings", http.StatusInternalServerError)
 		return
+	}
+
+	// Season fields are owned by the seasons table (Season Hub).
+	// Use the most recently started season whose start_date has passed — this keeps
+	// the schedule day counter incrementing through the off-season without resetting.
+	var seasonNum sql.NullInt64
+	var seasonStart sql.NullString
+	db.QueryRow(`SELECT season_number, start_date FROM seasons WHERE start_date <= date('now') ORDER BY start_date DESC LIMIT 1`).Scan(&seasonNum, &seasonStart)
+	if seasonNum.Valid {
+		v := int(seasonNum.Int64)
+		s.CurrentSeason = &v
+	}
+	if seasonStart.Valid {
+		s.SeasonStartDate = seasonStart.String
 	}
 
 	// Check if the GCP Vision credentials physically exist in the database
@@ -539,6 +546,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	isAdmin, _ := session.Values["is_admin"].(bool)
 
+	// Note: current_season and season_start_date are no longer editable here —
+	// they are derived from the seasons table (owned by Season Hub).
 	_, err := db.Exec(`UPDATE settings SET
 		schedule_message_template = ?,
 		daily_message_template = ?, power_tracking_enabled = ?, storm_timezones = ?,
@@ -549,7 +558,6 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		strike_needs_improvement_threshold = ?, strike_at_risk_threshold = ?,
 		mg_baseline = ?, zs_baseline = ?,
 		mg_default_time = ?, zs_default_time = ?,
-		current_season = ?, season_start_date = ?,
 		mg_anchor_date = ?, zs_schedule_mode = ?,
 		zs_weekdays = ?, zs_anchor_date = ?, zs_anchor_time = ?
 		WHERE id = 1`,
@@ -562,7 +570,6 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.StrikeNeedsImprovementThreshold, settings.StrikeAtRiskThreshold,
 		settings.MGBaseline, settings.ZSBaseline,
 		settings.MGDefaultTime, settings.ZSDefaultTime,
-		settings.CurrentSeason, settings.SeasonStartDate,
 		settings.MGAnchorDate, settings.ZSScheduleMode,
 		settings.ZSWeekdays, settings.ZSAnchorDate, settings.ZSAnchorTime,
 	)
