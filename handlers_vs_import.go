@@ -44,6 +44,30 @@ func resolveMemberAlias(tx *sql.Tx, providedName string, currentUserID int) (*Me
 	return nil, "none", sql.ErrNoRows
 }
 
+// resolveOCRPlayer resolves an OCRPlayer to a Member using the alias engine.
+// For ambiguous rows (Candidates non-nil), it tries each candidate split in order;
+// the first that resolves via the alias engine wins, and its score travels with it.
+// If no candidate resolves, it returns the heuristic fallback (candidates[0]) with
+// a nil Member so the caller can decide how to handle it (surface for manual review,
+// fall through to fuzzy matching, etc.).
+func resolveOCRPlayer(tx *sql.Tx, entry OCRPlayer, userID int) (name string, score int64, member *Member, matchType string) {
+	if len(entry.Candidates) == 0 {
+		m, mt, err := resolveMemberAlias(tx, entry.PlayerName, userID)
+		if err != nil {
+			return entry.PlayerName, entry.Score, nil, "none"
+		}
+		return entry.PlayerName, entry.Score, m, mt
+	}
+	for _, c := range entry.Candidates {
+		m, mt, err := resolveMemberAlias(tx, c.PlayerName, userID)
+		if err == nil && m != nil {
+			return c.PlayerName, c.Score, m, mt
+		}
+	}
+	// No candidate resolved — return heuristic fallback (smallest score / rightmost split).
+	return entry.Candidates[0].PlayerName, entry.Candidates[0].Score, nil, "none"
+}
+
 // commitCSVImport processes the final confirmed records from both CSV and OCR uploads
 func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")

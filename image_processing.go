@@ -15,15 +15,20 @@ import (
 	"google.golang.org/api/option"
 )
 
-// PlayerRecord represents a single player's parsed score from the OCR worker.
-type PlayerRecord struct {
-	PlayerName string `json:"player_name"`
-	Score      int64  `json:"score"`
+// OCRPlayer represents a single player's parsed score from the OCR worker.
+// When a player name ends in digits that run flush against the score, Vision API
+// may merge them into one token. In that case the worker enumerates every valid
+// comma-grouped split in Candidates (smallest score first). Candidates is nil /
+// absent when the name/score boundary is unambiguous.
+type OCRPlayer struct {
+	PlayerName string      `json:"player_name"`
+	Score      int64       `json:"score"`
+	Candidates []OCRPlayer `json:"candidates,omitempty"`
 }
 
 // CVWorkerResponse maps the categorized UI state (e.g., "monday", "power")
 // to the slice of extracted player records.
-type CVWorkerResponse map[string][]PlayerRecord
+type CVWorkerResponse map[string][]OCRPlayer
 
 // getDecryptedGCPKey retrieves and decrypts the service account JSON from the database.
 func getDecryptedGCPKey() ([]byte, error) {

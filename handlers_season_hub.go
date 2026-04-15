@@ -76,12 +76,13 @@ type ParticipationEntry struct {
 }
 
 type ContributionImportRow struct {
-	OriginalName  string  `json:"original_name"`
-	MemberID      int     `json:"member_id"`
-	MemberName    string  `json:"member_name"`
-	MemberRank    string  `json:"member_rank"`
-	MatchType     string  `json:"match_type"`
-	Points        int64   `json:"points"`
+	OriginalName string      `json:"original_name"`
+	MemberID     int         `json:"member_id"`
+	MemberName   string      `json:"member_name"`
+	MemberRank   string      `json:"member_rank"`
+	MatchType    string      `json:"match_type"`
+	Points       int64       `json:"points"`
+	Candidates   []OCRPlayer `json:"candidates,omitempty"` // populated for ambiguous unresolved rows
 }
 
 type SeasonReward struct {
@@ -1060,15 +1061,33 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "season_id is required", http.StatusBadRequest)
 		return
 	}
-	validCategories := map[string]bool{
-		"mutual_assistance": true,
-		"siege":             true,
-		"rare_soil_war":     true,
-		"defeat":            true,
+	// categoryColMap maps every valid OCR category key (base + granularity suffix) to
+	// its season_contributions column name.
+	// *_season keys always write to week_number=0 (the canonical season-end snapshot).
+	// *_weekly and *_daily keys use the week_number parameter supplied by the caller.
+	categoryColMap := map[string]string{
+		"mutual_assistance_daily":  "mutual_assistance",
+		"mutual_assistance_weekly": "mutual_assistance",
+		"mutual_assistance_season": "mutual_assistance",
+		"siege_daily":              "siege",
+		"siege_weekly":             "siege",
+		"siege_season":             "siege",
+		"rare_soil_war_daily":      "rare_soil_war",
+		"rare_soil_war_weekly":     "rare_soil_war",
+		"rare_soil_war_season":     "rare_soil_war",
+		"defeat_daily":             "defeat",
+		"defeat_weekly":            "defeat",
+		"defeat_season":            "defeat",
 	}
-	if !validCategories[category] {
-		http.Error(w, "category must be one of: mutual_assistance, siege, rare_soil_war, defeat", http.StatusBadRequest)
+	col, validCategory := categoryColMap[category]
+	if !validCategory {
+		http.Error(w, "invalid category", http.StatusBadRequest)
 		return
+	}
+	// Season-total screenshots always land in the week_number=0 slot regardless of
+	// whatever week_number was passed — 0 is the canonical ranking tie-breaker source.
+	if strings.HasSuffix(category, "_season") {
+		weekNumber = 0
 	}
 
 	s, err := loadSeasonByID(seasonID)
@@ -1132,12 +1151,19 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	unresolved := []ContributionImportRow{}
 
 	for _, rec := range records {
-		member, matchType, resolveErr := resolveMemberAlias(tx, rec.PlayerName, userID)
 		row := ContributionImportRow{
 			OriginalName: rec.PlayerName,
 			Points:       rec.Score,
 		}
-		if resolveErr != nil || member == nil {
+
+		resolvedName, resolvedScore, member, matchType := resolveOCRPlayer(tx, rec, userID)
+		_ = resolvedName // original name kept in row.OriginalName for display
+		row.Points = resolvedScore
+		if member == nil {
+			// Unresolved — surface candidates (if any) so the submitter can pick.
+			if len(rec.Candidates) > 0 {
+				row.Candidates = rec.Candidates
+			}
 			unresolved = append(unresolved, row)
 			continue
 		}
@@ -1162,13 +1188,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 
 	// Commit: upsert the specific category column for each matched member.
 	// week_number=0 is the season-end snapshot — the canonical tie-breaker source.
-	colMap := map[string]string{
-		"mutual_assistance": "mutual_assistance",
-		"siege":             "siege",
-		"rare_soil_war":     "rare_soil_war",
-		"defeat":            "defeat",
-	}
-	col := colMap[category]
+	// col is already resolved from categoryColMap above.
 
 	for _, row := range matched {
 		query := fmt.Sprintf(`

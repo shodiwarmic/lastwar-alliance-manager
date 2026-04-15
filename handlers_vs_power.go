@@ -196,7 +196,7 @@ func processVSPointsScreenshot(w http.ResponseWriter, r *http.Request) {
 
 	// We only care about the explicit day requested, or the first daily category returned
 	detectedDay := strings.ToLower(r.FormValue("day"))
-	var records []PlayerRecord
+	var records []OCRPlayer
 
 	if detectedDay != "" {
 		if !validDayColumns[detectedDay] {
@@ -250,41 +250,58 @@ func processVSPointsScreenshot(w http.ResponseWriter, r *http.Request) {
 	for _, record := range records {
 		var memberID int
 		var memberName string
-		err := tx.QueryRow("SELECT id, name FROM members WHERE LOWER(name) = LOWER(?)", record.PlayerName).Scan(&memberID, &memberName)
 
-		if err == sql.ErrNoRows {
-			rows, err := tx.Query("SELECT id, name FROM members")
-			if err != nil {
-				continue
+		// Candidate pre-pass: if the OCR worker flagged an ambiguous name/score merge,
+		// try the alias engine on each split before falling through to fuzzy matching.
+		if len(record.Candidates) > 0 {
+			if _, rScore, rMember, _ := resolveOCRPlayer(tx, record, 0); rMember != nil {
+				memberID = rMember.ID
+				memberName = rMember.Name
+				record.Score = rScore
+			} else {
+				// No alias match — use heuristic split for the lookup below.
+				record.PlayerName = record.Candidates[0].PlayerName
+				record.Score = record.Candidates[0].Score
 			}
+		}
 
-			bestMatch := ""
-			bestScore := 0
-			bestID := 0
+		if memberID == 0 {
+			err := tx.QueryRow("SELECT id, name FROM members WHERE LOWER(name) = LOWER(?)", record.PlayerName).Scan(&memberID, &memberName)
 
-			for rows.Next() {
-				var id int
-				var name string
-				if err := rows.Scan(&id, &name); err != nil {
+			if err == sql.ErrNoRows {
+				rows, err := tx.Query("SELECT id, name FROM members")
+				if err != nil {
 					continue
 				}
 
-				score := calculateSimilarity(record.PlayerName, name)
-				if score > bestScore {
-					bestScore = score
-					bestMatch = name
-					bestID = id
-				}
-			}
-			rows.Close()
+				bestMatch := ""
+				bestScore := 0
+				bestID := 0
 
-			if bestScore >= 70 {
-				memberID = bestID
-				memberName = bestMatch
-				log.Printf("Fuzzy matched '%s' to '%s' (similarity: %d%%)", record.PlayerName, bestMatch, bestScore)
-			} else {
-				notFoundMembers = append(notFoundMembers, record.PlayerName)
-				continue
+				for rows.Next() {
+					var id int
+					var name string
+					if err := rows.Scan(&id, &name); err != nil {
+						continue
+					}
+
+					score := calculateSimilarity(record.PlayerName, name)
+					if score > bestScore {
+						bestScore = score
+						bestMatch = name
+						bestID = id
+					}
+				}
+				rows.Close()
+
+				if bestScore >= 70 {
+					memberID = bestID
+					memberName = bestMatch
+					log.Printf("Fuzzy matched '%s' to '%s' (similarity: %d%%)", record.PlayerName, bestMatch, bestScore)
+				} else {
+					notFoundMembers = append(notFoundMembers, record.PlayerName)
+					continue
+				}
 			}
 		}
 
@@ -502,36 +519,50 @@ func processPowerScreenshot(w http.ResponseWriter, r *http.Request) {
 
 	for _, record := range records {
 		var memberID int
-		err := tx.QueryRow("SELECT id FROM members WHERE name = ?", record.PlayerName).Scan(&memberID)
 
-		if err != nil {
-			err = tx.QueryRow("SELECT id FROM members WHERE LOWER(name) = LOWER(?)", record.PlayerName).Scan(&memberID)
+		// Candidate pre-pass: if the OCR worker flagged an ambiguous name/score merge,
+		// try the alias engine on each split before falling through to fuzzy matching.
+		if len(record.Candidates) > 0 {
+			if _, rScore, rMember, _ := resolveOCRPlayer(tx, record, 0); rMember != nil {
+				memberID = rMember.ID
+				record.Score = rScore
+			} else {
+				record.PlayerName = record.Candidates[0].PlayerName
+				record.Score = record.Candidates[0].Score
+			}
 		}
 
-		if err != nil {
-			bestMatch := ""
-			bestMatchID := 0
-			bestScore := 0
-
-			for _, member := range allMembers {
-				score := calculateSimilarity(record.PlayerName, member.Name)
-				if score > bestScore {
-					bestScore = score
-					bestMatch = member.Name
-					bestMatchID = member.ID
-				}
+		if memberID == 0 {
+			err := tx.QueryRow("SELECT id FROM members WHERE name = ?", record.PlayerName).Scan(&memberID)
+			if err != nil {
+				err = tx.QueryRow("SELECT id FROM members WHERE LOWER(name) = LOWER(?)", record.PlayerName).Scan(&memberID)
 			}
 
-			if bestMatchID > 0 && bestScore >= 50 {
-				memberID = bestMatchID
-			} else {
-				failedCount++
-				if bestMatch != "" {
-					errors = append(errors, fmt.Sprintf("Member '%s' not found (closest: '%s' at %d%%, need 50%%+)", record.PlayerName, bestMatch, bestScore))
-				} else {
-					errors = append(errors, fmt.Sprintf("Member '%s' not found (no members in database)", record.PlayerName))
+			if err != nil {
+				bestMatch := ""
+				bestMatchID := 0
+				bestScore := 0
+
+				for _, member := range allMembers {
+					score := calculateSimilarity(record.PlayerName, member.Name)
+					if score > bestScore {
+						bestScore = score
+						bestMatch = member.Name
+						bestMatchID = member.ID
+					}
 				}
-				continue
+
+				if bestMatchID > 0 && bestScore >= 50 {
+					memberID = bestMatchID
+				} else {
+					failedCount++
+					if bestMatch != "" {
+						errors = append(errors, fmt.Sprintf("Member '%s' not found (closest: '%s' at %d%%, need 50%%+)", record.PlayerName, bestMatch, bestScore))
+					} else {
+						errors = append(errors, fmt.Sprintf("Member '%s' not found (no members in database)", record.PlayerName))
+					}
+					continue
+				}
 			}
 		}
 
@@ -655,28 +686,30 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, record := range records {
+			_, resolvedScore, member, matchType := resolveOCRPlayer(tx, record, currentUserID)
+
 			row, exists := payloadMap[record.PlayerName]
 			if !exists {
 				row = &VSImportRow{
 					OriginalName:  record.PlayerName,
 					UpdatedFields: make(map[string]int),
 				}
-
-				// Run through the newly updated Alias Engine
-				member, matchType, err := resolveMemberAlias(tx, record.PlayerName, currentUserID)
-				if err != nil {
-					row.MatchType = "unresolved"
-				} else {
+				if member != nil {
 					row.MatchedMember = member
 					row.MatchType = matchType
+				} else {
+					row.MatchType = "unresolved"
+					if len(record.Candidates) > 0 {
+						row.Candidates = record.Candidates
+					}
 				}
 				payloadMap[record.PlayerName] = row
 			}
 
 			if activeCategory == "power" {
-				row.UpdatedFields["power"] = int(record.Score)
+				row.UpdatedFields["power"] = int(resolvedScore)
 			} else {
-				row.UpdatedFields[activeCategory] = int(record.Score)
+				row.UpdatedFields[activeCategory] = int(resolvedScore)
 			}
 		}
 	}

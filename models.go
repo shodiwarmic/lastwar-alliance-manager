@@ -656,6 +656,7 @@ type VSImportRow struct {
 	Total         *int           `json:"total,omitempty"`
 	CalculatedSat bool           `json:"calculated_sat"`
 	Error         string         `json:"error,omitempty"`
+	Candidates    []OCRPlayer    `json:"candidates,omitempty"` // ambiguous name/score splits; present on unresolved rows only
 }
 
 type NewAliasMapping struct {
