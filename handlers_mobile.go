@@ -15,25 +15,71 @@ var validMobileCategories = map[string]bool{
 	"thursday": true, "friday": true, "saturday": true, "power": true,
 }
 
-// GET /api/mobile/members
-// Returns active member list for client-side name resolution.
-func getMobileMembers(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id, name, rank FROM members WHERE rank != 'EX' ORDER BY name ASC")
+// mobileRosterQuerier is the subset of *sql.DB / *sql.Tx that
+// loadMobileRoster needs, so the helper works against both.
+type mobileRosterQuerier interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
+// loadMobileRoster returns active members with the aliases the given user is
+// allowed to see (their own personals + all global + all OCR aliases).
+// It mirrors the Exact → Personal → Global → OCR hierarchy described in
+// lastwar-screen-definitions/README.md so the scanner's RosterAliasResolver
+// can run the same lookup on-device.
+func loadMobileRoster(q mobileRosterQuerier, userID int) ([]MobileMember, error) {
+	rows, err := q.Query(`
+		SELECT m.id, m.name, m.rank, a.alias, a.category
+		FROM members m
+		LEFT JOIN member_aliases a
+		  ON a.member_id = m.id
+		  AND (a.user_id IS NULL OR a.user_id = ?)
+		WHERE m.rank != 'EX'
+		ORDER BY m.name ASC, a.category ASC, a.alias ASC
+	`, userID)
 	if err != nil {
-		slog.Error("getMobileMembers: query failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	defer rows.Close()
 
-	members := []Member{}
+	byID := map[int]*MobileMember{}
+	order := []int{}
 	for rows.Next() {
-		var m Member
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank); err == nil {
-			members = append(members, m)
+		var (
+			id            int
+			name, rank    string
+			alias, catSql sql.NullString
+		)
+		if err := rows.Scan(&id, &name, &rank, &alias, &catSql); err != nil {
+			return nil, err
+		}
+		mm, ok := byID[id]
+		if !ok {
+			mm = &MobileMember{ID: id, Name: name, Rank: rank, Aliases: []MobileAlias{}}
+			byID[id] = mm
+			order = append(order, id)
+		}
+		if alias.Valid && catSql.Valid {
+			mm.Aliases = append(mm.Aliases, MobileAlias{Alias: alias.String, Category: catSql.String})
 		}
 	}
+	out := make([]MobileMember, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byID[id])
+	}
+	return out, nil
+}
 
+// GET /api/mobile/members
+// Returns active member list with aliases scoped to the current user, so the
+// scanner's RosterAliasResolver can run Exact → Personal → Global → OCR locally.
+func getMobileMembers(w http.ResponseWriter, r *http.Request) {
+	claims := getMobileClaims(r)
+	members, err := loadMobileRoster(db, claims.UserID)
+	if err != nil {
+		slog.Error("getMobileMembers: roster load failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(members)
 }
@@ -58,21 +104,15 @@ func mobilePreview(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// Fetch all active members for the picker UI
-	memberRows, err := tx.Query("SELECT id, name, rank FROM members WHERE rank != 'EX' ORDER BY name ASC")
+	// Fetch all active members (with aliases scoped to the current user) for
+	// the picker UI. Same shape as /api/mobile/members so the scanner can
+	// reuse the cached roster — see RosterAliasResolver on the device.
+	allMembers, err := loadMobileRoster(tx, claims.UserID)
 	if err != nil {
-		slog.Error("mobilePreview: members query failed", "error", err)
+		slog.Error("mobilePreview: roster load failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	allMembers := []Member{}
-	for memberRows.Next() {
-		var m Member
-		if err := memberRows.Scan(&m.ID, &m.Name, &m.Rank); err == nil {
-			allMembers = append(allMembers, m)
-		}
-	}
-	memberRows.Close()
 
 	resp := MobilePreviewResponse{
 		WeekDate:   req.WeekDate,
