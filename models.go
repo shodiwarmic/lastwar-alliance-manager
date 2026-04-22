@@ -689,6 +689,23 @@ type MobileScanEntry struct {
 	Category string `json:"category"`
 }
 
+// MobileAlias is one row from member_aliases, scoped to what the current
+// mobile user is allowed to see (their own personals + all global + all OCR).
+type MobileAlias struct {
+	Alias    string `json:"alias"`
+	Category string `json:"category"`
+}
+
+// MobileMember is the roster row served to the mobile scanner so that its
+// RosterAliasResolver can run the same Exact → Personal → Global → OCR
+// lookup that the backend does in resolveMemberAlias.
+type MobileMember struct {
+	ID      int           `json:"id"`
+	Name    string        `json:"name"`
+	Rank    string        `json:"rank"`
+	Aliases []MobileAlias `json:"aliases"`
+}
+
 type MobilePreviewRequest struct {
 	WeekDate string            `json:"week_date"`
 	Entries  []MobileScanEntry `json:"entries"`
@@ -706,7 +723,7 @@ type MobilePreviewResponse struct {
 	WeekDate        string               `json:"week_date"`
 	Matched         []MobilePreviewMatch `json:"matched"`
 	Unresolved      []MobilePreviewMatch `json:"unresolved"`
-	AllMembers      []Member             `json:"all_members"`
+	AllMembers      []MobileMember       `json:"all_members"`
 	TotalSubmitted  int                  `json:"total_submitted"`
 	TotalMatched    int                  `json:"total_matched"`
 	TotalUnresolved int                  `json:"total_unresolved"`
