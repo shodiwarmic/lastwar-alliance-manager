@@ -49,6 +49,53 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
+## Mobile API (`/api/mobile/*`)
+
+Four endpoints serve the Android scanner (`lastwar-android-scanner` repo). All routes are wrapped in `mobileBearerMiddleware` — JWT bearer token in the `Authorization` header, claims fetched via `getMobileClaims(r)` inside handlers.
+
+| Method | Path | Handler | Purpose |
+|---|---|---|---|
+| POST | `/api/mobile/login` | `mobileLogin` | Issue JWT |
+| GET | `/api/mobile/members` | `getMobileMembers` | Roster + aliases for client-side resolution |
+| POST | `/api/mobile/preview` | `mobilePreview` | Resolve scanned entries to members; returns matched/unresolved split |
+| POST | `/api/mobile/commit` | `mobileCommit` | Persist confirmed scan data + optional alias mappings |
+
+### Roster shape (`MobileMember` — see `models.go`)
+
+Both `getMobileMembers` and `mobilePreview` return members in this shape:
+
+```json
+{
+  "id": 42,
+  "name": "ShodiWarmic",
+  "rank": "R5",
+  "aliases": [
+    {"alias": "ShodiW", "category": "personal"},
+    {"alias": "Shodi",  "category": "global"}
+  ]
+}
+```
+
+`aliases` is **scoped to the requesting user**: each entry is either the current user's `personal` alias, or any user's `global` / `ocr` alias. Other users' personal aliases are filtered out by the `LEFT JOIN` clause in `loadMobileRoster`:
+
+```sql
+LEFT JOIN member_aliases a
+  ON a.member_id = m.id
+  AND (a.user_id IS NULL OR a.user_id = ?)  -- ? = current user
+```
+
+If you add a new alias category that should be visible to mobile clients, update `loadMobileRoster` and the `MobileAlias` struct accordingly. Don't widen the `WHERE` clause to include other users' personals — the scanner uses these for on-device name disambiguation and including personals from other users would leak private mappings.
+
+### Wire format for `/api/mobile/preview` entries
+
+Scanner → backend payload is `{name, score, category}` per entry — **no `candidates[]` array**. The scanner runs its own crash-token disambiguation (using the cached roster + the same Exact → Personal → Global → OCR alias hierarchy as `resolveMemberAlias`) before sending. The backend's `resolveMemberAlias` runs once per received name as a final safety net, but cannot fix a wrong score because by the time the entry hits the API only one `(name, score)` pair survives.
+
+This intentionally differs from the OCR-service path, which sends `candidates[]` because it has no roster access. Both paths converge on the same backend disambiguation rules — see the "Name resolution" section of `lastwar-screen-definitions/README.md` for the canonical algorithm both implementations must agree on.
+
+### Activity logging
+
+`mobileCommit` already calls `logActivity` for each VS / power record write (`vs_points`, `power_records` entity types — same as the web import path). New mobile endpoints that write data must do the same.
+
 ## Known gotchas
 
 ### CSP `'unsafe-inline'` must be removed as inline config blocks are migrated
