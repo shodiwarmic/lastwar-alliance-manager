@@ -12,9 +12,15 @@
     <div style="font-size: 64px; margin-bottom: 20px;">🔌</div>
     <h2>OCR Pipelines Disabled</h2>
     <p style="color: var(--text-muted); line-height: 1.6; font-size: 16px;">
-        The computer vision pipeline is currently offline. An administrator must configure <b>both</b> the Google Cloud Vision credentials and the CV Worker routing URL in the Security Settings to enable automated screenshot processing.
+        The computer vision pipeline is currently offline. An administrator must configure {{if eq .OCRBackendMode "local"}}the local OCR sidecar URL in the Security Settings{{else}}<b>both</b> the Google Cloud Vision credentials and the CV Worker routing URL in the Security Settings{{end}} to enable automated screenshot processing.
     </p>
 </div>
+
+{{if eq .OCRBackendMode "local"}}
+<div id="local-ocr-notice" style="max-width: 800px; margin: 0 auto 20px; padding: 16px 20px; background: var(--color-info-bg); color: var(--color-info); border-radius: 8px; line-height: 1.5;">
+    <b>🛡️ Local OCR mode</b> — Screenshots are processed entirely on this machine via the PaddleOCR sidecar. No API costs and no images leave the network. <b>You must select the screen + day for each batch</b> below; auto-detection isn't available in local mode because the local engine can't reliably read stylised game-UI titles.
+</div>
+{{end}}
 
 <div class="upload-container" id="main-upload-container">
     <div class="upload-section">
@@ -41,19 +47,38 @@
             
             <div id="category-selector" style="flex: 1; padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
                 <label for="force-category" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--text-primary);">Image Category:</label>
-                <select id="force-category" class="form-input" style="width: 100%;">
+                <select id="force-category" class="form-input" style="width: 100%;" data-backend="{{.OCRBackendMode}}">
+                    {{if ne .OCRBackendMode "local"}}
                     <option value="auto">🤖 Auto-Detect (Smart Sorting)</option>
                     <option value="total">📊 Force: Weekly Total (Auto-Calculates Sat)</option>
-                    <option value="power">⚡ Force: Power Rankings</option>
-                    <option disabled>──────────</option>
-                    <option value="monday">📅 Force: Monday</option>
-                    <option value="tuesday">📅 Force: Tuesday</option>
-                    <option value="wednesday">📅 Force: Wednesday</option>
-                    <option value="thursday">📅 Force: Thursday</option>
-                    <option value="friday">📅 Force: Friday</option>
-                    <option value="saturday">📅 Force: Saturday</option>
+                    {{end}}
+                    <option value="power">⚡ Power Rankings</option>
+                    <option value="kills">⚔️ Strength — Kills</option>
+                    <option value="donation_daily">🎁 Strength — Donation (Daily)</option>
+                    <option value="donation_weekly">🎁 Strength — Donation (Weekly)</option>
+                    <option disabled>───── Daily VS ─────</option>
+                    <option value="monday">📅 Monday</option>
+                    <option value="tuesday">📅 Tuesday</option>
+                    <option value="wednesday">📅 Wednesday</option>
+                    <option value="thursday">📅 Thursday</option>
+                    <option value="friday">📅 Friday</option>
+                    <option value="saturday">📅 Saturday</option>
+                    <option value="weekly">📊 Weekly Rank Total</option>
+                    <option disabled>───── Alliance Contribution ─────</option>
+                    <option value="mutual_assistance_daily">🤝 Mutual Assistance — Daily</option>
+                    <option value="mutual_assistance_weekly">🤝 Mutual Assistance — Weekly</option>
+                    <option value="mutual_assistance_season">🤝 Mutual Assistance — Season Total</option>
+                    <option value="siege_daily">🏰 Siege — Daily</option>
+                    <option value="siege_weekly">🏰 Siege — Weekly</option>
+                    <option value="siege_season">🏰 Siege — Season Total</option>
+                    <option value="rare_soil_war_daily">🌿 Rare Soil War — Daily</option>
+                    <option value="rare_soil_war_weekly">🌿 Rare Soil War — Weekly</option>
+                    <option value="rare_soil_war_season">🌿 Rare Soil War — Season Total</option>
+                    <option value="defeat_daily">💀 Defeat — Daily</option>
+                    <option value="defeat_weekly">💀 Defeat — Weekly</option>
+                    <option value="defeat_season">💀 Defeat — Season Total</option>
                 </select>
-                <p class="help-text" style="margin-top: 8px; font-size: 0.85em;">Bypass auto-detection for specific uploads.</p>
+                <p class="help-text" style="margin-top: 8px; font-size: 0.85em;">{{if eq .OCRBackendMode "local"}}<b>Required.</b> Pick the exact screen + tab the screenshots show.{{else}}Bypass auto-detection for specific uploads.{{end}}</p>
             </div>
         </div>
         

@@ -53,12 +53,25 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCP)
 	data.HasGCPCredentials = hasGCP
 
-	// NEW: Check if the CV Worker URL is configured
-	var cvWorkerURL string
-	db.QueryRow("SELECT COALESCE(cv_worker_url, '') FROM settings WHERE id = 1").Scan(&cvWorkerURL)
+	// NEW: Check if the CV Worker URL is configured + which OCR backend is active
+	var cvWorkerURL, ocrMode string
+	db.QueryRow(
+		"SELECT COALESCE(cv_worker_url, ''), COALESCE(ocr_backend_mode, 'cloud') FROM settings WHERE id = 1",
+	).Scan(&cvWorkerURL, &ocrMode)
 
-	// The pipeline is only ready if BOTH the key and the routing URL exist
-	data.OCRPipelineReady = hasGCP && cvWorkerURL != ""
+	if ocrMode != string(OCRBackendLocal) {
+		ocrMode = string(OCRBackendCloud)
+	}
+	data.OCRBackendMode = ocrMode
+
+	// The pipeline is ready when:
+	//   - cloud mode: GCP credentials AND a worker URL are configured
+	//   - local mode: just a worker URL (the local sidecar URL); no GCP needed
+	if ocrMode == string(OCRBackendLocal) {
+		data.OCRPipelineReady = cvWorkerURL != ""
+	} else {
+		data.OCRPipelineReady = hasGCP && cvWorkerURL != ""
+	}
 
 	return data
 }

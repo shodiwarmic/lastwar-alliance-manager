@@ -240,6 +240,11 @@ type Settings struct {
 	PwdHistoryCount              int    `json:"pwd_history_count"`
 	PwdValidityDays              int    `json:"pwd_validity_days"`
 	CVWorkerURL                  string `json:"cv_worker_url"`
+	// OCRBackendMode = "cloud" (default — Google Cloud Vision via OIDC) or
+	// "local" (PaddleOCR sidecar via plain HTTP). Set during install/update
+	// when the operator opts into the local sidecar. See
+	// image_processing.go and install.sh for the deployment plumbing.
+	OCRBackendMode               string `json:"ocr_backend_mode"`
 	TrainFreeDailyLimit          int    `json:"train_free_daily_limit"`
 	TrainPurchasedDailyLimit     int    `json:"train_purchased_daily_limit"`
 	AllianceMaxMembers           int    `json:"alliance_max_members"`
@@ -614,6 +619,11 @@ type PageData struct {
 	OCRPipelineReady  bool
 	VSMinimumPoints   int
 	MemberID          int
+	// OCRBackendMode is "cloud" (default — Cloud Vision auto-detect) or
+	// "local" (PaddleOCR sidecar; user picks scene per batch). Templates
+	// use this to swap help text and conditionally disable the
+	// auto-detect option in the upload page.
+	OCRBackendMode    string
 }
 
 // DashboardCard represents a single card in the dashboard with its visibility state.

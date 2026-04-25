@@ -49,6 +49,44 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
+## OCR backend (cloud vs local)
+
+Two backends ship in this repo. The active one is stored in
+`settings.ocr_backend_mode` (added in migration 032) and surfaced to
+templates via `PageData.OCRBackendMode`.
+
+| Mode | When to use | Picks the screen | Requires |
+|---|---|---|---|
+| `cloud` (default) | Hosted deployment | Auto-detects | GCP credentials in DB + Vision API enabled |
+| `local` | Self-hosted, no Cloud Vision | User picks per batch | The `lastwar-ocr-service:local` Docker image (PaddleOCR sidecar) |
+
+`install.sh` and `update.sh` prompt the operator to opt in to local mode
+on first install (or once on update for pre-existing installs). When
+local is selected, both scripts:
+1. Append `OCR_BACKEND_MODE=local` and `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml` to `.env`.
+2. Set `settings.ocr_backend_mode = 'local'` and default `cv_worker_url = 'http://ocr-local:8080'` in the DB.
+3. The next `docker compose up -d` brings up the `ocr-local` sidecar service defined in `docker-compose.local-ocr.yml`.
+
+Handlers should call `ProcessImages(ctx, files, category)` (in
+`image_processing.go`) which dispatches to either `ProcessImagesViaWorker`
+(cloud, OIDC-authenticated) or `ProcessImagesViaLocalWorker` (plain HTTP)
+based on `LoadOCRBackendConfig()`. Don't hand-roll the dispatch in new
+handlers.
+
+`category` is required for local mode and ignored for cloud mode.
+Allowed values are the same as the OCR service's `VALID_CATEGORIES`
+list — `monday`–`saturday`, `weekly`, `power`, `kills`,
+`donation_daily`, `donation_weekly`, plus the 12 `<category>_<period>`
+keys for Alliance Contribution. The upload UI's "Image Category"
+dropdown enumerates them.
+
+Why local mode requires manual selection: PaddleOCR's English model
+can't reliably read Last War's stylised header text
+(`STRENGTH RANKING`, `ALLIANCE CONTRIBUTION RANKING`), so the page-
+identification stage isn't trustworthy. Body OCR (player rows, scores,
+tab labels) is comparable to Cloud Vision; that's enough for extraction
+once the user supplies the screen + tab.
+
 ## Mobile API (`/api/mobile/*`)
 
 Four endpoints serve the Android scanner (`lastwar-android-scanner` repo). All routes are wrapped in `mobileBearerMiddleware` — JWT bearer token in the `Authorization` header, claims fetched via `getMobileClaims(r)` inside handlers.

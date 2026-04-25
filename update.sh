@@ -201,6 +201,31 @@ EOF
     fi
 fi
 
+# Existing installs that pre-date the local-OCR option won't have an
+# OCR_BACKEND_MODE entry in .env yet. Offer the upgrade prompt once.
+if [ -f .env ] && ! grep -q "^OCR_BACKEND_MODE=" .env; then
+    echo ""
+    echo -e "${YELLOW}New: optional local OCR sidecar${NC}"
+    echo "This installation predates the OCR-backend setting. You can stay on Cloud"
+    echo "Vision (current behaviour, requires GCP credentials, per-image API cost)"
+    echo "or switch to a fully-local PaddleOCR sidecar (no API cost, but you pick"
+    echo "the screen + day per upload because PaddleOCR can't reliably auto-detect"
+    echo "the stylised game-UI titles)."
+    echo ""
+    read -p "Enable the local OCR sidecar? [y/N]: " ENABLE_LOCAL
+    if [[ "$ENABLE_LOCAL" =~ ^[Yy]$ ]]; then
+        echo "OCR_BACKEND_MODE=local" >> .env
+        echo "COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml" >> .env
+        sudo sqlite3 ./data/alliance.db \
+            "UPDATE settings SET ocr_backend_mode = 'local' WHERE id = 1;" 2>/dev/null || true
+        sudo sqlite3 ./data/alliance.db \
+            "UPDATE settings SET cv_worker_url = 'http://ocr-local:8080' WHERE id = 1 AND COALESCE(cv_worker_url, '') = '';" 2>/dev/null || true
+        echo -e "${GREEN}Local OCR sidecar enabled — sidecar image will pull on the next compose step.${NC}"
+    else
+        echo "OCR_BACKEND_MODE=cloud" >> .env
+    fi
+fi
+
 echo -e "${YELLOW}[4/5] Building and starting Docker containers...${NC}"
 sudo docker compose pull
 sudo docker compose build

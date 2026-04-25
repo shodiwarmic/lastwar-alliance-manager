@@ -1,0 +1,50 @@
+# docker-compose.local-ocr.yml
+#
+# Optional sidecar that runs the local PaddleOCR OCR backend. Activated
+# during install/update when the operator opts in to local OCR mode.
+# Merge with the main compose file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local-ocr.yml up -d
+#
+# (install.sh / update.sh write a marker into .env so the alliance-manager
+# entrypoint knows to use this combined invocation automatically.)
+#
+# Trade-offs vs the default cloud (Google Cloud Vision) backend:
+#   - No per-image API cost; nothing leaves the local network.
+#   - First scan downloads ~250MB of model weights into the
+#     paddleocr-models named volume below.
+#   - PaddleOCR's stylised-header read isn't reliable, so the upload UI
+#     requires the user to pick the screen + day per batch (auto-detect
+#     is hidden when ocr_backend_mode=local).
+services:
+  alliance-manager:
+    environment:
+      # Tells the alliance-manager UI to render manual-mode pickers and
+      # disable auto-detect.  Settings.ocr_backend_mode in the database
+      # is the persistent source of truth — install.sh sets it on first
+      # provision.  The env var is a hint for templates that render
+      # before the database is queried (e.g. the missing-credentials
+      # banner on the upload page).
+      - OCR_BACKEND_HINT=local
+
+  ocr-local:
+    image: ghcr.io/shodiwarmic/lastwar-ocr-service:local
+    container_name: lastwar-ocr-local
+    restart: unless-stopped
+    environment:
+      - OCR_ENGINE=paddleocr
+      # Set this to a country / locale code to swap PaddleOCR's
+      # recognition model — e.g. "ch" for Chinese-+-Latin, "korean", etc.
+      # Defaults to English-only for the smallest download / fastest infer.
+      - PADDLEOCR_LANG=en
+    volumes:
+      # Persist downloaded models across container restarts so we don't
+      # re-download ~250MB on every recreate.
+      - paddleocr-models:/home/appuser/.paddlex
+    # Internal-only — the alliance-manager points at this via
+    # cv_worker_url=http://ocr-local:8080 in the settings table.
+    expose:
+      - "8080"
+
+volumes:
+  paddleocr-models:

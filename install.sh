@@ -207,9 +207,54 @@ EOF
     sudo systemctl restart nginx
 fi
 
+echo ""
+echo -e "${YELLOW}OCR backend selection${NC}"
+echo "Two options for the OCR pipeline that turns screenshots into player rows:"
+echo ""
+echo "  1) Cloud  — Google Cloud Vision."
+echo "              Auto-detects which screen each image is, mixes them in one upload."
+echo "              Requires a Google Cloud project + Vision API key (admin sets it later)."
+echo "              Per-image API cost (~\$0.0015) but zero local CPU."
+echo ""
+echo "  2) Local  — PaddleOCR sidecar container running on this machine."
+echo "              No API costs, nothing leaves the network."
+echo "              You select the screen + day in the upload UI per batch (auto-detect"
+echo "              isn't available because PaddleOCR can't reliably read stylised"
+echo "              game-UI titles)."
+echo "              Sidecar image is ~2GB and a first scan downloads ~250MB of model weights."
+echo ""
+read -p "Enter choice [1-2] (default: 1): " OCR_CHOICE
+OCR_CHOICE=${OCR_CHOICE:-1}
+
+if [ "$OCR_CHOICE" = "2" ]; then
+    OCR_BACKEND_MODE=local
+    echo -e "${GREEN}Local OCR sidecar enabled.${NC}"
+    echo "OCR_BACKEND_MODE=local" >> .env
+    echo "COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml" >> .env
+else
+    OCR_BACKEND_MODE=cloud
+    echo "OCR_BACKEND_MODE=cloud" >> .env
+fi
+echo ""
+
 echo -e "${GREEN}[6/6] Pulling and starting Docker containers...${NC}"
 sudo docker compose pull
 sudo docker compose up -d
+
+# Persist the operator's OCR-backend choice into the database so the
+# alliance-manager UI renders the correct upload page from the very first
+# request (templates query settings.ocr_backend_mode at render time).
+# Done after `up -d` so the migration that creates the column has run.
+echo "Setting OCR backend mode to '$OCR_BACKEND_MODE' in settings table..."
+sudo sqlite3 "$APP_DIR/data/alliance.db" "UPDATE settings SET ocr_backend_mode = '$OCR_BACKEND_MODE' WHERE id = 1;" || \
+    echo -e "${YELLOW}(warning) couldn't update ocr_backend_mode in settings — UI will still default to 'cloud' until an admin sets it.${NC}"
+
+if [ "$OCR_BACKEND_MODE" = "local" ]; then
+    # Default the local sidecar URL so the operator doesn't have to type it
+    # in the admin Security panel. Internal docker-network hostname.
+    sudo sqlite3 "$APP_DIR/data/alliance.db" \
+        "UPDATE settings SET cv_worker_url = 'http://ocr-local:8080' WHERE id = 1 AND COALESCE(cv_worker_url, '') = '';" || true
+fi
 
 echo "Setting up daily backups..."
 sudo tee /usr/local/bin/backup-lastwar.sh > /dev/null <<EOF
