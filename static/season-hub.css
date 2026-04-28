@@ -72,28 +72,16 @@
     transition: background 0.15s;
 }
 
-#season-hub-page .sortable-table th[data-sort]:hover {
-    background: #5568d3;
+.sortable-table th[data-sort]:hover {
+    filter: brightness(0.88);
 }
 
 .sortable-table th.sort-asc::after  { content: " ▲"; font-size: 0.75em; opacity: 0.85; }
 .sortable-table th.sort-desc::after { content: " ▼"; font-size: 0.75em; opacity: 0.85; }
 
-/* ── Tab toolbar ──────────────────────────────────────────────────────── */
-.tab-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-    flex-wrap: wrap;
-}
+/* .tab-toolbar and .status-msg are defined in styles.css (global utilities) */
 
 .tab-count {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-}
-
-.status-msg {
     font-size: 0.85rem;
     color: var(--text-muted);
 }
@@ -108,7 +96,7 @@
 }
 
 /* ── Tables ───────────────────────────────────────────────────────────── */
-#season-hub-page .data-table {
+.data-table {
     width: 100%;
     border-collapse: collapse;
     border-radius: 8px;
@@ -116,11 +104,11 @@
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
 
-#season-hub-page .data-table thead tr {
+.data-table thead tr {
     background: var(--color-primary);
 }
 
-#season-hub-page .data-table th {
+.data-table th {
     color: #fff;
     padding: 11px 14px;
     text-align: left;
@@ -129,7 +117,7 @@
     white-space: nowrap;
 }
 
-#season-hub-page .data-table td {
+.data-table td {
     padding: 9px 14px;
     border-bottom: 1px solid var(--border-color);
     vertical-align: middle;
@@ -137,16 +125,16 @@
     color: var(--text-primary);
 }
 
-#season-hub-page .data-table tbody tr:last-child td {
+.data-table tbody tr:last-child td {
     border-bottom: none;
 }
 
-#season-hub-page .data-table tbody tr:hover {
+.data-table tbody tr:hover {
     background: var(--bg-secondary);
 }
 
 /* loading / empty state row */
-#season-hub-page .data-table .loading-msg {
+.data-table .loading-msg {
     text-align: center;
     color: var(--text-muted);
     padding: 20px;

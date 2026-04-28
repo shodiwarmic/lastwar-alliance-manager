@@ -124,8 +124,7 @@ function setupReactiveSearch() {
                 const strong = document.createElement('strong');
                 strong.textContent = member.name;
                 const badge = document.createElement('span');
-                badge.className = `rank-badge rank-${member.rank.toLowerCase()}`;
-                badge.style.fontSize = '0.75em';
+                badge.className = `member-rank rank-${member.rank}`;
                 badge.textContent = member.rank;
                 div.append(strong, ' ', badge);
 
@@ -526,7 +525,7 @@ function renderGroupedView(recs, container) {
         nameSpan.className = 'member-name';
         nameSpan.textContent = group.member.name;
         const rankBadge = document.createElement('span');
-        rankBadge.className = `rank-badge rank-${group.member.rank.toLowerCase()}`;
+        rankBadge.className = `member-rank rank-${group.member.rank}`;
         rankBadge.textContent = group.member.rank;
         const countSpan = document.createElement('span');
         countSpan.className = 'dyno-count';
@@ -578,7 +577,7 @@ function createDynoCard(rec, compact = false) {
         nameSpan.className = 'member-name';
         nameSpan.textContent = rec.member_name;
         const rankBadge = document.createElement('span');
-        rankBadge.className = `rank-badge rank-${rec.member_rank.toLowerCase()}`;
+        rankBadge.className = `member-rank rank-${rec.member_rank}`;
         rankBadge.textContent = rec.member_rank;
         memberInfo.append(nameSpan, rankBadge);
         recHeader.appendChild(memberInfo);

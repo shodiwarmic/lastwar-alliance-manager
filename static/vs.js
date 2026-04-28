@@ -133,8 +133,8 @@ function buildVSRow(member) {
     nameSpan.className = 'member-name';
     nameSpan.textContent = member.name;
     const rankSpan = document.createElement('span');
-    rankSpan.className = 'member-rank';
-    rankSpan.textContent = `(${member.rank})`;
+    rankSpan.className = `member-rank rank-${member.rank}`;
+    rankSpan.textContent = member.rank;
     tdName.append(nameSpan, ' ', rankSpan);
     tr.appendChild(tdName);
 

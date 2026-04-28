@@ -31,7 +31,11 @@ function memberList(members, valueFormatter) {
         const li = document.createElement('li');
         const nameSpan = document.createElement('span');
         nameSpan.className = 'dash-list-name';
-        nameSpan.textContent = m.name + ' (' + m.rank + ')';
+        nameSpan.textContent = m.name + ' ';
+        const rankChip = document.createElement('span');
+        rankChip.className = `member-rank rank-${m.rank}`;
+        rankChip.textContent = m.rank;
+        nameSpan.appendChild(rankChip);
         const valSpan = document.createElement('span');
         valSpan.className = 'dash-list-value';
         valSpan.textContent = valueFormatter(m.value);

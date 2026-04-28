@@ -98,7 +98,7 @@
 .dash-stat-value {
     font-size: 1.4rem;
     font-weight: 700;
-    color: var(--accent-color, #667eea);
+    color: var(--color-primary);
     line-height: 1.2;
 }
 
@@ -148,7 +148,7 @@
 }
 
 .dash-card-error {
-    color: var(--danger-color, #e53e3e);
+    color: var(--color-danger);
 }
 
 .dash-section-label {

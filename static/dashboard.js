@@ -260,7 +260,10 @@ function renderLeaderFlags(card, members, vsRows) {
     const list = el('ul', { className: 'dash-list' });
     below.forEach(r => {
         const li = el('li');
-        li.appendChild(el('span', { className: 'dash-list-name', textContent: r.name + ' (' + r.rank + ')' }));
+        li.appendChild(el('span', { className: 'dash-list-name' },
+            r.name + ' ',
+            el('span', { className: `member-rank rank-${r.rank}` }, r.rank)
+        ));
         li.appendChild(el('span', { className: 'dash-list-value', textContent: fmtNumber(r.total) }));
         list.appendChild(li);
     });
@@ -281,7 +284,10 @@ function renderAccountability(card, data) {
         const list = el('ul', { className: 'dash-list' });
         data.top_at_risk.forEach(m => {
             const li = el('li');
-            li.appendChild(el('span', { className: 'dash-list-name', textContent: m.name + ' (' + m.rank + ')' }));
+            li.appendChild(el('span', { className: 'dash-list-name' },
+                m.name + ' ',
+                el('span', { className: `member-rank rank-${m.rank}` }, m.rank)
+            ));
             li.appendChild(el('span', { className: 'dash-list-value', textContent: m.active_strikes + ' strike' + (m.active_strikes !== 1 ? 's' : '') }));
             list.appendChild(li);
         });

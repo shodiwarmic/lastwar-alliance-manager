@@ -12,7 +12,7 @@
 
 .choices.is-focused .choices__inner,
 .choices.is-open .choices__inner {
-    border-color: #667eea;
+    border-color: var(--color-primary);
     outline: none;
 }
 
@@ -29,14 +29,14 @@
 .choices__list--dropdown,
 .choices__list[aria-expanded] {
     background: var(--input-bg);
-    border: 2px solid #667eea;
+    border: 2px solid var(--color-primary);
     border-top: none;
     border-radius: 0 0 6px 6px;
     z-index: 1000;
 }
 
-/* Search input inside dropdown */
-.choices__input {
+/* Search input inside dropdown — match default specificity (.choices[data-type] .choices__input = 0-3-0) */
+.choices[data-type] .choices__input {
     background: var(--input-bg);
     color: var(--text-primary);
     border-bottom: 1px solid var(--border-color);
@@ -46,7 +46,7 @@
     width: 100%;
 }
 
-.choices__input::placeholder {
+.choices[data-type] .choices__input::placeholder {
     color: var(--text-muted);
 }
 
@@ -58,11 +58,18 @@
     font-size: 0.9rem;
 }
 
-/* Hover / keyboard-focused item */
-.choices__list--dropdown .choices__item--highlighted,
-.choices__list[aria-expanded] .choices__item--highlighted {
-    background: #667eea;
-    color: #fff;
+/* Hover / keyboard-focused item — Choices.js v10 uses .is-highlighted */
+.choices__list--dropdown .choices__item--selectable.is-highlighted,
+.choices__list[aria-expanded] .choices__item--selectable.is-highlighted {
+    background: var(--color-primary);
+    color: var(--color-primary-text);
+}
+
+/* Rank chips inside a highlighted item — keep readable on the primary background */
+.choices__list--dropdown .choices__item--selectable.is-highlighted .member-rank,
+.choices__list[aria-expanded] .choices__item--selectable.is-highlighted .member-rank {
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--color-primary-text);
 }
 
 /* "No results found" */

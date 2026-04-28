@@ -1,5 +1,10 @@
 // alias-audit.js — Alias Audit & Management Page
 
+function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+let memberChoices = null;
 let allMembers = [];
 let currentMemberID = null;
 let currentAliases = [];
@@ -112,15 +117,17 @@ async function loadMembers() {
     allMembers = await res.json();
     if (!Array.isArray(allMembers)) allMembers = [];
 
-    const sel = document.getElementById('member-select');
-    allMembers
+    const opts = allMembers
         .sort((a, b) => a.name.localeCompare(b.name))
-        .forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m.id;
-            opt.textContent = `${m.name} (${m.rank})`;
-            sel.appendChild(opt);
-        });
+        .map(m => ({
+            value: String(m.id),
+            label: `<span class="member-rank rank-${m.rank}">${m.rank}</span> ${escapeHtml(m.name)}`,
+        }));
+
+    memberChoices.setChoices(
+        [{ value: '', label: '— select member —', placeholder: true }, ...opts],
+        'value', 'label', true
+    );
 }
 
 async function loadAliases(memberID) {
@@ -232,4 +239,8 @@ document.getElementById('btn-add-alias').addEventListener('click', () => {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+memberChoices = new Choices('#member-select', {
+    searchEnabled: true, searchPlaceholderValue: 'Search…',
+    itemSelectText: '', shouldSort: false, allowHTML: true,
+});
 loadMembers();

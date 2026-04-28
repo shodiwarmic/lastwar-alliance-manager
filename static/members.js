@@ -339,13 +339,13 @@ function buildMemberCard(member) {
 
     if (member.personal_aliases) {
         const span = document.createElement('span');
-        span.style.cssText = 'color:#63b3ed;font-size:0.85em;';
+        span.style.cssText = 'color:var(--color-info);font-size:0.85em;';
         span.textContent = `(${member.personal_aliases})`;
         nameDiv.appendChild(span);
     }
     if (member.global_aliases) {
         const span = document.createElement('span');
-        span.style.cssText = 'color:#a0aec0;font-size:0.85em;';
+        span.style.cssText = 'color:var(--text-muted);font-size:0.85em;';
         span.textContent = `[${member.global_aliases}]`;
         nameDiv.appendChild(span);
     }
@@ -369,8 +369,8 @@ function buildMemberCard(member) {
     // HQ badge
     if (member.level) {
         const badge = document.createElement('span');
-        badge.className = 'member-rank';
-        badge.style.cssText = 'background:#4a5568;margin-left:5px;';
+        badge.className = 'member-rank badge-hq';
+        badge.style.cssText = 'margin-left:5px;';
         badge.textContent = `HQ ${member.level}`;
         info.appendChild(badge);
     }
@@ -378,8 +378,8 @@ function buildMemberCard(member) {
     // Troop badge
     if (member.troop_level) {
         const badge = document.createElement('span');
-        badge.className = 'member-rank';
-        badge.style.cssText = 'background:#dd6b20;margin-left:5px;';
+        badge.className = 'member-rank badge-troop';
+        badge.style.cssText = 'margin-left:5px;';
         badge.textContent = `T${member.troop_level}`;
         info.appendChild(badge);
     }
@@ -387,8 +387,8 @@ function buildMemberCard(member) {
     // Profession badge
     if (member.profession) {
         const badge = document.createElement('span');
-        badge.className = 'member-rank';
-        badge.style.cssText = 'background:#805ad5;margin-left:5px;';
+        badge.className = 'member-rank badge-profession';
+        badge.style.cssText = 'margin-left:5px;';
         badge.textContent = member.profession;
         info.appendChild(badge);
     }
@@ -410,7 +410,7 @@ function buildMemberCard(member) {
         else if (member.squad_type === 'Missile') typeIcon = '🚀 ';
         const span = document.createElement('span');
         span.className = 'member-power';
-        span.style.cssText = 'margin-left:10px;color:var(--accent-color);';
+        span.style.cssText = 'margin-left:10px;color:var(--color-primary);';
         span.title = `Squad Power: ${member.squad_power ? member.squad_power.toLocaleString() : 0}`;
         span.textContent = `${typeIcon}${formatPower(member.squad_power)}`;
         info.appendChild(span);
@@ -545,7 +545,7 @@ function showModalStatus(msg) {
         el = document.createElement('p');
         el.id = 'member-modal-status';
         el.className = 'status-msg';
-        el.style.color = 'var(--danger-color)';
+        el.style.color = 'var(--color-danger)';
         document.getElementById('submit-btn')?.parentElement?.prepend(el);
     }
     el.textContent = msg;
@@ -657,7 +657,7 @@ async function archiveMember(id, name, actionsContainer, archiveBtn) {
                 console.error('Error archiving member:', error);
                 reasonSpan.remove();
                 const msg = document.createElement('span');
-                msg.style.cssText = 'color:var(--danger-color);font-size:0.85rem;';
+                msg.style.cssText = 'color:var(--color-danger);font-size:0.85rem;';
                 msg.textContent = 'Failed to archive.';
                 actionsContainer.appendChild(msg);
                 archiveBtn.style.display = '';
@@ -794,7 +794,7 @@ window.inviteUserForMember = function (memberId, memberName, actionsContainer, i
         } catch (error) {
             console.error('Error generating invite:', error);
             const errSpan = document.createElement('span');
-            errSpan.style.cssText = 'color:var(--danger-color);font-size:0.85rem;';
+            errSpan.style.cssText = 'color:var(--color-danger);font-size:0.85rem;';
             errSpan.textContent = error.message || 'Failed to generate invite.';
             actionsContainer.appendChild(errSpan);
             inviteBtn.style.display = '';
@@ -953,7 +953,7 @@ function setupCSVImport() {
             const confirmSpan = document.createElement('span');
             confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
             const warnLabel = document.createElement('span');
-            warnLabel.style.cssText = 'font-size:0.85rem;color:var(--danger-color);';
+            warnLabel.style.cssText = 'font-size:0.85rem;color:var(--color-danger);';
             warnLabel.textContent = `Delete ${removeMemberIDs.length} member(s)?`;
             const proceedBtn = document.createElement('button');
             proceedBtn.className = 'btn btn-danger btn-sm';
@@ -1012,7 +1012,7 @@ function displayCSVModalStatus(msg) {
         el = document.createElement('p');
         el.id = 'csv-modal-status';
         el.className = 'status-msg';
-        el.style.color = 'var(--danger-color)';
+        el.style.color = 'var(--color-danger)';
         document.getElementById('confirm-csv-btn')?.parentElement?.prepend(el);
     }
     el.textContent = msg;
@@ -1087,29 +1087,29 @@ function showCSVPreview(result) {
 
         if (member.level) {
             const s = document.createElement('span');
-            s.className = 'member-rank';
-            s.style.cssText = 'background:#4a5568;margin-left:5px;';
+            s.className = 'member-rank badge-hq';
+            s.style.cssText = 'margin-left:5px;';
             s.textContent = `HQ ${member.level}`;
             memberInfo.appendChild(s);
         }
         if (member.troop_level) {
             const s = document.createElement('span');
-            s.className = 'member-rank';
-            s.style.cssText = 'background:#dd6b20;margin-left:5px;';
+            s.className = 'member-rank badge-troop';
+            s.style.cssText = 'margin-left:5px;';
             s.textContent = `T${member.troop_level}`;
             memberInfo.appendChild(s);
         }
         if (member.squad_type) {
             const s = document.createElement('span');
-            s.className = 'member-rank';
-            s.style.cssText = 'background:#2b6cb0;margin-left:5px;';
+            s.className = 'member-rank badge-squad-type';
+            s.style.cssText = 'margin-left:5px;';
             s.textContent = member.squad_type;
             memberInfo.appendChild(s);
         }
         if (member.profession) {
             const s = document.createElement('span');
-            s.className = 'member-rank';
-            s.style.cssText = 'background:#805ad5;margin-left:5px;';
+            s.className = 'member-rank badge-profession';
+            s.style.cssText = 'margin-left:5px;';
             s.textContent = member.profession;
             memberInfo.appendChild(s);
         }
@@ -1123,7 +1123,7 @@ function showCSVPreview(result) {
         if (member.squad_power) {
             const s = document.createElement('span');
             s.className = 'member-power';
-            s.style.cssText = 'margin-left:10px;font-size:0.85em;color:var(--accent-color);';
+            s.style.cssText = 'margin-left:10px;font-size:0.85em;color:var(--color-primary);';
             s.textContent = `🛡️ ${(member.squad_power / 1000000).toFixed(1)}M`;
             memberInfo.appendChild(s);
         }
@@ -1270,14 +1270,15 @@ async function loadAliases() {
 
             const left = document.createElement('div');
 
-            const badgeStyles = {
-                global:   'background:#e2e8f0;color:#4a5568;',
-                personal: 'background:#bee3f8;color:#2b6cb0;',
-                ocr:      'background:#fed7d7;color:#c53030;',
+            const badgeClass = {
+                global:   'badge-alias-global',
+                personal: 'badge-alias-personal',
+                ocr:      'badge-alias-ocr',
             };
-            if (badgeStyles[a.category]) {
+            if (badgeClass[a.category]) {
                 const badge = document.createElement('span');
-                badge.style.cssText = badgeStyles[a.category] + 'padding:2px 6px;border-radius:4px;font-size:0.8em;margin-right:8px;';
+                badge.className = badgeClass[a.category];
+                badge.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:0.8em;margin-right:8px;';
                 badge.textContent = a.category.charAt(0).toUpperCase() + a.category.slice(1);
                 left.appendChild(badge);
             }
@@ -1290,7 +1291,7 @@ async function loadAliases() {
             const canDelete = a.is_mine || window.isAdmin || ((a.category === 'global' || a.category === 'ocr') && canManageRanks);
             if (canDelete) {
                 const deleteBtn = document.createElement('button');
-                deleteBtn.style.cssText = 'background:none;border:none;color:#e53e3e;cursor:pointer;';
+                deleteBtn.style.cssText = 'background:none;border:none;color:var(--color-danger);cursor:pointer;';
                 deleteBtn.title = 'Remove Nickname';
                 deleteBtn.textContent = '✖';
                 deleteBtn.addEventListener('click', () => deleteAlias(a.id, row, deleteBtn));
@@ -1303,7 +1304,7 @@ async function loadAliases() {
         list.replaceChildren(...rows);
     } catch (e) {
         const p = document.createElement('p');
-        p.style.cssText = 'color:#e53e3e;text-align:center;';
+        p.style.cssText = 'color:var(--color-danger);text-align:center;';
         p.textContent = 'Error loading aliases.';
         list.replaceChildren(p);
     }

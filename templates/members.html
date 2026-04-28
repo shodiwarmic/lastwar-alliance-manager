@@ -1,19 +1,19 @@
-{{define "head_tags"}}{{end}}
+{{define "head_tags"}}
+<link rel="stylesheet" href="/members.css">
+{{end}}
 
 {{define "header_text"}}
-    <h1>🎮 Last War: Survival</h1>
+    <h1>👥 Members</h1>
     <h2>Alliance Member Manager</h2>
 {{end}}
 
 {{define "content"}}
             <div class="action-bar">
-                <button type="button" id="add-member-btn" class="primary-action-btn">
-                    <span class="btn-icon">➕</span>
-                    <span class="btn-text">Add Member</span>
+                <button type="button" id="add-member-btn" class="btn btn-primary">
+                    ➕ Add Member
                 </button>
-                <button type="button" id="import-csv-trigger-btn" class="secondary-action-btn">
-                    <span class="btn-icon">📥</span>
-                    <span class="btn-text">Import CSV</span>
+                <button type="button" id="import-csv-trigger-btn" class="btn btn-secondary">
+                    📥 Import CSV
                 </button>
             </div>
 
@@ -33,17 +33,15 @@
             <section class="members-section">
                 <h3>Alliance Members</h3>
                 
-                <div class="filter-sort-controls" style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 25px; background: var(--bg-secondary); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color);">
-                    
-                    <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
-                        
-                        <div class="search-container" style="flex: 1; min-width: 250px; position: relative;">
-                            <input type="text" id="search-input" class="form-input" placeholder="Search by name or rank..." style="width: 100%; padding: 10px 35px 10px 15px; border-radius: 20px;">
-                            <button id="clear-search" style="display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-secondary);">✖</button>
+                <div class="filter-sort-controls">
+
+                    <div class="filter-sort-top">
+                        <div class="member-search-wrap">
+                            <input type="text" id="search-input" class="form-input" placeholder="Search by name or rank...">
+                            <button id="clear-search" style="display: none;">✖</button>
                         </div>
-                        
-                        <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-                            <select id="sort-by" class="form-input" style="padding: 10px 15px; border-radius: 20px; min-width: 160px; cursor: pointer;">
+                        <div class="filter-sort-right">
+                            <select id="sort-by" class="form-input sort-select">
                                 <option value="name-asc">Name (A-Z)</option>
                                 <option value="name-desc">Name (Z-A)</option>
                                 <option value="rank-desc">Rank (High to Low)</option>
@@ -52,19 +50,18 @@
                                 <option value="squad-power-desc" class="squad-sort-option" style="display: none;">Squad Power (Highest First)</option>
                                 <option value="squad-power-asc" class="squad-sort-option" style="display: none;">Squad Power (Lowest First)</option>
                             </select>
-                            <label id="filter-eligible-wrapper" style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 0.95em; font-weight: 500; color: var(--text-color); margin: 0;">
-                                <input type="checkbox" id="filter-eligible" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary-color);">
+                            <label id="filter-eligible-wrapper">
+                                <input type="checkbox" id="filter-eligible">
                                 Eligible Only
                             </label>
                         </div>
                     </div>
 
-                    <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0;">
+                    <hr class="filter-sort-divider">
 
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
-                        
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                            <span style="font-size: 0.85em; color: var(--text-secondary); width: 60px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold;">Rank:</span>
+                    <div class="filter-sort-grid">
+                        <div class="filter-row">
+                            <span class="filter-chip-label">Rank:</span>
                             <button class="filter-chip rank-chip active" data-rank="all">All</button>
                             <button class="filter-chip rank-chip" data-rank="R5">R5</button>
                             <button class="filter-chip rank-chip" data-rank="R4">R4</button>
@@ -73,8 +70,8 @@
                             <button class="filter-chip rank-chip" data-rank="R1">R1</button>
                         </div>
 
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                            <span style="font-size: 0.85em; color: var(--text-secondary); width: 60px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold;">Prof:</span>
+                        <div class="filter-row">
+                            <span class="filter-chip-label">Prof:</span>
                             <button class="filter-chip prof-chip active" data-prof="all">All</button>
                             <button class="filter-chip prof-chip" data-prof="Engineer">Engineer</button>
                             <button class="filter-chip prof-chip" data-prof="War Leader">War Leader</button>
@@ -83,8 +80,8 @@
                         </div>
 
                         <div class="squad-sort-option" style="display: none;">
-                            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                                <span style="font-size: 0.85em; color: var(--text-secondary); width: 60px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold;">Squad:</span>
+                            <div class="filter-row">
+                                <span class="filter-chip-label">Squad:</span>
                                 <button class="filter-chip squad-chip active" data-squad="all">All</button>
                                 <button class="filter-chip squad-chip" data-squad="Tank">🛡️ Tank</button>
                                 <button class="filter-chip squad-chip" data-squad="Aircraft">✈️ Aircraft</button>
@@ -92,8 +89,8 @@
                             </div>
                         </div>
 
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                            <span style="font-size: 0.85em; color: var(--text-secondary); width: 60px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold;">Troops:</span>
+                        <div class="filter-row">
+                            <span class="filter-chip-label">Troops:</span>
                             <button class="filter-chip troop-chip active" data-troop="all">All</button>
                             <button class="filter-chip troop-chip" data-troop="11">T11</button>
                             <button class="filter-chip troop-chip" data-troop="10">T10</button>
@@ -253,7 +250,7 @@
                     </div>
                     <button type="submit" class="btn btn-primary btn-sm">➕ Add</button>
                 </form>
-                <p id="alias-add-status" class="status-msg" style="color: var(--danger-color); margin: 6px 0 0;"></p>
+                <p id="alias-add-status" class="status-msg" style="color: var(--color-danger); margin: 6px 0 0;"></p>
                 <div id="global-alias-checkbox-wrapper" style="margin-top: 10px; display: none;">
                     <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-muted); font-size: 0.9em;">
                         <input type="checkbox" id="new-alias-global" style="width: 16px; height: 16px;">

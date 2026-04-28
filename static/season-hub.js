@@ -3,6 +3,10 @@
 (function () {
     'use strict';
 
+    function escapeHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     // ── Config ────────────────────────────────────────────────────────────────
     const cfg = document.getElementById('page-config').dataset;
     const CAN_MANAGE = cfg.canManage === 'true';
@@ -17,6 +21,7 @@
     let allMailItems = [];         // SeasonMailItem[]
     let contribPreviewData = null; // pending import data from preview
     let editingRewardId = null;    // id being edited, or null for create
+    let rewardMemberChoices = null;
 
     // ── Rankings sort state ───────────────────────────────────────────────────
     let rankingsSortCol = 'rank_position';
@@ -249,7 +254,10 @@
 
             // Alliance rank
             const tdRank = document.createElement('td');
-            tdRank.textContent = m.rank;
+            const rankChip1 = document.createElement('span');
+            rankChip1.className = `member-rank rank-${m.rank}`;
+            rankChip1.textContent = m.rank;
+            tdRank.appendChild(rankChip1);
             tr.appendChild(tdRank);
 
             // Participation
@@ -470,7 +478,10 @@
             tr.appendChild(tdName);
 
             const tdRank = document.createElement('td');
-            tdRank.textContent = m.rank;
+            const rankChip2 = document.createElement('span');
+            rankChip2.className = `member-rank rank-${m.rank}`;
+            rankChip2.textContent = m.rank;
+            tdRank.appendChild(rankChip2);
             tr.appendChild(tdRank);
 
             // Score dropdown
@@ -583,7 +594,10 @@
             tr.appendChild(tdName);
 
             const tdRank = document.createElement('td');
-            tdRank.textContent = m.rank;
+            const rankChip3 = document.createElement('span');
+            rankChip3.className = `member-rank rank-${m.rank}`;
+            rankChip3.textContent = m.rank;
+            tdRank.appendChild(rankChip3);
             tr.appendChild(tdRank);
 
             CONTRIB_CATEGORIES.forEach(cat => {
@@ -850,7 +864,7 @@
             const tr = document.createElement('tr');
 
             const tdName = document.createElement('td'); tdName.textContent = rw.member_name; tr.appendChild(tdName);
-            const tdRank = document.createElement('td'); tdRank.textContent = rw.member_rank; tr.appendChild(tdRank);
+            const tdRank = document.createElement('td'); const rankChip4 = document.createElement('span'); rankChip4.className = `member-rank rank-${rw.member_rank}`; rankChip4.textContent = rw.member_rank; tdRank.appendChild(rankChip4); tr.appendChild(tdRank);
             const tdTier = document.createElement('td'); tdTier.appendChild(makeTierBadge(rw.reward_tier)); tr.appendChild(tdTier);
             const tdPart = document.createElement('td'); tdPart.textContent = (rw.participation_pct || 0).toFixed(1) + '%'; tr.appendChild(tdPart);
             const tdContrib = document.createElement('td'); tdContrib.textContent = rw.contribution_pct != null ? (rw.contribution_pct).toFixed(1) + '%' : '—'; tr.appendChild(tdContrib);
@@ -914,14 +928,19 @@
         if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
 
         // Populate member select from allMembers
-        memberSel.replaceChildren();
-        allMembers.filter(m => m.rank !== 'EX').forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m.member_id;
-            opt.textContent = m.name + ' (' + m.rank + ')';
-            if (rw && rw.member_id === m.member_id) opt.selected = true;
-            memberSel.appendChild(opt);
-        });
+        if (rewardMemberChoices) {
+            const opts = allMembers
+                .filter(m => m.rank !== 'EX')
+                .map(m => ({
+                    value: String(m.member_id),
+                    label: `<span class="member-rank rank-${m.rank}">${m.rank}</span> ${escapeHtml(m.name)}`,
+                    selected: !!(rw && rw.member_id === m.member_id),
+                }));
+            rewardMemberChoices.setChoices(
+                [{ value: '', label: '— select member —', placeholder: true }, ...opts],
+                'value', 'label', true
+            );
+        }
 
         if (rw) {
             tierSel.value = rw.reward_tier;
@@ -948,6 +967,14 @@
         btnCancelReward.addEventListener('click', () => {
             const modal = document.getElementById('modal-assign-reward');
             if (modal) modal.style.display = '';
+        });
+    }
+
+    const rewardMemberEl = document.getElementById('reward-member');
+    if (rewardMemberEl) {
+        rewardMemberChoices = new Choices(rewardMemberEl, {
+            searchEnabled: true, searchPlaceholderValue: 'Search…',
+            itemSelectText: '', shouldSort: false, allowHTML: true,
         });
     }
 

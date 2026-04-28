@@ -3,6 +3,11 @@
     <h2>Audit & Prune Member Aliases</h2>
 {{end}}
 
+{{define "head_tags"}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
+<link rel="stylesheet" href="/choices-theme.css">
+{{end}}
+
 {{define "content"}}
 <div id="alias-audit-page">
 
@@ -80,5 +85,6 @@
 {{end}}
 
 {{define "scripts"}}
+<script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
 <script src="/alias-audit.js"></script>
 {{end}}

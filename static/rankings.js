@@ -13,7 +13,7 @@ let allVsData = [];
 // --- Global Chart.js Styling ---
 // This ensures the charts match your app's typography and adapt to light/dark themes
 Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-Chart.defaults.color = '#718096';
+Chart.defaults.color = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
 Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(26, 32, 44, 0.9)';
 Chart.defaults.plugins.tooltip.padding = 12;
 Chart.defaults.plugins.tooltip.cornerRadius = 8;
@@ -46,7 +46,7 @@ function formatGrowth(num) {
         span.className = 'positive-growth';
         span.textContent = '+' + formatShortPower(num);
     } else if (num < 0) {
-        span.style.color = '#e53e3e';
+        span.style.color = 'var(--color-danger)';
         span.textContent = formatShortPower(num);
     } else {
         span.className = 'neutral-growth';
@@ -178,7 +178,7 @@ function buildGrowthRow(m) {
 
     const tdRank = document.createElement('td');
     const badge = document.createElement('span');
-    badge.className = `rank-badge rank-${m.rank}`;
+    badge.className = `member-rank rank-${m.rank}`;
     badge.textContent = m.rank;
     tdRank.appendChild(badge);
 
@@ -263,7 +263,7 @@ async function loadVSData() {
         const td = document.createElement('td');
         td.colSpan = 9;
         td.className = 'error';
-        td.style.cssText = 'text-align: center; color: #e53e3e; padding: 20px;';
+        td.style.cssText = 'text-align: center; color: var(--color-danger); padding: 20px;';
         td.textContent = 'Failed to load data.';
         tr.appendChild(td);
         document.getElementById('vs-tbody').replaceChildren(tr);

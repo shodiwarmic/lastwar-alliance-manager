@@ -637,10 +637,10 @@ function renderAssigneeList(filter, assigned) {
 
         const nameSpan = document.createElement('span');
         nameSpan.appendChild(document.createTextNode(m.name + ' '));
-        const rankSmall = document.createElement('small');
-        rankSmall.style.color = 'var(--text-secondary)';
-        rankSmall.textContent = m.rank;
-        nameSpan.appendChild(rankSmall);
+        const rankChip = document.createElement('span');
+        rankChip.className = `member-rank rank-${m.rank}`;
+        rankChip.textContent = m.rank;
+        nameSpan.appendChild(rankChip);
 
         const addBtn = document.createElement('button');
         addBtn.className = 'btn btn-sm btn-primary';

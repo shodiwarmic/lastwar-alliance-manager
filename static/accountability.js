@@ -168,7 +168,10 @@ async function loadMembers() {
         tdName.textContent = m.name;
 
         const tdRank = document.createElement('td');
-        tdRank.textContent = m.rank;
+        const rankChip = document.createElement('span');
+        rankChip.className = `member-rank rank-${m.rank}`;
+        rankChip.textContent = m.rank;
+        tdRank.appendChild(rankChip);
 
         const tdTag = document.createElement('td');
         const tagSpan = document.createElement('span');
@@ -317,7 +320,11 @@ async function loadStrikes() {
         const tdMember = document.createElement('td');
         const link = document.createElement('a');
         link.href = '/accountability/' + s.member_id;
-        link.textContent = s.member_name + ' (' + s.member_rank + ')';
+        link.textContent = s.member_name + ' ';
+        const linkRankChip = document.createElement('span');
+        linkRankChip.className = `member-rank rank-${s.member_rank}`;
+        linkRankChip.textContent = s.member_rank;
+        link.appendChild(linkRankChip);
         tdMember.appendChild(link);
 
         const tdType = document.createElement('td');
@@ -435,7 +442,11 @@ async function loadStormAttendance() {
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'storm-member-name';
-        nameSpan.textContent = m.member_name + ' (' + m.member_rank + ')';
+        nameSpan.textContent = m.member_name + ' ';
+        const stormRankChip = document.createElement('span');
+        stormRankChip.className = `member-rank rank-${m.member_rank}`;
+        stormRankChip.textContent = m.member_rank;
+        nameSpan.appendChild(stormRankChip);
 
         const statusSel = document.createElement('select');
         statusSel.className = 'form-input';
@@ -524,7 +535,11 @@ function memberListEl(members, valueFormatter) {
         const li = document.createElement('li');
         const nameSpan = document.createElement('span');
         nameSpan.className = 'dash-list-name';
-        nameSpan.textContent = m.name + ' (' + m.rank + ')';
+        nameSpan.textContent = m.name + ' ';
+        const nameRankChip = document.createElement('span');
+        nameRankChip.className = `member-rank rank-${m.rank}`;
+        nameRankChip.textContent = m.rank;
+        nameSpan.appendChild(nameRankChip);
         const valSpan = document.createElement('span');
         valSpan.className = 'dash-list-value';
         valSpan.textContent = valueFormatter(m.value);

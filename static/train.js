@@ -3,6 +3,10 @@
 // Game server is UTC-2 (same constant as storm.js)
 const SERVER_UTC_OFFSET = -2;
 
+function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 const CAN_MANAGE = window.CAN_MANAGE === true;
 
 // ── Game-time helpers ─────────────────────────────────────────────────────────
@@ -41,11 +45,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     conductorChoices = new Choices('#log-conductor', {
         searchEnabled: true, searchPlaceholderValue: 'Search…',
-        itemSelectText: '', shouldSort: false,
+        itemSelectText: '', shouldSort: false, allowHTML: true,
     });
     vipChoices = new Choices('#log-vip', {
         searchEnabled: true, searchPlaceholderValue: 'Search…',
-        itemSelectText: '', shouldSort: false,
+        itemSelectText: '', shouldSort: false, allowHTML: true,
     });
 
     setupTabs();
@@ -110,7 +114,7 @@ async function loadMembers() {
 function populateMemberDropdowns() {
     if (!conductorChoices) return;
 
-    const memberOpts = allMembers.map(m => ({ value: String(m.id), label: `[${m.rank}] ${m.name}` }));
+    const memberOpts = allMembers.map(m => ({ value: String(m.id), label: `<span class="member-rank rank-${m.rank}">${m.rank}</span> ${escapeHtml(m.name)}` }));
 
     conductorChoices.setChoices(
         [{ value: '', label: '— select member —', placeholder: true }, ...memberOpts],
@@ -483,9 +487,8 @@ function renderEligibleList(members) {
         const nameEl = document.createElement('div');
         nameEl.className = 'eligible-card-name';
         nameEl.textContent = m.name;
-        const rankEl = document.createElement('div');
-        rankEl.style.fontSize = '0.8rem';
-        rankEl.style.color = 'var(--text-secondary)';
+        const rankEl = document.createElement('span');
+        rankEl.className = `member-rank rank-${m.rank}`;
         rankEl.textContent = m.rank;
         nameRank.appendChild(nameEl);
         nameRank.appendChild(rankEl);

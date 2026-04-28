@@ -18,33 +18,34 @@
     <div class="container {{block "main_class" .}}{{end}}">
         
         <header>
-            <button id="mobile-menu-btn" class="hamburger-btn" aria-label="Toggle Navigation">
-                ☰ Menu
-            </button>
+            <div class="header-controls-row">
+                <button id="mobile-menu-btn" class="hamburger-btn" aria-label="Toggle Navigation">
+                    ☰ Menu
+                </button>
+                <div class="user-info">
+                    <div class="user-dropdown">
+                        <button id="username-display" class="username-btn">
+                            👤 {{.Username}} {{if .Rank}}({{.Rank}}){{end}}
+                        </button>
+
+                        <div id="user-dropdown-menu" class="dropdown-menu">
+                            <div class="theme-section">
+                                <div class="theme-section-label">Theme</div>
+                                <a href="#" class="dropdown-item theme-option" data-theme="auto">● Auto (System)</a>
+                                <a href="#" class="dropdown-item theme-option" data-theme="light">○ Light</a>
+                                <a href="#" class="dropdown-item theme-option" data-theme="dark">○ Dark</a>
+                            </div>
+                            <div class="dropdown-divider"></div>
+                            <a href="#" class="dropdown-item" id="dropdown-logout-btn">🚪 Logout</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {{block "header_text" .}}
                 <h1>🎮 Last War: Survival</h1>
                 <h2>Alliance Manager</h2>
             {{end}}
-
-            <div class="user-info">
-                <div class="user-dropdown">
-                    <button id="username-display" class="username-btn">
-                        👤 {{.Username}} {{if .Rank}}({{.Rank}}){{end}}
-                    </button>
-                    
-                    <div id="user-dropdown-menu" class="dropdown-menu">
-                        <div class="theme-section">
-                            <div class="theme-section-label">Theme</div>
-                            <a href="#" class="dropdown-item theme-option" data-theme="auto">● Auto (System)</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="light">○ Light</a>
-                            <a href="#" class="dropdown-item theme-option" data-theme="dark">○ Dark</a>
-                        </div>
-                        <div class="dropdown-divider"></div>
-                        <a href="#" class="dropdown-item" id="dropdown-logout-btn">🚪 Logout</a>
-                    </div>
-                </div>
-            </div>
         </header>
 
         <nav class="nav-menu" id="main-nav">
