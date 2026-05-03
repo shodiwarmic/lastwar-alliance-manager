@@ -2,31 +2,9 @@
 
 /* ── Former Members Table ─────────────────────────────────────────────────── */
 
-.recruiting-table {
-    width: 100%;
+/* uses global .data-table — page-specific override for min-width */
+.data-table.recruiting-ex-table {
     min-width: 560px;
-    border-collapse: collapse;
-    font-size: 0.95rem;
-}
-
-.recruiting-table th,
-.recruiting-table td {
-    padding: 10px 14px;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.recruiting-table th {
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-secondary);
-    background: var(--bg-secondary);
-    white-space: nowrap;
-}
-
-.recruiting-table tbody tr:hover {
-    background: var(--bg-secondary);
 }
 
 .actions-cell {

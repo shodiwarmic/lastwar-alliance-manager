@@ -104,7 +104,7 @@ function renderFormerMembers(members, container) {
     }
 
     const table = document.createElement('table');
-    table.className = 'recruiting-table';
+    table.className = 'data-table recruiting-ex-table';
 
     const thead = table.createTHead();
     const hr = thead.insertRow();

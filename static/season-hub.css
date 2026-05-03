@@ -95,50 +95,7 @@
     font-size: 0.9rem;
 }
 
-/* ── Tables ───────────────────────────────────────────────────────────── */
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-}
-
-.data-table thead tr {
-    background: var(--color-primary);
-}
-
-.data-table th {
-    color: #fff;
-    padding: 11px 14px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 0.85rem;
-    white-space: nowrap;
-}
-
-.data-table td {
-    padding: 9px 14px;
-    border-bottom: 1px solid var(--border-color);
-    vertical-align: middle;
-    font-size: 0.875rem;
-    color: var(--text-primary);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.data-table tbody tr:hover {
-    background: var(--bg-secondary);
-}
-
-/* loading / empty state row */
-.data-table .loading-msg {
-    text-align: center;
-    color: var(--text-muted);
-    padding: 20px;
-}
+/* .data-table global utility moved to styles.css */
 
 /* Scroll wrapper for wide tables */
 .tab-content {
@@ -381,7 +338,7 @@
     gap: 12px;
     padding: 10px 14px;
     background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    border: 2px solid var(--border-color);
     border-radius: 6px;
 }
 

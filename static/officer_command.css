@@ -75,23 +75,11 @@
     user-select: none;
 }
 .oc-drag-handle:active { cursor: grabbing; }
-.oc-table {
-    width: 100%;
+/* uses global .data-table — page-specific overrides */
+.data-table.oc-table {
     min-width: 480px;
-    border-collapse: collapse;
 }
-.oc-table thead th {
-    padding: 0.5rem 1rem;
-    text-align: left;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-secondary);
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-primary);
-    white-space: nowrap;
-}
-.oc-table thead th:last-child { width: 1%; white-space: nowrap; }
+.data-table.oc-table thead th:last-child { width: 1%; white-space: nowrap; }
 .oc-row {
     border-bottom: 1px solid var(--border-color);
     transition: background 0.15s;

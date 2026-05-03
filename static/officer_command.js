@@ -216,7 +216,7 @@ function render() {
             tableScroll.className = 'table-scroll';
 
             const table = document.createElement('table');
-            table.className = 'oc-table';
+            table.className = 'data-table oc-table';
 
             const thead = table.createTHead();
             const hr = thead.insertRow();
