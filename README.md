@@ -13,7 +13,12 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Categorized Alias Engine**: Assign personal nicknames or authoritative global aliases to commanders. The system utilizes a strict hierarchy (Exact -> Personal -> Global -> OCR) to resolve identities during imports. Background `ocr` aliases keep machine-read corrections hidden from standard user searches.
 - **Self-Service Profiles**: Users securely linked to an in-game commander can update their own stats, HQ level, and squad power through a rule-enforced dashboard.
 - **Smart CSV Ingestion**: Upload VS Points or roster CSVs with dynamic column mapping. Features a backend-driven "Preview & Confirm" modal allowing administrators to validate data, calculate missing values (e.g., deducing Saturday from Weekly Totals), and manually map unresolved names before committing.
-- **Advanced Player Stats**: Track optional fields including Player Profession and Troop Levels (dynamically validated against configurable HQ Level caps).
+- **Advanced Player Stats**: Track optional fields including Player Profession, Squad Type, Squad Power, and Troop Levels (dynamically validated against configurable HQ Level caps). All stat badges on member cards adapt to light and dark mode.
+- **Unified Navigation Theme**: The Admin nav item uses a purple tint (token-based, dark-mode safe) instead of the primary gradient, reducing visual competition with the active page indicator.
+- **Unified Mobile Header**: On small screens, the hamburger menu button and the user account button share a single flex row above the page title, with matched pill-shaped styling. Previously the hamburger used absolute positioning and required extra header padding to avoid overlap.
+- **Rank Badges**: R4–R1 rank badges use semantic color tokens (danger/info/success/muted) that adapt to light and dark mode. R5 retains its gold "prestige" color.
+- **Consistent Member Badges**: HQ level, Troop tier, Profession, and Squad type badges on member cards use the design system's semantic color tokens and adapt correctly to light and dark mode.
+- **Filter Chips**: The Members page rank/profession/troop/squad filter chips are compact pill-shaped buttons with a clear active state.
 
 ### 🏠 Overview Dashboard
 - **Customizable Landing Page**: The default landing page is a per-user dashboard surfacing key alliance data at a glance without navigating between pages. Cards can be reordered via drag-and-drop and toggled on or off; preferences are saved per account.
@@ -28,6 +33,7 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Commander Growth Tracking**: Instantly calculate and visualize 7-day and 30-day power deltas for every member to easily identify top grinders and stagnant accounts.
 - **VS Duel Leaderboards**: Track daily alliance duel contributions with massive, interactive stacked bar charts to see exactly where members excel (e.g., Radar vs. Tech day).
 - **Alliance Composition**: Premium `Chart.js` visualizations breaking down the alliance's Troop Tiers and Primary Squad focuses (Tank/Aircraft/Missile).
+- **Theme-Aware Charts**: Chart.js color defaults are read from the active CSS theme at initialization time, so axis labels and tooltips match the current light/dark mode rather than being hardcoded to a single palette.
 - **Historical Integrity**: Power and Squad Power are tracked chronologically, preventing data loss and enabling long-term growth analysis.
 - **Audit / Activity Log**: A structured, chronological audit trail of all write operations across the app — member changes, recruits, allies, storm, OC, awards, files, imports, and more. Consecutive creates of the same entity type by the same user within 15 minutes are batched into a single entry. Update events include a field-level diff (e.g. `status: interested → pending`). Accessible to R4/R5 by default via a dedicated `/activity` page with user and limit filters. Sensitive events (user accounts, permissions, settings, credentials, invitations) are visible to admins only.
 

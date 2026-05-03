@@ -12,8 +12,9 @@
 2. **Permissions** — add columns to `rank_permissions` via migration, add fields to `RankPermissions` struct in `models.go`, add to the `getRankPermissions` SELECT in `handlers_admin.go`, and add the all-true entry in the admin shortcut block in `main.go` (`getPageData`).
 3. **Routes** — register in `main.go` following the existing pattern. UI page routes go in the `pages` map and `pagePermissions` map.
 4. **Handler file** — one file per feature, e.g. `handlers_feature.go`.
-5. **Template** — `templates/feature.html`. Define `header_text`, `content`, `scripts`, and `modals` blocks (see below).
+5. **Template** — `templates/feature.html`. Define `header_text` (page-specific title, not the app title), `head_tags`, `content`, `scripts`, and `modals` blocks. All modals go in `{{define "modals"}}` — not inside `{{define "content"}}`.
 6. **CSS** — `static/feature.css`, linked via `{{define "head_tags"}}`. Never embed `<style>` blocks in templates.
+6a. **Global utility check** — before adding any CSS to your page file, check if `styles.css` already provides what you need: `.data-table`, `.filter-chip`, `.tab-toolbar`, `.status-msg`, `.badge-*`, `.btn`, `.form-input`, `.tab-bar`, `.tab-btn`. Page CSS is for page-specific layout only.
 7. **JS** — `static/feature.js`, loaded in `{{define "scripts"}}`.
 8. **Activity log** — call `logActivity` for every write operation (see section below).
 
@@ -164,16 +165,13 @@ const CAN_MANAGE = cfg.canManage === 'true';
 Once **all** templates are migrated, remove `'unsafe-inline'` from `script-src` in `install.sh`, `update.sh`, and `Caddyfile`.
 
 ### Nav hamburger breakpoint must account for body padding
-The hamburger media query threshold is **not** simply `(nav items × min item width) / 0.95`. The base `body` has `padding: 20px`, and the `@media (max-width: 1024px)` rule overrides this to `padding: 10px`. In the icon-only viewport range (≤1024px) the correct formula is:
+
+The hamburger media query threshold (`@media (max-width: 946px)`) was updated during the design standards pass. The mobile header layout now uses a unified controls row — both the hamburger button and the username button are in a single flex row above the page title, with matched `border-radius: 20px`. The hamburger is `position: static` (was `position: absolute`). If the nav item count changes, recalculate the breakpoint using:
 
 ```
-container_needed = items × min_item_width          (e.g. 19 × 44px = 836px)
-container = 0.95 × (viewport − 20px)              (body padding 10px each side)
-viewport  = (container_needed + 19) / 0.95        (19 = 0.95 × 20)
-         = 855 / 0.95 ≈ 900px
+container_needed = items × 44px
+viewport = (container_needed / 0.95) + 20
 ```
-
-The current hamburger breakpoint is `@media (max-width: 900px)`. If the item count or min-width changes, recalculate using this formula. Note: users may report the wrapping threshold as ~18px higher than the CSS viewport because browser window width includes the scrollbar.
 
 ### Former/archived members have rank `'EX'`, not `'Former'`
 Members removed from the alliance are stored with `rank = 'EX'`. Any query or JS filter that needs only active members must exclude this rank explicitly. Filtering by `'Former'` silently does nothing — that string does not exist in the data.
@@ -408,6 +406,58 @@ btn.addEventListener('click', () => editMember(member.id));
 `static/officer_command.js` — skip, already uses correct patterns.
 `static/login.js` — ✅ Done (same password-rules pattern as profile.js; fixed during final sweep).
 
+## JS DOM standards — colors and styles
+
+The same token rules that apply to CSS apply to JavaScript. Every color set via `element.style.cssText` or `element.style.color` must use `var(--token)`. Hardcoded hex values do not respond to theme changes.
+
+```javascript
+// ❌ Wrong — hardcoded, breaks dark mode
+span.style.cssText = 'color:#63b3ed;font-size:0.85em;';
+
+// ❌ Wrong — non-existent token, silently falls back
+span.style.color = 'var(--danger-color)';
+
+// ✅ Correct
+span.style.cssText = 'color:var(--color-info);font-size:0.85em;';
+span.style.color = 'var(--color-danger)';
+```
+
+When JS creates the same styled element repeatedly (e.g. a badge), the color belongs in a CSS class — not a `style.cssText` string duplicated across every render call. Apply classes via `element.classList.add('badge-hq')`.
+
+**Chart.js** — read the color token at init time rather than hardcoding:
+
+```javascript
+// ❌ Wrong
+Chart.defaults.color = '#718096';
+
+// ✅ Correct
+Chart.defaults.color = getComputedStyle(document.documentElement)
+    .getPropertyValue('--text-muted').trim();
+```
+
+### Reference: `dashboard.js` `el()` helper
+
+`dashboard.js` defines a clean DOM builder that never uses `innerHTML` or hardcoded colors. Use it as a reference pattern for any new JS file that constructs significant DOM:
+
+```javascript
+function el(tag, props, ...children) {
+    const node = document.createElement(tag);
+    if (props) {
+        Object.entries(props).forEach(([k, v]) => {
+            if (k === 'className')    node.className = v;
+            else if (k === 'textContent') node.textContent = v;
+            else if (k === 'style')   Object.assign(node.style, v);
+            else node.setAttribute(k, v);
+        });
+    }
+    children.forEach(c => {
+        if (c == null) return;
+        node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+    return node;
+}
+```
+
 ## UI feedback — never use browser dialogs
 
 All user-facing feedback must go through the helpers in `static/global.js`. Browser-native `alert()`, `confirm()`, and `prompt()` are banned — they block the thread, ignore theming, and break automated tests.
@@ -439,28 +489,44 @@ setFieldError(document.getElementById('name-input'), 'Name is required.');
 
 ### Available tokens
 
-| Token | Light value | Dark value |
-|-------|-------------|------------|
-| `--bg-primary` | `white` | `#1a1f2e` |
-| `--bg-secondary` | `#f8f9fa` | `rgba(255,255,255,0.05)` |
-| `--bg-tertiary` | `#edf2f7` | `rgba(255,255,255,0.08)` |
-| `--text-primary` | `#1a202c` | `#e2e8f0` |
-| `--text-secondary` | `#4a5568` | `#a0aec0` |
-| `--text-muted` | `#718096` | `#718096` |
-| `--border-color` | `#e2e8f0` | `rgba(255,255,255,0.1)` |
-| `--color-primary` | `#667eea` | `#667eea` |
-| `--color-info-bg` / `--color-info` | `#dbeafe` / `#1d4ed8` | `rgba(59,130,246,0.15)` / `#93c5fd` |
-| `--color-success-bg` / `--color-success` | `#dcfce7` / `#15803d` | `rgba(34,197,94,0.15)` / `#86efac` |
-| `--color-danger-bg` / `--color-danger` | `#fee2e2` / `#dc2626` | `rgba(220,53,69,0.15)` / `#f87171` |
-| `--color-purple-bg` / `--color-purple` | `#ede9fe` / `#6d28d9` | `rgba(109,40,217,0.15)` / `#c4b5fd` |
+| Token | Light value | Dark value | Usage |
+|-------|-------------|------------|-------|
+| `--bg-primary` | `white` | `#1a1f2e` | Main page / card backgrounds. Prefer over `--container-bg` in new code. |
+| `--bg-secondary` | `#f8f9fa` | `rgba(255,255,255,0.05)` | Toolbars, filter bars, form sections, table row hover. |
+| `--bg-tertiary` | `#edf2f7` | `rgba(255,255,255,0.08)` | Nested backgrounds, code snippets, non-primary table headers. |
+| `--text-primary` | `#333` | `#e9ecef` | Body text, headings, labels. |
+| `--text-secondary` | `#666` | `rgba(255,255,255,0.7)` | Subtext, metadata, table column headers. |
+| `--text-muted` | `#6c757d` | `rgba(255,255,255,0.6)` | Placeholders, hints, timestamps. |
+| `--border-color` | `#e9ecef` | `rgba(255,255,255,0.1)` | All borders, dividers, table separators. |
+| `--color-primary` | `#667eea` | `#667eea` | Accent, focus rings, active states. |
+| `--color-info-bg` / `--color-info` | `#dbeafe` / `#1d4ed8` | `rgba(59,130,246,0.15)` / `#93c5fd` | Info panels, at-risk badges. |
+| `--color-success-bg` / `--color-success` | `#dcfce7` / `#15803d` | `rgba(34,197,94,0.15)` / `#86efac` | Success states, eligible badges. |
+| `--color-danger-bg` / `--color-danger` | `#fee2e2` / `#dc2626` | `rgba(220,53,69,0.15)` / `#f87171` | Errors, destructive actions. |
+| `--color-purple-bg` / `--color-purple` | `#ede9fe` / `#6d28d9` | `rgba(109,40,217,0.15)` / `#c4b5fd` | Role/privilege indicators, Admin nav, profession badges. |
+| `--input-bg` / `--input-border` | `white` / `#dee2e6` | `#252b3b` / `rgba(255,255,255,0.2)` | Form inputs, selects, textareas. |
 
-### Rules
+### Non-existent token names — do not use
 
-- **Backgrounds**: use `var(--bg-primary/secondary/tertiary)`. Never write `background: #fff` or `background: white`.
-- **Text**: use `var(--text-primary/secondary/muted)`. Never write `color: #666` or `color: #333`.
-- **Tinted boxes** (info/success/warning/error panels): use the `-bg`/text token pair, e.g. `background: var(--color-info-bg); color: var(--color-info)`.
-- **Borders**: use `var(--border-color)`.
-- **JS-injected styles**: same rules apply — use `var(--token)` in `element.style.cssText` strings. Never write hardcoded colors in JS.
+These names appear in older code but are NOT defined in `styles.css`. They silently fall through to browser defaults in dark mode:
+
+- `--danger-color` → use `--color-danger`
+- `--accent-color` → use `--color-primary`
+- `--primary-color` → use `--color-primary`
+- `--text-color` → use `--text-primary`
+
+### Additional CSS rules
+
+- **New page CSS** goes in `static/feature.css`, linked via `{{define "head_tags"}}`. Never embed `<style>` in templates.
+- **Prefer `--bg-primary`** over `--container-bg` in new page CSS files. `--container-bg` remains in the core layout rules where it already exists.
+- **Buttons**: use `.btn .btn-primary / .btn-secondary / .btn-danger` (+ `.btn-sm`). The older `.primary-action-btn` / `.secondary-action-btn` classes are deprecated — do not use in new code.
+- **Card borders**: interactive data-entity cards (member, award, day, mail item) use `border: 2px solid var(--border-color)`. Toolbar/filter panel cards use `border: 1px solid var(--border-color)`.
+- **Global utilities** — the following classes are defined in `styles.css` and available on every page without importing page CSS:
+  - `.data-table` — standard table with gradient header
+  - `.filter-chip` / `.filter-chip-label` — pill-shaped filter button with active state
+  - `.tab-toolbar` / `.status-msg` — tab action row and async status text
+  - `.badge-hq` / `.badge-troop` / `.badge-profession` / `.badge-squad-type` — secondary member badges (used alongside `.member-rank`)
+  - `.btn`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.btn-sm`
+  - `.form-input` — input/select/textarea styling (alias for `.form-group input`)
 
 ## Documentation
 
