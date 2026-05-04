@@ -255,6 +255,7 @@ func claimInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logActivity(int(newUserID), req.Username, "accepted", "invite", req.Username, true, "linked to member: "+memberName)
+	trackLogin(int(newUserID), req.Username, r, true)
 
 	session, _ := store.Get(r, "session")
 	session.Values["authenticated"] = true
