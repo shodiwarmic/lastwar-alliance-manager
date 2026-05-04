@@ -1206,8 +1206,12 @@ function drawWeekImage() {
     };
 
     // ── Layout ─────────────────────────────────────────────────────────────
-    // 4 columns top (Mon–Thu), 3 columns bottom (Fri–Sun)
-    const ROWS  = [[0,1,2,3], [4,5,6]];
+    const numCols = parseInt(document.getElementById('week-image-cols').value, 10) || 4;
+    // 4-col: Mon–Thu top row, Fri–Sun bottom row (3 cols, centred)
+    // 2-col: Mon/Tue, Wed/Thu, Fri/Sat, Sun (centred)
+    const ROWS = numCols === 2
+        ? [[0,1], [2,3], [4,5], [6]]
+        : [[0,1,2,3], [4,5,6]];
     const colW  = 230;
     const padX  = 14;
     const hdrH  = 62;
@@ -1226,8 +1230,8 @@ function drawWeekImage() {
         if (n > maxEvts) maxEvts = n;
     });
     const colH   = banH + gap + hdrH + gap + Math.max(maxEvts, 1) * rowH + gap * 2;
-    const totalW = 4 * colW + 5 * gap;
-    const totalH = gap + colH + rowGap + colH + gap;
+    const totalW = numCols * colW + (numCols + 1) * gap;
+    const totalH = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + gap;
 
     const canvas = document.getElementById('schedule-canvas');
     canvas.width  = totalW;
@@ -1249,8 +1253,10 @@ function drawWeekImage() {
 
     // ── Draw one day column ────────────────────────────────────────────────
     function drawDayColumn(d, colIdx, rowIdx) {
-        let xOff = 0;
-        if (rowIdx === 1) xOff = Math.round((colW + gap) / 2); // centre 3-col row
+        // Centre any row that has fewer columns than numCols
+        const rowLen = ROWS[rowIdx].length;
+        const missingCols = numCols - rowLen;
+        const xOff = missingCols > 0 ? Math.round(missingCols * (colW + gap) / 2) : 0;
         const x = gap + colIdx * (colW + gap) + xOff;
         const y = gap + rowIdx * (colH + rowGap);
 
@@ -1366,8 +1372,7 @@ function drawWeekImage() {
         });
     }
 
-    ROWS[0].forEach((dayIdx, colIdx) => drawDayColumn(dates[dayIdx], colIdx, 0));
-    ROWS[1].forEach((dayIdx, colIdx) => drawDayColumn(dates[dayIdx], colIdx, 1));
+    ROWS.forEach((row, rowIdx) => row.forEach((dayIdx, colIdx) => drawDayColumn(dates[dayIdx], colIdx, rowIdx)));
 }
 
 // ── Canvas: Day Card ──────────────────────────────────────────────────────────
@@ -1724,12 +1729,21 @@ function bindEvents() {
         document.getElementById('text-output-section').classList.add('hidden');
     });
 
-    document.getElementById('btn-week-image').addEventListener('click', () => {
+    function showWeekImage() {
         const sec = document.getElementById('canvas-section');
         document.getElementById('canvas-section-title').textContent = '🖼️ Week Image';
         document.getElementById('text-output-section').classList.add('hidden');
         sec.classList.remove('hidden');
         drawWeekImage();
+    }
+
+    document.getElementById('btn-week-image').addEventListener('click', showWeekImage);
+
+    document.getElementById('week-image-cols').addEventListener('change', () => {
+        if (!document.getElementById('canvas-section').classList.contains('hidden') &&
+            document.getElementById('canvas-section-title').textContent.startsWith('🖼️')) {
+            drawWeekImage();
+        }
     });
 
     document.getElementById('btn-day-card').addEventListener('click', () => {

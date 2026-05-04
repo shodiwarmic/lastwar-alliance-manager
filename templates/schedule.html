@@ -39,7 +39,13 @@
         <!-- Output buttons -->
         <div class="schedule-output-bar">
             <button class="btn btn-secondary btn-sm" id="btn-text-output">📄 Text</button>
-            <button class="btn btn-secondary btn-sm" id="btn-week-image">🖼️ Week Image</button>
+            <span style="display:inline-flex;align-items:center;gap:4px;">
+                <button class="btn btn-secondary btn-sm" id="btn-week-image">🖼️ Week Image</button>
+                <select id="week-image-cols" class="day-card-picker" title="Layout columns">
+                    <option value="4">4 cols</option>
+                    <option value="2">2 cols</option>
+                </select>
+            </span>
             <span style="display:inline-flex;align-items:center;gap:4px;">
                 <button class="btn btn-secondary btn-sm" id="btn-day-card">📅 Day Card</button>
                 <select id="day-card-picker" class="day-card-picker" title="Select day for card"></select>
