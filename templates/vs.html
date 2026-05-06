@@ -32,7 +32,7 @@
     </section>
 
     <section class="table-wrapper">
-        <table class="vs-table" id="vs-table">
+        <table class="vs-table" id="vs-table" data-export-csv="vs-points.csv">
             <thead>
                 <tr>
                     <th data-sort="name" class="sort-asc">Member</th>
@@ -98,5 +98,6 @@
 {{end}}
 
 {{define "scripts"}}
-    <script src="vs.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
+<script src="vs.js"></script>
 {{end}}

@@ -1,5 +1,75 @@
 // static/global.js - Global JavaScript for handling mobile menu, user dropdown, and logout functionality
 
+// ---- Table export (CSV + XLSX) ----
+
+function _extractTableData(tableEl) {
+    const skipCols = new Set();
+    const rows = [];
+
+    const ths = tableEl.querySelectorAll('thead th');
+    const headers = [];
+    ths.forEach((th, i) => {
+        if ('noExport' in th.dataset) { skipCols.add(i); return; }
+        headers.push(th.textContent.trim());
+    });
+    rows.push(headers);
+
+    tableEl.querySelectorAll('tbody tr').forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        if (tds.length === 1 && tds[0].colSpan > 1) return;
+        const cells = [];
+        tds.forEach((td, i) => {
+            if (skipCols.has(i)) return;
+            const input = td.querySelector('input, select, textarea');
+            let val;
+            if (input) {
+                val = input.type === 'checkbox' ? (input.checked ? 'Yes' : 'No') : input.value;
+            } else {
+                val = td.textContent;
+            }
+            cells.push(val.trim());
+        });
+        if (cells.length) rows.push(cells);
+    });
+
+    return rows;
+}
+
+function exportTableToCSV(tableEl, filename) {
+    if (typeof tableEl === 'string') tableEl = document.getElementById(tableEl);
+    if (!tableEl) return;
+
+    const rows = _extractTableData(tableEl);
+    const csv = '﻿' + rows.map(row =>
+        row.map(val => {
+            const s = String(val ?? '');
+            return (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r'))
+                ? '"' + s.replace(/"/g, '""') + '"'
+                : s;
+        }).join(',')
+    ).join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function exportTableToXLSX(tableEl, filename) {
+    if (typeof tableEl === 'string') tableEl = document.getElementById(tableEl);
+    if (!tableEl) return;
+    const rows = _extractTableData(tableEl);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, filename);
+}
+
 // ---- Toast notifications ----
 function showToast(message, type = 'success', duration = 3500) {
     const container = document.getElementById('toast-container');
@@ -128,6 +198,47 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Auto-wire CSV + XLSX export buttons for tables with data-export-csv attribute
+    document.querySelectorAll('table[data-export-csv]').forEach(table => {
+        const csvFilename  = table.dataset.exportCsv;
+        const xlsxFilename = csvFilename.replace(/\.csv$/i, '.xlsx');
+
+        const csvBtn = document.createElement('button');
+        csvBtn.className = 'btn btn-secondary btn-sm';
+        csvBtn.textContent = '↓ CSV';
+        csvBtn.title = 'Download as CSV';
+        csvBtn.addEventListener('click', () => exportTableToCSV(table, csvFilename));
+
+        const xlsxBtn = document.createElement('button');
+        xlsxBtn.className = 'btn btn-secondary btn-sm';
+        xlsxBtn.textContent = '↓ XLSX';
+        xlsxBtn.title = 'Download as Excel spreadsheet';
+        xlsxBtn.addEventListener('click', () => exportTableToXLSX(table, xlsxFilename));
+
+        // Find nearest preceding .tab-toolbar, searching up through ancestors
+        let toolbar = null;
+        let cur = table;
+        outer: while (cur && cur !== document.body) {
+            let prev = cur.previousElementSibling;
+            while (prev) {
+                if (prev.classList.contains('tab-toolbar')) { toolbar = prev; break outer; }
+                prev = prev.previousElementSibling;
+            }
+            cur = cur.parentElement;
+        }
+
+        if (toolbar) {
+            toolbar.appendChild(csvBtn);
+            toolbar.appendChild(xlsxBtn);
+        } else {
+            const wrap = document.createElement('div');
+            wrap.className = 'tab-toolbar';
+            wrap.appendChild(csvBtn);
+            wrap.appendChild(xlsxBtn);
+            table.parentNode.insertBefore(wrap, table);
+        }
+    });
 });
 
 document.addEventListener('DOMContentLoaded', () => {

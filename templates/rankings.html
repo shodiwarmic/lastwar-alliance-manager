@@ -38,7 +38,7 @@
             </div>
             
             <div style="overflow-x: auto;">
-                <table class="analytics-table" id="growth-table">
+                <table class="analytics-table" id="growth-table" data-export-csv="power-growth.csv">
                     <thead>
                         <tr>
                             <th>Commander</th>
@@ -75,7 +75,7 @@
         <section class="rankings-section">
             <h3>🏆 Weekly VS Leaderboard</h3>
             <div style="overflow-x: auto;">
-                <table class="analytics-table" id="vs-table">
+                <table class="analytics-table" id="vs-table" data-export-csv="vs-leaderboard.csv">
                     <thead>
                         <tr>
                             <th>Rank</th>
@@ -99,5 +99,6 @@
 {{end}}
 
 {{define "scripts"}}
-    <script src="rankings.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
+<script src="rankings.js"></script>
 {{end}}
