@@ -18,6 +18,18 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// Re-validate admin status from DB on every request so that revoking
+		// admin rights takes effect immediately without requiring re-login.
+		// gorilla/sessions returns the same object for the same name within a
+		// request, so requirePermission / adminMiddleware / getPageData all
+		// see the refreshed value without any extra DB calls.
+		if userID, ok := session.Values["user_id"].(int); ok {
+			var isAdmin bool
+			if err := db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin); err == nil {
+				session.Values["is_admin"] = isAdmin
+			}
+		}
+
 		// Refresh the session cookie expiration (Rolling Session)
 		session.Save(r, w)
 
