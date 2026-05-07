@@ -26,6 +26,11 @@ const PERM_ROWS = [
     { key: 'view_allies', label: 'View Allies' },
     { key: 'manage_allies', label: 'Manage Allies' },
     { key: 'view_activity', label: 'View Activity Log' },
+    { key: 'view_accountability', label: 'View Accountability' },
+    { key: 'manage_accountability', label: 'Manage Accountability' },
+    { key: 'view_season_hub', label: 'View Season Hub' },
+    { key: 'manage_season_hub', label: 'Manage Season Hub' },
+    { key: 'manage_season_rewards', label: 'Manage Season Rewards' },
     { key: 'manage_settings', label: 'Access Settings Tab' }
 ];
 
