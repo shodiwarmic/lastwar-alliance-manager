@@ -282,7 +282,8 @@ func forceChangePassword(w http.ResponseWriter, r *http.Request) {
 
 func logout(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
-	session.Values["authenticated"] = false
+	delete(session.Values, "user_id")
+	delete(session.Values, "authenticated")
 	session.Options.MaxAge = -1
 	session.Save(r, w)
 
@@ -291,12 +292,8 @@ func logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func changePassword(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, ok := session.Values["user_id"].(int)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	user := getAuthUser(r)
+	userID := user.ID
 
 	var input struct {
 		CurrentPassword string `json:"current_password"`

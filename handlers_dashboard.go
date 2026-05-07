@@ -47,8 +47,7 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getDashboardPrefs(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	userID := getAuthUser(r).ID
 
 	data := getPageData(r, "", "")
 	allowed := allowedCards(data)
@@ -97,8 +96,7 @@ func getDashboardPrefs(w http.ResponseWriter, r *http.Request) {
 }
 
 func saveDashboardPrefs(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	userID := getAuthUser(r).ID
 
 	var submitted []DashboardCard
 	if err := json.NewDecoder(r.Body).Decode(&submitted); err != nil {

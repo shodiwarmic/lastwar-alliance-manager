@@ -568,9 +568,8 @@ func handleAccountabilityReportData(w http.ResponseWriter, r *http.Request) {
 // --- API: strike CRUD ---
 
 func handleStrikeCreate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	var body struct {
 		MemberID   int    `json:"member_id"`
@@ -624,9 +623,8 @@ func handleStrikeCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleStrikeUpdate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	strikeID, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -684,9 +682,8 @@ func handleStrikeUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleStrikeDelete(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	strikeID, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -718,9 +715,8 @@ func handleStrikeDelete(w http.ResponseWriter, r *http.Request) {
 // --- API: storm attendance ---
 
 func handleStormAttendanceUpsert(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	var body struct {
 		StormDate string `json:"storm_date"`

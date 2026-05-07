@@ -270,9 +270,7 @@ func handleSeasonList(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		Name             string       `json:"name"`
@@ -410,16 +408,14 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logActivity(userID, username, "created", "season_config", body.Name, false)
+	logActivity(user.ID, user.Username, "created", "season_config", body.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"id": seasonID, "message": "Season created"})
 }
 
 func handleSeasonArchive(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -449,16 +445,14 @@ func handleSeasonArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logActivity(userID, username, "archived", "season_config", s.Name, false)
+	logActivity(user.ID, user.Username, "archived", "season_config", s.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Season archived"})
 }
 
 func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -534,16 +528,14 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 	if old.WeekCount != body.WeekCount {
 		changes = append(changes, fmt.Sprintf("week_count: %d → %d", old.WeekCount, body.WeekCount))
 	}
-	logActivity(userID, username, "updated", "season_config", body.Name, false, strings.Join(changes, "; "))
+	logActivity(user.ID, user.Username, "updated", "season_config", body.Name, false, strings.Join(changes, "; "))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Season updated"})
 }
 
 func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -593,7 +585,7 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logActivity(userID, username, "deleted", "season_config", s.Name, false)
+	logActivity(user.ID, user.Username, "deleted", "season_config", s.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Season deleted"})
@@ -940,9 +932,7 @@ func handleParticipationGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		SeasonID   int                  `json:"season_id"`
@@ -1015,7 +1005,7 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 			  note = excluded.note,
 			  recorded_by = excluded.recorded_by,
 			  updated_at = CURRENT_TIMESTAMP`,
-			body.SeasonID, e.MemberID, body.WeekNumber, scoreKey, e.AttendedKeyEvent, e.Note, userID)
+			body.SeasonID, e.MemberID, body.WeekNumber, scoreKey, e.AttendedKeyEvent, e.Note, user.ID)
 		if err != nil {
 			slog.Error("handleParticipationSave: upsert", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1030,7 +1020,7 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logActivity(userID, username, "updated", "season_attendance",
+	logActivity(user.ID, user.Username, "updated", "season_attendance",
 		fmt.Sprintf("%s Week %d", s.Name, body.WeekNumber), false,
 		fmt.Sprintf("%d members scored", saved))
 
@@ -1043,9 +1033,7 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	if err := r.ParseMultipartForm(50 << 20); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
@@ -1156,7 +1144,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 			Points:       rec.Score,
 		}
 
-		resolvedName, resolvedScore, member, matchType := resolveOCRPlayer(tx, rec, userID)
+		resolvedName, resolvedScore, member, matchType := resolveOCRPlayer(tx, rec, user.ID)
 		_ = resolvedName // original name kept in row.OriginalName for display
 		row.Points = resolvedScore
 		if member == nil {
@@ -1198,7 +1186,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 			  %s = excluded.%s,
 			  imported_by = excluded.imported_by,
 			  imported_at = CURRENT_TIMESTAMP`, col, col, col)
-		if _, err := tx.Exec(query, seasonID, row.MemberID, weekNumber, row.Points, userID); err != nil {
+		if _, err := tx.Exec(query, seasonID, row.MemberID, weekNumber, row.Points, user.ID); err != nil {
 			slog.Error("handleContributionsImport: upsert", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -1215,7 +1203,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	if weekNumber == 0 {
 		weekLabel = "Season Total"
 	}
-	logActivity(userID, username, "imported", "season_contributions",
+	logActivity(user.ID, user.Username, "imported", "season_contributions",
 		fmt.Sprintf("%s — %s %s", s.Name, strings.ReplaceAll(category, "_", " "), weekLabel), false,
 		fmt.Sprintf("%d members imported", len(matched)))
 
@@ -1283,9 +1271,7 @@ func handleContributionsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleContributionsManual(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		SeasonID   int `json:"season_id"`
@@ -1347,7 +1333,7 @@ func handleContributionsManual(w http.ResponseWriter, r *http.Request) {
 			  imported_by       = excluded.imported_by,
 			  imported_at       = CURRENT_TIMESTAMP`,
 			body.SeasonID, e.MemberID, body.WeekNumber,
-			e.MutualAssistance, e.Siege, e.RareSoilWar, e.Defeat, userID)
+			e.MutualAssistance, e.Siege, e.RareSoilWar, e.Defeat, user.ID)
 		if err != nil {
 			slog.Error("handleContributionsManual: upsert", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1366,7 +1352,7 @@ func handleContributionsManual(w http.ResponseWriter, r *http.Request) {
 	if body.WeekNumber == 0 {
 		weekLabel = "Season Total"
 	}
-	logActivity(userID, username, "imported", "season_contributions",
+	logActivity(user.ID, user.Username, "imported", "season_contributions",
 		fmt.Sprintf("%s — %s (manual)", s.Name, weekLabel), false,
 		fmt.Sprintf("%d members saved", saved))
 
@@ -1436,9 +1422,7 @@ func handleRewardsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRewardSave(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		SeasonID         int     `json:"season_id"`
@@ -1489,7 +1473,7 @@ func handleRewardSave(w http.ResponseWriter, r *http.Request) {
 		  logged_by = excluded.logged_by,
 		  logged_at = CURRENT_TIMESTAMP`,
 		body.SeasonID, body.MemberID, body.RewardTier,
-		body.ParticipationPct, body.ContributionPct, body.Note, userID)
+		body.ParticipationPct, body.ContributionPct, body.Note, user.ID)
 	if err != nil {
 		slog.Error("handleRewardSave: upsert", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1497,7 +1481,7 @@ func handleRewardSave(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
-	logActivity(userID, username, "created", "season_rewards",
+	logActivity(user.ID, user.Username, "created", "season_rewards",
 		fmt.Sprintf("%s — %s", memberName, body.RewardTier), false)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1505,9 +1489,8 @@ func handleRewardSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -1561,9 +1544,8 @@ func handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRewardDelete(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -1656,9 +1638,8 @@ func handleSeasonMailList(w http.ResponseWriter, r *http.Request) {
 
 // handleSeasonMailUpload creates a new text-based season mail entry (title + copy-paste content).
 func handleSeasonMailUpload(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	var body struct {
 		SeasonID int    `json:"season_id"`
@@ -1706,9 +1687,8 @@ func handleSeasonMailUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSeasonMailUpdate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -1762,9 +1742,8 @@ func handleSeasonMailUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSeasonMailDelete(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {

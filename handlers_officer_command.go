@@ -113,10 +113,8 @@ func createOCCategory(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "created", "oc_category", body.Name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "oc_category", body.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(OCCategory{
@@ -147,14 +145,12 @@ func updateOCCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	details := ""
 	if oldName != body.Name {
 		details = "name: " + oldName + " → " + body.Name
 	}
-	logActivity(actorID, actorName, "updated", "oc_category", body.Name, false, details)
+	logActivity(user.ID, user.Username, "updated", "oc_category", body.Name, false, details)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -182,10 +178,8 @@ func deleteOCCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "deleted", "oc_category", catName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "oc_category", catName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -219,10 +213,8 @@ func createOCResponsibility(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "created", "oc_responsibility", body.Name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "oc_responsibility", body.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(OCResponsibility{
@@ -264,9 +256,7 @@ func updateOCResponsibility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	var changes []string
 	if oldName != body.Name {
 		changes = append(changes, "name: "+oldName+" → "+body.Name)
@@ -275,7 +265,7 @@ func updateOCResponsibility(w http.ResponseWriter, r *http.Request) {
 		changes = append(changes, "frequency: "+oldFreq+" → "+body.Frequency)
 	}
 	details := strings.Join(changes, "; ")
-	logActivity(actorID, actorName, "updated", "oc_responsibility", body.Name, false, details)
+	logActivity(user.ID, user.Username, "updated", "oc_responsibility", body.Name, false, details)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -303,10 +293,8 @@ func deleteOCResponsibility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "deleted", "oc_responsibility", respName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "oc_responsibility", respName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -338,10 +326,8 @@ func addOCAssignee(w http.ResponseWriter, r *http.Request) {
 	var respName string
 	db.QueryRow(`SELECT name FROM oc_responsibilities WHERE id = ?`, respID).Scan(&respName)
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "created", "oc_assignee", a.Name, false, respName)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "oc_assignee", a.Name, false, respName)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(a)
@@ -366,10 +352,8 @@ func removeOCAssignee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "deleted", "oc_assignee", memberName, false, respName)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "oc_assignee", memberName, false, respName)
 
 	w.WriteHeader(http.StatusNoContent)
 }

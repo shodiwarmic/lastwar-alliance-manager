@@ -18,7 +18,9 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 )
 
-// getPageData extracts the current user's session data and permissions
+// getPageData loads the current user from the database and populates PageData.
+// The session cookie is only used to identify the user (user_id); all
+// authorization data is sourced live from the DB.
 func getPageData(r *http.Request, title, activePage string) PageData {
 	data := PageData{
 		Title:      title,
@@ -26,21 +28,21 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	}
 
 	session, _ := store.Get(r, "session")
-	if auth, ok := session.Values["authenticated"].(bool); ok && auth {
-		data.IsAuthenticated = true
-		data.Username = session.Values["username"].(string)
-
-		if adminVal, ok := session.Values["is_admin"].(bool); ok && adminVal {
-			data.IsAdmin = true
-			data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewAnonymousAuthors: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true, ViewAccountability: true, ManageAccountability: true, ViewSeasonHub: true, ManageSeasonHub: true, ManageSeasonRewards: true}
-			if memberID, ok := session.Values["member_id"].(int); ok && memberID > 0 {
-				db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&data.Rank)
+	userID, ok := session.Values["user_id"].(int)
+	if ok && userID > 0 {
+		user := loadUserFromDB(userID)
+		if user != nil {
+			data.IsAuthenticated = true
+			data.Username = user.Username
+			data.Rank = user.Rank
+			if user.MemberID != nil {
+				data.MemberID = *user.MemberID
 			}
-		} else if memberID, ok := session.Values["member_id"].(int); ok {
-			var rank string
-			if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err == nil {
-				data.Rank = rank
-				data.Permissions = getRankPermissions(rank)
+			if user.IsAdmin {
+				data.IsAdmin = true
+				data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewAnonymousAuthors: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true, ViewAccountability: true, ManageAccountability: true, ViewSeasonHub: true, ManageSeasonHub: true, ManageSeasonRewards: true}
+			} else if user.Rank != "" {
+				data.Permissions = getRankPermissions(user.Rank)
 			}
 		}
 	}
@@ -373,7 +375,7 @@ func main() {
 	// Custom Login Route (No Layout)
 	router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := store.Get(r, "session")
-		if auth, ok := session.Values["authenticated"].(bool); ok && auth {
+		if userID, ok := session.Values["user_id"].(int); ok && userID > 0 {
 			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 			return
 		}

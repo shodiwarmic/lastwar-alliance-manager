@@ -105,9 +105,7 @@ func createProspect(w http.ResponseWriter, r *http.Request) {
 		db.QueryRow("SELECT name FROM members WHERE id = ?", *p.RecruiterID).Scan(&p.RecruiterName)
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	prospectDetails := ""
 	if p.Server != "" || p.SourceAlliance != "" {
 		prospectDetails = "server: " + p.Server
@@ -115,7 +113,7 @@ func createProspect(w http.ResponseWriter, r *http.Request) {
 			prospectDetails += ", from: " + p.SourceAlliance
 		}
 	}
-	logActivity(actorID, actorName, "created", "prospect", p.Name, false, prospectDetails)
+	logActivity(user.ID, user.Username, "created", "prospect", p.Name, false, prospectDetails)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -187,9 +185,7 @@ func updateProspect(w http.ResponseWriter, r *http.Request) {
 		db.QueryRow("SELECT name FROM members WHERE id = ?", *p.RecruiterID).Scan(&p.RecruiterName)
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	var prospectChanges []string
 	if oldName != p.Name {
 		prospectChanges = append(prospectChanges, "name: "+oldName+" → "+p.Name)
@@ -256,7 +252,7 @@ func updateProspect(w http.ResponseWriter, r *http.Request) {
 	if oldFirstContacted != p.FirstContacted {
 		prospectChanges = append(prospectChanges, "first contacted: "+oldFirstContacted+" → "+p.FirstContacted)
 	}
-	logActivity(actorID, actorName, "updated", "prospect", p.Name, false, strings.Join(prospectChanges, "; "))
+	logActivity(user.ID, user.Username, "updated", "prospect", p.Name, false, strings.Join(prospectChanges, "; "))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(p)
@@ -286,10 +282,8 @@ func deleteProspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "deleted", "prospect", prospectName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "prospect", prospectName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
