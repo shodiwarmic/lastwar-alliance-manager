@@ -67,10 +67,8 @@ func createAllyAgreementType(w http.ResponseWriter, r *http.Request) {
 		&t.ID, &t.Name, &t.Active, &t.SortOrder, &t.CreatedAt,
 	)
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "created", "agreement_type", req.Name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "agreement_type", req.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -127,10 +125,8 @@ func updateAllyAgreementType(w http.ResponseWriter, r *http.Request) {
 	)
 	t.Active = active == 1
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "updated", "agreement_type", t.Name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "updated", "agreement_type", t.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(t)
@@ -168,10 +164,8 @@ func deleteAllyAgreementType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "deleted", "agreement_type", typeName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "agreement_type", typeName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -289,10 +283,8 @@ func createAlly(w http.ResponseWriter, r *http.Request) {
 		a.AgreementTypeIDs = []int{}
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "created", "ally", req.Name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "ally", req.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -371,9 +363,7 @@ func updateAlly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	var allyChanges []string
 	if oldName != req.Name {
 		allyChanges = append(allyChanges, "name: "+oldName+" → "+req.Name)
@@ -394,7 +384,7 @@ func updateAlly(w http.ResponseWriter, r *http.Request) {
 		}
 		allyChanges = append(allyChanges, was+" → "+now)
 	}
-	logActivity(actorID, actorName, "updated", "ally", req.Name, false, strings.Join(allyChanges, "; "))
+	logActivity(user.ID, user.Username, "updated", "ally", req.Name, false, strings.Join(allyChanges, "; "))
 
 	var a Ally
 	var activeVal int
@@ -441,10 +431,8 @@ func deleteAlly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "deleted", "ally", allyName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "ally", allyName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }

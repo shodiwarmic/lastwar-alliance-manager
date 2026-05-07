@@ -37,15 +37,14 @@ func hasSufficientRank(userRank, requiredRank string) bool {
 }
 
 func getFilesList(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
+	userID := user.ID
 	var userRank string
 
-	if isAdmin {
+	if user.IsAdmin {
 		userRank = "Admin"
-	} else if memberID, ok := session.Values["member_id"].(int); ok {
-		db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&userRank)
+	} else if user.Rank != "" {
+		userRank = user.Rank
 	} else {
 		userRank = "R1"
 	}
@@ -68,7 +67,7 @@ func getFilesList(w http.ResponseWriter, r *http.Request) {
 
 		f.IsOwner = (f.OwnerUserID == userID)
 
-		if isAdmin || f.IsOwner || hasSufficientRank(userRank, f.MinRank) {
+		if user.IsAdmin || f.IsOwner || hasSufficientRank(userRank, f.MinRank) {
 			files = append(files, f)
 		}
 	}
@@ -78,8 +77,8 @@ func getFilesList(w http.ResponseWriter, r *http.Request) {
 }
 
 func uploadFile(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	user := getAuthUser(r)
+	userID := user.ID
 
 	r.Body = http.MaxBytesReader(w, r.Body, MaxFileUploadSize)
 	err := r.ParseMultipartForm(MaxFileUploadSize)
@@ -126,8 +125,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "created", "file", title, false)
+	logActivity(userID, user.Username, "created", "file", title, false)
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -136,9 +134,7 @@ func updateFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	fileID := vars["id"]
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
 
 	var ownerID int
 	err := db.QueryRow("SELECT owner_user_id FROM files WHERE id = ?", fileID).Scan(&ownerID)
@@ -147,14 +143,10 @@ func updateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canManage := isAdmin || userID == ownerID
-	if !canManage {
-		if memberID, ok := session.Values["member_id"].(int); ok {
-			var rank string
-			db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
-			perms := getRankPermissions(rank)
-			canManage = perms.ManageFiles
-		}
+	canManage := user.IsAdmin || user.ID == ownerID
+	if !canManage && user.Rank != "" {
+		perms := getRankPermissions(user.Rank)
+		canManage = perms.ManageFiles
 	}
 
 	if !canManage {
@@ -187,9 +179,7 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	fileID := vars["id"]
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
 
 	var fileName, fileTitle string
 	var ownerID int
@@ -199,14 +189,10 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canManage := isAdmin || userID == ownerID
-	if !canManage {
-		if memberID, ok := session.Values["member_id"].(int); ok {
-			var rank string
-			db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
-			perms := getRankPermissions(rank)
-			canManage = perms.ManageFiles
-		}
+	canManage := user.IsAdmin || user.ID == ownerID
+	if !canManage && user.Rank != "" {
+		perms := getRankPermissions(user.Rank)
+		canManage = perms.ManageFiles
 	}
 
 	if !canManage {
@@ -217,17 +203,14 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 	os.Remove(filepath.Join(getStoragePath(), fileName))
 	db.Exec("DELETE FROM files WHERE id = ?", fileID)
 
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "deleted", "file", fileTitle, false)
+	logActivity(user.ID, user.Username, "deleted", "file", fileTitle, false)
 
 	w.WriteHeader(http.StatusOK)
 }
 
 func downloadFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
 
 	var fileName, minRank string
 	var ownerID int
@@ -237,11 +220,9 @@ func downloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !isAdmin && ownerID != userID {
-		var userRank string
-		if memberID, ok := session.Values["member_id"].(int); ok {
-			db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&userRank)
-		} else {
+	if !user.IsAdmin && ownerID != user.ID {
+		userRank := user.Rank
+		if userRank == "" {
 			userRank = "R1"
 		}
 		if !hasSufficientRank(userRank, minRank) {
@@ -257,10 +238,7 @@ func generateWOPIToken(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	fileID, _ := strconv.Atoi(vars["id"])
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
 
 	var minRank, minEditRank string
 	var ownerID int
@@ -273,14 +251,12 @@ func generateWOPIToken(w http.ResponseWriter, r *http.Request) {
 	canView := false
 	canEdit := false
 
-	if isAdmin || userID == ownerID {
+	if user.IsAdmin || user.ID == ownerID {
 		canView = true
 		canEdit = true
-	} else if memberID, ok := session.Values["member_id"].(int); ok {
-		var userRank string
-		db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&userRank)
-		canView = hasSufficientRank(userRank, minRank)
-		canEdit = hasSufficientRank(userRank, minEditRank)
+	} else if user.Rank != "" {
+		canView = hasSufficientRank(user.Rank, minRank)
+		canEdit = hasSufficientRank(user.Rank, minEditRank)
 	}
 
 	if !canView {
@@ -289,8 +265,8 @@ func generateWOPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims := WOPIClaims{
-		UserID:   userID,
-		Username: username,
+		UserID:   user.ID,
+		Username: user.Username,
 		FileID:   fileID,
 		CanEdit:  canEdit,
 		RegisteredClaims: jwt.RegisteredClaims{

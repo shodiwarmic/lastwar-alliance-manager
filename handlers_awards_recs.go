@@ -104,16 +104,14 @@ func saveAwards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	awardCount := 0
 	for _, a := range data.Awards {
 		if a.MemberID > 0 {
 			awardCount++
 		}
 	}
-	logActivity(actorID, actorName, "updated", "awards", data.WeekDate, false, strconv.Itoa(awardCount)+" awards")
+	logActivity(user.ID, user.Username, "updated", "awards", data.WeekDate, false, strconv.Itoa(awardCount)+" awards")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Awards saved successfully"})
@@ -129,11 +127,9 @@ func deleteWeekAwards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	n, _ := result.RowsAffected()
-	logActivity(actorID, actorName, "deleted", "awards", weekDate, false, strconv.FormatInt(n, 10)+" awards removed")
+	logActivity(user.ID, user.Username, "deleted", "awards", weekDate, false, strconv.FormatInt(n, 10)+" awards removed")
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -203,10 +199,8 @@ func createAwardType(w http.ResponseWriter, r *http.Request) {
 	at.SortOrder = maxOrder + 1
 	at.CreatedAt = time.Now().Format(time.RFC3339)
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "created", "award_type", at.Name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "award_type", at.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -239,9 +233,7 @@ func updateAwardType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	var atChanges []string
 	if oldName != at.Name {
 		atChanges = append(atChanges, "name: "+oldName+" → "+at.Name)
@@ -256,7 +248,7 @@ func updateAwardType(w http.ResponseWriter, r *http.Request) {
 		}
 		atChanges = append(atChanges, was+" → "+now)
 	}
-	logActivity(actorID, actorName, "updated", "award_type", at.Name, false, strings.Join(atChanges, "; "))
+	logActivity(user.ID, user.Username, "updated", "award_type", at.Name, false, strings.Join(atChanges, "; "))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Award type updated"})
@@ -305,10 +297,8 @@ func deleteAwardType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "deleted", "award_type", name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "award_type", name, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -359,8 +349,7 @@ func getRecommendations(w http.ResponseWriter, r *http.Request) {
 }
 
 func createRecommendation(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	userID := getAuthUser(r).ID
 
 	var input struct {
 		MemberID int    `json:"member_id"`
@@ -432,9 +421,9 @@ func createRecommendation(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteRecommendation(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
+	userID := user.ID
+	isAdmin := user.IsAdmin
 
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
@@ -469,9 +458,9 @@ func deleteRecommendation(w http.ResponseWriter, r *http.Request) {
 }
 
 func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
+	userID := user.ID
+	isAdmin := user.IsAdmin
 
 	var userRank string
 	var canViewAnon bool
@@ -542,8 +531,7 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 }
 
 func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	userID := getAuthUser(r).ID
 
 	var input struct {
 		MemberID       int    `json:"member_id"`
@@ -607,8 +595,7 @@ func createDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateDynoRecommendation(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	userID := getAuthUser(r).ID
 
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
@@ -662,9 +649,9 @@ func updateDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
+	userID := user.ID
+	isAdmin := user.IsAdmin
 
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])

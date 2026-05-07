@@ -5,15 +5,10 @@ let canUploadFiles = false;
 let allFilesData = [];
 let currentEditFileId = null;
 
-document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        const response = await fetch('/api/check-auth');
-        if (response.ok) {
-            const data = await response.json();
-            canManageFiles = data.permissions.manage_files || data.is_admin;
-            canUploadFiles = data.permissions.upload_files || data.is_admin;
-        }
-    } catch (e) {}
+document.addEventListener('DOMContentLoaded', () => {
+    const cfg = document.getElementById('page-config').dataset;
+    canManageFiles = cfg.canManage === 'true';
+    canUploadFiles = cfg.canUpload === 'true';
     loadFiles();
 });
 

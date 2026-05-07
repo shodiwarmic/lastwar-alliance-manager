@@ -15,8 +15,7 @@ import (
 )
 
 func getMembers(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	userID := getAuthUser(r).ID
 
 	// CTE-based query replaces 6 correlated subqueries per row with a single pass.
 	query := `
@@ -133,10 +132,8 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "created", "member", m.Name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "member", m.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -223,10 +220,8 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		changes = append(changes, eligStr(old.Eligible)+" → "+eligStr(m.Eligible))
 	}
 	if len(changes) > 0 {
-		session, _ := store.Get(r, "session")
-		actorID, _ := session.Values["user_id"].(int)
-		actorName, _ := session.Values["username"].(string)
-		logActivity(actorID, actorName, "updated", "member", m.Name, false, strings.Join(changes, "; "))
+		user := getAuthUser(r)
+		logActivity(user.ID, user.Username, "updated", "member", m.Name, false, strings.Join(changes, "; "))
 	}
 
 	// Handle Power History
@@ -285,10 +280,8 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "deleted", "member", memberName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "member", memberName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -325,10 +318,8 @@ func archiveMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "archived", "member", memberName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "archived", "member", memberName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -371,10 +362,8 @@ func reactivateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "unarchived", "member", memberName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "unarchived", "member", memberName, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -430,10 +419,8 @@ func updateFormerMember(w http.ResponseWriter, r *http.Request) {
 		changes = append(changes, "leave reason: "+oldLeaveReason+" → "+req.LeaveReason)
 	}
 	if len(changes) > 0 {
-		session, _ := store.Get(r, "session")
-		actorID, _ := session.Values["user_id"].(int)
-		actorName, _ := session.Values["username"].(string)
-		logActivity(actorID, actorName, "updated", "member", req.Name, false, strings.Join(changes, "; "))
+		user := getAuthUser(r)
+		logActivity(user.ID, user.Username, "updated", "member", req.Name, false, strings.Join(changes, "; "))
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -549,8 +536,7 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 
 	// --- NEW ALIAS LOOKUP LOGIC ---
 	// 1. Get the current user's ID to fetch their personal aliases
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	userID := getAuthUser(r).ID
 
 	// 2. Build fast-lookup maps for canonical names and aliases
 	existingMembersByID := make(map[int]Member)
@@ -762,10 +748,8 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 
 	total := result.Added + result.Updated + result.Removed
 	if total > 0 {
-		session, _ := store.Get(r, "session")
-		actorID, _ := session.Values["user_id"].(int)
-		actorName, _ := session.Values["username"].(string)
-		logActivity(actorID, actorName, "imported", "member", strconv.Itoa(total)+" member updates", false)
+		user := getAuthUser(r)
+		logActivity(user.ID, user.Username, "imported", "member", strconv.Itoa(total)+" member updates", false)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -815,12 +799,13 @@ func getMemberStats(w http.ResponseWriter, r *http.Request) {
 
 // getMyProfile retrieves the current user's linked member stats and latest power history
 func getMyProfile(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	memberID, ok := session.Values["member_id"].(int)
+	user := getAuthUser(r)
+	ok := user.MemberID != nil
 	if !ok {
 		http.Error(w, "No linked member profile found", http.StatusNotFound)
 		return
 	}
+	memberID := *user.MemberID
 
 	var m Member
 
@@ -848,12 +833,12 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 
 // updateMyProfile allows a user to self-serve update their own in-game stats
 func updateMyProfile(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	memberID, ok := session.Values["member_id"].(int)
-	if !ok {
+	user := getAuthUser(r)
+	if user.MemberID == nil {
 		http.Error(w, "Forbidden: No linked member profile", http.StatusForbidden)
 		return
 	}
+	memberID := *user.MemberID
 
 	var req struct {
 		Name       string `json:"name"`
@@ -936,9 +921,7 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		profileChanges = append(profileChanges, "power updated")
 	}
 	if len(profileChanges) > 0 {
-		username, _ := session.Values["username"].(string)
-		userID, _ := session.Values["user_id"].(int)
-		logActivity(userID, username, "updated", "member", req.Name, false, strings.Join(profileChanges, "; "))
+		logActivity(user.ID, user.Username, "updated", "member", req.Name, false, strings.Join(profileChanges, "; "))
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -953,8 +936,7 @@ type AliasResponse struct {
 
 func getMemberAliases(w http.ResponseWriter, r *http.Request) {
 	memberID := mux.Vars(r)["id"]
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	userID := getAuthUser(r).ID
 
 	// Fetch all aliases for this member (Global, OCR, and the user's specific Personal aliases)
 	rows, err := db.Query(`
@@ -990,9 +972,9 @@ func getMemberAliases(w http.ResponseWriter, r *http.Request) {
 
 func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 	memberID := mux.Vars(r)["id"]
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
+	userID := user.ID
+	isAdmin := user.IsAdmin
 
 	canManageGlobal := isAdmin
 	if !canManageGlobal {
@@ -1039,17 +1021,16 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 	if req.IsGlobal {
 		category = "global"
 	}
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "created", "alias", req.Alias, false, memberName+" ("+category+")")
+	logActivity(userID, user.Username, "created", "alias", req.Alias, false, memberName+" ("+category+")")
 
 	w.WriteHeader(http.StatusCreated)
 }
 
 func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 	aliasID := mux.Vars(r)["id"]
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
+	userID := user.ID
+	isAdmin := user.IsAdmin
 
 	canManageGlobal := isAdmin
 	if !canManageGlobal {
@@ -1086,8 +1067,7 @@ func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 
 	db.Exec("DELETE FROM member_aliases WHERE id = ?", aliasID)
 
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "deleted", "alias", aliasText, false, memberName+" ("+category+")")
+	logActivity(userID, user.Username, "deleted", "alias", aliasText, false, memberName+" ("+category+")")
 
 	w.WriteHeader(http.StatusOK)
 }

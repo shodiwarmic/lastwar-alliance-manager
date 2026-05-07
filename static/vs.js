@@ -62,23 +62,14 @@ function updateWeekDisplay() {
  * 2. DATA LOADING & PERMISSIONS
  */
 
-async function checkPermissions() {
-    try {
-        const response = await fetch('/api/check-auth');
-        if (response.ok) {
-            const data = await response.json();
+function checkPermissions() {
+    canEditVS = document.getElementById('page-config').dataset.canManage === 'true';
 
-            canEditVS = data.is_admin || (data.permissions && data.permissions.manage_vs_points);
-
-            if (canEditVS) {
-                const adminElements = ['save-btn', 'clear-btn', 'csv-import-btn', 'toggle-mode-btn'];
-                adminElements.forEach(id => {
-                    document.getElementById(id)?.classList.remove('hidden');
-                });
-            }
-        }
-    } catch (e) {
-        console.error("Auth check failed:", e);
+    if (canEditVS) {
+        const adminElements = ['save-btn', 'clear-btn', 'csv-import-btn', 'toggle-mode-btn'];
+        adminElements.forEach(id => {
+            document.getElementById(id)?.classList.remove('hidden');
+        });
     }
 }
 

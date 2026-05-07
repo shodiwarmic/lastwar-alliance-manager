@@ -8,31 +8,6 @@ let currentPolicy = {
     require_special: false
 };
 
-async function loadProfileInfo() {
-    try {
-        const response = await fetch(`${API_BASE}/check-auth`);
-        if (response.ok) {
-            const data = await response.json();
-            
-            const profileUsername = document.getElementById('profile-username');
-            if (profileUsername) profileUsername.textContent = data.username;
-            
-            const profileRole = document.getElementById('profile-role');
-            if (profileRole) profileRole.textContent = data.is_admin ? 'Administrator' : 'Member';
-            
-            const profileMember = document.getElementById('profile-member');
-            const profileMemberInfo = document.getElementById('profile-member-info');
-            
-            if (data.rank && profileMember && profileMemberInfo) {
-                profileMember.textContent = data.rank;
-                profileMemberInfo.style.display = 'block';
-            }
-        }
-    } catch (error) {
-        console.error('Failed to load profile info:', error);
-    }
-}
-
 // Renamed from loadPasswordPolicy to handle both passwords and game limits
 async function loadSystemSettings() {
     try {
@@ -210,7 +185,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const hqInput = document.getElementById('stat-level');
     
     if (passwordForm) {
-        await loadProfileInfo();
         await loadSystemSettings();
         await loadGameStats();
         

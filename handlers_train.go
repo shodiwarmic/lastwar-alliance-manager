@@ -119,8 +119,8 @@ func postTrainLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	actor := getAuthUser(r)
+	userID := actor.ID
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	res, err := db.Exec(`
@@ -144,8 +144,7 @@ func postTrainLog(w http.ResponseWriter, r *http.Request) {
 
 	limitWarning := checkDailyLimit(req.Date, req.TrainType, int(id))
 
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "created", "train_log", req.Date+" "+req.TrainType, false, "conductor: "+tl.ConductorName)
+	logActivity(userID, actor.Username, "created", "train_log", req.Date+" "+req.TrainType, false, "conductor: "+tl.ConductorName)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -199,9 +198,8 @@ func putTrainLog(w http.ResponseWriter, r *http.Request) {
 
 	limitWarning := checkDailyLimit(req.Date, req.TrainType, id)
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "updated", "train_log", req.Date+" "+req.TrainType, false, "conductor: "+tl.ConductorName)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -241,9 +239,8 @@ func deleteTrainLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "deleted", "train_log", logDate+" "+trainType, false, "conductor: "+conductorName)
 
 	w.WriteHeader(http.StatusNoContent)
@@ -285,8 +282,8 @@ func postEligibilityRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
+	actor := getAuthUser(r)
+	userID := actor.ID
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	res, err := db.Exec(`
@@ -305,8 +302,7 @@ func postEligibilityRule(w http.ResponseWriter, r *http.Request) {
 	rule.CreatedAt = now
 	rule.UpdatedAt = now
 
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "created", "eligibility_rule", rule.Name, false)
+	logActivity(userID, actor.Username, "created", "eligibility_rule", rule.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rule)
@@ -339,9 +335,8 @@ func putEligibilityRule(w http.ResponseWriter, r *http.Request) {
 	rule.ID = id
 	rule.UpdatedAt = now
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "updated", "eligibility_rule", rule.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -378,9 +373,8 @@ func deleteEligibilityRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "deleted", "eligibility_rule", ruleName, false)
 
 	w.WriteHeader(http.StatusNoContent)
@@ -767,9 +761,8 @@ func toStringSlice(v interface{}) ([]string, bool) {
 // handleTrainNoShow updates showed_up on a train log and auto-manages the
 // corresponding accountability_strike for train_no_show.
 func handleTrainNoShow(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	userID, username := actor.ID, actor.Username
 
 	logID, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {

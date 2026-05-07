@@ -91,9 +91,8 @@ func saveStormAssignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "updated", "storm_assignments", "TF "+request.TaskForce, false, strconv.Itoa(len(request.Assignments))+" assignments")
 
 	w.Header().Set("Content-Type", "application/json")
@@ -178,9 +177,8 @@ func saveStormConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	var tfParts []string
 	for _, c := range configs {
 		slot := "unset"
@@ -237,12 +235,12 @@ func getStormRegistrations(w http.ResponseWriter, r *http.Request) {
 }
 
 func upsertMyRegistration(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	memberID, ok := session.Values["member_id"].(int)
-	if !ok || memberID == 0 {
+	authUser := getAuthUser(r)
+	if authUser.MemberID == nil {
 		http.Error(w, "no linked member", 403)
 		return
 	}
+	memberID := *authUser.MemberID
 	var body struct {
 		Slot1 int `json:"slot_1"`
 		Slot2 int `json:"slot_2"`
@@ -265,12 +263,12 @@ func upsertMyRegistration(w http.ResponseWriter, r *http.Request) {
 }
 
 func getMyRegistration(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	memberID, ok := session.Values["member_id"].(int)
-	if !ok || memberID == 0 {
+	authUser := getAuthUser(r)
+	if authUser.MemberID == nil {
 		http.Error(w, "no linked member", 403)
 		return
 	}
+	memberID := *authUser.MemberID
 	var reg StormRegistration
 	err := db.QueryRow(`SELECT id, member_id, slot_1, slot_2, slot_3, updated_at FROM storm_registrations WHERE member_id=?`, memberID).
 		Scan(&reg.ID, &reg.MemberID, &reg.Slot1, &reg.Slot2, &reg.Slot3, &reg.UpdatedAt)
@@ -448,9 +446,8 @@ func createStormGroup(w http.ResponseWriter, r *http.Request) {
 	g.Buildings = []StormGroupBuilding{}
 	g.DirectMembers = []StormGroupMember{}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "created", "storm_group", g.Name, false, "TF "+g.TaskForce)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -475,9 +472,8 @@ func updateStormGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	details := "TF " + oldTF
 	if oldName != g.Name {
 		details += "; name: " + oldName + " → " + g.Name
@@ -499,9 +495,8 @@ func deleteStormGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "deleted", "storm_group", groupName, false, "TF "+tf)
 
 	w.WriteHeader(http.StatusNoContent)
@@ -595,9 +590,8 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 	var groupName string
 	db.QueryRow(`SELECT name FROM storm_groups WHERE id=?`, groupID).Scan(&groupName)
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "updated", "storm_group", groupName, false,
 		"TF "+tf+"; "+strconv.Itoa(len(memberIDs))+" members across "+strconv.Itoa(len(buildings))+" buildings")
 
@@ -667,9 +661,8 @@ func saveGroupDirectMembers(w http.ResponseWriter, r *http.Request) {
 	var groupName string
 	db.QueryRow(`SELECT name FROM storm_groups WHERE id=?`, groupID).Scan(&groupName)
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "updated", "storm_group", groupName, false,
 		"TF "+tf+"; "+strconv.Itoa(len(members))+" direct members")
 
