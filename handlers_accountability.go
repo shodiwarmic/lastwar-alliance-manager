@@ -238,6 +238,7 @@ func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Strikes
+	thresholds := loadStrikeThresholds()
 	strikeRows, err := db.Query(`
 		SELECT s.id, s.strike_type, s.reason, COALESCE(s.ref_date,''), s.status,
 		       COALESCE(eu.username,''), s.excused_reason,
@@ -254,7 +255,6 @@ func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer strikeRows.Close()
-	thresholds := loadStrikeThresholds()
 	profile.Strikes = []AccountabilityStrike{}
 	for strikeRows.Next() {
 		var s AccountabilityStrike
