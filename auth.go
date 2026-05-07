@@ -344,41 +344,6 @@ func changePassword(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Password changed successfully"})
 }
 
-func checkAuth(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	if auth, ok := session.Values["authenticated"].(bool); ok && auth {
-		username, _ := session.Values["username"].(string)
-		isAdmin := false
-		if adminVal, ok := session.Values["is_admin"].(bool); ok {
-			isAdmin = adminVal
-		}
-
-		var rank string
-		var perms RankPermissions
-
-		if isAdmin {
-			rank = "Admin"
-			perms = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewAnonymousAuthors: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true, ViewAccountability: true, ManageAccountability: true, ViewSeasonHub: true, ManageSeasonHub: true, ManageSeasonRewards: true}
-		} else if memberID, ok := session.Values["member_id"].(int); ok {
-			err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank)
-			if err == nil {
-				perms = getRankPermissions(rank)
-			}
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"authenticated": true,
-			"username":      username,
-			"rank":          rank,
-			"is_admin":      isAdmin,
-			"permissions":   perms,
-		})
-	} else {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]bool{"authenticated": false})
-	}
-}
 
 func validatePasswordPolicy(password string, userID int) error {
 	var s Settings

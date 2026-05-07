@@ -118,7 +118,6 @@ func main() {
 	router.HandleFunc("/api/login", login).Methods("POST")
 	router.HandleFunc("/api/force-change-password", forceChangePassword).Methods("POST")
 	router.HandleFunc("/api/logout", logout).Methods("POST")
-	router.HandleFunc("/api/check-auth", checkAuth).Methods("GET")
 	router.HandleFunc("/api/change-password", authMiddleware(changePassword)).Methods("POST")
 	router.HandleFunc("/api/members/{id}/invite", authMiddleware(requirePermission("manage_members", generateInvite))).Methods("POST")
 	router.HandleFunc("/invite/{token}", showInvitePage).Methods("GET")

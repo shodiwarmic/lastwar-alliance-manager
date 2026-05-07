@@ -16,21 +16,10 @@ let pointsChart = null;
 let membersChart = null;
 let timelineChart = null;
 
-// Fetch permissions to get the user ID for Delete button rendering
-async function fetchPermissions() {
-    try {
-        const response = await fetch('/api/check-auth');
-        if (response.ok) {
-            const data = await response.json();
-            currentUsername = data.username;
-            // Removed reliance on user_id to prevent the 0 === 0 scrubbing bug
-
-            // Extract the manage_dyno permission
-            canManageDyno = data.permissions?.manage_dyno || data.is_admin || false;
-        }
-    } catch (error) {
-        console.error('Auth check error:', error);
-    }
+function fetchPermissions() {
+    const cfg = document.getElementById('page-config').dataset;
+    currentUsername = cfg.username || '';
+    canManageDyno = cfg.canManage === 'true';
 }
 
 // Load members

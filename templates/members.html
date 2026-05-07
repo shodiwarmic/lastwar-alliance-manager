@@ -266,5 +266,13 @@
 {{end}}
 
 {{define "scripts"}}
-    <script src="/members.js"></script>
+<div id="page-config"
+    data-username="{{.Username}}"
+    data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}"
+    data-can-manage-members="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
+    data-can-manage-settings="{{if .Permissions.ManageSettings}}true{{else}}false{{end}}"
+    data-view-train="{{if .Permissions.ViewTrain}}true{{else}}false{{end}}"
+    data-manage-train="{{if .Permissions.ManageTrain}}true{{else}}false{{end}}"
+    hidden></div>
+<script src="/members.js"></script>
 {{end}}

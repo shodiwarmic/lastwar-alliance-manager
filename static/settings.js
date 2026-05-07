@@ -36,16 +36,8 @@ const PERM_ROWS = [
 
 let isR5OrAdmin = false;
 
-async function fetchPermissions() {
-    try {
-        const response = await fetch(`${API_BASE}/check-auth`);
-        if (response.ok) {
-            const data = await response.json();
-            isR5OrAdmin = data.permissions?.manage_settings || false;
-        }
-    } catch (error) {
-        console.error('Auth check error:', error);
-    }
+function fetchPermissions() {
+    isR5OrAdmin = document.getElementById('page-config').dataset.canManage === 'true';
 }
 
 async function loadSettings() {

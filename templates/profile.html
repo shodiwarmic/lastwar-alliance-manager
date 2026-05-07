@@ -88,9 +88,9 @@
         <section class="info-section" style="border-top: none; padding: 0; background: transparent;">
             <h3>ℹ️ Account Information</h3>
             <div class="info-card">
-                <p><strong>System Username:</strong> <span id="profile-username">-</span></p>
-                <p><strong>Account Role:</strong> <span id="profile-role">-</span></p>
-                <p id="profile-member-info" style="display: none;"><strong>Alliance Rank:</strong> <span id="profile-member">-</span></p>
+                <p><strong>System Username:</strong> <span id="profile-username">{{.Username}}</span></p>
+                <p><strong>Account Role:</strong> <span id="profile-role">{{if .IsAdmin}}Administrator{{else}}Member{{end}}</span></p>
+                {{if .Rank}}<p id="profile-member-info"><strong>Alliance Rank:</strong> <span id="profile-member">{{.Rank}}</span></p>{{end}}
             </div>
         </section>
 
