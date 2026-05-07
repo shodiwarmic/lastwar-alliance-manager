@@ -1,7 +1,8 @@
 'use strict';
 
-const MEMBER_ID  = window.MEMBER_ID  || 0;
-const CAN_MANAGE = window.CAN_MANAGE || false;
+const _cfg       = document.getElementById('page-config').dataset;
+const MEMBER_ID  = parseInt(_cfg.memberId, 10) || 0;
+const CAN_MANAGE = _cfg.canManage === 'true';
 
 // Flatpickr instance — initialised in DOMContentLoaded
 let strikeRefDateFP = null;
