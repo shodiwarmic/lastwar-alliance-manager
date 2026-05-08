@@ -265,6 +265,7 @@ type Settings struct {
 	ZSWeekdays     string `json:"zs_weekdays"`
 	ZSAnchorDate   string `json:"zs_anchor_date"`
 	ZSAnchorTime   string `json:"zs_anchor_time"`
+	SeasonScoreLevelsDefault string `json:"season_score_levels_default"`
 }
 
 type StormAssignment struct {

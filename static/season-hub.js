@@ -103,7 +103,9 @@
                     populateWeekSelect();
                     loadParticipationWeek();
                     populateContribWeekSelect();
+                    renderContribHeaders();
                     renderManualTable();
+                    populateOcrCategoryDropdown();
                 }
             })
             .catch(() => showToast('Failed to load season data.', 'error'));
@@ -566,21 +568,47 @@
 
     // OCR import — open modal
     const btnContribOcr = document.getElementById('btn-contrib-ocr');
+    function populateOcrCategoryDropdown() {
+        const sel = document.getElementById('contrib-category');
+        if (!sel) return;
+        sel.replaceChildren();
+        (activeSeason ? activeSeason.trackables || [] : []).forEach(t => {
+            ['_daily', '_weekly', '_season'].forEach(suffix => {
+                const opt = document.createElement('option');
+                opt.value = t.key + suffix;
+                opt.textContent = t.label + suffix.replace('_', ' ');
+                sel.appendChild(opt);
+            });
+        });
+    }
+
     if (btnContribOcr) {
         btnContribOcr.addEventListener('click', () => {
             if (!activeSeason) { showToast('No active season.', 'error'); return; }
+            populateOcrCategoryDropdown();
             const modal = document.getElementById('modal-ocr-import');
             if (modal) modal.style.display = 'flex';
         });
     }
 
-    const CONTRIB_CATEGORIES = ['mutual_assistance', 'siege', 'rare_soil_war', 'defeat'];
+    // Manual entry table — headers and inputs are driven by activeSeason.trackables
+    function renderContribHeaders() {
+        const headRow = document.getElementById('contrib-manual-thead-row');
+        if (!headRow) return;
+        // Keep first two (Member, Rank), replace the rest
+        while (headRow.children.length > 2) headRow.removeChild(headRow.lastChild);
+        (activeSeason ? activeSeason.trackables || [] : []).forEach(t => {
+            const th = document.createElement('th');
+            th.textContent = t.label;
+            headRow.appendChild(th);
+        });
+    }
 
-    // Manual entry table
     function renderManualTable() {
         const tbody = document.getElementById('contrib-manual-tbody');
         if (!tbody) return;
 
+        const trackables = activeSeason ? (activeSeason.trackables || []) : [];
         const query = (document.getElementById('contrib-manual-search') || {}).value || '';
         const members = allMembers.filter(m => m.rank !== 'EX' &&
             (!query || m.name.toLowerCase().includes(query.toLowerCase())));
@@ -600,12 +628,12 @@
             tdRank.appendChild(rankChip3);
             tr.appendChild(tdRank);
 
-            CONTRIB_CATEGORIES.forEach(cat => {
+            trackables.forEach(t => {
                 const td = document.createElement('td');
                 const input = document.createElement('input');
                 input.type = 'number';
                 input.className = 'contrib-input';
-                input.dataset.category = cat;
+                input.dataset.key = t.key;
                 input.min = '0';
                 input.value = '';
                 input.placeholder = '0';
@@ -637,7 +665,7 @@
                     tr.querySelectorAll('.contrib-input').forEach(input => {
                         // Show actual value (including 0) when a DB record exists.
                         // Leave blank when there's no record — blank means "no data yet".
-                        input.value = e !== undefined ? (e[input.dataset.category] ?? 0) : '';
+                        input.value = e !== undefined ? ((e.records || {})[input.dataset.key] ?? 0) : '';
                     });
                 });
             })
@@ -673,15 +701,13 @@
         tbody.querySelectorAll('tr').forEach(tr => {
             const memberId = parseInt(tr.dataset.memberId, 10);
             if (!memberId) return;
-            const entry = { member_id: memberId };
-            // Include row if any input is non-empty (including explicit 0).
-            // Blank means "no intent to change this member" — skip entirely.
+            const records = {};
             let hasExplicit = false;
             tr.querySelectorAll('.contrib-input').forEach(input => {
                 if (input.value !== '') hasExplicit = true;
-                entry[input.dataset.category] = input.value !== '' ? (parseInt(input.value, 10) || 0) : 0;
+                records[input.dataset.key] = input.value !== '' ? (parseInt(input.value, 10) || 0) : 0;
             });
-            if (hasExplicit) entries.push(entry);
+            if (hasExplicit) entries.push({ member_id: memberId, records });
         });
 
         if (entries.length === 0) {
@@ -1273,13 +1299,69 @@
     const formCreateSeason = document.getElementById('form-create-season');
     const btnArchiveSeason = document.getElementById('btn-archive-season');
 
+    // ── Create Season — trackable + event row helpers ─────────────────────────
+
+    let csEventTypes = []; // cached schedule_event_types for dropdowns
+
+    function fetchEventTypes() {
+        if (csEventTypes.length > 0) return Promise.resolve(csEventTypes);
+        return fetch('/api/schedule/event-types')
+            .then(r => r.ok ? r.json() : { event_types: [] })
+            .then(d => { csEventTypes = d.event_types || []; return csEventTypes; })
+            .catch(() => []);
+    }
+
+    function openCreateSeasonModal() {
+        const errEl = document.getElementById('cs-error');
+        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        updateArchiveWarning();
+
+        // Populate template dropdown
+        const sel = document.getElementById('cs-template');
+        if (sel && sel.options.length <= 1) {
+            fetch('/api/season-hub/templates')
+                .then(r => r.json())
+                .then(d => {
+                    sel.replaceChildren();
+                    const blank = document.createElement('option');
+                    blank.value = ''; blank.textContent = '— select template —';
+                    sel.appendChild(blank);
+                    (d.templates || []).forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.id;
+                        opt.dataset.name = t.template_name;
+                        opt.dataset.defaults = t.defaults;
+                        opt.textContent = t.template_name;
+                        sel.appendChild(opt);
+                    });
+                })
+                .catch(() => {});
+        }
+
+        const modal = document.getElementById('modal-create-season');
+        if (modal) modal.style.display = 'flex';
+    }
+
     if (btnCreateSeason) {
-        btnCreateSeason.addEventListener('click', () => {
-            const errEl = document.getElementById('cs-error');
-            if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        btnCreateSeason.addEventListener('click', openCreateSeasonModal);
+    }
+
+    // Template select — show preview of week count and key event
+    const csTplSel = document.getElementById('cs-template');
+    if (csTplSel) {
+        csTplSel.addEventListener('change', () => {
+            const opt = csTplSel.selectedOptions[0];
+            const preview = document.getElementById('cs-template-preview');
+            if (!opt || !opt.value) { if (preview) preview.style.display = 'none'; return; }
+            try {
+                const defs = JSON.parse(opt.dataset.defaults || '{}');
+                if (preview) {
+                    preview.textContent = (defs.week_count || 8) + ' weeks · ' + (defs.key_event_name || '') +
+                        (defs.key_event_required ? ' (required: ' + defs.key_event_required + ')' : '');
+                    preview.style.display = '';
+                }
+            } catch (_) {}
             updateArchiveWarning();
-            const modal = document.getElementById('modal-create-season');
-            if (modal) modal.style.display = 'flex';
         });
     }
 
@@ -1322,32 +1404,25 @@
     function submitCreateSeason() {
         const errEl = document.getElementById('cs-error');
         const submitBtn = formCreateSeason.querySelector('button[type="submit"]');
-
-        const scoreLevelRows = document.querySelectorAll('#cs-score-levels-table tbody tr');
-        const newScoreLevels = Array.from(scoreLevelRows).map((row, i) => ({
-            key: row.querySelector('.sl-key').value.trim(),
-            label: row.querySelector('.sl-label').value.trim(),
-            points: parseInt(row.querySelector('.sl-points').value, 10) || 0,
-        }));
+        const tplSel = document.getElementById('cs-template');
 
         const body = {
-            name: document.getElementById('cs-name').value.trim(),
-            season_number: parseInt(document.getElementById('cs-number').value, 10),
+            template_id: parseInt(tplSel?.value, 10) || 0,
             start_date: document.getElementById('cs-start-date').value,
-            week_count: parseInt(document.getElementById('cs-week-count').value, 10),
-            key_event_name: document.getElementById('cs-key-event-name').value.trim(),
-            key_event_required: parseInt(document.getElementById('cs-key-event-required').value, 10) || 0,
             tier_active_min_pct: parseInt(document.getElementById('cs-tier-active').value, 10) || 70,
             tier_at_risk_min_pct: parseInt(document.getElementById('cs-tier-at-risk').value, 10) || 60,
             tier_count_leader: parseInt(document.getElementById('cs-tier-leader').value, 10) || 1,
             tier_count_core: parseInt(document.getElementById('cs-tier-core').value, 10) || 10,
             tier_count_elite: parseInt(document.getElementById('cs-tier-elite').value, 10) || 20,
             tier_count_valued: parseInt(document.getElementById('cs-tier-valued').value, 10) || 69,
-            score_levels: newScoreLevels,
         };
 
-        if (!body.name || !body.start_date) {
-            if (errEl) { errEl.textContent = 'Name and start date are required.'; errEl.style.display = ''; }
+        if (!body.template_id) {
+            if (errEl) { errEl.textContent = 'Please select a template.'; errEl.style.display = ''; }
+            return;
+        }
+        if (!body.start_date) {
+            if (errEl) { errEl.textContent = 'Start date is required.'; errEl.style.display = ''; }
             return;
         }
 
@@ -1357,7 +1432,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         })
-            .then(r => r.ok ? r : r.text().then(t => { throw new Error(t); }))
+            .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
             .then(() => {
                 const modal = document.getElementById('modal-create-season');
                 if (modal) modal.style.display = '';
@@ -1388,6 +1463,225 @@
         });
     }
 
+    // ── Edit season — per-row trackable/event builders ────────────────────────
+
+    function buildEsTrackableRow(tk, seasonId) {
+        tk = tk || {};
+        const tr = document.createElement('tr');
+        tr.dataset.id = tk.id || '';
+
+        const tdKey = document.createElement('td');
+        if (tk.id) {
+            tdKey.textContent = tk.key;
+        } else {
+            const inp = document.createElement('input');
+            inp.type = 'text'; inp.className = 'form-input tk-key'; inp.placeholder = 'key (e.g. war_merit)';
+            tdKey.appendChild(inp);
+        }
+        tr.appendChild(tdKey);
+
+        const tdLabel = document.createElement('td');
+        const inpLabel = document.createElement('input');
+        inpLabel.type = 'text'; inpLabel.className = 'form-input tk-label'; inpLabel.value = tk.label || ''; inpLabel.placeholder = 'Label';
+        tdLabel.appendChild(inpLabel);
+        tr.appendChild(tdLabel);
+
+        const tdAct = document.createElement('td');
+        tdAct.style.cssText = 'white-space:nowrap;';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button'; saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Save';
+        saveBtn.addEventListener('click', () => {
+            const label = inpLabel.value.trim();
+            if (!label) { showToast('Label required.', 'error'); return; }
+            if (tk.id) {
+                fetch('/api/season-hub/trackables/' + tk.id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label })
+                }).then(r => r.ok ? showToast('Trackable saved.') : r.text().then(t => { throw new Error(t); }))
+                  .catch(err => showToast(err.message || 'Save failed.', 'error'));
+            } else {
+                const keyEl = tdKey.querySelector('.tk-key');
+                const key = keyEl ? keyEl.value.trim() : '';
+                if (!key) { showToast('Key required.', 'error'); return; }
+                fetch('/api/season-hub/trackables', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ season_id: seasonId, key, label, sort_order: tr.rowIndex || 0 })
+                }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
+                  .then(d => {
+                      tr.dataset.id = d.id; tk.id = d.id;
+                      tdKey.replaceChildren(document.createTextNode(key));
+                      showToast('Trackable created.');
+                  })
+                  .catch(err => showToast(err.message || 'Create failed.', 'error'));
+            }
+        });
+        tdAct.appendChild(saveBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button'; delBtn.className = 'btn btn-danger btn-sm'; delBtn.textContent = '✕';
+        delBtn.style.marginLeft = '4px';
+        delBtn.addEventListener('click', () => {
+            if (!tk.id) { tr.remove(); return; }
+            delBtn.style.display = 'none';
+            const cs = document.createElement('span');
+            cs.style.cssText = 'display:inline-flex;gap:4px;align-items:center;margin-left:4px;';
+            const yBtn = document.createElement('button');
+            yBtn.type = 'button'; yBtn.className = 'btn btn-danger btn-sm'; yBtn.textContent = 'Delete';
+            yBtn.addEventListener('click', () => {
+                fetch('/api/season-hub/trackables/' + tk.id, { method: 'DELETE' })
+                    .then(r => r.ok ? r : r.text().then(t => { throw new Error(t); }))
+                    .then(() => { tr.remove(); showToast('Trackable deleted.'); })
+                    .catch(err => { cs.remove(); delBtn.style.display = ''; showToast(err.message || 'Delete failed.', 'error'); });
+            });
+            const nBtn = document.createElement('button');
+            nBtn.type = 'button'; nBtn.className = 'btn btn-secondary btn-sm'; nBtn.textContent = 'No';
+            nBtn.addEventListener('click', () => { cs.remove(); delBtn.style.display = ''; });
+            cs.append(yBtn, nBtn);
+            tdAct.appendChild(cs);
+        });
+        tdAct.appendChild(delBtn);
+        tr.appendChild(tdAct);
+        return tr;
+    }
+
+    function buildEsEventRow(ev, seasonId) {
+        ev = ev || {};
+        const tr = document.createElement('tr');
+        tr.dataset.id = ev.id || '';
+
+        function mkTd(child) { const td = document.createElement('td'); td.appendChild(child); return td; }
+
+        const inLabel = document.createElement('input');
+        inLabel.type = 'text'; inLabel.className = 'form-input ev-label'; inLabel.value = ev.label || ''; inLabel.placeholder = 'Event name';
+        tr.appendChild(mkTd(inLabel));
+
+        const selType = document.createElement('select');
+        selType.className = 'form-input ev-type';
+        const optNone = document.createElement('option'); optNone.value = ''; optNone.textContent = '— none —';
+        selType.appendChild(optNone);
+        csEventTypes.forEach(et => {
+            const opt = document.createElement('option');
+            opt.value = et.id; opt.textContent = et.name;
+            if (ev.event_type_id && et.id === ev.event_type_id) opt.selected = true;
+            selType.appendChild(opt);
+        });
+        tr.appendChild(mkTd(selType));
+
+        const inDay = document.createElement('input');
+        inDay.type = 'number'; inDay.className = 'form-input ev-day'; inDay.min = '1'; inDay.max = '7';
+        inDay.placeholder = 'blank=unsched'; inDay.style.width = '80px';
+        if (ev.day_offset != null) inDay.value = ev.day_offset;
+        tr.appendChild(mkTd(inDay));
+
+        const inTime = document.createElement('input');
+        inTime.type = 'time'; inTime.className = 'form-input ev-time'; inTime.value = ev.event_time || '20:00'; inTime.style.width = '90px';
+        tr.appendChild(mkTd(inTime));
+
+        const inWkS = document.createElement('input');
+        inWkS.type = 'number'; inWkS.className = 'form-input ev-wk-start'; inWkS.min = '1'; inWkS.value = ev.week_start || 1; inWkS.style.width = '55px';
+        tr.appendChild(mkTd(inWkS));
+
+        const inWkE = document.createElement('input');
+        inWkE.type = 'number'; inWkE.className = 'form-input ev-wk-end'; inWkE.min = '0'; inWkE.value = ev.week_end !== undefined ? ev.week_end : 0; inWkE.style.width = '55px';
+        tr.appendChild(mkTd(inWkE));
+
+        const inLevel = document.createElement('input');
+        inLevel.type = 'number'; inLevel.className = 'form-input ev-level'; inLevel.min = '1';
+        inLevel.placeholder = '—'; inLevel.style.width = '50px';
+        if (ev.level != null) inLevel.value = ev.level;
+        tr.appendChild(mkTd(inLevel));
+
+        const inNotes = document.createElement('input');
+        inNotes.type = 'text'; inNotes.className = 'form-input ev-notes'; inNotes.value = ev.notes || '';
+        tr.appendChild(mkTd(inNotes));
+
+        const chkServer = document.createElement('input');
+        chkServer.type = 'checkbox'; chkServer.className = 'ev-server';
+        chkServer.title = 'Server event';
+        chkServer.style.cssText = 'width:16px;height:16px;cursor:pointer;';
+        chkServer.checked = !!ev.is_server_event;
+        tr.appendChild(mkTd(chkServer));
+
+        const inDuration = document.createElement('input');
+        inDuration.type = 'number'; inDuration.className = 'form-input ev-duration'; inDuration.min = '1';
+        inDuration.value = ev.duration_days || 1; inDuration.style.width = '50px';
+        tr.appendChild(mkTd(inDuration));
+
+        const tdAct = document.createElement('td');
+        tdAct.style.cssText = 'white-space:nowrap;';
+
+        function collectEvData() {
+            const dayVal = inDay.value;
+            const lvlVal = inLevel.value.trim();
+            return {
+                season_id:       seasonId,
+                label:           inLabel.value.trim(),
+                event_type_id:   selType.value ? parseInt(selType.value, 10) : null,
+                day_offset:      dayVal !== '' ? (parseInt(dayVal, 10) || null) : null,
+                event_time:      inTime.value || '20:00',
+                week_start:      parseInt(inWkS.value, 10) || 1,
+                week_end:        parseInt(inWkE.value, 10) || 0,
+                level:           lvlVal !== '' ? parseInt(lvlVal, 10) : null,
+                notes:           inNotes.value || '',
+                is_server_event: chkServer.checked,
+                duration_days:   parseInt(inDuration.value, 10) || 1,
+            };
+        }
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button'; saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Save';
+        saveBtn.addEventListener('click', () => {
+            const payload = collectEvData();
+            if (!payload.label) { showToast('Label required.', 'error'); return; }
+            if (ev.id) {
+                fetch('/api/season-hub/season-events/' + ev.id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(r => r.ok ? showToast('Event saved.') : r.text().then(t => { throw new Error(t); }))
+                  .catch(err => showToast(err.message || 'Save failed.', 'error'));
+            } else {
+                fetch('/api/season-hub/season-events', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
+                  .then(d => { tr.dataset.id = d.id; ev.id = d.id; showToast('Event created.'); })
+                  .catch(err => showToast(err.message || 'Create failed.', 'error'));
+            }
+        });
+        tdAct.appendChild(saveBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button'; delBtn.className = 'btn btn-danger btn-sm'; delBtn.textContent = '✕';
+        delBtn.style.marginLeft = '4px';
+        delBtn.addEventListener('click', () => {
+            if (!ev.id) { tr.remove(); return; }
+            delBtn.style.display = 'none';
+            const cs = document.createElement('span');
+            cs.style.cssText = 'display:inline-flex;gap:4px;align-items:center;margin-left:4px;';
+            const yBtn = document.createElement('button');
+            yBtn.type = 'button'; yBtn.className = 'btn btn-danger btn-sm'; yBtn.textContent = 'Delete';
+            yBtn.addEventListener('click', () => {
+                fetch('/api/season-hub/season-events/' + ev.id, { method: 'DELETE' })
+                    .then(r => r.ok ? r : r.text().then(t => { throw new Error(t); }))
+                    .then(() => { tr.remove(); showToast('Event deleted.'); })
+                    .catch(err => { cs.remove(); delBtn.style.display = ''; showToast(err.message || 'Delete failed.', 'error'); });
+            });
+            const nBtn = document.createElement('button');
+            nBtn.type = 'button'; nBtn.className = 'btn btn-secondary btn-sm'; nBtn.textContent = 'No';
+            nBtn.addEventListener('click', () => { cs.remove(); delBtn.style.display = ''; });
+            cs.append(yBtn, nBtn);
+            tdAct.appendChild(cs);
+        });
+        tdAct.appendChild(delBtn);
+        tr.appendChild(tdAct);
+        return tr;
+    }
+
     // ── Edit season ───────────────────────────────────────────────────────────
     const btnEditSeason = document.getElementById('btn-edit-season');
     const btnCancelEditSeason = document.getElementById('btn-cancel-edit-season');
@@ -1411,8 +1705,21 @@
             document.getElementById('es-tier-valued').value = s.tier_count_valued;
             const errEl = document.getElementById('es-error');
             if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
-            const modal = document.getElementById('modal-edit-season');
-            if (modal) modal.style.display = 'flex';
+
+            // Load trackables and events, then open modal
+            fetchEventTypes().then(() => {
+                Promise.all([
+                    fetch('/api/season-hub/trackables?season_id=' + s.id).then(r => r.json()),
+                    fetch('/api/season-hub/season-events?season_id=' + s.id).then(r => r.json()),
+                ]).then(([tkData, evData]) => {
+                    const tkBody = document.getElementById('es-trackables-tbody');
+                    if (tkBody) tkBody.replaceChildren(...(tkData.trackables || []).map(t => buildEsTrackableRow(t, s.id)));
+                    const evBody = document.getElementById('es-events-tbody');
+                    if (evBody) evBody.replaceChildren(...(evData.events || []).map(ev => buildEsEventRow(ev, s.id)));
+                }).catch(() => {});
+                const modal = document.getElementById('modal-edit-season');
+                if (modal) modal.style.display = 'flex';
+            });
         });
     }
 
@@ -1420,6 +1727,50 @@
         btnCancelEditSeason.addEventListener('click', () => {
             const modal = document.getElementById('modal-edit-season');
             if (modal) modal.style.display = '';
+        });
+    }
+
+    const btnEsAddTrackable = document.getElementById('btn-es-add-trackable');
+    if (btnEsAddTrackable) {
+        btnEsAddTrackable.addEventListener('click', () => {
+            const tb = document.getElementById('es-trackables-tbody');
+            if (tb && activeSeason) tb.appendChild(buildEsTrackableRow({}, activeSeason.id));
+        });
+    }
+
+    const btnEsAddEvent = document.getElementById('btn-es-add-event');
+    if (btnEsAddEvent) {
+        btnEsAddEvent.addEventListener('click', () => {
+            const tb = document.getElementById('es-events-tbody');
+            if (tb && activeSeason) tb.appendChild(buildEsEventRow({}, activeSeason.id));
+        });
+    }
+
+    const btnEsPushSchedule = document.getElementById('btn-es-push-schedule');
+    if (btnEsPushSchedule) {
+        btnEsPushSchedule.addEventListener('click', () => {
+            if (!activeSeason) return;
+            const statusEl = document.getElementById('es-push-status');
+            if (statusEl) { statusEl.textContent = 'Pushing…'; statusEl.style.color = 'var(--text-muted)'; }
+            setButtonLoading(btnEsPushSchedule);
+            fetch('/api/season-hub/season-events/push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ season_id: activeSeason.id })
+            })
+                .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
+                .then(d => {
+                    let msg = d.created + ' event' + (d.created !== 1 ? 's' : '') + ' created';
+                    if (d.skipped > 0) msg += ', ' + d.skipped + ' already existed';
+                    if (d.skipped_no_type > 0) msg += ', ' + d.skipped_no_type + ' skipped (no event type — run Sync Event Types in Settings first)';
+                    if (statusEl) { statusEl.textContent = msg; statusEl.style.color = 'var(--color-success)'; }
+                    showToast(msg, d.skipped_no_type > 0 ? 'info' : 'success');
+                })
+                .catch(err => {
+                    if (statusEl) { statusEl.textContent = err.message || 'Push failed.'; statusEl.style.color = 'var(--color-danger)'; }
+                    showToast(err.message || 'Push failed.', 'error');
+                })
+                .finally(() => clearButtonLoading(btnEsPushSchedule));
         });
     }
 

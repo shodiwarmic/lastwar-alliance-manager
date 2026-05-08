@@ -40,6 +40,8 @@ const ENTITY_LABELS = {
     season_rewards:        'season reward',
     season_mail:           'season mail',
     season_config:         'season config',
+    season_trackable:      'season trackable',
+    season_event:          'season event',
 };
 
 const ENTITY_LABELS_PLURAL = {

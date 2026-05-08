@@ -477,7 +477,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(mg_baseline, 11), COALESCE(zs_baseline, 7),
         COALESCE(mg_default_time, '00:30'), COALESCE(zs_default_time, '23:00'),
         COALESCE(mg_anchor_date, ''), COALESCE(zs_schedule_mode, 'weekdays'),
-        COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00')
+        COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00'),
+        COALESCE(season_score_levels_default, '[{"key":"full","label":"FULL","points":10},{"key":"partial","label":"PARTIAL","points":5},{"key":"absent","label":"ABSENT","points":0}]')
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -494,6 +495,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.MGDefaultTime, &s.ZSDefaultTime,
 		&s.MGAnchorDate, &s.ZSScheduleMode,
 		&s.ZSWeekdays, &s.ZSAnchorDate, &s.ZSAnchorTime,
+		&s.SeasonScoreLevelsDefault,
 	)
 
 	if err != nil {
@@ -559,7 +561,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		mg_baseline = ?, zs_baseline = ?,
 		mg_default_time = ?, zs_default_time = ?,
 		mg_anchor_date = ?, zs_schedule_mode = ?,
-		zs_weekdays = ?, zs_anchor_date = ?, zs_anchor_time = ?
+		zs_weekdays = ?, zs_anchor_date = ?, zs_anchor_time = ?,
+		season_score_levels_default = ?
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -572,6 +575,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.MGDefaultTime, settings.ZSDefaultTime,
 		settings.MGAnchorDate, settings.ZSScheduleMode,
 		settings.ZSWeekdays, settings.ZSAnchorDate, settings.ZSAnchorTime,
+		settings.SeasonScoreLevelsDefault,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)

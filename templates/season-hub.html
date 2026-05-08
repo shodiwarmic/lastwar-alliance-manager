@@ -112,24 +112,20 @@
             </div>
             <input type="text" id="contrib-manual-search" class="form-input" placeholder="Search members…" style="width:200px;">
             <button class="btn btn-primary" id="btn-contrib-manual-save">Save</button>
-            {{/* OCR screenshot import — pending microservice support for season contribution screens */}}
-            {{/* <button class="btn btn-secondary" id="btn-contrib-ocr">Import from Screenshots</button> */}}
+            <button class="btn btn-secondary" id="btn-contrib-ocr">Import from Screenshots</button>
             <span id="contrib-manual-status" class="status-msg"></span>
         </div>
 
         <table class="data-table" id="contrib-manual-table" data-export-csv="contributions.csv">
             <thead>
-                <tr>
+                <tr id="contrib-manual-thead-row">
                     <th>Member</th>
                     <th>Rank</th>
-                    <th>Mutual Assistance</th>
-                    <th>Siege</th>
-                    <th>Rare Soil War</th>
-                    <th>Defeat</th>
+                    <!-- trackable columns injected by JS from season.trackables -->
                 </tr>
             </thead>
             <tbody id="contrib-manual-tbody">
-                <tr><td colspan="6" class="loading-msg">Loading…</td></tr>
+                <tr><td colspan="4" class="loading-msg">Loading…</td></tr>
             </tbody>
         </table>
 
@@ -192,39 +188,21 @@
 
 <!-- Create Season Modal -->
 <div id="modal-create-season" class="modal">
-    <div class="modal-content" style="max-width:540px;">
+    <div class="modal-content" style="max-width:480px;">
         <h3>Create Season</h3>
         <form id="form-create-season">
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="cs-name">Season Name</label>
-                    <input type="text" id="cs-name" class="form-input" placeholder="e.g. Season II" required>
-                </div>
-                <div class="form-group">
-                    <label for="cs-number">Season Number</label>
-                    <input type="number" id="cs-number" class="form-input" min="1" required>
-                </div>
+            <div class="form-group">
+                <label for="cs-template">Template</label>
+                <select id="cs-template" class="form-input" required>
+                    <option value="">Loading templates…</option>
+                </select>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="cs-start-date">Start Date</label>
-                    <input type="date" id="cs-start-date" class="form-input" required>
-                </div>
-                <div class="form-group">
-                    <label for="cs-week-count">Weeks</label>
-                    <input type="number" id="cs-week-count" class="form-input" value="8" min="1" max="52" required>
-                </div>
+            <div id="cs-template-preview" style="display:none;font-size:0.85rem;color:var(--text-secondary);margin:-4px 0 8px;"></div>
+            <div class="form-group">
+                <label for="cs-start-date">Start Date</label>
+                <input type="date" id="cs-start-date" class="form-input" required>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="cs-key-event-name">Key Event Name</label>
-                    <input type="text" id="cs-key-event-name" class="form-input" value="Rare Soil War" required>
-                </div>
-                <div class="form-group">
-                    <label for="cs-key-event-required">Key Event Required</label>
-                    <input type="number" id="cs-key-event-required" class="form-input" value="4" min="0">
-                </div>
-            </div>
+            <h4 style="margin:12px 0 6px;">Reward Tier Thresholds</h4>
             <div class="form-row">
                 <div class="form-group">
                     <label for="cs-tier-active">Active % Floor</label>
@@ -254,27 +232,6 @@
                     <input type="number" id="cs-tier-valued" class="form-input" value="69" min="0">
                 </div>
             </div>
-            <h4 style="margin:12px 0 6px;">Score Levels</h4>
-            <table class="data-table" id="cs-score-levels-table">
-                <thead><tr><th>Key</th><th>Label</th><th>Points</th></tr></thead>
-                <tbody>
-                    <tr>
-                        <td><input type="text" class="form-input sl-key" value="full" required></td>
-                        <td><input type="text" class="form-input sl-label" value="FULL" required></td>
-                        <td><input type="number" class="form-input sl-points" value="10" min="0" required></td>
-                    </tr>
-                    <tr>
-                        <td><input type="text" class="form-input sl-key" value="partial" required></td>
-                        <td><input type="text" class="form-input sl-label" value="PARTIAL" required></td>
-                        <td><input type="number" class="form-input sl-points" value="5" min="0" required></td>
-                    </tr>
-                    <tr>
-                        <td><input type="text" class="form-input sl-key" value="absent" required></td>
-                        <td><input type="text" class="form-input sl-label" value="ABSENT" required></td>
-                        <td><input type="number" class="form-input sl-points" value="0" min="0" required></td>
-                    </tr>
-                </tbody>
-            </table>
             <div id="cs-archive-warning" class="field-warning" style="display:none"></div>
             <div id="cs-error" class="field-error" style="display:none"></div>
             <div class="modal-actions">
@@ -287,7 +244,7 @@
 
 <!-- Edit Season Modal -->
 <div id="modal-edit-season" class="modal">
-    <div class="modal-content" style="max-width:540px;">
+    <div class="modal-content" style="max-width:1100px;width:95vw;">
         <h3>Edit Season</h3>
         <form id="form-edit-season">
             <div class="form-row">
@@ -349,6 +306,40 @@
                     <input type="number" id="es-tier-valued" class="form-input" min="0">
                 </div>
             </div>
+            <h4 style="margin:12px 0 6px;">Trackables</h4>
+            <table class="data-table" id="es-trackables-table">
+                <thead><tr><th>Key</th><th>Label</th><th></th></tr></thead>
+                <tbody id="es-trackables-tbody"></tbody>
+            </table>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-trackable" style="margin-top:4px;">+ Add Trackable</button>
+
+            <h4 style="margin:12px 0 6px;">Season Events</h4>
+            <div style="overflow-x:auto;">
+            <table class="data-table" id="es-events-table" style="font-size:0.8rem;white-space:nowrap;">
+                <thead>
+                    <tr>
+                        <th>Label</th>
+                        <th>Event Type</th>
+                        <th>Day</th>
+                        <th>Time</th>
+                        <th>Wk Start</th>
+                        <th>Wk End</th>
+                        <th>Level</th>
+                        <th>Notes</th>
+                        <th title="Server event — pushed to Server Events section">🌐 Server</th>
+                        <th title="Duration in days (server events only)">Days</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="es-events-tbody"></tbody>
+            </table>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:4px;align-items:center;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-event">+ Add Event</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-es-push-schedule">Push to Schedule</button>
+                <span id="es-push-status" class="status-msg"></span>
+            </div>
+
             <div id="es-error" class="field-error" style="display:none"></div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" id="btn-cancel-edit-season">Cancel</button>
@@ -408,10 +399,7 @@
             <div class="form-group">
                 <label for="contrib-category">Category</label>
                 <select id="contrib-category" class="form-input">
-                    <option value="mutual_assistance">Mutual Assistance</option>
-                    <option value="siege">Siege</option>
-                    <option value="rare_soil_war">Rare Soil War</option>
-                    <option value="defeat">Defeat</option>
+                    <!-- options injected by JS from season.trackables -->
                 </select>
             </div>
             <div class="form-group">
