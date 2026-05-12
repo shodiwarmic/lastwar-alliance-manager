@@ -89,7 +89,7 @@ function formatRelativeTime(dateStr) {
 
 function formatAbsoluteTime(dateStr) {
     const date = new Date(dateStr + (dateStr.endsWith('Z') ? '' : 'Z'));
-    return date.toLocaleString();
+    return date.toLocaleString(undefined, { hour12: false });
 }
 
 function buildDescription(entry) {

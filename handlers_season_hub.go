@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gorilla/mux"
 )
@@ -324,6 +325,54 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+// deriveServerEventShortName builds a short_name for a pushed server event.
+// "Exclusive Weapon: <Hero> (<Class>)" → "EW<Hero>" so different EWs don't
+// collide on initials (e.g. Murphy vs Marshall both → EWM).
+// Otherwise: first letter/digit of each word, up to 4 chars.
+func deriveServerEventShortName(label string) string {
+	if strings.HasPrefix(label, "Exclusive Weapon:") {
+		rest := strings.TrimSpace(strings.TrimPrefix(label, "Exclusive Weapon:"))
+		// Strip parens groups like "(Tank)" / "(Aircraft)".
+		if i := strings.Index(rest, "("); i >= 0 {
+			rest = strings.TrimSpace(rest[:i])
+		}
+		// CamelCase whatever words remain, keep letters/digits only.
+		camel := ""
+		for _, w := range strings.Fields(rest) {
+			first := true
+			for _, r := range w {
+				if unicode.IsLetter(r) || unicode.IsDigit(r) {
+					if first {
+						camel += string(unicode.ToUpper(r))
+						first = false
+					} else {
+						camel += string(r)
+					}
+				}
+			}
+		}
+		if camel != "" {
+			return "EW" + camel
+		}
+	}
+	if len([]rune(label)) <= 6 {
+		return label
+	}
+	short := ""
+	for _, w := range strings.Fields(label) {
+		for _, r := range w {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				short += string(unicode.ToUpper(r))
+				break
+			}
+		}
+		if len([]rune(short)) >= 4 {
+			break
+		}
+	}
+	return short
+}
+
 func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	userID, _ := session.Values["user_id"].(int)
@@ -424,6 +473,10 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	var evDefs []evDef
 	json.Unmarshal([]byte(tmpl.Events), &evDefs)
+
+	// Sync any missing schedule_event_types from the template so type_name lookups
+	// below resolve cleanly. Server-event types are skipped (they live elsewhere).
+	syncEventTypesFromEvents(tmpl.Events)
 
 	// Resolve type_name → event_type_id for each event before the transaction.
 	typeIDCache := map[string]int{}
@@ -570,8 +623,24 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 
 	logActivity(userID, username, "created", "season_config", tmpl.TemplateName, false)
 
+	// Auto-push events to the schedule. Best-effort: if the push fails we still
+	// report a successful season creation; the user can re-push from the edit
+	// modal. Idempotent, so re-pushing is safe.
+	var pushed pushResult
+	if s, err := loadSeasonByID(int(seasonID)); err == nil {
+		if p, err := pushSeasonEventsToSchedule(s, userID, username); err != nil {
+			slog.Error("handleSeasonCreate: auto push", "error", err)
+		} else {
+			pushed = p
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"id": seasonID, "message": "Season created"})
+	json.NewEncoder(w).Encode(map[string]any{
+		"id":      seasonID,
+		"message": "Season created",
+		"pushed":  pushed,
+	})
 }
 
 func handleSeasonArchive(w http.ResponseWriter, r *http.Request) {
@@ -1288,7 +1357,10 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	files := r.MultipartForm.File["images"]
+	files := r.MultipartForm.File["images[]"]
+	if len(files) == 0 {
+		files = r.MultipartForm.File["images"]
+	}
 	if len(files) == 0 {
 		http.Error(w, "No images provided", http.StatusBadRequest)
 		return
@@ -1301,16 +1373,17 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract records for the user-selected category.
-	// The microservice returns keys matching the DB column names once updated;
-	// until then, the user manually selects the category and we read that key.
-	records := workerResp[category]
-	if len(records) == 0 {
-		// Fallback: try any non-empty key if the microservice doesn't know the category yet
-		for _, v := range workerResp {
-			if len(v) > 0 {
-				records = v
-				break
+	// The user has already selected the category, so merge records from every
+	// key the worker returned — different images may be classified under variant
+	// keys (e.g. mutual_assistance_daily vs mutual_assistance_weekly). We trust
+	// the user's selection and deduplicate by player name during resolution.
+	seen := map[string]bool{}
+	var records []OCRPlayer
+	for _, batch := range workerResp {
+		for _, r := range batch {
+			if !seen[r.PlayerName] {
+				seen[r.PlayerName] = true
+				records = append(records, r)
 			}
 		}
 	}
@@ -1362,6 +1435,60 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply any manual resolutions the user provided for previously-unresolved names.
+	type resolvedMapping struct {
+		OriginalName string `json:"original_name"`
+		Points       int64  `json:"points"`
+		MemberID     int    `json:"member_id"`
+		AliasType    string `json:"alias_type"` // "", "ocr", "global", "personal"
+	}
+	var resolvedMappings []resolvedMapping
+	if raw := r.FormValue("resolved_mappings"); raw != "" {
+		json.Unmarshal([]byte(raw), &resolvedMappings)
+	}
+	resolvedCount := 0
+	for _, rm := range resolvedMappings {
+		if rm.MemberID == 0 {
+			continue
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO season_member_records
+			  (season_id, member_id, week_number, trackable_id, recorded_value, logged_by, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(season_id, member_id, week_number, trackable_id) DO UPDATE SET
+			  recorded_value = excluded.recorded_value,
+			  logged_by      = excluded.logged_by,
+			  updated_at     = CURRENT_TIMESTAMP`,
+			seasonID, rm.MemberID, weekNumber, trackableID, rm.Points, userID); err != nil {
+			slog.Error("handleContributionsImport: upsert resolved", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		resolvedCount++
+		if rm.AliasType != "" && rm.OriginalName != "" {
+			var isGlobal int
+			if rm.AliasType == "global" || rm.AliasType == "ocr" {
+				isGlobal = 1
+			}
+			var aliasUserID *int
+			if rm.AliasType == "personal" {
+				aliasUserID = &userID
+			}
+			tx.Exec(`INSERT INTO member_aliases (member_id, alias, category, user_id)
+				VALUES (?, ?, ?, ?)
+				ON CONFLICT DO NOTHING`,
+				rm.MemberID, rm.OriginalName, func() string {
+					if rm.AliasType == "ocr" {
+						return "ocr"
+					}
+					if isGlobal == 1 {
+						return "global"
+					}
+					return "personal"
+				}(), aliasUserID)
+		}
+	}
+
 	// Commit: upsert into season_member_records for the resolved trackable.
 	for _, row := range matched {
 		if _, err := tx.Exec(`
@@ -1391,14 +1518,12 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	}
 	logActivity(userID, username, "imported", "season_contributions",
 		fmt.Sprintf("%s — %s %s", s.Name, strings.ReplaceAll(category, "_", " "), weekLabel), false,
-		fmt.Sprintf("%d members imported", len(matched)))
+		fmt.Sprintf("%d committed, %d resolved", len(matched), resolvedCount))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"imported":   len(matched),
-		"unresolved": len(unresolved),
-		"matched":    matched,
-		"unresolved_list": unresolved,
+		"committed": len(matched) + resolvedCount,
+		"resolved":  resolvedCount,
 	})
 }
 
@@ -2208,10 +2333,7 @@ func handleSeasonEventCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "season_id and label are required", http.StatusBadRequest)
 		return
 	}
-	if body.WeekStart < 1 {
-		http.Error(w, "week_start must be at least 1", http.StatusBadRequest)
-		return
-	}
+	// week_start may be 0 or negative for pre-season events (e.g. S6 Faction Awards).
 	if body.EventTime == "" {
 		body.EventTime = "20:00"
 	}
@@ -2256,10 +2378,7 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "label is required", http.StatusBadRequest)
 		return
 	}
-	if body.WeekStart < 1 {
-		http.Error(w, "week_start must be at least 1", http.StatusBadRequest)
-		return
-	}
+	// week_start may be 0 or negative for pre-season events (e.g. S6 Faction Awards).
 	if body.EventTime == "" {
 		body.EventTime = "20:00"
 	}
@@ -2316,60 +2435,35 @@ func handleSeasonEventDelete(w http.ResponseWriter, r *http.Request) {
 // Push season events to schedule
 // ---------------------------------------------------------------------------
 
-func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+type pushResult struct {
+	Created            int `json:"created"`
+	Skipped            int `json:"skipped"`
+	SkippedUnscheduled int `json:"skipped_unscheduled"`
+	SkippedNoType      int `json:"skipped_no_type"`
+}
 
-	var body struct {
-		SeasonID int `json:"season_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	if body.SeasonID == 0 {
-		http.Error(w, "season_id is required", http.StatusBadRequest)
-		return
-	}
-
-	s, err := loadSeasonByID(body.SeasonID)
-	if err == sql.ErrNoRows {
-		http.Error(w, "Season not found", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		slog.Error("handleSeasonEventPushToSchedule: load season", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	if s.ArchivedAt != "" {
-		http.Error(w, "Season is archived — cannot push events", http.StatusConflict)
-		return
-	}
+// pushSeasonEventsToSchedule materialises every season_event row for the given
+// season into either schedule_events (alliance) or server_events (server) using
+// the season's start_date as the Week 1 anchor. Idempotent — safe to re-run.
+func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushResult, error) {
+	var result pushResult
 	if s.StartDate == "" {
-		http.Error(w, "Season has no start date", http.StatusBadRequest)
-		return
+		return result, fmt.Errorf("season has no start date")
 	}
-
 	startDate, err := time.Parse("2006-01-02", s.StartDate)
 	if err != nil {
-		slog.Error("handleSeasonEventPushToSchedule: parse start date", "error", err)
-		http.Error(w, "Invalid season start date", http.StatusInternalServerError)
-		return
+		return result, fmt.Errorf("invalid start date: %w", err)
 	}
 
-	// Load all season events; event_type_id may be NULL if types were synced after season creation.
 	rows, err := db.Query(`
 		SELECT id, label, event_type_id, type_name, day_offset, event_time, all_day, level,
 		       week_start, week_end, notes, is_server_event, duration_days
-		FROM season_events WHERE season_id = ?`, body.SeasonID)
+		FROM season_events WHERE season_id = ?`, s.ID)
 	if err != nil {
-		slog.Error("handleSeasonEventPushToSchedule: load events", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return result, err
 	}
 	defer rows.Close()
+
 	type pushEvent struct {
 		id            int
 		label         string
@@ -2431,27 +2525,27 @@ func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
 		if err := db.QueryRow(`SELECT id FROM schedule_event_types WHERE name = ?`, ev.typeName).Scan(&typeID); err == nil {
 			typeIDCache[ev.typeName] = typeID
 			events[i].eventTypeID = typeID
-			// Backfill so future pushes don't need the lookup.
 			db.Exec(`UPDATE season_events SET event_type_id = ? WHERE id = ?`, typeID, ev.id)
 		}
 	}
 
-	created, skipped, skippedUnscheduled := 0, 0, 0
-
-	skippedNoType := 0
 	for _, ev := range events {
-		if ev.eventTypeID == 0 {
-			skippedNoType++
+		// Alliance schedule events require a type; server events don't (type is only used for the icon).
+		if ev.eventTypeID == 0 && !ev.isServerEvent {
+			result.SkippedNoType++
 			continue
 		}
 		if ev.dayOffset == nil {
-			skippedUnscheduled++
+			result.SkippedUnscheduled++
 			continue
 		}
 
-		// week_end=0 means use season.WeekCount.
+		// week_end < week_start is the open-ended sentinel meaning "run from
+		// week_start through the season's last week" (legacy: also matches
+		// week_end=0 with week_start=1). Pre-season events use week_start=0,
+		// week_end=0 to mean "week 0 only".
 		weekEnd := ev.weekEnd
-		if weekEnd == 0 {
+		if weekEnd < ev.weekStart {
 			weekEnd = s.WeekCount
 		}
 
@@ -2461,45 +2555,25 @@ func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
 			dateStr := eventDate.Format("2006-01-02")
 
 			if ev.isServerEvent {
-				// Push to server_events (idempotent by name + anchor_date).
 				var existingID int
 				err := db.QueryRow(`SELECT id FROM server_events WHERE name = ? AND anchor_date = ?`,
 					ev.label, dateStr).Scan(&existingID)
 				if err == nil {
-					skipped++
+					result.Skipped++
 					continue
 				}
 				if err != sql.ErrNoRows {
-					slog.Error("handleSeasonEventPushToSchedule: check server event", "error", err)
-					http.Error(w, "Database error", http.StatusInternalServerError)
-					return
+					return result, err
 				}
-				icon := ev.notes // fallback — overridden below if type has an icon
 				var typeIcon string
 				if ev.eventTypeID != 0 {
 					db.QueryRow(`SELECT icon FROM schedule_event_types WHERE id = ?`, ev.eventTypeID).Scan(&typeIcon)
 				}
-				if typeIcon != "" {
-					icon = typeIcon
-				} else {
+				icon := typeIcon
+				if icon == "" {
 					icon = "🌐"
 				}
-				shortName := ev.label
-				if len([]rune(shortName)) > 6 {
-					// Derive from label words
-					words := strings.Fields(shortName)
-					short := ""
-					for _, w := range words {
-						if len([]rune(w)) > 0 {
-							short += string([]rune(w)[0])
-						}
-						if len([]rune(short)) >= 4 {
-							break
-						}
-					}
-					shortName = strings.ToUpper(short)
-				}
-				// Ensure short_name uniqueness in server_events
+				shortName := deriveServerEventShortName(ev.label)
 				finalShort := shortName
 				for suffix := 2; ; suffix++ {
 					var n int
@@ -2513,53 +2587,82 @@ func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
 					INSERT INTO server_events (name, short_name, icon, duration_days, repeat_type, anchor_date, active, sort_order)
 					VALUES (?, ?, ?, ?, 'none', ?, 1, 0)`,
 					ev.label, finalShort, icon, ev.durationDays, dateStr); err != nil {
-					slog.Error("handleSeasonEventPushToSchedule: insert server event", "error", err)
-					http.Error(w, "Database error", http.StatusInternalServerError)
-					return
+					return result, err
 				}
-				created++
+				result.Created++
 				continue
 			}
 
-			// Alliance schedule event — requires an event_type_id.
-			// Idempotent: skip if this (date, type) already exists.
 			var existingID int
 			err := db.QueryRow(`SELECT id FROM schedule_events WHERE event_date = ? AND event_type_id = ?`,
 				dateStr, ev.eventTypeID).Scan(&existingID)
 			if err == nil {
-				skipped++
+				result.Skipped++
 				continue
 			}
 			if err != sql.ErrNoRows {
-				slog.Error("handleSeasonEventPushToSchedule: check existing", "error", err)
-				http.Error(w, "Database error", http.StatusInternalServerError)
-				return
+				return result, err
 			}
-
 			if _, err := db.Exec(`
 				INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by)
 				VALUES (?, ?, ?, ?, ?, ?, ?)`,
 				dateStr, ev.eventTypeID, ev.eventTime, ev.allDay, ev.level, ev.notes, userID); err != nil {
-				slog.Error("handleSeasonEventPushToSchedule: insert", "error", err)
-				http.Error(w, "Database error", http.StatusInternalServerError)
-				return
+				return result, err
 			}
-			created++
+			result.Created++
 		}
 	}
 
-	logActivity(userID, username, "created", "season_event",
-		s.Name+" schedule push", false,
-		fmt.Sprintf("%d events created", created))
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"created":             created,
-		"skipped":             skipped,
-		"skipped_unscheduled": skippedUnscheduled,
-		"skipped_no_type":     skippedNoType,
-	})
+	if result.Created > 0 {
+		logActivity(userID, username, "created", "season_event",
+			s.Name+" schedule push", false,
+			fmt.Sprintf("%d events created", result.Created))
+	}
+	return result, nil
 }
+
+func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+	username, _ := session.Values["username"].(string)
+
+	var body struct {
+		SeasonID int `json:"season_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.SeasonID == 0 {
+		http.Error(w, "season_id is required", http.StatusBadRequest)
+		return
+	}
+
+	s, err := loadSeasonByID(body.SeasonID)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Season not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		slog.Error("handleSeasonEventPushToSchedule: load season", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if s.ArchivedAt != "" {
+		http.Error(w, "Season is archived — cannot push events", http.StatusConflict)
+		return
+	}
+
+	result, err := pushSeasonEventsToSchedule(s, userID, username)
+	if err != nil {
+		slog.Error("handleSeasonEventPushToSchedule: push", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
 
 // ---------------------------------------------------------------------------
 // Season templates
@@ -2610,15 +2713,15 @@ func handleSeasonTemplateGet(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(t)
 }
 
-func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
+func handleSeasonTemplateCreate(w http.ResponseWriter, r *http.Request) {
 	data := getPageData(r, "", "")
 	if !data.Permissions.ManageSettings {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	id, _ := strconv.Atoi(mux.Vars(r)["id"])
 	var body struct {
 		TemplateName string `json:"template_name"`
+		SeasonNumber int    `json:"season_number"`
 		Trackables   string `json:"trackables"`
 		Defaults     string `json:"defaults"`
 		Events       string `json:"events"`
@@ -2631,8 +2734,71 @@ func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "template_name is required", http.StatusBadRequest)
 		return
 	}
-	_, err := db.Exec(`UPDATE season_templates SET template_name=?, trackables=?, defaults=?, events=? WHERE id=?`,
-		body.TemplateName, body.Trackables, body.Defaults, body.Events, id)
+	if body.SeasonNumber > 0 {
+		var existing int
+		db.QueryRow(`SELECT COUNT(*) FROM season_templates WHERE season_number = ?`, body.SeasonNumber).Scan(&existing)
+		if existing > 0 {
+			http.Error(w, fmt.Sprintf("A template for Season %d already exists", body.SeasonNumber), http.StatusConflict)
+			return
+		}
+	}
+	if body.Trackables == "" {
+		body.Trackables = "[]"
+	}
+	if body.Defaults == "" {
+		body.Defaults = `{"week_count":8,"key_event_name":"","key_event_required":0}`
+	}
+	if body.Events == "" {
+		body.Events = "[]"
+	}
+	res, err := db.Exec(`INSERT INTO season_templates (template_name, season_number, trackables, defaults, events) VALUES (?,?,?,?,?)`,
+		body.TemplateName, body.SeasonNumber, body.Trackables, body.Defaults, body.Events)
+	if err != nil {
+		slog.Error("handleSeasonTemplateCreate: insert", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	id, _ := res.LastInsertId()
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+	username, _ := session.Values["username"].(string)
+	logActivity(userID, username, "created", "season_config", body.TemplateName, false)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"id": id})
+}
+
+func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
+	data := getPageData(r, "", "")
+	if !data.Permissions.ManageSettings {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	id, _ := strconv.Atoi(mux.Vars(r)["id"])
+	var body struct {
+		TemplateName string `json:"template_name"`
+		SeasonNumber int    `json:"season_number"`
+		Trackables   string `json:"trackables"`
+		Defaults     string `json:"defaults"`
+		Events       string `json:"events"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.TemplateName == "" {
+		http.Error(w, "template_name is required", http.StatusBadRequest)
+		return
+	}
+	if body.SeasonNumber > 0 {
+		var existing int
+		db.QueryRow(`SELECT COUNT(*) FROM season_templates WHERE season_number = ? AND id != ?`, body.SeasonNumber, id).Scan(&existing)
+		if existing > 0 {
+			http.Error(w, fmt.Sprintf("A template for Season %d already exists", body.SeasonNumber), http.StatusConflict)
+			return
+		}
+	}
+	_, err := db.Exec(`UPDATE season_templates SET template_name=?, season_number=?, trackables=?, defaults=?, events=? WHERE id=?`,
+		body.TemplateName, body.SeasonNumber, body.Trackables, body.Defaults, body.Events, id)
 	if err != nil {
 		slog.Error("handleSeasonTemplateUpdate: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -2644,6 +2810,39 @@ func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 	logActivity(userID, username, "updated", "season_config", body.TemplateName, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Updated"})
+}
+
+func handleSeasonTemplateDelete(w http.ResponseWriter, r *http.Request) {
+	data := getPageData(r, "", "")
+	if !data.Permissions.ManageSettings {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+	var name string
+	if err := db.QueryRow(`SELECT template_name FROM season_templates WHERE id = ?`, id).Scan(&name); err == sql.ErrNoRows {
+		http.Error(w, "Template not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		slog.Error("handleSeasonTemplateDelete: load", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := db.Exec(`DELETE FROM season_templates WHERE id = ?`, id); err != nil {
+		slog.Error("handleSeasonTemplateDelete: delete", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	session, _ := store.Get(r, "session")
+	userID, _ := session.Values["user_id"].(int)
+	username, _ := session.Values["username"].(string)
+	logActivity(userID, username, "deleted", "season_config", name, false)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Deleted"})
 }
 
 func handleSeasonScoreLevelsDefault(w http.ResponseWriter, r *http.Request) {
@@ -2681,6 +2880,98 @@ func handleSeasonScoreLevelsDefault(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Saved"})
 }
 
+// syncEventTypesFromEvents inserts a schedule_event_types row for each unique
+// alliance event type_name in the given template events JSON (server-event
+// types are skipped — they live in server_events, not schedule_event_types).
+// Also backfills event_type_id and is_server_event on existing season_events
+// rows so they match the template's source of truth. Returns the count of
+// newly created schedule_event_types rows.
+func syncEventTypesFromEvents(eventsJSON string) int {
+	type evTypeDef struct {
+		TypeName      string `json:"type_name"`
+		TypeShort     string `json:"type_short"`
+		TypeIcon      string `json:"type_icon"`
+		IsServerEvent bool   `json:"is_server_event"`
+	}
+	var evDefs []evTypeDef
+	json.Unmarshal([]byte(eventsJSON), &evDefs)
+
+	// A given type_name might appear on multiple events — some flagged as server
+	// events, some not. Treat the type as a server event if ANY occurrence is one.
+	serverTypes := map[string]bool{}
+	for _, ev := range evDefs {
+		if ev.IsServerEvent {
+			serverTypes[ev.TypeName] = true
+		}
+	}
+
+	seen := map[string]bool{}
+	created := 0
+	for _, ev := range evDefs {
+		if ev.TypeName == "" || seen[ev.TypeName] {
+			continue
+		}
+		seen[ev.TypeName] = true
+		if serverTypes[ev.TypeName] {
+			continue
+		}
+
+		var exists int
+		db.QueryRow(`SELECT COUNT(*) FROM schedule_event_types WHERE name = ?`, ev.TypeName).Scan(&exists)
+		if exists > 0 {
+			continue
+		}
+
+		short := ev.TypeShort
+		if short == "" {
+			short = ev.TypeName
+			if len(short) > 4 {
+				short = short[:4]
+			}
+		}
+		icon := ev.TypeIcon
+		if icon == "" {
+			icon = "📅"
+		}
+		finalShort := short
+		for suffix := 2; ; suffix++ {
+			var n int
+			db.QueryRow(`SELECT COUNT(*) FROM schedule_event_types WHERE short_name = ?`, finalShort).Scan(&n)
+			if n == 0 {
+				break
+			}
+			finalShort = fmt.Sprintf("%s%d", short, suffix)
+		}
+
+		if _, err := db.Exec(`INSERT INTO schedule_event_types (name, short_name, icon) VALUES (?, ?, ?)`,
+			ev.TypeName, finalShort, icon); err != nil {
+			slog.Error("syncEventTypesFromEvents: insert", "error", err)
+			continue
+		}
+		created++
+	}
+
+	// Backfill season_events.event_type_id for any rows missing it.
+	db.Exec(`UPDATE season_events
+		SET event_type_id = (SELECT id FROM schedule_event_types WHERE name = season_events.type_name)
+		WHERE event_type_id IS NULL AND type_name != ''`)
+
+	// Align is_server_event with the template.
+	for _, ev := range evDefs {
+		if ev.TypeName == "" {
+			continue
+		}
+		flag := 0
+		if serverTypes[ev.TypeName] {
+			flag = 1
+		}
+		db.Exec(`UPDATE season_events SET is_server_event = ? WHERE type_name = ?`,
+			flag, ev.TypeName)
+	}
+
+	return created
+}
+
 func handleSeasonTemplateSyncEventTypes(w http.ResponseWriter, r *http.Request) {
 	data := getPageData(r, "", "")
 	if !data.Permissions.ManageSettings {
@@ -2700,65 +2991,7 @@ func handleSeasonTemplateSyncEventTypes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	type evTypeDef struct {
-		TypeName  string `json:"type_name"`
-		TypeShort string `json:"type_short"`
-		TypeIcon  string `json:"type_icon"`
-	}
-	var evDefs []evTypeDef
-	json.Unmarshal([]byte(eventsJSON), &evDefs)
-
-	// Deduplicate by type_name and create any missing schedule_event_types.
-	seen := map[string]bool{}
-	created := 0
-	for _, ev := range evDefs {
-		if ev.TypeName == "" || seen[ev.TypeName] {
-			continue
-		}
-		seen[ev.TypeName] = true
-
-		var exists int
-		db.QueryRow(`SELECT COUNT(*) FROM schedule_event_types WHERE name = ?`, ev.TypeName).Scan(&exists)
-		if exists > 0 {
-			continue
-		}
-
-		short := ev.TypeShort
-		if short == "" {
-			// Derive initials as fallback
-			short = ev.TypeName
-			if len(short) > 4 {
-				short = short[:4]
-			}
-		}
-		icon := ev.TypeIcon
-		if icon == "" {
-			icon = "📅"
-		}
-		// Ensure short_name uniqueness
-		finalShort := short
-		for suffix := 2; ; suffix++ {
-			var n int
-			db.QueryRow(`SELECT COUNT(*) FROM schedule_event_types WHERE short_name = ?`, finalShort).Scan(&n)
-			if n == 0 {
-				break
-			}
-			finalShort = fmt.Sprintf("%s%d", short, suffix)
-		}
-
-		if _, err := db.Exec(`INSERT INTO schedule_event_types (name, short_name, icon) VALUES (?, ?, ?)`,
-			ev.TypeName, finalShort, icon); err != nil {
-			slog.Error("handleSeasonTemplateSyncEventTypes: insert", "error", err)
-			continue
-		}
-		created++
-	}
-
-	// Backfill season_events.event_type_id for any rows that have a type_name but no type ID yet.
-	// This handles the case where a season was created before its event types were synced.
-	db.Exec(`UPDATE season_events
-		SET event_type_id = (SELECT id FROM schedule_event_types WHERE name = season_events.type_name)
-		WHERE event_type_id IS NULL AND type_name != ''`)
+	created := syncEventTypesFromEvents(eventsJSON)
 
 	session, _ := store.Get(r, "session")
 	userID, _ := session.Values["user_id"].(int)

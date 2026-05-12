@@ -563,7 +563,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             cell(mkInp('text', 'Short',        ev.type_short || '', '55px'));
             cell(mkInp('text', '🎯',           ev.type_icon  || '', '45px'));
             cell(mkSel(ev.day_offset ?? ''));
-            cell(mkInp('time', '20:00',        ev.event_time || '20:00', '80px'));
+            const timeInp = mkInp('text', '20:00', ev.event_time || '20:00', '80px');
+            flatpickr(timeInp, { enableTime: true, noCalendar: true, dateFormat: 'H:i', time_24hr: true, minuteIncrement: 30, allowInput: true });
+            cell(timeInp);
 
             const wkS = mkInp('number', '1', ev.week_start ?? 1, '50px');
             const wkE = mkInp('number', '0', ev.week_end   ?? 0, '50px');
@@ -636,124 +638,122 @@ document.addEventListener('DOMContentLoaded', async () => {
         return { el: wrap, getJSON };
     }
 
-    // ── Template card ───────────────────────────────────────────────────────────
+    // ── Template card (list row only) ───────────────────────────────────────────
 
     function buildTemplateCard(t) {
         const card = document.createElement('div');
-        card.style.cssText = 'border:1px solid var(--border-color);border-radius:8px;padding:12px 16px;margin-bottom:10px;background:var(--bg-secondary);';
+        card.style.cssText = 'border:1px solid var(--border-color);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:var(--bg-secondary);display:flex;align-items:center;gap:10px;';
 
-        const header = document.createElement('div');
-        header.style.cssText = 'display:flex;align-items:center;gap:10px;';
-
-        const name = document.createElement('strong');
-        name.textContent = t.template_name;
-        name.style.flex = '1';
+        const nameLbl = document.createElement('span');
+        nameLbl.textContent = (t.season_number > 0 ? 'S' + t.season_number + ' — ' : '') + t.template_name;
+        nameLbl.style.flex = '1';
 
         const btnEdit = document.createElement('button');
         btnEdit.type = 'button'; btnEdit.className = 'btn btn-secondary btn-sm';
         btnEdit.textContent = 'Edit';
+        btnEdit.addEventListener('click', () => openTemplateModal(t));
 
         const btnSync = document.createElement('button');
         btnSync.type = 'button'; btnSync.className = 'btn btn-secondary btn-sm';
         btnSync.textContent = 'Sync Event Types';
-
-        header.appendChild(name);
-        header.appendChild(btnEdit);
-        header.appendChild(btnSync);
-        card.appendChild(header);
-
-        // Inline edit form (collapsed by default)
-        const editForm = document.createElement('div');
-        editForm.style.display = 'none';
-        editForm.style.marginTop = '12px';
-
-        // Template name field
-        const nameFg = document.createElement('div');
-        nameFg.className = 'form-group';
-        nameFg.style.marginBottom = '10px';
-        const nameLbl = document.createElement('label');
-        nameLbl.style.cssText = 'font-size:0.85rem;font-weight:600;display:block;margin-bottom:4px;';
-        nameLbl.textContent = 'Template Name';
-        const nameInp = document.createElement('input');
-        nameInp.type = 'text';
-        nameInp.className = 'form-input';
-        nameInp.value = t.template_name;
-        nameFg.appendChild(nameLbl);
-        nameFg.appendChild(nameInp);
-        editForm.appendChild(nameFg);
-
-        const defaultsEd    = buildDefaultsEditor(t.defaults);
-        const trackablesEd  = buildTrackablesEditor(t.trackables);
-        const eventsEd      = buildEventsEditor(t.events);
-
-        editForm.appendChild(defaultsEd.el);
-        editForm.appendChild(trackablesEd.el);
-        editForm.appendChild(eventsEd.el);
-
-        const saveRow = document.createElement('div');
-        saveRow.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:10px;';
-
-        const btnSave = document.createElement('button');
-        btnSave.type = 'button'; btnSave.className = 'btn btn-primary btn-sm';
-        btnSave.textContent = 'Save';
-
-        const btnCancel = document.createElement('button');
-        btnCancel.type = 'button'; btnCancel.className = 'btn btn-secondary btn-sm';
-        btnCancel.textContent = 'Cancel';
-
-        saveRow.appendChild(btnSave);
-        saveRow.appendChild(btnCancel);
-        editForm.appendChild(saveRow);
-        card.appendChild(editForm);
-
-        btnEdit.addEventListener('click', () => {
-            editForm.style.display = editForm.style.display === 'none' ? 'block' : 'none';
-        });
-
-        btnCancel.addEventListener('click', () => {
-            editForm.style.display = 'none';
-        });
-
-        btnSave.addEventListener('click', () => {
-            const body = {
-                template_name: nameInp.value.trim(),
-                trackables: trackablesEd.getJSON(),
-                defaults:   defaultsEd.getJSON(),
-                events:     eventsEd.getJSON(),
-            };
-            fetch('/api/season-hub/templates/' + t.id, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            })
-                .then(r => r.ok ? r.json() : r.text().then(txt => { throw new Error(txt); }))
-                .then(() => {
-                    showToast('Template saved.');
-                    editForm.style.display = 'none';
-                    name.textContent = body.template_name;
-                    t.template_name = body.template_name;
-                    t.trackables = body.trackables;
-                    t.defaults   = body.defaults;
-                    t.events     = body.events;
-                })
-                .catch(err => showToast(err.message || 'Save failed.', 'error'));
-        });
-
         btnSync.addEventListener('click', () => {
             fetch('/api/season-hub/templates/' + t.id + '/sync-event-types', { method: 'POST' })
                 .then(r => r.ok ? r.json() : r.text().then(txt => { throw new Error(txt); }))
-                .then(d => {
-                    if (d.created > 0) {
-                        showToast(d.created + ' event type(s) synced.');
-                    } else {
-                        showToast('All event types already exist.', 'info');
-                    }
-                })
+                .then(d => showToast(d.created > 0 ? d.created + ' event type(s) synced.' : 'All event types already exist.', d.created > 0 ? 'success' : 'info'))
                 .catch(err => showToast(err.message || 'Sync failed.', 'error'));
         });
 
+        const btnDel = document.createElement('button');
+        btnDel.type = 'button'; btnDel.className = 'btn btn-danger btn-sm';
+        btnDel.textContent = 'Delete';
+        btnDel.addEventListener('click', async () => {
+            if (!await showConfirm('Permanently delete template "' + t.template_name + '"? This cannot be undone.', 'Delete')) return;
+            fetch('/api/season-hub/templates/' + t.id, { method: 'DELETE' })
+                .then(r => r.ok ? r.json() : r.text().then(txt => { throw new Error(txt); }))
+                .then(() => { showToast('Template deleted.'); card.remove(); })
+                .catch(err => showToast(err.message || 'Delete failed.', 'error'));
+        });
+
+        card.appendChild(nameLbl);
+        card.appendChild(btnEdit);
+        card.appendChild(btnSync);
+        card.appendChild(btnDel);
         return card;
     }
+
+    // ── Template modal ──────────────────────────────────────────────────────────
+
+    const modal       = document.getElementById('modal-season-template');
+    const modalTitle  = document.getElementById('season-template-modal-title');
+    const stmName     = document.getElementById('stm-name');
+    const stmNum      = document.getElementById('stm-season-number');
+    const defaultsWrap    = document.getElementById('stm-defaults-wrap');
+    const trackablesWrap  = document.getElementById('stm-trackables-wrap');
+    const eventsWrap      = document.getElementById('stm-events-wrap');
+    const btnStmSave  = document.getElementById('btn-stm-save');
+    const btnStmCancel = document.getElementById('btn-stm-cancel');
+
+    let activeTemplate = null;
+    let defaultsEd, trackablesEd, eventsEd;
+
+    function openTemplateModal(t) {
+        activeTemplate = t || {};
+        const isNew = !activeTemplate.id;
+
+        modalTitle.textContent = isNew ? 'New Season Template' : 'Edit — ' + activeTemplate.template_name;
+        stmName.value = activeTemplate.template_name || '';
+        stmNum.value  = activeTemplate.season_number ?? '';
+
+        defaultsEd   = buildDefaultsEditor(activeTemplate.defaults    || '{}');
+        trackablesEd = buildTrackablesEditor(activeTemplate.trackables || '[]');
+        eventsEd     = buildEventsEditor(activeTemplate.events         || '[]');
+
+        defaultsWrap.replaceChildren(defaultsEd.el);
+        trackablesWrap.replaceChildren(trackablesEd.el);
+        eventsWrap.replaceChildren(eventsEd.el);
+
+        modal.style.display = 'flex';
+        stmName.focus();
+    }
+
+    function closeTemplateModal() {
+        modal.style.display = '';
+        activeTemplate = null;
+    }
+
+    if (btnStmCancel) btnStmCancel.addEventListener('click', closeTemplateModal);
+    if (modal) modal.addEventListener('click', e => { if (e.target === modal) closeTemplateModal(); });
+
+    if (btnStmSave) {
+        btnStmSave.addEventListener('click', () => {
+            const body = {
+                template_name: stmName.value.trim(),
+                season_number: parseInt(stmNum.value, 10) || 0,
+                defaults:      defaultsEd.getJSON(),
+                trackables:    trackablesEd.getJSON(),
+                events:        eventsEd.getJSON(),
+            };
+            if (!body.template_name) { showToast('Template name is required.', 'error'); return; }
+
+            const isNew = !activeTemplate.id;
+            const url    = isNew ? '/api/season-hub/templates' : '/api/season-hub/templates/' + activeTemplate.id;
+            const method = isNew ? 'POST' : 'PUT';
+
+            fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                .then(r => r.ok ? r.json() : r.text().then(txt => { throw new Error(txt); }))
+                .then(d => {
+                    if (isNew) activeTemplate.id = d.id;
+                    Object.assign(activeTemplate, body);
+                    showToast(isNew ? 'Template created.' : 'Template saved.');
+                    closeTemplateModal();
+                    loadSeasonTemplates();
+                })
+                .catch(err => showToast(err.message || 'Save failed.', 'error'));
+        });
+    }
+
+    const btnAddTemplate = document.getElementById('btn-add-season-template');
+    if (btnAddTemplate) btnAddTemplate.addEventListener('click', () => openTemplateModal(null));
 
     loadSeasonTemplates();
 })();

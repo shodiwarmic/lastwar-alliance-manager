@@ -7,6 +7,8 @@
 <link rel="stylesheet" href="/season-hub.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
 <link rel="stylesheet" href="/choices-theme.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {{end}}
 
 {{define "content"}}
@@ -416,9 +418,12 @@
                 </thead>
                 <tbody id="contrib-preview-tbody"></tbody>
             </table>
-            <div id="contrib-unresolved-wrap" style="display:none;margin-top:8px;">
-                <p class="contrib-unresolved-title">Unresolved names:</p>
-                <ul id="contrib-unresolved-list"></ul>
+            <div id="contrib-unresolved-wrap" style="display:none;margin-top:16px;">
+                <p class="contrib-unresolved-title" style="font-weight:600;margin-bottom:6px;">Unresolved — map to a member or ignore:</p>
+                <table class="data-table">
+                    <thead><tr><th>OCR Name</th><th>Points</th><th>Map to Member</th><th>Save Alias</th></tr></thead>
+                    <tbody id="contrib-unresolved-list"></tbody>
+                </table>
             </div>
         </div>
         <div class="modal-actions">

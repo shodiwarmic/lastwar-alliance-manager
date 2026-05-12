@@ -777,12 +777,30 @@
         fd.append('commit', commit ? 'true' : 'false');
         Array.from(filesInput.files).forEach(f => fd.append('images[]', f));
 
+        if (commit && contribPreviewData) {
+            const mappings = [];
+            document.querySelectorAll('#contrib-unresolved-list tr').forEach((tr, idx) => {
+                const memberSel = tr.querySelector('.unresolved-member-sel');
+                const aliasSel  = tr.querySelector('.unresolved-alias-sel');
+                const row = (contribPreviewData.unresolved || [])[idx];
+                if (memberSel && memberSel.value && row) {
+                    mappings.push({
+                        original_name: row.original_name,
+                        points:        row.points,
+                        member_id:     parseInt(memberSel.value, 10),
+                        alias_type:    aliasSel ? aliasSel.value : '',
+                    });
+                }
+            });
+            if (mappings.length) fd.append('resolved_mappings', JSON.stringify(mappings));
+        }
+
         fetch('/api/season-hub/contributions/import', { method: 'POST', body: fd })
-            .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+            .then(r => r.ok ? r.json().then(d => ({ ok: true, data: d })) : r.text().then(t => { throw new Error(t || 'Import failed.'); }))
             .then(({ ok, data }) => {
                 if (!ok) throw new Error(data.error || 'Import failed.');
                 if (commit) {
-                    showToast('Contributions committed: ' + (data.committed || 0) + ' records.');
+                    showToast('Contributions committed: ' + (data.committed || 0) + ' records' + (data.resolved || 0 ? ', ' + data.resolved + ' resolved' : '') + '.');
                     cancelContribImport();
                     loadSeasonData(activeSeason ? activeSeason.id : null);
                 } else {
@@ -832,12 +850,51 @@
         if (unresolvedWrap && unresolvedList) {
             if (unresolved.length > 0) {
                 unresolvedWrap.style.display = '';
-                const items = unresolved.map(name => {
-                    const li = document.createElement('li');
-                    li.textContent = name;
-                    return li;
+                const rows = unresolved.map((row, idx) => {
+                    const tr = document.createElement('tr');
+                    tr.dataset.idx = idx;
+
+                    const tdName = document.createElement('td');
+                    tdName.textContent = row.original_name;
+
+                    const tdPts = document.createElement('td');
+                    tdPts.textContent = (row.points || 0).toLocaleString();
+
+                    const tdMap = document.createElement('td');
+                    const memberSel = document.createElement('select');
+                    memberSel.className = 'form-input unresolved-member-sel';
+                    memberSel.style.cssText = 'width:180px;font-size:0.85rem;';
+                    const ignoreOpt = document.createElement('option');
+                    ignoreOpt.value = ''; ignoreOpt.textContent = '— Ignore —';
+                    memberSel.appendChild(ignoreOpt);
+                    allMembers.filter(m => m.rank !== 'EX').forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.id; opt.textContent = m.name + ' (' + m.rank + ')';
+                        memberSel.appendChild(opt);
+                    });
+                    tdMap.appendChild(memberSel);
+
+                    const tdAlias = document.createElement('td');
+                    const aliasSel = document.createElement('select');
+                    aliasSel.className = 'form-input unresolved-alias-sel';
+                    aliasSel.style.cssText = 'width:160px;font-size:0.85rem;';
+                    aliasSel.disabled = true;
+                    [['', 'Do not save alias'], ['ocr', 'Save as OCR Alias'], ['global', 'Save as Global Alias'], ['personal', 'Save as Personal Alias']].forEach(([v, t]) => {
+                        const opt = document.createElement('option');
+                        opt.value = v; opt.textContent = t;
+                        aliasSel.appendChild(opt);
+                    });
+                    memberSel.addEventListener('change', () => {
+                        aliasSel.disabled = !memberSel.value;
+                        if (memberSel.value) aliasSel.value = 'ocr';
+                        else aliasSel.value = '';
+                    });
+                    tdAlias.appendChild(aliasSel);
+
+                    tr.append(tdName, tdPts, tdMap, tdAlias);
+                    return tr;
                 });
-                unresolvedList.replaceChildren(...items);
+                unresolvedList.replaceChildren(...rows);
             } else {
                 unresolvedWrap.style.display = 'none';
             }
@@ -1331,7 +1388,7 @@
                         opt.value = t.id;
                         opt.dataset.name = t.template_name;
                         opt.dataset.defaults = t.defaults;
-                        opt.textContent = t.template_name;
+                        opt.textContent = (t.season_number > 0 ? 'S' + t.season_number + ' — ' : '') + t.template_name;
                         sel.appendChild(opt);
                     });
                 })
@@ -1433,10 +1490,17 @@
             body: JSON.stringify(body)
         })
             .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
-            .then(() => {
+            .then(d => {
                 const modal = document.getElementById('modal-create-season');
                 if (modal) modal.style.display = '';
-                showToast('Season created.');
+                let msg = 'Season created.';
+                const p = d && d.pushed;
+                if (p && (p.created || p.skipped_no_type || p.skipped_unscheduled)) {
+                    msg += ' Pushed ' + (p.created || 0) + ' event' + ((p.created || 0) === 1 ? '' : 's') + ' to schedule';
+                    if (p.skipped_no_type) msg += ', ' + p.skipped_no_type + ' skipped (no event type — run Sync Event Types in Settings)';
+                    msg += '.';
+                }
+                showToast(msg);
                 loadSeasonList();
                 loadRewards();
                 loadSeasonMail();
@@ -1577,7 +1641,8 @@
         tr.appendChild(mkTd(inDay));
 
         const inTime = document.createElement('input');
-        inTime.type = 'time'; inTime.className = 'form-input ev-time'; inTime.value = ev.event_time || '20:00'; inTime.style.width = '90px';
+        inTime.type = 'text'; inTime.className = 'form-input ev-time'; inTime.value = ev.event_time || '20:00'; inTime.style.width = '90px';
+        flatpickr(inTime, { enableTime: true, noCalendar: true, dateFormat: 'H:i', time_24hr: true, minuteIncrement: 30, allowInput: true });
         tr.appendChild(mkTd(inTime));
 
         const inWkS = document.createElement('input');

@@ -85,8 +85,7 @@ function formatDateRange(mon) {
 // Format "HH:MM" → "H:MM" (no leading zero on hour)
 function formatTime(hhmm) {
     if (!hhmm) return '';
-    const [h, m] = hhmm.split(':');
-    return String(parseInt(h, 10)) + ':' + m;
+    return hhmm; // already stored as HH:MM 24-hour
 }
 
 function dayOfSeason(dateStr) {

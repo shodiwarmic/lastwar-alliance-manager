@@ -40,7 +40,7 @@ CREATE TABLE season_templates (
 
 -- S1 — The Crimson Plague (⚠️ approximate — completely different contribution architecture)
 INSERT INTO season_templates (template_name, season_number, trackables, defaults, events) VALUES (
-    'S1 — The Crimson Plague ⚠️ approximate',
+    'The Crimson Plague',
     1,
     '[{"key":"city_captures","label":"City Captures","sort_order":0},{"key":"warzone_donations","label":"Warzone Donations","sort_order":1}]',
     '{"week_count":8,"key_event_name":"City Clash","key_event_required":0}',
@@ -61,7 +61,7 @@ INSERT INTO season_templates (template_name, season_number, trackables, defaults
 
 -- S2 — Polar World (✅ confirmed; includes Age of Oil post-season weeks 9-13)
 INSERT INTO season_templates (template_name, season_number, trackables, defaults, events) VALUES (
-    'S2 — Polar World ✅ confirmed',
+    'Polar World',
     2,
     '[{"key":"mutual_assistance","label":"Mutual Assistance","sort_order":0},{"key":"siege","label":"Siege","sort_order":1},{"key":"rare_soil_war","label":"Rare Soil War","sort_order":2},{"key":"defeat","label":"Defeat","sort_order":3}]',
     '{"week_count":8,"key_event_name":"Rare Soil War","key_event_required":4}',
@@ -89,7 +89,7 @@ INSERT INTO season_templates (template_name, season_number, trackables, defaults
 
 -- S3 — Golden Realm (⚠️ partially confirmed)
 INSERT INTO season_templates (template_name, season_number, trackables, defaults, events) VALUES (
-    'S3 — Golden Realm ⚠️ partially confirmed',
+    'Golden Realm',
     3,
     '[{"key":"mutual_assistance","label":"Mutual Assistance","sort_order":0},{"key":"siege","label":"Siege","sort_order":1},{"key":"spice_war","label":"Spice War","sort_order":2},{"key":"defeat","label":"Defeat","sort_order":3}]',
     '{"week_count":8,"key_event_name":"Spice War","key_event_required":4}',
@@ -113,7 +113,7 @@ INSERT INTO season_templates (template_name, season_number, trackables, defaults
 
 -- S4 — Evernight Isle (⚠️ partially confirmed)
 INSERT INTO season_templates (template_name, season_number, trackables, defaults, events) VALUES (
-    'S4 — Evernight Isle ⚠️ partially confirmed',
+    'Evernight Isle',
     4,
     '[{"key":"mutual_assistance","label":"Mutual Assistance","sort_order":0},{"key":"siege","label":"Siege","sort_order":1},{"key":"copper_war","label":"Copper War","sort_order":2},{"key":"defeat","label":"Defeat","sort_order":3}]',
     '{"week_count":8,"key_event_name":"Copper War","key_event_required":4}',
@@ -137,7 +137,7 @@ INSERT INTO season_templates (template_name, season_number, trackables, defaults
 
 -- S5 — Wild West (✅ confirmed)
 INSERT INTO season_templates (template_name, season_number, trackables, defaults, events) VALUES (
-    'S5 — Wild West ✅ confirmed',
+    'Wild West',
     5,
     '[{"key":"crystal_gold","label":"CrystalGold","sort_order":0},{"key":"capture","label":"Capture","sort_order":1},{"key":"kills","label":"Kills","sort_order":2}]',
     '{"week_count":8,"key_event_name":"Finance Tycoon / Bank Capture","key_event_required":2}',
@@ -161,7 +161,7 @@ INSERT INTO season_templates (template_name, season_number, trackables, defaults
 
 -- S6 — Lost Rainforest / Shadow Rainforest (✅ confirmed)
 INSERT INTO season_templates (template_name, season_number, trackables, defaults, events) VALUES (
-    'S6 — Lost Rainforest ✅ confirmed',
+    'Lost Rainforest',
     6,
     '[{"key":"war_merit","label":"War Merit","sort_order":0},{"key":"capture","label":"Capture","sort_order":1},{"key":"defeat","label":"Defeat","sort_order":2}]',
     '{"week_count":8,"key_event_name":"Faction Clash","key_event_required":4}',

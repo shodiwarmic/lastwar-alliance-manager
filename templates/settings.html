@@ -3,6 +3,11 @@
     <h2>System Settings</h2>
 {{end}}
 
+{{define "head_tags"}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+{{end}}
+
 {{define "content"}}
             <section class="form-section">
                 <h3>Global Configuration</h3>
@@ -181,10 +186,12 @@
 
                 <h4>Default Score Levels</h4>
                 <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:8px;">Applied when creating a new season. Changing this does not affect existing seasons.</p>
-                <table class="data-table" id="score-levels-table" style="max-width:400px;">
-                    <thead><tr><th>Key</th><th>Label</th><th>Points</th><th></th></tr></thead>
-                    <tbody id="score-levels-tbody"></tbody>
-                </table>
+                <div style="overflow-x:auto;">
+                    <table class="data-table" id="score-levels-table">
+                        <thead><tr><th>Key</th><th>Label</th><th>Points</th><th></th></tr></thead>
+                        <tbody id="score-levels-tbody"></tbody>
+                    </table>
+                </div>
                 <button type="button" class="btn btn-secondary btn-sm" id="btn-add-score-level" style="margin-top:6px;">+ Add Level</button>
                 <div style="margin-top:10px;">
                     <button type="button" class="btn btn-primary btn-sm" id="btn-save-score-levels">Save Score Levels</button>
@@ -194,8 +201,34 @@
                 <h4 style="margin-top:24px;">Season Templates</h4>
                 <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:8px;">Templates are one-time blueprints. Editing a template has no effect on existing seasons.</p>
                 <div id="season-templates-list"></div>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-add-season-template" style="margin-top:8px;">+ Add Season Template</button>
             </section>
 {{end}}
+{{end}}
+
+{{define "modals"}}
+<div id="modal-season-template" class="modal">
+    <div class="modal-content" style="max-width:1100px;width:95vw;">
+        <h3 id="season-template-modal-title">Edit Season Template</h3>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:12px;">
+            <div class="form-group" style="margin:0;">
+                <label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:4px;">Template Name</label>
+                <input type="text" id="stm-name" class="form-input" placeholder="e.g. S7 — New Season">
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:4px;">Season #</label>
+                <input type="number" id="stm-season-number" class="form-input" min="0" style="width:80px;">
+            </div>
+        </div>
+        <div id="stm-defaults-wrap"></div>
+        <div id="stm-trackables-wrap"></div>
+        <div id="stm-events-wrap"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="btn-stm-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btn-stm-save">Save Template</button>
+        </div>
+    </div>
+</div>
 {{end}}
 
 {{define "scripts"}}

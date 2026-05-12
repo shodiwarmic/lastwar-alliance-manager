@@ -173,8 +173,10 @@ func main() {
 	router.HandleFunc("/api/season-hub/season-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_hub", handleSeasonEventUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/season-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_hub", handleSeasonEventDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/templates", authMiddleware(requirePermission("view_season_hub", handleSeasonTemplateList))).Methods("GET")
+	router.HandleFunc("/api/season-hub/templates", authMiddleware(requirePermission("manage_settings", handleSeasonTemplateCreate))).Methods("POST")
 	router.HandleFunc("/api/season-hub/templates/{id:[0-9]+}", authMiddleware(requirePermission("view_season_hub", handleSeasonTemplateGet))).Methods("GET")
 	router.HandleFunc("/api/season-hub/templates/{id:[0-9]+}", authMiddleware(requirePermission("manage_settings", handleSeasonTemplateUpdate))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/templates/{id:[0-9]+}", authMiddleware(requirePermission("manage_settings", handleSeasonTemplateDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/templates/{id:[0-9]+}/sync-event-types", authMiddleware(requirePermission("manage_settings", handleSeasonTemplateSyncEventTypes))).Methods("POST")
 	router.HandleFunc("/api/season-hub/score-levels-default", authMiddleware(handleSeasonScoreLevelsDefault)).Methods("GET", "PUT")
 

@@ -87,7 +87,7 @@ function buildRecentLoginsSection(user) {
 
     user.recent_logins.slice(0, 3).forEach(login => {
         const location = [login.city, login.country].filter(v => v).join(', ') || 'Unknown';
-        const time = new Date(login.login_time).toLocaleString();
+        const time = new Date(login.login_time).toLocaleString(undefined, { hour12: false });
 
         const entry = document.createElement('div');
         entry.className = 'login-entry';
@@ -112,7 +112,7 @@ function buildRecentLoginsSection(user) {
 }
 
 function buildUserCard(user) {
-    const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString() : 'Never';
+    const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString(undefined, { hour12: false }) : 'Never';
 
     const card = document.createElement('div');
     card.className = 'user-card';
@@ -573,7 +573,7 @@ function displayLoginStats(logins) {
 function buildLoginRow(login) {
     const status = login.success ? '✅' : '❌';
     const statusClass = login.success ? 'success' : 'failed';
-    const time = new Date(login.login_time).toLocaleString();
+    const time = new Date(login.login_time).toLocaleString(undefined, { hour12: false });
     const location = [login.city, login.country].filter(v => v).join(', ') || 'Unknown';
     const ip = login.ip_address || 'N/A';
     const isp = login.isp || 'Unknown';
