@@ -135,6 +135,42 @@
         </div>
     </div>
 
+    <!-- Convert Prospect to Member Modal -->
+    <div id="convert-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 420px;">
+            <span class="close" id="close-convert-modal">&times;</span>
+            <h2>Convert to Member</h2>
+            <p id="convert-prospect-name" style="color: var(--text-secondary); margin-bottom: 16px;"></p>
+            <form id="convert-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="convert-rank">Rank:</label>
+                        <select id="convert-rank" class="form-input" required>
+                            <option value="R1">R1</option>
+                            <option value="R2">R2</option>
+                            <option value="R3">R3</option>
+                            <option value="R4">R4</option>
+                            <option value="R5">R5</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="convert-level">Level <span class="optional">(optional)</span></label>
+                        <input type="number" id="convert-level" class="form-input" min="0" placeholder="e.g. 60">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="convert-power">Power <span class="optional">(optional)</span></label>
+                    <input type="number" id="convert-power" class="form-input" min="0" placeholder="e.g. 45000000">
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary" id="convert-submit-btn">Add to Roster</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-convert-btn">Cancel</button>
+                </div>
+            </form>
+            <p id="convert-status" class="status-msg" style="margin-top: 10px;"></p>
+        </div>
+    </div>
+
     <!-- Add/Edit Prospect Modal -->
     <div id="prospect-modal" class="modal" style="display: none;">
         <div class="modal-content">

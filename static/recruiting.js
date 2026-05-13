@@ -7,6 +7,7 @@ const HAS_FORMER_TAB = window.HAS_FORMER_TAB === true;
 
 let allMembers = [];        // for recruiter dropdown and capacity header
 let editingProspectId = null;
+let convertingProspect = null;
 let reactivatingMemberId = null;
 let editingFormerMemberId = null;
 let currentFormerAliasMemberId = null;
@@ -481,21 +482,33 @@ function buildProspectCard(p) {
         card.appendChild(notesEl);
     }
 
-    if (CAN_MANAGE_RECRUITING) {
+    if (CAN_MANAGE_RECRUITING || CAN_MANAGE_MEMBERS) {
         const actions = document.createElement('div');
         actions.className = 'prospect-actions';
 
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn btn-secondary btn-sm';
-        editBtn.textContent = 'Edit';
-        editBtn.addEventListener('click', () => openProspectModal(p));
-        actions.appendChild(editBtn);
+        if (CAN_MANAGE_RECRUITING) {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn btn-secondary btn-sm';
+            editBtn.textContent = 'Edit';
+            editBtn.addEventListener('click', () => openProspectModal(p));
+            actions.appendChild(editBtn);
+        }
 
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn btn-danger btn-sm';
-        delBtn.textContent = 'Delete';
-        delBtn.addEventListener('click', () => deleteProspect(p.id, p.name, actions, delBtn));
-        actions.appendChild(delBtn);
+        if (CAN_MANAGE_MEMBERS) {
+            const convertBtn = document.createElement('button');
+            convertBtn.className = 'btn btn-primary btn-sm';
+            convertBtn.textContent = 'Add to Roster';
+            convertBtn.addEventListener('click', () => openConvertModal(p));
+            actions.appendChild(convertBtn);
+        }
+
+        if (CAN_MANAGE_RECRUITING) {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn btn-danger btn-sm';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', () => deleteProspect(p.id, p.name, actions, delBtn));
+            actions.appendChild(delBtn);
+        }
 
         card.appendChild(actions);
     }
@@ -530,6 +543,58 @@ async function deleteProspect(id, name, actionsContainer, delBtn) {
     noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
     confirmSpan.append(label, yesBtn, noBtn);
     actionsContainer.appendChild(confirmSpan);
+}
+
+// ── Convert Prospect to Member ────────────────────────────────────────────────
+
+function openConvertModal(prospect) {
+    convertingProspect = prospect;
+    const nameEl = document.getElementById('convert-prospect-name');
+    if (nameEl) nameEl.textContent = `Converting: ${prospect.name}`;
+    document.getElementById('convert-rank').value = 'R1';
+    document.getElementById('convert-level').value = '';
+    document.getElementById('convert-power').value = prospect.power ? prospect.power : '';
+    const statusEl = document.getElementById('convert-status');
+    if (statusEl) statusEl.textContent = '';
+    const modal = document.getElementById('convert-modal');
+    if (modal) { modal.style.display = 'flex'; trapFocus(modal); }
+}
+
+async function handleConvertSubmit(e) {
+    e.preventDefault();
+    if (!convertingProspect) return;
+
+    const rank = document.getElementById('convert-rank').value;
+    const levelVal = document.getElementById('convert-level').value;
+    const level = levelVal !== '' ? parseInt(levelVal, 10) : 0;
+    const powerVal = document.getElementById('convert-power').value;
+    const power = powerVal !== '' ? parseInt(powerVal, 10) : null;
+    const statusEl = document.getElementById('convert-status');
+
+    try {
+        const res = await fetch(`/api/prospects/${convertingProspect.id}/convert`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rank, level, power }),
+        });
+        if (!res.ok) {
+            const msg = await res.text();
+            throw new Error(msg || 'Failed to convert prospect');
+        }
+        const convertedName = convertingProspect.name;
+        const modal = document.getElementById('convert-modal');
+        releaseFocus(modal);
+        modal.style.display = 'none';
+        convertingProspect = null;
+        showToast(`${convertedName} added to roster.`);
+        await loadProspects();
+    } catch (err) {
+        console.error(err);
+        if (statusEl) {
+            statusEl.textContent = err.message || 'Failed to add member. Please try again.';
+            statusEl.style.color = 'var(--color-danger)';
+        }
+    }
 }
 
 // ── Prospect Modal ────────────────────────────────────────────────────────────
@@ -750,6 +815,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
     });
+
+    // Convert modal
+    const convertModal = document.getElementById('convert-modal');
+    if (convertModal) {
+        const closeConvertModal = () => { releaseFocus(convertModal); convertModal.style.display = 'none'; convertingProspect = null; };
+        document.getElementById('close-convert-modal')?.addEventListener('click', closeConvertModal);
+        document.getElementById('cancel-convert-btn')?.addEventListener('click', closeConvertModal);
+        window.addEventListener('click', e => { if (e.target === convertModal) closeConvertModal(); });
+        document.getElementById('convert-form')?.addEventListener('submit', handleConvertSubmit);
+    }
 
     // Prospect modal
     const prospectModal = document.getElementById('prospect-modal');

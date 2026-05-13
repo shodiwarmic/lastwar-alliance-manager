@@ -275,6 +275,7 @@ func main() {
 	router.HandleFunc("/api/prospects", authMiddleware(requirePermission("manage_recruiting", createProspect))).Methods("POST")
 	router.HandleFunc("/api/prospects/{id:[0-9]+}", authMiddleware(requirePermission("manage_recruiting", updateProspect))).Methods("PUT")
 	router.HandleFunc("/api/prospects/{id:[0-9]+}", authMiddleware(requirePermission("manage_recruiting", deleteProspect))).Methods("DELETE")
+	router.HandleFunc("/api/prospects/{id:[0-9]+}/convert", authMiddleware(requirePermission("manage_members", convertProspectToMember))).Methods("POST")
 
 	// Allies API
 	router.HandleFunc("/api/ally-agreement-types", authMiddleware(getAllyAgreementTypes)).Methods("GET")

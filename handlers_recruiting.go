@@ -3,6 +3,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -286,6 +287,110 @@ func deleteProspect(w http.ResponseWriter, r *http.Request) {
 	logActivity(user.ID, user.Username, "deleted", "prospect", prospectName, false)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type ConvertProspectRequest struct {
+	Rank  string `json:"rank"`
+	Level int    `json:"level"`
+	Power *int64 `json:"power"`
+}
+
+func convertProspectToMember(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid prospect ID", http.StatusBadRequest)
+		return
+	}
+
+	var req ConvertProspectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	validRanks := map[string]bool{"R1": true, "R2": true, "R3": true, "R4": true, "R5": true}
+	if !validRanks[req.Rank] {
+		http.Error(w, "rank must be one of R1–R5", http.StatusBadRequest)
+		return
+	}
+
+	var prospectName string
+	var prospectPower *int64
+	err = db.QueryRow(`SELECT name, power FROM prospects WHERE id = ?`, id).Scan(&prospectName, &prospectPower)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Prospect not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		slog.Error("Failed to load prospect for conversion", "prospect_id", id, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Fall back to prospect's stored power if none supplied in request
+	if req.Power == nil {
+		req.Power = prospectPower
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("Failed to begin transaction for prospect conversion", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec(
+		"INSERT INTO members (name, rank, level, eligible) VALUES (?, ?, ?, 1)",
+		prospectName, req.Rank, req.Level,
+	)
+	if err != nil {
+		slog.Error("Failed to insert member from prospect", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	memberID, _ := result.LastInsertId()
+
+	if req.Power != nil {
+		if _, err := tx.Exec(
+			"INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+			memberID, *req.Power,
+		); err != nil {
+			slog.Error("Failed to insert initial power history for converted member", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if _, err := tx.Exec("DELETE FROM prospects WHERE id = ?", id); err != nil {
+		slog.Error("Failed to delete prospect after conversion", "prospect_id", id, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("Failed to commit prospect conversion", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "member", prospectName, false, "converted from prospect")
+
+	m := Member{
+		ID:       int(memberID),
+		Name:     prospectName,
+		Rank:     req.Rank,
+		Level:    req.Level,
+		Eligible: true,
+		Power:    req.Power,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(m)
 }
 
 func validProspectStatus(status string) bool {
