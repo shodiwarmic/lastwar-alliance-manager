@@ -284,11 +284,6 @@ func autoActivateUpcomingSeason() {
 // handleSeasonList returns all seasons ordered newest-first, for the season selector.
 func handleSeasonList(w http.ResponseWriter, r *http.Request) {
 	autoActivateUpcomingSeason()
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
 	type SeasonSummary struct {
 		ID           int    `json:"id"`
 		Name         string `json:"name"`
@@ -902,12 +897,8 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 // handleSeasonHubData returns the active season config + all member standings.
 // R1–R3 (non-managers) receive only their own row — enforced server-side.
 func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-	canManage := data.Permissions.ManageSeasonHub
+	user := getAuthUser(r)
+	canManage := user.IsAdmin || getRankPermissions(user.Rank).ManageSeasonHub
 
 	var season *Season
 	var err error
@@ -1190,8 +1181,11 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// R1–R3 view restriction — enforced server-side: filter to own row only
-	if !canManage && !data.IsAdmin {
-		own := data.MemberID
+	if !canManage {
+		own := 0
+		if user.MemberID != nil {
+			own = *user.MemberID
+		}
 		filtered := []SeasonMember{}
 		for _, sm := range members {
 			if sm.MemberID == own {
@@ -1214,11 +1208,6 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleParticipationGet(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
 
 	season, err := loadActiveSeason()
 	if err != nil {
@@ -1598,11 +1587,6 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 // handleContributionsGet returns per-member contribution values for a given season + week,
 // used to pre-populate the manual entry table.
 func handleContributionsGet(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
 	seasonID, _ := strconv.Atoi(r.URL.Query().Get("season_id"))
 	week, _ := strconv.Atoi(r.URL.Query().Get("week"))
 	if seasonID == 0 {
@@ -1750,11 +1734,6 @@ func handleContributionsManual(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleRewardsGet(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
 
 	season, err := loadActiveSeason()
 	if err != nil {
@@ -1973,11 +1952,6 @@ func handleRewardDelete(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleSeasonMailList(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
 
 	season, err := loadActiveSeason()
 	if err != nil {
@@ -2168,11 +2142,6 @@ func handleSeasonMailDelete(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleSeasonTrackableList(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
 	seasonID, _ := strconv.Atoi(r.URL.Query().Get("season_id"))
 	if seasonID == 0 {
 		http.Error(w, "season_id is required", http.StatusBadRequest)
@@ -2323,11 +2292,6 @@ func handleSeasonTrackableDelete(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleSeasonEventList(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
 	seasonID, _ := strconv.Atoi(r.URL.Query().Get("season_id"))
 	if seasonID == 0 {
 		http.Error(w, "season_id is required", http.StatusBadRequest)
@@ -2783,11 +2747,6 @@ func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleSeasonTemplateList(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
 	rows, err := db.Query(`SELECT id, template_name, season_number, trackables, defaults, events
 		FROM season_templates ORDER BY season_number ASC`)
 	if err != nil {
@@ -2828,11 +2787,7 @@ func handleSeasonTemplateGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSeasonTemplateCreate(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.Permissions.ManageSettings {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+	user := getAuthUser(r)
 	var body struct {
 		TemplateName string `json:"template_name"`
 		SeasonNumber int    `json:"season_number"`
@@ -2873,18 +2828,13 @@ func handleSeasonTemplateCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
-	user := getAuthUser(r)
 	logActivity(user.ID, user.Username, "created", "season_template", body.TemplateName, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"id": id})
 }
 
 func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.Permissions.ManageSettings {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+	user := getAuthUser(r)
 	id, _ := strconv.Atoi(mux.Vars(r)["id"])
 	var body struct {
 		TemplateName string `json:"template_name"`
@@ -2916,18 +2866,13 @@ func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	user := getAuthUser(r)
 	logActivity(user.ID, user.Username, "updated", "season_template", body.TemplateName, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Updated"})
 }
 
 func handleSeasonTemplateDelete(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.Permissions.ManageSettings {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+	user := getAuthUser(r)
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
 		http.Error(w, "Invalid template ID", http.StatusBadRequest)
@@ -2947,26 +2892,20 @@ func handleSeasonTemplateDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	user := getAuthUser(r)
 	logActivity(user.ID, user.Username, "deleted", "season_template", name, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Deleted"})
 }
 
-func handleSeasonScoreLevelsDefault(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		var v string
-		db.QueryRow(`SELECT season_score_levels_default FROM settings WHERE id = 1`).Scan(&v)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"score_levels":%s}`, v)
-		return
-	}
-	// PUT
-	data := getPageData(r, "", "")
-	if !data.Permissions.ManageSettings {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+func handleSeasonScoreLevelsDefaultGet(w http.ResponseWriter, r *http.Request) {
+	var v string
+	db.QueryRow(`SELECT season_score_levels_default FROM settings WHERE id = 1`).Scan(&v)
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"score_levels":%s}`, v)
+}
+
+func handleSeasonScoreLevelsDefaultPut(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
 	var body struct {
 		ScoreLevels json.RawMessage `json:"score_levels"`
 	}
@@ -2974,13 +2913,11 @@ func handleSeasonScoreLevelsDefault(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	_, err := db.Exec(`UPDATE settings SET season_score_levels_default = ? WHERE id = 1`, string(body.ScoreLevels))
-	if err != nil {
+	if _, err := db.Exec(`UPDATE settings SET season_score_levels_default = ? WHERE id = 1`, string(body.ScoreLevels)); err != nil {
 		slog.Error("handleSeasonScoreLevelsDefault: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	user := getAuthUser(r)
 	logActivity(user.ID, user.Username, "updated", "settings", "season score levels default", true)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Saved"})
@@ -3086,11 +3023,7 @@ func syncEventTypesFromEvents(eventsJSON string, backfillExisting bool) int {
 }
 
 func handleSeasonTemplateSyncEventTypes(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.Permissions.ManageSettings {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+	user := getAuthUser(r)
 	id, _ := strconv.Atoi(mux.Vars(r)["id"])
 	var eventsJSON string
 	err := db.QueryRow(`SELECT events FROM season_templates WHERE id = ?`, id).Scan(&eventsJSON)
@@ -3109,7 +3042,6 @@ func handleSeasonTemplateSyncEventTypes(w http.ResponseWriter, r *http.Request) 
 	// pre-date the columns or were saved from an older template.
 	created := syncEventTypesFromEvents(eventsJSON, true)
 
-	user := getAuthUser(r)
 	if created > 0 {
 		logActivity(user.ID, user.Username, "created", "schedule", fmt.Sprintf("%d event types synced from template", created), false)
 	}

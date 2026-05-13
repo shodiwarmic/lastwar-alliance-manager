@@ -179,7 +179,8 @@ func main() {
 	router.HandleFunc("/api/season-hub/templates/{id:[0-9]+}", authMiddleware(requirePermission("manage_settings", handleSeasonTemplateUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/templates/{id:[0-9]+}", authMiddleware(requirePermission("manage_settings", handleSeasonTemplateDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/templates/{id:[0-9]+}/sync-event-types", authMiddleware(requirePermission("manage_settings", handleSeasonTemplateSyncEventTypes))).Methods("POST")
-	router.HandleFunc("/api/season-hub/score-levels-default", authMiddleware(handleSeasonScoreLevelsDefault)).Methods("GET", "PUT")
+	router.HandleFunc("/api/season-hub/score-levels-default", authMiddleware(requirePermission("view_season_hub", handleSeasonScoreLevelsDefaultGet))).Methods("GET")
+	router.HandleFunc("/api/season-hub/score-levels-default", authMiddleware(requirePermission("manage_settings", handleSeasonScoreLevelsDefaultPut))).Methods("PUT")
 
 	// Admin routes (admin only)
 	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(getAdminUsers))).Methods("GET")
