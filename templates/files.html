@@ -119,5 +119,9 @@
 {{end}}
 
 {{define "scripts"}}
-    <script src="/files.js"></script>
+<div id="page-config"
+    data-can-manage="{{if .Permissions.ManageFiles}}true{{else}}false{{end}}"
+    data-can-upload="{{if .Permissions.UploadFiles}}true{{else}}false{{end}}"
+    hidden></div>
+<script src="/files.js"></script>
 {{end}}

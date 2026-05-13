@@ -70,12 +70,8 @@ func resolveOCRPlayer(tx *sql.Tx, entry OCRPlayer, userID int) (name string, sco
 
 // commitCSVImport processes the final confirmed records from both CSV and OCR uploads
 func commitCSVImport(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, ok := session.Values["user_id"].(int)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	user := getAuthUser(r)
+	userID := user.ID
 
 	var req VSImportCommitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -212,12 +208,11 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username, _ := session.Values["username"].(string)
 	details := strconv.Itoa(successCount) + " members"
 	if aliasCount > 0 {
 		details += ", " + strconv.Itoa(aliasCount) + " aliases saved"
 	}
-	logActivity(userID, username, "imported", "vs_points", req.WeekDate, false, details)
+	logActivity(userID, user.Username, "imported", "vs_points", req.WeekDate, false, details)
 
 	response := map[string]interface{}{
 		"message":          fmt.Sprintf("Import successful. Saved data for %d members and registered %d new aliases.", successCount, aliasCount),
@@ -252,8 +247,7 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 
 	weekDate := r.FormValue("week_date")
 
-	session, _ := store.Get(r, "session")
-	currentUserID, _ := session.Values["user_id"].(int)
+	currentUserID := getAuthUser(r).ID
 
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()

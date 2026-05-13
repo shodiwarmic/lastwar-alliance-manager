@@ -26,21 +26,18 @@ const PERM_ROWS = [
     { key: 'view_allies', label: 'View Allies' },
     { key: 'manage_allies', label: 'Manage Allies' },
     { key: 'view_activity', label: 'View Activity Log' },
+    { key: 'view_accountability', label: 'View Accountability' },
+    { key: 'manage_accountability', label: 'Manage Accountability' },
+    { key: 'view_season_hub', label: 'View Season Hub' },
+    { key: 'manage_season_hub', label: 'Manage Season Hub' },
+    { key: 'manage_season_rewards', label: 'Manage Season Rewards' },
     { key: 'manage_settings', label: 'Access Settings Tab' }
 ];
 
 let isR5OrAdmin = false;
 
-async function fetchPermissions() {
-    try {
-        const response = await fetch(`${API_BASE}/check-auth`);
-        if (response.ok) {
-            const data = await response.json();
-            isR5OrAdmin = data.permissions?.manage_settings || false;
-        }
-    } catch (error) {
-        console.error('Auth check error:', error);
-    }
+function fetchPermissions() {
+    isR5OrAdmin = document.getElementById('page-config').dataset.canManage === 'true';
 }
 
 async function loadSettings() {

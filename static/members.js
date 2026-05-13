@@ -7,6 +7,8 @@ let currentUsername = '';
 let canManageRanks = false;
 let isR5OrAdmin = false;
 let isAdmin = false;
+let canViewTrain = false;
+let canManageTrain = false;
 let allMembers = [];
 let isPowerTrackingEnabled = false;
 let isSquadTrackingEnabled = false;
@@ -15,38 +17,27 @@ let currentMaxHQ = 35;
 // Define the HQ requirements for each Troop Tier
 const TROOP_HQ_REQ = { 1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35 };
 
-let permissions = {};
+function fetchPermissions() {
+    const cfg = document.getElementById('page-config').dataset;
+    currentUsername = cfg.username || '';
+    isAdmin = cfg.isAdmin === 'true';
+    canManageRanks = cfg.canManageMembers === 'true';
+    isR5OrAdmin = cfg.canManageSettings === 'true';
+    canViewTrain = cfg.viewTrain === 'true';
+    canManageTrain = cfg.manageTrain === 'true';
 
-async function fetchPermissions() {
-    try {
-        const response = await fetch('/api/check-auth');
-        if (response.ok) {
-            const data = await response.json();
-            currentUsername = data.username;
-            isAdmin = data.is_admin || false;
-            permissions = data.permissions || {};
-
-            // Backwards compatibility
-            canManageRanks = permissions.manage_members || false;
-            isR5OrAdmin = permissions.manage_settings || false;
-
-            // Hide Train Eligibility Filters and Modal Inputs based on matrix
-            const filterEligibleWrapper = document.getElementById('filter-eligible-wrapper');
-            if (filterEligibleWrapper) {
-                filterEligibleWrapper.style.display = permissions.view_train ? 'flex' : 'none';
-            }
-
-            const modalEligibleWrapper = document.getElementById('modal-eligible-wrapper');
-            if (modalEligibleWrapper) {
-                modalEligibleWrapper.style.display = permissions.manage_train ? 'flex' : 'none';
-            }
-
-            const notesSection = document.getElementById('modal-notes-section');
-            if (notesSection) notesSection.style.display = canManageRanks ? 'block' : 'none';
-        }
-    } catch (error) {
-        console.error('Auth check error:', error);
+    const filterEligibleWrapper = document.getElementById('filter-eligible-wrapper');
+    if (filterEligibleWrapper) {
+        filterEligibleWrapper.style.display = canViewTrain ? 'flex' : 'none';
     }
+
+    const modalEligibleWrapper = document.getElementById('modal-eligible-wrapper');
+    if (modalEligibleWrapper) {
+        modalEligibleWrapper.style.display = canManageTrain ? 'flex' : 'none';
+    }
+
+    const notesSection = document.getElementById('modal-notes-section');
+    if (notesSection) notesSection.style.display = canManageRanks ? 'block' : 'none';
 }
 
 async function fetchSettings() {
@@ -417,7 +408,7 @@ function buildMemberCard(member) {
     }
 
     // Eligible status (view only)
-    if (permissions.view_train) {
+    if (canViewTrain) {
         const eligible = member.eligible !== false;
         const span = document.createElement('span');
         span.className = `member-eligible ${eligible ? 'eligible' : 'not-eligible'}`;
@@ -460,7 +451,7 @@ function buildMemberCard(member) {
             actions.appendChild(inviteUserBtn);
         }
 
-        if (permissions.manage_train) {
+        if (canManageTrain) {
             const eligible = member.eligible !== false;
             const toggleBtn = document.createElement('button');
             toggleBtn.className = `toggle-eligible-btn ${eligible ? 'eligible' : 'not-eligible'}`;
@@ -679,7 +670,7 @@ async function archiveMember(id, name, actionsContainer, archiveBtn) {
 }
 
 window.toggleEligible = function (id, currentStatus, actionsContainer, toggleBtn) {
-    if (!permissions.manage_train) return;
+    if (!canManageTrain) return;
 
     const newStatus = !currentStatus;
     const statusText = newStatus ? 'eligible' : 'not eligible';

@@ -42,12 +42,8 @@ func generateInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	createdBy, ok := session.Values["user_id"].(int)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	creator := getAuthUser(r)
+	createdBy := creator.ID
 
 	var memberName string
 	err = db.QueryRow("SELECT name FROM members WHERE id = ?", memberID).Scan(&memberName)
@@ -90,8 +86,7 @@ func generateInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorName, _ := session.Values["username"].(string)
-	logActivity(createdBy, actorName, "created", "invite", memberName, true, "expires in 48h")
+	logActivity(createdBy, creator.Username, "created", "invite", memberName, true, "expires in 48h")
 
 	inviteURL := "/invite/" + token
 	w.Header().Set("Content-Type", "application/json")

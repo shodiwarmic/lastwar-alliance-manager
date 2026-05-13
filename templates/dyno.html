@@ -151,5 +151,9 @@
 {{end}}
 
 {{define "scripts"}}
-    <script src="dyno.js"></script>
+<div id="page-config"
+    data-username="{{.Username}}"
+    data-can-manage="{{if .Permissions.ManageDyno}}true{{else}}false{{end}}"
+    hidden></div>
+<script src="dyno.js"></script>
 {{end}}

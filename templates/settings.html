@@ -232,5 +232,8 @@
 {{end}}
 
 {{define "scripts"}}
-    <script src="settings.js"></script>
+<div id="page-config"
+    data-can-manage="{{if .Permissions.ManageSettings}}true{{else}}false{{end}}"
+    hidden></div>
+<script src="settings.js"></script>
 {{end}}

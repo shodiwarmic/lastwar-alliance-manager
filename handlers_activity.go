@@ -13,25 +13,15 @@ import (
 // Admins see all entries; non-admins with view_activity see only non-sensitive entries.
 // Query params: limit (default 100, max 1000), offset (default 0), user_id (optional filter).
 func getActivityLog(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	user := getAuthUser(r)
 
 	// Permission check: admin always allowed; non-admins need view_activity
-	if !isAdmin {
-		var memberID int
-		if mid, ok := session.Values["member_id"].(int); ok {
-			memberID = mid
-		}
-		if memberID == 0 {
+	if !user.IsAdmin {
+		if user.MemberID == nil || user.Rank == "" {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		var rank string
-		if err := db.QueryRow("SELECT rank FROM members WHERE id = ?", memberID).Scan(&rank); err != nil {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
-		perms := getRankPermissions(rank)
+		perms := getRankPermissions(user.Rank)
 		if !perms.ViewActivity {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
@@ -55,7 +45,7 @@ func getActivityLog(w http.ResponseWriter, r *http.Request) {
 	// Build query — non-admins cannot see sensitive entries
 	args := []interface{}{}
 	sensitiveFilter := ""
-	if !isAdmin {
+	if !user.IsAdmin {
 		sensitiveFilter = "WHERE is_sensitive = 0"
 	}
 

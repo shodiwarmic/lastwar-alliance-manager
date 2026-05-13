@@ -135,10 +135,8 @@ func createScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "created", "schedule_event_type", req.Name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "schedule_event_type", req.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -233,10 +231,8 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		changes = append(changes, fmt.Sprintf("active: %v → %v", old.Active, newActive))
 	}
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "updated", "schedule_event_type", req.Name, false, strings.Join(changes, "; "))
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "updated", "schedule_event_type", req.Name, false, strings.Join(changes, "; "))
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -274,10 +270,8 @@ func deleteScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "deleted", "schedule_event_type", name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "schedule_event_type", name, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -410,9 +404,7 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	allDayInt := 0
@@ -422,7 +414,7 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	res, err := db.Exec(`
 		INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		req.EventDate, req.EventTypeID, req.EventTime, allDayInt, req.Level, req.Notes, userID, now, now)
+		req.EventDate, req.EventTypeID, req.EventTime, allDayInt, req.Level, req.Notes, user.ID, now, now)
 	if err != nil {
 		slog.Error("createScheduleEvent insert", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -430,7 +422,7 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
-	logActivity(userID, username, "created", "schedule_event", typeName+" "+req.EventDate, false)
+	logActivity(user.ID, user.Username, "created", "schedule_event", typeName+" "+req.EventDate, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -550,10 +542,8 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		changes = append(changes, "notes updated")
 	}
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "updated", "schedule_event", typeName+" "+req.EventDate, false, strings.Join(changes, "; "))
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "updated", "schedule_event", typeName+" "+req.EventDate, false, strings.Join(changes, "; "))
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -582,10 +572,8 @@ func deleteScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "deleted", "schedule_event", typeName+" "+eventDate, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "schedule_event", typeName+" "+eventDate, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -633,9 +621,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='MG'`).Scan(&mgTypeID)
 	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='ZS'`).Scan(&zsTypeID)
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	genTypes := map[string]bool{}
@@ -667,7 +653,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 				if _, err := db.Exec(`
 					INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by, created_at, updated_at)
 					VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
-					dateStr, mgTypeID, s.MGDefaultTime, s.MGBaseline, userID, now, now); err != nil {
+					dateStr, mgTypeID, s.MGDefaultTime, s.MGBaseline, user.ID, now, now); err != nil {
 					slog.Error("generateScheduleEvents MG insert", "error", err, "date", dateStr)
 					continue
 				}
@@ -704,7 +690,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 				if _, err := db.Exec(`
 					INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by, created_at, updated_at)
 					VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
-					dateStr, zsTypeID, s.ZSDefaultTime, s.ZSBaseline, userID, now, now); err != nil {
+					dateStr, zsTypeID, s.ZSDefaultTime, s.ZSBaseline, user.ID, now, now); err != nil {
 					slog.Error("generateScheduleEvents ZS weekday insert", "error", err, "date", dateStr)
 					continue
 				}
@@ -741,7 +727,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 						if _, err := db.Exec(`
 							INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by, created_at, updated_at)
 							VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
-							dateStr, zsTypeID, s.ZSDefaultTime, s.ZSBaseline, userID, now, now); err != nil {
+							dateStr, zsTypeID, s.ZSDefaultTime, s.ZSBaseline, user.ID, now, now); err != nil {
 							slog.Error("generateScheduleEvents ZS asap insert", "error", err, "date", dateStr)
 							continue
 						}
@@ -753,7 +739,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if mgCreated+zsCreated > 0 {
-		logActivity(userID, username, "created", "schedule_event",
+		logActivity(user.ID, user.Username, "created", "schedule_event",
 			fmt.Sprintf("%d events generated", mgCreated+zsCreated), false,
 			fmt.Sprintf("MG: %d, ZS: %d", mgCreated, zsCreated))
 	}
@@ -847,10 +833,8 @@ func createServerEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "created", "server_event", req.Name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "server_event", req.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -947,10 +931,8 @@ func updateServerEvent(w http.ResponseWriter, r *http.Request) {
 		changes = append(changes, fmt.Sprintf("active: %v → %v", old.Active, newActive))
 	}
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "updated", "server_event", req.Name, false, strings.Join(changes, "; "))
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "updated", "server_event", req.Name, false, strings.Join(changes, "; "))
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -976,10 +958,8 @@ func deleteServerEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "deleted", "server_event", name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "server_event", name, false)
 
 	w.WriteHeader(http.StatusNoContent)
 }

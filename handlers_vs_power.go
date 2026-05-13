@@ -128,9 +128,8 @@ func saveVSPoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "updated", "vs_points", data.WeekDate, false, strconv.Itoa(len(data.Points))+" members")
 
 	w.Header().Set("Content-Type", "application/json")
@@ -148,9 +147,8 @@ func deleteWeekVSPoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	n, _ := result.RowsAffected()
 	logActivity(actorID, actorName, "deleted", "vs_points", weekDate, false, strconv.FormatInt(n, 10)+" records")
 
@@ -336,9 +334,8 @@ func processVSPointsScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "imported", "vs_points", weekDate+" ("+detectedDay+")", false,
 		strconv.Itoa(successCount)+" members updated via screenshot")
 
@@ -582,9 +579,8 @@ func processPowerScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "imported", "power_records", "power screenshot", false,
 		strconv.Itoa(successCount)+" records saved, "+strconv.Itoa(failedCount)+" failed")
 
@@ -656,8 +652,7 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	session, _ := store.Get(r, "session")
-	currentUserID, _ := session.Values["user_id"].(int)
+	currentUserID := getAuthUser(r).ID
 
 	payloadMap := make(map[string]*VSImportRow)
 	var processedSummaries []string

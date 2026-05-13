@@ -58,10 +58,8 @@ func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
 	stmt.Close()
 	tx.Commit()
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "updated", "permissions", "rank permissions matrix", true)
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "updated", "permissions", "rank permissions matrix", true)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Permissions updated"})
@@ -207,10 +205,8 @@ func createAdminUser(w http.ResponseWriter, r *http.Request) {
 	id, _ := result.LastInsertId()
 	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", id, string(hashedPassword))
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "created", "user", req.Username, true)
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "created", "user", req.Username, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -267,9 +263,7 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
 	targetUsername := existingUsername
 	if req.Username != "" {
 		targetUsername = req.Username
@@ -288,7 +282,7 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 		}
 		userChanges = append(userChanges, "role: "+was+" → "+now)
 	}
-	logActivity(actorID, actorName, "updated", "user", targetUsername, true, strings.Join(userChanges, "; "))
+	logActivity(actor.ID, actor.Username, "updated", "user", targetUsername, true, strings.Join(userChanges, "; "))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "User updated successfully"})
@@ -324,9 +318,8 @@ func deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "deleted", "user", deletedUsername, true)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -370,9 +363,8 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 
 	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", userID, string(hashedPassword))
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "reset_password", "user", username, true)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -545,8 +537,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	isAdmin, _ := session.Values["is_admin"].(bool)
+	actor := getAuthUser(r)
 
 	// Note: current_season and season_start_date are no longer editable here —
 	// they are derived from the seasons table (owned by Season Hub).
@@ -583,7 +574,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isAdmin && settings.PwdMinLength >= 6 {
+	if actor.IsAdmin && settings.PwdMinLength >= 6 {
 		_, err = db.Exec(`UPDATE settings SET 
 			pwd_min_length = ?, pwd_require_special = ?, pwd_require_upper = ?, 
 			pwd_require_lower = ?, pwd_require_number = ?, pwd_history_count = ?, pwd_validity_days = ? 
@@ -598,9 +589,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "updated", "settings", "alliance settings", true)
+	logActivity(actor.ID, actor.Username, "updated", "settings", "alliance settings", true)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Settings updated successfully"})
@@ -686,10 +675,8 @@ func updatePasswordPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
-	logActivity(actorID, actorName, "updated", "settings", "password policy", true)
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "updated", "settings", "password policy", true)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Password policy updated successfully"})
@@ -716,9 +703,8 @@ func updateCVWorkerURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "updated", "settings", "CV worker URL", true)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -736,9 +722,8 @@ func deleteExternalCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "deleted", "credentials", serviceName, true)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -793,9 +778,8 @@ func updateExternalCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "updated", "credentials", req.ServiceName, true)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -869,9 +853,8 @@ func putAdvancedStormSlots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	actorID, _ := session.Values["user_id"].(int)
-	actorName, _ := session.Values["username"].(string)
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
 	logActivity(actorID, actorName, "updated", "settings", "storm slot times", true)
 
 	w.Header().Set("Content-Type", "application/json")

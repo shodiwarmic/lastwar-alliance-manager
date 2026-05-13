@@ -374,9 +374,7 @@ func deriveServerEventShortName(label string) string {
 }
 
 func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		TemplateID       int    `json:"template_id"`
@@ -625,7 +623,7 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Note: tmpl.TemplateName is also the new season's name (handleSeasonCreate
 	// uses it verbatim for the seasons.name column).
-	logActivity(userID, username, "created", "season_config", tmpl.TemplateName, false,
+	logActivity(user.ID, user.Username, "created", "season_config", tmpl.TemplateName, false,
 		fmt.Sprintf("Season %d", tmpl.SeasonNumber))
 
 	// Auto-push events to the schedule. Best-effort: if the push fails we still
@@ -633,7 +631,7 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	// modal. Idempotent, so re-pushing is safe.
 	var pushed pushResult
 	if s, err := loadSeasonByID(int(seasonID)); err == nil {
-		if p, err := pushSeasonEventsToSchedule(s, userID, username); err != nil {
+		if p, err := pushSeasonEventsToSchedule(s, user.ID, user.Username); err != nil {
 			slog.Error("handleSeasonCreate: auto push", "error", err)
 		} else {
 			pushed = p
@@ -649,9 +647,7 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSeasonArchive(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -681,16 +677,14 @@ func handleSeasonArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logActivity(userID, username, "archived", "season_config", s.Name, false)
+	logActivity(user.ID, user.Username, "archived", "season_config", s.Name, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Season archived"})
 }
 
 func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -766,16 +760,14 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 	if old.WeekCount != body.WeekCount {
 		changes = append(changes, fmt.Sprintf("week_count: %d → %d", old.WeekCount, body.WeekCount))
 	}
-	logActivity(userID, username, "updated", "season_config", body.Name, false, strings.Join(changes, "; "))
+	logActivity(user.ID, user.Username, "updated", "season_config", body.Name, false, strings.Join(changes, "; "))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Season updated"})
 }
 
 func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -893,7 +885,7 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 	if purgedAlliance > 0 || purgedServer > 0 {
 		details = fmt.Sprintf("purged %d alliance + %d server events", purgedAlliance, purgedServer)
 	}
-	logActivity(userID, username, "deleted", "season_config", s.Name, false, details)
+	logActivity(user.ID, user.Username, "deleted", "season_config", s.Name, false, details)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
@@ -1275,9 +1267,7 @@ func handleParticipationGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		SeasonID   int                  `json:"season_id"`
@@ -1350,7 +1340,7 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 			  note = excluded.note,
 			  recorded_by = excluded.recorded_by,
 			  updated_at = CURRENT_TIMESTAMP`,
-			body.SeasonID, e.MemberID, body.WeekNumber, scoreKey, e.AttendedKeyEvent, e.Note, userID)
+			body.SeasonID, e.MemberID, body.WeekNumber, scoreKey, e.AttendedKeyEvent, e.Note, user.ID)
 		if err != nil {
 			slog.Error("handleParticipationSave: upsert", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1365,7 +1355,7 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logActivity(userID, username, "updated", "season_attendance",
+	logActivity(user.ID, user.Username, "updated", "season_attendance",
 		fmt.Sprintf("%s Week %d", s.Name, body.WeekNumber), false,
 		fmt.Sprintf("%d members scored", saved))
 
@@ -1378,9 +1368,7 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	if err := r.ParseMultipartForm(50 << 20); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
@@ -1481,7 +1469,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 			Points:       rec.Score,
 		}
 
-		resolvedName, resolvedScore, member, matchType := resolveOCRPlayer(tx, rec, userID)
+		resolvedName, resolvedScore, member, matchType := resolveOCRPlayer(tx, rec, user.ID)
 		_ = resolvedName // original name kept in row.OriginalName for display
 		row.Points = resolvedScore
 		if member == nil {
@@ -1535,7 +1523,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 			  recorded_value = excluded.recorded_value,
 			  logged_by      = excluded.logged_by,
 			  updated_at     = CURRENT_TIMESTAMP`,
-			seasonID, rm.MemberID, weekNumber, trackableID, rm.Points, userID); err != nil {
+			seasonID, rm.MemberID, weekNumber, trackableID, rm.Points, user.ID); err != nil {
 			slog.Error("handleContributionsImport: upsert resolved", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -1548,7 +1536,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 			}
 			var aliasUserID *int
 			if rm.AliasType == "personal" {
-				aliasUserID = &userID
+				aliasUserID = &user.ID
 			}
 			tx.Exec(`INSERT INTO member_aliases (member_id, alias, category, user_id)
 				VALUES (?, ?, ?, ?)
@@ -1575,7 +1563,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 			  recorded_value = excluded.recorded_value,
 			  logged_by      = excluded.logged_by,
 			  updated_at     = CURRENT_TIMESTAMP`,
-			seasonID, row.MemberID, weekNumber, trackableID, row.Points, userID); err != nil {
+			seasonID, row.MemberID, weekNumber, trackableID, row.Points, user.ID); err != nil {
 			slog.Error("handleContributionsImport: upsert", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -1592,7 +1580,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	if weekNumber == 0 {
 		weekLabel = "Season Total"
 	}
-	logActivity(userID, username, "imported", "season_contributions",
+	logActivity(user.ID, user.Username, "imported", "season_contributions",
 		fmt.Sprintf("%s — %s %s", s.Name, strings.ReplaceAll(category, "_", " "), weekLabel), false,
 		fmt.Sprintf("%d committed, %d resolved", len(matched), resolvedCount))
 
@@ -1663,9 +1651,7 @@ func handleContributionsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleContributionsManual(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		SeasonID   int `json:"season_id"`
@@ -1731,7 +1717,7 @@ func handleContributionsManual(w http.ResponseWriter, r *http.Request) {
 				  recorded_value = excluded.recorded_value,
 				  logged_by      = excluded.logged_by,
 				  updated_at     = CURRENT_TIMESTAMP`,
-				body.SeasonID, e.MemberID, body.WeekNumber, tid, val, userID)
+				body.SeasonID, e.MemberID, body.WeekNumber, tid, val, user.ID)
 			if err != nil {
 				slog.Error("handleContributionsManual: upsert", "error", err)
 				http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1751,7 +1737,7 @@ func handleContributionsManual(w http.ResponseWriter, r *http.Request) {
 	if body.WeekNumber == 0 {
 		weekLabel = "Season Total"
 	}
-	logActivity(userID, username, "imported", "season_contributions",
+	logActivity(user.ID, user.Username, "imported", "season_contributions",
 		fmt.Sprintf("%s — %s (manual)", s.Name, weekLabel), false,
 		fmt.Sprintf("%d members saved", saved))
 
@@ -1821,9 +1807,7 @@ func handleRewardsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRewardSave(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		SeasonID         int     `json:"season_id"`
@@ -1874,7 +1858,7 @@ func handleRewardSave(w http.ResponseWriter, r *http.Request) {
 		  logged_by = excluded.logged_by,
 		  logged_at = CURRENT_TIMESTAMP`,
 		body.SeasonID, body.MemberID, body.RewardTier,
-		body.ParticipationPct, body.ContributionPct, body.Note, userID)
+		body.ParticipationPct, body.ContributionPct, body.Note, user.ID)
 	if err != nil {
 		slog.Error("handleRewardSave: upsert", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1882,7 +1866,7 @@ func handleRewardSave(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
-	logActivity(userID, username, "created", "season_rewards",
+	logActivity(user.ID, user.Username, "created", "season_rewards",
 		fmt.Sprintf("%s — %s", memberName, body.RewardTier), false)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1890,9 +1874,7 @@ func handleRewardSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -1932,13 +1914,13 @@ func handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := db.Exec(`UPDATE season_rewards SET reward_tier=?, participation_pct=?, contribution_pct=?, note=?, logged_by=?, logged_at=CURRENT_TIMESTAMP WHERE id=?`,
-		body.RewardTier, body.ParticipationPct, body.ContributionPct, body.Note, userID, id); err != nil {
+		body.RewardTier, body.ParticipationPct, body.ContributionPct, body.Note, user.ID, id); err != nil {
 		slog.Error("handleRewardUpdate: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
-	logActivity(userID, username, "updated", "season_rewards",
+	logActivity(user.ID, user.Username, "updated", "season_rewards",
 		fmt.Sprintf("%s — %s", memberName, body.RewardTier), false)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1946,9 +1928,7 @@ func handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRewardDelete(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -1981,7 +1961,7 @@ func handleRewardDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logActivity(userID, username, "deleted", "season_rewards",
+	logActivity(user.ID, user.Username, "deleted", "season_rewards",
 		fmt.Sprintf("%s — %s", memberName, tier), false)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2041,9 +2021,7 @@ func handleSeasonMailList(w http.ResponseWriter, r *http.Request) {
 
 // handleSeasonMailUpload creates a new text-based season mail entry (title + copy-paste content).
 func handleSeasonMailUpload(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		SeasonID int    `json:"season_id"`
@@ -2076,7 +2054,7 @@ func handleSeasonMailUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := db.Exec(`INSERT INTO season_mail (season_id, title, content, posted_by) VALUES (?, ?, ?, ?)`,
-		body.SeasonID, body.Title, body.Content, userID)
+		body.SeasonID, body.Title, body.Content, user.ID)
 	if err != nil {
 		slog.Error("handleSeasonMailUpload: db insert", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -2084,16 +2062,14 @@ func handleSeasonMailUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 
-	logActivity(userID, username, "created", "season_mail", body.Title, false)
+	logActivity(user.ID, user.Username, "created", "season_mail", body.Title, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"id": id})
 }
 
 func handleSeasonMailUpdate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -2134,22 +2110,20 @@ func handleSeasonMailUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := db.Exec(`UPDATE season_mail SET title = ?, content = ?, posted_by = ?, posted_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		body.Title, body.Content, userID, id); err != nil {
+		body.Title, body.Content, user.ID, id); err != nil {
 		slog.Error("handleSeasonMailUpdate: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
-	logActivity(userID, username, "updated", "season_mail", body.Title, false)
+	logActivity(user.ID, user.Username, "updated", "season_mail", body.Title, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Updated"})
 }
 
 func handleSeasonMailDelete(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -2183,7 +2157,7 @@ func handleSeasonMailDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logActivity(userID, username, "deleted", "season_mail", title, false)
+	logActivity(user.ID, user.Username, "deleted", "season_mail", title, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Deleted"})
@@ -2225,9 +2199,7 @@ func handleSeasonTrackableList(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSeasonTrackableCreate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body SeasonTrackable
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -2258,15 +2230,13 @@ func handleSeasonTrackableCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
-	logActivity(userID, username, "created", "season_trackable", body.Label, false)
+	logActivity(user.ID, user.Username, "created", "season_trackable", body.Label, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"id": id})
 }
 
 func handleSeasonTrackableUpdate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -2309,16 +2279,14 @@ func handleSeasonTrackableUpdate(w http.ResponseWriter, r *http.Request) {
 	if oldSortOrder != body.SortOrder {
 		changes = append(changes, fmt.Sprintf("sort_order: %d → %d", oldSortOrder, body.SortOrder))
 	}
-	logActivity(userID, username, "updated", "season_trackable", body.Label, false,
+	logActivity(user.ID, user.Username, "updated", "season_trackable", body.Label, false,
 		strings.Join(changes, "; "))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Updated"})
 }
 
 func handleSeasonTrackableDelete(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -2345,7 +2313,7 @@ func handleSeasonTrackableDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	logActivity(userID, username, "deleted", "season_trackable", label, false)
+	logActivity(user.ID, user.Username, "deleted", "season_trackable", label, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Deleted"})
 }
@@ -2422,9 +2390,7 @@ func handleSeasonEventList(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSeasonEventCreate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body SeasonEvent
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -2456,15 +2422,13 @@ func handleSeasonEventCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
-	logActivity(userID, username, "created", "season_event", body.Label, false)
+	logActivity(user.ID, user.Username, "created", "season_event", body.Label, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"id": id})
 }
 
 func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -2550,16 +2514,14 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 	if oldDur != updateDuration {
 		changes = append(changes, fmt.Sprintf("duration_days: %d → %d", oldDur, updateDuration))
 	}
-	logActivity(userID, username, "updated", "season_event", body.Label, false,
+	logActivity(user.ID, user.Username, "updated", "season_event", body.Label, false,
 		strings.Join(changes, "; "))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Updated"})
 }
 
 func handleSeasonEventDelete(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -2580,7 +2542,7 @@ func handleSeasonEventDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	logActivity(userID, username, "deleted", "season_event", label, false)
+	logActivity(user.ID, user.Username, "deleted", "season_event", label, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Deleted"})
 }
@@ -2776,9 +2738,7 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 }
 
 func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 
 	var body struct {
 		SeasonID int `json:"season_id"`
@@ -2807,7 +2767,7 @@ func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := pushSeasonEventsToSchedule(s, userID, username)
+	result, err := pushSeasonEventsToSchedule(s, user.ID, user.Username)
 	if err != nil {
 		slog.Error("handleSeasonEventPushToSchedule: push", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -2913,10 +2873,8 @@ func handleSeasonTemplateCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "created", "season_template", body.TemplateName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "created", "season_template", body.TemplateName, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"id": id})
 }
@@ -2958,10 +2916,8 @@ func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "updated", "season_template", body.TemplateName, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "updated", "season_template", body.TemplateName, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Updated"})
 }
@@ -2991,10 +2947,8 @@ func handleSeasonTemplateDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "deleted", "season_template", name, false)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "deleted", "season_template", name, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Deleted"})
 }
@@ -3026,10 +2980,8 @@ func handleSeasonScoreLevelsDefault(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
-	logActivity(userID, username, "updated", "settings", "season score levels default", true)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "updated", "settings", "season score levels default", true)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Saved"})
 }
@@ -3157,11 +3109,9 @@ func handleSeasonTemplateSyncEventTypes(w http.ResponseWriter, r *http.Request) 
 	// pre-date the columns or were saved from an older template.
 	created := syncEventTypesFromEvents(eventsJSON, true)
 
-	session, _ := store.Get(r, "session")
-	userID, _ := session.Values["user_id"].(int)
-	username, _ := session.Values["username"].(string)
+	user := getAuthUser(r)
 	if created > 0 {
-		logActivity(userID, username, "created", "schedule", fmt.Sprintf("%d event types synced from template", created), false)
+		logActivity(user.ID, user.Username, "created", "schedule", fmt.Sprintf("%d event types synced from template", created), false)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"created": created})

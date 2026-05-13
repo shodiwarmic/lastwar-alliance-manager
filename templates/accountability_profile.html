@@ -81,9 +81,6 @@
 {{end}}
 
 {{define "scripts"}}
-<script>
-    window.MEMBER_ID   = {{.MemberID}};
-    window.CAN_MANAGE  = {{if .Permissions.ManageAccountability}}true{{else}}false{{end}};
-</script>
+<div id="page-config" data-member-id="{{.MemberID}}" data-can-manage="{{if .Permissions.ManageAccountability}}true{{else}}false{{end}}" hidden></div>
 <script src="/accountability_profile.js"></script>
 {{end}}
