@@ -40,6 +40,7 @@ const ENTITY_LABELS = {
     season_rewards:        'season reward',
     season_mail:           'season mail',
     season_config:         'season config',
+    season_template:       'season template',
     season_trackable:      'season trackable',
     season_event:          'season event',
 };
@@ -65,6 +66,9 @@ const ENTITY_LABELS_PLURAL = {
     season_contributions:  'season contributions',
     season_rewards:        'season rewards',
     season_mail:           'season mail items',
+    season_template:       'season templates',
+    season_trackable:      'season trackables',
+    season_event:          'season events',
 };
 
 function entityLabel(type, count) {

@@ -1646,7 +1646,9 @@
         tr.appendChild(mkTd(inTime));
 
         const inWkS = document.createElement('input');
-        inWkS.type = 'number'; inWkS.className = 'form-input ev-wk-start'; inWkS.min = '1'; inWkS.value = ev.week_start || 1; inWkS.style.width = '55px';
+        inWkS.type = 'number'; inWkS.className = 'form-input ev-wk-start';
+        // No min: pre-season events use 0 (or negative) for weeks before season start.
+        inWkS.value = ev.week_start != null ? ev.week_start : 1; inWkS.style.width = '55px';
         tr.appendChild(mkTd(inWkS));
 
         const inWkE = document.createElement('input');
@@ -1681,14 +1683,17 @@
         function collectEvData() {
             const dayVal = inDay.value;
             const lvlVal = inLevel.value.trim();
+            const wkSParsed = parseInt(inWkS.value, 10);
+            const wkEParsed = parseInt(inWkE.value, 10);
             return {
                 season_id:       seasonId,
                 label:           inLabel.value.trim(),
                 event_type_id:   selType.value ? parseInt(selType.value, 10) : null,
                 day_offset:      dayVal !== '' ? (parseInt(dayVal, 10) || null) : null,
                 event_time:      inTime.value || '20:00',
-                week_start:      parseInt(inWkS.value, 10) || 1,
-                week_end:        parseInt(inWkE.value, 10) || 0,
+                // Preserve 0 / negative values for pre-season events.
+                week_start:      Number.isFinite(wkSParsed) ? wkSParsed : 1,
+                week_end:        Number.isFinite(wkEParsed) ? wkEParsed : 0,
                 level:           lvlVal !== '' ? parseInt(lvlVal, 10) : null,
                 notes:           inNotes.value || '',
                 is_server_event: chkServer.checked,

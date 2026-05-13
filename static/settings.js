@@ -500,8 +500,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             { text: 'Icon',    title: 'Emoji icon' },
             { text: 'Day',     title: '1=Mon…7=Sun; blank = unscheduled (skipped during push)' },
             { text: 'Time',    title: 'Default start time (HH:MM)' },
-            { text: 'Wk★',    title: 'First week this event runs (1-based)' },
-            { text: 'Wk✕',    title: 'Last week this event runs; 0 = until end of season' },
+            { text: 'Wk★',    title: 'First week this event runs (1-based; use 0 or negative for pre-season events)' },
+            { text: 'Wk✕',    title: 'Last week this event runs. If less than Wk★ (e.g. 0 when Wk★≥1), treated as "open-ended through end of season"' },
             { text: 'Level',   title: 'Optional numeric level tag (e.g. 1 for L1 city clash)' },
             { text: 'Notes',   title: 'Optional notes pushed to schedule' },
             { text: '🌐 Svr',  title: 'Server event — pushed to Server Events section of schedule instead of alliance schedule' },
@@ -570,7 +570,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const wkS = mkInp('number', '1', ev.week_start ?? 1, '50px');
             const wkE = mkInp('number', '0', ev.week_end   ?? 0, '50px');
             const lvl = mkInp('number', '—', ev.level != null ? ev.level : '', '45px');
-            wkS.min = 1; wkE.min = 0; lvl.min = 1;
+            // No min on wkS — pre-season events use 0 (or negative).
+            lvl.min = 1;
             cell(wkS); cell(wkE); cell(lvl);
 
             cell(mkInp('text', 'Notes', ev.notes || '', '110px'));
@@ -614,6 +615,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const label = tds[0].querySelector('input').value.trim();
                 if (!label) return;
                 const daySel = tds[4].querySelector('select');
+                const wkSVal = parseInt(tds[6].querySelector('input').value, 10);
                 const wkEVal = parseInt(tds[7].querySelector('input').value, 10);
                 const lvlVal = tds[8].querySelector('input').value.trim();
                 const ev = {
@@ -623,8 +625,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     type_icon:       tds[3].querySelector('input').value.trim(),
                     day_offset:      daySel.value !== '' ? parseInt(daySel.value, 10) : null,
                     event_time:      tds[5].querySelector('input').value || '20:00',
-                    week_start:      parseInt(tds[6].querySelector('input').value, 10) || 1,
-                    week_end:        isNaN(wkEVal) ? 0 : wkEVal,
+                    // Preserve 0 / negative values for pre-season events.
+                    week_start:      Number.isFinite(wkSVal) ? wkSVal : 1,
+                    week_end:        Number.isFinite(wkEVal) ? wkEVal : 0,
                     notes:           tds[9].querySelector('input').value.trim(),
                     is_server_event: tds[10].querySelector('input[type=checkbox]').checked,
                     duration_days:   parseInt(tds[11].querySelector('input').value, 10) || 1,
