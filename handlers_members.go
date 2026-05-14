@@ -127,6 +127,10 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 		tx.Exec(`INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.SquadPower)
 	}
 
+	if m.HeroPower != nil {
+		tx.Exec(`INSERT INTO hero_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.HeroPower)
+	}
+
 	if err := tx.Commit(); err != nil {
 		http.Error(w, "Failed to save member", http.StatusInternalServerError)
 		return
@@ -246,6 +250,15 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Handle Hero Power History
+	if m.HeroPower != nil {
+		var currentHeroPower int64 = -1
+		_ = db.QueryRow(`SELECT power FROM hero_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentHeroPower)
+		if currentHeroPower != *m.HeroPower {
+			db.Exec(`INSERT INTO hero_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.HeroPower)
+		}
+	}
+
 	m.ID = id
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(m)
@@ -272,6 +285,10 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 
 	if _, err = db.Exec("DELETE FROM squad_power_history WHERE member_id = ?", id); err != nil {
 		slog.Error("Failed to delete squad power history for member", "member_id", id, "error", err)
+	}
+
+	if _, err = db.Exec("DELETE FROM hero_power_history WHERE member_id = ?", id); err != nil {
+		slog.Error("Failed to delete hero power history for member", "member_id", id, "error", err)
 	}
 
 	if _, err = db.Exec("DELETE FROM members WHERE id = ?", id); err != nil {
@@ -741,6 +758,7 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 			db.Exec("DELETE FROM users WHERE member_id = ?", id)
 			db.Exec("DELETE FROM power_history WHERE member_id = ?", id)
 			db.Exec("DELETE FROM squad_power_history WHERE member_id = ?", id)
+			db.Exec("DELETE FROM hero_power_history WHERE member_id = ?", id)
 			db.Exec("DELETE FROM members WHERE id = ?", id)
 			result.Removed++
 		}
@@ -847,6 +865,7 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		TroopLevel int    `json:"troop_level"`
 		SquadType  string `json:"squad_type"`
 		SquadPower int64  `json:"squad_power"`
+		HeroPower  int64  `json:"hero_power"`
 		Profession string `json:"profession"`
 	}
 
@@ -899,6 +918,9 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.SquadPower > 0 {
 		db.Exec(`INSERT INTO squad_power_history (member_id, power) VALUES (?, ?)`, memberID, req.SquadPower)
+	}
+	if req.HeroPower > 0 {
+		db.Exec(`INSERT INTO hero_power_history (member_id, power) VALUES (?, ?)`, memberID, req.HeroPower)
 	}
 
 	var profileChanges []string

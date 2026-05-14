@@ -593,6 +593,94 @@ func processPowerScreenshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func getHeroPowerHistory(w http.ResponseWriter, r *http.Request) {
+	memberID := r.URL.Query().Get("member_id")
+	limit := r.URL.Query().Get("limit")
+	if limit == "" {
+		limit = "30"
+	}
+
+	var rows *sql.Rows
+	var err error
+
+	if memberID != "" {
+		rows, err = db.Query(`
+			SELECT id, member_id, power, recorded_at
+			FROM hero_power_history
+			WHERE member_id = ?
+			ORDER BY recorded_at DESC
+			LIMIT ?
+		`, memberID, limit)
+	} else {
+		rows, err = db.Query(`
+			SELECT id, member_id, power, recorded_at
+			FROM hero_power_history
+			ORDER BY recorded_at DESC
+			LIMIT ?
+		`, limit)
+	}
+
+	if err != nil {
+		log.Printf("Failed to query hero power history: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	history := []HeroPowerHistory{}
+	for rows.Next() {
+		var h HeroPowerHistory
+		if err := rows.Scan(&h.ID, &h.MemberID, &h.Power, &h.RecordedAt); err != nil {
+			log.Printf("Failed to scan hero power history row: %v", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		history = append(history, h)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(history)
+}
+
+func addHeroPowerRecord(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		MemberID int   `json:"member_id"`
+		Power    int64 `json:"power"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	var exists int
+	err := db.QueryRow("SELECT COUNT(*) FROM members WHERE id = ?", request.MemberID).Scan(&exists)
+	if err != nil || exists == 0 {
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	result, err := db.Exec("INSERT INTO hero_power_history (member_id, power) VALUES (?, ?)",
+		request.MemberID, request.Power)
+	if err != nil {
+		log.Printf("Failed to insert hero power record: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	id, _ := result.LastInsertId()
+
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "updated", "power_records", "total hero power record", false)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Hero power record added successfully",
+		"id":      id,
+	})
+}
+
 // Process images with automatic bucketing via Cloud Run Worker
 func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(50 << 20)

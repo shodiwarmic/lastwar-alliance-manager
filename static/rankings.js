@@ -70,7 +70,7 @@ async function loadGrowthData() {
         console.error('Error:', error);
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 5;
+        td.colSpan = 8;
         td.className = 'error';
         td.textContent = 'Failed to load data.';
         tr.appendChild(td);
@@ -193,7 +193,33 @@ function buildGrowthRow(m) {
     const td30d = document.createElement('td');
     td30d.appendChild(formatGrowth(m.growth_30d));
 
-    tr.append(tdName, tdRank, tdPower, td7d, td30d);
+    const tdHero = document.createElement('td');
+    tdHero.style.fontWeight = '600';
+    tdHero.style.color = 'var(--color-purple)';
+    if (m.current_hero_power > 0) {
+        tdHero.textContent = formatNumber(m.current_hero_power);
+    } else {
+        tdHero.style.color = 'var(--text-muted)';
+        tdHero.textContent = '—';
+    }
+
+    const tdHero7d = document.createElement('td');
+    if (m.current_hero_power > 0) {
+        tdHero7d.appendChild(formatGrowth(m.hero_growth_7d));
+    } else {
+        tdHero7d.style.color = 'var(--text-muted)';
+        tdHero7d.textContent = '—';
+    }
+
+    const tdHero30d = document.createElement('td');
+    if (m.current_hero_power > 0) {
+        tdHero30d.appendChild(formatGrowth(m.hero_growth_30d));
+    } else {
+        tdHero30d.style.color = 'var(--text-muted)';
+        tdHero30d.textContent = '—';
+    }
+
+    tr.append(tdName, tdRank, tdPower, td7d, td30d, tdHero, tdHero7d, tdHero30d);
     return tr;
 }
 
@@ -202,7 +228,7 @@ function renderGrowthTable(data) {
     if (data.length === 0) {
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 5;
+        td.colSpan = 8;
         td.className = 'empty';
         td.style.cssText = 'text-align: center; padding: 20px;';
         td.textContent = 'No active commanders found.';
