@@ -3,7 +3,7 @@
 {{end}}
 
 {{define "header_text"}}
-    <h1>📊 Alliance Analytics</h1>
+    <h1>📊 Power Tracking</h1>
     <h2>Commander Growth & VS Activity</h2>
 {{end}}
 
@@ -36,20 +36,23 @@
                     <input type="text" id="growth-search" placeholder="Commander name...">
                 </div>
             </div>
-            
+
             <div style="overflow-x: auto;">
                 <table class="analytics-table" id="growth-table" data-export-csv="power-growth.csv">
                     <thead>
                         <tr>
                             <th>Commander</th>
                             <th>Rank</th>
-                            <th>Current Power</th>
+                            <th>Overall Power</th>
                             <th>7-Day Growth</th>
                             <th>30-Day Growth</th>
+                            <th>Total Hero Power</th>
+                            <th>Hero Power 7-Day</th>
+                            <th>Hero Power 30-Day</th>
                         </tr>
                     </thead>
                     <tbody id="growth-tbody">
-                        <tr><td colspan="5" class="loading">Loading growth data...</td></tr>
+                        <tr><td colspan="8" class="loading">Loading growth data...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -65,7 +68,7 @@
                     <select id="vs-week-select" style="min-width: 200px; padding: 8px; border-radius: 6px;"></select>
                 </div>
             </div>
-            
+
             <div class="chart-container full-width">
                 <h4>Daily Contribution Breakdown</h4>
                 <canvas id="vsChart"></canvas>
@@ -100,5 +103,5 @@
 
 {{define "scripts"}}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
-<script src="rankings.js"></script>
+<script src="/rankings.js"></script>
 {{end}}

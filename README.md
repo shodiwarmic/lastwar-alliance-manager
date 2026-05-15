@@ -13,7 +13,7 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Categorized Alias Engine**: Assign personal nicknames or authoritative global aliases to commanders. The system utilizes a strict hierarchy (Exact -> Personal -> Global -> OCR) to resolve identities during imports. Background `ocr` aliases keep machine-read corrections hidden from standard user searches.
 - **Self-Service Profiles**: Users securely linked to an in-game commander can update their own stats, HQ level, and squad power through a rule-enforced dashboard.
 - **Smart CSV Ingestion**: Upload VS Points or roster CSVs with dynamic column mapping. Features a backend-driven "Preview & Confirm" modal allowing administrators to validate data, calculate missing values (e.g., deducing Saturday from Weekly Totals), and manually map unresolved names before committing.
-- **Advanced Player Stats**: Track optional fields including Player Profession, Squad Type, Squad Power, and Troop Levels (dynamically validated against configurable HQ Level caps). All stat badges on member cards adapt to light and dark mode.
+- **Advanced Player Stats**: Track optional fields including Player Profession, Squad Type, Squad Power, Total Hero Power, and Troop Levels (dynamically validated against configurable HQ Level caps). All stat badges on member cards adapt to light and dark mode.
 - **Unified Navigation Theme**: The Admin nav item uses a purple tint (token-based, dark-mode safe) instead of the primary gradient, reducing visual competition with the active page indicator.
 - **Unified Mobile Header**: On small screens, the hamburger menu button and the user account button share a single flex row above the page title, with matched pill-shaped styling. Previously the hamburger used absolute positioning and required extra header padding to avoid overlap.
 - **Rank Badges**: R4–R1 rank badges use semantic color tokens (danger/info/success/muted) that adapt to light and dark mode. R5 retains its gold "prestige" color.
@@ -30,11 +30,12 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Members page** is still accessible via its own nav link at `/members`.
 
 ### 📈 Analytics & Activity Dashboard
-- **Commander Growth Tracking**: Instantly calculate and visualize 7-day and 30-day power deltas for every member to easily identify top grinders and stagnant accounts.
+- **Commander Growth Tracking**: Instantly calculate and visualize 7-day and 30-day overall power deltas for every member to easily identify top grinders and stagnant accounts.
+- **Total Hero Power Tracking**: Track each member's Total Hero Power alongside overall power, with full chronological history and 7-day / 30-day growth deltas shown on the Tracking page.
 - **VS Duel Leaderboards**: Track daily alliance duel contributions with massive, interactive stacked bar charts to see exactly where members excel (e.g., Radar vs. Tech day).
 - **Alliance Composition**: Premium `Chart.js` visualizations breaking down the alliance's Troop Tiers and Primary Squad focuses (Tank/Aircraft/Missile).
 - **Theme-Aware Charts**: Chart.js color defaults are read from the active CSS theme at initialization time, so axis labels and tooltips match the current light/dark mode rather than being hardcoded to a single palette.
-- **Historical Integrity**: Power and Squad Power are tracked chronologically, preventing data loss and enabling long-term growth analysis.
+- **Historical Integrity**: Overall Power, Squad Power, and Total Hero Power are all tracked chronologically, preventing data loss and enabling long-term growth analysis.
 - **Audit / Activity Log**: A structured, chronological audit trail of all write operations across the app — member changes, recruits, allies, storm, OC, awards, files, imports, and more. Consecutive creates of the same entity type by the same user within 15 minutes are batched into a single entry. Update events include a field-level diff (e.g. `status: interested → pending`). Accessible to R4/R5 by default via a dedicated `/activity` page with user and limit filters. Sensitive events (user accounts, permissions, settings, credentials, invitations) are visible to admins only.
 
 ### 📢 Shoutouts & Feedback (Zero-Trust Feedback Engine)
@@ -81,7 +82,7 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 ### 🎯 Recruiting
 - **Former Members**: Instead of deleting members and losing their history, officers can archive them (rank `EX`). Archived members remain in all historical records — train logs still show their name, VS point history is preserved. Officers with `manage_members` can view former members on the Members page ("Former" filter chip) and on the Recruiting page with stats: last known power, total train runs conducted, and last VS week active.
 - **Reactivate**: Former members can be restored to an active rank (R1–R5) from the Recruiting page, re-joining the roster immediately.
-- **Prospect Tracking**: Officers can log potential recruits with fields for in-game name, server, current alliance, power, rank in their alliance, recruiter, first contact date, notes, and status (Interested / Pending / Declined).
+- **Prospect Tracking**: Officers can log potential recruits with fields for in-game name, server, current alliance, power, Total Hero Power, rank in their alliance, recruiter, first contact date, notes, and status (Interested / Pending / Declined).
 - **Officer Notes**: Each active member now has an internal notes field visible only to officers with `manage_members`. Notes are displayed in the member edit modal and never shown to standard members.
 - **Permission-Gated Access**: `manage_members` controls archive/reactivate and viewing former members. Separate `view_recruiting` and `manage_recruiting` permissions (R4–R5 default) gate the Recruiting page and prospect CRUD. Hard-deleting archived members is admin-only.
 

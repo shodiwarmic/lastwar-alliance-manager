@@ -458,7 +458,7 @@ function buildProspectCard(p) {
     if (p.server) detailItems.push(['Server', p.server]);
     if (p.source_alliance) detailItems.push(['Alliance', p.source_alliance]);
     if (p.power) detailItems.push(['Power', formatPower(p.power)]);
-    if (p.hero_power != null) detailItems.push(['Hero Power', formatPower(p.hero_power)]);
+    if (p.hero_power != null) detailItems.push(['Total Hero Power', formatPower(p.hero_power)]);
     if (p.rank_in_alliance) detailItems.push(['Rank', p.rank_in_alliance]);
     if (p.recruiter_name) detailItems.push(['Recruiter', p.recruiter_name]);
     if (p.first_contacted) detailItems.push(['Contacted', p.first_contacted]);

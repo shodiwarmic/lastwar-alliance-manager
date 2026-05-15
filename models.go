@@ -30,6 +30,7 @@ type Member struct {
 	SquadType           string `json:"squad_type"`
 	SquadPower          *int64 `json:"squad_power"`
 	SquadPowerUpdatedAt string `json:"squad_power_updated_at"`
+	HeroPower           *int64 `json:"hero_power"`
 	TroopLevel          int    `json:"troop_level"`
 	Profession          string `json:"profession"`
 	GlobalAliases       string `json:"global_aliases"`
@@ -75,6 +76,13 @@ type Alias struct {
 }
 
 type SquadPowerHistory struct {
+	ID         int    `json:"id"`
+	MemberID   int    `json:"member_id"`
+	Power      int64  `json:"power"`
+	RecordedAt string `json:"recorded_at"`
+}
+
+type HeroPowerHistory struct {
 	ID         int    `json:"id"`
 	MemberID   int    `json:"member_id"`
 	Power      int64  `json:"power"`

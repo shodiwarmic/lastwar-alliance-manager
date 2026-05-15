@@ -223,7 +223,7 @@ func updateProspect(w http.ResponseWriter, r *http.Request) {
 		newHeroPowerStr = strconv.FormatInt(*p.HeroPower, 10)
 	}
 	if oldHeroPowerStr != newHeroPowerStr {
-		prospectChanges = append(prospectChanges, "hero power: "+oldHeroPowerStr+" → "+newHeroPowerStr)
+		prospectChanges = append(prospectChanges, "total hero power: "+oldHeroPowerStr+" → "+newHeroPowerStr)
 	}
 	oldRecruiterName := ""
 	if oldRecruiterID != nil {
