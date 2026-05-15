@@ -35,6 +35,14 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 				FROM squad_power_history
 			) WHERE rn = 1
 		),
+		latest_hero_power AS (
+			SELECT member_id, power, recorded_at
+			FROM (
+				SELECT member_id, power, recorded_at,
+					ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY recorded_at DESC) as rn
+				FROM hero_power_history
+			) WHERE rn = 1
+		),
 		global_aliases AS (
 			SELECT member_id, GROUP_CONCAT(alias, ', ') as aliases
 			FROM member_aliases WHERE category = 'global'
@@ -54,10 +62,13 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			   EXISTS(SELECT 1 FROM users WHERE member_id = m.id) as has_user,
 			   COALESCE(ga.aliases, '') as global_aliases,
 			   COALESCE(pa.aliases, '') as personal_aliases,
-			   COALESCE(m.notes, '') as notes
+			   COALESCE(m.notes, '') as notes,
+			   COALESCE(lhp.power, 0) as latest_hero_power,
+			   COALESCE(lhp.recorded_at, '') as latest_hero_power_date
 		FROM members m
 		LEFT JOIN latest_power lp ON lp.member_id = m.id
 		LEFT JOIN latest_squad_power lsp ON lsp.member_id = m.id
+		LEFT JOIN latest_hero_power lhp ON lhp.member_id = m.id
 		LEFT JOIN global_aliases ga ON ga.member_id = m.id
 		LEFT JOIN personal_aliases pa ON pa.member_id = m.id
 		WHERE m.rank != 'EX'
@@ -78,6 +89,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.SquadType, &m.TroopLevel,
 			&m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt,
 			&m.HasUser, &m.GlobalAliases, &m.PersonalAliases, &m.Notes,
+			&m.HeroPower, &m.HeroPowerUpdatedAt,
 		); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -127,7 +139,7 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 		tx.Exec(`INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.SquadPower)
 	}
 
-	if m.HeroPower != nil {
+	if m.HeroPower != nil && *m.HeroPower > 0 {
 		tx.Exec(`INSERT INTO hero_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.HeroPower)
 	}
 
@@ -251,7 +263,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Handle Hero Power History
-	if m.HeroPower != nil {
+	if m.HeroPower != nil && *m.HeroPower > 0 {
 		var currentHeroPower int64 = -1
 		_ = db.QueryRow(`SELECT power FROM hero_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentHeroPower)
 		if currentHeroPower != *m.HeroPower {
@@ -829,15 +841,19 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Added m.eligible and updated to fetch the latest squad_power history
 	err := db.QueryRow(`
-		SELECT 
-			m.id, m.name, m.rank, m.eligible, m.level, 
+		SELECT
+			m.id, m.name, m.rank, m.eligible, m.level,
 			(SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as power,
-			COALESCE(m.squad_type, ''), 
+			COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as power_updated_at,
+			COALESCE(m.squad_type, ''),
 			(SELECT power FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as squad_power,
-			COALESCE(m.troop_level, 0), 
-			COALESCE(m.profession, '') 
+			COALESCE((SELECT recorded_at FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as squad_power_updated_at,
+			COALESCE(m.troop_level, 0),
+			COALESCE(m.profession, ''),
+			(SELECT power FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as hero_power,
+			COALESCE((SELECT recorded_at FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as hero_power_updated_at
 		FROM members m WHERE m.id = ?`, memberID).
-		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.Power, &m.SquadType, &m.SquadPower, &m.TroopLevel, &m.Profession)
+		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.HeroPower, &m.HeroPowerUpdatedAt)
 
 	if err != nil {
 		log.Printf("Profile Fetch Error: %v", err)

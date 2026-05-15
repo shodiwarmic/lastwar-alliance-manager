@@ -277,6 +277,11 @@ function resetMemberForm() {
     const notesInput = document.getElementById('member-notes');
     if (notesInput) notesInput.value = '';
 
+    const heroPowerInput = document.getElementById('member-hero-power');
+    if (heroPowerInput) heroPowerInput.value = '';
+    const heroTimestampText = document.getElementById('modal-hero-power-timestamp');
+    if (heroTimestampText) heroTimestampText.textContent = '';
+
     document.getElementById('modal-form-title').textContent = 'Add New Member';
     document.getElementById('submit-btn').textContent = 'Add Member';
 }
@@ -401,9 +406,19 @@ function buildMemberCard(member) {
         else if (member.squad_type === 'Missile') typeIcon = '🚀 ';
         const span = document.createElement('span');
         span.className = 'member-power';
-        span.style.cssText = 'margin-left:10px;color:var(--color-primary);';
+        span.style.cssText = 'margin-left:10px;';
         span.title = `Squad Power: ${member.squad_power ? member.squad_power.toLocaleString() : 0}`;
         span.textContent = `${typeIcon}${formatPower(member.squad_power)}`;
+        info.appendChild(span);
+    }
+
+    // Hero Power
+    if (member.hero_power > 0) {
+        const span = document.createElement('span');
+        span.className = 'member-power';
+        span.style.cssText = 'margin-left:10px;';
+        span.title = `Total Hero Power: ${member.hero_power.toLocaleString()}`;
+        span.textContent = `🦸 ${formatPower(member.hero_power)}`;
         info.appendChild(span);
     }
 
@@ -431,7 +446,8 @@ function buildMemberCard(member) {
             member.power || 0, member.power_updated_at || '',
             member.level || 0, member.squad_type || '',
             member.squad_power || 0, member.squad_power_updated_at || '',
-            member.troop_level || 0, member.profession || '', member.notes || ''
+            member.troop_level || 0, member.profession || '', member.notes || '',
+            member.hero_power || 0, member.hero_power_updated_at || ''
         ));
         actions.appendChild(editBtn);
 
@@ -494,6 +510,9 @@ async function handleMemberFormSubmit(e) {
     const powerInput = document.getElementById('modal-member-power');
     const power = (powerInput && powerInput.value !== '') ? parseInt(powerInput.value, 10) : 0;
 
+    const heroPowerInput = document.getElementById('member-hero-power');
+    const hero_power = (heroPowerInput && heroPowerInput.value !== '') ? parseInt(heroPowerInput.value, 10) : 0;
+
     const notesInput = document.getElementById('member-notes');
     const notes = (notesInput && canManageRanks) ? notesInput.value.trim() : '';
 
@@ -507,7 +526,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, notes }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, notes }),
             });
             if (!response.ok) throw new Error('Failed to update member');
             editingMemberId = null;
@@ -515,7 +534,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, notes }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, notes }),
             });
             if (!response.ok) {
                 if (response.status === 403) throw new Error('Permission denied');
@@ -544,7 +563,7 @@ function showModalStatus(msg) {
     el._timer = setTimeout(() => { el.textContent = ''; }, 5000);
 }
 
-window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0, squadType = '', squadPower = 0, squadPowerUpdatedAt = '', troopLevel = 0, profession = '', notes = '') {
+window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0, squadType = '', squadPower = 0, squadPowerUpdatedAt = '', troopLevel = 0, profession = '', notes = '', heroPower = 0, heroPowerUpdatedAt = '') {
     if (!canManageRanks) return;
     editingMemberId = id;
 
@@ -590,7 +609,7 @@ window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedA
     if (sqTimestampText) {
         if (squadPowerUpdatedAt) {
             const updatedDate = new Date(squadPowerUpdatedAt.replace(' ', 'T') + 'Z');
-            sqTimestampText.textContent = `Last updated: ${updatedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+            sqTimestampText.textContent = `Last updated: ${updatedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
         } else {
             sqTimestampText.textContent = 'Last updated: Never';
         }
@@ -600,6 +619,19 @@ window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedA
 
     const notesInput = document.getElementById('member-notes');
     if (notesInput) notesInput.value = notes;
+
+    const heroPowerInput = document.getElementById('member-hero-power');
+    if (heroPowerInput) heroPowerInput.value = (heroPower && heroPower > 0) ? heroPower : '';
+
+    const heroTimestampText = document.getElementById('modal-hero-power-timestamp');
+    if (heroTimestampText) {
+        if (heroPowerUpdatedAt) {
+            const updatedDate = new Date(heroPowerUpdatedAt.replace(' ', 'T') + 'Z');
+            heroTimestampText.textContent = `Last updated: ${updatedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+        } else {
+            heroTimestampText.textContent = 'Last updated: Never';
+        }
+    }
 
     document.getElementById('modal-form-title').textContent = 'Edit Member';
     document.getElementById('submit-btn').textContent = 'Update Member';

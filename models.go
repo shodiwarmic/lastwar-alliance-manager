@@ -31,6 +31,7 @@ type Member struct {
 	SquadPower          *int64 `json:"squad_power"`
 	SquadPowerUpdatedAt string `json:"squad_power_updated_at"`
 	HeroPower           *int64 `json:"hero_power"`
+	HeroPowerUpdatedAt  string `json:"hero_power_updated_at"`
 	TroopLevel          int    `json:"troop_level"`
 	Profession          string `json:"profession"`
 	GlobalAliases       string `json:"global_aliases"`
