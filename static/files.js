@@ -9,6 +9,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const cfg = document.getElementById('page-config').dataset;
     canManageFiles = cfg.canManage === 'true';
     canUploadFiles = cfg.canUpload === 'true';
+
+    document.getElementById('upload-file-btn')?.addEventListener('click', showUploadModal);
+    document.getElementById('edit-modal-close').addEventListener('click', closeEditModal);
+    document.getElementById('edit-cancel-btn').addEventListener('click', closeEditModal);
+    document.getElementById('edit-form').addEventListener('submit', handleEdit);
+    document.getElementById('upload-modal-close').addEventListener('click', closeUploadModal);
+    document.getElementById('upload-cancel-btn').addEventListener('click', closeUploadModal);
+    document.getElementById('upload-form').addEventListener('submit', handleUpload);
+    document.getElementById('image-modal-close').addEventListener('click', closeImageModal);
+    document.getElementById('document-modal-close').addEventListener('click', closeDocumentModal);
+
     loadFiles();
 });
 

@@ -6,7 +6,7 @@
 {{define "content"}}
     <div class="action-bar">
         {{if .Permissions.UploadFiles}}
-        <button class="primary-action-btn" onclick="showUploadModal()">
+        <button id="upload-file-btn" class="primary-action-btn">
             <span class="btn-icon">📤</span><span class="btn-text">Upload File</span>
         </button>
         {{end}}
@@ -25,9 +25,9 @@
 {{define "modals"}}
     <div id="edit-modal" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="closeEditModal()">&times;</span>
+            <span class="close" id="edit-modal-close">&times;</span>
             <h2>Edit File Details</h2>
-            <form id="edit-form" onsubmit="handleEdit(event)">
+            <form id="edit-form">
                 <div class="form-group">
                     <label>Document Title:</label>
                     <input type="text" id="edit-file-title" required class="form-input">
@@ -54,7 +54,7 @@
                 </div>
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary" id="edit-submit-btn">Save Changes</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" id="edit-cancel-btn">Cancel</button>
                 </div>
             </form>
         </div>
@@ -62,9 +62,9 @@
 
     <div id="upload-modal" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="closeUploadModal()">&times;</span>
+            <span class="close" id="upload-modal-close">&times;</span>
             <h2>Upload File</h2>
-            <form id="upload-form" onsubmit="handleUpload(event)">
+            <form id="upload-form">
                 <div class="form-group">
                     <label>Document Title:</label>
                     <input type="text" id="file-title" required class="form-input">
@@ -95,7 +95,7 @@
                 </div>
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary" id="upload-submit-btn">Upload</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" id="upload-cancel-btn">Cancel</button>
                 </div>
             </form>
         </div>
@@ -103,7 +103,7 @@
 
     <div id="image-modal" class="modal">
         <div class="modal-content modal-lg" style="text-align: center;">
-            <span class="close" onclick="closeImageModal()">&times;</span>
+            <span class="close" id="image-modal-close">&times;</span>
             <h2 id="image-modal-title"></h2>
             <img id="image-modal-img" src="" style="max-width: 100%; height: auto; border-radius: 8px; margin-top: 15px;">
         </div>
@@ -111,7 +111,7 @@
 
     <div id="document-modal" class="modal">
         <div class="modal-content modal-xl">
-            <span class="close" onclick="closeDocumentModal()">&times;</span>
+            <span class="close" id="document-modal-close">&times;</span>
             <div id="document-modal-body" style="height: 100%; width: 100%; padding-top: 30px;">
             </div>
         </div>
