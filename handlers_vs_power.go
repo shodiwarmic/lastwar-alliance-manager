@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -181,7 +182,9 @@ func processVSPointsScreenshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ship directly to the Python Worker
-	workerResults, err := ProcessImagesViaWorker(r.Context(), files, workerURL)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	workerResults, err := ProcessImagesViaWorker(ctx, files, workerURL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Microservice processing failed: %v", err), http.StatusInternalServerError)
 		return
@@ -473,7 +476,9 @@ func processPowerScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workerResults, err := ProcessImagesViaWorker(r.Context(), files, workerURL)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	workerResults, err := ProcessImagesViaWorker(ctx, files, workerURL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Microservice processing failed: %v", err), http.StatusInternalServerError)
 		return
@@ -714,7 +719,9 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ship the entire batch to the Python Worker and let it do the heavily lifting
-	workerResults, err := ProcessImagesViaWorker(r.Context(), files, workerURL)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	workerResults, err := ProcessImagesViaWorker(ctx, files, workerURL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Microservice processing failed: %v", err), http.StatusInternalServerError)
 		return

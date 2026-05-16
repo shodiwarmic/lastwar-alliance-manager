@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"time"
 
 	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
@@ -246,7 +247,7 @@ func ProcessImagesViaLocalWorker(ctx context.Context, files []*multipart.FileHea
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 5 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("local OCR sidecar unreachable at %s: %v", endpoint, err)
