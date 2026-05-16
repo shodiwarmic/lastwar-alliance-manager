@@ -10,20 +10,24 @@ your-domain.com {
         # Prevent MIME type sniffing
         X-Content-Type-Options "nosniff"
         
-        # Prevent clickjacking
-        X-Frame-Options "DENY"
-        
+        # Prevent clickjacking — SAMEORIGIN (not DENY) is required so the
+        # Collabora iframe can load inside this app's own pages.
+        X-Frame-Options "SAMEORIGIN"
+
         # XSS protection (legacy browsers)
         X-XSS-Protection "1; mode=block"
-        
+
         # Referrer policy
         Referrer-Policy "strict-origin-when-cross-origin"
-        
+
         # HSTS - Force HTTPS for 1 year
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        
-        # Content Security Policy (adjust as needed)
-        Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"
+
+        # Content Security Policy
+        # frame-src: allows the Collabora iframe to load on document pages.
+        # connect-src: allows Collabora's JS to open WebSocket connections back to its own domain.
+        # Replace collabora.your-domain.com with your actual Collabora subdomain.
+        Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self'; connect-src 'self' https://collabora.your-domain.com; frame-src https://collabora.your-domain.com; frame-ancestors 'none';"
         
         # Remove server information
         -Server

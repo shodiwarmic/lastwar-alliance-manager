@@ -201,7 +201,7 @@ The application relies on a `.env` file in the root directory:
 - **Encrypted Credentials**: External API credentials (like GCP Service Accounts) are symmetrically encrypted at rest using AES-GCM. The application employs strict memory hygiene, zeroing out sensitive plaintext buffers immediately after cryptographic operations or API transmissions to prevent memory scraping.
 - **Isolated Internal Networking**: The Go application and the Collabora document server communicate exclusively over a private Docker bridge (`lastwar-net`), preventing external data exposure.
 - **Strict CSRF Protection**: All mutating endpoints (POST/PUT/DELETE) are protected by robust Cross-Site Request Forgery tokens integrated natively into the JS fetch interceptors.
-- **Content-Security-Policy**: The automated Caddy setup injects strict `frame-ancestors` headers, ensuring your Collabora instance can *only* be embedded within your specific Alliance Manager domain.
+- **Content-Security-Policy**: The automated Caddy setup configures strict CSP headers on both domains. The main app uses `frame-src` and `connect-src` to restrict iframes and WebSocket connections exclusively to your Collabora subdomain. The Collabora server uses `frame-ancestors` to ensure it can *only* be embedded within your Alliance Manager domain.
 - **Password Hashing**: Passwords are exclusively hashed with bcrypt before storage, accompanied by strict server-side complexity enforcement.
 - **WOPI JWT**: Document editing sessions are secured with short-lived JSON Web Tokens.
 - **Volume Persistence**: Databases and uploads are stored in persistent Docker volumes, surviving container rebuilds while remaining inaccessible to the public web root.
