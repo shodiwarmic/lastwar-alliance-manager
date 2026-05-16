@@ -50,6 +50,7 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Task Force Configuration**: Set up two Task Forces (A/B) with custom time slots for coordinated Storm events.
 - **Member Registration**: Members self-register for Storm participation; leaders get a live view of sign-ups by TF.
 - **Group & Building Management**: Organize registered members into groups, assign them to specific buildings, and track assignments in real time.
+- **Battle Mail Integration**: The Battle Mail tab fetches the "DS Battle Strategy Mail" template from the Comms hub, pre-fills task force, battle time, and group assignments automatically, then copies straight to clipboard. Edit the template on the Comms page and Storm picks it up immediately; if the template is deleted Storm falls back to a built-in mail gracefully.
 - **Permission-Gated Access**: Separate `view_storm` and `manage_storm` permissions let you control who can see vs. administer the planner.
 
 ### 🗓️ Alliance Schedule
@@ -93,8 +94,18 @@ A season-scoped tracking and reward distribution system for structured in-game c
 - **Participation Tab** *(R4/R5)*: Log weekly scores per member using configurable score levels (e.g. FULL / PARTIAL / ABSENT) and a key event attendance counter. Scores are saved per week with bulk-save and week navigation.
 - **Contributions Tab** *(R4/R5)*: Manually enter season contribution totals across four categories (Mutual Assistance, Siege, Rare Soil War, Defeat) with week-level granularity. The season-end snapshot (week 0) is used as the canonical tie-breaker for rankings; weekly tracking is optional.
 - **Rewards Tab** *(R4/R5 view, R5 assign)*: Assign reward tiers (Alliance Leader, Core, Elite, Valued) to members with an audit trail of who assigned what and when.
-- **Season Mail Tab**: Upload and manage season-specific communications (documents, images) scoped to each season and isolated from the global Alliance Files page.
+- **Season Mail**: Season-specific mail templates are stored in the Comms hub and scoped to the season. Full create, edit, delete, and variable-fill copy work from Season Hub directly — no need to leave the page.
 - **Permission-Gated Access**: `view_season_hub` (R1–R5), `manage_season_hub` (R4–R5), `manage_season_rewards` (R5) — all configurable via the permissions matrix.
+
+### 📬 Alliance Communications
+A central hub for all alliance-wide mail templates, announcements, and reference resources.
+- **Mail & Announcement Templates**: Create reusable templates organised into free-form, collapsible categories (e.g. Desert Storm, Policy, Reminder). R4/R5 manage; R3 view and copy.
+- **Variable System**: Embed `{variable_name}` placeholders — you're prompted to fill them in when copying. Add a type prefix for a specific input: `{time:var}` (24h time picker), `{date:var}` (date picker), `{dayofweek:var}` (day-of-week dropdown), `{number:var}` (numeric field), `{multiline:var}` (text area). Use `{{` and `}}` for literal braces that won't be treated as variables.
+- **System Variables**: Templates can declare variables pre-filled by integrations (e.g. the Storm page supplies `task_force`, `battle_time`, and `group_assignments` for the DS battle mail). Pre-filled variables are never shown in the fill-in modal.
+- **Unified Season Mail**: Season-specific templates are stored in the same table, scoped by season. They appear in Season Hub for in-context editing and in Comms under their season category — one system, two entry points.
+- **Resources Tab**: Store named external links (guides, spreadsheets, infographics) with optional descriptions for quick alliance-wide reference.
+- **Search & Browse**: Live search filters across titles and content. When no search is active, templates group into collapsible category sections with session-persistent open/closed state.
+- **Permission-Gated Access**: `view_comms` (R3–R5 default) and `manage_comms` (R4–R5 default), configurable via the permissions matrix.
 
 ### ⚖️ Member Accountability
 - **Tag System**: Each active member is automatically tagged as Reliable, Needs Improvement, or At Risk based on their current active strike count. The strike thresholds for each tag are configurable in Alliance Settings.
