@@ -1,6 +1,7 @@
 // allies.js — Allies Tracker page
 
-const CAN_MANAGE = window.CAN_MANAGE === true;
+const cfg = document.getElementById('page-config').dataset;
+const CAN_MANAGE = cfg.canManage === 'true';
 
 let allTypes = [];   // AllyAgreementType[]
 let allAllies = [];  // Ally[]

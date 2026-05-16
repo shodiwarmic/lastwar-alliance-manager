@@ -51,9 +51,7 @@
 {{end}}
 
 {{define "scripts"}}
-<script>
-window.CAN_MANAGE = {{if .Permissions.ManageAllies}}true{{else}}false{{end}};
-</script>
+<div id="page-config" data-can-manage="{{if .Permissions.ManageAllies}}true{{else}}false{{end}}" hidden></div>
 <script src="/allies.js"></script>
 {{end}}
 
