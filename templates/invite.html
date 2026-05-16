@@ -72,13 +72,13 @@
     </div>
 
     <script src="/csrf.js"></script>
-    <script>
-        window.PWD_MIN_LENGTH = {{.PwdMinLength}};
-        window.PWD_REQUIRE_UPPER = {{if .PwdRequireUpper}}true{{else}}false{{end}};
-        window.PWD_REQUIRE_LOWER = {{if .PwdRequireLower}}true{{else}}false{{end}};
-        window.PWD_REQUIRE_NUMBER = {{if .PwdRequireNumber}}true{{else}}false{{end}};
-        window.PWD_REQUIRE_SPECIAL = {{if .PwdRequireSpecial}}true{{else}}false{{end}};
-    </script>
+    <div id="page-config"
+         data-pwd-min-length="{{.PwdMinLength}}"
+         data-pwd-require-upper="{{if .PwdRequireUpper}}true{{else}}false{{end}}"
+         data-pwd-require-lower="{{if .PwdRequireLower}}true{{else}}false{{end}}"
+         data-pwd-require-number="{{if .PwdRequireNumber}}true{{else}}false{{end}}"
+         data-pwd-require-special="{{if .PwdRequireSpecial}}true{{else}}false{{end}}"
+         hidden></div>
     <script src="/invite.js"></script>
 </body>
 </html>

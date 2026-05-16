@@ -1,5 +1,6 @@
 // Derive the token from the URL path: /invite/{token}
 const INVITE_TOKEN = window.location.pathname.split('/')[2];
+const cfg = document.getElementById('page-config').dataset;
 
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
@@ -26,7 +27,7 @@ function validateUsername() {
 
 function checkRule(rule, password) {
     switch (rule) {
-        case 'length':  return password.length >= (window.PWD_MIN_LENGTH || 8);
+        case 'length':  return password.length >= (Number(cfg.pwdMinLength) || 8);
         case 'upper':   return /[A-Z]/.test(password);
         case 'lower':   return /[a-z]/.test(password);
         case 'number':  return /[0-9]/.test(password);
