@@ -47,6 +47,6 @@
 {{end}}
 
 {{define "scripts"}}
-<script>window.IS_ADMIN = {{if .IsAdmin}}true{{else}}false{{end}};</script>
+<div id="page-config" data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}" hidden></div>
 <script src="/activity.js"></script>
 {{end}}

@@ -1,6 +1,7 @@
 // activity.js - Activity log page
 
-const IS_ADMIN = window.IS_ADMIN === true;
+const cfg = document.getElementById('page-config').dataset;
+const IS_ADMIN = cfg.isAdmin === 'true';
 
 // Choices.js instance — initialised in DOMContentLoaded
 let userFilterChoices = null;
