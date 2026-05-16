@@ -1,9 +1,10 @@
 'use strict';
 
-const CAN_MANAGE_MEMBERS = window.CAN_MANAGE_MEMBERS === true;
-const CAN_MANAGE_RECRUITING = window.CAN_MANAGE_RECRUITING === true;
-const IS_ADMIN = window.IS_ADMIN === true;
-const HAS_FORMER_TAB = window.HAS_FORMER_TAB === true;
+const cfg = document.getElementById('page-config').dataset;
+const CAN_MANAGE_MEMBERS = cfg.canManageMembers === 'true';
+const CAN_MANAGE_RECRUITING = cfg.canManageRecruiting === 'true';
+const IS_ADMIN = cfg.isAdmin === 'true';
+const HAS_FORMER_TAB = cfg.hasFormerTab === 'true';
 
 let allMembers = [];        // for recruiter dropdown and capacity header
 let editingProspectId = null;

@@ -268,11 +268,11 @@
 {{end}}
 
 {{define "scripts"}}
-<script>
-    window.CAN_MANAGE_MEMBERS = {{if .Permissions.ManageMembers}}true{{else}}false{{end}};
-    window.CAN_MANAGE_RECRUITING = {{if .Permissions.ManageRecruiting}}true{{else}}false{{end}};
-    window.IS_ADMIN = {{if .IsAdmin}}true{{else}}false{{end}};
-    window.HAS_FORMER_TAB = {{if .Permissions.ManageMembers}}true{{else}}false{{end}};
-</script>
+<div id="page-config"
+     data-can-manage-members="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
+     data-can-manage-recruiting="{{if .Permissions.ManageRecruiting}}true{{else}}false{{end}}"
+     data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}"
+     data-has-former-tab="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
+     hidden></div>
 <script src="/recruiting.js"></script>
 {{end}}
