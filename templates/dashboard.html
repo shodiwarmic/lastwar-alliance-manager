@@ -27,10 +27,10 @@
 {{end}}
 
 {{define "scripts"}}
-<script>
-    window.VS_MINIMUM = {{.VSMinimumPoints}};
-    window.USER_RANK  = "{{.Rank}}";
-    window.IS_ADMIN   = {{if .IsAdmin}}true{{else}}false{{end}};
-</script>
+<div id="page-config"
+     data-vs-minimum="{{.VSMinimumPoints}}"
+     data-user-rank="{{.Rank}}"
+     data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}"
+     hidden></div>
 <script src="/dashboard.js"></script>
 {{end}}

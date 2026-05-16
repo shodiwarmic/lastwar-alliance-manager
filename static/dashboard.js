@@ -1,8 +1,9 @@
 'use strict';
 
-const VS_MINIMUM  = window.VS_MINIMUM  || 2500000;
-const USER_RANK   = window.USER_RANK   || '';
-const IS_ADMIN    = window.IS_ADMIN    || false;
+const cfg        = document.getElementById('page-config').dataset;
+const VS_MINIMUM = Number(cfg.vsMinimum) || 2500000;
+const USER_RANK  = cfg.userRank || '';
+const IS_ADMIN   = cfg.isAdmin === 'true';
 
 // --- Card metadata ---
 
