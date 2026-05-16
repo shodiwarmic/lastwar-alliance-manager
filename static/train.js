@@ -7,7 +7,8 @@ function escapeHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-const CAN_MANAGE = window.CAN_MANAGE === true;
+const cfg = document.getElementById('page-config').dataset;
+const CAN_MANAGE = cfg.canManage === 'true';
 
 // ── Game-time helpers ─────────────────────────────────────────────────────────
 
