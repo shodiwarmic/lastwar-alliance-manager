@@ -382,6 +382,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             loadVSPoints();
         });
 
+        // Preview modal
+        document.getElementById('vs-preview-cancel-btn').addEventListener('click', closePreviewModal);
+        document.getElementById('vs-preview-confirm-btn').addEventListener('click', commitImport);
+
         // Search
         document.getElementById('search-box')?.addEventListener('input', renderTable);
 

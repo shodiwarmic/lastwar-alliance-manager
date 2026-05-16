@@ -298,7 +298,7 @@ let allMembers = [];
 let currentImportPayload = null;
 let currentWeekDate = null;
 
-// Fetch members on load so the dropdowns have data
+// Fetch members on load and wire preview modal buttons
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         const response = await fetch('/api/members');
@@ -306,6 +306,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         console.error('Error loading members:', error);
     }
+
+    document.getElementById('upload-preview-cancel-btn')?.addEventListener('click', closePreviewModal);
+    document.getElementById('upload-preview-confirm-btn')?.addEventListener('click', commitImport);
 });
 
 function buildMatchedRow(row) {

@@ -399,6 +399,8 @@ function renderVSWeek(weekDate) {
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('tab-growth')) {
+        document.getElementById('tab-btn-growth').addEventListener('click', () => switchTab('growth'));
+        document.getElementById('tab-btn-vs').addEventListener('click', () => switchTab('vs'));
         loadGrowthData();
         loadVSData();
     }

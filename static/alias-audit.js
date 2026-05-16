@@ -194,6 +194,7 @@ function closeAddAliasModal() {
     m.style.display = 'none';
 }
 
+document.getElementById('add-alias-cancel-btn').addEventListener('click', closeAddAliasModal);
 document.getElementById('add-alias-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeAddAliasModal();
 });

@@ -33,6 +33,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadUsers();
         await loadMembers();
         await loadStormSlots();
+
+        // Tab buttons
+        document.getElementById('tab-btn-users').addEventListener('click', () => switchTab('users'));
+        document.getElementById('tab-btn-logins').addEventListener('click', () => switchTab('logins'));
+        document.getElementById('tab-btn-security').addEventListener('click', () => switchTab('security'));
+
+        // User management
+        document.getElementById('create-user-btn').addEventListener('click', showCreateUserModal);
+        document.getElementById('user-search').addEventListener('keyup', filterUsers);
+        document.getElementById('login-filter').addEventListener('change', loadLoginHistory);
+        document.getElementById('login-limit').addEventListener('change', loadLoginHistory);
+
+        // Forms
+        document.getElementById('password-policy-form').addEventListener('submit', savePasswordPolicy);
+        document.getElementById('cv-worker-form').addEventListener('submit', saveCVWorkerUrl);
+        document.getElementById('gcp-upload-form').addEventListener('submit', uploadGCPCredentials);
+        document.getElementById('delete-gcp-btn').addEventListener('click', showDeleteGCPModal);
+
+        // User modal
+        document.getElementById('user-modal-close').addEventListener('click', closeUserModal);
+        document.getElementById('user-form').addEventListener('submit', saveUser);
+        document.getElementById('user-cancel-btn').addEventListener('click', closeUserModal);
+
+        // Reset password modal
+        document.getElementById('reset-password-modal-close').addEventListener('click', closeResetPasswordModal);
+        document.getElementById('copy-password-btn').addEventListener('click', copyPassword);
+        document.getElementById('confirm-reset-btn').addEventListener('click', confirmResetPassword);
+        document.getElementById('reset-password-cancel-btn').addEventListener('click', closeResetPasswordModal);
+
+        // Transfer files modal
+        document.getElementById('transfer-files-modal-close').addEventListener('click', closeTransferFilesModal);
+        document.getElementById('transfer-files-confirm-btn').addEventListener('click', confirmTransferFiles);
+        document.getElementById('transfer-files-cancel-btn').addEventListener('click', closeTransferFilesModal);
+
+        // Delete GCP modal
+        document.getElementById('delete-gcp-modal-close').addEventListener('click', closeDeleteGCPModal);
+        document.getElementById('confirm-delete-gcp-btn').addEventListener('click', confirmDeleteGCP);
+        document.getElementById('delete-gcp-cancel-btn').addEventListener('click', closeDeleteGCPModal);
     }
 
     // Wire storm slots save button (only present on admin page)
@@ -44,15 +82,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Tab Switching
 function switchTab(tabName) {
-    // Update tab buttons
     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
-
-    // Update tab content
+    document.getElementById('tab-btn-' + tabName).classList.add('active');
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
     document.getElementById(tabName + '-tab').classList.add('active');
-
-    // Load data for the active tab
     if (tabName === 'logins') {
         loadLoginHistory();
     }
