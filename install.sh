@@ -131,6 +131,18 @@ $DOMAIN {
         Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self'; connect-src 'self' https://$COLLABORA_DOMAIN; frame-src https://$COLLABORA_DOMAIN; frame-ancestors 'none';"
         -Server
     }
+    log {
+        output file /var/log/caddy/lastwar-access.log {
+            roll_size 100mb
+            roll_keep 10
+            roll_keep_for 720h
+        }
+        format json
+    }
+}
+
+www.$DOMAIN {
+    redir https://$DOMAIN{uri} permanent
 }
 
 $COLLABORA_DOMAIN {

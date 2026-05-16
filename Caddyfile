@@ -1,15 +1,15 @@
 your-domain.com {
-    # Reverse proxy to Go application
+    # Reverse proxy to Go application (handles all routing including 404s)
     reverse_proxy localhost:8080
-    
+
     # Enable gzip compression
     encode gzip
-    
+
     # Security headers
     header {
         # Prevent MIME type sniffing
         X-Content-Type-Options "nosniff"
-        
+
         # Prevent clickjacking — SAMEORIGIN (not DENY) is required so the
         # Collabora iframe can load inside this app's own pages.
         X-Frame-Options "SAMEORIGIN"
@@ -28,11 +28,11 @@ your-domain.com {
         # connect-src: allows Collabora's JS to open WebSocket connections back to its own domain.
         # Replace collabora.your-domain.com with your actual Collabora subdomain.
         Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self'; connect-src 'self' https://collabora.your-domain.com; frame-src https://collabora.your-domain.com; frame-ancestors 'none';"
-        
+
         # Remove server information
         -Server
     }
-    
+
     # Access logging
     log {
         output file /var/log/caddy/lastwar-access.log {
@@ -42,14 +42,21 @@ your-domain.com {
         }
         format json
     }
-    
-    # Error handling
-    handle_errors {
-        @404 {
-            expression {http.error.status_code} == 404
-        }
-        rewrite @404 /index.html
-        file_server
+}
+
+# Collabora Online document server
+collabora.your-domain.com {
+    encode gzip
+    reverse_proxy localhost:9980
+    header {
+        X-Content-Type-Options "nosniff"
+        # X-Frame-Options is omitted here because we MUST allow embedding.
+        # Instead, we use a strict CSP to ONLY allow your main domain to iframe it.
+        Content-Security-Policy "frame-ancestors https://your-domain.com"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
     }
 }
 
