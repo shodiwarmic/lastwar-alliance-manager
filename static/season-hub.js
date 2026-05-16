@@ -1125,7 +1125,7 @@
     // ── Season Mail tab ───────────────────────────────────────────────────────
     function loadSeasonMail() {
         if (!activeSeason) return;
-        fetch('/api/season-hub/season-mail?season_id=' + activeSeason.id)
+        fetch('/api/comms/templates?type=mail&season_id=' + activeSeason.id)
             .then(r => r.json())
             .then(data => {
                 allMailItems = data.items || [];
@@ -1170,29 +1170,11 @@
             const actions = document.createElement('div');
             actions.className = 'mail-item-actions';
 
-            // Copy button
+            // Copy button — uses mail.js copyWithVariables for variable support
             const copyBtn = document.createElement('button');
             copyBtn.className = 'btn btn-secondary btn-sm';
             copyBtn.textContent = 'Copy';
-            copyBtn.addEventListener('click', () => {
-                const text = item.content || '';
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(text).then(() => {
-                        copyBtn.textContent = 'Copied!';
-                        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
-                    });
-                } else {
-                    const ta = document.createElement('textarea');
-                    ta.value = text;
-                    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand('copy');
-                    ta.remove();
-                    copyBtn.textContent = 'Copied!';
-                    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
-                }
-            });
+            copyBtn.addEventListener('click', () => copyWithVariables(item.content || ''));
             actions.appendChild(copyBtn);
 
             // Toggle expand
@@ -1312,12 +1294,13 @@
         }
 
         const url = isEdit
-            ? '/api/season-hub/season-mail/' + editingMailId
-            : '/api/season-hub/season-mail/upload';
+            ? '/api/comms/templates/' + editingMailId
+            : '/api/comms/templates';
         const method = isEdit ? 'PUT' : 'POST';
+        const seasonCategory = activeSeason ? 'Season ' + activeSeason.season_number : 'Season Mail';
         const body = isEdit
-            ? { title: titleEl.value.trim(), content: contentEl ? contentEl.value : '' }
-            : { season_id: activeSeason.id, title: titleEl.value.trim(), content: contentEl ? contentEl.value : '' };
+            ? { title: titleEl.value.trim(), content: contentEl ? contentEl.value : '', category: seasonCategory, required_vars: '[]' }
+            : { type: 'mail', season_id: activeSeason.id, title: titleEl.value.trim(), content: contentEl ? contentEl.value : '', category: seasonCategory };
 
         const submitBtn = formUploadMail.querySelector('button[type="submit"]');
         setButtonLoading(submitBtn);
@@ -1341,7 +1324,7 @@
     }
 
     function deleteMailItem(id) {
-        fetch('/api/season-hub/season-mail/' + id, { method: 'DELETE' })
+        fetch('/api/comms/templates/' + id, { method: 'DELETE' })
             .then(r => {
                 if (!r.ok) return r.text().then(t => { throw new Error(t); });
                 showToast('Document deleted.');

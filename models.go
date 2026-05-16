@@ -422,6 +422,31 @@ type RankPermissions struct {
 	ViewSeasonHub        bool   `json:"view_season_hub"`
 	ManageSeasonHub      bool   `json:"manage_season_hub"`
 	ManageSeasonRewards  bool   `json:"manage_season_rewards"`
+	ViewComms            bool   `json:"view_comms"`
+	ManageComms          bool   `json:"manage_comms"`
+}
+
+type CommsTemplate struct {
+	ID           int     `json:"id"`
+	Type         string  `json:"type"`
+	Title        string  `json:"title"`
+	Category     string  `json:"category"`
+	Content      string  `json:"content"`
+	SeasonID     *int    `json:"season_id"`
+	Slug         *string `json:"slug"`
+	RequiredVars string  `json:"required_vars"`
+	CreatedBy    string  `json:"created_by"`
+	CreatedAt    string  `json:"created_at"`
+	UpdatedAt    string  `json:"updated_at"`
+}
+
+type CommsResource struct {
+	ID          int    `json:"id"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	Description string `json:"description"`
+	CreatedBy   string `json:"created_by"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type ActivityLog struct {

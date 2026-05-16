@@ -1217,6 +1217,53 @@ async function saveConfig() {
     }
 }
 
+// ── Battle mail helpers ───────────────────────────────────────────
+function getBattleTimeText() {
+    const selId = currentTF === 'A' ? 'storm-time-select-a' : 'storm-time-select-b';
+    const sel = document.getElementById(selId);
+    if (sel && sel.selectedIndex !== -1) return sel.options[sel.selectedIndex].text;
+    return '';
+}
+
+function buildGroupAssignmentsText() {
+    let text = '';
+    for (const g of groups) {
+        text += `\nGROUP: ${g.name}\n`;
+        text += `────────────────────────────────\n`;
+        if (g.instructions) text += `Instructions: ${g.instructions}\n`;
+
+        for (const b of g.buildings) {
+            const bInfo = BUILDINGS.find(x => x.id === b.building_id) || { name: b.building_id };
+            const primaries = b.members.filter(m => !m.is_sub).map(m => {
+                const mem = allMembers.find(x => x.id === m.member_id);
+                return mem ? mem.name : `#${m.member_id}`;
+            });
+            const subs = b.members.filter(m => m.is_sub).map(m => {
+                const mem = allMembers.find(x => x.id === m.member_id);
+                return mem ? mem.name : `#${m.member_id}`;
+            });
+            text += `\n  ${bInfo.name}:\n`;
+            if (primaries.length > 0) text += `    Primary: ${primaries.join(', ')}\n`;
+            if (subs.length > 0) text += `    Sub: ${subs.join(', ')}\n`;
+        }
+
+        const directPrimaries = g.direct_members.filter(m => !m.is_sub).map(m => {
+            const mem = allMembers.find(x => x.id === m.member_id);
+            return mem ? mem.name : `#${m.member_id}`;
+        });
+        const directSubs = g.direct_members.filter(m => m.is_sub).map(m => {
+            const mem = allMembers.find(x => x.id === m.member_id);
+            return mem ? mem.name : `#${m.member_id}`;
+        });
+        if (directPrimaries.length > 0 || directSubs.length > 0) {
+            text += `\n  Flexible Role:\n`;
+            if (directPrimaries.length > 0) text += `    ${directPrimaries.join(', ')}\n`;
+            if (directSubs.length > 0) text += `    ${directSubs.join(', ')} (sub)\n`;
+        }
+    }
+    return text;
+}
+
 // ── Generate mail ─────────────────────────────────────────────────
 function generateMail() {
     const isA = currentTF === 'A';
@@ -1292,45 +1339,8 @@ function generateMail() {
     mail += `- Jump in immediately if someone doesn't show\n\n`;
     mail += `Your flexibility and readiness make all the difference! 💪\n\n`;
     mail += `═══════════════════════════════════════\n`;
-    mail += `GROUP ASSIGNMENTS:\n\n`;
-
-    for (const g of groups) {
-        mail += `\nGROUP: ${g.name}\n`;
-        mail += `────────────────────────────────\n`;
-        if (g.instructions) {
-            mail += `Instructions: ${g.instructions}\n`;
-        }
-
-        for (const b of g.buildings) {
-            const bInfo = BUILDINGS.find(x => x.id === b.building_id) || { name: b.building_id };
-            const primaries = b.members.filter(m => !m.is_sub).map(m => {
-                const mem = allMembers.find(x => x.id === m.member_id);
-                return mem ? mem.name : `#${m.member_id}`;
-            });
-            const subs = b.members.filter(m => m.is_sub).map(m => {
-                const mem = allMembers.find(x => x.id === m.member_id);
-                return mem ? mem.name : `#${m.member_id}`;
-            });
-            mail += `\n  ${bInfo.name}:\n`;
-            if (primaries.length > 0) mail += `    Primary: ${primaries.join(', ')}\n`;
-            if (subs.length > 0) mail += `    Sub: ${subs.join(', ')}\n`;
-        }
-
-        const directPrimaries = g.direct_members.filter(m => !m.is_sub).map(m => {
-            const mem = allMembers.find(x => x.id === m.member_id);
-            return mem ? mem.name : `#${m.member_id}`;
-        });
-        const directSubs = g.direct_members.filter(m => m.is_sub).map(m => {
-            const mem = allMembers.find(x => x.id === m.member_id);
-            return mem ? mem.name : `#${m.member_id}`;
-        });
-        if (directPrimaries.length > 0 || directSubs.length > 0) {
-            mail += `\n  Flexible Role:\n`;
-            if (directPrimaries.length > 0) mail += `    ${directPrimaries.join(', ')}\n`;
-            if (directSubs.length > 0) mail += `    ${directSubs.join(', ')} (sub)\n`;
-        }
-    }
-
+    mail += `GROUP ASSIGNMENTS:\n`;
+    mail += buildGroupAssignmentsText();
     mail += `\n═══════════════════════════════════════\n`;
     mail += `💪 LET'S WIN THIS!\n`;
     mail += `═══════════════════════════════════════\n`;
@@ -1555,7 +1565,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnSaveMyReg) btnSaveMyReg.addEventListener('click', saveMyRegistration);
 
     const btnGenerateMail = document.getElementById('btn-generate-mail');
-    if (btnGenerateMail) btnGenerateMail.addEventListener('click', generateMail);
+    if (btnGenerateMail) {
+        btnGenerateMail.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/comms/templates/slug/ds_battle_mail');
+                if (res.ok) {
+                    const template = await res.json();
+                    const prefilledValues = {
+                        task_force: `TF ${currentTF}`,
+                        battle_time: getBattleTimeText(),
+                        group_assignments: buildGroupAssignmentsText()
+                    };
+                    await copyWithVariables(template.content, prefilledValues);
+                    return;
+                }
+            } catch (e) {
+                // fall through to legacy generateMail
+            }
+            generateMail();
+        });
+    }
 
     const btnCopyMail = document.getElementById('btn-copy-mail');
     if (btnCopyMail) btnCopyMail.addEventListener('click', copyMail);

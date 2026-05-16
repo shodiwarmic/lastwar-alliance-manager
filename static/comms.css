@@ -1,0 +1,258 @@
+/* comms.css — Alliance Communications page */
+
+.comms-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0 14px;
+    flex-wrap: wrap;
+}
+
+.comms-search {
+    flex: 1;
+    min-width: 200px;
+    max-width: 380px;
+}
+
+/* ── Category sections ──────────────────────────────────────────── */
+
+.category-section {
+    margin-bottom: 18px;
+}
+
+.category-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.category-header:hover {
+    background: var(--bg-tertiary);
+}
+
+.category-chevron {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+
+.category-header.collapsed .category-chevron {
+    transform: rotate(-90deg);
+}
+
+.category-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.category-count {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1px 8px;
+}
+
+.category-body {
+    padding: 10px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ── Template cards ─────────────────────────────────────────────── */
+
+.template-card {
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.template-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.template-card-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    flex: 1;
+}
+
+.template-card-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.template-vars-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+}
+
+.var-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-family: monospace;
+}
+
+.var-chip-user {
+    background: var(--color-info-bg);
+    color: var(--color-info);
+    border: 1px solid var(--color-info);
+}
+
+.var-chip-system {
+    background: var(--color-purple-bg);
+    color: var(--color-purple);
+    border: 1px solid var(--color-purple);
+}
+
+/* ── Resource cards ─────────────────────────────────────────────── */
+
+.resource-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    padding-top: 6px;
+}
+
+.resource-card {
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.resource-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.resource-card-title {
+    font-weight: 600;
+    color: var(--color-primary);
+    font-size: 0.95rem;
+    flex: 1;
+    word-break: break-word;
+}
+
+.resource-card-title:hover {
+    text-decoration: underline;
+}
+
+.resource-card-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.resource-card-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.resource-card-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* ── Search results count ───────────────────────────────────────── */
+
+.comms-results-count {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    padding: 4px 0 10px;
+}
+
+/* ── Hints and variable preview ─────────────────────────────────── */
+
+.comms-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 6px 0 0;
+    line-height: 1.5;
+}
+
+.comms-hint code {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 0.78rem;
+    color: var(--text-primary);
+}
+
+.comms-hint-inline {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+.comms-vars-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--bg-secondary);
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+}
+
+.comms-vars-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-right: 4px;
+}
+
+/* ── Empty state ────────────────────────────────────────────────── */
+
+.comms-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 40px 0;
+    font-size: 0.9rem;
+}
+
+/* ── form-group spacing ─────────────────────────────────────────── */
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 5px;
+}

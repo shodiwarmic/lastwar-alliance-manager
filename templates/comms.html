@@ -1,0 +1,128 @@
+{{define "header_text"}}
+<h1>📬 Alliance Communications</h1>
+<h2>Mail, Announcements &amp; Resources</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<link rel="stylesheet" href="/comms.css">
+{{end}}
+
+{{define "content"}}
+<div class="tab-bar">
+    <button class="tab-btn active" data-tab="mail">Mail</button>
+    <button class="tab-btn" data-tab="announcement">Announcements</button>
+    <button class="tab-btn" data-tab="resources">Resources</button>
+</div>
+
+<div id="tab-mail" class="tab-content">
+    <div class="comms-toolbar">
+        <input type="search" id="mail-search" class="form-input comms-search" placeholder="Search mail templates…" autocomplete="off">
+        {{if .Permissions.ManageComms}}
+        <button class="btn btn-primary btn-sm" id="new-mail-btn">+ New Mail Template</button>
+        {{end}}
+    </div>
+    <div id="mail-list"></div>
+</div>
+
+<div id="tab-announcement" class="tab-content">
+    <div class="comms-toolbar">
+        <input type="search" id="announcement-search" class="form-input comms-search" placeholder="Search announcements…" autocomplete="off">
+        {{if .Permissions.ManageComms}}
+        <button class="btn btn-primary btn-sm" id="new-announcement-btn">+ New Announcement</button>
+        {{end}}
+    </div>
+    <div id="announcement-list"></div>
+</div>
+
+<div id="tab-resources" class="tab-content">
+    <div class="comms-toolbar">
+        <input type="search" id="resource-search" class="form-input comms-search" placeholder="Search resources…" autocomplete="off">
+        {{if .Permissions.ManageComms}}
+        <button class="btn btn-primary btn-sm" id="new-resource-btn">+ New Resource</button>
+        {{end}}
+    </div>
+    <div id="resource-list"></div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<div id="page-config"
+    data-can-manage="{{if .Permissions.ManageComms}}true{{else}}false{{end}}"
+    hidden></div>
+<script src="/mail.js"></script>
+<script src="/comms.js"></script>
+{{end}}
+
+{{define "modals"}}
+<datalist id="category-suggestions"></datalist>
+
+<div id="modal-template" class="modal">
+    <div class="modal-content" style="max-width:600px;">
+        <h2 id="modal-template-title">New Template</h2>
+        <input type="hidden" id="template-id" value="">
+        <input type="hidden" id="template-type" value="mail">
+
+        <div class="form-group">
+            <label for="template-title-input">Title</label>
+            <input type="text" id="template-title-input" class="form-input" placeholder="Template title" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="template-category-input">Category</label>
+            <input type="text" id="template-category-input" class="form-input" list="category-suggestions" placeholder="e.g. Desert Storm, Policy, General" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="template-content-input">Content</label>
+            <textarea id="template-content-input" class="form-input" rows="10" placeholder="Write your template here…" style="resize:vertical;font-family:monospace;"></textarea>
+            <p class="comms-hint">Use <code>{variable_name}</code> for fill-in fields — prompted at copy time. Add a type prefix for specific inputs: <code>{time:var}</code>, <code>{date:var}</code>, <code>{dayofweek:var}</code>, <code>{number:var}</code>, <code>{multiline:var}</code>. No prefix = plain text. Use <code>{{"{{"}}</code> and <code>{{"}}"}}</code> for literal braces.</p>
+            <div id="template-vars-preview" class="comms-vars-preview" style="display:none;">
+                <span class="comms-vars-label">Variables detected:</span>
+                <span id="template-vars-chips"></span>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="template-required-vars-input">System-provided variables <span class="comms-hint-inline">(comma-separated)</span></label>
+            <input type="text" id="template-required-vars-input" class="form-input" placeholder="e.g. battle_time, group_assignments" autocomplete="off">
+            <p class="comms-hint">Variables auto-filled by integrations like the Storm page — not prompted at copy time.</p>
+        </div>
+
+        <div class="modal-actions">
+            <button id="template-save-btn" class="btn btn-primary">Save</button>
+            <button id="template-cancel-btn" class="btn btn-secondary">Cancel</button>
+        </div>
+        <p id="template-status" class="status-msg"></p>
+    </div>
+</div>
+
+<div id="modal-resource" class="modal">
+    <div class="modal-content" style="max-width:520px;">
+        <h2 id="modal-resource-title">New Resource</h2>
+        <input type="hidden" id="resource-id" value="">
+
+        <div class="form-group">
+            <label for="resource-title-input">Title</label>
+            <input type="text" id="resource-title-input" class="form-input" placeholder="Resource title" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="resource-url-input">URL</label>
+            <input type="url" id="resource-url-input" class="form-input" placeholder="https://…" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="resource-desc-input">Description <span class="comms-hint-inline">(optional)</span></label>
+            <textarea id="resource-desc-input" class="form-input" rows="3" placeholder="Brief description of this resource" style="resize:vertical;"></textarea>
+        </div>
+
+        <div class="modal-actions">
+            <button id="resource-save-btn" class="btn btn-primary">Save</button>
+            <button id="resource-cancel-btn" class="btn btn-secondary">Cancel</button>
+        </div>
+        <p id="resource-status" class="status-msg"></p>
+    </div>
+</div>
+{{end}}

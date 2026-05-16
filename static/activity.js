@@ -39,6 +39,8 @@ const ENTITY_LABELS = {
     season_contributions:  'season contributions',
     season_rewards:        'season reward',
     season_mail:           'season mail',
+    comms_template:        'Comms Template',
+    comms_resource:        'Resource Link',
     season_config:         'season config',
     season_template:       'season template',
     season_trackable:      'season trackable',
