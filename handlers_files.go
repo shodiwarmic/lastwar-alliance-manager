@@ -98,6 +98,35 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	ext := strings.ToLower(filepath.Ext(header.Filename))
+
+	allowedExtensions := map[string]bool{
+		".pdf": true, ".docx": true, ".xlsx": true, ".pptx": true,
+		".jpg": true, ".jpeg": true, ".png": true, ".gif": true,
+		".webp": true, ".txt": true, ".csv": true, ".ods": true,
+	}
+	if !allowedExtensions[ext] {
+		http.Error(w, "file extension not allowed", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	buf := make([]byte, 512)
+	n, _ := file.Read(buf)
+	_, _ = file.Seek(0, io.SeekStart)
+	detectedMIME := strings.SplitN(http.DetectContentType(buf[:n]), ";", 2)[0]
+	allowedMIMEs := map[string]bool{
+		"application/pdf": true,
+		"application/zip": true, // docx, xlsx, pptx, ods are all ZIP-based
+		"image/jpeg":      true,
+		"image/png":       true,
+		"image/gif":       true,
+		"image/webp":      true,
+		"text/plain":      true,
+	}
+	if !allowedMIMEs[detectedMIME] {
+		http.Error(w, "file type not allowed", http.StatusUnsupportedMediaType)
+		return
+	}
+
 	fileType := "document"
 	if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp" {
 		fileType = "image"
