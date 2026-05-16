@@ -1,7 +1,8 @@
 'use strict';
 
 const API = '/api/officer-command';
-const canManage = window.CAN_MANAGE === true;
+const cfg = document.getElementById('page-config').dataset;
+const canManage = cfg.canManage === 'true';
 
 let categories = [];   // OCCategory[]
 let allMembers = [];   // {id, name, rank}[]

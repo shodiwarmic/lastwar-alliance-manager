@@ -98,8 +98,6 @@
 {{end}}
 
 {{define "scripts"}}
-<script>
-    window.CAN_MANAGE = {{if .Permissions.ManageOfficerCommand}}true{{else}}false{{end}};
-</script>
+<div id="page-config" data-can-manage="{{if .Permissions.ManageOfficerCommand}}true{{else}}false{{end}}" hidden></div>
 <script src="/officer_command.js"></script>
 {{end}}
