@@ -90,6 +90,7 @@ func mobileLogin(w http.ResponseWriter, r *http.Request) {
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Subject:   user.Username,
+			Issuer:    "lastwar-alliance-manager",
 		},
 	}
 

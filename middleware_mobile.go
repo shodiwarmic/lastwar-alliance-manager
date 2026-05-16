@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -24,9 +25,16 @@ func mobileBearerMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		secretKey := os.Getenv("SESSION_KEY")
 		claims := &MobileTokenClaims{}
 		token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
 			return []byte(secretKey), nil
 		})
 		if err != nil || !token.Valid {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if claims.Issuer != "lastwar-alliance-manager" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
