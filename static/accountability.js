@@ -1,6 +1,7 @@
 'use strict';
 
-const CAN_MANAGE = window.CAN_MANAGE || false;
+const cfg = document.getElementById('page-config').dataset;
+const CAN_MANAGE = cfg.canManage === 'true';
 
 // --- Helpers ---
 
