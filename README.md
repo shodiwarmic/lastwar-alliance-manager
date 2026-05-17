@@ -11,6 +11,8 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Customizable Login Banner**: Server-Side Rendered (SSR) login screen messaging configurable by Admins/R5s.
 - **Role-Based Permissions**: Granular access levels governed by a dynamic, admin-controlled permissions matrix (e.g., toggling who can manage the roster, view analytics, or see anonymous feedback authors).
 - **Categorized Alias Engine**: Assign personal nicknames or authoritative global aliases to commanders. The system utilizes a strict hierarchy (Exact -> Personal -> Global -> OCR) to resolve identities during imports. Background `ocr` aliases keep machine-read corrections hidden from standard user searches.
+- **Alias Audit**: A dedicated `/alias-audit` page (gated by `manage_members`) lets officers browse, add, and delete every alias for any member, filtered by category (Global / Personal / OCR). Useful for pruning stale OCR aliases that were auto-generated from incorrect import matches.
+- **Invite-Link Onboarding**: Officers with `manage_members` can generate a single-use, 48-hour invite link directly from the Members page. Following the link takes a new user to a self-registration page pre-linked to their in-game commander — no admin password-setting required.
 - **Self-Service Profiles**: Users securely linked to an in-game commander can update their own stats, HQ level, and squad power through a rule-enforced dashboard.
 - **Smart CSV Ingestion**: Upload VS Points or roster CSVs with dynamic column mapping. Features a backend-driven "Preview & Confirm" modal allowing administrators to validate data, calculate missing values (e.g., deducing Saturday from Weekly Totals), and manually map unresolved names before committing.
 - **Advanced Player Stats**: Track optional fields including Player Profession, Squad Type, Squad Power, Total Hero Power, and Troop Levels (dynamically validated against configurable HQ Level caps). All stat badges on member cards adapt to light and dark mode.
@@ -45,6 +47,12 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Creator Anonymity Bypass**: Authors can optionally toggle a "Make my author name public" checkbox, bypassing the anonymity filters to give public kudos.
 - **Creator Management**: Authors retain full control to edit or delete their own active shoutouts, while authorized moderators can curate the board.
 - **Auto-Expiring**: Shoutouts automatically expire after 7 days, keeping the feedback loop relevant to current events.
+
+### 🤝 Allies & Diplomacy
+- **Ally Directory**: Track all current and former allied alliances on a dedicated `/allies` page. Each entry stores the ally name, agreement type tags, and active/inactive status. Inactive allies are hidden by default and can be surfaced via toggle.
+- **Agreement Type Registry**: Manage a custom set of agreement types (e.g. NAP, Mutual Aid, Coalition) used to tag each relationship. Types can be created, renamed, and deleted from the Agreement Types tab (visible to `manage_allies`).
+- **Dashboard Integration**: The Overview Dashboard's Diplomacy Card surfaces active allies and their tags at a glance without navigating to the full page.
+- **Permission-Gated Access**: Separate `view_allies` (R4/R5 default) and `manage_allies` (R5 default) permissions control read vs. write access.
 
 ### 🌩️ Desert Storm Planner
 - **Task Force Configuration**: Set up two Task Forces (A/B) with custom time slots for coordinated Storm events.
@@ -134,10 +142,13 @@ Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** conta
 ### 📸 Smart OCR Extraction (External Microservice)
 To maintain a lightweight core application, heavy image processing and Optical Character Recognition (OCR) are offloaded to a dedicated, containerized Python microservice. 
 **Repository:** [`shodiwarmic/lastwar-ocr-service`](https://github.com/shodiwarmic/lastwar-ocr-service)
-- **Automated Data Extraction**: Drag and drop up to 100 game screenshots at once to automatically extract VS Points or Power updates using Google Cloud Vision Document AI.
+- **Automated Data Extraction**: Drag and drop up to 100 game screenshots at once to automatically extract VS Points or Power updates.
 - **Intelligent Pipeline**: The microservice automatically detects the screenshot type by analyzing colored UI tabs, groups them into buckets, and dynamically stitches them into vertical towers to bypass API limits and retain razor-sharp text.
 - **Hybrid State Machine Parsing**: Overcomes vertical text-flow layout issues natively by intelligently pairing player names with valid scores while filtering out UI noise.
 - **Validation UI & Machine Learning**: OCR results are held in a "Preview & Confirm" modal. Administrators can manually map unresolved scans to existing members and save the pairing as an `ocr` alias, teaching the Alias Engine to automatically correct that specific visual artifact in all future uploads.
+- **Two OCR Backends**: The app ships two backends, switchable in Admin Settings:
+  - **Cloud** (default): Sends images to Google Cloud Vision via an OIDC-authenticated Cloud Run worker. Fully automatic screen-type detection. Requires GCP credentials configured in Admin Settings.
+  - **Local**: Runs a [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) sidecar (`lastwar-ocr-service:local`) in Docker with no external dependencies. The user selects the image category manually per batch because PaddleOCR's English model cannot reliably detect Last War's stylised headers. Enable by selecting "Local" during `install.sh` / `update.sh`, or by setting `OCR_BACKEND_MODE=local` in `.env`.
 - See [image_recognition.md](image_recognition.md) for detailed technical documentation.
 
 ---
@@ -187,6 +198,7 @@ The application relies on a `.env` file in the root directory:
 - `APP_DOMAIN` - Your main domain (e.g., `app.example.com`).
 - `COLLABORA_DOMAIN` - Your document domain (e.g., `collabora.example.com`).
 - `TRUSTED_ORIGINS` - Comma-separated list of trusted IPs/Domains for CSRF validation.
+- `OCR_BACKEND_MODE` - Set to `local` to use the PaddleOCR sidecar instead of Google Cloud Vision. Defaults to `cloud`. Also requires `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml`.
 
 ## Default Login Credentials
 - **Username**: `admin`
