@@ -20,10 +20,10 @@ import (
 
 func getRankPermissions(rank string) RankPermissions {
 	var p RankPermissions
+	var blob string
+	db.QueryRow(`SELECT permissions FROM rank_permissions WHERE rank = ?`, rank).Scan(&blob)
+	json.Unmarshal([]byte(blob), &p)
 	p.Rank = rank
-	db.QueryRow(`SELECT view_train, manage_train, view_awards, manage_awards, view_recs, manage_recs, view_dyno, manage_dyno, view_rankings, view_storm, manage_storm, view_vs_points, manage_vs_points, view_upload, manage_members, manage_settings, view_files, upload_files, manage_files, view_anonymous_authors, view_schedule, manage_schedule, view_officer_command, manage_officer_command, view_recruiting, manage_recruiting, view_allies, manage_allies, view_activity, view_accountability, manage_accountability, view_season_hub, manage_season_hub, manage_season_rewards, view_comms, manage_comms FROM rank_permissions WHERE rank = ?`, rank).Scan(
-		&p.ViewTrain, &p.ManageTrain, &p.ViewAwards, &p.ManageAwards, &p.ViewRecs, &p.ManageRecs, &p.ViewDyno, &p.ManageDyno, &p.ViewRankings, &p.ViewStorm, &p.ManageStorm, &p.ViewVSPoints, &p.ManageVSPoints, &p.ViewUpload, &p.ManageMembers, &p.ManageSettings, &p.ViewFiles, &p.UploadFiles, &p.ManageFiles, &p.ViewAnonymousAuthors, &p.ViewSchedule, &p.ManageSchedule, &p.ViewOfficerCommand, &p.ManageOfficerCommand, &p.ViewRecruiting, &p.ManageRecruiting, &p.ViewAllies, &p.ManageAllies, &p.ViewActivity, &p.ViewAccountability, &p.ManageAccountability, &p.ViewSeasonHub, &p.ManageSeasonHub, &p.ManageSeasonRewards, &p.ViewComms, &p.ManageComms,
-	)
 	return p
 }
 
@@ -50,12 +50,23 @@ func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	stmt, _ := tx.Prepare(`UPDATE rank_permissions SET view_train=?, manage_train=?, view_awards=?, manage_awards=?, view_recs=?, manage_recs=?, view_dyno=?, manage_dyno=?, view_rankings=?, view_storm=?, manage_storm=?, view_vs_points=?, manage_vs_points=?, view_upload=?, manage_members=?, manage_settings=?, view_files=?, upload_files=?, manage_files=?, view_anonymous_authors=?, view_schedule=?, manage_schedule=?, view_officer_command=?, manage_officer_command=?, view_recruiting=?, manage_recruiting=?, view_allies=?, manage_allies=?, view_activity=?, view_accountability=?, manage_accountability=?, view_season_hub=?, manage_season_hub=?, manage_season_rewards=?, view_comms=?, manage_comms=? WHERE rank=?`)
+	stmt, err := tx.Prepare(`UPDATE rank_permissions SET permissions = ? WHERE rank = ?`)
+	if err != nil {
+		slog.Error("failed to prepare permissions update", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
 
 	for _, p := range matrix {
-		stmt.Exec(p.ViewTrain, p.ManageTrain, p.ViewAwards, p.ManageAwards, p.ViewRecs, p.ManageRecs, p.ViewDyno, p.ManageDyno, p.ViewRankings, p.ViewStorm, p.ManageStorm, p.ViewVSPoints, p.ManageVSPoints, p.ViewUpload, p.ManageMembers, p.ManageSettings, p.ViewFiles, p.UploadFiles, p.ManageFiles, p.ViewAnonymousAuthors, p.ViewSchedule, p.ManageSchedule, p.ViewOfficerCommand, p.ManageOfficerCommand, p.ViewRecruiting, p.ManageRecruiting, p.ViewAllies, p.ManageAllies, p.ViewActivity, p.ViewAccountability, p.ManageAccountability, p.ViewSeasonHub, p.ManageSeasonHub, p.ManageSeasonRewards, p.ViewComms, p.ManageComms, p.Rank)
+		blob, err := json.Marshal(p)
+		if err != nil {
+			slog.Error("failed to marshal permissions", "rank", p.Rank, "error", err)
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+		stmt.Exec(string(blob), p.Rank)
 	}
-	stmt.Close()
 	tx.Commit()
 
 	actor := getAuthUser(r)
@@ -63,6 +74,11 @@ func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Permissions updated"})
+}
+
+func getPermissionsSchema(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(PermissionGroups)
 }
 
 // --- ADMIN USER MANAGEMENT ---

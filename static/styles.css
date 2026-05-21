@@ -5135,7 +5135,15 @@ button {
 }
 
 .data-table tbody tr:hover {
+    background: var(--bg-tertiary);
+}
+
+.data-table tbody tr.row-alt {
     background: var(--bg-secondary);
+}
+
+.data-table tbody tr.row-alt:hover {
+    background: var(--bg-tertiary);
 }
 
 .data-table .loading-msg {

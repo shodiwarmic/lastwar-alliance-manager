@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"html/template"
+	"reflect"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -424,6 +425,102 @@ type RankPermissions struct {
 	ManageSeasonRewards  bool   `json:"manage_season_rewards"`
 	ViewComms            bool   `json:"view_comms"`
 	ManageComms          bool   `json:"manage_comms"`
+}
+
+// PermissionRow is a single permission entry within a feature group (key + short label).
+type PermissionRow struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
+
+// PermissionGroup groups related permissions under a single feature name for the RBAC matrix UI.
+// Adding a new permission = add a PermissionRow to the appropriate group here + 1 field in RankPermissions. No migration needed.
+type PermissionGroup struct {
+	Feature string          `json:"feature"`
+	Rows    []PermissionRow `json:"rows"`
+}
+
+// PermissionGroups is the canonical list shown in the Settings matrix, in display order.
+var PermissionGroups = []PermissionGroup{
+	{Feature: "Roster", Rows: []PermissionRow{
+		{Key: "manage_members", Label: "Manage"},
+	}},
+	{Feature: "Train Tracker", Rows: []PermissionRow{
+		{Key: "view_train", Label: "View"},
+		{Key: "manage_train", Label: "Manage"},
+	}},
+	{Feature: "Shoutouts", Rows: []PermissionRow{
+		{Key: "view_dyno", Label: "View"},
+		{Key: "manage_dyno", Label: "Manage"},
+		{Key: "view_anonymous_authors", Label: "Anon Authors"},
+	}},
+	{Feature: "Analytics Dashboard", Rows: []PermissionRow{
+		{Key: "view_rankings", Label: "View"},
+	}},
+	{Feature: "Desert Storm", Rows: []PermissionRow{
+		{Key: "view_storm", Label: "View"},
+		{Key: "manage_storm", Label: "Manage"},
+	}},
+	{Feature: "VS Points", Rows: []PermissionRow{
+		{Key: "view_vs_points", Label: "View"},
+		{Key: "manage_vs_points", Label: "Manage"},
+	}},
+	{Feature: "OCR Upload", Rows: []PermissionRow{
+		{Key: "view_upload", Label: "Access"},
+	}},
+	{Feature: "Alliance Files", Rows: []PermissionRow{
+		{Key: "view_files", Label: "View"},
+		{Key: "upload_files", Label: "Upload"},
+		{Key: "manage_files", Label: "Manage"},
+	}},
+	{Feature: "Schedule", Rows: []PermissionRow{
+		{Key: "view_schedule", Label: "View"},
+		{Key: "manage_schedule", Label: "Manage"},
+	}},
+	{Feature: "Officer Command", Rows: []PermissionRow{
+		{Key: "view_officer_command", Label: "View"},
+		{Key: "manage_officer_command", Label: "Manage"},
+	}},
+	{Feature: "Recruiting", Rows: []PermissionRow{
+		{Key: "view_recruiting", Label: "View"},
+		{Key: "manage_recruiting", Label: "Manage"},
+	}},
+	{Feature: "Allies", Rows: []PermissionRow{
+		{Key: "view_allies", Label: "View"},
+		{Key: "manage_allies", Label: "Manage"},
+	}},
+	{Feature: "Activity Log", Rows: []PermissionRow{
+		{Key: "view_activity", Label: "View"},
+	}},
+	{Feature: "Accountability", Rows: []PermissionRow{
+		{Key: "view_accountability", Label: "View"},
+		{Key: "manage_accountability", Label: "Manage"},
+	}},
+	{Feature: "Season Hub", Rows: []PermissionRow{
+		{Key: "view_season_hub", Label: "View"},
+		{Key: "manage_season_hub", Label: "Manage"},
+		{Key: "manage_season_rewards", Label: "Rewards"},
+	}},
+	{Feature: "Comms", Rows: []PermissionRow{
+		{Key: "view_comms", Label: "View"},
+		{Key: "manage_comms", Label: "Manage"},
+	}},
+	{Feature: "Settings", Rows: []PermissionRow{
+		{Key: "manage_settings", Label: "Access"},
+	}},
+}
+
+// allPermissionsTrue returns a RankPermissions with every bool field set to true.
+// Used for admin users — automatically covers any new bool fields added to the struct.
+func allPermissionsTrue() RankPermissions {
+	var p RankPermissions
+	v := reflect.ValueOf(&p).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		if v.Field(i).Kind() == reflect.Bool {
+			v.Field(i).SetBool(true)
+		}
+	}
+	return p
 }
 
 type CommsTemplate struct {

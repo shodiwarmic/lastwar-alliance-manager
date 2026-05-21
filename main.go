@@ -40,7 +40,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 			}
 			if user.IsAdmin {
 				data.IsAdmin = true
-				data.Permissions = RankPermissions{ViewTrain: true, ManageTrain: true, ViewAwards: true, ManageAwards: true, ViewRecs: true, ManageRecs: true, ViewDyno: true, ManageDyno: true, ViewRankings: true, ViewStorm: true, ManageStorm: true, ViewVSPoints: true, ManageVSPoints: true, ViewUpload: true, ManageMembers: true, ManageSettings: true, ViewFiles: true, ManageFiles: true, UploadFiles: true, ViewAnonymousAuthors: true, ViewSchedule: true, ManageSchedule: true, ViewOfficerCommand: true, ManageOfficerCommand: true, ViewRecruiting: true, ManageRecruiting: true, ViewAllies: true, ManageAllies: true, ViewActivity: true, ViewAccountability: true, ManageAccountability: true, ViewSeasonHub: true, ManageSeasonHub: true, ManageSeasonRewards: true, ViewComms: true, ManageComms: true}
+				data.Permissions = allPermissionsTrue()
 			} else if user.Rank != "" {
 				data.Permissions = getRankPermissions(user.Rank)
 			}
@@ -260,6 +260,7 @@ func main() {
 	// Permission Matrix & Settings routes
 	router.HandleFunc("/api/permissions", authMiddleware(requirePermission("manage_settings", getPermissionsMatrix))).Methods("GET")
 	router.HandleFunc("/api/permissions", authMiddleware(requirePermission("manage_settings", updatePermissionsMatrix))).Methods("PUT")
+	router.HandleFunc("/api/permissions/schema", authMiddleware(requirePermission("manage_settings", getPermissionsSchema))).Methods("GET")
 	router.HandleFunc("/api/settings", authMiddleware(getSettings)).Methods("GET")
 	router.HandleFunc("/api/settings", authMiddleware(requirePermission("manage_settings", updateSettings))).Methods("PUT")
 
@@ -446,7 +447,6 @@ func main() {
 		"/profile":  "profile",
 		"/files":       "files",
 		"/schedule":    "schedule",
-		"/alias-audit":     "alias-audit",
 		"/officer-command": "officer-command",
 		"/train":           "train",
 		"/recruiting":      "recruiting",
@@ -476,7 +476,6 @@ func main() {
 				"settings": data.Permissions.ManageSettings,
 				"admin":       data.IsAdmin,
 				"schedule":    data.Permissions.ViewSchedule,
-				"alias-audit":     data.Permissions.ManageMembers,
 				"officer-command": data.Permissions.ViewOfficerCommand,
 				"train":           data.Permissions.ViewTrain,
 				"recruiting":      data.Permissions.ViewRecruiting,

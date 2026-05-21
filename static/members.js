@@ -1251,10 +1251,87 @@ function displayImportError(message) {
 
 // ── Alias Management ──────────────────────────────────────────────
 let currentAliasMemberId = null;
+let loadedAliases = [];
+let activeAliasFilter = 'all';
+
+const ALIAS_EMPTY_MESSAGES = {
+    all:      'No nicknames set for this commander.',
+    global:   'No global aliases.',
+    personal: 'No personal aliases.',
+    ocr:      'No OCR aliases. These are created automatically during imports — prune incorrect ones here.',
+};
+
+function setAliasFilter(filter) {
+    activeAliasFilter = filter;
+    document.querySelectorAll('[data-alias-filter]').forEach(btn => {
+        btn.classList.toggle('active-filter', btn.dataset.aliasFilter === filter);
+    });
+    renderAliases();
+}
+
+function renderAliases() {
+    const list = document.getElementById('aliases-list');
+    const filtered = activeAliasFilter === 'all'
+        ? loadedAliases
+        : loadedAliases.filter(a => a.category === activeAliasFilter);
+
+    if (filtered.length === 0) {
+        const p = document.createElement('p');
+        p.style.cssText = 'text-align:center;color:var(--text-muted);margin-top:12px;';
+        p.textContent = ALIAS_EMPTY_MESSAGES[activeAliasFilter] || ALIAS_EMPTY_MESSAGES.all;
+        list.replaceChildren(p);
+        return;
+    }
+
+    const rows = filtered.map(a => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border-color);';
+
+        const left = document.createElement('div');
+
+        const badgeClass = {
+            global:   'badge-alias-global',
+            personal: 'badge-alias-personal',
+            ocr:      'badge-alias-ocr',
+        };
+        if (badgeClass[a.category]) {
+            const badge = document.createElement('span');
+            badge.className = badgeClass[a.category];
+            badge.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:0.8em;margin-right:8px;';
+            badge.textContent = a.category.charAt(0).toUpperCase() + a.category.slice(1);
+            left.appendChild(badge);
+        }
+
+        const strong = document.createElement('strong');
+        strong.textContent = a.alias;
+        left.appendChild(strong);
+        row.appendChild(left);
+
+        const canDelete = a.is_mine || window.isAdmin || ((a.category === 'global' || a.category === 'ocr') && canManageRanks);
+        if (canDelete) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.style.cssText = 'background:none;border:none;color:var(--color-danger);cursor:pointer;';
+            deleteBtn.title = 'Remove Nickname';
+            deleteBtn.textContent = '✖';
+            deleteBtn.addEventListener('click', () => deleteAlias(a.id, row, deleteBtn));
+            row.appendChild(deleteBtn);
+        }
+
+        return row;
+    });
+
+    list.replaceChildren(...rows);
+}
 
 async function openAliasModal(memberId, memberName) {
     currentAliasMemberId = memberId;
+    loadedAliases = [];
+    activeAliasFilter = 'all';
     document.getElementById('alias-modal-title').textContent = `Nicknames for ${memberName}`;
+
+    document.querySelectorAll('[data-alias-filter]').forEach(btn => {
+        btn.classList.toggle('active-filter', btn.dataset.aliasFilter === 'all');
+    });
 
     const globalWrapper = document.getElementById('global-alias-checkbox-wrapper');
     if (globalWrapper) {
@@ -1277,54 +1354,9 @@ async function loadAliases() {
 
     try {
         const res = await fetch(`${API_URL}/${currentAliasMemberId}/aliases`);
-        const aliases = await res.json();
-
-        if (!aliases || aliases.length === 0) {
-            const p = document.createElement('p');
-            p.style.cssText = 'text-align:center;color:var(--text-muted);';
-            p.textContent = 'No nicknames set for this commander.';
-            list.replaceChildren(p);
-            return;
-        }
-
-        const rows = aliases.map(a => {
-            const row = document.createElement('div');
-            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border-color);';
-
-            const left = document.createElement('div');
-
-            const badgeClass = {
-                global:   'badge-alias-global',
-                personal: 'badge-alias-personal',
-                ocr:      'badge-alias-ocr',
-            };
-            if (badgeClass[a.category]) {
-                const badge = document.createElement('span');
-                badge.className = badgeClass[a.category];
-                badge.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:0.8em;margin-right:8px;';
-                badge.textContent = a.category.charAt(0).toUpperCase() + a.category.slice(1);
-                left.appendChild(badge);
-            }
-
-            const strong = document.createElement('strong');
-            strong.textContent = a.alias;
-            left.appendChild(strong);
-            row.appendChild(left);
-
-            const canDelete = a.is_mine || window.isAdmin || ((a.category === 'global' || a.category === 'ocr') && canManageRanks);
-            if (canDelete) {
-                const deleteBtn = document.createElement('button');
-                deleteBtn.style.cssText = 'background:none;border:none;color:var(--color-danger);cursor:pointer;';
-                deleteBtn.title = 'Remove Nickname';
-                deleteBtn.textContent = '✖';
-                deleteBtn.addEventListener('click', () => deleteAlias(a.id, row, deleteBtn));
-                row.appendChild(deleteBtn);
-            }
-
-            return row;
-        });
-
-        list.replaceChildren(...rows);
+        loadedAliases = await res.json();
+        if (!Array.isArray(loadedAliases)) loadedAliases = [];
+        renderAliases();
     } catch (e) {
         const p = document.createElement('p');
         p.style.cssText = 'color:var(--color-danger);text-align:center;';
@@ -1393,6 +1425,10 @@ window.deleteAlias = function (aliasId, rowEl, deleteBtn) {
     confirmSpan.append(label, yesBtn, noBtn);
     rowEl.appendChild(confirmSpan);
 };
+
+document.querySelectorAll('[data-alias-filter]').forEach(btn => {
+    btn.addEventListener('click', () => setAliasFilter(btn.dataset.aliasFilter));
+});
 
 document.getElementById('close-alias-modal')?.addEventListener('click', () => {
     const aliasModal = document.getElementById('alias-modal');

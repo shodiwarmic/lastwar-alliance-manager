@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"net/http"
 	"os"
 
@@ -75,10 +74,12 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// requirePermission gates a handler behind a rank_permissions column check.
+// requirePermission gates a handler behind a JSON permissions blob check.
 // Admin users bypass the rank check. All data comes from the context set by
 // authMiddleware — no session reads.
-func requirePermission(permColumn string, next http.HandlerFunc) http.HandlerFunc {
+// Uses json_extract with a bound parameter — safer than the former fmt.Sprintf column approach.
+// COALESCE handles missing keys (new permissions on old rows) as 0 → false.
+func requirePermission(permKey string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := getAuthUser(r)
 		if user == nil {
@@ -92,9 +93,9 @@ func requirePermission(permColumn string, next http.HandlerFunc) http.HandlerFun
 		}
 
 		if user.MemberID != nil && user.Rank != "" {
-			var hasPerm bool
-			query := fmt.Sprintf("SELECT %s FROM rank_permissions WHERE rank = ?", permColumn)
-			if err := db.QueryRow(query, user.Rank).Scan(&hasPerm); err == nil && hasPerm {
+			var val int64
+			query := `SELECT COALESCE(json_extract(permissions, '$.' || ?), 0) FROM rank_permissions WHERE rank = ?`
+			if err := db.QueryRow(query, permKey, user.Rank).Scan(&val); err == nil && val != 0 {
 				next(w, r)
 				return
 			}

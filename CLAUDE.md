@@ -9,7 +9,7 @@
 ## Adding a new feature — checklist
 
 1. **Migration** — name it `NNN_feature_name.sql` where NNN follows the last file in `migrations/`. Check before assuming.
-2. **Permissions** — add columns to `rank_permissions` via migration, add fields to `RankPermissions` struct in `models.go`, add to the `getRankPermissions` SELECT in `handlers_admin.go`, and add the all-true entry in the admin shortcut block in `main.go` (`getPageData`).
+2. **Permissions** — add `FieldName bool \`json:"key_name"\`` to `RankPermissions` in `models.go`, and add a `PermissionRow{Key: "key_name", Label: "View"/"Manage"/etc.}` to the appropriate `PermissionGroup` in `PermissionGroups` in `models.go` (or add a new group). **No migration required.** No SELECT/Scan update, no admin shortcut update, no JS change — all handled automatically.
 3. **Routes** — register in `main.go` following the existing pattern. UI page routes go in the `pages` map and `pagePermissions` map.
 4. **Handler file** — one file per feature, e.g. `handlers_feature.go`.
 5. **Template** — `templates/feature.html`. Define `header_text` (page-specific title, not the app title), `head_tags`, `content`, `scripts`, and `modals` blocks. All modals go in `{{define "modals"}}` — not inside `{{define "content"}}`.
@@ -393,7 +393,6 @@ btn.addEventListener('click', () => editMember(member.id));
 | `static/storm.js` | ✅ Done |
 | `static/rankings.js` | ✅ Done |
 | `static/vs.js` | ✅ Done |
-| `static/alias-audit.js` | ✅ Done |
 | `static/dyno.js` | ✅ Done |
 | `static/admin.js` | ✅ Done |
 | `static/settings.js` | ✅ Done |

@@ -1,0 +1,86 @@
+/* ── Permissions matrix — CSS Grid ──────────────────────────────── */
+
+/* Shrink container to hug grid content rather than spanning full form width */
+#permissions-matrix {
+    width: fit-content;
+    max-width: 100%;
+}
+
+.perm-grid {
+    display: grid;
+    grid-template-columns: 160px minmax(120px, max-content) 70px 70px 70px 70px 70px;
+}
+
+.perm-grid-header {
+    background: var(--color-primary);
+    color: white;
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 12px;
+    text-align: center;
+}
+.perm-grid-header:first-child {
+    text-align: left;
+    border-radius: 8px 0 0 0;
+}
+.perm-grid-header:last-child {
+    border-radius: 0 8px 0 0;
+}
+
+/* Feature column — spans N rows via grid-row: span N (set inline by JS) */
+.perm-feature {
+    font-weight: 600;
+    font-size: 0.82rem;
+    color: var(--color-primary);
+    border-right: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 9px 12px;
+    white-space: nowrap;
+}
+
+.perm-feature-group-even { background: var(--bg-secondary); }
+.perm-feature-group-odd  { background: var(--color-purple-bg); }
+.perm-feature-group-border { border-bottom: 2px solid var(--border-color); }
+.perm-feature.perm-feature-hovered { background: var(--bg-tertiary); }
+
+/* Data cells — explicit bg-primary so alt rows have visible contrast in light mode */
+.perm-grid-label {
+    padding: 9px 12px;
+    font-size: 0.83rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    background: var(--bg-primary);
+}
+
+.perm-grid-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 9px;
+    background: var(--bg-primary);
+}
+
+.perm-grid-check input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--color-primary);
+}
+
+/* Alternating rows */
+.row-alt { background: var(--bg-secondary); }
+
+/* Hover — specificity 0,2,0 beats .row-alt (0,1,0); no !important needed */
+.perm-grid-label.row-hovered,
+.perm-grid-check.row-hovered {
+    background: var(--bg-tertiary);
+}
+
+/* Bold separator between permission groups */
+.perm-row-last-in-group {
+    border-bottom: 2px solid var(--border-color);
+}

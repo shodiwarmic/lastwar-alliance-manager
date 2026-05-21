@@ -1,38 +1,6 @@
 const API_BASE = '/api';
 const SETTINGS_URL = `${API_BASE}/settings`;
 
-const PERM_ROWS = [
-    { key: 'manage_members', label: 'Manage Roster (Home)' },
-    { key: 'view_dyno', label: 'View Shoutouts' }, 
-    { key: 'manage_dyno', label: 'Manage Shoutouts' },
-    { key: 'view_anonymous_authors', label: 'View Anonymous Authors' },
-    { key: 'view_rankings', label: 'View Analytics Dashboard' },
-    { key: 'view_storm', label: 'View Desert Storm' }, 
-    { key: 'manage_storm', label: 'Manage Desert Storm' },
-    { key: 'view_vs_points', label: 'View VS Points' }, 
-    { key: 'manage_vs_points', label: 'Manage VS Points' },
-    { key: 'view_upload', label: 'Access OCR Upload Tool' },
-    { key: 'view_files', label: 'View Alliance Files' },
-    { key: 'upload_files', label: 'Upload Alliance Files' },
-    { key: 'manage_files', label: 'Manage Alliance Files' },
-    { key: 'view_schedule', label: 'View Schedule' },
-    { key: 'manage_schedule', label: 'Manage Schedule' },
-    { key: 'view_train', label: 'View Train Tracker' },
-    { key: 'manage_train', label: 'Manage Train Tracker' },
-    { key: 'view_officer_command', label: 'View Officer Command' },
-    { key: 'manage_officer_command', label: 'Manage Officer Command' },
-    { key: 'view_recruiting', label: 'View Recruiting' },
-    { key: 'manage_recruiting', label: 'Manage Recruiting' },
-    { key: 'view_allies', label: 'View Allies' },
-    { key: 'manage_allies', label: 'Manage Allies' },
-    { key: 'view_activity', label: 'View Activity Log' },
-    { key: 'view_accountability', label: 'View Accountability' },
-    { key: 'manage_accountability', label: 'Manage Accountability' },
-    { key: 'view_season_hub', label: 'View Season Hub' },
-    { key: 'manage_season_hub', label: 'Manage Season Hub' },
-    { key: 'manage_season_rewards', label: 'Manage Season Rewards' },
-    { key: 'manage_settings', label: 'Access Settings Tab' }
-];
 
 let isR5OrAdmin = false;
 
@@ -90,37 +58,83 @@ async function loadSettings() {
         const squadCheckbox = document.getElementById('squad-tracking-enabled');
         if (squadCheckbox) squadCheckbox.checked = settings.squad_tracking_enabled === true;
 
-        const matrixRes = await fetch(`${API_BASE}/permissions`);
-        if (matrixRes.ok) {
+        const [matrixRes, schemaRes] = await Promise.all([
+            fetch(`${API_BASE}/permissions`),
+            fetch(`${API_BASE}/permissions/schema`)
+        ]);
+        if (matrixRes.ok && schemaRes.ok) {
             const matrix = await matrixRes.json();
-            const tbody = document.querySelector('#permissions-matrix tbody');
-            tbody.replaceChildren(...PERM_ROWS.map((row, index) => {
-                const tr = document.createElement('tr');
-                tr.style.borderBottom = '1px solid var(--border-color)';
-                if (index % 2 !== 0) tr.style.background = 'var(--bg-secondary)';
+            const permGroups = await schemaRes.json();
+            const matrixEl = document.getElementById('permissions-matrix');
+            const grid = document.createElement('div');
+            grid.className = 'perm-grid';
 
-                const tdLabel = document.createElement('td');
-                tdLabel.style.cssText = 'text-align: left; padding: 10px 12px; font-weight: 500;';
-                tdLabel.textContent = row.label;
-                tr.appendChild(tdLabel);
+            // Header row (built in JS so the grid owns the full layout)
+            ['Feature', 'Permission', 'R5', 'R4', 'R3', 'R2', 'R1'].forEach(text => {
+                const cell = document.createElement('div');
+                cell.className = 'perm-grid-header';
+                cell.textContent = text;
+                grid.appendChild(cell);
+            });
 
-                ['R5', 'R4', 'R3', 'R2', 'R1'].forEach(rank => {
-                    const rankData = matrix.find(m => m.rank === rank) || {};
-                    const td = document.createElement('td');
-                    td.style.padding = '10px';
-                    const input = document.createElement('input');
-                    input.type = 'checkbox';
-                    input.className = 'perm-checkbox';
-                    input.dataset.rank = rank;
-                    input.dataset.key = row.key;
-                    input.checked = !!rankData[row.key];
-                    input.style.cssText = 'width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary-color);';
-                    td.appendChild(input);
-                    tr.appendChild(td);
+            let globalRowIndex = 0;
+
+            for (const [groupIdx, group] of permGroups.entries()) {
+                const isLastGroup = groupIdx === permGroups.length - 1;
+                const featureGroupClass = groupIdx % 2 !== 0 ? 'perm-feature-group-odd' : 'perm-feature-group-even';
+
+                const featureCell = document.createElement('div');
+                featureCell.className = `perm-feature ${featureGroupClass}`;
+                featureCell.textContent = group.feature;
+                featureCell.style.gridRow = `span ${group.rows.length}`;
+                if (!isLastGroup) featureCell.classList.add('perm-feature-group-border');
+                grid.appendChild(featureCell);
+
+                group.rows.forEach((perm, i) => {
+                    const isLastInGroup = i === group.rows.length - 1;
+                    const rowCells = [];
+
+                    const labelCell = document.createElement('div');
+                    labelCell.className = 'perm-grid-label';
+                    if (globalRowIndex % 2 !== 0) labelCell.classList.add('row-alt');
+                    if (isLastInGroup && !isLastGroup) labelCell.classList.add('perm-row-last-in-group');
+                    labelCell.textContent = perm.label;
+                    rowCells.push(labelCell);
+                    grid.appendChild(labelCell);
+
+                    ['R5', 'R4', 'R3', 'R2', 'R1'].forEach(rank => {
+                        const rankData = matrix.find(m => m.rank === rank) || {};
+                        const cell = document.createElement('div');
+                        cell.className = 'perm-grid-check';
+                        if (globalRowIndex % 2 !== 0) cell.classList.add('row-alt');
+                        if (isLastInGroup && !isLastGroup) cell.classList.add('perm-row-last-in-group');
+                        const input = document.createElement('input');
+                        input.type = 'checkbox';
+                        input.className = 'perm-checkbox';
+                        input.dataset.rank = rank;
+                        input.dataset.key = perm.key;
+                        input.checked = !!rankData[perm.key];
+                        cell.appendChild(input);
+                        rowCells.push(cell);
+                        grid.appendChild(cell);
+                    });
+
+                    rowCells.forEach(cell => {
+                        cell.addEventListener('mouseenter', () => {
+                            rowCells.forEach(c => c.classList.add('row-hovered'));
+                            featureCell.classList.add('perm-feature-hovered');
+                        });
+                        cell.addEventListener('mouseleave', () => {
+                            rowCells.forEach(c => c.classList.remove('row-hovered'));
+                            featureCell.classList.remove('perm-feature-hovered');
+                        });
+                    });
+
+                    globalRowIndex++;
                 });
+            }
 
-                return tr;
-            }));
+            matrixEl.replaceChildren(grid);
         }
     } catch (error) {
         console.error('Error loading settings:', error);
