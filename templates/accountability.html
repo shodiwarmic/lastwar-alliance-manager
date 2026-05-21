@@ -134,13 +134,16 @@
             <input type="hidden" id="strike-member-id">
         </div>
         <div class="form-group">
-            <label for="strike-type">Type</label>
+            <label for="strike-type">Category</label>
             <select id="strike-type" class="form-input">
+                <option value="">— select —</option>
                 <option value="vs_below_threshold">VS Below Threshold</option>
                 <option value="train_no_show">Train No-Show</option>
                 <option value="storm_no_show">Storm No-Show</option>
-                <option value="manual">Manual</option>
+                <option value="__custom__">Manual</option>
             </select>
+            <input type="text" id="strike-type-custom" class="form-input"
+                   placeholder="Enter category" style="display:none;margin-top:6px;">
         </div>
         <div class="form-group">
             <label for="strike-reason">Reason</label>

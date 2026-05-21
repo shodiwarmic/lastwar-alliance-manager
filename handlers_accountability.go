@@ -565,6 +565,38 @@ func handleAccountabilityReportData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(report)
 }
 
+// --- API: distinct strike types (for modal dropdown) ---
+
+func handleStrikeTypes(w http.ResponseWriter, r *http.Request) {
+	data := getPageData(r, "", "")
+	if !data.IsAuthenticated || !data.Permissions.ViewAccountability {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	rows, err := db.Query(`SELECT DISTINCT strike_type FROM accountability_strikes ORDER BY strike_type`)
+	if err != nil {
+		slog.Error("handleStrikeTypes: query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	types := []string{}
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			slog.Error("handleStrikeTypes: scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		types = append(types, t)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(types)
+}
+
 // --- API: strike CRUD ---
 
 func handleStrikeCreate(w http.ResponseWriter, r *http.Request) {

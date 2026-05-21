@@ -134,6 +134,7 @@ func main() {
 	router.HandleFunc("/accountability/{id:[0-9]+}", authMiddleware(handleAccountabilityProfile)).Methods("GET")
 	router.HandleFunc("/api/accountability/summary", authMiddleware(handleAccountabilitySummary)).Methods("GET")
 	router.HandleFunc("/api/accountability/strikes", authMiddleware(handleAllStrikes)).Methods("GET")
+	router.HandleFunc("/api/accountability/strike-types", authMiddleware(handleStrikeTypes)).Methods("GET")
 	router.HandleFunc("/api/accountability/storm-attendance", authMiddleware(handleStormAttendanceForDate)).Methods("GET")
 	router.HandleFunc("/api/accountability/members", authMiddleware(handleAccountabilityMembers)).Methods("GET")
 	router.HandleFunc("/api/accountability/members/{id:[0-9]+}", authMiddleware(handleAccountabilityMemberProfile)).Methods("GET")

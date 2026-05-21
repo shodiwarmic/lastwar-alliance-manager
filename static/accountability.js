@@ -24,7 +24,8 @@ function strikeTypeLabel(t) {
         case 'vs_below_threshold': return 'VS Below Min';
         case 'train_no_show':      return 'Train No-Show';
         case 'storm_no_show':      return 'Storm No-Show';
-        default:                   return 'Manual';
+        case 'manual':             return 'Manual';
+        default:                   return t;
     }
 }
 
@@ -78,7 +79,10 @@ let strikeRefDateFP = null;
 function openStrikeModal(memberID, memberName, preType) {
     document.getElementById('strike-member-id').value = memberID;
     document.getElementById('strike-member-name').value = memberName;
-    if (preType) document.getElementById('strike-type').value = preType;
+    const typeSelect = document.getElementById('strike-type');
+    typeSelect.value = preType || '';
+    document.getElementById('strike-type-custom').style.display = 'none';
+    document.getElementById('strike-type-custom').value = '';
     document.getElementById('strike-reason').value = '';
     strikeRefDateFP.clear(false);
     document.getElementById('strike-modal-status').textContent = '';
@@ -93,12 +97,28 @@ function closeStrikeModal() {
     strikeModal.style.display = '';
 }
 
+function registerCustomStrikeType(value) {
+    const select = document.getElementById('strike-type');
+    for (const opt of select.options) {
+        if (opt.value === value) return;
+    }
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value;
+    select.insertBefore(opt, select.querySelector('option[value="__custom__"]'));
+}
+
 async function saveStrike() {
     const memberID   = parseInt(document.getElementById('strike-member-id').value, 10);
-    const strikeType = document.getElementById('strike-type').value;
-    const reason     = document.getElementById('strike-reason').value.trim();
-    const refDate    = document.getElementById('strike-ref-date').value;
-    const status     = document.getElementById('strike-modal-status');
+    const typeSelect = document.getElementById('strike-type');
+    const isCustom   = typeSelect.value === '__custom__';
+    const strikeType = isCustom
+        ? document.getElementById('strike-type-custom').value.trim()
+        : typeSelect.value;
+    const reason   = document.getElementById('strike-reason').value.trim();
+    const refDate  = document.getElementById('strike-ref-date').value;
+    const status   = document.getElementById('strike-modal-status');
+    if (!strikeType) { status.textContent = 'Category is required.'; return; }
     if (!reason) { status.textContent = 'Reason is required.'; return; }
 
     const res = await fetch('/api/accountability/strikes', {
@@ -107,6 +127,7 @@ async function saveStrike() {
         body: JSON.stringify({ member_id: memberID, strike_type: strikeType, reason, ref_date: refDate }),
     });
     if (!res.ok) { status.textContent = 'Failed to save strike.'; return; }
+    if (isCustom) registerCustomStrikeType(strikeType);
     closeStrikeModal();
     loadMembers();
     strikesLoaded = false; // invalidate cache so next tab-switch refetches
@@ -630,6 +651,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('member-search').addEventListener('input', loadMembers);
 
     if (CAN_MANAGE) {
+        fetch('/api/accountability/strike-types')
+            .then(r => r.ok ? r.json() : [])
+            .then(types => types.forEach(t => registerCustomStrikeType(t)))
+            .catch(() => {});
+
+        document.getElementById('strike-type').addEventListener('change', function () {
+            const customInput = document.getElementById('strike-type-custom');
+            customInput.style.display = this.value === '__custom__' ? '' : 'none';
+            if (this.value === '__custom__') customInput.focus();
+        });
+
         document.getElementById('btn-strike-save').addEventListener('click', saveStrike);
         document.getElementById('btn-strike-cancel').addEventListener('click', closeStrikeModal);
 
