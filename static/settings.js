@@ -165,18 +165,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             if (!isR5OrAdmin) {
                 showSettingsStatus('You do not have permission to modify settings.', false);
                 return;
             }
-            
+
+            // Fetch current settings first so fields not owned by this form
+            // (e.g. schedule defaults) are preserved and not zeroed out.
+            let currentSettings = {};
+            try {
+                const r = await fetch(SETTINGS_URL);
+                if (r.ok) currentSettings = await r.json();
+            } catch {}
+
             const selectedZones = Array.from(document.querySelectorAll('.tz-checkbox:checked'))
                 .map(cb => cb.value).join(',');
-    
-            const settings = {
-                schedule_message_template: "",
-                daily_message_template: "",
+
+            const settings = Object.assign({}, currentSettings, {
                 login_message: document.getElementById('settings-login-message').value,
                 max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
@@ -190,7 +196,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 vs_minimum_points: parseInt(document.getElementById('vs-minimum-points').value, 10) || 2500000,
                 strike_needs_improvement_threshold: parseInt(document.getElementById('strike-needs-improvement-threshold').value, 10) || 1,
                 strike_at_risk_threshold: parseInt(document.getElementById('strike-at-risk-threshold').value, 10) || 3,
-            };
+            });
 
             const newMatrix = ['R5', 'R4', 'R3', 'R2', 'R1'].map(rank => {
                 const obj = { rank: rank };
