@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -686,6 +687,97 @@ func addHeroPowerRecord(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func getKillHistory(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query(`
+		SELECT
+			m.id, m.name, m.rank,
+			COALESCE((SELECT kills FROM kill_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as current_kills,
+			COALESCE((SELECT kills FROM kill_history WHERE member_id = m.id AND recorded_at <= datetime('now', '-7 days') ORDER BY recorded_at DESC LIMIT 1), 0) as kills_7d,
+			COALESCE((SELECT kills FROM kill_history WHERE member_id = m.id AND recorded_at <= datetime('now', '-30 days') ORDER BY recorded_at DESC LIMIT 1), 0) as kills_30d,
+			COALESCE((SELECT recorded_at FROM kill_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as last_recorded_at
+		FROM members m
+		WHERE m.rank != 'EX'
+		  AND EXISTS (SELECT 1 FROM kill_history WHERE member_id = m.id)
+		ORDER BY current_kills DESC
+	`)
+	if err != nil {
+		slog.Error("Failed to query kill history", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var result []KillCount
+	for rows.Next() {
+		var k KillCount
+		var kills7d, kills30d int64
+		if err := rows.Scan(&k.MemberID, &k.MemberName, &k.MemberRank, &k.CurrentKills, &kills7d, &kills30d, &k.LastRecordedAt); err != nil {
+			slog.Error("Failed to scan kill history row", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if kills7d > 0 {
+			delta := k.CurrentKills - kills7d
+			k.KillsDelta7d = &delta
+		}
+		if kills30d > 0 {
+			delta := k.CurrentKills - kills30d
+			k.KillsDelta30d = &delta
+		}
+		result = append(result, k)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func postKillHistory(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		MemberID int   `json:"member_id"`
+		Kills    int64 `json:"kills"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	var memberRank string
+	err := db.QueryRow("SELECT rank FROM members WHERE id = ?", request.MemberID).Scan(&memberRank)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		slog.Error("Failed to look up member for kill history", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if memberRank == "EX" {
+		http.Error(w, "Cannot record kills for archived members", http.StatusBadRequest)
+		return
+	}
+
+	result, err := db.Exec("INSERT INTO kill_history (member_id, kills) VALUES (?, ?)", request.MemberID, request.Kills)
+	if err != nil {
+		slog.Error("Failed to insert kill history record", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	id, _ := result.LastInsertId()
+
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "updated", "kill_count", "troop kill record", false)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Kill count record added successfully",
+		"id":      id,
+	})
+}
+
 // Process images with automatic bucketing via Cloud Run Worker
 func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(50 << 20)
@@ -766,7 +858,9 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 		}
 
 		summary := "Power Rankings"
-		if activeCategory != "power" {
+		if activeCategory == "kills" {
+			summary = "Troop Kills"
+		} else if activeCategory != "power" {
 			summary = fmt.Sprintf("VS Points (%s)", strings.Title(activeCategory))
 		}
 
@@ -796,11 +890,7 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 				payloadMap[record.PlayerName] = row
 			}
 
-			if activeCategory == "power" {
-				row.UpdatedFields["power"] = int(resolvedScore)
-			} else {
-				row.UpdatedFields[activeCategory] = int(resolvedScore)
-			}
+			row.UpdatedFields[activeCategory] = int(resolvedScore)
 		}
 	}
 

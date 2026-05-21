@@ -33,6 +33,8 @@ type Member struct {
 	SquadPowerUpdatedAt string `json:"squad_power_updated_at"`
 	HeroPower           *int64 `json:"hero_power"`
 	HeroPowerUpdatedAt  string `json:"hero_power_updated_at"`
+	CurrentKills        *int64 `json:"current_kills"`
+	KillsUpdatedAt      string `json:"kills_updated_at"`
 	TroopLevel          int    `json:"troop_level"`
 	Profession          string `json:"profession"`
 	GlobalAliases       string `json:"global_aliases"`
@@ -89,6 +91,23 @@ type HeroPowerHistory struct {
 	MemberID   int    `json:"member_id"`
 	Power      int64  `json:"power"`
 	RecordedAt string `json:"recorded_at"`
+}
+
+type KillHistory struct {
+	ID         int    `json:"id"`
+	MemberID   int    `json:"member_id"`
+	Kills      int64  `json:"kills"`
+	RecordedAt string `json:"recorded_at"`
+}
+
+type KillCount struct {
+	MemberID       int    `json:"member_id"`
+	MemberName     string `json:"member_name"`
+	MemberRank     string `json:"member_rank"`
+	CurrentKills   int64  `json:"current_kills"`
+	KillsDelta7d   *int64 `json:"kills_delta_7d"`
+	KillsDelta30d  *int64 `json:"kills_delta_30d"`
+	LastRecordedAt string `json:"last_recorded_at"`
 }
 
 type MemberStats struct {

@@ -43,6 +43,14 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 				FROM hero_power_history
 			) WHERE rn = 1
 		),
+		latest_kills AS (
+			SELECT member_id, kills, recorded_at
+			FROM (
+				SELECT member_id, kills, recorded_at,
+					ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY recorded_at DESC) as rn
+				FROM kill_history
+			) WHERE rn = 1
+		),
 		global_aliases AS (
 			SELECT member_id, GROUP_CONCAT(alias, ', ') as aliases
 			FROM member_aliases WHERE category = 'global'
@@ -64,11 +72,14 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			   COALESCE(pa.aliases, '') as personal_aliases,
 			   COALESCE(m.notes, '') as notes,
 			   COALESCE(lhp.power, 0) as latest_hero_power,
-			   COALESCE(lhp.recorded_at, '') as latest_hero_power_date
+			   COALESCE(lhp.recorded_at, '') as latest_hero_power_date,
+			   COALESCE(lk.kills, 0) as latest_kills,
+			   COALESCE(lk.recorded_at, '') as latest_kills_date
 		FROM members m
 		LEFT JOIN latest_power lp ON lp.member_id = m.id
 		LEFT JOIN latest_squad_power lsp ON lsp.member_id = m.id
 		LEFT JOIN latest_hero_power lhp ON lhp.member_id = m.id
+		LEFT JOIN latest_kills lk ON lk.member_id = m.id
 		LEFT JOIN global_aliases ga ON ga.member_id = m.id
 		LEFT JOIN personal_aliases pa ON pa.member_id = m.id
 		WHERE m.rank != 'EX'
@@ -90,6 +101,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			&m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt,
 			&m.HasUser, &m.GlobalAliases, &m.PersonalAliases, &m.Notes,
 			&m.HeroPower, &m.HeroPowerUpdatedAt,
+			&m.CurrentKills, &m.KillsUpdatedAt,
 		); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -141,6 +153,10 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 
 	if m.HeroPower != nil && *m.HeroPower > 0 {
 		tx.Exec(`INSERT INTO hero_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.HeroPower)
+	}
+
+	if m.CurrentKills != nil && *m.CurrentKills > 0 {
+		tx.Exec(`INSERT INTO kill_history (member_id, kills, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.CurrentKills)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -271,6 +287,15 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Handle Kill Count History
+	if m.CurrentKills != nil && *m.CurrentKills > 0 {
+		var currentKills int64 = -1
+		_ = db.QueryRow(`SELECT kills FROM kill_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentKills)
+		if currentKills != *m.CurrentKills {
+			db.Exec(`INSERT INTO kill_history (member_id, kills, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.CurrentKills)
+		}
+	}
+
 	m.ID = id
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(m)
@@ -301,6 +326,10 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 
 	if _, err = db.Exec("DELETE FROM hero_power_history WHERE member_id = ?", id); err != nil {
 		slog.Error("Failed to delete hero power history for member", "member_id", id, "error", err)
+	}
+
+	if _, err = db.Exec("DELETE FROM kill_history WHERE member_id = ?", id); err != nil {
+		slog.Error("Failed to delete kill history for member", "member_id", id, "error", err)
 	}
 
 	if _, err = db.Exec("DELETE FROM members WHERE id = ?", id); err != nil {
@@ -771,6 +800,7 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 			db.Exec("DELETE FROM power_history WHERE member_id = ?", id)
 			db.Exec("DELETE FROM squad_power_history WHERE member_id = ?", id)
 			db.Exec("DELETE FROM hero_power_history WHERE member_id = ?", id)
+			db.Exec("DELETE FROM kill_history WHERE member_id = ?", id)
 			db.Exec("DELETE FROM members WHERE id = ?", id)
 			result.Removed++
 		}
@@ -851,9 +881,11 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 			COALESCE(m.troop_level, 0),
 			COALESCE(m.profession, ''),
 			(SELECT power FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as hero_power,
-			COALESCE((SELECT recorded_at FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as hero_power_updated_at
+			COALESCE((SELECT recorded_at FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as hero_power_updated_at,
+			COALESCE((SELECT kills FROM kill_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as current_kills,
+			COALESCE((SELECT recorded_at FROM kill_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as kills_updated_at
 		FROM members m WHERE m.id = ?`, memberID).
-		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.HeroPower, &m.HeroPowerUpdatedAt)
+		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.HeroPower, &m.HeroPowerUpdatedAt, &m.CurrentKills, &m.KillsUpdatedAt)
 
 	if err != nil {
 		log.Printf("Profile Fetch Error: %v", err)
@@ -875,14 +907,15 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 	memberID := *user.MemberID
 
 	var req struct {
-		Name       string `json:"name"`
-		Level      int    `json:"level"`
-		Power      int64  `json:"power"`
-		TroopLevel int    `json:"troop_level"`
-		SquadType  string `json:"squad_type"`
-		SquadPower int64  `json:"squad_power"`
-		HeroPower  int64  `json:"hero_power"`
-		Profession string `json:"profession"`
+		Name         string `json:"name"`
+		Level        int    `json:"level"`
+		Power        int64  `json:"power"`
+		TroopLevel   int    `json:"troop_level"`
+		SquadType    string `json:"squad_type"`
+		SquadPower   int64  `json:"squad_power"`
+		HeroPower    int64  `json:"hero_power"`
+		CurrentKills int64  `json:"current_kills"`
+		Profession   string `json:"profession"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -937,6 +970,9 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.HeroPower > 0 {
 		db.Exec(`INSERT INTO hero_power_history (member_id, power) VALUES (?, ?)`, memberID, req.HeroPower)
+	}
+	if req.CurrentKills > 0 {
+		db.Exec(`INSERT INTO kill_history (member_id, kills) VALUES (?, ?)`, memberID, req.CurrentKills)
 	}
 
 	var profileChanges []string

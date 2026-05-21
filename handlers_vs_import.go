@@ -99,12 +99,17 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 		hasVSPoints := false
 		var powerVal int
 		hasPower := false
+		var killsVal int
+		hasKills := false
 
-		// Separate power from VS points
+		// Separate power / kills from VS points
 		for day, val := range row.UpdatedFields {
 			if day == "power" {
 				hasPower = true
 				powerVal = val
+			} else if day == "kills" {
+				hasKills = true
+				killsVal = val
 			} else {
 				hasVSPoints = true
 			}
@@ -115,6 +120,16 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 			_, err = tx.Exec("INSERT INTO power_history (member_id, power) VALUES (?, ?)", row.MatchedMember.ID, powerVal)
 			if err != nil {
 				dbErrors = append(dbErrors, fmt.Sprintf("Power Error (%s): %v", row.OriginalName, err))
+			} else {
+				successCount++
+			}
+		}
+
+		// Save Kill Count Record
+		if hasKills {
+			_, err = tx.Exec("INSERT INTO kill_history (member_id, kills) VALUES (?, ?)", row.MatchedMember.ID, killsVal)
+			if err != nil {
+				dbErrors = append(dbErrors, fmt.Sprintf("Kill Count Error (%s): %v", row.OriginalName, err))
 			} else {
 				successCount++
 			}
@@ -131,7 +146,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 				vals := []interface{}{row.MatchedMember.ID, req.WeekDate}
 
 				for day, val := range row.UpdatedFields {
-					if day == "power" {
+					if day == "power" || day == "kills" {
 						continue
 					}
 					cols = append(cols, day)
@@ -146,7 +161,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 				var updates []string
 				var vals []interface{}
 				for day, val := range row.UpdatedFields {
-					if day == "power" {
+					if day == "power" || day == "kills" {
 						continue
 					}
 					updates = append(updates, day+" = ?")
@@ -163,8 +178,8 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 
 			if vsErr != nil {
 				dbErrors = append(dbErrors, fmt.Sprintf("VS Points Error (%s): %v", row.OriginalName, vsErr))
-			} else if !hasPower {
-				// Only increment success if it wasn't already incremented by a successful power insert
+			} else if !hasPower && !hasKills {
+				// Only increment success if it wasn't already incremented by power/kills inserts
 				successCount++
 			}
 		}

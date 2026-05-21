@@ -382,6 +382,8 @@ func main() {
 
 	router.HandleFunc("/api/hero-power-history", authMiddleware(getHeroPowerHistory)).Methods("GET")
 	router.HandleFunc("/api/hero-power-history", authMiddleware(requirePermission("manage_members", addHeroPowerRecord))).Methods("POST")
+	router.HandleFunc("/api/kill-history", authMiddleware(getKillHistory)).Methods("GET")
+	router.HandleFunc("/api/kill-history", authMiddleware(requirePermission("manage_members", postKillHistory))).Methods("POST")
 
 	router.HandleFunc("/api/smart-screenshot", authMiddleware(processSmartScreenshot)).Methods("POST")
 
