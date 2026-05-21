@@ -11,6 +11,7 @@
     <div class="tabs" style="margin-bottom: 20px;">
         <button class="tab-button active" id="tab-btn-growth">📈 Commander Growth</button>
         <button class="tab-button" id="tab-btn-vs">⚔️ VS Duel Activity</button>
+        <button class="tab-button" id="tab-btn-kills">💀 Troop Kills</button>
     </div>
 
     <div id="tab-growth" class="tab-content active">
@@ -94,6 +95,35 @@
                     </thead>
                     <tbody id="vs-tbody">
                         <tr><td colspan="9" class="loading">Loading VS data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+    <div id="tab-kills" class="tab-content">
+        <section class="rankings-section">
+            <h3>💀 Troop Kills Leaderboard</h3>
+            <div class="filter-controls">
+                <div class="filter-group">
+                    <label for="kills-search">🔍 Search:</label>
+                    <input type="text" id="kills-search" placeholder="Commander name...">
+                </div>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table class="analytics-table" id="kills-table" data-export-csv="troop-kills.csv">
+                    <thead>
+                        <tr>
+                            <th>Commander</th>
+                            <th>Rank</th>
+                            <th>Total Kills</th>
+                            <th>7-Day Delta</th>
+                            <th>30-Day Delta</th>
+                            <th>Last Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="kills-tbody">
+                        <tr><td colspan="6" class="loading">Loading kill data...</td></tr>
                     </tbody>
                 </table>
             </div>

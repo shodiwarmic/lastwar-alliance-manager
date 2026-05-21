@@ -9,6 +9,7 @@ let charts = {
 
 let rawGrowthData = [];
 let allVsData = [];
+let rawKillData = [];
 
 // --- Global Chart.js Styling ---
 // This ensures the charts match your app's typography and adapt to light/dark themes
@@ -27,6 +28,99 @@ function switchTab(tabId) {
 
     document.getElementById(`tab-btn-${tabId}`).classList.add('active');
     document.getElementById(`tab-${tabId}`).classList.add('active');
+}
+
+// --- Tab 3: Troop Kills ---
+async function loadKillData() {
+    try {
+        const response = await fetch(`${API_BASE}/kill-history`);
+        if (!response.ok) throw new Error('Failed to load kill data');
+
+        rawKillData = await response.json() || [];
+        renderKillTable(rawKillData);
+    } catch (error) {
+        console.error('Error:', error);
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6;
+        td.className = 'error';
+        td.textContent = 'Failed to load data.';
+        tr.appendChild(td);
+        document.getElementById('kills-tbody').replaceChildren(tr);
+    }
+}
+
+function formatKillDelta(delta) {
+    const span = document.createElement('span');
+    if (delta === null || delta === undefined) {
+        span.className = 'neutral-growth';
+        span.textContent = '—';
+    } else if (delta > 0) {
+        span.className = 'positive-growth';
+        span.textContent = '+' + formatNumber(delta);
+    } else if (delta < 0) {
+        span.style.color = 'var(--color-danger)';
+        span.textContent = formatNumber(delta);
+    } else {
+        span.className = 'neutral-growth';
+        span.textContent = '0';
+    }
+    return span;
+}
+
+function buildKillRow(k) {
+    const tr = document.createElement('tr');
+
+    const tdName = document.createElement('td');
+    const strong = document.createElement('strong');
+    strong.textContent = k.member_name;
+    tdName.appendChild(strong);
+
+    const tdRank = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = `member-rank rank-${k.member_rank}`;
+    badge.textContent = k.member_rank;
+    tdRank.appendChild(badge);
+
+    const tdKills = document.createElement('td');
+    tdKills.style.fontWeight = '600';
+    tdKills.style.color = 'var(--color-danger)';
+    tdKills.textContent = formatNumber(k.current_kills);
+
+    const td7d = document.createElement('td');
+    td7d.appendChild(formatKillDelta(k.kills_delta_7d));
+
+    const td30d = document.createElement('td');
+    td30d.appendChild(formatKillDelta(k.kills_delta_30d));
+
+    const tdDate = document.createElement('td');
+    tdDate.style.color = 'var(--text-muted)';
+    tdDate.style.fontSize = '0.9em';
+    if (k.last_recorded_at) {
+        const d = new Date(k.last_recorded_at.replace(' ', 'T') + 'Z');
+        tdDate.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    } else {
+        tdDate.textContent = '—';
+    }
+
+    tr.append(tdName, tdRank, tdKills, td7d, td30d, tdDate);
+    return tr;
+}
+
+function renderKillTable(data) {
+    const tbody = document.getElementById('kills-tbody');
+    if (!data || data.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6;
+        td.className = 'empty';
+        td.style.cssText = 'text-align: center; padding: 20px;';
+        td.textContent = 'No kill data recorded yet.';
+        tr.appendChild(td);
+        tbody.replaceChildren(tr);
+        return;
+    }
+    tbody.replaceChildren(...data.map(buildKillRow));
 }
 
 // --- Utility Formatters ---
@@ -396,12 +490,20 @@ function renderVSWeek(weekDate) {
     document.getElementById('vs-tbody').replaceChildren(...weekData.map(buildVSRow));
 }
 
+document.getElementById('kills-search')?.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    const filtered = rawKillData.filter(k => k.member_name.toLowerCase().includes(term));
+    renderKillTable(filtered);
+});
+
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('tab-growth')) {
         document.getElementById('tab-btn-growth').addEventListener('click', () => switchTab('growth'));
         document.getElementById('tab-btn-vs').addEventListener('click', () => switchTab('vs'));
+        document.getElementById('tab-btn-kills').addEventListener('click', () => switchTab('kills'));
         loadGrowthData();
         loadVSData();
+        loadKillData();
     }
 });

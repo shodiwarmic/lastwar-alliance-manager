@@ -422,6 +422,16 @@ function buildMemberCard(member) {
         info.appendChild(span);
     }
 
+    // Troop Kills
+    if (member.current_kills > 0) {
+        const span = document.createElement('span');
+        span.className = 'member-power';
+        span.style.cssText = 'margin-left:10px;';
+        span.title = `Troop Kills: ${member.current_kills.toLocaleString()}`;
+        span.textContent = `💀 ${formatPower(member.current_kills)}`;
+        info.appendChild(span);
+    }
+
     // Eligible status (view only)
     if (canViewTrain) {
         const eligible = member.eligible !== false;
@@ -447,7 +457,8 @@ function buildMemberCard(member) {
             member.level || 0, member.squad_type || '',
             member.squad_power || 0, member.squad_power_updated_at || '',
             member.troop_level || 0, member.profession || '', member.notes || '',
-            member.hero_power || 0, member.hero_power_updated_at || ''
+            member.hero_power || 0, member.hero_power_updated_at || '',
+            member.current_kills || 0, member.kills_updated_at || ''
         ));
         actions.appendChild(editBtn);
 
@@ -513,6 +524,9 @@ async function handleMemberFormSubmit(e) {
     const heroPowerInput = document.getElementById('member-hero-power');
     const hero_power = (heroPowerInput && heroPowerInput.value !== '') ? parseInt(heroPowerInput.value, 10) : 0;
 
+    const killCountInput = document.getElementById('member-kill-count');
+    const current_kills = (killCountInput && killCountInput.value !== '') ? parseInt(killCountInput.value, 10) : 0;
+
     const notesInput = document.getElementById('member-notes');
     const notes = (notesInput && canManageRanks) ? notesInput.value.trim() : '';
 
@@ -526,7 +540,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, notes }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes }),
             });
             if (!response.ok) throw new Error('Failed to update member');
             editingMemberId = null;
@@ -534,7 +548,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, notes }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes }),
             });
             if (!response.ok) {
                 if (response.status === 403) throw new Error('Permission denied');
@@ -563,7 +577,7 @@ function showModalStatus(msg) {
     el._timer = setTimeout(() => { el.textContent = ''; }, 5000);
 }
 
-window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0, squadType = '', squadPower = 0, squadPowerUpdatedAt = '', troopLevel = 0, profession = '', notes = '', heroPower = 0, heroPowerUpdatedAt = '') {
+window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0, squadType = '', squadPower = 0, squadPowerUpdatedAt = '', troopLevel = 0, profession = '', notes = '', heroPower = 0, heroPowerUpdatedAt = '', currentKills = 0, killsUpdatedAt = '') {
     if (!canManageRanks) return;
     editingMemberId = id;
 
@@ -630,6 +644,19 @@ window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedA
             heroTimestampText.textContent = `Last updated: ${updatedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
         } else {
             heroTimestampText.textContent = 'Last updated: Never';
+        }
+    }
+
+    const killCountInput = document.getElementById('member-kill-count');
+    if (killCountInput) killCountInput.value = (currentKills && currentKills > 0) ? currentKills : '';
+
+    const killTimestampText = document.getElementById('modal-kill-count-timestamp');
+    if (killTimestampText) {
+        if (killsUpdatedAt) {
+            const updatedDate = new Date(killsUpdatedAt.replace(' ', 'T') + 'Z');
+            killTimestampText.textContent = `Last updated: ${updatedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+        } else {
+            killTimestampText.textContent = 'Last updated: Never';
         }
     }
 

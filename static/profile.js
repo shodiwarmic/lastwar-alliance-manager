@@ -110,6 +110,7 @@ async function loadGameStats() {
             document.getElementById('stat-squad-power').value = data.squad_power || '';
             document.getElementById('stat-profession').value = data.profession || '';
             document.getElementById('stat-hero-power').value = data.hero_power || '';
+            document.getElementById('stat-kill-count').value = data.current_kills || '';
 
             const fmt = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' };
             function setTimestamp(id, raw) {
@@ -120,6 +121,7 @@ async function loadGameStats() {
             setTimestamp('stat-power-timestamp', data.power_updated_at);
             setTimestamp('stat-squad-power-timestamp', data.squad_power_updated_at);
             setTimestamp('stat-hero-power-timestamp', data.hero_power_updated_at);
+            setTimestamp('stat-kill-count-timestamp', data.kills_updated_at);
 
             // Run enforcement immediately on load
             enforceTroopLevel();
@@ -270,6 +272,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             squad_type: document.getElementById('stat-squad-type').value,
                             squad_power: parseInt(document.getElementById('stat-squad-power').value) || 0,
                             hero_power: parseInt(document.getElementById('stat-hero-power').value) || 0,
+                            current_kills: parseInt(document.getElementById('stat-kill-count').value) || 0,
                             profession: document.getElementById('stat-profession').value
                         })
                     });

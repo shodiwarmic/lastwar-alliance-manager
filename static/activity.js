@@ -31,6 +31,7 @@ const ENTITY_LABELS = {
     invite:           'invite',
     vs_points:        'VS points',
     power_records:    'power records',
+    kill_count:       'Troop Kills',
     permissions:      'permissions',
     settings:              'settings',
     credentials:           'credentials',
