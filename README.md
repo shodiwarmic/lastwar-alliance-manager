@@ -208,6 +208,12 @@ The application relies on a `.env` file in the root directory:
 
 ---
 
+## Credits & Acknowledgements
+
+This project originated as a fork of [`vervelak/lastwar-alliance-manager`](https://github.com/vervelak/lastwar-alliance-manager). The original repository provided the foundation that this project was built upon, and we are grateful to its author for starting it. The codebases have since diverged significantly — features, architecture, and deployment have all evolved independently — but the original work deserves full credit for getting this started.
+
+---
+
 ## Security Architecture
 
 - **Encrypted Credentials**: External API credentials (like GCP Service Accounts) are symmetrically encrypted at rest using AES-GCM. The application employs strict memory hygiene, zeroing out sensitive plaintext buffers immediately after cryptographic operations or API transmissions to prevent memory scraping.
