@@ -37,29 +37,26 @@
 
                     <div class="filter-sort-top">
                         <div class="member-search-wrap">
-                            <input type="text" id="search-input" class="form-input" placeholder="Search by name or rank...">
+                            <input type="text" id="search-input" class="form-input" placeholder="Search members...">
                             <button id="clear-search" style="display: none;">✖</button>
-                        </div>
-                        <div class="filter-sort-right">
-                            <select id="sort-by" class="form-input sort-select">
-                                <option value="name-asc">Name (A-Z)</option>
-                                <option value="name-desc">Name (Z-A)</option>
-                                <option value="rank-desc">Rank (High to Low)</option>
-                                <option value="power-desc" class="power-sort-option" style="display: none;">Power (Highest First)</option>
-                                <option value="power-asc" class="power-sort-option" style="display: none;">Power (Lowest First)</option>
-                                <option value="squad-power-desc" class="squad-sort-option" style="display: none;">Squad Power (Highest First)</option>
-                                <option value="squad-power-asc" class="squad-sort-option" style="display: none;">Squad Power (Lowest First)</option>
-                            </select>
-                            <label id="filter-eligible-wrapper">
-                                <input type="checkbox" id="filter-eligible">
-                                Eligible Only
-                            </label>
                         </div>
                     </div>
 
                     <hr class="filter-sort-divider">
 
                     <div class="filter-sort-grid">
+
+                        <div class="filter-row" id="sort-chips-row" style="grid-column: 1 / -1">
+                            <span class="filter-chip-label">Sort:</span>
+                            <button class="filter-chip sort-chip active" data-sort="name">Name ↑</button>
+                            <button class="filter-chip sort-chip" data-sort="rank">Rank</button>
+                            <button class="filter-chip sort-chip power-sort-option" data-sort="power" style="display:none">Power</button>
+                            <button class="filter-chip sort-chip" data-sort="hq">HQ</button>
+                            <button class="filter-chip sort-chip" data-sort="hero_power">Hero Power</button>
+                            <button class="filter-chip sort-chip" data-sort="kills">Kills</button>
+                            <button class="filter-chip sort-chip squad-sort-option" data-sort="squad_power" style="display:none">Squad Power</button>
+                        </div>
+
                         <div class="filter-row">
                             <span class="filter-chip-label">Rank:</span>
                             <button class="filter-chip rank-chip active" data-rank="all">All</button>
@@ -89,7 +86,7 @@
                             </div>
                         </div>
 
-                        <div class="filter-row">
+                        <div class="filter-row" style="grid-column: 1 / -1">
                             <span class="filter-chip-label">Troops:</span>
                             <button class="filter-chip troop-chip active" data-troop="all">All</button>
                             <button class="filter-chip troop-chip" data-troop="11">T11</button>
@@ -104,6 +101,14 @@
                             <button class="filter-chip troop-chip" data-troop="2">T2</button>
                             <button class="filter-chip troop-chip" data-troop="1">T1</button>
                         </div>
+
+                        <div class="filter-row" id="eligible-filter-row" style="display:none; grid-column: 1 / -1">
+                            <span class="filter-chip-label">Status:</span>
+                            <button class="filter-chip eligible-chip active" data-eligible="all">All</button>
+                            <button class="filter-chip eligible-chip" data-eligible="eligible">Eligible</button>
+                            <button class="filter-chip eligible-chip" data-eligible="not-eligible">Not Eligible</button>
+                        </div>
+
                     </div>
                 </div>
 
@@ -294,5 +299,6 @@
     data-view-train="{{if .Permissions.ViewTrain}}true{{else}}false{{end}}"
     data-manage-train="{{if .Permissions.ManageTrain}}true{{else}}false{{end}}"
     hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 <script src="/members.js"></script>
 {{end}}

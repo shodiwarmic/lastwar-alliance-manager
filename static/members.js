@@ -13,6 +13,14 @@ let allMembers = [];
 let isPowerTrackingEnabled = false;
 let isSquadTrackingEnabled = false;
 let currentMaxHQ = 35;
+let sortField = 'name';
+let sortDir = 'asc';
+let fuseInstance = null;
+
+const SORT_DEFAULTS = {
+    name: 'asc', rank: 'desc', power: 'desc',
+    hq: 'desc', hero_power: 'desc', kills: 'desc', squad_power: 'desc',
+};
 
 // Define the HQ requirements for each Troop Tier
 const TROOP_HQ_REQ = { 1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35 };
@@ -26,10 +34,8 @@ function fetchPermissions() {
     canViewTrain = cfg.viewTrain === 'true';
     canManageTrain = cfg.manageTrain === 'true';
 
-    const filterEligibleWrapper = document.getElementById('filter-eligible-wrapper');
-    if (filterEligibleWrapper) {
-        filterEligibleWrapper.style.display = canViewTrain ? 'flex' : 'none';
-    }
+    const eligibleRow = document.getElementById('eligible-filter-row');
+    if (eligibleRow) eligibleRow.style.display = canViewTrain ? 'flex' : 'none';
 
     const modalEligibleWrapper = document.getElementById('modal-eligible-wrapper');
     if (modalEligibleWrapper) {
@@ -56,8 +62,14 @@ async function fetchSettings() {
 
             // Hide/Show squad sorting and filtering options globally
             document.querySelectorAll('.squad-sort-option').forEach(el => {
-                el.style.display = isSquadTrackingEnabled ? 'block' : 'none';
+                el.style.display = isSquadTrackingEnabled ? '' : 'none';
             });
+            const activeSortChip = document.querySelector('.sort-chip.active');
+            if (activeSortChip && activeSortChip.style.display === 'none') {
+                sortField = 'name';
+                sortDir = 'asc';
+                updateSortChips();
+            }
 
             // Dynamically hide ANY troop tier that exceeds the server's Max HQ setting
             Object.entries(TROOP_HQ_REQ).forEach(([tier, reqHQ]) => {
@@ -102,23 +114,22 @@ window.updateTroopLevelOptions = function () {
 };
 
 function updateDisplayedMembers() {
-    const searchTerm = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
-    const eligibleOnly = document.getElementById('filter-eligible')?.checked || false;
-    const sortBy = document.getElementById('sort-by')?.value || 'name-asc';
+    const searchTerm = (document.getElementById('search-input')?.value || '').trim();
+
+    let base;
+    if (searchTerm.length > 0 && fuseInstance) {
+        base = fuseInstance.search(searchTerm).map(r => r.item);
+    } else {
+        base = [...allMembers];
+    }
 
     const activeRanks = Array.from(document.querySelectorAll('.rank-chip.active')).map(c => c.dataset.rank);
     const activeProfs = Array.from(document.querySelectorAll('.prof-chip.active')).map(c => c.dataset.prof);
     const activeSquads = Array.from(document.querySelectorAll('.squad-chip.active')).map(c => c.dataset.squad);
     const activeTroops = Array.from(document.querySelectorAll('.troop-chip.active')).map(c => c.dataset.troop);
+    const activeEligible = document.querySelector('.eligible-chip.active')?.dataset.eligible || 'all';
 
-    let filtered = allMembers.filter(member => {
-        const matchesSearch =
-            member.name.toLowerCase().includes(searchTerm) ||
-            member.rank.toLowerCase().includes(searchTerm) ||
-            (member.global_aliases && member.global_aliases.toLowerCase().includes(searchTerm)) ||
-            (member.personal_aliases && member.personal_aliases.toLowerCase().includes(searchTerm));
-
-        const matchesEligible = !eligibleOnly || member.eligible !== false;
+    let filtered = base.filter(member => {
         const matchesRank = activeRanks.includes('all') || activeRanks.includes(member.rank);
 
         const memProf = member.profession || 'none';
@@ -130,22 +141,26 @@ function updateDisplayedMembers() {
         const memTroop = (member.troop_level || 0).toString();
         const matchesTroop = activeTroops.includes('all') || activeTroops.includes(memTroop);
 
-        return matchesSearch && matchesEligible && matchesRank && matchesProf && matchesSquad && matchesTroop;
+        const matchesEligible =
+            activeEligible === 'all' ||
+            (activeEligible === 'eligible' && member.eligible !== false) ||
+            (activeEligible === 'not-eligible' && member.eligible === false);
+
+        return matchesRank && matchesProf && matchesSquad && matchesTroop && matchesEligible;
     });
 
+    const RANK_ORDER = { R5: 5, R4: 4, R3: 3, R2: 2, R1: 1 };
     filtered.sort((a, b) => {
-        if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
-        if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
-        if (sortBy === 'power-desc') return (b.power || 0) - (a.power || 0);
-        if (sortBy === 'power-asc') return (a.power || 0) - (b.power || 0);
-        if (sortBy === 'squad-power-desc') return (b.squad_power || 0) - (a.squad_power || 0);
-        if (sortBy === 'squad-power-asc') return (a.squad_power || 0) - (b.squad_power || 0);
-        if (sortBy === 'rank-desc') {
-            const rankOrder = { 'R5': 5, 'R4': 4, 'R3': 3, 'R2': 2, 'R1': 1 };
-            const diff = (rankOrder[b.rank] || 0) - (rankOrder[a.rank] || 0);
-            return diff !== 0 ? diff : a.name.localeCompare(b.name);
-        }
-        return 0;
+        let diff = 0;
+        if (sortField === 'name')             diff = a.name.localeCompare(b.name);
+        else if (sortField === 'rank')        diff = (RANK_ORDER[a.rank] || 0) - (RANK_ORDER[b.rank] || 0);
+        else if (sortField === 'power')       diff = (a.power || 0) - (b.power || 0);
+        else if (sortField === 'hq')          diff = (a.level || 0) - (b.level || 0);
+        else if (sortField === 'hero_power')  diff = (a.hero_power || 0) - (b.hero_power || 0);
+        else if (sortField === 'kills')       diff = (a.current_kills || 0) - (b.current_kills || 0);
+        else if (sortField === 'squad_power') diff = (a.squad_power || 0) - (b.squad_power || 0);
+        if (diff === 0) diff = a.name.localeCompare(b.name);
+        return sortDir === 'asc' ? diff : -diff;
     });
 
     displayMembers(filtered);
@@ -160,8 +175,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     await fetchSettings();
 
     document.querySelectorAll('.power-sort-option').forEach(el => {
-        el.style.display = isPowerTrackingEnabled ? 'block' : 'none';
+        el.style.display = isPowerTrackingEnabled ? '' : 'none';
     });
+    const activeSortChipAfterPower = document.querySelector('.sort-chip.active');
+    if (activeSortChipAfterPower && activeSortChipAfterPower.style.display === 'none') {
+        sortField = 'name';
+        sortDir = 'asc';
+        updateSortChips();
+    }
 
     const actionBar = document.querySelector('.action-bar');
     if (!canManageRanks && actionBar) {
@@ -291,6 +312,7 @@ async function loadMembers() {
         const response = await fetch(API_URL);
         const members = await response.json();
         allMembers = members;
+        rebuildFuse();
         updateDisplayedMembers();
     } catch (error) {
         console.error('Error loading members:', error);
@@ -875,8 +897,6 @@ function updateMemberCount(count) {
 function setupSearch() {
     const searchInput = document.getElementById('search-input');
     const clearBtn = document.getElementById('clear-search');
-    const eligibleFilter = document.getElementById('filter-eligible');
-    const sortDropdown = document.getElementById('sort-by');
 
     if (searchInput) searchInput.addEventListener('input', updateDisplayedMembers);
 
@@ -916,8 +936,50 @@ function setupSearch() {
     setupChipGroup('.squad-chip', 'squad');
     setupChipGroup('.troop-chip', 'troop');
 
-    if (eligibleFilter) eligibleFilter.addEventListener('change', updateDisplayedMembers);
-    if (sortDropdown) sortDropdown.addEventListener('change', updateDisplayedMembers);
+    document.querySelectorAll('.eligible-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.eligible-chip').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            updateDisplayedMembers();
+        });
+    });
+
+    document.querySelectorAll('.sort-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const field = btn.dataset.sort;
+            if (sortField === field) {
+                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortField = field;
+                sortDir = SORT_DEFAULTS[field] || 'asc';
+            }
+            updateSortChips();
+            updateDisplayedMembers();
+        });
+    });
+}
+
+function rebuildFuse() {
+    if (typeof Fuse === 'undefined') return;
+    fuseInstance = new Fuse(allMembers, {
+        keys: ['name', 'global_aliases', 'personal_aliases'],
+        threshold: 0.4,
+        includeScore: false,
+        minMatchCharLength: 1,
+    });
+}
+
+function updateSortChips() {
+    const SORT_LABELS = {
+        name: 'Name', rank: 'Rank', power: 'Power',
+        hq: 'HQ', hero_power: 'Hero Power', kills: 'Kills', squad_power: 'Squad Power',
+    };
+    document.querySelectorAll('.sort-chip').forEach(btn => {
+        const field = btn.dataset.sort;
+        const isActive = field === sortField;
+        btn.classList.toggle('active', isActive);
+        btn.textContent = SORT_LABELS[field] + (isActive ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '');
+    });
 }
 
 // ── CSV Import ────────────────────────────────────────────────────
