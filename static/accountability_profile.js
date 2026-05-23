@@ -162,14 +162,14 @@ function renderStrikes(strikes) {
                 const excuseBtn = document.createElement('button');
                 excuseBtn.className = 'btn btn-secondary btn-sm';
                 excuseBtn.textContent = 'Excuse';
-                excuseBtn.addEventListener('click', () => excuseStrike(s.id, excuseBtn, tr));
+                excuseBtn.addEventListener('click', () => excuseStrike(s.id));
                 tdAct.appendChild(excuseBtn);
             }
             const delBtn = document.createElement('button');
             delBtn.className = 'btn btn-danger btn-sm';
             delBtn.textContent = 'Delete';
             delBtn.style.marginLeft = s.status === 'active' ? '6px' : '0';
-            delBtn.addEventListener('click', () => deleteStrike(s.id, delBtn, tr));
+            delBtn.addEventListener('click', () => deleteStrike(s.id));
             tdAct.appendChild(delBtn);
             tr.appendChild(tdAct);
         }
@@ -180,50 +180,20 @@ function renderStrikes(strikes) {
     container.appendChild(table);
 }
 
-async function excuseStrike(strikeID, btn, tr) {
-    btn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = Object.assign(document.createElement('span'), { textContent: 'Excuse?' });
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-primary btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        const res = await fetch('/api/accountability/strikes/' + strikeID, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'excused', excused_reason: '' }),
-        });
-        if (res.ok) boot();
+async function excuseStrike(strikeID) {
+    if (!await showConfirm('Excuse this strike?', 'Excuse')) return;
+    const res = await fetch('/api/accountability/strikes/' + strikeID, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'excused', excused_reason: '' }),
     });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); btn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    tr.querySelector('td:last-child').appendChild(confirmSpan);
+    if (res.ok) boot();
 }
 
-async function deleteStrike(strikeID, btn, tr) {
-    btn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = Object.assign(document.createElement('span'), { textContent: 'Sure?' });
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        const res = await fetch('/api/accountability/strikes/' + strikeID, { method: 'DELETE' });
-        if (res.ok) boot();
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); btn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    tr.querySelector('td:last-child').appendChild(confirmSpan);
+async function deleteStrike(strikeID) {
+    if (!await showConfirm('Delete this strike?', 'Delete')) return;
+    const res = await fetch('/api/accountability/strikes/' + strikeID, { method: 'DELETE' });
+    if (res.ok) boot();
 }
 
 function renderVSHistory(vsHistory) {

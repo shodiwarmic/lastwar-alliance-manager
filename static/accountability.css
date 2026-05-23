@@ -42,7 +42,7 @@
 }
 .acc-tag--reliable {
     background: rgba(40, 167, 69, 0.18);
-    color: #28a745;
+    color: var(--color-success);
 }
 .acc-tag--needs-improvement {
     background: rgba(255, 193, 7, 0.22);
@@ -50,7 +50,7 @@
 }
 .acc-tag--at-risk {
     background: rgba(220, 53, 69, 0.18);
-    color: #dc3545;
+    color: var(--color-danger);
 }
 
 /* --- Row highlight for below-threshold members --- */
@@ -60,11 +60,11 @@ tr.acc-row--below-vs {
 
 /* --- VS value colouring --- */
 .acc-vs--below {
-    color: #dc3545;
+    color: var(--color-danger);
     font-weight: 600;
 }
 .acc-vs--ok {
-    color: #28a745;
+    color: var(--color-success);
 }
 
 /* --- Profile header --- */
@@ -74,17 +74,17 @@ tr.acc-row--below-vs {
     gap: 16px;
     flex-wrap: wrap;
     padding-bottom: 1rem;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--color-border);
     margin-bottom: 1rem;
 }
 .acc-profile-name {
     font-size: 1.4rem;
     font-weight: 700;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 .acc-profile-sub {
     font-size: 0.9rem;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     margin-top: 2px;
 }
 .acc-profile-actions {
@@ -97,27 +97,27 @@ tr.acc-row--below-vs {
     font-size: 0.9rem;
 }
 .acc-back-link a {
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     text-decoration: none;
 }
 .acc-back-link a:hover {
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 /* --- Strike table status --- */
 .acc-status--active {
-    color: #dc3545;
+    color: var(--color-danger);
     font-weight: 600;
 }
 .acc-status--excused {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     text-decoration: line-through;
 }
 
 /* --- Storm attendance status --- */
-.acc-attend--attended  { color: #28a745; font-weight: 600; }
-.acc-attend--no-show   { color: #dc3545; font-weight: 600; }
-.acc-attend--excused   { color: var(--text-muted); }
+.acc-attend--attended  { color: var(--color-success); font-weight: 600; }
+.acc-attend--no-show   { color: var(--color-danger); font-weight: 600; }
+.acc-attend--excused   { color: var(--color-text-muted); }
 
 /* --- Storm attendance modal checklist --- */
 .storm-member-row {
@@ -125,14 +125,14 @@ tr.acc-row--below-vs {
     align-items: center;
     gap: 10px;
     padding: 6px 4px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--color-border);
     flex-wrap: wrap;
 }
 .storm-member-row:last-child { border-bottom: none; }
 .storm-member-name {
     flex: 1;
     font-size: 0.9rem;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 .storm-member-row select {
     width: 130px;
@@ -150,8 +150,8 @@ tr.acc-row--below-vs {
     margin-bottom: 1.5rem;
 }
 .acc-stat-card {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 14px 20px;
     min-width: 140px;
@@ -161,11 +161,11 @@ tr.acc-row--below-vs {
 .acc-stat-card-value {
     font-size: 2rem;
     font-weight: 700;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 .acc-stat-card-label {
     font-size: 0.8rem;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     margin-top: 2px;
 }
 .acc-report-grid {
@@ -174,20 +174,20 @@ tr.acc-row--below-vs {
     gap: 1rem;
 }
 .acc-report-section {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 14px 16px;
 }
 .acc-report-section h3 {
     font-size: 0.95rem;
     margin: 0 0 10px 0;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 /* --- Warning button (not in global styles) --- */
 .btn-warning {
-    background: #ffc107;
+    background: var(--color-warning);
     color: #212529;
     padding: 12px 24px;
     border: none;
