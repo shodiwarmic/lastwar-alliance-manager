@@ -35,7 +35,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    background: #667eea;
+    background: var(--color-accent);
     color: #fff;
 }
 
@@ -59,8 +59,8 @@
 .week-grid .day-col:nth-child(7) { grid-column: 3; }
 
 .day-col {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 8px;
     display: flex;
@@ -70,7 +70,7 @@
 }
 
 .day-col-header {
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--color-border);
     padding-bottom: 6px;
     margin-bottom: 4px;
 }
@@ -78,7 +78,7 @@
 .day-col-date {
     font-weight: 700;
     font-size: 0.85rem;
-    color: var(--text-primary);
+    color: var(--color-text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -86,12 +86,12 @@
 
 .day-col-season {
     font-size: 0.72rem;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
 }
 
 .day-col-vs {
     font-size: 0.72rem;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -99,8 +99,8 @@
 
 /* ── Event cards ────────────────────────────────────────────────────────── */
 .event-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     padding: 6px 8px;
     font-size: 0.85rem;
@@ -118,12 +118,12 @@
 }
 
 .event-card-time {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-size: 0.8rem;
 }
 
 .event-card-level {
-    background: var(--accent-color, #667eea);
+    background: var(--color-accent);
     color: #fff;
     border-radius: 4px;
     padding: 1px 6px;
@@ -133,7 +133,7 @@
 
 .event-card-notes {
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     margin-top: 2px;
     white-space: pre-wrap;
 }
@@ -167,7 +167,7 @@
 
 /* ── Storm pills ────────────────────────────────────────────────────────── */
 .storm-pill {
-    background: #f59e0b;
+    background: var(--color-warning);
     color: #000;
     border-radius: 4px;
     padding: 2px 6px;
@@ -196,10 +196,10 @@
 .day-card-picker {
     font-size: 0.82rem;
     padding: 3px 6px;
-    border: 1px solid var(--input-border);
+    border: 1px solid var(--color-border);
     border-radius: 4px;
-    background: var(--input-bg);
-    color: var(--text-primary);
+    background: var(--color-surface);
+    color: var(--color-text);
     color-scheme: light;
 }
 
@@ -216,63 +216,63 @@ html.theme-auto .day-card-picker {
 
 /* Flatpickr dark-mode overrides */
 .flatpickr-calendar {
-    background: var(--card-bg, #1a2540);
-    border-color: var(--border-color, #2e3f6e);
+    background: var(--color-card);
+    border-color: var(--color-border);
     box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-    color: var(--text-primary, #e9ecef);
+    color: var(--color-text);
 }
 .flatpickr-months .flatpickr-month,
 .flatpickr-weekdays,
 span.flatpickr-weekday {
-    background: var(--card-bg, #1a2540);
-    color: var(--text-muted, #a0aec0);
+    background: var(--color-card);
+    color: var(--color-text-muted);
 }
 .flatpickr-day {
-    color: var(--text-primary, #e9ecef);
+    color: var(--color-text);
 }
 .flatpickr-day:hover,
 .flatpickr-day:focus {
-    background: var(--bg-secondary, #0d1b35);
-    border-color: var(--border-color, #2e3f6e);
+    background: var(--color-surface);
+    border-color: var(--color-border);
 }
 .flatpickr-day.selected,
 .flatpickr-day.selected:hover {
-    background: #667eea;
-    border-color: #667eea;
+    background: var(--color-accent);
+    border-color: var(--color-accent);
     color: #fff;
 }
 .flatpickr-day.disabled,
 .flatpickr-day.disabled:hover {
-    color: var(--text-muted, #a0aec0);
+    color: var(--color-text-muted);
     opacity: 0.35;
 }
 .flatpickr-time input,
 .flatpickr-time .flatpickr-am-pm {
-    background: var(--bg-secondary, #0d1b35);
-    color: var(--text-primary, #e9ecef);
+    background: var(--color-surface);
+    color: var(--color-text);
 }
 .flatpickr-time input:hover,
 .flatpickr-time .flatpickr-am-pm:hover {
-    background: var(--card-bg, #1a2540);
+    background: var(--color-card);
 }
 .numInputWrapper span.arrowUp,
 .numInputWrapper span.arrowDown {
-    border-color: var(--border-color, #2e3f6e);
+    border-color: var(--color-border);
 }
 .flatpickr-current-month input.cur-year,
 .flatpickr-current-month .flatpickr-monthDropdown-months {
-    color: var(--text-primary, #e9ecef);
+    color: var(--color-text);
     background: transparent;
 }
 .flatpickr-prev-month svg,
 .flatpickr-next-month svg {
-    fill: var(--text-muted, #a0aec0);
+    fill: var(--color-text-muted);
 }
 
 /* ── Settings tab ───────────────────────────────────────────────────────── */
 .generate-section {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 16px;
 }
@@ -304,8 +304,8 @@ span.flatpickr-weekday {
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     margin-bottom: 6px;
     flex-wrap: wrap;
@@ -326,7 +326,7 @@ span.flatpickr-weekday {
 .server-event-row-meta,
 .event-type-row-meta {
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     margin-top: 2px;
 }
 
@@ -392,7 +392,7 @@ span.flatpickr-weekday {
 }
 
 .error-msg {
-    color: var(--danger-color, #e74c3c);
+    color: var(--color-danger);
 }
 
 /* ── Mobile: single-day view ────────────────────────────────────────────── */
