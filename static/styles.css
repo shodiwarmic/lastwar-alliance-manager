@@ -466,6 +466,7 @@ main {
 
 /* More sheet */
 .more-sheet {
+    display: none;
     position: fixed; inset: 0; z-index: 50;
     background: var(--color-sidebar);
     overflow-y: auto;
@@ -491,9 +492,9 @@ main {
     .more-sheet    { display: none !important; }
 }
 @media (max-width: 768px) {
-    .app-shell      { flex-direction: column; }
-    .sidebar        { display: none; }
-    .content-scroll { padding-bottom: 72px; }
+    .app-shell  { flex-direction: column; }
+    .sidebar    { display: none; }
+    main        { padding-bottom: 102px; } /* 72px bottom-tabs + 30px base padding */
 }
 
 /* ── End Split Command App Shell ─────────────────────────────────────────── */
