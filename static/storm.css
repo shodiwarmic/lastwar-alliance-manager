@@ -46,8 +46,8 @@
     min-width: 140px;
     text-align: center;
 }
-.capacity-cell.warn   { border-color: var(--warning-color, #f59e0b); color: var(--warning-color, #f59e0b); }
-.capacity-cell.danger { border-color: var(--danger-color, #ef4444);  color: var(--danger-color, #ef4444); }
+.capacity-cell.warn   { border-color: var(--color-warning); color: var(--color-warning); }
+.capacity-cell.danger { border-color: var(--color-danger);  color: var(--color-danger); }
 
 /* ── Member Pool ──────────────────────────────────────────────────────────── */
 
@@ -75,11 +75,11 @@
 .pool-card .pool-meta { font-size: 0.8em; color: var(--color-text-mid); }
 .pool-card .pool-reg  { font-size: 0.75em; margin-top: 2px; }
 
-.reg-avail { color: var(--success-color, #22c55e); }
-.reg-sub   { color: var(--warning-color, #f59e0b); }
+.reg-avail { color: var(--color-success); }
+.reg-sub   { color: var(--color-warning); }
 .reg-none  { color: var(--color-text-mid); }
 .reg-other { font-size: 0.75em; margin-left: 6px; opacity: 0.75; }
-.pool-squad-power { color: var(--warning-color, #f59e0b); font-size: 0.8em; }
+.pool-squad-power { color: var(--color-warning); font-size: 0.8em; }
 
 /* ── Group Cards ──────────────────────────────────────────────────────────── */
 
@@ -166,13 +166,13 @@
     user-select: none;
 }
 .member-chip.is-sub .chip-sub-toggle {
-    background: var(--warning-color, #f59e0b);
+    background: var(--color-warning);
     color: #fff;
-    border-color: var(--warning-color, #f59e0b);
+    border-color: var(--color-warning);
 }
 .member-chip .chip-remove {
     cursor: pointer;
-    color: var(--danger-color, #ef4444);
+    color: var(--color-danger);
     margin-left: 2px;
     font-weight: bold;
     font-size: 1em;
@@ -204,9 +204,9 @@
     font-size: 0.85em;
     color: var(--color-text);
 }
-.three-way button.active-unavail { background: var(--danger-color, #ef4444);  color: #fff; border-color: var(--danger-color, #ef4444); }
-.three-way button.active-avail   { background: var(--success-color, #22c55e); color: #fff; border-color: var(--success-color, #22c55e); }
-.three-way button.active-sub     { background: var(--warning-color, #f59e0b); color: #fff; border-color: var(--warning-color, #f59e0b); }
+.three-way button.active-unavail { background: var(--color-danger);  color: #fff; border-color: var(--color-danger); }
+.three-way button.active-avail   { background: var(--color-success); color: #fff; border-color: var(--color-success); }
+.three-way button.active-sub     { background: var(--color-warning); color: #fff; border-color: var(--color-warning); }
 
 /* ── Registration Table ───────────────────────────────────────────────────── */
 
@@ -224,8 +224,8 @@
     border: 1px solid transparent;
 }
 .reg-pill.s0 { background: var(--color-surface); color: var(--color-text-mid); border-color: var(--color-border); }
-.reg-pill.s1 { background: var(--success-color, #22c55e); color: #fff; }
-.reg-pill.s2 { background: var(--warning-color, #f59e0b); color: #fff; }
+.reg-pill.s1 { background: var(--color-success); color: #fff; }
+.reg-pill.s2 { background: var(--color-warning); color: #fff; }
 
 /* ── Inline Member Search ─────────────────────────────────────────────────── */
 
