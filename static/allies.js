@@ -90,7 +90,7 @@ function renderAllies() {
     if (allAllies.length === 0) {
         container.replaceChildren();
         const p = document.createElement('p');
-        p.style.color = 'var(--text-secondary)';
+        p.style.color = 'var(--color-text-mid)';
         p.textContent = CAN_MANAGE ? 'No allies yet. Add one to get started.' : 'No allies found.';
         container.appendChild(p);
         return;
@@ -184,23 +184,9 @@ function renderAllyCard(ally) {
         const delBtn = document.createElement('button');
         delBtn.className = 'btn btn-danger btn-sm';
         delBtn.textContent = 'Delete';
-        delBtn.addEventListener('click', () => {
-            delBtn.style.display = 'none';
-            const confirmSpan = document.createElement('span');
-            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-            const label = document.createElement('span');
-            label.textContent = 'Sure?';
-            label.style.fontSize = '0.85rem';
-            const yesBtn = document.createElement('button');
-            yesBtn.className = 'btn btn-danger btn-sm';
-            yesBtn.textContent = 'Yes';
-            yesBtn.addEventListener('click', () => doDeleteAlly(ally.id));
-            const noBtn = document.createElement('button');
-            noBtn.className = 'btn btn-secondary btn-sm';
-            noBtn.textContent = 'No';
-            noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
-            confirmSpan.append(label, yesBtn, noBtn);
-            actions.appendChild(confirmSpan);
+        delBtn.addEventListener('click', async () => {
+            if (!await showConfirm('Delete this ally?', 'Delete')) return;
+            doDeleteAlly(ally.id);
         });
 
         actions.appendChild(editBtn);
@@ -218,7 +204,7 @@ function renderTypesTab() {
     if (allTypes.length === 0) {
         container.replaceChildren();
         const p = document.createElement('p');
-        p.style.color = 'var(--text-secondary)';
+        p.style.color = 'var(--color-text-mid)';
         p.textContent = 'No agreement types yet.';
         container.appendChild(p);
         return;
@@ -260,23 +246,9 @@ function renderTypeRow(t) {
     const delBtn = document.createElement('button');
     delBtn.className = 'btn btn-danger btn-sm';
     delBtn.textContent = 'Delete';
-    delBtn.addEventListener('click', () => {
-        delBtn.style.display = 'none';
-        const confirmSpan = document.createElement('span');
-        confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-        const label = document.createElement('span');
-        label.textContent = 'Sure?';
-        label.style.fontSize = '0.85rem';
-        const yesBtn = document.createElement('button');
-        yesBtn.className = 'btn btn-danger btn-sm';
-        yesBtn.textContent = 'Yes';
-        yesBtn.addEventListener('click', () => doDeleteType(t.id));
-        const noBtn = document.createElement('button');
-        noBtn.className = 'btn btn-secondary btn-sm';
-        noBtn.textContent = 'No';
-        noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
-        confirmSpan.append(label, yesBtn, noBtn);
-        actions.appendChild(confirmSpan);
+    delBtn.addEventListener('click', async () => {
+        if (!await showConfirm('Delete this agreement type?', 'Delete')) return;
+        doDeleteType(t.id);
     });
 
     actions.appendChild(editBtn);

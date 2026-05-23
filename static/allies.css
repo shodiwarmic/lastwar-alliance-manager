@@ -11,7 +11,7 @@
     align-items: center;
     gap: 6px;
     font-size: 0.9rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     cursor: pointer;
     user-select: none;
 }
@@ -26,7 +26,7 @@
 
 .ally-card {
     background: var(--card-bg);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 16px 20px;
     display: flex;
@@ -52,7 +52,7 @@
 }
 
 .ally-card.inactive .ally-server-badge {
-    background: var(--text-secondary);
+    background: var(--color-text-mid);
 }
 
 .ally-body {
@@ -70,7 +70,7 @@
 
 .ally-tag {
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-family: monospace;
 }
 
@@ -81,7 +81,7 @@
 
 .ally-inactive-badge {
     font-size: 0.72rem;
-    background: var(--text-secondary);
+    background: var(--color-text-mid);
     color: #fff;
     border-radius: 4px;
     padding: 2px 6px;
@@ -109,7 +109,7 @@
 .ally-meta {
     margin-top: 6px;
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -132,7 +132,7 @@
 
 .type-row {
     background: var(--card-bg);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     padding: 12px 16px;
     display: flex;
@@ -151,7 +151,7 @@
 
 .type-inactive-label {
     font-size: 0.78rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-style: italic;
 }
 
