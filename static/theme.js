@@ -20,10 +20,10 @@ function setThemePreference(theme) {
 // Apply theme to document
 function applyTheme(theme) {
     const html = document.documentElement;
-    
+
     // Remove all theme classes
     html.classList.remove('theme-light', 'theme-dark', 'theme-auto');
-    
+
     // Add the selected theme class
     if (theme === THEMES.LIGHT) {
         html.classList.add('theme-light');
@@ -35,7 +35,13 @@ function applyTheme(theme) {
         html.classList.add('theme-auto');
         html.style.colorScheme = 'light dark';
     }
-    
+
+    // Set data-theme attribute for new [data-theme] CSS token blocks
+    const resolved = theme === THEMES.AUTO
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : theme;
+    html.setAttribute('data-theme', resolved);
+
     // Update theme selector if it exists
     updateThemeSelector(theme);
 }
@@ -81,3 +87,8 @@ function setupThemeHandlers() {
 
 // Initialize theme immediately
 initTheme();
+
+// Re-resolve data-theme when system preference changes while auto is active
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (getThemePreference() === THEMES.AUTO) applyTheme(THEMES.AUTO);
+});
