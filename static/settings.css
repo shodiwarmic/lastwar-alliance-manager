@@ -12,7 +12,7 @@
 }
 
 .perm-grid-header {
-    background: var(--color-primary);
+    background: var(--color-accent);
     color: white;
     font-weight: 700;
     font-size: 0.85rem;
@@ -31,8 +31,8 @@
 .perm-feature {
     font-weight: 600;
     font-size: 0.82rem;
-    color: var(--color-primary);
-    border-right: 2px solid var(--border-color);
+    color: var(--color-accent);
+    border-right: 2px solid var(--color-border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -41,19 +41,19 @@
     white-space: nowrap;
 }
 
-.perm-feature-group-even { background: var(--bg-secondary); }
+.perm-feature-group-even { background: var(--color-surface); }
 .perm-feature-group-odd  { background: var(--color-purple-bg); }
-.perm-feature-group-border { border-bottom: 2px solid var(--border-color); }
-.perm-feature.perm-feature-hovered { background: var(--bg-tertiary); }
+.perm-feature-group-border { border-bottom: 2px solid var(--color-border); }
+.perm-feature.perm-feature-hovered { background: var(--color-card); }
 
 /* Data cells — explicit bg-primary so alt rows have visible contrast in light mode */
 .perm-grid-label {
     padding: 9px 12px;
     font-size: 0.83rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     display: flex;
     align-items: center;
-    background: var(--bg-primary);
+    background: var(--color-bg);
 }
 
 .perm-grid-check {
@@ -61,26 +61,26 @@
     align-items: center;
     justify-content: center;
     padding: 9px;
-    background: var(--bg-primary);
+    background: var(--color-bg);
 }
 
 .perm-grid-check input[type="checkbox"] {
     width: 16px;
     height: 16px;
     cursor: pointer;
-    accent-color: var(--color-primary);
+    accent-color: var(--color-accent);
 }
 
 /* Alternating rows */
-.row-alt { background: var(--bg-secondary); }
+.row-alt { background: var(--color-surface); }
 
 /* Hover — specificity 0,2,0 beats .row-alt (0,1,0); no !important needed */
 .perm-grid-label.row-hovered,
 .perm-grid-check.row-hovered {
-    background: var(--bg-tertiary);
+    background: var(--color-card);
 }
 
 /* Bold separator between permission groups */
 .perm-row-last-in-group {
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 2px solid var(--color-border);
 }

@@ -150,7 +150,7 @@ function buildVSRow(member) {
     if (isTotalMode) {
         const span = document.createElement('span');
         span.className = 'day6-val';
-        span.style.cssText = 'font-weight:bold; color:var(--text-secondary);';
+        span.style.cssText = 'font-weight:bold; color:var(--color-text-mid);';
         span.textContent = points.saturday;
         tdDay6.appendChild(span);
     } else {
@@ -404,7 +404,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 toggleBtn.addEventListener('click', () => {
                     isTotalMode = !isTotalMode;
                     toggleBtn.textContent = isTotalMode ? '🔙 Return to Day 6 Entry' : '🧮 Enter Weekly Totals';
-                    toggleBtn.style.background = isTotalMode ? '#fd7e14' : '#17a2b8';
+                    toggleBtn.style.background = isTotalMode ? 'var(--color-warning)' : 'var(--color-accent)';
                     renderTable();
                 });
             }

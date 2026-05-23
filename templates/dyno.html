@@ -3,8 +3,11 @@
 {{end}}
 
 {{define "header_text"}}
-    <h1>🎮 Last War: Survival</h1>
-    <h2>📢 Shoutouts & Feedback</h2>
+    <h1>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/></svg>
+        Shoutouts
+    </h1>
+    <h2>Alliance Recognition &amp; Feedback</h2>
 {{end}}
 
 {{define "content"}}
@@ -111,9 +114,9 @@
                 <div class="form-group" style="position: relative;">
                     <label for="member-search">Target Member:</label>
                     <input type="text" id="member-search" class="form-input" placeholder="Type a name to search..." autocomplete="off">
-                    <div id="member-search-results" class="dropdown-list" style="display: none; max-height: 200px; position: absolute; width: 100%; z-index: 1001; background: var(--container-bg); border: 1px solid #667eea; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+                    <div id="member-search-results" class="dropdown-list" style="display: none; max-height: 200px; position: absolute; width: 100%; z-index: 1001; background: var(--color-surface); border: 1px solid var(--color-accent); border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
                     <input type="hidden" id="member-select" required>
-                    <div id="selected-member-display" style="margin-top: 8px; font-weight: bold; color: #667eea; display: none;"></div>
+                    <div id="selected-member-display" style="margin-top: 8px; font-weight: bold; color: var(--color-accent); display: none;"></div>
                 </div>
 
                 <div class="form-group">

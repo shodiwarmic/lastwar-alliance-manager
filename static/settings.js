@@ -15,6 +15,8 @@ async function loadSettings() {
         
         const settings = await response.json();
         
+        document.getElementById('alliance-name').value = settings.alliance_name ?? '';
+        document.getElementById('alliance-tag').value = settings.alliance_tag ?? '';
         document.getElementById('max-hq-level').value = settings.max_hq_level || 35;
         document.getElementById('settings-login-message').value = settings.login_message || '';
         document.getElementById('train-free-limit').value = settings.train_free_daily_limit ?? 1;
@@ -151,7 +153,7 @@ function showSettingsStatus(message, success) {
     const el = document.getElementById('settings-save-status');
     if (!el) return;
     el.textContent = message;
-    el.style.color = success ? 'var(--color-success, #2ecc71)' : 'var(--danger-color, #e74c3c)';
+    el.style.color = success ? 'var(--color-success)' : 'var(--color-danger)';
     clearTimeout(_settingsStatusTimer);
     _settingsStatusTimer = setTimeout(() => { el.textContent = ''; }, 4000);
 }
@@ -183,6 +185,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 .map(cb => cb.value).join(',');
 
             const settings = Object.assign({}, currentSettings, {
+                alliance_name: document.getElementById('alliance-name').value.trim(),
+                alliance_tag: document.getElementById('alliance-tag').value.trim(),
                 login_message: document.getElementById('settings-login-message').value,
                 max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
@@ -354,7 +358,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         wrap.appendChild(hdr);
 
         const tableWrap = document.createElement('div');
-        tableWrap.style.cssText = 'overflow-x:auto;border:1px solid var(--border-color);border-radius:6px;';
+        tableWrap.style.cssText = 'overflow-x:auto;border:1px solid var(--color-border);border-radius:6px;';
 
         const tbl = document.createElement('table');
         tbl.className = 'data-table';
@@ -502,7 +506,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         wrap.appendChild(hdr);
 
         const tableWrap = document.createElement('div');
-        tableWrap.style.cssText = 'overflow-x:auto;border:1px solid var(--border-color);border-radius:6px;';
+        tableWrap.style.cssText = 'overflow-x:auto;border:1px solid var(--color-border);border-radius:6px;';
 
         const tbl = document.createElement('table');
         tbl.className = 'data-table';
@@ -662,7 +666,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function buildTemplateCard(t) {
         const card = document.createElement('div');
-        card.style.cssText = 'border:1px solid var(--border-color);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:var(--bg-secondary);display:flex;align-items:center;gap:10px;';
+        card.style.cssText = 'border:1px solid var(--color-border);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:var(--color-surface);display:flex;align-items:center;gap:10px;';
 
         const nameLbl = document.createElement('span');
         nameLbl.textContent = (t.season_number > 0 ? 'S' + t.season_number + ' — ' : '') + t.template_name;

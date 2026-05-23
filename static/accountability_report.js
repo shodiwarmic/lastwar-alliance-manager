@@ -91,7 +91,7 @@ async function boot() {
     tagEl.replaceChildren();
     [['Reliable', 'acc-tag--reliable'], ['Needs Improvement', 'acc-tag--needs-improvement'], ['At Risk', 'acc-tag--at-risk']].forEach(([tag, cls]) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-color);';
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--color-border);';
         const label = document.createElement('span');
         label.className = 'acc-tag ' + cls;
         label.textContent = tag;

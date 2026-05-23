@@ -37,7 +37,7 @@ async function loadSystemSettings() {
                     const li = document.createElement('li');
                     li.id = r.id;
                     li.dataset.text = r.text;
-                    li.style.cssText = 'color: var(--text-secondary); transition: color 0.3s;';
+                    li.style.cssText = 'color: var(--color-text-mid); transition: color 0.3s;';
                     li.textContent = `⚪ ${r.text}`;
                     return li;
                 });
@@ -148,10 +148,10 @@ function checkPasswordRequirements() {
         const baseText = el.getAttribute('data-text');
         if (isMet) {
             el.textContent = `✅ ${baseText}`;
-            el.style.color = '#28a745';
+            el.style.color = 'var(--color-success)';
         } else {
             el.textContent = `❌ ${baseText}`;
-            el.style.color = '#dc3545';
+            el.style.color = 'var(--color-danger)';
             allRulesMet = false;
         }
     }
@@ -168,7 +168,7 @@ function checkPasswordRequirements() {
         const listItems = rulesList.getElementsByTagName('li');
         for (let li of listItems) {
             li.textContent = `⚪ ${li.getAttribute('data-text')}`;
-            li.style.color = '#666';
+            li.style.color = 'var(--color-text-muted)';
         }
     }
 
@@ -177,11 +177,11 @@ function checkPasswordRequirements() {
         matchStatus.style.display = 'block';
         if (newPwd === confirmPwd) {
             matchStatus.textContent = '✅ Passwords match';
-            matchStatus.style.color = '#28a745';
+            matchStatus.style.color = 'var(--color-success)';
             passwordsMatch = true;
         } else {
             matchStatus.textContent = '❌ Passwords do not match';
-            matchStatus.style.color = '#dc3545';
+            matchStatus.style.color = 'var(--color-danger)';
         }
     } else {
         matchStatus.style.display = 'none';

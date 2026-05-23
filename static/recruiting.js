@@ -164,7 +164,7 @@ function renderFormerMembers(members, container) {
             delBtn.className = 'btn btn-danger btn-sm';
             delBtn.style.marginLeft = '6px';
             delBtn.textContent = 'Delete';
-            delBtn.addEventListener('click', () => permanentlyDeleteMember(m.id, m.name, actionsTd, delBtn));
+            delBtn.addEventListener('click', () => permanentlyDeleteMember(m.id, m.name));
             actionsTd.appendChild(delBtn);
         }
 
@@ -187,36 +187,16 @@ function openReactivateModal(id, name) {
     if (modal) { modal.style.display = 'flex'; trapFocus(modal); }
 }
 
-async function permanentlyDeleteMember(id, name, actionsCell, delBtn) {
-    delBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Delete forever?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        try {
-            const res = await fetch(`/api/members/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error('Failed to delete member');
-            await loadFormerMembers();
-        } catch (err) {
-            console.error(err);
-            const msg = document.createElement('span');
-            msg.style.cssText = 'color:var(--danger-color);font-size:0.85rem;';
-            msg.textContent = 'Delete failed.';
-            confirmSpan.replaceWith(msg);
-            delBtn.style.display = '';
-        }
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    actionsCell.appendChild(confirmSpan);
+async function permanentlyDeleteMember(id, name) {
+    if (!await showConfirm(`Permanently delete ${name}? This cannot be undone.`, 'Delete Forever')) return;
+    try {
+        const res = await fetch(`/api/members/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete member');
+        await loadFormerMembers();
+    } catch (err) {
+        console.error(err);
+        showToast('Delete failed.', 'error');
+    }
 }
 
 // ── Edit Former Member ────────────────────────────────────────────────────────
@@ -284,7 +264,7 @@ async function loadFormerAliases() {
     if (!list) return;
 
     const loadingP = document.createElement('p');
-    loadingP.style.cssText = 'text-align:center;color:var(--text-muted);';
+    loadingP.style.cssText = 'text-align:center;color:var(--color-text-muted);';
     loadingP.textContent = 'Loading...';
     list.replaceChildren(loadingP);
 
@@ -294,7 +274,7 @@ async function loadFormerAliases() {
 
         if (!aliases || aliases.length === 0) {
             const p = document.createElement('p');
-            p.style.cssText = 'text-align:center;color:var(--text-muted);';
+            p.style.cssText = 'text-align:center;color:var(--color-text-muted);';
             p.textContent = 'No nicknames set for this commander.';
             list.replaceChildren(p);
             return;
@@ -302,17 +282,13 @@ async function loadFormerAliases() {
 
         const rows = aliases.map(a => {
             const row = document.createElement('div');
-            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border-color);';
+            row.className = 'alias-row';
 
             const left = document.createElement('div');
-            const badgeStyles = {
-                global:   'background:#e2e8f0;color:#4a5568;',
-                personal: 'background:#bee3f8;color:#2b6cb0;',
-                ocr:      'background:#fed7d7;color:#c53030;',
-            };
-            if (badgeStyles[a.category]) {
+            const badgeClass = { global: 'alias-badge-global', personal: 'alias-badge-personal', ocr: 'alias-badge-ocr' }[a.category];
+            if (badgeClass) {
                 const badge = document.createElement('span');
-                badge.style.cssText = badgeStyles[a.category] + 'padding:2px 6px;border-radius:4px;font-size:0.8em;margin-right:8px;';
+                badge.className = `alias-badge ${badgeClass}`;
                 badge.textContent = a.category.charAt(0).toUpperCase() + a.category.slice(1);
                 left.appendChild(badge);
             }
@@ -324,10 +300,10 @@ async function loadFormerAliases() {
             const canDelete = a.is_mine || IS_ADMIN || ((a.category === 'global' || a.category === 'ocr') && CAN_MANAGE_MEMBERS);
             if (canDelete) {
                 const deleteBtn = document.createElement('button');
-                deleteBtn.style.cssText = 'background:none;border:none;color:#e53e3e;cursor:pointer;';
+                deleteBtn.className = 'alias-delete-btn';
                 deleteBtn.title = 'Remove Nickname';
                 deleteBtn.textContent = '✖';
-                deleteBtn.addEventListener('click', () => deleteFormerAlias(a.id, row, deleteBtn));
+                deleteBtn.addEventListener('click', () => deleteFormerAlias(a.id));
                 row.appendChild(deleteBtn);
             }
 
@@ -337,40 +313,21 @@ async function loadFormerAliases() {
         list.replaceChildren(...rows);
     } catch (e) {
         const p = document.createElement('p');
-        p.style.cssText = 'color:#e53e3e;text-align:center;';
+        p.style.cssText = 'color:var(--color-danger);text-align:center;';
         p.textContent = 'Error loading aliases.';
         list.replaceChildren(p);
     }
 }
 
-function deleteFormerAlias(aliasId, rowEl, deleteBtn) {
-    deleteBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Remove?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        try {
-            const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error(await res.text());
-            await loadFormerAliases();
-        } catch (err) {
-            confirmSpan.remove();
-            deleteBtn.style.display = '';
-        }
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); deleteBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    rowEl.appendChild(confirmSpan);
+async function deleteFormerAlias(aliasId) {
+    if (!await showConfirm('Remove this alias?', 'Remove')) return;
+    try {
+        const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        await loadFormerAliases();
+    } catch (err) {
+        showToast('Failed to remove alias.', 'error');
+    }
 }
 
 // ── Prospects ─────────────────────────────────────────────────────────────────
@@ -507,7 +464,7 @@ function buildProspectCard(p) {
             const delBtn = document.createElement('button');
             delBtn.className = 'btn btn-danger btn-sm';
             delBtn.textContent = 'Delete';
-            delBtn.addEventListener('click', () => deleteProspect(p.id, p.name, actions, delBtn));
+            delBtn.addEventListener('click', () => deleteProspect(p.id, p.name));
             actions.appendChild(delBtn);
         }
 
@@ -517,33 +474,16 @@ function buildProspectCard(p) {
     return card;
 }
 
-async function deleteProspect(id, name, actionsContainer, delBtn) {
-    delBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Sure?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        try {
-            const res = await fetch(`/api/prospects/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error('Failed to delete prospect');
-            await loadProspects();
-        } catch (err) {
-            console.error(err);
-            confirmSpan.remove();
-            delBtn.style.display = '';
-        }
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    actionsContainer.appendChild(confirmSpan);
+async function deleteProspect(id, name) {
+    if (!await showConfirm(`Delete prospect ${name}?`, 'Delete')) return;
+    try {
+        const res = await fetch(`/api/prospects/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete prospect');
+        await loadProspects();
+    } catch (err) {
+        console.error(err);
+        showToast('Delete failed.', 'error');
+    }
 }
 
 // ── Convert Prospect to Member ────────────────────────────────────────────────
@@ -774,7 +714,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error(err);
             if (statusEl) {
                 statusEl.textContent = 'Failed to reactivate. Please try again.';
-                statusEl.style.color = 'var(--danger-color)';
+                statusEl.style.color = 'var(--color-danger)';
             }
         }
     });

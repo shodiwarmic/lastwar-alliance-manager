@@ -363,7 +363,7 @@ function buildMemberCard(member) {
     }
     if (member.global_aliases) {
         const span = document.createElement('span');
-        span.style.cssText = 'color:var(--text-muted);font-size:0.85em;';
+        span.style.cssText = 'color:var(--color-text-muted);font-size:0.85em;';
         span.textContent = `[${member.global_aliases}]`;
         nameDiv.appendChild(span);
     }
@@ -688,109 +688,70 @@ window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedA
 };
 
 async function archiveMember(id, name, actionsContainer, archiveBtn) {
+    if (!await showConfirm(`Archive ${name}?`, 'Archive')) return;
+
     archiveBtn.style.display = 'none';
+    const reasonSpan = document.createElement('span');
+    reasonSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;';
+    const reasonInput = document.createElement('input');
+    reasonInput.type = 'text';
+    reasonInput.placeholder = 'Reason for leaving (optional)';
+    reasonInput.style.cssText = 'font-size:0.85rem;padding:3px 6px;border:1px solid var(--color-border);border-radius:4px;min-width:180px;';
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btn-danger btn-sm';
+    confirmBtn.textContent = 'Confirm';
+    const skipBtn = document.createElement('button');
+    skipBtn.className = 'btn btn-secondary btn-sm';
+    skipBtn.textContent = 'Skip';
 
-    // Step 1: "Archive?" confirm
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Archive?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', () => {
-        confirmSpan.remove();
-
-        // Step 2: optional reason input
-        const reasonSpan = document.createElement('span');
-        reasonSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;';
-        const reasonInput = document.createElement('input');
-        reasonInput.type = 'text';
-        reasonInput.placeholder = 'Reason for leaving (optional)';
-        reasonInput.style.cssText = 'font-size:0.85rem;padding:3px 6px;border:1px solid var(--border-color);border-radius:4px;min-width:180px;';
-        const confirmBtn = document.createElement('button');
-        confirmBtn.className = 'btn btn-danger btn-sm';
-        confirmBtn.textContent = 'Confirm';
-        const skipBtn = document.createElement('button');
-        skipBtn.className = 'btn btn-secondary btn-sm';
-        skipBtn.textContent = 'Skip';
-
-        async function doArchive(leaveReason) {
-            try {
-                const response = await fetch(`${API_URL}/${id}/archive`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ leave_reason: leaveReason }),
-                });
-                if (!response.ok) throw new Error('Failed to archive member');
-                await loadMembers();
-            } catch (error) {
-                console.error('Error archiving member:', error);
-                reasonSpan.remove();
-                const msg = document.createElement('span');
-                msg.style.cssText = 'color:var(--color-danger);font-size:0.85rem;';
-                msg.textContent = 'Failed to archive.';
-                actionsContainer.appendChild(msg);
-                archiveBtn.style.display = '';
-            }
+    async function doArchive(leaveReason) {
+        try {
+            const response = await fetch(`${API_URL}/${id}/archive`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leave_reason: leaveReason }),
+            });
+            if (!response.ok) throw new Error('Failed to archive member');
+            await loadMembers();
+        } catch (error) {
+            console.error('Error archiving member:', error);
+            reasonSpan.remove();
+            showToast('Failed to archive.', 'error');
+            archiveBtn.style.display = '';
         }
+    }
 
-        confirmBtn.addEventListener('click', () => doArchive(reasonInput.value.trim()));
-        skipBtn.addEventListener('click', () => doArchive(''));
+    confirmBtn.addEventListener('click', () => doArchive(reasonInput.value.trim()));
+    skipBtn.addEventListener('click', () => doArchive(''));
 
-        reasonSpan.append(reasonInput, confirmBtn, skipBtn);
-        actionsContainer.appendChild(reasonSpan);
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); archiveBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    actionsContainer.appendChild(confirmSpan);
+    reasonSpan.append(reasonInput, confirmBtn, skipBtn);
+    actionsContainer.appendChild(reasonSpan);
 }
 
-window.toggleEligible = function (id, currentStatus, actionsContainer, toggleBtn) {
+window.toggleEligible = async function (id, currentStatus, actionsContainer, toggleBtn) {
     if (!canManageTrain) return;
 
     const newStatus = !currentStatus;
     const statusText = newStatus ? 'eligible' : 'not eligible';
 
-    toggleBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = `Mark ${statusText}?`;
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-primary btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        confirmSpan.remove();
-        try {
-            const response = await fetch(`${API_URL}`);
-            if (!response.ok) throw new Error('fetch failed');
-            const members = await response.json();
-            const member = members.find(m => m.id === id);
-            if (!member) throw new Error('Member not found');
-            const updateResponse = await fetch(`${API_URL}/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...member, eligible: newStatus }),
-            });
-            if (!updateResponse.ok) throw new Error('update failed');
-            loadMembers();
-        } catch (error) {
-            console.error('Error toggling eligibility:', error);
-            toggleBtn.style.display = '';
-        }
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); toggleBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    actionsContainer.appendChild(confirmSpan);
+    if (!await showConfirm(`Mark as ${statusText}?`, 'Yes')) return;
+    try {
+        const response = await fetch(`${API_URL}`);
+        if (!response.ok) throw new Error('fetch failed');
+        const members = await response.json();
+        const member = members.find(m => m.id === id);
+        if (!member) throw new Error('Member not found');
+        const updateResponse = await fetch(`${API_URL}/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...member, eligible: newStatus }),
+        });
+        if (!updateResponse.ok) throw new Error('update failed');
+        loadMembers();
+    } catch (error) {
+        console.error('Error toggling eligibility:', error);
+        showToast('Failed to update eligibility.', 'error');
+    }
 };
 
 function fallbackCopy(text, onSuccess) {
@@ -807,78 +768,58 @@ function fallbackCopy(text, onSuccess) {
     }
 }
 
-window.inviteUserForMember = function (memberId, memberName, actionsContainer, inviteBtn) {
+window.inviteUserForMember = async function (memberId, memberName, actionsContainer, inviteBtn) {
+    if (!await showConfirm(`Send invite to ${memberName}?`, 'Send')) return;
     inviteBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = `Send invite to ${memberName}?`;
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-primary btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        confirmSpan.remove();
-        try {
-            const response = await fetch(`${API_URL}/${memberId}/invite`, { method: 'POST' });
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(errText);
-            }
-            const result = await response.json();
-            const inviteBox = document.createElement('div');
-            inviteBox.style.cssText = 'display:flex;flex-direction:column;gap:6px;font-size:0.85rem;padding:10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;max-width:320px;';
-            const heading = document.createElement('span');
-            heading.style.fontWeight = 'bold';
-            heading.textContent = 'Invite link (valid 48h):';
-            const linkRow = document.createElement('div');
-            linkRow.style.cssText = 'display:flex;gap:6px;align-items:center;';
-            const linkAnchor = document.createElement('a');
-            linkAnchor.href = result.invite_url;
-            linkAnchor.textContent = window.location.origin + result.invite_url;
-            linkAnchor.style.cssText = 'font-size:0.8rem;word-break:break-all;';
-            const copyBtn = document.createElement('button');
-            copyBtn.className = 'btn btn-secondary btn-sm';
-            copyBtn.textContent = 'Copy';
-            copyBtn.style.flexShrink = '0';
-            copyBtn.addEventListener('click', () => {
-                const fullURL = window.location.origin + result.invite_url;
-                const onSuccess = () => {
-                    copyBtn.textContent = 'Copied!';
-                    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
-                };
-                if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(fullURL).then(onSuccess).catch(() => fallbackCopy(fullURL, onSuccess));
-                } else {
-                    fallbackCopy(fullURL, onSuccess);
-                }
-            });
-            linkRow.append(linkAnchor, copyBtn);
-            const dismissBtn = document.createElement('button');
-            dismissBtn.className = 'btn btn-secondary btn-sm';
-            dismissBtn.textContent = 'Dismiss';
-            dismissBtn.addEventListener('click', async () => {
-                inviteBox.remove();
-                await loadMembers();
-            });
-            inviteBox.append(heading, linkRow, dismissBtn);
-            actionsContainer.appendChild(inviteBox);
-        } catch (error) {
-            console.error('Error generating invite:', error);
-            const errSpan = document.createElement('span');
-            errSpan.style.cssText = 'color:var(--color-danger);font-size:0.85rem;';
-            errSpan.textContent = error.message || 'Failed to generate invite.';
-            actionsContainer.appendChild(errSpan);
-            inviteBtn.style.display = '';
-            setTimeout(() => { errSpan.remove(); }, 4000);
+    try {
+        const response = await fetch(`${API_URL}/${memberId}/invite`, { method: 'POST' });
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText);
         }
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); inviteBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    actionsContainer.appendChild(confirmSpan);
+        const result = await response.json();
+        const inviteBox = document.createElement('div');
+        inviteBox.style.cssText = 'display:flex;flex-direction:column;gap:6px;font-size:0.85rem;padding:10px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;max-width:320px;';
+        const heading = document.createElement('span');
+        heading.style.fontWeight = 'bold';
+        heading.textContent = 'Invite link (valid 48h):';
+        const linkRow = document.createElement('div');
+        linkRow.style.cssText = 'display:flex;gap:6px;align-items:center;';
+        const linkAnchor = document.createElement('a');
+        linkAnchor.href = result.invite_url;
+        linkAnchor.textContent = window.location.origin + result.invite_url;
+        linkAnchor.style.cssText = 'font-size:0.8rem;word-break:break-all;';
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn btn-secondary btn-sm';
+        copyBtn.textContent = 'Copy';
+        copyBtn.style.flexShrink = '0';
+        copyBtn.addEventListener('click', () => {
+            const fullURL = window.location.origin + result.invite_url;
+            const onSuccess = () => {
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+            };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(fullURL).then(onSuccess).catch(() => fallbackCopy(fullURL, onSuccess));
+            } else {
+                fallbackCopy(fullURL, onSuccess);
+            }
+        });
+        linkRow.append(linkAnchor, copyBtn);
+        const dismissBtn = document.createElement('button');
+        dismissBtn.className = 'btn btn-secondary btn-sm';
+        dismissBtn.textContent = 'Dismiss';
+        dismissBtn.addEventListener('click', async () => {
+            inviteBox.remove();
+            await loadMembers();
+        });
+        inviteBox.append(heading, linkRow, dismissBtn);
+        actionsContainer.appendChild(inviteBox);
+    } catch (error) {
+        console.error('Error generating invite:', error);
+        showToast(error.message || 'Failed to generate invite.', 'error');
+        inviteBtn.style.display = '';
+    }
 };
 
 function formatPower(power) {
@@ -1060,27 +1001,7 @@ function setupCSVImport() {
 
         const removeMemberIDs = Array.from(selectedRemoveMembers);
         if (removeMemberIDs.length > 0) {
-            // Button-swap confirm for destructive remove
-            confirmBtn.style.display = 'none';
-            const confirmSpan = document.createElement('span');
-            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-            const warnLabel = document.createElement('span');
-            warnLabel.style.cssText = 'font-size:0.85rem;color:var(--color-danger);';
-            warnLabel.textContent = `Delete ${removeMemberIDs.length} member(s)?`;
-            const proceedBtn = document.createElement('button');
-            proceedBtn.className = 'btn btn-danger btn-sm';
-            proceedBtn.textContent = 'Proceed';
-            const abortBtn = document.createElement('button');
-            abortBtn.className = 'btn btn-secondary btn-sm';
-            abortBtn.textContent = 'Cancel';
-            abortBtn.addEventListener('click', () => { confirmSpan.remove(); confirmBtn.style.display = ''; });
-            proceedBtn.addEventListener('click', () => {
-                confirmSpan.remove();
-                doImport(selectedMembers, removeMemberIDs, renames, confirmBtn, modal, fileInput);
-            });
-            confirmSpan.append(warnLabel, proceedBtn, abortBtn);
-            confirmBtn.parentElement.appendChild(confirmSpan);
-            return;
+            if (!await showConfirm(`Delete ${removeMemberIDs.length} member(s)? This cannot be undone.`, 'Delete')) return;
         }
 
         doImport(selectedMembers, removeMemberIDs, renames, confirmBtn, modal, fileInput);
@@ -1235,7 +1156,7 @@ function showCSVPreview(result) {
         if (member.squad_power) {
             const s = document.createElement('span');
             s.className = 'member-power';
-            s.style.cssText = 'margin-left:10px;font-size:0.85em;color:var(--color-primary);';
+            s.style.cssText = 'margin-left:10px;font-size:0.85em;color:var(--color-accent);';
             s.textContent = `🛡️ ${(member.squad_power / 1000000).toFixed(1)}M`;
             memberInfo.appendChild(s);
         }
@@ -1366,7 +1287,7 @@ function renderAliases() {
 
     if (filtered.length === 0) {
         const p = document.createElement('p');
-        p.style.cssText = 'text-align:center;color:var(--text-muted);margin-top:12px;';
+        p.style.cssText = 'text-align:center;color:var(--color-text-muted);margin-top:12px;';
         p.textContent = ALIAS_EMPTY_MESSAGES[activeAliasFilter] || ALIAS_EMPTY_MESSAGES.all;
         list.replaceChildren(p);
         return;
@@ -1374,7 +1295,7 @@ function renderAliases() {
 
     const rows = filtered.map(a => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border-color);';
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--color-border);';
 
         const left = document.createElement('div');
 
@@ -1437,7 +1358,7 @@ async function loadAliases() {
     const list = document.getElementById('aliases-list');
 
     const loadingP = document.createElement('p');
-    loadingP.style.cssText = 'text-align:center;color:var(--text-muted);';
+    loadingP.style.cssText = 'text-align:center;color:var(--color-text-muted);';
     loadingP.textContent = 'Loading...';
     list.replaceChildren(loadingP);
 
@@ -1484,35 +1405,16 @@ document.getElementById('add-alias-form')?.addEventListener('submit', async e =>
     }
 });
 
-window.deleteAlias = function (aliasId, rowEl, deleteBtn) {
-    deleteBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Remove?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        try {
-            const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error(await res.text());
-            await loadAliases();
-            loadMembers();
-        } catch (err) {
-            confirmSpan.remove();
-            deleteBtn.style.display = '';
-        }
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); deleteBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    rowEl.appendChild(confirmSpan);
+window.deleteAlias = async function (aliasId, rowEl, deleteBtn) {
+    if (!await showConfirm('Remove this alias?', 'Remove')) return;
+    try {
+        const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        await loadAliases();
+        loadMembers();
+    } catch (err) {
+        showToast('Failed to remove alias.', 'error');
+    }
 };
 
 document.querySelectorAll('[data-alias-filter]').forEach(btn => {

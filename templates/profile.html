@@ -1,6 +1,9 @@
 {{define "header_text"}}
-    <h1>🎮 Last War: Survival</h1>
-    <h2>My Profile</h2>
+    <h1>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        My Profile
+    </h1>
+    <h2>Account settings &amp; preferences</h2>
 {{end}}
 
 {{define "content"}}
@@ -93,7 +96,7 @@
             </form>
         </section>
         
-        <div id="no-member-warning" class="info-card" style="display: none; background: #fff3cd; color: #856404; border-color: #ffeeba;">
+        <div id="no-member-warning" class="info-card" style="display: none; background: var(--color-warning-bg); color: var(--color-warning); border-color: var(--color-warning);">
             <p>⚠️ Your account is not linked to an in-game commander profile. Contact an administrator to link your account to update your stats.</p>
         </div>
     </div>

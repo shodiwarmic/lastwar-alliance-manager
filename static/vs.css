@@ -3,34 +3,34 @@
 .vs-table {
     width: 100%;
     border-collapse: collapse;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .vs-table th {
-    background: #667eea;
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     padding: 12px;
     text-align: left;
     font-weight: 600;
-    cursor: pointer; /* Added for sorting */
+    cursor: pointer;
     user-select: none;
     transition: background 0.2s ease;
 }
 
 .vs-table th:hover {
-    background: #5568d3;
+    opacity: 0.88;
 }
 
 /* Sorting Indicators */
-.vs-table th.sort-asc::after { content: " ▲"; font-size: 0.8em; }
+.vs-table th.sort-asc::after  { content: " ▲"; font-size: 0.8em; }
 .vs-table th.sort-desc::after { content: " ▼"; font-size: 0.8em; }
 
 .vs-table td {
     padding: 10px 12px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--color-border);
 }
 
 .vs-table tr:last-child td {
@@ -38,7 +38,7 @@
 }
 
 .vs-table tr:hover {
-    background: var(--hover-bg);
+    background: var(--color-accent-bg);
 }
 
 .vs-input {
@@ -47,17 +47,17 @@
     min-width: 60px;
     box-sizing: border-box;
     padding: 8px 10px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--color-border);
     border-radius: 6px;
     font-size: 14px;
     text-align: center;
-    background: var(--input-bg);
-    color: var(--text-primary);
+    background: var(--color-surface);
+    color: var(--color-text);
 }
 
 .vs-input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--color-accent);
 }
 
 /* Read-only state styling */
@@ -73,38 +73,32 @@
 }
 
 .member-rank {
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-size: 0.9em;
     margin-left: 8px;
 }
 
-/* Update your .total-column to this (Removed display: flex) */
 .total-column {
     font-weight: bold;
-    color: #667eea;
+    color: var(--color-accent);
     font-size: 1.1em;
     text-align: center;
 }
 
-/* Add these new styles at the bottom of the file */
 .calc-mode-btn {
-    background: #17a2b8;
-}
-.calc-mode-btn:hover {
-    background: #138496;
+    background: var(--color-accent);
 }
 
 /* Highlights the input boxes when in Total Calculation mode */
 .total-mode-input {
-    background-color: #fff3cd !important;
-    border-color: #ffc107 !important;
-    color: #000000 !important; /* Forces black text for contrast in Dark Mode */
+    background-color: var(--color-warning-bg) !important;
+    border-color: var(--color-warning) !important;
     font-weight: bold;
 }
 
 .calc-btn {
-    background: #17a2b8;
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     border: none;
     border-radius: 4px;
     padding: 4px 8px;
@@ -114,7 +108,7 @@
     transition: background 0.2s;
 }
 
-.calc-btn:hover { background: #138496; }
+.calc-btn:hover { opacity: 0.88; }
 
 .controls {
     display: flex;
@@ -133,8 +127,8 @@
 
 .week-nav-btn {
     padding: 10px 20px;
-    background: #667eea;
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -143,12 +137,12 @@
 }
 
 .week-nav-btn:hover {
-    background: #5568d3;
+    opacity: 0.88;
     transform: translateY(-2px);
 }
 
 .week-nav-btn:disabled {
-    background: #ccc;
+    background: var(--color-border);
     cursor: not-allowed;
     transform: none;
     opacity: 0.6;
@@ -156,12 +150,12 @@
 
 .week-info h3 {
     margin: 0;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .week-subtitle {
     margin: 5px 0 0 0;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-size: 0.9em;
 }
 
@@ -172,8 +166,8 @@
 
 .save-btn {
     padding: 10px 20px;
-    background: #28a745;
-    color: white;
+    background: var(--color-success);
+    color: #fff;
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -181,17 +175,17 @@
     transition: all 0.3s ease;
 }
 
-.save-btn:hover { background: #218838; transform: translateY(-2px); }
+.save-btn:hover { opacity: 0.88; transform: translateY(-2px); }
 
 .csv-btn {
-    background: #fd7e14;
+    background: var(--color-warning);
 }
-.csv-btn:hover { background: #e86e10; }
+.csv-btn:hover { opacity: 0.88; }
 
 .clear-btn {
     padding: 10px 20px;
-    background: #dc3545;
-    color: white;
+    background: var(--color-danger);
+    color: #fff;
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -199,20 +193,20 @@
     transition: all 0.3s ease;
 }
 
-.clear-btn:hover { background: #c82333; transform: translateY(-2px); }
+.clear-btn:hover { opacity: 0.88; transform: translateY(-2px); }
 
 .search-box {
     width: 100%;
     max-width: 300px;
     padding: 10px 15px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     font-size: 14px;
-    background: var(--input-bg);
-    color: var(--text-primary);
+    background: var(--color-surface);
+    color: var(--color-text);
 }
 
-.search-box:focus { outline: none; border-color: #667eea; }
+.search-box:focus { outline: none; border-color: var(--color-accent); }
 .table-wrapper { overflow-x: auto; }
 
 /* Hidden utility class for permissions */

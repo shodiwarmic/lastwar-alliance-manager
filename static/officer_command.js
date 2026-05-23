@@ -82,9 +82,10 @@ function buildLeaderFilter() {
 }
 
 function getFilters() {
+    const activeChip = document.querySelector('#filter-frequency-chips .filter-chip.active');
     return {
         leader: parseInt(document.getElementById('filter-leader').value) || 0,
-        frequency: document.getElementById('filter-frequency').value,
+        frequency: activeChip ? activeChip.dataset.freq : '',
     };
 }
 
@@ -95,7 +96,7 @@ function render() {
 
     if (!categories.length) {
         const p = document.createElement('p');
-        p.style.color = 'var(--text-secondary)';
+        p.style.color = 'var(--color-text-mid)';
         if (canManage) {
             p.appendChild(document.createTextNode('No categories yet. Use '));
             const strong = document.createElement('strong');
@@ -182,31 +183,12 @@ function render() {
             delCatBtn.className = 'btn btn-sm btn-danger';
             delCatBtn.title = 'Delete category';
             delCatBtn.textContent = '🗑';
-            delCatBtn.addEventListener('click', () => {
-                delCatBtn.style.display = 'none';
-                const confirmSpan = document.createElement('span');
-                confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-                const label = document.createElement('span');
-                label.textContent = 'Sure?';
-                label.style.fontSize = '0.85rem';
-                const yesBtn = document.createElement('button');
-                yesBtn.className = 'btn btn-danger btn-sm';
-                yesBtn.textContent = 'Yes';
-                yesBtn.addEventListener('click', () => deleteCategory(ci));
-                const noBtn = document.createElement('button');
-                noBtn.className = 'btn btn-secondary btn-sm';
-                noBtn.textContent = 'No';
-                noBtn.addEventListener('click', () => { confirmSpan.remove(); delCatBtn.style.display = ''; });
-                confirmSpan.append(label, yesBtn, noBtn);
-                delCatBtn.insertAdjacentElement('afterend', confirmSpan);
+            delCatBtn.addEventListener('click', async () => {
+                if (!await showConfirm('Delete this category?', 'Delete')) return;
+                deleteCategory(ci);
             });
             header.appendChild(delCatBtn);
 
-            const addRespBtn = document.createElement('button');
-            addRespBtn.className = 'btn btn-sm btn-primary';
-            addRespBtn.textContent = '+ Add Responsibility';
-            addRespBtn.addEventListener('click', () => openRespModal(ci, null));
-            header.appendChild(addRespBtn);
         }
 
         catDiv.appendChild(header);
@@ -300,7 +282,11 @@ function render() {
                 (rp.assignees || []).forEach(a => {
                     const chip = document.createElement('span');
                     chip.className = 'oc-chip';
-                    chip.appendChild(document.createTextNode(`${a.name} ${a.rank}`));
+                    chip.appendChild(document.createTextNode(a.name + ' '));
+                    const rankBadge = document.createElement('span');
+                    rankBadge.className = `member-rank rank-${a.rank}`;
+                    rankBadge.textContent = a.rank;
+                    chip.appendChild(rankBadge);
                     if (canManage) {
                         const removeBtn = document.createElement('button');
                         removeBtn.className = 'oc-chip-remove';
@@ -335,23 +321,9 @@ function render() {
                     const delRespBtn = document.createElement('button');
                     delRespBtn.className = 'btn btn-sm btn-danger';
                     delRespBtn.textContent = 'Delete';
-                    delRespBtn.addEventListener('click', () => {
-                        delRespBtn.style.display = 'none';
-                        const confirmSpan = document.createElement('span');
-                        confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-                        const label = document.createElement('span');
-                        label.textContent = 'Sure?';
-                        label.style.fontSize = '0.85rem';
-                        const yesBtn = document.createElement('button');
-                        yesBtn.className = 'btn btn-danger btn-sm';
-                        yesBtn.textContent = 'Yes';
-                        yesBtn.addEventListener('click', () => deleteResponsibility(ci, ri));
-                        const noBtn = document.createElement('button');
-                        noBtn.className = 'btn btn-secondary btn-sm';
-                        noBtn.textContent = 'No';
-                        noBtn.addEventListener('click', () => { confirmSpan.remove(); delRespBtn.style.display = ''; });
-                        confirmSpan.append(label, yesBtn, noBtn);
-                        delRespBtn.insertAdjacentElement('afterend', confirmSpan);
+                    delRespBtn.addEventListener('click', async () => {
+                        if (!await showConfirm('Delete this responsibility?', 'Delete')) return;
+                        deleteResponsibility(ci, ri);
                     });
                     actionsDiv.appendChild(delRespBtn);
                     actionsTd.appendChild(actionsDiv);
@@ -360,10 +332,30 @@ function render() {
 
             tableScroll.appendChild(table);
             catDiv.appendChild(tableScroll);
+
+            if (canManage) {
+                const footer = document.createElement('div');
+                footer.className = 'oc-table-footer';
+                const addRespBtn = document.createElement('button');
+                addRespBtn.className = 'btn btn-sm btn-primary';
+                addRespBtn.textContent = '+ Add Responsibility';
+                addRespBtn.addEventListener('click', () => openRespModal(ci, null));
+                footer.appendChild(addRespBtn);
+                catDiv.appendChild(footer);
+            }
         } else {
             const emptyDiv = document.createElement('div');
             emptyDiv.className = 'oc-empty';
-            emptyDiv.textContent = `No responsibilities${frequency || leader ? ' match the current filters' : ''}.`;
+            if (canManage && !frequency && !leader) {
+                emptyDiv.appendChild(document.createTextNode('No responsibilities yet — '));
+                const addLink = document.createElement('button');
+                addLink.className = 'oc-empty-add-link';
+                addLink.textContent = 'Add one';
+                addLink.addEventListener('click', () => openRespModal(ci, null));
+                emptyDiv.appendChild(addLink);
+            } else {
+                emptyDiv.textContent = `No responsibilities${frequency || leader ? ' match the current filters' : ''}.`;
+            }
             catDiv.appendChild(emptyDiv);
         }
 
@@ -626,7 +618,7 @@ function renderAssigneeList(filter, assigned) {
 
     if (!members.length) {
         const p = document.createElement('p');
-        p.style.cssText = 'color:var(--text-secondary);padding:0.5rem;font-size:0.9rem;';
+        p.style.cssText = 'color:var(--color-text-mid);padding:0.5rem;font-size:0.9rem;';
         p.textContent = 'No members to add.';
         container.replaceChildren(p);
         return;
@@ -733,5 +725,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Filters
     document.getElementById('filter-leader').addEventListener('change', render);
-    document.getElementById('filter-frequency').addEventListener('change', render);
+
+    // Frequency filter chips
+    document.querySelectorAll('#filter-frequency-chips .filter-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#filter-frequency-chips .filter-chip').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            render();
+        });
+    });
 });

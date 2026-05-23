@@ -1,0 +1,116 @@
+/* Full-page centering — overrides styles.css `body { overflow: hidden }` for
+   the login form. auth.css loads AFTER styles.css so these rules win. */
+body {
+  margin: 0;
+  padding: 20px;
+  overflow: auto;
+  min-height: 100vh;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-container {
+  width: 100%;
+  max-width: 420px;
+}
+
+.login-box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* Dark brand header — always sidebar-dark regardless of content theme */
+.login-header {
+  background: var(--color-sidebar, #1c2030);
+  padding: 32px 30px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.login-header-icon {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  background: var(--color-accent);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.login-header h1 {
+  font-size: 20px; font-weight: 800;
+  color: #fff; letter-spacing: -0.02em; margin: 0;
+}
+
+.login-header p {
+  font-size: 13px;
+  color: var(--color-sidebar-muted, #6b7490);
+  margin: 0;
+}
+
+.login-form {
+  padding: 32px 30px;
+}
+
+/* Full-width submit button */
+.login-btn {
+  width: 100%;
+  padding: 11px;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: inherit; font-size: 15px; font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.login-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.login-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Login-page banner (admin message) */
+.login-banner {
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: var(--color-alert-bg);
+  border: 1px solid var(--color-alert-border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--color-alert-text);
+}
+
+.login-banner strong { display: block; margin-bottom: 6px; font-size: 14px; }
+.login-banner code {
+  background: var(--color-card);
+  padding: 1px 5px; border-radius: 3px; font-family: monospace;
+}
+
+/* Invite-specific */
+.invite-member-label {
+  font-size: 13px;
+  color: var(--color-text);
+  margin-bottom: 18px;
+  padding: 10px 14px;
+  background: var(--color-accent-bg);
+  border: 1px solid var(--color-accent-border);
+  border-radius: 6px;
+}
+
+.field-hint      { margin-top: 4px; font-size: 12px; color: var(--color-text-muted); }
+.field-hint code { background: var(--color-card); padding: 1px 4px; border-radius: 3px; font-family: monospace; }
+.error-hint      { color: var(--color-danger); }
+
+.invite-error-state { text-align: center; padding: 10px 0; }
+.invite-error-icon  { font-size: 2.5em; margin-bottom: 10px; }
+.invite-error-state h2 { margin-bottom: 10px; color: var(--color-text); }
+.invite-error-state p  { color: var(--color-text-muted); font-size: 14px; }
+
+@media (max-width: 480px) {
+  body           { align-items: flex-start; padding-top: 32px; }
+  .login-header  { padding: 24px 20px; }
+  .login-form    { padding: 24px 20px; }
+}

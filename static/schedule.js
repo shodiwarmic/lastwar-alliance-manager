@@ -100,7 +100,7 @@ function dayOfSeason(dateStr) {
 
 function showStatus(el, msg, isError, durationMs) {
     el.textContent = msg;
-    el.style.color = isError ? 'var(--danger-color, #e74c3c)' : 'var(--success-color, #27ae60)';
+    el.style.color = isError ? 'var(--color-danger)' : 'var(--color-success)';
     if (durationMs !== 0) {
         setTimeout(() => { el.textContent = ''; }, durationMs ?? 3000);
     }
@@ -374,7 +374,10 @@ function buildEventCard(evt, dateStr) {
         delLabel.textContent = 'Delete';
         delBtn.appendChild(delIcon);
         delBtn.appendChild(delLabel);
-        delBtn.addEventListener('click', () => confirmDeleteEvent(evt.id, actions, delBtn));
+        delBtn.addEventListener('click', async () => {
+            if (!await showConfirm('Delete this event?', 'Delete')) return;
+            deleteEvent(evt.id);
+        });
         actions.appendChild(delBtn);
 
         card.appendChild(actions);
@@ -575,34 +578,6 @@ function setActionBtnContent(btn, icon, label) {
     btn.appendChild(labelSpan);
 }
 
-function confirmDeleteEvent(id, container, delBtn) {
-    const editBtn = container.querySelector('.btn-ghost');
-    if (editBtn) editBtn.style.display = 'none';
-
-    // Swap delete button for Sure? + Cancel in-place
-    const newDel = delBtn.cloneNode(false);
-    setActionBtnContent(newDel, '🗑', 'Sure?');
-    delBtn.replaceWith(newDel);
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn btn-secondary btn-sm event-card-action-btn';
-    setActionBtnContent(cancelBtn, '✕', 'Cancel');
-    newDel.after(cancelBtn);
-
-    newDel.addEventListener('click', async () => {
-        await deleteEvent(id);
-    });
-
-    cancelBtn.addEventListener('click', () => {
-        cancelBtn.remove();
-        // Clone to strip all accumulated listeners before rewiring
-        const freshDel = newDel.cloneNode(false);
-        setActionBtnContent(freshDel, '🗑', 'Delete');
-        newDel.replaceWith(freshDel);
-        if (editBtn) editBtn.style.display = '';
-        freshDel.addEventListener('click', () => confirmDeleteEvent(id, container, freshDel));
-    });
-}
 
 async function deleteEvent(id) {
     try {
@@ -672,7 +647,15 @@ function renderEventTypes() {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'btn btn-danger btn-sm';
                 delBtn.textContent = 'Delete';
-                delBtn.addEventListener('click', () => confirmDeleteEventType(et.id, actions, delBtn));
+                delBtn.addEventListener('click', async () => {
+                    if (!await showConfirm('Delete this event type?', 'Delete')) return;
+                    const res = await fetch('/api/schedule/event-types/' + et.id, { method: 'DELETE' });
+                    if (!res.ok) {
+                        showToast(await res.text() || 'Delete failed.', 'error');
+                        return;
+                    }
+                    await loadEventTypes();
+                });
                 actions.appendChild(delBtn);
             }
 
@@ -740,46 +723,6 @@ async function saveEventType(e) {
     await loadEventTypes();
 }
 
-function confirmDeleteEventType(id, container, delBtn) {
-    delBtn.style.display = 'none';
-
-    const span = document.createElement('span');
-    span.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-
-    const label = document.createElement('span');
-    label.textContent = 'Sure?';
-    label.style.fontSize = '0.82rem';
-
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        const res = await fetch('/api/schedule/event-types/' + id, { method: 'DELETE' });
-        if (!res.ok) {
-            const errEl = document.createElement('span');
-            errEl.style.color = 'var(--danger-color,#e74c3c)';
-            errEl.style.fontSize = '0.82rem';
-            errEl.textContent = await res.text() || 'Delete failed';
-            span.replaceWith(errEl);
-            delBtn.style.display = '';
-            setTimeout(() => errEl.remove(), 4000);
-            return;
-        }
-        span.remove();
-        await loadEventTypes();
-    });
-
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => {
-        span.remove();
-        delBtn.style.display = '';
-    });
-
-    span.append(label, yesBtn, noBtn);
-    container.appendChild(span);
-}
 
 // ── Server Events tab ─────────────────────────────────────────────────────────
 
@@ -851,7 +794,12 @@ function renderServerEvents() {
             const delBtn = document.createElement('button');
             delBtn.className = 'btn btn-danger btn-sm';
             delBtn.textContent = 'Delete';
-            delBtn.addEventListener('click', () => confirmDeleteServerEvent(evt.id, actions, delBtn));
+            delBtn.addEventListener('click', async () => {
+                if (!await showConfirm('Delete this server event?', 'Delete')) return;
+                await fetch('/api/schedule/server-events/' + evt.id, { method: 'DELETE' });
+                await loadServerEvents();
+                await loadWeek();
+            });
             actions.appendChild(delBtn);
 
             row.appendChild(actions);
@@ -950,37 +898,6 @@ async function saveServerEvent(e) {
     await loadWeek();
 }
 
-function confirmDeleteServerEvent(id, container, delBtn) {
-    delBtn.style.display = 'none';
-
-    const span = document.createElement('span');
-    span.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-
-    const label = document.createElement('span');
-    label.textContent = 'Sure?';
-    label.style.fontSize = '0.82rem';
-
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        await fetch('/api/schedule/server-events/' + id, { method: 'DELETE' });
-        span.remove();
-        await loadServerEvents();
-        await loadWeek();
-    });
-
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => {
-        span.remove();
-        delBtn.style.display = '';
-    });
-
-    span.append(label, yesBtn, noBtn);
-    container.appendChild(span);
-}
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
 

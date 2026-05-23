@@ -768,7 +768,7 @@
 
         const btn = commit ? btnContribCommit : btnContribPreview;
         setButtonLoading(btn);
-        if (statusEl) { statusEl.textContent = commit ? 'Committing…' : 'Processing…'; statusEl.style.color = 'var(--text-muted)'; }
+        if (statusEl) { statusEl.textContent = commit ? 'Committing…' : 'Processing…'; statusEl.style.color = 'var(--color-text-muted)'; }
 
         const fd = new FormData();
         fd.append('season_id', activeSeason.id);
@@ -967,23 +967,9 @@
                 delBtn.className = 'btn btn-danger btn-sm';
                 delBtn.textContent = 'Delete';
                 delBtn.style.marginLeft = '4px';
-                delBtn.addEventListener('click', () => {
-                    delBtn.style.display = 'none';
-                    const confirmSpan = document.createElement('span');
-                    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;margin-left:4px;';
-                    const label = document.createElement('span');
-                    label.textContent = 'Sure?';
-                    label.style.fontSize = '0.85rem';
-                    const yesBtn = document.createElement('button');
-                    yesBtn.className = 'btn btn-danger btn-sm';
-                    yesBtn.textContent = 'Yes';
-                    yesBtn.addEventListener('click', () => deleteReward(rw.id));
-                    const noBtn = document.createElement('button');
-                    noBtn.className = 'btn btn-secondary btn-sm';
-                    noBtn.textContent = 'No';
-                    noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
-                    confirmSpan.append(label, yesBtn, noBtn);
-                    tdActions.appendChild(confirmSpan);
+                delBtn.addEventListener('click', async () => {
+                    if (!await showConfirm('Delete this reward?', 'Delete')) return;
+                    deleteReward(rw.id);
                 });
                 tdActions.appendChild(delBtn);
                 tr.appendChild(tdActions);
@@ -1201,23 +1187,9 @@
                 const delBtn = document.createElement('button');
                 delBtn.className = 'btn btn-danger btn-sm';
                 delBtn.textContent = 'Delete';
-                delBtn.addEventListener('click', () => {
-                    delBtn.style.display = 'none';
-                    const confirmSpan = document.createElement('span');
-                    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-                    const label = document.createElement('span');
-                    label.textContent = 'Sure?';
-                    label.style.fontSize = '0.85rem';
-                    const yesBtn = document.createElement('button');
-                    yesBtn.className = 'btn btn-danger btn-sm';
-                    yesBtn.textContent = 'Yes';
-                    yesBtn.addEventListener('click', () => deleteMailItem(item.id));
-                    const noBtn = document.createElement('button');
-                    noBtn.className = 'btn btn-secondary btn-sm';
-                    noBtn.textContent = 'No';
-                    noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
-                    confirmSpan.append(label, yesBtn, noBtn);
-                    actions.appendChild(confirmSpan);
+                delBtn.addEventListener('click', async () => {
+                    if (!await showConfirm('Delete this mail item?', 'Delete')) return;
+                    deleteMailItem(item.id);
                 });
                 actions.appendChild(delBtn);
             }
@@ -1804,7 +1776,7 @@
         btnEsPushSchedule.addEventListener('click', () => {
             if (!activeSeason) return;
             const statusEl = document.getElementById('es-push-status');
-            if (statusEl) { statusEl.textContent = 'Pushing…'; statusEl.style.color = 'var(--text-muted)'; }
+            if (statusEl) { statusEl.textContent = 'Pushing…'; statusEl.style.color = 'var(--color-text-muted)'; }
             setButtonLoading(btnEsPushSchedule);
             fetch('/api/season-hub/season-events/push', {
                 method: 'POST',

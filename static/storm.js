@@ -188,7 +188,7 @@ function renderPool() {
 
     if (unassigned.length === 0) {
         const p = document.createElement('p');
-        p.style.cssText = 'color:var(--text-secondary);font-size:0.85em;';
+        p.style.cssText = 'color:var(--color-text-mid);font-size:0.85em;';
         p.textContent = 'All members assigned';
         pool.replaceChildren(p);
         return;
@@ -394,7 +394,7 @@ function buildBuildingSlot(g, b) {
     }
 
     const powerSpan = document.createElement('span');
-    powerSpan.style.cssText = 'font-weight:400;font-size:0.85em;color:var(--text-secondary);';
+    powerSpan.style.cssText = 'font-weight:400;font-size:0.85em;color:var(--color-text-mid);';
     powerSpan.textContent = ` ${formatPowerSum(b.members.map(m => m.member_id))}`;
     header.appendChild(powerSpan);
     slot.appendChild(header);
@@ -430,7 +430,7 @@ function buildDirectSlot(g) {
     header.appendChild(document.createTextNode('Flexible Role'));
 
     const powerSpan = document.createElement('span');
-    powerSpan.style.cssText = 'font-weight:400;font-size:0.85em;color:var(--text-secondary);';
+    powerSpan.style.cssText = 'font-weight:400;font-size:0.85em;color:var(--color-text-mid);';
     powerSpan.textContent = ` ${formatPowerSum(g.direct_members.map(m => m.member_id))}`;
     header.appendChild(powerSpan);
     slot.appendChild(header);
@@ -482,7 +482,7 @@ function buildGroupCard(g) {
     }
 
     const powerInfo = document.createElement('span');
-    powerInfo.style.cssText = 'font-size:0.8em;color:var(--text-secondary);';
+    powerInfo.style.cssText = 'font-size:0.8em;color:var(--color-text-mid);';
     powerInfo.textContent = `Primary: ${formatPowerSum(primaryIds)} | Sub: ${formatPowerSum(subIds)}`;
     header.appendChild(powerInfo);
 
@@ -491,23 +491,9 @@ function buildGroupCard(g) {
         deleteBtn.className = 'btn btn-danger';
         deleteBtn.style.cssText = 'padding:2px 8px;';
         deleteBtn.textContent = '✕';
-        deleteBtn.addEventListener('click', () => {
-            deleteBtn.style.display = 'none';
-            const confirmSpan = document.createElement('span');
-            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-            const label = document.createElement('span');
-            label.textContent = 'Sure?';
-            label.style.fontSize = '0.85rem';
-            const yesBtn = document.createElement('button');
-            yesBtn.className = 'btn btn-danger btn-sm';
-            yesBtn.textContent = 'Yes';
-            yesBtn.addEventListener('click', () => deleteGroup(g.id));
-            const noBtn = document.createElement('button');
-            noBtn.className = 'btn btn-secondary btn-sm';
-            noBtn.textContent = 'No';
-            noBtn.addEventListener('click', () => { confirmSpan.remove(); deleteBtn.style.display = ''; });
-            confirmSpan.append(label, yesBtn, noBtn);
-            deleteBtn.insertAdjacentElement('afterend', confirmSpan);
+        deleteBtn.addEventListener('click', async () => {
+            if (!await showConfirm('Delete this group?', 'Delete')) return;
+            deleteGroup(g.id);
         });
         header.appendChild(deleteBtn);
     }
@@ -530,7 +516,7 @@ function buildGroupCard(g) {
         body.appendChild(textarea);
     } else if (g.instructions) {
         const p = document.createElement('p');
-        p.style.cssText = 'color:var(--text-secondary);font-size:0.9em;margin-bottom:8px;';
+        p.style.cssText = 'color:var(--color-text-mid);font-size:0.9em;margin-bottom:8px;';
         p.textContent = g.instructions;
         body.appendChild(p);
     }
@@ -599,7 +585,7 @@ function renderGroups() {
 
     if (tfParticipating[currentTF] === 0) {
         const p = document.createElement('p');
-        p.style.cssText = 'color:var(--text-secondary);';
+        p.style.cssText = 'color:var(--color-text-mid);';
         p.textContent = `Task Force ${currentTF} is not participating this week.`;
         container.replaceChildren(p);
         return;
@@ -607,7 +593,7 @@ function renderGroups() {
 
     if (groups.length === 0) {
         const p = document.createElement('p');
-        p.style.cssText = 'color:var(--text-secondary);';
+        p.style.cssText = 'color:var(--color-text-mid);';
         p.textContent = 'No groups yet.' + (canManage ? ' Click "+ Add Group" to create one.' : '');
         container.replaceChildren(p);
         return;
@@ -724,7 +710,7 @@ function showInlineDropdown(dropdown, q, groupId, buildingId, isDirect) {
 
     if (filtered.length === 0) {
         const div = document.createElement('div');
-        div.style.cssText = 'padding:6px 10px;color:var(--text-secondary);font-size:0.85em;';
+        div.style.cssText = 'padding:6px 10px;color:var(--color-text-mid);font-size:0.85em;';
         div.textContent = 'No members available';
         dropdown.replaceChildren(div);
         return;
@@ -1519,7 +1505,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const nameInput = document.createElement('input');
             nameInput.type = 'text';
             nameInput.placeholder = 'Group name';
-            nameInput.style.cssText = 'padding:2px 6px;font-size:0.85rem;border-radius:4px;border:1px solid var(--border-color);background:var(--input-bg,var(--bg-secondary));color:var(--text-primary);width:120px;';
+            nameInput.style.cssText = 'padding:2px 6px;font-size:0.85rem;border-radius:4px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text);width:120px;';
             const createBtn = document.createElement('button');
             createBtn.className = 'btn btn-primary btn-sm';
             createBtn.textContent = 'Create';

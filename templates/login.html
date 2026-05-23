@@ -4,23 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Last War Alliance Manager</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="login.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/auth.css">
+    <script src="/theme.js"></script>
 </head>
 <body>
-    <div id="csrf-container" style="display:none;">
+    <div id="csrf-container" hidden>
         {{.CSRFToken}}
     </div>
     <div class="login-container">
         <div class="login-box">
             <div class="login-header">
-                <h1>🎮 Last War</h1>
-                <p>Alliance Manager Login</p>
+                <div class="login-header-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                         stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+                <h1>Alliance Manager</h1>
+                <p>Sign in to continue</p>
             </div>
 
             <div class="login-form">
-                <div id="error-message" class="error-message"></div>
-                <div id="success-message" class="success-message"></div>
+                <div id="error-message" class="error-message" style="display:none"></div>
+                <div id="success-message" class="success-message" style="display:none"></div>
 
                 <form id="login-form">
                     <div class="form-group">
@@ -39,18 +48,18 @@
                     {{ .LoginMessage }}
                 </div>
                 {{ end }}
-                
+
             </div>
         </div>
     </div>
 
-    <div id="force-password-modal" class="modal-overlay">
+    <div id="force-password-modal" class="modal">
         <div class="modal-content">
             <h3>🔒 Password Update Required</h3>
-            <p style="margin-bottom: 15px; font-size: 0.9em; color: var(--text-secondary);">Your password has expired or an admin requires you to update it.</p>
+            <p style="margin-bottom: 15px; font-size: 0.9em; color: var(--color-text-muted);">Your password has expired or an admin requires you to update it.</p>
 
             <ul id="password-rules" class="password-rules" style="list-style: none;">
-                <li style="color: var(--text-secondary);">⚪ Loading requirements...</li>
+                <li style="color: var(--color-text-muted);">⚪ Loading requirements...</li>
             </ul>
 
             <form id="force-password-form">
@@ -64,7 +73,7 @@
                     <div id="force-match-status" style="margin-top: 5px; font-size: 0.85em; font-weight: bold; display: none;"></div>
                 </div>
                 <div id="force-password-error" class="error-message" style="font-size: 0.9em; padding: 8px;"></div>
-                <button type="submit" class="login-btn" id="force-submit-btn" disabled style="opacity: 0.6; cursor: not-allowed;">Update & Login</button>
+                <button type="submit" class="login-btn" id="force-submit-btn" disabled style="opacity: 0.6; cursor: not-allowed;">Update &amp; Login</button>
             </form>
         </div>
     </div>

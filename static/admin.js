@@ -952,14 +952,14 @@ async function saveStormSlots() {
         if (!res.ok) {
             const msg = await res.text();
             statusEl.textContent = msg || 'Save failed';
-            statusEl.style.color = 'var(--danger-color, #e74c3c)';
+            statusEl.style.color = 'var(--color-danger)';
             return;
         }
         statusEl.textContent = 'Saved';
-        statusEl.style.color = 'var(--success-color, #27ae60)';
+        statusEl.style.color = 'var(--color-success)';
         setTimeout(() => { statusEl.textContent = ''; }, 3000);
     } catch {
         statusEl.textContent = 'Network error';
-        statusEl.style.color = 'var(--danger-color, #e74c3c)';
+        statusEl.style.color = 'var(--color-danger)';
     }
 }

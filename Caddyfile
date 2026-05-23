@@ -27,7 +27,7 @@ your-domain.com {
         # frame-src: allows the Collabora iframe to load on document pages.
         # connect-src: allows Collabora's JS to open WebSocket connections back to its own domain.
         # Replace collabora.your-domain.com with your actual Collabora subdomain.
-        Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self'; connect-src 'self' https://collabora.your-domain.com; frame-src https://collabora.your-domain.com; frame-ancestors 'none';"
+        Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://collabora.your-domain.com; frame-src https://collabora.your-domain.com; frame-ancestors 'none';"
 
         # Remove server information
         -Server

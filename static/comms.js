@@ -192,7 +192,18 @@ function renderTemplateCard(t) {
         const delBtn = document.createElement('button');
         delBtn.className = 'btn btn-danger btn-sm';
         delBtn.textContent = 'Delete';
-        delBtn.addEventListener('click', () => confirmDeleteTemplate(t, delBtn, actions));
+        delBtn.addEventListener('click', async () => {
+            if (!await showConfirm('Delete this template?', 'Delete')) return;
+            const res = await fetch('/api/comms/templates/' + t.id, { method: 'DELETE' });
+            if (res.ok) {
+                delete cache[t.type];
+                loaded[t.type] = false;
+                loadTemplates(t.type);
+                showToast('Template deleted.');
+            } else {
+                showToast('Delete failed.', 'error');
+            }
+        });
 
         actions.append(editBtn, delBtn);
     }
@@ -218,41 +229,6 @@ function renderTemplateCard(t) {
     return card;
 }
 
-function confirmDeleteTemplate(t, delBtn, actions) {
-    delBtn.style.display = 'none';
-    const span = document.createElement('span');
-    span.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-
-    const label = document.createElement('span');
-    label.textContent = 'Sure?';
-    label.style.fontSize = '0.85rem';
-    label.style.color = 'var(--text-secondary)';
-
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        const res = await fetch('/api/comms/templates/' + t.id, { method: 'DELETE' });
-        if (res.ok) {
-            delete cache[t.type];
-            loaded[t.type] = false;
-            loadTemplates(t.type);
-            showToast('Template deleted.');
-        } else {
-            showToast('Delete failed.', 'error');
-            span.remove();
-            delBtn.style.display = '';
-        }
-    });
-
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { span.remove(); delBtn.style.display = ''; });
-
-    span.append(label, yesBtn, noBtn);
-    actions.appendChild(span);
-}
 
 // ── Resource loading & rendering ─────────────────────────────────────────────
 
@@ -325,7 +301,18 @@ function renderResourceCard(r) {
         const delBtn = document.createElement('button');
         delBtn.className = 'btn btn-danger btn-sm';
         delBtn.textContent = 'Delete';
-        delBtn.addEventListener('click', () => confirmDeleteResource(r, delBtn, actions));
+        delBtn.addEventListener('click', async () => {
+            if (!await showConfirm('Delete this resource?', 'Delete')) return;
+            const res = await fetch('/api/comms/resources/' + r.id, { method: 'DELETE' });
+            if (res.ok) {
+                cache.resources = null;
+                loaded.resources = false;
+                loadResources();
+                showToast('Resource deleted.');
+            } else {
+                showToast('Delete failed.', 'error');
+            }
+        });
 
         actions.append(editBtn, delBtn);
     }
@@ -348,41 +335,6 @@ function renderResourceCard(r) {
     return card;
 }
 
-function confirmDeleteResource(r, delBtn, actions) {
-    delBtn.style.display = 'none';
-    const span = document.createElement('span');
-    span.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-
-    const label = document.createElement('span');
-    label.textContent = 'Sure?';
-    label.style.fontSize = '0.85rem';
-    label.style.color = 'var(--text-secondary)';
-
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        const res = await fetch('/api/comms/resources/' + r.id, { method: 'DELETE' });
-        if (res.ok) {
-            cache.resources = null;
-            loaded.resources = false;
-            loadResources();
-            showToast('Resource deleted.');
-        } else {
-            showToast('Delete failed.', 'error');
-            span.remove();
-            delBtn.style.display = '';
-        }
-    });
-
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { span.remove(); delBtn.style.display = ''; });
-
-    span.append(label, yesBtn, noBtn);
-    actions.appendChild(span);
-}
 
 // ── Template modal ────────────────────────────────────────────────────────────
 

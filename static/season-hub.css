@@ -8,8 +8,8 @@
     gap: 12px;
     margin-bottom: 16px;
     padding: 12px 16px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
 }
 
@@ -22,7 +22,7 @@
 .season-name {
     font-size: 1.1rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .season-badge {
@@ -41,8 +41,8 @@
 }
 
 .season-badge.archived {
-    background: var(--bg-tertiary);
-    color: var(--text-muted);
+    background: var(--color-card);
+    color: var(--color-text-muted);
 }
 
 .season-badge.upcoming {
@@ -83,7 +83,7 @@
 
 .tab-count {
     font-size: 0.85rem;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
 }
 
 /* ── Info panel ───────────────────────────────────────────────────────── */
@@ -118,7 +118,7 @@
 .pct-bar-bg {
     flex: 1;
     height: 8px;
-    background: var(--bg-tertiary);
+    background: var(--color-card);
     border-radius: 4px;
     overflow: hidden;
 }
@@ -126,13 +126,13 @@
 .pct-bar-fill {
     height: 100%;
     border-radius: 4px;
-    background: var(--color-primary);
+    background: var(--color-accent);
     transition: width 0.2s;
 }
 
 .pct-bar-label {
     font-size: 0.8rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     white-space: nowrap;
     min-width: 42px;
     text-align: right;
@@ -156,7 +156,7 @@
 .week-dot.dot-full    { background: var(--color-success); }
 .week-dot.dot-partial { background: var(--color-info); }
 .week-dot.dot-absent  { background: var(--color-danger); opacity: 0.6; }
-.week-dot.dot-empty   { background: var(--bg-tertiary); border: 1px solid var(--border-color); }
+.week-dot.dot-empty   { background: var(--color-card); border: 1px solid var(--color-border); }
 
 /* Class tags */
 .class-tag {
@@ -209,8 +209,8 @@
 }
 
 .tier-badge.valued {
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
+    background: var(--color-card);
+    color: var(--color-text-mid);
 }
 
 /* Key event eligibility */
@@ -220,7 +220,7 @@
 }
 
 .key-event-ineligible {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
 }
 
 /* ── Shared week dropdown ─────────────────────────────────────────────── */
@@ -242,10 +242,10 @@
 
 .score-select {
     padding: 4px 6px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--color-bg);
+    color: var(--color-text);
     font-size: 0.85rem;
     min-width: 100px;
 }
@@ -253,10 +253,10 @@
 .key-event-count {
     width: 60px;
     padding: 4px 6px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--color-bg);
+    color: var(--color-text);
     font-size: 0.85rem;
     text-align: center;
 }
@@ -265,10 +265,10 @@
     width: 100%;
     max-width: 240px;
     padding: 4px 6px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--color-bg);
+    color: var(--color-text);
     font-size: 0.85rem;
 }
 
@@ -276,10 +276,10 @@
 .contrib-input {
     width: 120px;
     padding: 4px 6px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--color-bg);
+    color: var(--color-text);
     font-size: 0.9rem;
     text-align: right;
 }
@@ -292,7 +292,7 @@
     display: block;
     font-size: 0.85rem;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     margin-bottom: 4px;
 }
 
@@ -314,7 +314,7 @@
     margin: 0;
     padding-left: 20px;
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 /* ── Rewards tab ──────────────────────────────────────────────────────── */
@@ -337,8 +337,8 @@
     justify-content: space-between;
     gap: 12px;
     padding: 10px 14px;
-    background: var(--bg-secondary);
-    border: 2px solid var(--border-color);
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
     border-radius: 6px;
 }
 
@@ -352,7 +352,7 @@
 
 .mail-item-title {
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text);
     font-size: 0.9rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -361,7 +361,7 @@
 
 .mail-item-meta {
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
 }
 
 .mail-item-actions {
@@ -374,13 +374,13 @@
 .mail-item-content {
     margin: 0;
     padding: 10px 14px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-top: none;
     border-radius: 0 0 6px 6px;
     font-family: inherit;
     font-size: 0.875rem;
-    color: var(--text-primary);
+    color: var(--color-text);
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -431,7 +431,7 @@
 }
 
 #cs-score-levels-table thead tr {
-    background: var(--bg-tertiary);
+    background: var(--color-card);
 }
 
 #cs-score-levels-table th {
@@ -439,13 +439,13 @@
     text-align: left;
     font-size: 0.82rem;
     font-weight: 600;
-    color: var(--text-secondary);
-    border-bottom: 1px solid var(--border-color);
+    color: var(--color-text-mid);
+    border-bottom: 1px solid var(--color-border);
 }
 
 #cs-score-levels-table td {
     padding: 6px 8px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--color-border);
     vertical-align: middle;
 }
 

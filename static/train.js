@@ -216,26 +216,9 @@ function renderLogsTable(logs) {
             const delBtn = document.createElement('button');
             delBtn.className = 'btn btn-danger btn-sm';
             delBtn.textContent = 'Delete';
-            delBtn.addEventListener('click', () => {
-                delBtn.style.display = 'none';
-                const confirmSpan = document.createElement('span');
-                confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-                const label = document.createElement('span');
-                label.textContent = 'Sure?';
-                label.style.fontSize = '0.85rem';
-                const yesBtn = document.createElement('button');
-                yesBtn.className = 'btn btn-danger btn-sm';
-                yesBtn.textContent = 'Yes';
-                yesBtn.addEventListener('click', () => deleteTrainLog(log.id));
-                const noBtn = document.createElement('button');
-                noBtn.className = 'btn btn-secondary btn-sm';
-                noBtn.textContent = 'No';
-                noBtn.addEventListener('click', () => {
-                    confirmSpan.remove();
-                    delBtn.style.display = '';
-                });
-                confirmSpan.append(label, yesBtn, noBtn);
-                row.appendChild(confirmSpan);
+            delBtn.addEventListener('click', async () => {
+                if (!await showConfirm('Delete this train log?', 'Delete')) return;
+                deleteTrainLog(log.id);
             });
             row.appendChild(delBtn);
 
@@ -405,26 +388,9 @@ function renderRules() {
         const delBtn = document.createElement('button');
         delBtn.className = 'btn btn-danger btn-sm';
         delBtn.textContent = 'Delete';
-        delBtn.addEventListener('click', () => {
-            delBtn.style.display = 'none';
-            const confirmSpan = document.createElement('span');
-            confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-            const label = document.createElement('span');
-            label.textContent = 'Sure?';
-            label.style.fontSize = '0.85rem';
-            const yesBtn = document.createElement('button');
-            yesBtn.className = 'btn btn-danger btn-sm';
-            yesBtn.textContent = 'Yes';
-            yesBtn.addEventListener('click', () => deleteRule(rule.id));
-            const noBtn = document.createElement('button');
-            noBtn.className = 'btn btn-secondary btn-sm';
-            noBtn.textContent = 'No';
-            noBtn.addEventListener('click', () => {
-                confirmSpan.remove();
-                delBtn.style.display = '';
-            });
-            confirmSpan.append(label, yesBtn, noBtn);
-            actions.appendChild(confirmSpan);
+        delBtn.addEventListener('click', async () => {
+            if (!await showConfirm('Delete this rule?', 'Delete')) return;
+            deleteRule(rule.id);
         });
         actions.appendChild(delBtn);
 
@@ -480,7 +446,7 @@ function renderEligibleList(members) {
         left.style.gap = '12px';
 
         const pos = document.createElement('span');
-        pos.style.cssText = 'font-size:1.1rem;font-weight:700;color:var(--text-secondary);min-width:24px;text-align:center;';
+        pos.style.cssText = 'font-size:1.1rem;font-weight:700;color:var(--color-text-mid);min-width:24px;text-align:center;';
         pos.textContent = index + 1;
         left.appendChild(pos);
 
