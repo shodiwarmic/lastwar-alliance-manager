@@ -179,3 +179,32 @@
     flex-shrink: 0;
     width: auto;
 }
+.oc-modal-error {
+    color: var(--color-danger);
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+}
+.filter-chip-group {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.oc-table-footer {
+    padding: 0.6rem 1rem;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+.oc-empty-add-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--color-accent);
+    font-size: inherit;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+}
+.oc-empty-add-link:hover {
+    color: var(--color-text);
+}

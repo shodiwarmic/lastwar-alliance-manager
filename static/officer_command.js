@@ -82,9 +82,10 @@ function buildLeaderFilter() {
 }
 
 function getFilters() {
+    const activeChip = document.querySelector('#filter-frequency-chips .filter-chip.active');
     return {
         leader: parseInt(document.getElementById('filter-leader').value) || 0,
-        frequency: document.getElementById('filter-frequency').value,
+        frequency: activeChip ? activeChip.dataset.freq : '',
     };
 }
 
@@ -188,11 +189,6 @@ function render() {
             });
             header.appendChild(delCatBtn);
 
-            const addRespBtn = document.createElement('button');
-            addRespBtn.className = 'btn btn-sm btn-primary';
-            addRespBtn.textContent = '+ Add Responsibility';
-            addRespBtn.addEventListener('click', () => openRespModal(ci, null));
-            header.appendChild(addRespBtn);
         }
 
         catDiv.appendChild(header);
@@ -286,7 +282,11 @@ function render() {
                 (rp.assignees || []).forEach(a => {
                     const chip = document.createElement('span');
                     chip.className = 'oc-chip';
-                    chip.appendChild(document.createTextNode(`${a.name} ${a.rank}`));
+                    chip.appendChild(document.createTextNode(a.name + ' '));
+                    const rankBadge = document.createElement('span');
+                    rankBadge.className = `member-rank rank-${a.rank}`;
+                    rankBadge.textContent = a.rank;
+                    chip.appendChild(rankBadge);
                     if (canManage) {
                         const removeBtn = document.createElement('button');
                         removeBtn.className = 'oc-chip-remove';
@@ -332,10 +332,30 @@ function render() {
 
             tableScroll.appendChild(table);
             catDiv.appendChild(tableScroll);
+
+            if (canManage) {
+                const footer = document.createElement('div');
+                footer.className = 'oc-table-footer';
+                const addRespBtn = document.createElement('button');
+                addRespBtn.className = 'btn btn-sm btn-primary';
+                addRespBtn.textContent = '+ Add Responsibility';
+                addRespBtn.addEventListener('click', () => openRespModal(ci, null));
+                footer.appendChild(addRespBtn);
+                catDiv.appendChild(footer);
+            }
         } else {
             const emptyDiv = document.createElement('div');
             emptyDiv.className = 'oc-empty';
-            emptyDiv.textContent = `No responsibilities${frequency || leader ? ' match the current filters' : ''}.`;
+            if (canManage && !frequency && !leader) {
+                emptyDiv.appendChild(document.createTextNode('No responsibilities yet — '));
+                const addLink = document.createElement('button');
+                addLink.className = 'oc-empty-add-link';
+                addLink.textContent = 'Add one';
+                addLink.addEventListener('click', () => openRespModal(ci, null));
+                emptyDiv.appendChild(addLink);
+            } else {
+                emptyDiv.textContent = `No responsibilities${frequency || leader ? ' match the current filters' : ''}.`;
+            }
             catDiv.appendChild(emptyDiv);
         }
 
@@ -705,5 +725,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Filters
     document.getElementById('filter-leader').addEventListener('change', render);
-    document.getElementById('filter-frequency').addEventListener('change', render);
+
+    // Frequency filter chips
+    document.querySelectorAll('#filter-frequency-chips .filter-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#filter-frequency-chips .filter-chip').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            render();
+        });
+    });
 });

@@ -27,12 +27,12 @@
         <select id="filter-leader">
             <option value="">All Leaders</option>
         </select>
-        <select id="filter-frequency">
-            <option value="">All Frequencies</option>
-            <option value="Daily">Daily</option>
-            <option value="Weekly">Weekly</option>
-            <option value="Seasonal">Seasonal</option>
-        </select>
+        <div id="filter-frequency-chips" class="filter-chip-group" role="group" aria-label="Filter by frequency">
+            <button class="filter-chip active" data-freq="">All</button>
+            <button class="filter-chip" data-freq="Daily">Daily</button>
+            <button class="filter-chip" data-freq="Weekly">Weekly</button>
+            <button class="filter-chip" data-freq="Seasonal">Seasonal</button>
+        </div>
     </div>
 
     <div id="oc-categories"></div>
@@ -47,7 +47,7 @@
         <div class="form-group">
             <label>Name</label>
             <input type="text" id="add-cat-name" class="form-input" placeholder="e.g. Combat Operations">
-            <p id="add-cat-error" style="color:var(--danger);display:none;margin-top:0.25rem;font-size:0.875rem;"></p>
+            <p id="add-cat-error" class="oc-modal-error" style="display:none;"></p>
         </div>
         <div class="modal-actions">
             <button class="btn btn-secondary" id="add-cat-cancel">Cancel</button>
@@ -63,7 +63,7 @@
         <div class="form-group">
             <label>Name</label>
             <input type="text" id="resp-name" class="form-input" placeholder="e.g. Member Recruiting">
-            <p id="resp-name-error" style="color:var(--danger);display:none;margin-top:0.25rem;font-size:0.875rem;"></p>
+            <p id="resp-name-error" class="oc-modal-error" style="display:none;"></p>
         </div>
         <div class="form-group">
             <label>Description</label>

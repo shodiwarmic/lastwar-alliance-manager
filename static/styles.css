@@ -36,6 +36,7 @@
        Required so var(--color-*) never resolves to "guaranteed invalid" on <a> tags. */
     --color-bg:             #f4f6f9;
     --color-surface:        #ffffff;
+    --color-card:           #ffffff;
     --color-border:         #e4e8f0;
     --color-text:           #1c2030;
     --color-text-mid:       #4a5270;
