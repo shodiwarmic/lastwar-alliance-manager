@@ -38,7 +38,7 @@
     gap: 8px;
     flex-wrap: wrap;
     font-size: 0.875rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .date-range-row input[type="date"] {
@@ -58,15 +58,15 @@
 .train-table th {
     text-align: left;
     padding: 8px 12px;
-    background: var(--surface-secondary);
-    border-bottom: 2px solid var(--border-color);
+    background: var(--color-surface);
+    border-bottom: 2px solid var(--color-border);
     font-weight: 600;
     white-space: nowrap;
 }
 
 .train-table td {
     padding: 8px 12px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--color-border);
     vertical-align: middle;
 }
 
@@ -75,7 +75,7 @@
 }
 
 .train-table tr:hover td {
-    background: var(--surface-hover);
+    background: var(--color-surface);
 }
 
 .badge-free {
@@ -84,8 +84,8 @@
     border-radius: 10px;
     font-size: 0.75rem;
     font-weight: 600;
-    background: var(--success-bg, #1a3a2a);
-    color: var(--success-color, #4caf50);
+    background: var(--color-success-bg);
+    color: var(--color-success);
 }
 
 .badge-purchased {
@@ -94,8 +94,8 @@
     border-radius: 10px;
     font-size: 0.75rem;
     font-weight: 600;
-    background: var(--info-bg, #1a2a3a);
-    color: var(--info-color, #42a5f5);
+    background: var(--color-accent-bg);
+    color: var(--color-accent);
 }
 
 .badge-vip-type {
@@ -103,8 +103,8 @@
     padding: 2px 6px;
     border-radius: 8px;
     font-size: 0.7rem;
-    background: var(--surface-secondary);
-    color: var(--text-secondary);
+    background: var(--color-surface);
+    color: var(--color-text-mid);
     margin-left: 4px;
 }
 
@@ -132,8 +132,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    background: var(--surface-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     gap: 12px;
     flex-wrap: wrap;
@@ -149,7 +149,7 @@
     gap: 16px;
     flex-wrap: wrap;
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .eligible-card-stat {
@@ -163,12 +163,12 @@
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
 }
 
 .eligible-card-stat span:last-child {
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 /* ── Rules Tab ────────────────────────────────────────────────────────────── */
@@ -184,8 +184,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    background: var(--surface-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     gap: 12px;
     flex-wrap: wrap;
@@ -197,7 +197,7 @@
 
 .rule-card-meta {
     font-size: 0.82rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     margin-top: 2px;
 }
 
@@ -210,16 +210,16 @@
 
 .field-hint {
     font-size: 0.8rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     margin: 4px 0 10px;
 }
 
 .condition-group {
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     padding: 10px 12px;
     margin-bottom: 8px;
-    background: var(--surface-primary);
+    background: var(--color-bg);
 }
 
 .condition-group-header {
@@ -234,14 +234,14 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .or-divider {
     text-align: center;
     font-size: 0.78rem;
     font-weight: 700;
-    color: var(--accent-color);
+    color: var(--color-accent);
     letter-spacing: 0.1em;
     margin: 6px 0;
 }
@@ -278,7 +278,7 @@
 /* ── Misc ─────────────────────────────────────────────────────────────────── */
 
 .empty-state {
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-style: italic;
     text-align: center;
     padding: 32px 0;
