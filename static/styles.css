@@ -32,6 +32,26 @@
     --color-danger: #dc2626;
     --color-purple-bg: #ede9fe;
     --color-purple: #6d28d9;
+    /* Split Command token fallbacks — light-mode defaults; overridden by [data-theme] blocks.
+       Required so var(--color-*) never resolves to "guaranteed invalid" on <a> tags. */
+    --color-bg:             #f4f6f9;
+    --color-surface:        #ffffff;
+    --color-border:         #e4e8f0;
+    --color-text:           #1c2030;
+    --color-text-mid:       #4a5270;
+    --color-text-muted:     #8b93a8;
+    --color-accent:         #7c6df7;
+    --color-accent-bg:      rgba(124,109,247,0.09);
+    --color-accent-border:  rgba(124,109,247,0.25);
+    --color-alert-bg:       #ede9ff;
+    --color-alert-border:   rgba(124,109,247,0.30);
+    --color-alert-text:     #4c1d95;
+    --color-sidebar:        #1c2030;
+    --color-sidebar-text:   #c8cfdf;
+    --color-sidebar-muted:  #6b7490;
+    --color-sidebar-border: rgba(255,255,255,0.07);
+    --color-sidebar-hover:  rgba(255,255,255,0.05);
+    --card-shadow:          0 1px 2px rgba(0,0,0,0.03);
 }
 
 /* Auto theme - respects browser preference */

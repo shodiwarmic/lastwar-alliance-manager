@@ -74,6 +74,10 @@ function initTheme() {
 
 // Setup theme option handlers
 function setupThemeHandlers() {
+    // Re-sync visual state now that the DOM is ready. initTheme() ran before
+    // the body was parsed so querySelectorAll found nothing at that point.
+    updateThemeSelector(getThemePreference());
+
     const themeOptions = document.querySelectorAll('.theme-option');
     themeOptions.forEach(option => {
         option.addEventListener('click', (e) => {
