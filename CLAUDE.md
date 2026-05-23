@@ -380,7 +380,7 @@ btn.addEventListener('click', () => editMember(member.id));
 
 **Modal open/close check** — the global `.modal` class uses `display: flex` for centering. Always open modals with `modal.style.display = 'flex'` (never `'block'`) and close with `modal.style.display = ''`. Never add `class="hidden"` to a `.modal` element — see gotcha above. Verify open/close on every file during hardening.
 
-**Progress** (branch: `js-hardening`):
+**Progress**:
 | File | Status |
 |------|--------|
 | `static/members.js` | ✅ Done |
@@ -395,9 +395,23 @@ btn.addEventListener('click', () => editMember(member.id));
 | `static/upload.js` | ✅ Done |
 | `static/files.js` | ✅ Done |
 | `static/recruiting.js` | ✅ Done (written with safe patterns from the start) |
-
-`static/officer_command.js` — skip, already uses correct patterns.
-`static/login.js` — ✅ Done (same password-rules pattern as profile.js; fixed during final sweep).
+| `static/login.js` | ✅ Done (same password-rules pattern as profile.js; fixed during final sweep) |
+| `static/invite.js` | ✅ Done (same password-rules pattern as login.js) |
+| `static/accountability.js` | ✅ Done (uses safe DOM patterns throughout) |
+| `static/accountability_profile.js` | ✅ Done |
+| `static/accountability_report.js` | ✅ Done |
+| `static/activity.js` | ✅ Done |
+| `static/allies.js` | ✅ Done |
+| `static/comms.js` | ✅ Done |
+| `static/dashboard.js` | ✅ Done (reference implementation of the `el()` helper pattern) |
+| `static/season-hub.js` | ✅ Done |
+| `static/train.js` | ✅ Done |
+| `static/mail.js` | ✅ Done (2 `.onclick` property assignments on global modal buttons — safe, not markup injection) |
+| `static/officer_command.js` | ✅ Done (skip — already used correct patterns) |
+| `static/global.js` | ✅ Done (utility — no DOM injection) |
+| `static/theme.js` | ✅ Done (utility — no DOM injection) |
+| `static/csrf.js` | ✅ Done (utility — no DOM injection) |
+| `static/modal-focus.js` | ✅ Done (utility — keyboard focus trap only) |
 
 ## JS DOM standards — colors and styles
 
@@ -494,7 +508,8 @@ setFieldError(document.getElementById('name-input'), 'Name is required.');
 | `--color-primary` | `#667eea` | `#667eea` | Accent, focus rings, active states. |
 | `--color-info-bg` / `--color-info` | `#dbeafe` / `#1d4ed8` | `rgba(59,130,246,0.15)` / `#93c5fd` | Info panels, at-risk badges. |
 | `--color-success-bg` / `--color-success` | `#dcfce7` / `#15803d` | `rgba(34,197,94,0.15)` / `#86efac` | Success states, eligible badges. |
-| `--color-danger-bg` / `--color-danger` | `#fee2e2` / `#dc2626` | `rgba(220,53,69,0.15)` / `#f87171` | Errors, destructive actions. |
+| `--color-warning-bg` / `--color-warning` | `#fef3c7` / `#d97706` | `rgba(251,191,36,0.12)` / `#fbbf24` | Warnings, needs-improvement badges, profile expiry notices. |
+| `--color-danger-bg` / `--color-danger` | `#fee2e2` / `#dc2626` | `rgba(248,113,113,0.12)` / `#f87171` | Errors, destructive actions. |
 | `--color-purple-bg` / `--color-purple` | `#ede9fe` / `#6d28d9` | `rgba(109,40,217,0.15)` / `#c4b5fd` | Role/privilege indicators, Admin nav, profession badges. |
 | `--input-bg` / `--input-border` | `white` / `#dee2e6` | `#252b3b` / `rgba(255,255,255,0.2)` | Form inputs, selects, textareas. |
 

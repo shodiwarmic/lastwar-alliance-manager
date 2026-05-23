@@ -44,6 +44,8 @@
     --color-accent:         #7c6df7;
     --color-accent-bg:      rgba(124,109,247,0.09);
     --color-accent-border:  rgba(124,109,247,0.25);
+    --color-warning:        #d97706;
+    --color-warning-bg:     #fef3c7;
     --color-alert-bg:       #ede9ff;
     --color-alert-border:   rgba(124,109,247,0.30);
     --color-alert-text:     #4c1d95;

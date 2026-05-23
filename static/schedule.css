@@ -204,6 +204,7 @@
 }
 
 html.theme-dark .day-card-picker,
+html[data-theme="dark"] .day-card-picker,
 html.theme-auto .day-card-picker {
     color-scheme: dark;
 }
