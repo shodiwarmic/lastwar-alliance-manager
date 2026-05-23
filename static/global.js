@@ -151,15 +151,6 @@ function clearButtonLoading(btn) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Mobile Menu Toggle
-    const menuBtn = document.getElementById("mobile-menu-btn");
-    const navMenu = document.getElementById("main-nav");
-    if(menuBtn && navMenu) {
-        menuBtn.addEventListener("click", () => {
-            navMenu.classList.toggle("show");
-        });
-    }
-
     const usernameDisplay = document.getElementById('username-display');
     const logoutBtn = document.getElementById('dropdown-logout-btn');
     
@@ -241,12 +232,3 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Fix Theme Dropdown State
-    const themeDropdown = document.getElementById('theme-selector'); // Update ID if different
-    if (themeDropdown) {
-        // Read the saved theme (fallback to 'dark' or 'light' as your default)
-        const currentTheme = localStorage.getItem('theme') || 'dark'; 
-        themeDropdown.value = currentTheme;
-    }
-});
