@@ -416,6 +416,7 @@ main {
     font-size: 18px; font-weight: 700;
     color: var(--color-text);
     margin: 0; line-height: 1.2;
+    display: flex; align-items: center; gap: 8px;
 }
 .topbar h2 {
     font-size: 12px; font-weight: 400;
