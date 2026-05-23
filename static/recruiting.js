@@ -164,7 +164,7 @@ function renderFormerMembers(members, container) {
             delBtn.className = 'btn btn-danger btn-sm';
             delBtn.style.marginLeft = '6px';
             delBtn.textContent = 'Delete';
-            delBtn.addEventListener('click', () => permanentlyDeleteMember(m.id, m.name, actionsTd, delBtn));
+            delBtn.addEventListener('click', () => permanentlyDeleteMember(m.id, m.name));
             actionsTd.appendChild(delBtn);
         }
 
@@ -187,36 +187,16 @@ function openReactivateModal(id, name) {
     if (modal) { modal.style.display = 'flex'; trapFocus(modal); }
 }
 
-async function permanentlyDeleteMember(id, name, actionsCell, delBtn) {
-    delBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Delete forever?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        try {
-            const res = await fetch(`/api/members/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error('Failed to delete member');
-            await loadFormerMembers();
-        } catch (err) {
-            console.error(err);
-            const msg = document.createElement('span');
-            msg.style.cssText = 'color:var(--danger-color);font-size:0.85rem;';
-            msg.textContent = 'Delete failed.';
-            confirmSpan.replaceWith(msg);
-            delBtn.style.display = '';
-        }
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    actionsCell.appendChild(confirmSpan);
+async function permanentlyDeleteMember(id, name) {
+    if (!await showConfirm(`Permanently delete ${name}? This cannot be undone.`, 'Delete Forever')) return;
+    try {
+        const res = await fetch(`/api/members/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete member');
+        await loadFormerMembers();
+    } catch (err) {
+        console.error(err);
+        showToast('Delete failed.', 'error');
+    }
 }
 
 // ── Edit Former Member ────────────────────────────────────────────────────────
@@ -327,7 +307,7 @@ async function loadFormerAliases() {
                 deleteBtn.style.cssText = 'background:none;border:none;color:#e53e3e;cursor:pointer;';
                 deleteBtn.title = 'Remove Nickname';
                 deleteBtn.textContent = '✖';
-                deleteBtn.addEventListener('click', () => deleteFormerAlias(a.id, row, deleteBtn));
+                deleteBtn.addEventListener('click', () => deleteFormerAlias(a.id));
                 row.appendChild(deleteBtn);
             }
 
@@ -337,40 +317,21 @@ async function loadFormerAliases() {
         list.replaceChildren(...rows);
     } catch (e) {
         const p = document.createElement('p');
-        p.style.cssText = 'color:#e53e3e;text-align:center;';
+        p.style.cssText = 'color:var(--color-danger);text-align:center;';
         p.textContent = 'Error loading aliases.';
         list.replaceChildren(p);
     }
 }
 
-function deleteFormerAlias(aliasId, rowEl, deleteBtn) {
-    deleteBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Remove?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        try {
-            const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error(await res.text());
-            await loadFormerAliases();
-        } catch (err) {
-            confirmSpan.remove();
-            deleteBtn.style.display = '';
-        }
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.style.cssText = 'padding:1px 6px;font-size:0.8rem;';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); deleteBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    rowEl.appendChild(confirmSpan);
+async function deleteFormerAlias(aliasId) {
+    if (!await showConfirm('Remove this alias?', 'Remove')) return;
+    try {
+        const res = await fetch(`/api/aliases/${aliasId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        await loadFormerAliases();
+    } catch (err) {
+        showToast('Failed to remove alias.', 'error');
+    }
 }
 
 // ── Prospects ─────────────────────────────────────────────────────────────────
@@ -507,7 +468,7 @@ function buildProspectCard(p) {
             const delBtn = document.createElement('button');
             delBtn.className = 'btn btn-danger btn-sm';
             delBtn.textContent = 'Delete';
-            delBtn.addEventListener('click', () => deleteProspect(p.id, p.name, actions, delBtn));
+            delBtn.addEventListener('click', () => deleteProspect(p.id, p.name));
             actions.appendChild(delBtn);
         }
 
@@ -517,33 +478,16 @@ function buildProspectCard(p) {
     return card;
 }
 
-async function deleteProspect(id, name, actionsContainer, delBtn) {
-    delBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Sure?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', async () => {
-        try {
-            const res = await fetch(`/api/prospects/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error('Failed to delete prospect');
-            await loadProspects();
-        } catch (err) {
-            console.error(err);
-            confirmSpan.remove();
-            delBtn.style.display = '';
-        }
-    });
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    actionsContainer.appendChild(confirmSpan);
+async function deleteProspect(id, name) {
+    if (!await showConfirm(`Delete prospect ${name}?`, 'Delete')) return;
+    try {
+        const res = await fetch(`/api/prospects/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete prospect');
+        await loadProspects();
+    } catch (err) {
+        console.error(err);
+        showToast('Delete failed.', 'error');
+    }
 }
 
 // ── Convert Prospect to Member ────────────────────────────────────────────────
