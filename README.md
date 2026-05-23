@@ -15,11 +15,14 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Self-Service Profiles**: Users securely linked to an in-game commander can update their own stats, HQ level, and squad power through a rule-enforced dashboard.
 - **Smart CSV Ingestion**: Upload VS Points or roster CSVs with dynamic column mapping. Features a backend-driven "Preview & Confirm" modal allowing administrators to validate data, calculate missing values (e.g., deducing Saturday from Weekly Totals), and manually map unresolved names before committing.
 - **Advanced Player Stats**: Track optional fields including Player Profession, Squad Type, Squad Power, Total Hero Power, Lifetime Troop Kills, and Troop Levels (dynamically validated against configurable HQ Level caps). All stat badges on member cards adapt to light and dark mode. Members and officers with `manage_members` can record kills directly from the edit modal; self-linked users can update their kill count from My Profile.
+- **Alliance Identity**: Configure a custom Alliance Name and Tag in Settings. The name replaces the generic "Alliance" label in the sidebar brand and mobile header; the tag (e.g. `[WARMC]`) appears in the subtitle beside "Alliance Manager". Both fields are optional — leave blank to keep the defaults.
+- **Theme Switcher**: Each user can independently set the app theme to **Light**, **Dark**, or **Auto** (follows the OS preference). The selection persists across sessions via `localStorage`. Accessible from the gear icon in the sidebar user row or the More sheet on mobile.
 - **Unified Navigation Theme**: The Admin nav item uses a purple tint (token-based, dark-mode safe) instead of the primary gradient, reducing visual competition with the active page indicator.
-- **Unified Mobile Header**: On small screens, the hamburger menu button and the user account button share a single flex row above the page title, with matched pill-shaped styling. Previously the hamburger used absolute positioning and required extra header padding to avoid overlap.
+- **Sidebar Navigation**: On desktop (≥769 px) a persistent sidebar replaces the old top bar, providing always-visible navigation without a hamburger. On mobile a fixed bottom tab bar gives one-tap access to the five most-used pages; a "More" sheet slides up for the full nav.
 - **Rank Badges**: R4–R1 rank badges use semantic color tokens (danger/info/success/muted) that adapt to light and dark mode. R5 retains its gold "prestige" color.
 - **Consistent Member Badges**: HQ level, Troop tier, Profession, and Squad type badges on member cards use the design system's semantic color tokens and adapt correctly to light and dark mode.
 - **Filter Chips**: The Members page rank/profession/troop/squad filter chips are compact pill-shaped buttons with a clear active state.
+- **Members Search & Sort**: Live search on the Members page uses [Fuse.js](https://www.fusejs.io/) fuzzy matching so partial or misspelled commander names still surface the right result. Results can be sorted by name, HQ level, power, squad power, or join order, with ascending/descending toggle.
 
 ### 🏠 Overview Dashboard
 - **Customizable Landing Page**: The default landing page is a per-user dashboard surfacing key alliance data at a glance without navigating between pages. Cards can be reordered via drag-and-drop and toggled on or off; preferences are saved per account.
@@ -84,7 +87,7 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Category & Responsibility Management**: Admins can create, rename, and delete categories and responsibilities inline without leaving the page.
 - **Assignee Tracking**: Assign one or more members to each responsibility; chips display name and rank. Members can be added via a searchable picker and removed individually.
 - **Frequency Badges**: Each responsibility carries a Daily / Weekly / Seasonal frequency, displayed as colour-coded pill badges.
-- **Client-Side Filtering**: Filter the directory by assigned leader or frequency without round-trips to the server.
+- **Client-Side Filtering**: Filter the directory by assigned leader using a dropdown, or by frequency (All / Daily / Weekly / Seasonal) using pill-shaped filter chips — no round-trips to the server.
 - **Drag-to-Reorder**: Categories and responsibilities within a category can be reordered by drag-and-drop; order is persisted server-side.
 - **Permission-Gated Access**: Separate `view_officer_command` (R1–R5 default) and `manage_officer_command` (R4–R5 default) permissions control who can view vs. administer the directory.
 
