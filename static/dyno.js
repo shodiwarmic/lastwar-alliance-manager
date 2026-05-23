@@ -131,7 +131,7 @@ function setupReactiveSearch() {
             resultsContainer.style.display = 'block';
             const noResult = document.createElement('div');
             noResult.className = 'member-search-item';
-            noResult.style.cssText = 'color: #999; cursor: default;';
+            noResult.style.cssText = 'color: var(--color-text-muted); cursor: default;';
             noResult.textContent = 'No members found';
             resultsContainer.appendChild(noResult);
         }
@@ -599,7 +599,7 @@ function createDynoCard(rec, compact = false) {
     if (!rec.is_author_public && currentUsername && rec.created_by === currentUsername) {
         const anonBadge = document.createElement('span');
         anonBadge.className = 'expiry-badge';
-        anonBadge.style.cssText = 'background: #6c757d; color: white;';
+        anonBadge.style.cssText = 'background: var(--color-text-muted); color: #fff;';
         anonBadge.title = 'Your name is hidden from members without the view permission';
         anonBadge.textContent = '🕵️ Anonymous to Alliance';
         meta.appendChild(anonBadge);

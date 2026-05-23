@@ -94,7 +94,7 @@ function buildKillRow(k) {
     td30d.appendChild(formatKillDelta(k.kills_delta_30d));
 
     const tdDate = document.createElement('td');
-    tdDate.style.color = 'var(--text-muted)';
+    tdDate.style.color = 'var(--color-text-muted)';
     tdDate.style.fontSize = '0.9em';
     if (k.last_recorded_at) {
         const d = new Date(k.last_recorded_at.replace(' ', 'T') + 'Z');
@@ -278,7 +278,7 @@ function buildGrowthRow(m) {
 
     const tdPower = document.createElement('td');
     tdPower.style.fontWeight = '600';
-    tdPower.style.color = 'var(--text-primary)';
+    tdPower.style.color = 'var(--color-text)';
     tdPower.textContent = formatNumber(m.current_power);
 
     const td7d = document.createElement('td');
@@ -293,7 +293,7 @@ function buildGrowthRow(m) {
     if (m.current_hero_power > 0) {
         tdHero.textContent = formatNumber(m.current_hero_power);
     } else {
-        tdHero.style.color = 'var(--text-muted)';
+        tdHero.style.color = 'var(--color-text-muted)';
         tdHero.textContent = '—';
     }
 
@@ -301,7 +301,7 @@ function buildGrowthRow(m) {
     if (m.current_hero_power > 0) {
         tdHero7d.appendChild(formatGrowth(m.hero_growth_7d));
     } else {
-        tdHero7d.style.color = 'var(--text-muted)';
+        tdHero7d.style.color = 'var(--color-text-muted)';
         tdHero7d.textContent = '—';
     }
 
@@ -309,7 +309,7 @@ function buildGrowthRow(m) {
     if (m.current_hero_power > 0) {
         tdHero30d.appendChild(formatGrowth(m.hero_growth_30d));
     } else {
-        tdHero30d.style.color = 'var(--text-muted)';
+        tdHero30d.style.color = 'var(--color-text-muted)';
         tdHero30d.textContent = '—';
     }
 
@@ -394,7 +394,7 @@ function buildVSRow(v, idx) {
     const tr = document.createElement('tr');
 
     const tdIdx = document.createElement('td');
-    tdIdx.style.cssText = 'color: var(--text-muted); font-size: 0.9em;';
+    tdIdx.style.cssText = 'color: var(--color-text-muted); font-size: 0.9em;';
     tdIdx.textContent = `#${idx + 1}`;
 
     const tdName = document.createElement('td');

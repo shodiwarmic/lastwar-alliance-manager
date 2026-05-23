@@ -38,11 +38,11 @@ function buildFileCard(file) {
     const infoDiv = document.createElement('div');
 
     const h3 = document.createElement('h3');
-    h3.style.cssText = 'margin: 0; font-size: 1.1em; color: var(--text-primary);';
+    h3.style.cssText = 'margin: 0; font-size: 1.1em; color: var(--color-text);';
     h3.textContent = `${icon} ${file.title}`;
 
     const metaDiv = document.createElement('div');
-    metaDiv.style.cssText = 'font-size: 0.85em; color: var(--text-muted); margin-top: 5px;';
+    metaDiv.style.cssText = 'font-size: 0.85em; color: var(--color-text-muted); margin-top: 5px;';
 
     metaDiv.appendChild(document.createTextNode(`By: ${file.owner_name} | View: `));
     const viewRank = document.createElement('span');
