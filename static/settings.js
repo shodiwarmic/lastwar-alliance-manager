@@ -15,6 +15,8 @@ async function loadSettings() {
         
         const settings = await response.json();
         
+        document.getElementById('alliance-name').value = settings.alliance_name ?? '';
+        document.getElementById('alliance-tag').value = settings.alliance_tag ?? '';
         document.getElementById('max-hq-level').value = settings.max_hq_level || 35;
         document.getElementById('settings-login-message').value = settings.login_message || '';
         document.getElementById('train-free-limit').value = settings.train_free_daily_limit ?? 1;
@@ -183,6 +185,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 .map(cb => cb.value).join(',');
 
             const settings = Object.assign({}, currentSettings, {
+                alliance_name: document.getElementById('alliance-name').value.trim(),
+                alliance_tag: document.getElementById('alliance-tag').value.trim(),
                 login_message: document.getElementById('settings-login-message').value,
                 max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,

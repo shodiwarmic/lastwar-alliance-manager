@@ -295,6 +295,8 @@ type Settings struct {
 	ZSAnchorDate   string `json:"zs_anchor_date"`
 	ZSAnchorTime   string `json:"zs_anchor_time"`
 	SeasonScoreLevelsDefault string `json:"season_score_levels_default"`
+	AllianceName             string `json:"alliance_name"`
+	AllianceTag              string `json:"alliance_tag"`
 }
 
 type StormAssignment struct {
@@ -775,6 +777,8 @@ type PageData struct {
 	// use this to swap help text and conditionally disable the
 	// auto-detect option in the upload page.
 	OCRBackendMode    string
+	AllianceName      string
+	AllianceTag       string
 }
 
 // DashboardCard represents a single card in the dashboard with its visibility state.
