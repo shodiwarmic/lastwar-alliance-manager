@@ -46,7 +46,7 @@
 }
 .acc-tag--needs-improvement {
     background: rgba(255, 193, 7, 0.22);
-    color: #b8860b;
+    color: var(--color-warning);
 }
 .acc-tag--at-risk {
     background: rgba(220, 53, 69, 0.18);

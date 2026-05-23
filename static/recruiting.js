@@ -264,7 +264,7 @@ async function loadFormerAliases() {
     if (!list) return;
 
     const loadingP = document.createElement('p');
-    loadingP.style.cssText = 'text-align:center;color:var(--text-muted);';
+    loadingP.style.cssText = 'text-align:center;color:var(--color-text-muted);';
     loadingP.textContent = 'Loading...';
     list.replaceChildren(loadingP);
 
@@ -274,7 +274,7 @@ async function loadFormerAliases() {
 
         if (!aliases || aliases.length === 0) {
             const p = document.createElement('p');
-            p.style.cssText = 'text-align:center;color:var(--text-muted);';
+            p.style.cssText = 'text-align:center;color:var(--color-text-muted);';
             p.textContent = 'No nicknames set for this commander.';
             list.replaceChildren(p);
             return;
@@ -282,17 +282,13 @@ async function loadFormerAliases() {
 
         const rows = aliases.map(a => {
             const row = document.createElement('div');
-            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--color-border);';
+            row.className = 'alias-row';
 
             const left = document.createElement('div');
-            const badgeStyles = {
-                global:   'background:#e2e8f0;color:#4a5568;',
-                personal: 'background:#bee3f8;color:#2b6cb0;',
-                ocr:      'background:#fed7d7;color:#c53030;',
-            };
-            if (badgeStyles[a.category]) {
+            const badgeClass = { global: 'alias-badge-global', personal: 'alias-badge-personal', ocr: 'alias-badge-ocr' }[a.category];
+            if (badgeClass) {
                 const badge = document.createElement('span');
-                badge.style.cssText = badgeStyles[a.category] + 'padding:2px 6px;border-radius:4px;font-size:0.8em;margin-right:8px;';
+                badge.className = `alias-badge ${badgeClass}`;
                 badge.textContent = a.category.charAt(0).toUpperCase() + a.category.slice(1);
                 left.appendChild(badge);
             }
@@ -304,7 +300,7 @@ async function loadFormerAliases() {
             const canDelete = a.is_mine || IS_ADMIN || ((a.category === 'global' || a.category === 'ocr') && CAN_MANAGE_MEMBERS);
             if (canDelete) {
                 const deleteBtn = document.createElement('button');
-                deleteBtn.style.cssText = 'background:none;border:none;color:#e53e3e;cursor:pointer;';
+                deleteBtn.className = 'alias-delete-btn';
                 deleteBtn.title = 'Remove Nickname';
                 deleteBtn.textContent = '✖';
                 deleteBtn.addEventListener('click', () => deleteFormerAlias(a.id));

@@ -17,10 +17,10 @@ function checkForcePasswordRequirements() {
         const baseText = el.getAttribute('data-text');
         if (isMet) {
             el.textContent = `✅ ${baseText}`;
-            el.style.color = '#28a745';
+            el.style.color = 'var(--color-success)';
         } else {
             el.textContent = `❌ ${baseText}`;
-            el.style.color = '#dc3545';
+            el.style.color = 'var(--color-danger)';
             allRulesMet = false;
         }
     }
@@ -46,11 +46,11 @@ function checkForcePasswordRequirements() {
         matchStatus.style.display = 'block';
         if (newPwd === confirmPwd) {
             matchStatus.textContent = '✅ Passwords match';
-            matchStatus.style.color = '#28a745';
+            matchStatus.style.color = 'var(--color-success)';
             passwordsMatch = true;
         } else {
             matchStatus.textContent = '❌ Passwords do not match';
-            matchStatus.style.color = '#dc3545';
+            matchStatus.style.color = 'var(--color-danger)';
         }
     } else {
         matchStatus.style.display = 'none';

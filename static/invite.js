@@ -44,7 +44,7 @@ function updateRules() {
         const met = checkRule(rule, pwd);
         if (!met) allMet = false;
         li.textContent = (met ? '\u2705 ' : '\u274c ') + li.textContent.replace(/^[\u2705\u274c\u26aa] /, '');
-        li.style.color = met ? '#28a745' : '#dc3545';
+        li.style.color = met ? 'var(--color-success)' : 'var(--color-danger)';
     });
     return allMet;
 }
@@ -57,7 +57,7 @@ function updateMatchStatus() {
     matchStatus.style.display = 'block';
     const match = passwordInput.value === confirmInput.value;
     matchStatus.textContent = match ? '\u2705 Passwords match' : '\u274c Passwords do not match';
-    matchStatus.style.color = match ? '#28a745' : '#dc3545';
+    matchStatus.style.color = match ? 'var(--color-success)' : 'var(--color-danger)';
     return match;
 }
 

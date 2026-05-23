@@ -191,3 +191,31 @@ p.empty {
     font-style: italic;
     padding: 20px 0;
 }
+
+/* ── Alias category badges ────────────────────────────────────────────────── */
+
+.alias-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.alias-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    margin-right: 8px;
+}
+
+.alias-badge-global   { background: var(--color-card);       color: var(--color-text-mid); }
+.alias-badge-personal { background: var(--color-accent-bg);  color: var(--color-accent); }
+.alias-badge-ocr      { background: var(--color-danger-bg);  color: var(--color-danger); }
+
+.alias-delete-btn {
+    background: none;
+    border: none;
+    color: var(--color-danger);
+    cursor: pointer;
+}

@@ -147,7 +147,7 @@ function renderStrikes(strikes) {
         if (s.excused_by) {
             const bySpan = document.createElement('span');
             bySpan.style.fontSize = '0.8rem';
-            bySpan.style.color = 'var(--text-muted)';
+            bySpan.style.color = 'var(--color-text-muted)';
             bySpan.textContent = ' by ' + s.excused_by;
             tdStatus.append(statusSpan, bySpan);
         } else {

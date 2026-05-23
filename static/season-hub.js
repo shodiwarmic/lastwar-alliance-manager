@@ -768,7 +768,7 @@
 
         const btn = commit ? btnContribCommit : btnContribPreview;
         setButtonLoading(btn);
-        if (statusEl) { statusEl.textContent = commit ? 'Committing…' : 'Processing…'; statusEl.style.color = 'var(--text-muted)'; }
+        if (statusEl) { statusEl.textContent = commit ? 'Committing…' : 'Processing…'; statusEl.style.color = 'var(--color-text-muted)'; }
 
         const fd = new FormData();
         fd.append('season_id', activeSeason.id);
@@ -1776,7 +1776,7 @@
         btnEsPushSchedule.addEventListener('click', () => {
             if (!activeSeason) return;
             const statusEl = document.getElementById('es-push-status');
-            if (statusEl) { statusEl.textContent = 'Pushing…'; statusEl.style.color = 'var(--text-muted)'; }
+            if (statusEl) { statusEl.textContent = 'Pushing…'; statusEl.style.color = 'var(--color-text-muted)'; }
             setButtonLoading(btnEsPushSchedule);
             fetch('/api/season-hub/season-events/push', {
                 method: 'POST',
