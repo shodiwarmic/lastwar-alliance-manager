@@ -4,19 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Accept Invite - Last War Alliance Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="/styles.css">
-    <link rel="stylesheet" href="/invite.css">
+    <link rel="stylesheet" href="/auth.css">
+    <script src="/theme.js"></script>
 </head>
 <body>
-    <div id="csrf-container" style="display:none;">
+    <div id="csrf-container" hidden>
         {{.CSRFToken}}
     </div>
 
     <div class="login-container">
         <div class="login-box">
             <div class="login-header">
-                <h1>🎮 Last War</h1>
-                <p>Alliance Manager — Accept Invite</p>
+                <div class="login-header-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                         stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+                <h1>Alliance Manager</h1>
+                <p>Accept your invite</p>
             </div>
 
             <div class="login-form">
