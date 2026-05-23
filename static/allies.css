@@ -25,7 +25,7 @@
 }
 
 .ally-card {
-    background: var(--card-bg);
+    background: var(--color-card);
     border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 16px 20px;
@@ -39,7 +39,7 @@
 }
 
 .ally-server-badge {
-    background: var(--accent-color);
+    background: var(--color-accent);
     color: #fff;
     border-radius: 6px;
     padding: 4px 10px;
@@ -98,8 +98,8 @@
 }
 
 .agreement-pill {
-    background: var(--accent-color-faint, rgba(var(--accent-rgb, 100,149,237), 0.15));
-    color: var(--accent-color);
+    background: var(--color-accent-bg);
+    color: var(--color-accent);
     border-radius: 12px;
     padding: 2px 10px;
     font-size: 0.78rem;
@@ -131,7 +131,7 @@
 }
 
 .type-row {
-    background: var(--card-bg);
+    background: var(--color-card);
     border: 1px solid var(--color-border);
     border-radius: 6px;
     padding: 12px 16px;
