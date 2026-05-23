@@ -282,7 +282,7 @@ async function loadFormerAliases() {
 
         const rows = aliases.map(a => {
             const row = document.createElement('div');
-            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border-color);';
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--color-border);';
 
             const left = document.createElement('div');
             const badgeStyles = {
@@ -718,7 +718,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error(err);
             if (statusEl) {
                 statusEl.textContent = 'Failed to reactivate. Please try again.';
-                statusEl.style.color = 'var(--danger-color)';
+                statusEl.style.color = 'var(--color-danger)';
             }
         }
     });

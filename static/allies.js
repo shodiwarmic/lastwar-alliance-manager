@@ -419,7 +419,7 @@ async function doDeleteType(id) {
         const typesList = document.getElementById('types-list');
         // Re-render with a notice — simplest approach: show a status in the tab
         const notice = document.createElement('p');
-        notice.style.color = 'var(--danger-color, #e74c3c)';
+        notice.style.color = 'var(--color-danger)';
         notice.style.marginTop = '8px';
         notice.textContent = data.error + ' Click "Force Delete" to remove it anyway.';
         const forceBtn = document.createElement('button');

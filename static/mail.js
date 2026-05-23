@@ -127,7 +127,7 @@ async function copyWithVariables(content, prefilledValues) {
 
     userSpecs.forEach(({ name, type }) => {
         const label = document.createElement('label');
-        label.style.cssText = 'display:block;margin-bottom:14px;color:var(--text-primary);font-size:0.9rem;';
+        label.style.cssText = 'display:block;margin-bottom:14px;color:var(--color-text);font-size:0.9rem;';
         label.textContent = toVarLabel(name);
         label.appendChild(buildVarInput(name, type));
         form.appendChild(label);

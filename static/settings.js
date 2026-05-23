@@ -151,7 +151,7 @@ function showSettingsStatus(message, success) {
     const el = document.getElementById('settings-save-status');
     if (!el) return;
     el.textContent = message;
-    el.style.color = success ? 'var(--color-success, #2ecc71)' : 'var(--danger-color, #e74c3c)';
+    el.style.color = success ? 'var(--color-success)' : 'var(--color-danger)';
     clearTimeout(_settingsStatusTimer);
     _settingsStatusTimer = setTimeout(() => { el.textContent = ''; }, 4000);
 }
@@ -354,7 +354,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         wrap.appendChild(hdr);
 
         const tableWrap = document.createElement('div');
-        tableWrap.style.cssText = 'overflow-x:auto;border:1px solid var(--border-color);border-radius:6px;';
+        tableWrap.style.cssText = 'overflow-x:auto;border:1px solid var(--color-border);border-radius:6px;';
 
         const tbl = document.createElement('table');
         tbl.className = 'data-table';
@@ -502,7 +502,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         wrap.appendChild(hdr);
 
         const tableWrap = document.createElement('div');
-        tableWrap.style.cssText = 'overflow-x:auto;border:1px solid var(--border-color);border-radius:6px;';
+        tableWrap.style.cssText = 'overflow-x:auto;border:1px solid var(--color-border);border-radius:6px;';
 
         const tbl = document.createElement('table');
         tbl.className = 'data-table';
@@ -662,7 +662,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function buildTemplateCard(t) {
         const card = document.createElement('div');
-        card.style.cssText = 'border:1px solid var(--border-color);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:var(--bg-secondary);display:flex;align-items:center;gap:10px;';
+        card.style.cssText = 'border:1px solid var(--color-border);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:var(--color-surface);display:flex;align-items:center;gap:10px;';
 
         const nameLbl = document.createElement('span');
         nameLbl.textContent = (t.season_number > 0 ? 'S' + t.season_number + ' — ' : '') + t.template_name;

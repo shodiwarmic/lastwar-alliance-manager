@@ -100,7 +100,7 @@ function dayOfSeason(dateStr) {
 
 function showStatus(el, msg, isError, durationMs) {
     el.textContent = msg;
-    el.style.color = isError ? 'var(--danger-color, #e74c3c)' : 'var(--success-color, #27ae60)';
+    el.style.color = isError ? 'var(--color-danger)' : 'var(--color-success)';
     if (durationMs !== 0) {
         setTimeout(() => { el.textContent = ''; }, durationMs ?? 3000);
     }

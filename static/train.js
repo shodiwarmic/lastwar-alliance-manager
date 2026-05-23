@@ -446,7 +446,7 @@ function renderEligibleList(members) {
         left.style.gap = '12px';
 
         const pos = document.createElement('span');
-        pos.style.cssText = 'font-size:1.1rem;font-weight:700;color:var(--text-secondary);min-width:24px;text-align:center;';
+        pos.style.cssText = 'font-size:1.1rem;font-weight:700;color:var(--color-text-mid);min-width:24px;text-align:center;';
         pos.textContent = index + 1;
         left.appendChild(pos);
 
