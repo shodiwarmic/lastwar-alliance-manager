@@ -464,6 +464,13 @@ main {
 .bottom-tab.active { color: var(--color-accent); font-weight: 700; }
 .bottom-tab svg { width: 22px; height: 22px; }
 
+/* Spacer that keeps content above the fixed bottom-tab bar on mobile */
+.mobile-nav-spacer {
+    display: none;
+    height: 72px;
+    flex-shrink: 0;
+}
+
 /* More sheet */
 .more-sheet {
     display: none;
@@ -492,9 +499,9 @@ main {
     .more-sheet    { display: none !important; }
 }
 @media (max-width: 768px) {
-    .app-shell  { flex-direction: column; }
+    .app-shell  { flex-direction: column; height: 100vh; height: 100dvh; }
     .sidebar    { display: none; }
-    main        { padding-bottom: 102px; } /* 72px bottom-tabs + 30px base padding */
+    .mobile-nav-spacer { display: block; }
 }
 
 /* ── End Split Command App Shell ─────────────────────────────────────────── */
