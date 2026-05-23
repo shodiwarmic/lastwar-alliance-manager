@@ -4857,7 +4857,7 @@ button {
 .tab-button {
     background: transparent;
     border: none;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     padding: 15px 25px;
     cursor: pointer;
     font-size: 16px;
@@ -4868,20 +4868,14 @@ button {
 }
 
 .tab-button:hover {
-    color: var(--text-primary);
-    background: var(--card-bg);
+    color: var(--color-text);
+    background: var(--color-card);
 }
 
 .tab-button.active {
-    color: #667eea;
-    border-bottom-color: #667eea;
-    background: rgba(102, 126, 234, 0.1);
-}
-
-@media (prefers-color-scheme: dark) {
-    .tab-button.active {
-        color: #a0aef0;
-    }
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
+    background: var(--color-accent-bg);
 }
 
 /* ── Scrollable table wrapper ────────────────────────────────────────────── */
@@ -5487,11 +5481,11 @@ button {
 
 /* Admin Panel Cards */
 .card {
-    background: var(--container-bg);
+    background: var(--color-surface);
     border-radius: 12px;
     padding: 25px;
     margin-bottom: 25px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -5501,31 +5495,15 @@ button {
     align-items: center;
     margin-bottom: 20px;
     padding-bottom: 15px;
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 2px solid var(--color-border);
     flex-wrap: wrap;
     gap: 15px;
 }
 
 .card-header h2 {
-    color: var(--text-primary);
+    color: var(--color-text);
     font-size: 1.5em;
     margin: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-    .card {
-        background: rgba(255, 255, 255, 0.02);
-        border-color: rgba(255, 255, 255, 0.1);
-        box-shadow: none;
-    }
-    
-    .card-header {
-        border-bottom-color: rgba(255, 255, 255, 0.1);
-    }
-    
-    .card-header h2 {
-        color: white;
-    }
 }
 
 /* High-Contrast Code Blocks */
