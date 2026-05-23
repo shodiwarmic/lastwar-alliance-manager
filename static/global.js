@@ -188,6 +188,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // More sheet open/close
+    const moreSheet = document.getElementById('more-sheet');
+    if (moreSheet) {
+        document.getElementById('more-tab-btn')?.addEventListener('click', () => {
+            moreSheet.style.display = 'block';
+        });
+        document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
+            moreSheet.style.display = 'block';
+        });
+        document.getElementById('more-sheet-close-btn')?.addEventListener('click', () => {
+            moreSheet.style.display = '';
+        });
+    }
+
     // Auto-wire CSV + XLSX export buttons for tables with data-export-csv attribute
     document.querySelectorAll('table[data-export-csv]').forEach(table => {
         const csvFilename  = table.dataset.exportCsv;

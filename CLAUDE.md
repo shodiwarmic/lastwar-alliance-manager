@@ -137,18 +137,12 @@ This intentionally differs from the OCR-service path, which sends `candidates[]`
 
 ## Known gotchas
 
-### CSP `'unsafe-inline'` must be removed as inline config blocks are migrated
-The deployed `Content-Security-Policy` header currently includes `'unsafe-inline'` in `script-src` because 13+ templates use inline `window.VAR = ...` config blocks in `{{define "scripts"}}`. This weakens XSS protection.
+### CSP — no inline scripts allowed (`script-src 'self'` only)
+`install.sh` sets `script-src 'self' https://cdn.jsdelivr.net` — **`'unsafe-inline'` is not in `script-src`**. Any inline `<script>` block in a template will be silently blocked in production (and on Android, this is immediately visible as a broken feature).
 
-**When touching a template's `{{define "scripts"}}` block**, migrate any inline `window.VAR = ...` assignments to `data-*` attributes on a container element and read them from JS via `dataset`. Example:
+All template config vars have been migrated to `data-*` attributes. **Never add a bare `<script>` block to a template.** Use `data-*` on a container element instead:
 
 ```html
-<!-- Before (in template) -->
-{{define "scripts"}}
-<script>window.CAN_MANAGE = {{if .CanManage}}true{{else}}false{{end}};</script>
-<script src="/feature.js"></script>
-{{end}}
-
 <!-- After (in template) -->
 {{define "scripts"}}
 <div id="page-config" data-can-manage="{{if .CanManage}}true{{else}}false{{end}}" hidden></div>
@@ -162,7 +156,7 @@ const cfg = document.getElementById('page-config').dataset;
 const CAN_MANAGE = cfg.canManage === 'true';
 ```
 
-Once **all** templates are migrated, remove `'unsafe-inline'` from `script-src` in `install.sh`, `update.sh`, and `Caddyfile`.
+If you need layout.html-level JS (e.g. mobile nav handlers), add it to `static/global.js` — not as an inline script.
 
 ### Nav hamburger breakpoint must account for body padding
 

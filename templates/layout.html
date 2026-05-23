@@ -299,20 +299,6 @@
   <script src="/csrf.js"></script>
   <script src="/modal-focus.js"></script>
 
-  <script>
-    // More sheet open/close
-    const moreSheet = document.getElementById('more-sheet');
-    document.getElementById('more-tab-btn')?.addEventListener('click', () => {
-      moreSheet.style.display = 'block';
-    });
-    document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
-      moreSheet.style.display = 'block';
-    });
-    document.getElementById('more-sheet-close-btn')?.addEventListener('click', () => {
-      moreSheet.style.display = 'none';
-    });
-  </script>
-
   {{block "scripts" .}}{{end}}
 </body>
 </html>
