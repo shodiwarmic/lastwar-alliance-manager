@@ -152,8 +152,6 @@ function clearButtonLoading(btn) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const usernameDisplay = document.getElementById('username-display');
-    const logoutBtn = document.getElementById('dropdown-logout-btn');
-    
     // Toggle user dropdown menu
     if (usernameDisplay) {
         usernameDisplay.addEventListener('click', (event) => {
@@ -171,9 +169,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Handle Logout
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', async (event) => {
+    // Handle Logout — class-based so both sidebar dropdown and more-sheet share the same handler
+    document.querySelectorAll('.logout-btn').forEach(btn => {
+        btn.addEventListener('click', async (event) => {
             event.preventDefault();
             if (!await showConfirm('Are you sure you want to logout?', 'Logout')) return;
 
@@ -188,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Logout failed. Check the browser console for details.', 'error');
             }
         });
-    }
+    });
 
     // Auto-wire CSV + XLSX export buttons for tables with data-export-csv attribute
     document.querySelectorAll('table[data-export-csv]').forEach(table => {
