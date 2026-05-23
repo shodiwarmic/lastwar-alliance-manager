@@ -3,7 +3,7 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
         Recruiting
     </h1>
-    <h2>Prospects &amp; Former Members</h2>
+    <h2>Transfers, Prospects &amp; Former Members</h2>
 {{end}}
 
 {{define "head_tags"}}
@@ -21,19 +21,35 @@
     <!-- Capacity Header (populated by JS) -->
     <div id="recruiting-header"></div>
 
-    <!-- Tab Bar — Prospects first, Former Members second -->
+    <!-- Tab Bar — Transfers first, Prospects second, Former Members third -->
     <div class="tab-bar">
-        <button class="tab-btn active" data-tab="prospects">Prospects</button>
+        <button class="tab-btn active" data-tab="transfers">Transfers</button>
+        <button class="tab-btn" data-tab="prospects">Prospects</button>
         {{if .Permissions.ManageMembers}}
         <button class="tab-btn" data-tab="former">Former Members</button>
         {{end}}
     </div>
 
-    <!-- Prospects Tab (default active) -->
+    <!-- Transfers Tab (default active) -->
+    <div id="tab-transfers" class="tab-content">
+        {{if .Permissions.ManageRecruiting}}
+        <div class="action-bar" style="margin-bottom: 20px;">
+            <button type="button" id="add-transfer-btn" class="btn btn-primary">
+                <span class="btn-icon">➕</span>
+                <span class="btn-text">Add Transfer</span>
+            </button>
+        </div>
+        {{end}}
+        <div id="transfers-list">
+            <p class="loading">Loading transfers...</p>
+        </div>
+    </div>
+
+    <!-- Prospects Tab -->
     <div id="tab-prospects" class="tab-content">
         {{if .Permissions.ManageRecruiting}}
         <div class="action-bar" style="margin-bottom: 20px;">
-            <button type="button" id="add-prospect-btn" class="primary-action-btn">
+            <button type="button" id="add-prospect-btn" class="btn btn-primary">
                 <span class="btn-icon">➕</span>
                 <span class="btn-text">Add Prospect</span>
             </button>
@@ -178,7 +194,7 @@
     <div id="prospect-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <span class="close" id="close-prospect-modal">&times;</span>
-            <h2 id="prospect-modal-title">Add Prospect</h2>
+            <h2 id="prospect-modal-title">Add Transfer</h2>
             <form id="prospect-form">
                 <div class="form-row">
                     <div class="form-group">
@@ -197,21 +213,27 @@
                     </div>
                 </div>
 
-                <div class="form-row">
+                <div id="row-server-seat" class="form-row">
                     <div class="form-group">
                         <label for="prospect-server">Server:</label>
                         <input type="text" id="prospect-server" class="form-input" placeholder="e.g. S42">
                     </div>
                     <div class="form-group">
-                        <label for="prospect-alliance">Alliance:</label>
-                        <input type="text" id="prospect-alliance" class="form-input" placeholder="Current alliance">
+                        <label for="prospect-seat-color">Seat Color:</label>
+                        <select id="prospect-seat-color" class="form-input">
+                            <option value="">Unknown</option>
+                            <option value="gold">Gold</option>
+                            <option value="purple">Purple</option>
+                            <option value="blue">Blue</option>
+                            <option value="grey">White / Grey</option>
+                        </select>
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="prospect-power">Power:</label>
-                        <input type="number" id="prospect-power" class="form-input" min="0" placeholder="e.g. 45000000">
+                        <label for="prospect-alliance">Alliance:</label>
+                        <input type="text" id="prospect-alliance" class="form-input" placeholder="Current alliance">
                     </div>
                     <div class="form-group">
                         <label for="prospect-rank">Rank in Alliance:</label>
@@ -232,26 +254,20 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="prospect-notes">Notes:</label>
-                    <textarea id="prospect-notes" class="form-input" rows="3" placeholder="Recruiting notes..."></textarea>
-                </div>
-
                 <div class="form-row">
+                    <div class="form-group">
+                        <label for="prospect-power">Power:</label>
+                        <input type="number" id="prospect-power" class="form-input" min="0" placeholder="e.g. 45000000">
+                    </div>
                     <div class="form-group">
                         <label for="prospect-hero-power">Total Hero Power <span class="optional">(optional)</span></label>
                         <input type="number" id="prospect-hero-power" class="form-input" min="0" placeholder="e.g. 1200000">
                     </div>
-                    <div class="form-group">
-                        <label for="prospect-seat-color">Seat Color:</label>
-                        <select id="prospect-seat-color" class="form-input">
-                            <option value="">Unknown</option>
-                            <option value="gold">Gold</option>
-                            <option value="purple">Purple</option>
-                            <option value="blue">Blue</option>
-                            <option value="grey">White / Grey</option>
-                        </select>
-                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="prospect-notes">Notes:</label>
+                    <textarea id="prospect-notes" class="form-input" rows="3" placeholder="Recruiting notes..."></textarea>
                 </div>
 
                 <div class="form-group">
@@ -262,7 +278,7 @@
                 </div>
 
                 <div class="modal-actions">
-                    <button type="submit" class="btn btn-primary" id="prospect-submit-btn">Add Prospect</button>
+                    <button type="submit" class="btn btn-primary" id="prospect-submit-btn">Add Transfer</button>
                     <button type="button" class="btn btn-secondary" id="cancel-prospect-btn">Cancel</button>
                 </div>
             </form>

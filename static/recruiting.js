@@ -8,6 +8,7 @@ const HAS_FORMER_TAB = cfg.hasFormerTab === 'true';
 
 let allMembers = [];        // for recruiter dropdown and capacity header
 let editingProspectId = null;
+let currentModalType = 'transfer';  // tracks which type context the modal opened in
 let convertingProspect = null;
 let reactivatingMemberId = null;
 let editingFormerMemberId = null;
@@ -332,34 +333,47 @@ async function deleteFormerAlias(aliasId) {
 
 // ── Prospects ─────────────────────────────────────────────────────────────────
 
-async function loadProspects() {
-    const container = document.getElementById('prospects-list');
-    if (!container) return;
+async function loadAllProspects() {
+    const transfersContainer = document.getElementById('transfers-list');
+    const prospectsContainer = document.getElementById('prospects-list');
 
     try {
         const res = await fetch('/api/prospects');
         if (!res.ok) throw new Error('Failed to load prospects');
-        const prospects = await res.json();
-        renderProspects(prospects, container);
+        const all = await res.json();
+
+        const transfers = all.filter(p => p.prospect_type === 'transfer');
+        const prospects = all.filter(p => p.prospect_type === 'prospect');
+
+        if (transfersContainer) renderProspects(transfers, transfersContainer, 'transfer');
+        if (prospectsContainer) renderProspects(prospects, prospectsContainer, 'prospect');
     } catch (err) {
         console.error(err);
-        const p = document.createElement('p');
-        p.className = 'empty';
-        p.textContent = 'Failed to load prospects.';
-        container.replaceChildren(p);
+        const makeErrP = () => {
+            const p = document.createElement('p');
+            p.className = 'empty';
+            p.textContent = 'Failed to load.';
+            return p;
+        };
+        if (transfersContainer) transfersContainer.replaceChildren(makeErrP());
+        if (prospectsContainer) prospectsContainer.replaceChildren(makeErrP());
     }
 }
 
-function renderProspects(prospects, container) {
-    if (!prospects || prospects.length === 0) {
+function renderProspects(items, container, typeContext) {
+    if (!items || items.length === 0) {
         const p = document.createElement('p');
         p.className = 'empty';
-        p.textContent = CAN_MANAGE_RECRUITING ? 'No prospects yet. Add one to get started.' : 'No prospects.';
+        if (typeContext === 'transfer') {
+            p.textContent = CAN_MANAGE_RECRUITING ? 'No transfers yet. Add one to get started.' : 'No transfers.';
+        } else {
+            p.textContent = CAN_MANAGE_RECRUITING ? 'No prospects yet. Add one to get started.' : 'No prospects.';
+        }
         container.replaceChildren(p);
         return;
     }
 
-    const cards = prospects.map(p => buildProspectCard(p));
+    const cards = items.map(p => buildProspectCard(p, typeContext));
     container.replaceChildren(...cards);
 }
 
@@ -371,7 +385,7 @@ const STATUS_LABELS = {
     unqualified_transfer:  'Unqualified Transfer',
 };
 
-function buildProspectCard(p) {
+function buildProspectCard(p, typeContext) {
     const card = document.createElement('div');
     card.className = 'prospect-card';
 
@@ -450,6 +464,12 @@ function buildProspectCard(p) {
             editBtn.textContent = 'Edit';
             editBtn.addEventListener('click', () => openProspectModal(p));
             actions.appendChild(editBtn);
+
+            const moveBtn = document.createElement('button');
+            moveBtn.className = 'btn btn-secondary btn-sm';
+            moveBtn.textContent = typeContext === 'transfer' ? 'Move to Prospects' : 'Move to Transfers';
+            moveBtn.addEventListener('click', () => moveProspect(p, typeContext === 'transfer' ? 'prospect' : 'transfer'));
+            actions.appendChild(moveBtn);
         }
 
         if (CAN_MANAGE_MEMBERS) {
@@ -479,7 +499,7 @@ async function deleteProspect(id, name) {
     try {
         const res = await fetch(`/api/prospects/${id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Failed to delete prospect');
-        await loadProspects();
+        await loadAllProspects();
     } catch (err) {
         console.error(err);
         showToast('Delete failed.', 'error');
@@ -528,7 +548,7 @@ async function handleConvertSubmit(e) {
         modal.style.display = 'none';
         convertingProspect = null;
         showToast(`${convertedName} added to roster.`);
-        await loadProspects();
+        await loadAllProspects();
     } catch (err) {
         console.error(err);
         if (statusEl) {
@@ -540,15 +560,78 @@ async function handleConvertSubmit(e) {
 
 // ── Prospect Modal ────────────────────────────────────────────────────────────
 
-function openProspectModal(prospect = null) {
+function applyStatusOptionsForType(type) {
+    const statusSelect = document.getElementById('prospect-status');
+    if (!statusSelect) return;
+    const transferOnlyOpts = statusSelect.querySelectorAll(
+        'option[value="qualified_transfer"], option[value="unqualified_transfer"]'
+    );
+    transferOnlyOpts.forEach(opt => {
+        opt.hidden = type === 'prospect';
+        opt.disabled = type === 'prospect';
+    });
+    if (type === 'prospect' &&
+        (statusSelect.value === 'qualified_transfer' || statusSelect.value === 'unqualified_transfer')) {
+        statusSelect.value = 'interested';
+    }
+}
+
+async function moveProspect(p, newType) {
+    let newStatus = p.status;
+    let newServer = p.server || '';
+    let newSeatColor = p.seat_color || '';
+
+    if (newType === 'prospect') {
+        newServer = '';
+        newSeatColor = '';
+        if (newStatus === 'qualified_transfer' || newStatus === 'unqualified_transfer') {
+            newStatus = 'interested';
+        }
+    }
+
+    const payload = {
+        name: p.name,
+        server: newServer,
+        source_alliance: p.source_alliance,
+        power: p.power,
+        rank_in_alliance: p.rank_in_alliance,
+        recruiter_id: p.recruiter_id,
+        status: newStatus,
+        notes: p.notes,
+        hero_power: p.hero_power,
+        seat_color: newSeatColor,
+        interested_in_r4: p.interested_in_r4,
+        first_contacted: p.first_contacted,
+        prospect_type: newType,
+    };
+
+    try {
+        const res = await fetch(`/api/prospects/${p.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Failed to move');
+        const label = newType === 'transfer' ? 'Transfers' : 'Prospects';
+        showToast(`${p.name} moved to ${label}.`);
+        await loadAllProspects();
+    } catch (err) {
+        console.error(err);
+        showToast('Move failed.', 'error');
+    }
+}
+
+function openProspectModal(prospect = null, defaultType = 'transfer') {
     editingProspectId = prospect ? prospect.id : null;
+    currentModalType = prospect ? prospect.prospect_type : defaultType;
+
     const modal = document.getElementById('prospect-modal');
     const title = document.getElementById('prospect-modal-title');
     const submitBtn = document.getElementById('prospect-submit-btn');
 
     document.getElementById('prospect-name').value = prospect ? prospect.name : '';
     document.getElementById('prospect-status').value = prospect ? prospect.status : 'interested';
-    document.getElementById('prospect-server').value = prospect ? prospect.server : '';
+    document.getElementById('prospect-server').value = prospect ? (prospect.server || '') : '';
     document.getElementById('prospect-alliance').value = prospect ? prospect.source_alliance : '';
     document.getElementById('prospect-power').value = (prospect && prospect.power) ? prospect.power : '';
     document.getElementById('prospect-rank').value = prospect ? prospect.rank_in_alliance : '';
@@ -559,8 +642,13 @@ function openProspectModal(prospect = null) {
     document.getElementById('prospect-seat-color').value = prospect ? (prospect.seat_color || '') : '';
     document.getElementById('prospect-interested-r4').checked = prospect ? !!prospect.interested_in_r4 : false;
 
-    if (title) title.textContent = prospect ? 'Edit Prospect' : 'Add Prospect';
-    if (submitBtn) submitBtn.textContent = prospect ? 'Save Changes' : 'Add Prospect';
+    const rowServerSeat = document.getElementById('row-server-seat');
+    if (rowServerSeat) rowServerSeat.style.display = currentModalType === 'transfer' ? '' : 'none';
+    applyStatusOptionsForType(currentModalType);
+
+    const typeLabel = currentModalType === 'transfer' ? 'Transfer' : 'Prospect';
+    if (title) title.textContent = prospect ? `Edit ${typeLabel}` : `Add ${typeLabel}`;
+    if (submitBtn) submitBtn.textContent = prospect ? 'Save Changes' : `Add ${typeLabel}`;
     if (modal) { modal.style.display = 'flex'; trapFocus(modal); }
 }
 
@@ -589,6 +677,7 @@ async function handleProspectSubmit(e) {
         name, status, server, source_alliance, power, rank_in_alliance,
         recruiter_id, first_contacted, notes,
         hero_power, seat_color, interested_in_r4,
+        prospect_type: currentModalType,
     };
 
     try {
@@ -610,7 +699,7 @@ async function handleProspectSubmit(e) {
         const pm = document.getElementById('prospect-modal');
         releaseFocus(pm);
         pm.style.display = 'none';
-        await loadProspects();
+        await loadAllProspects();
     } catch (err) {
         console.error(err);
     }
@@ -669,8 +758,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setupTabs();
 
-    // Prospects is default tab — load it first
-    loadProspects();
+    // Load all prospects (populates both Transfers and Prospects tabs)
+    loadAllProspects();
     if (HAS_FORMER_TAB) {
         loadFormerMembers();
     }
@@ -769,7 +858,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Prospect modal
     const prospectModal = document.getElementById('prospect-modal');
-    document.getElementById('add-prospect-btn')?.addEventListener('click', () => openProspectModal(null));
+    document.getElementById('add-transfer-btn')?.addEventListener('click', () => openProspectModal(null, 'transfer'));
+    document.getElementById('add-prospect-btn')?.addEventListener('click', () => openProspectModal(null, 'prospect'));
     const closeProspectModal = () => { releaseFocus(prospectModal); prospectModal.style.display = 'none'; };
     document.getElementById('close-prospect-modal')?.addEventListener('click', closeProspectModal);
     document.getElementById('cancel-prospect-btn')?.addEventListener('click', closeProspectModal);

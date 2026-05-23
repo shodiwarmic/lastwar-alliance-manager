@@ -25,7 +25,8 @@ func getProspects(w http.ResponseWriter, r *http.Request) {
 			p.recruiter_id, COALESCE(m.name, '') as recruiter_name,
 			p.status, p.notes,
 			p.hero_power, p.seat_color, p.interested_in_r4,
-			p.first_contacted, p.created_at, p.updated_at
+			p.first_contacted, p.created_at, p.updated_at,
+			p.prospect_type
 		FROM prospects p
 		LEFT JOIN members m ON m.id = p.recruiter_id
 		ORDER BY p.name
@@ -49,6 +50,7 @@ func getProspects(w http.ResponseWriter, r *http.Request) {
 			&p.Status, &p.Notes,
 			&p.HeroPower, &p.SeatColor, &p.InterestedInR4,
 			&p.FirstContacted, &p.CreatedAt, &p.UpdatedAt,
+			&p.ProspectType,
 		); err != nil {
 			slog.Error("Failed to scan prospect row", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -80,18 +82,29 @@ func createProspect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "seat_color must be one of: gold, purple, blue, grey, or empty", http.StatusBadRequest)
 		return
 	}
+	if p.ProspectType == "" {
+		p.ProspectType = "transfer"
+	}
+	if !validProspectType(p.ProspectType) {
+		http.Error(w, "prospect_type must be 'transfer' or 'prospect'", http.StatusBadRequest)
+		return
+	}
+	if !statusAllowedForType(p.Status, p.ProspectType) {
+		http.Error(w, "status not valid for prospect type", http.StatusBadRequest)
+		return
+	}
 
 	result, err := db.Exec(`
 		INSERT INTO prospects
 			(name, server, source_alliance, power, rank_in_alliance,
 			 recruiter_id, status, notes,
 			 hero_power, seat_color, interested_in_r4,
-			 first_contacted)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 first_contacted, prospect_type)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.Name, p.Server, p.SourceAlliance, p.Power, p.RankInAlliance,
 		p.RecruiterID, p.Status, p.Notes,
 		p.HeroPower, p.SeatColor, p.InterestedInR4,
-		p.FirstContacted,
+		p.FirstContacted, p.ProspectType,
 	)
 	if err != nil {
 		slog.Error("Failed to create prospect", "error", err)
@@ -147,14 +160,32 @@ func updateProspect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "seat_color must be one of: gold, purple, blue, grey, or empty", http.StatusBadRequest)
 		return
 	}
+	if p.ProspectType == "" {
+		p.ProspectType = "transfer"
+	}
+	if !validProspectType(p.ProspectType) {
+		http.Error(w, "prospect_type must be 'transfer' or 'prospect'", http.StatusBadRequest)
+		return
+	}
+	// Auto-reset transfer-specific statuses before the cross-field validation so the
+	// inline Move button works without a second round-trip.
+	if p.ProspectType == "prospect" && (p.Status == "qualified_transfer" || p.Status == "unqualified_transfer") {
+		p.Status = "interested"
+	}
+	if !statusAllowedForType(p.Status, p.ProspectType) {
+		http.Error(w, "status not valid for prospect type", http.StatusBadRequest)
+		return
+	}
 
 	var oldName, oldStatus, oldServer, oldSourceAlliance, oldRankInAlliance, oldSeatColor, oldFirstContacted string
 	var oldPower, oldHeroPower *int64
 	var oldRecruiterID *int
 	var oldInterestedInR4 bool
-	db.QueryRow(`SELECT name, status, COALESCE(server,''), COALESCE(source_alliance,''), COALESCE(rank_in_alliance,''), power, hero_power, recruiter_id, COALESCE(seat_color,''), interested_in_r4, COALESCE(first_contacted,'') FROM prospects WHERE id = ?`, id).Scan(
+	var oldProspectType string
+	db.QueryRow(`SELECT name, status, COALESCE(server,''), COALESCE(source_alliance,''), COALESCE(rank_in_alliance,''), power, hero_power, recruiter_id, COALESCE(seat_color,''), interested_in_r4, COALESCE(first_contacted,''), COALESCE(prospect_type,'transfer') FROM prospects WHERE id = ?`, id).Scan(
 		&oldName, &oldStatus, &oldServer, &oldSourceAlliance, &oldRankInAlliance,
 		&oldPower, &oldHeroPower, &oldRecruiterID, &oldSeatColor, &oldInterestedInR4, &oldFirstContacted,
+		&oldProspectType,
 	)
 
 	result, err := db.Exec(`
@@ -162,12 +193,12 @@ func updateProspect(w http.ResponseWriter, r *http.Request) {
 		SET name=?, server=?, source_alliance=?, power=?, rank_in_alliance=?,
 		    recruiter_id=?, status=?, notes=?,
 		    hero_power=?, seat_color=?, interested_in_r4=?,
-		    first_contacted=?, updated_at=CURRENT_TIMESTAMP
+		    first_contacted=?, prospect_type=?, updated_at=CURRENT_TIMESTAMP
 		WHERE id=?`,
 		p.Name, p.Server, p.SourceAlliance, p.Power, p.RankInAlliance,
 		p.RecruiterID, p.Status, p.Notes,
 		p.HeroPower, p.SeatColor, p.InterestedInR4,
-		p.FirstContacted, id,
+		p.FirstContacted, p.ProspectType, id,
 	)
 	if err != nil {
 		slog.Error("Failed to update prospect", "prospect_id", id, "error", err)
@@ -252,6 +283,9 @@ func updateProspect(w http.ResponseWriter, r *http.Request) {
 	}
 	if oldFirstContacted != p.FirstContacted {
 		prospectChanges = append(prospectChanges, "first contacted: "+oldFirstContacted+" → "+p.FirstContacted)
+	}
+	if oldProspectType != p.ProspectType {
+		prospectChanges = append(prospectChanges, "type: "+oldProspectType+" → "+p.ProspectType)
 	}
 	logActivity(user.ID, user.Username, "updated", "prospect", p.Name, false, strings.Join(prospectChanges, "; "))
 
@@ -399,4 +433,15 @@ func validProspectStatus(status string) bool {
 		return true
 	}
 	return false
+}
+
+func validProspectType(t string) bool {
+	return t == "transfer" || t == "prospect"
+}
+
+func statusAllowedForType(status, prospectType string) bool {
+	if prospectType == "prospect" {
+		return status != "qualified_transfer" && status != "unqualified_transfer"
+	}
+	return true
 }

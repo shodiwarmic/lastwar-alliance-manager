@@ -68,6 +68,7 @@ type Prospect struct {
 	FirstContacted string `json:"first_contacted"`
 	CreatedAt      string `json:"created_at"`
 	UpdatedAt      string `json:"updated_at"`
+	ProspectType   string `json:"prospect_type"`
 }
 
 type Alias struct {
