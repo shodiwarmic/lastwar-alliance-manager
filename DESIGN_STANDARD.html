@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alliance Manager — Frontend Design Standard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --card: #ffffff;
+    --border: #e4e8f0;
+    --text: #1c2030;
+    --text-mid: #4a5270;
+    --text-muted: #8b93a8;
+    --accent: #7c6df7;
+    --accent-bg: rgba(124,109,247,0.09);
+    --success: #16a34a;
+    --success-bg: #dcfce7;
+    --warning: #d97706;
+    --warning-bg: #fef3c7;
+    --danger: #dc2626;
+    --danger-bg: #fee2e2;
+    --info: #1d4ed8;
+    --info-bg: #dbeafe;
+    --purple: #6d28d9;
+    --purple-bg: #ede9fe;
+    --code-bg: #1c2030;
+    --code-text: #c8cfdf;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 0;
+  }
+
+  .layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* Sidebar TOC */
+  .toc {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--code-bg);
+    padding: 28px 0 40px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .toc-brand {
+    padding: 0 18px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    margin-bottom: 14px;
+  }
+
+  .toc-brand-name {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.01em;
+  }
+
+  .toc-brand-sub {
+    font-size: 10px;
+    color: #6b7490;
+    margin-top: 2px;
+  }
+
+  .toc-section-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #6b7490;
+    padding: 8px 18px 3px;
+  }
+
+  .toc a {
+    display: block;
+    padding: 5px 18px;
+    font-size: 12px;
+    color: #c8cfdf;
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: color 0.1s, background 0.1s;
+  }
+
+  .toc a:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.05);
+  }
+
+  .toc a.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: rgba(124,109,247,0.09);
+  }
+
+  .toc a.sub {
+    padding-left: 28px;
+    font-size: 11px;
+    color: #6b7490;
+  }
+
+  .toc a.sub:hover { color: #c8cfdf; }
+
+  /* Main content */
+  .main {
+    flex: 1;
+    min-width: 0;
+    padding: 48px 56px 100px;
+    max-width: 820px;
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    color: var(--text);
+    margin-bottom: 6px;
+    line-height: 1.2;
+  }
+
+  .doc-meta {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 52px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    scroll-margin-top: 24px;
+  }
+
+  h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 28px;
+    margin-bottom: 10px;
+    scroll-margin-top: 24px;
+  }
+
+  h4 {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 20px;
+    margin-bottom: 8px;
+  }
+
+  p {
+    font-size: 0.9rem;
+    color: var(--text-mid);
+    margin-bottom: 14px;
+    line-height: 1.75;
+  }
+
+  p strong { color: var(--text); font-weight: 600; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  ul, ol {
+    padding-left: 20px;
+    margin-bottom: 14px;
+  }
+
+  li {
+    font-size: 0.9rem;
+    color: var(--text-mid);
+    margin-bottom: 4px;
+    line-height: 1.65;
+  }
+
+  li strong { color: var(--text); font-weight: 600; }
+
+  /* Token tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 0.82rem;
+  }
+
+  thead tr {
+    background: var(--surface);
+  }
+
+  th {
+    text-align: left;
+    padding: 8px 12px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    color: var(--text-mid);
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+
+  td code, th code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    background: var(--bg);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--accent);
+  }
+
+  /* Code blocks */
+  pre {
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin: 12px 0 20px;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.75;
+    color: var(--code-text);
+  }
+
+  pre .bad     { color: #f87171; }
+  pre .good    { color: #86efac; }
+  pre .comment { color: #545d78; }
+  pre .key     { color: #93c5fd; }
+  pre .val     { color: #fbbf24; }
+  pre .str     { color: #a5f3fc; }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--accent);
+  }
+
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+  }
+
+  /* Token swatches */
+  .token-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .token-swatch {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    font-size: 0.75rem;
+  }
+
+  .swatch-color {
+    height: 36px;
+  }
+
+  .swatch-info {
+    padding: 6px 8px;
+    background: var(--surface);
+  }
+
+  .swatch-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .swatch-val {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  /* Callouts */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    font-size: 0.875rem;
+    border: 1px solid;
+  }
+
+  .callout-warn {
+    background: var(--warning-bg);
+    border-color: rgba(217,119,6,0.25);
+    color: #92400e;
+  }
+
+  .callout-info {
+    background: var(--info-bg);
+    border-color: rgba(29,78,216,0.2);
+    color: #1e40af;
+  }
+
+  .callout-ok {
+    background: var(--success-bg);
+    border-color: rgba(22,163,74,0.2);
+    color: #166534;
+  }
+
+  .callout strong { font-weight: 700; }
+
+  .callout code {
+    background: rgba(0,0,0,0.08);
+    border: none;
+    color: inherit;
+  }
+
+  /* Do/Don't blocks */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 700px) {
+    .compare { grid-template-columns: 1fr; }
+    .toc { display: none; }
+    .main { padding: 28px 20px 60px; }
+  }
+
+  .compare-block { border-radius: 8px; overflow: hidden; }
+  .compare-label {
+    padding: 5px 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .compare-bad  .compare-label { background: var(--danger-bg); color: var(--danger); }
+  .compare-good .compare-label { background: var(--success-bg); color: var(--success); }
+
+  .compare-block pre {
+    margin: 0;
+    border-radius: 0;
+    font-size: 0.75rem;
+  }
+
+  /* Utility class list */
+  .utility-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .utility-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 40px 0;
+  }
+
+  .exception-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+
+  .exception-block h4 { margin-top: 0; }
+
+  .toc-footer {
+    margin-top: auto;
+    padding: 16px 18px 0;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    font-size: 10px;
+    color: #545d78;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar TOC -->
+  <nav class="toc">
+    <div class="toc-brand">
+      <div class="toc-brand-name">Alliance Manager</div>
+      <div class="toc-brand-sub">Frontend Design Standard</div>
+    </div>
+    <div class="toc-section-label">Contents</div>
+    <a href="#theme">Theme System</a>
+    <a href="#tokens">Design Tokens</a>
+    <a class="sub" href="#tokens-surface">Surface / Background</a>
+    <a class="sub" href="#tokens-text">Text</a>
+    <a class="sub" href="#tokens-semantic">Semantic Colours</a>
+    <a class="sub" href="#tokens-sidebar">Sidebar Shell</a>
+    <a class="sub" href="#tokens-legacy">Legacy Tokens</a>
+    <a href="#organisation">CSS Organisation</a>
+    <a href="#utilities">Global Utilities</a>
+    <a href="#components">Components</a>
+    <a class="sub" href="#comp-buttons">Buttons</a>
+    <a class="sub" href="#comp-modals">Modals</a>
+    <a class="sub" href="#comp-tabs">Tabs</a>
+    <a class="sub" href="#comp-tables">Data Tables</a>
+    <a class="sub" href="#comp-chips">Chips & Badges</a>
+    <a class="sub" href="#comp-cards">Cards</a>
+    <a class="sub" href="#comp-feedback">Feedback</a>
+    <a href="#typography">Typography</a>
+    <a href="#darkmode">Dark Mode Rules</a>
+    <a href="#js">JS DOM Standards</a>
+    <a href="#exceptions">Approved Exceptions</a>
+    <div class="toc-footer">Last updated May 2026</div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main">
+
+    <h1>Frontend Design Standard</h1>
+    <div class="doc-meta">Alliance Manager · Complements <code>CLAUDE.md</code> · Last updated May 2026</div>
+
+    <p>This is the canonical reference for all UI and CSS work. It covers the design system: tokens, theming, components, and CSS/JS conventions specific to the visual layer. Backend patterns, Go conventions, and template architecture are in <code>CLAUDE.md</code>.</p>
+
+    <!-- THEME -->
+    <h2 id="theme">Theme System</h2>
+
+    <p>The app carries two theming mechanisms. <strong>Only the attribute system is canonical for new code.</strong></p>
+
+    <h3>Canonical: <code>html[data-theme]</code></h3>
+    <p><code>theme.js</code> sets <code>data-theme="light"</code> or <code>data-theme="dark"</code> on <code>&lt;html&gt;</code> synchronously on page load, before first paint. All CSS written during and after the redesign uses this attribute.</p>
+    <pre><span class="comment">/* ✅ Correct — new page CSS */</span>
+<span class="good">html[data-theme="dark"] .my-element {
+    background: var(--color-surface);
+}</span></pre>
+
+    <h3>Legacy: <code>html.theme-*</code> (do not use for new code)</h3>
+    <p>The old class-based system (<code>html.theme-dark</code>, <code>html.theme-light</code>, <code>html.theme-auto</code>) remains in <code>styles.css</code> to support page CSS written before the redesign. Do not write new dark-mode overrides targeting these classes. <code>theme.js</code> sets both simultaneously; the canonical <code>[data-theme]</code> tokens always win due to specificity.</p>
+
+    <h3><code>color-scheme</code> property</h3>
+    <p>When setting the native <code>color-scheme</code> hint on an element (e.g. a date picker), include <strong>both</strong> selectors:</p>
+    <pre><span class="comment">/* ✅ Covers both systems */</span>
+<span class="good">html.theme-dark .my-input,
+html.theme-auto .my-input,
+html[data-theme="dark"] .my-input {
+    color-scheme: dark;
+}</span></pre>
+
+    <!-- TOKENS -->
+    <h2 id="tokens">Design Tokens</h2>
+    <p>All CSS must use these tokens. Never hardcode hex or rgba colour values — see <a href="#exceptions">Approved Exceptions</a> for the narrow list of intentional hardcodes.</p>
+
+    <h3 id="tokens-surface">Surface / Background</h3>
+    <table>
+      <thead><tr><th>Token</th><th>Light</th><th>Dark</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>--color-bg</code></td><td><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:14px;height:14px;border-radius:3px;background:#f4f6f9;border:1px solid #e4e8f0;flex-shrink:0;"></span>#f4f6f9</span></td><td>#0d1117</td><td>Page background, content area</td></tr>
+        <tr><td><code>--color-surface</code></td><td><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:14px;height:14px;border-radius:3px;background:#fff;border:1px solid #e4e8f0;flex-shrink:0;"></span>#ffffff</span></td><td>#161b26</td><td>Topbar, section headers, filter bars</td></tr>
+        <tr><td><code>--color-card</code></td><td><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:14px;height:14px;border-radius:3px;background:#fff;border:1px solid #e4e8f0;flex-shrink:0;"></span>#ffffff</span></td><td>#1c2130</td><td>Cards, table rows, list items</td></tr>
+      </tbody>
+    </table>
+    <div class="callout callout-info">Layer these as an elevation stack: <code>--color-bg</code> → <code>--color-surface</code> → <code>--color-card</code>. Don't skip levels.</div>
+
+    <h3 id="tokens-text">Text</h3>
+    <table>
+      <thead><tr><th>Token</th><th>Light</th><th>Dark</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>--color-text</code></td><td>#1c2030</td><td>#e4e8f4</td><td>Body text, headings, labels</td></tr>
+        <tr><td><code>--color-text-mid</code></td><td>#4a5270</td><td>#9aa3bc</td><td>Secondary text, metadata, column headers</td></tr>
+        <tr><td><code>--color-text-muted</code></td><td>#8b93a8</td><td>#545d78</td><td>Placeholders, hints, timestamps</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Border</h4>
+    <table>
+      <thead><tr><th>Token</th><th>Light</th><th>Dark</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>--color-border</code></td><td>#e4e8f0</td><td>rgba(255,255,255,0.08)</td><td>All borders, dividers, separators</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Accent</h4>
+    <table>
+      <thead><tr><th>Token</th><th>Light</th><th>Dark</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>--color-accent</code></td><td><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:14px;height:14px;border-radius:3px;background:#7c6df7;flex-shrink:0;"></span>#7c6df7</span></td><td>#9580ff</td><td>Active states, focus rings</td></tr>
+        <tr><td><code>--color-accent-bg</code></td><td>rgba(124,109,247,0.09)</td><td>rgba(149,128,255,0.12)</td><td>Active nav bg, drag-over fills, chip backgrounds</td></tr>
+        <tr><td><code>--color-accent-border</code></td><td>rgba(124,109,247,0.25)</td><td>rgba(149,128,255,0.30)</td><td>Chip and tag borders at accent weight</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="tokens-semantic">Semantic Colours</h3>
+    <table>
+      <thead><tr><th>Token pair</th><th>Light bg / fg</th><th>Dark bg / fg</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>--color-success-bg</code><br><code>--color-success</code></td>
+          <td><span style="display:inline-flex;align-items:center;gap:5px;"><span style="background:#dcfce7;color:#16a34a;padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:600;">bg</span></span> / #16a34a</td>
+          <td>rgba(74,222,128,0.12) / #4ade80</td>
+          <td>Eligible, attended, active-season</td>
+        </tr>
+        <tr>
+          <td><code>--color-warning-bg</code><br><code>--color-warning</code></td>
+          <td><span style="display:inline-flex;align-items:center;gap:5px;"><span style="background:#fef3c7;color:#d97706;padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:600;">bg</span></span> / #d97706</td>
+          <td>rgba(251,191,36,0.12) / #fbbf24</td>
+          <td>Pending, substitute, at-capacity</td>
+        </tr>
+        <tr>
+          <td><code>--color-danger-bg</code><br><code>--color-danger</code></td>
+          <td><span style="display:inline-flex;align-items:center;gap:5px;"><span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:600;">bg</span></span> / #dc2626</td>
+          <td>rgba(248,113,113,0.12) / #f87171</td>
+          <td>Errors, destructive actions, no-show</td>
+        </tr>
+        <tr>
+          <td><code>--color-info-bg</code><br><code>--color-info</code></td>
+          <td><span style="display:inline-flex;align-items:center;gap:5px;"><span style="background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:600;">bg</span></span> / #1d4ed8</td>
+          <td>rgba(59,130,246,0.15) / #93c5fd</td>
+          <td>Info panels, at-risk badges, daily-frequency</td>
+        </tr>
+        <tr>
+          <td><code>--color-purple-bg</code><br><code>--color-purple</code></td>
+          <td><span style="display:inline-flex;align-items:center;gap:5px;"><span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:600;">bg</span></span> / #6d28d9</td>
+          <td>rgba(109,40,217,0.15) / #c4b5fd</td>
+          <td>Role/privilege indicators, Admin nav, seasonal</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-warn">
+      <strong>Warning token note:</strong> <code>--color-warning</code> / <code>--color-warning-bg</code> have a <code>:root</code> fallback but when using them in new page CSS, always pass a fallback value as insurance:<br>
+      <code>color: var(--color-warning, #d97706);</code>
+    </div>
+
+    <h4>Alert Panels</h4>
+    <table>
+      <thead><tr><th>Token</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>--color-alert-bg</code></td><td>Alert/callout panel background</td></tr>
+        <tr><td><code>--color-alert-border</code></td><td>Alert panel border</td></tr>
+        <tr><td><code>--color-alert-text</code></td><td>Alert panel text</td></tr>
+      </tbody>
+    </table>
+    <p>Use alert panels for contextual inline warnings. For transient feedback, use <code>showToast()</code>.</p>
+
+    <h3 id="tokens-sidebar">Sidebar Shell Tokens</h3>
+    <p>These are for the sidebar and mobile header <strong>only</strong>. Do not use in page content.</p>
+    <table>
+      <thead><tr><th>Token</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>--color-sidebar</code></td><td>Sidebar background</td></tr>
+        <tr><td><code>--color-sidebar-text</code></td><td>Nav link text</td></tr>
+        <tr><td><code>--color-sidebar-muted</code></td><td>Section labels, sub-text</td></tr>
+        <tr><td><code>--color-sidebar-border</code></td><td>Sidebar dividers</td></tr>
+        <tr><td><code>--color-sidebar-hover</code></td><td>Nav link hover state</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="tokens-legacy">Legacy Tokens — Do Not Use</h3>
+    <p>These exist in the legacy <code>html.theme-*</code> blocks and are referenced by pre-redesign page CSS. Do not introduce them in new files.</p>
+    <table>
+      <thead><tr><th>Do not use</th><th>Use instead</th></tr></thead>
+      <tbody>
+        <tr><td><code>--danger-color</code></td><td><code>--color-danger</code></td></tr>
+        <tr><td><code>--accent-color</code></td><td><code>--color-accent</code></td></tr>
+        <tr><td><code>--primary-color</code></td><td><code>--color-accent</code></td></tr>
+        <tr><td><code>--text-color</code></td><td><code>--color-text</code></td></tr>
+        <tr><td><code>--bg-primary</code> / <code>--bg-secondary</code></td><td><code>--color-bg</code> / <code>--color-surface</code></td></tr>
+        <tr><td><code>--text-primary</code> / <code>--text-secondary</code></td><td><code>--color-text</code> / <code>--color-text-mid</code></td></tr>
+        <tr><td><code>--border-color</code></td><td><code>--color-border</code></td></tr>
+      </tbody>
+    </table>
+
+    <!-- CSS ORGANISATION -->
+    <h2 id="organisation">CSS File Organisation</h2>
+    <pre><span class="comment">styles.css         — Global tokens, shell layout, utility classes.
+                     Never edit for page features.
+static/feature.css — Page-specific layout only.
+                     Linked via {{define "head_tags"}}.</span></pre>
+
+    <div class="callout callout-info"><strong>Check first.</strong> Before writing any page CSS, verify that <code>styles.css</code> doesn't already provide what you need (see Global Utilities below). Page CSS is for page-specific layout only.</div>
+
+    <!-- UTILITIES -->
+    <h2 id="utilities">Global Utility Classes</h2>
+    <div class="utility-list">
+      <div class="utility-chip">.data-table</div>
+      <div class="utility-chip">.filter-chip</div>
+      <div class="utility-chip">.filter-chip-label</div>
+      <div class="utility-chip">.tab-toolbar</div>
+      <div class="utility-chip">.status-msg</div>
+      <div class="utility-chip">.tab-bar</div>
+      <div class="utility-chip">.tab-btn</div>
+      <div class="utility-chip">.modal</div>
+      <div class="utility-chip">.modal-content</div>
+      <div class="utility-chip">.btn</div>
+      <div class="utility-chip">.btn-primary</div>
+      <div class="utility-chip">.btn-secondary</div>
+      <div class="utility-chip">.btn-danger</div>
+      <div class="utility-chip">.btn-warning</div>
+      <div class="utility-chip">.btn-sm</div>
+      <div class="utility-chip">.form-input</div>
+      <div class="utility-chip">.badge-hq</div>
+      <div class="utility-chip">.badge-troop</div>
+      <div class="utility-chip">.badge-profession</div>
+      <div class="utility-chip">.badge-squad-type</div>
+    </div>
+
+    <h3>Tab switching</h3>
+    <p>The global rule sets <code>.tab-content { display: none }</code>. You must show the initial active tab explicitly on <code>DOMContentLoaded</code>, and always use <code>style.display = 'block'</code> — never <code>style.display = ''</code>.</p>
+    <pre>document.addEventListener('DOMContentLoaded', () => {
+    const activeBtn = document.querySelector('.tab-btn.active');
+    if (activeBtn) {
+        const tab = document.getElementById('tab-' + activeBtn.dataset.tab);
+<span class="good">        if (tab) tab.style.display = 'block'; // NOT style.display = ''</span>
+    }
+});</pre>
+
+    <!-- COMPONENTS -->
+    <h2 id="components">Component Patterns</h2>
+
+    <h3 id="comp-buttons">Buttons</h3>
+    <pre><span class="comment">&lt;!-- Standard sizes --&gt;</span>
+&lt;button class="btn btn-primary"&gt;Save&lt;/button&gt;
+&lt;button class="btn btn-secondary"&gt;Cancel&lt;/button&gt;
+&lt;button class="btn btn-danger btn-sm"&gt;Delete&lt;/button&gt;
+&lt;button class="btn btn-warning btn-sm"&gt;Flag&lt;/button&gt;</pre>
+    <ul>
+      <li>Do <strong>not</strong> use <code>.primary-action-btn</code> / <code>.secondary-action-btn</code> — deprecated.</li>
+      <li>Buttons in flex rows: wrap in a <code>display:flex; gap:6px</code> container, never use <code>margin-right</code>.</li>
+      <li><code>.btn-sm</code> reduces padding for inline/table contexts.</li>
+    </ul>
+
+    <h3 id="comp-modals">Modals</h3>
+    <div class="callout callout-warn"><strong>Modals go in <code>{{define "modals"}}</code>, not <code>{{define "content"}}</code>.</strong> Placing them inside <code>content</code> traps them in the container's stacking context and breaks <code>position:fixed</code> backdrops.</div>
+    <pre><span class="comment">{{define "modals"}}</span>
+&lt;div id="my-modal" class="modal"&gt;
+  &lt;div class="modal-content"&gt;
+    &lt;h2&gt;Title&lt;/h2&gt;
+    &lt;!-- form content --&gt;
+    &lt;div class="modal-actions"&gt;
+      &lt;button class="btn btn-primary" id="my-save"&gt;Save&lt;/button&gt;
+      &lt;button class="btn btn-secondary" id="my-cancel"&gt;Cancel&lt;/button&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+<span class="comment">{{end}}</span></pre>
+    <pre><span class="comment">// Open</span>
+document.getElementById('my-modal').style.display = 'flex';
+<span class="comment">// Close</span>
+document.getElementById('my-modal').style.display = '';
+<span class="comment">// Backdrop click</span>
+modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = ''; });</pre>
+    <div class="callout callout-warn">Never add <code>class="hidden"</code> to a <code>.modal</code> — it is already <code>display:none</code> by default. Adding <code>.hidden</code> (<code>display:none !important</code>) prevents <code>style.display='flex'</code> from taking effect.</div>
+
+    <h3 id="comp-tabs">Tabs</h3>
+    <pre>&lt;div class="tab-bar"&gt;
+  &lt;button class="tab-btn active" data-tab="overview"&gt;Overview&lt;/button&gt;
+  &lt;button class="tab-btn"       data-tab="history"&gt;History&lt;/button&gt;
+&lt;/div&gt;
+&lt;div id="tab-overview" class="tab-content"&gt;...&lt;/div&gt;
+&lt;div id="tab-history"  class="tab-content"&gt;...&lt;/div&gt;</pre>
+
+    <h3 id="comp-tables">Data Tables</h3>
+    <pre>&lt;div style="overflow-x:auto"&gt;
+  &lt;table class="data-table"&gt;
+    &lt;thead&gt;
+      &lt;tr&gt;
+        &lt;th&gt;Name&lt;/th&gt;
+        &lt;th&gt;Rank&lt;/th&gt;
+        &lt;th style="width:1%;white-space:nowrap"&gt;Actions&lt;/th&gt;
+      &lt;/tr&gt;
+    &lt;/thead&gt;
+    &lt;tbody id="my-table-body"&gt;&lt;/tbody&gt;
+  &lt;/table&gt;
+&lt;/div&gt;</pre>
+    <ul>
+      <li>Pin the actions column: <code>width:1%; white-space:nowrap</code>.</li>
+      <li><code>overflow-x:auto</code> goes on the wrapper div, not the table.</li>
+      <li>Add a page-specific subclass (<code>.data-table.my-table</code>) for <code>min-width</code> overrides only.</li>
+    </ul>
+
+    <h3 id="comp-chips">Chips and Badges</h3>
+    <p>For chip borders, use <code>--color-accent-border</code> or the <code>color-mix()</code> approach for semantic colours — not the full-strength text token.</p>
+    <div class="compare">
+      <div class="compare-block compare-bad">
+        <div class="compare-label">❌ Don't</div>
+        <pre>border: 1px solid var(--color-info);
+border: 1px solid var(--color-purple);</pre>
+      </div>
+      <div class="compare-block compare-good">
+        <div class="compare-label">✅ Do</div>
+        <pre>border: 1px solid var(--color-accent-border);
+border: 1px solid color-mix(
+  in srgb,
+  var(--color-info) 35%,
+  transparent
+);</pre>
+      </div>
+    </div>
+
+    <h3 id="comp-cards">Cards</h3>
+    <table>
+      <thead><tr><th>Type</th><th>Border</th><th>Background</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr><td>Entity card</td><td><code>2px solid var(--color-border)</code></td><td><code>--color-card</code></td><td>Members, awards, prospects, mail items</td></tr>
+        <tr><td>Filter / info panel</td><td><code>1px solid var(--color-border)</code></td><td><code>--color-surface</code></td><td>Capacity bars, settings sections, generate panels</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="comp-feedback">Status and Feedback</h3>
+    <p>Never use <code>alert()</code>, <code>confirm()</code>, or <code>prompt()</code>. Use the helpers in <code>global.js</code>:</p>
+    <pre><span class="comment">// Transient notifications</span>
+showToast('Saved successfully.');
+showToast('Failed to save.', 'error');
+showToast('Processing…', 'info', 8000); <span class="comment">// custom duration ms</span>
+
+<span class="comment">// Destructive confirmation — returns Promise&lt;boolean&gt;</span>
+if (!await showConfirm('Delete this entry?', 'Delete')) return;
+if (!await showConfirm('Delete entry?', 'Delete', 'Confirm Deletion')) return; <span class="comment">// custom title</span>
+
+<span class="comment">// Inline field validation</span>
+setFieldError(document.getElementById('name-input'), 'Name is required.');
+clearFieldError(document.getElementById('name-input'));
+clearAllFieldErrors(document.getElementById('my-form'));</pre>
+
+    <!-- TYPOGRAPHY -->
+    <h2 id="typography">Typography</h2>
+    <p><strong>Font:</strong> Plus Jakarta Sans (loaded in <code>styles.css</code>). No other font family.</p>
+    <table>
+      <thead><tr><th>Weight</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td>400</td><td>Body text, table cell values</td></tr>
+        <tr><td>500</td><td>Secondary labels, non-active nav links</td></tr>
+        <tr><td>600</td><td>Card titles, section headers, active nav, form labels</td></tr>
+        <tr><td>700</td><td>Page headings, stat values</td></tr>
+        <tr><td>800</td><td>Brand name, avatar initials</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>Size</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td>0.72rem</td><td>Micro labels, timestamp suffixes</td></tr>
+        <tr><td>0.75rem</td><td>Badge / chip text</td></tr>
+        <tr><td>0.78rem</td><td>Tag text</td></tr>
+        <tr><td>0.82rem</td><td>Table metadata</td></tr>
+        <tr><td>0.85rem</td><td>Secondary body, notes, hints</td></tr>
+        <tr><td>0.875rem</td><td>Form labels, table cell body <strong>(default for modal content)</strong></td></tr>
+        <tr><td>0.9rem</td><td>Filter chips, secondary UI</td></tr>
+        <tr><td>0.95rem</td><td>Section titles, card titles</td></tr>
+        <tr><td>1rem</td><td>Primary body</td></tr>
+        <tr><td>1.1rem</td><td>Group headings</td></tr>
+        <tr><td>18px / 1.125rem</td><td>Topbar h1 (fixed)</td></tr>
+      </tbody>
+    </table>
+
+    <!-- DARK MODE -->
+    <h2 id="darkmode">Dark Mode Rules</h2>
+    <ol>
+      <li><strong>Always use tokens.</strong> Every colour must come from a <code>var(--color-*)</code> token.</li>
+      <li><strong>Use <code>html[data-theme="dark"]</code> for overrides</strong>, not <code>html.theme-dark</code>.</li>
+      <li><strong>Include both selectors for <code>color-scheme</code></strong> (see Theme System above).</li>
+      <li><strong>Use <code>color-mix()</code> for semi-transparent semantic borders</strong> — it adapts automatically as the token changes between themes.</li>
+      <li><strong>Test in both themes</strong> before committing.</li>
+    </ol>
+    <pre><span class="comment">/* Semi-transparent semantic border — adapts to both themes */</span>
+<span class="good">border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);</span>
+
+<span class="comment">/* Chart.js — read token at runtime */</span>
+<span class="good">Chart.defaults.color = getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-text-mid').trim();</span></pre>
+
+    <!-- JS -->
+    <h2 id="js">JavaScript DOM Standards</h2>
+
+    <h3>Safe DOM construction</h3>
+    <div class="compare">
+      <div class="compare-block compare-bad">
+        <div class="compare-label">❌ Never</div>
+        <pre>container.innerHTML =
+  `&lt;div class="card"&gt;
+    ${item.name}
+  &lt;/div&gt;`;</pre>
+      </div>
+      <div class="compare-block compare-good">
+        <div class="compare-label">✅ Always</div>
+        <pre>const card = document.createElement('div');
+card.className = 'card';
+card.textContent = item.name;
+container.appendChild(card);</pre>
+      </div>
+    </div>
+    <pre><span class="comment">// Batch replace children cleanly</span>
+container.replaceChildren(...items.map(buildCard));</pre>
+
+    <h3>Event binding</h3>
+    <div class="compare">
+      <div class="compare-block compare-bad">
+        <div class="compare-label">❌ Never</div>
+        <pre>btn.setAttribute('onclick',
+  `deleteItem(${item.id})`);</pre>
+      </div>
+      <div class="compare-block compare-good">
+        <div class="compare-label">✅ Always</div>
+        <pre>btn.addEventListener('click',
+  () => deleteItem(item.id));</pre>
+      </div>
+    </div>
+
+    <h3>Colours in JS</h3>
+    <div class="compare">
+      <div class="compare-block compare-bad">
+        <div class="compare-label">❌ Never</div>
+        <pre>span.style.color = '#1d4ed8';
+el.style.cssText =
+  'color:#f87171;font-size:0.85em;';</pre>
+      </div>
+      <div class="compare-block compare-good">
+        <div class="compare-label">✅ Always</div>
+        <pre>span.style.color = 'var(--color-info)';
+el.style.cssText =
+  'color:var(--color-danger);font-size:0.85em;';</pre>
+      </div>
+    </div>
+    <p>If the same styled element is created in a loop, the style belongs in a CSS class — not duplicated in each JS call.</p>
+
+    <h3><code>el()</code> helper</h3>
+    <p>For files that construct significant DOM, use the builder helper from <code>dashboard.js</code> rather than chained <code>createElement</code> calls. Copy the <code>el(tag, props, ...children)</code> function verbatim — it's the reference pattern for new files.</p>
+
+    <!-- EXCEPTIONS -->
+    <h2 id="exceptions">Approved Exceptions</h2>
+    <p>The following hardcoded colour values are intentional and must not be replaced with tokens.</p>
+
+    <div class="exception-block">
+      <h4>Seat tier dots (<code>recruiting.css</code>)</h4>
+      <pre>.seat-gold   { background: #f1c40f; }
+.seat-purple { background: #9b59b6; }
+.seat-blue   { background: #3498db; }
+.seat-grey   { background: #95a5a6; }</pre>
+      <p style="margin:8px 0 0;font-size:0.85rem;color:var(--text-mid);">These map to specific in-game seat tier colours that must be constant across both themes. They are game identifiers, not semantic states. New in-game colour coding that requires constant values must be documented here.</p>
+    </div>
+
+    <div class="exception-block">
+      <h4>Sidebar shell background</h4>
+      <p style="margin:0;font-size:0.85rem;color:var(--text-mid);"><code>--color-sidebar</code> is a near-black value in both light and dark themes — the sidebar is intentionally always dark regardless of page theme.</p>
+    </div>
+
+    <hr>
+    <p style="font-size:0.8rem;color:var(--text-muted);">Amend this document whenever a new global pattern is introduced or an existing one changes.</p>
+
+  </div><!-- .main -->
+</div><!-- .layout -->
+</body>
+</html>
