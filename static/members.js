@@ -16,11 +16,14 @@ let currentMaxHQ = 35;
 let sortField = 'name';
 let sortDir = 'asc';
 let fuseInstance = null;
+let skillRegistry = []; // [{key, label}] — populated from GET /api/skills
 
 const SORT_DEFAULTS = {
     name: 'asc', rank: 'desc', power: 'desc',
     hq: 'desc', hero_power: 'desc', kills: 'desc', squad_power: 'desc',
 };
+
+const SKILL_EMOJI = { medical_aid: '🩹' };
 
 // Define the HQ requirements for each Troop Tier
 const TROOP_HQ_REQ = { 1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35 };
@@ -128,6 +131,7 @@ function updateDisplayedMembers() {
     const activeSquads = Array.from(document.querySelectorAll('.squad-chip.active')).map(c => c.dataset.squad);
     const activeTroops = Array.from(document.querySelectorAll('.troop-chip.active')).map(c => c.dataset.troop);
     const activeEligible = document.querySelector('.eligible-chip.active')?.dataset.eligible || 'all';
+    const activeSkills = Array.from(document.querySelectorAll('.skill-chip.active')).map(c => c.dataset.skill);
 
     let filtered = base.filter(member => {
         const matchesRank = activeRanks.includes('all') || activeRanks.includes(member.rank);
@@ -146,7 +150,11 @@ function updateDisplayedMembers() {
             (activeEligible === 'eligible' && member.eligible !== false) ||
             (activeEligible === 'not-eligible' && member.eligible === false);
 
-        return matchesRank && matchesProf && matchesSquad && matchesTroop && matchesEligible;
+        const memberSkillList = member.skills ? member.skills.split(',') : [];
+        const matchesSkill = activeSkills.length === 0 || activeSkills.includes('all') ||
+            activeSkills.every(s => memberSkillList.includes(s));
+
+        return matchesRank && matchesProf && matchesSquad && matchesTroop && matchesEligible && matchesSkill;
     });
 
     const RANK_ORDER = { R5: 5, R4: 4, R3: 3, R2: 2, R1: 1 };
@@ -201,6 +209,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupModalListeners();
     setupCSVImport();
     setupSearch();
+    await loadSkillRegistry();
     loadMembers();
 });
 
@@ -303,8 +312,20 @@ function resetMemberForm() {
     const heroTimestampText = document.getElementById('modal-hero-power-timestamp');
     if (heroTimestampText) heroTimestampText.textContent = '';
 
+    // Reset skill checkboxes
+    document.querySelectorAll('[data-skill-key]').forEach(cb => { cb.checked = false; });
+
     document.getElementById('modal-form-title').textContent = 'Add New Member';
     document.getElementById('submit-btn').textContent = 'Add Member';
+}
+
+async function loadSkillRegistry() {
+    try {
+        const res = await fetch('/api/skills');
+        if (res.ok) skillRegistry = await res.json();
+    } catch (e) {
+        console.error('Error loading skill registry:', e);
+    }
 }
 
 async function loadMembers() {
@@ -388,7 +409,6 @@ function buildMemberCard(member) {
     if (member.level) {
         const badge = document.createElement('span');
         badge.className = 'member-rank badge-hq';
-        badge.style.cssText = 'margin-left:5px;';
         badge.textContent = `HQ ${member.level}`;
         info.appendChild(badge);
     }
@@ -397,7 +417,6 @@ function buildMemberCard(member) {
     if (member.troop_level) {
         const badge = document.createElement('span');
         badge.className = 'member-rank badge-troop';
-        badge.style.cssText = 'margin-left:5px;';
         badge.textContent = `T${member.troop_level}`;
         info.appendChild(badge);
     }
@@ -406,9 +425,22 @@ function buildMemberCard(member) {
     if (member.profession) {
         const badge = document.createElement('span');
         badge.className = 'member-rank badge-profession';
-        badge.style.cssText = 'margin-left:5px;';
         badge.textContent = member.profession;
         info.appendChild(badge);
+    }
+
+    // Skill badges
+    if (member.skills) {
+        const memberSkills = member.skills.split(',');
+        skillRegistry.forEach(({ key, label }) => {
+            if (memberSkills.includes(key)) {
+                const badge = document.createElement('span');
+                badge.className = 'badge-skill';
+                badge.textContent = SKILL_EMOJI[key] || '⚕️';
+                badge.title = label;
+                info.appendChild(badge);
+            }
+        });
     }
 
     // Power
@@ -428,7 +460,6 @@ function buildMemberCard(member) {
         else if (member.squad_type === 'Missile') typeIcon = '🚀 ';
         const span = document.createElement('span');
         span.className = 'member-power';
-        span.style.cssText = 'margin-left:10px;';
         span.title = `Squad Power: ${member.squad_power ? member.squad_power.toLocaleString() : 0}`;
         span.textContent = `${typeIcon}${formatPower(member.squad_power)}`;
         info.appendChild(span);
@@ -438,7 +469,6 @@ function buildMemberCard(member) {
     if (member.hero_power > 0) {
         const span = document.createElement('span');
         span.className = 'member-power';
-        span.style.cssText = 'margin-left:10px;';
         span.title = `Total Hero Power: ${member.hero_power.toLocaleString()}`;
         span.textContent = `🦸 ${formatPower(member.hero_power)}`;
         info.appendChild(span);
@@ -448,7 +478,6 @@ function buildMemberCard(member) {
     if (member.current_kills > 0) {
         const span = document.createElement('span');
         span.className = 'member-power';
-        span.style.cssText = 'margin-left:10px;';
         span.title = `Troop Kills: ${member.current_kills.toLocaleString()}`;
         span.textContent = `💀 ${formatPower(member.current_kills)}`;
         info.appendChild(span);
@@ -473,15 +502,7 @@ function buildMemberCard(member) {
         const editBtn = document.createElement('button');
         editBtn.className = 'edit-btn';
         editBtn.textContent = 'Edit';
-        editBtn.addEventListener('click', () => editMember(
-            member.id, member.name, member.rank, member.eligible !== false,
-            member.power || 0, member.power_updated_at || '',
-            member.level || 0, member.squad_type || '',
-            member.squad_power || 0, member.squad_power_updated_at || '',
-            member.troop_level || 0, member.profession || '', member.notes || '',
-            member.hero_power || 0, member.hero_power_updated_at || '',
-            member.current_kills || 0, member.kills_updated_at || ''
-        ));
+        editBtn.addEventListener('click', () => editMember(member));
         actions.appendChild(editBtn);
 
         if (member.rank !== 'EX') {
@@ -558,6 +579,7 @@ async function handleMemberFormSubmit(e) {
     }
 
     try {
+        let targetId;
         if (editingMemberId) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
@@ -565,6 +587,7 @@ async function handleMemberFormSubmit(e) {
                 body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes }),
             });
             if (!response.ok) throw new Error('Failed to update member');
+            targetId = editingMemberId;
             editingMemberId = null;
         } else {
             const response = await fetch(API_URL, {
@@ -576,7 +599,18 @@ async function handleMemberFormSubmit(e) {
                 if (response.status === 403) throw new Error('Permission denied');
                 throw new Error('Failed to add member');
             }
+            const newMember = await response.json();
+            targetId = newMember.id;
         }
+
+        const skillsArr = [...document.querySelectorAll('[data-skill-key]:checked')].map(el => el.dataset.skillKey);
+        const skillsRes = await fetch(`${API_URL}/${targetId}/skills`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skills: skillsArr }),
+        });
+        if (!skillsRes.ok) throw new Error('Failed to save skills');
+
         closeMemberModalFunc();
         await loadMembers();
     } catch (error) {
@@ -599,12 +633,27 @@ function showModalStatus(msg) {
     el._timer = setTimeout(() => { el.textContent = ''; }, 5000);
 }
 
-window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedAt = '', level = 0, squadType = '', squadPower = 0, squadPowerUpdatedAt = '', troopLevel = 0, profession = '', notes = '', heroPower = 0, heroPowerUpdatedAt = '', currentKills = 0, killsUpdatedAt = '') {
+window.editMember = function (member) {
     if (!canManageRanks) return;
-    editingMemberId = id;
+    editingMemberId = member.id;
 
-    document.getElementById('member-name').value = name;
-    document.getElementById('member-rank').value = rank;
+    const eligible = member.eligible !== false;
+    const power = member.power || 0;
+    const powerUpdatedAt = member.power_updated_at || '';
+    const level = member.level || 0;
+    const squadType = member.squad_type || '';
+    const squadPower = member.squad_power || 0;
+    const squadPowerUpdatedAt = member.squad_power_updated_at || '';
+    const troopLevel = member.troop_level || 0;
+    const profession = member.profession || '';
+    const notes = member.notes || '';
+    const heroPower = member.hero_power || 0;
+    const heroPowerUpdatedAt = member.hero_power_updated_at || '';
+    const currentKills = member.current_kills || 0;
+    const killsUpdatedAt = member.kills_updated_at || '';
+
+    document.getElementById('member-name').value = member.name;
+    document.getElementById('member-rank').value = member.rank;
     document.getElementById('member-eligible').checked = eligible;
 
     const levelInput = document.getElementById('member-level');
@@ -681,6 +730,12 @@ window.editMember = function (id, name, rank, eligible, power = 0, powerUpdatedA
             killTimestampText.textContent = 'Last updated: Never';
         }
     }
+
+    // Pre-check skill checkboxes
+    const memberSkills = (member.skills || '').split(',').filter(Boolean);
+    document.querySelectorAll('[data-skill-key]').forEach(cb => {
+        cb.checked = memberSkills.includes(cb.dataset.skillKey);
+    });
 
     document.getElementById('modal-form-title').textContent = 'Edit Member';
     document.getElementById('submit-btn').textContent = 'Update Member';
@@ -876,6 +931,7 @@ function setupSearch() {
     setupChipGroup('.prof-chip', 'prof');
     setupChipGroup('.squad-chip', 'squad');
     setupChipGroup('.troop-chip', 'troop');
+    setupChipGroup('.skill-chip', 'skill');
 
     document.querySelectorAll('.eligible-chip').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1121,42 +1177,38 @@ function showCSVPreview(result) {
         if (member.level) {
             const s = document.createElement('span');
             s.className = 'member-rank badge-hq';
-            s.style.cssText = 'margin-left:5px;';
             s.textContent = `HQ ${member.level}`;
             memberInfo.appendChild(s);
         }
         if (member.troop_level) {
             const s = document.createElement('span');
             s.className = 'member-rank badge-troop';
-            s.style.cssText = 'margin-left:5px;';
             s.textContent = `T${member.troop_level}`;
             memberInfo.appendChild(s);
         }
         if (member.squad_type) {
             const s = document.createElement('span');
             s.className = 'member-rank badge-squad-type';
-            s.style.cssText = 'margin-left:5px;';
             s.textContent = member.squad_type;
             memberInfo.appendChild(s);
         }
         if (member.profession) {
             const s = document.createElement('span');
             s.className = 'member-rank badge-profession';
-            s.style.cssText = 'margin-left:5px;';
             s.textContent = member.profession;
             memberInfo.appendChild(s);
         }
         if (member.power) {
             const s = document.createElement('span');
             s.className = 'member-power';
-            s.style.cssText = 'margin-left:10px;font-size:0.85em;';
+            s.style.cssText = 'font-size:0.85em;';
             s.textContent = `⚡ ${(member.power / 1000000).toFixed(1)}M`;
             memberInfo.appendChild(s);
         }
         if (member.squad_power) {
             const s = document.createElement('span');
             s.className = 'member-power';
-            s.style.cssText = 'margin-left:10px;font-size:0.85em;color:var(--color-accent);';
+            s.style.cssText = 'font-size:0.85em;color:var(--color-primary);';
             s.textContent = `🛡️ ${(member.squad_power / 1000000).toFixed(1)}M`;
             memberInfo.appendChild(s);
         }

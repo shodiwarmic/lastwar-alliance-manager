@@ -112,6 +112,16 @@
                             <button class="filter-chip eligible-chip" data-eligible="not-eligible">Not Eligible</button>
                         </div>
 
+                        {{if .SkillLabels}}
+                        <div class="filter-row" style="grid-column: 1 / -1">
+                            <span class="filter-chip-label">Skills:</span>
+                            <button class="filter-chip skill-chip active" data-skill="all">All</button>
+                            {{range $key, $label := .SkillLabels}}
+                            <button class="filter-chip skill-chip" data-skill="{{$key}}">{{$label}}</button>
+                            {{end}}
+                        </div>
+                        {{end}}
+
                     </div>
                 </div>
 
@@ -228,6 +238,20 @@
                     <label for="member-notes">Officer Notes:</label>
                     <textarea id="member-notes" class="form-input" rows="3" placeholder="Internal notes visible to officers only..."></textarea>
                 </div>
+
+                {{if .SkillLabels}}
+                <div class="form-group">
+                    <label>Skills:</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;">
+                        {{range $key, $label := .SkillLabels}}
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                            <input type="checkbox" data-skill-key="{{$key}}">
+                            <span>{{$label}}</span>
+                        </label>
+                        {{end}}
+                    </div>
+                </div>
+                {{end}}
 
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary" id="submit-btn">Save Member</button>

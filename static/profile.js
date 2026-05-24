@@ -123,6 +123,12 @@ async function loadGameStats() {
             setTimestamp('stat-hero-power-timestamp', data.hero_power_updated_at);
             setTimestamp('stat-kill-count-timestamp', data.kills_updated_at);
 
+            // Pre-check skill checkboxes
+            const memberSkills = (data.skills || '').split(',').filter(Boolean);
+            document.querySelectorAll('[data-skill-key]').forEach(cb => {
+                cb.checked = memberSkills.includes(cb.dataset.skillKey);
+            });
+
             // Run enforcement immediately on load
             enforceTroopLevel();
         } else if (response.status === 404 || response.status === 403) {
@@ -276,10 +282,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                             profession: document.getElementById('stat-profession').value
                         })
                     });
-                    
+
                     if (!response.ok) throw new Error(await response.text());
-                    
-                    showToast('Game stats updated.');
+
+                    const skillsArr = [...document.querySelectorAll('[data-skill-key]:checked')].map(el => el.dataset.skillKey);
+                    const skillsRes = await fetch(`${API_BASE}/profile/me/skills`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ skills: skillsArr }),
+                    });
+                    if (!skillsRes.ok) {
+                        showToast('Stats saved, but skill update failed.', 'error');
+                    } else {
+                        showToast('Game stats updated.');
+                    }
                 } catch (error) {
                     console.error('Error updating stats:', error);
                     showToast('Failed to update stats.', 'error');

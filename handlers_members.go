@@ -60,6 +60,11 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			SELECT member_id, GROUP_CONCAT(alias, ', ') as aliases
 			FROM member_aliases WHERE category = 'personal' AND user_id = ?
 			GROUP BY member_id
+		),
+		member_skills_agg AS (
+			SELECT member_id, GROUP_CONCAT(skill_key) AS skills
+			FROM (SELECT member_id, skill_key FROM member_skills ORDER BY skill_key)
+			GROUP BY member_id
 		)
 		SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
 			   COALESCE(m.squad_type, ''), COALESCE(m.troop_level, 0), COALESCE(m.profession, ''),
@@ -74,7 +79,8 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			   COALESCE(lhp.power, 0) as latest_hero_power,
 			   COALESCE(lhp.recorded_at, '') as latest_hero_power_date,
 			   COALESCE(lk.kills, 0) as latest_kills,
-			   COALESCE(lk.recorded_at, '') as latest_kills_date
+			   COALESCE(lk.recorded_at, '') as latest_kills_date,
+			   COALESCE(msa.skills, '') as skills
 		FROM members m
 		LEFT JOIN latest_power lp ON lp.member_id = m.id
 		LEFT JOIN latest_squad_power lsp ON lsp.member_id = m.id
@@ -82,6 +88,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN latest_kills lk ON lk.member_id = m.id
 		LEFT JOIN global_aliases ga ON ga.member_id = m.id
 		LEFT JOIN personal_aliases pa ON pa.member_id = m.id
+		LEFT JOIN member_skills_agg msa ON msa.member_id = m.id
 		WHERE m.rank != 'EX'
 		ORDER BY m.name
 	`
@@ -102,6 +109,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			&m.HasUser, &m.GlobalAliases, &m.PersonalAliases, &m.Notes,
 			&m.HeroPower, &m.HeroPowerUpdatedAt,
 			&m.CurrentKills, &m.KillsUpdatedAt,
+			&m.Skills,
 		); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -883,9 +891,13 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 			(SELECT power FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as hero_power,
 			COALESCE((SELECT recorded_at FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as hero_power_updated_at,
 			COALESCE((SELECT kills FROM kill_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as current_kills,
-			COALESCE((SELECT recorded_at FROM kill_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as kills_updated_at
+			COALESCE((SELECT recorded_at FROM kill_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as kills_updated_at,
+			COALESCE((
+				SELECT GROUP_CONCAT(skill_key)
+				FROM (SELECT skill_key FROM member_skills WHERE member_id = m.id ORDER BY skill_key)
+			), '') as skills
 		FROM members m WHERE m.id = ?`, memberID).
-		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.HeroPower, &m.HeroPowerUpdatedAt, &m.CurrentKills, &m.KillsUpdatedAt)
+		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.HeroPower, &m.HeroPowerUpdatedAt, &m.CurrentKills, &m.KillsUpdatedAt, &m.Skills)
 
 	if err != nil {
 		log.Printf("Profile Fetch Error: %v", err)

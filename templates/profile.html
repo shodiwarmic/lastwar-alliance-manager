@@ -90,6 +90,20 @@
                     </div>
                 </div>
 
+                {{if .SkillLabels}}
+                <div class="form-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                    <label>Skills:</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;">
+                        {{range $key, $label := .SkillLabels}}
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                            <input type="checkbox" data-skill-key="{{$key}}">
+                            <span>{{$label}}</span>
+                        </label>
+                        {{end}}
+                    </div>
+                </div>
+                {{end}}
+
                 <div class="button-group" style="margin-top: 20px;">
                     <button type="submit" id="submit-stats-btn" class="btn btn-primary">💾 Save Stats</button>
                 </div>

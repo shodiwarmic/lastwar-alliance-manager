@@ -83,6 +83,8 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 		data.OCRPipelineReady = hasGCP && cvWorkerURL != ""
 	}
 
+	data.SkillLabels = SkillLabels
+
 	return data
 }
 
@@ -285,6 +287,10 @@ func main() {
 	router.HandleFunc("/api/former-members/{id:[0-9]+}", authMiddleware(requirePermission("manage_members", updateFormerMember))).Methods("PUT")
 	router.HandleFunc("/api/members/import", authMiddleware(requirePermission("manage_members", importCSV))).Methods("POST")
 	router.HandleFunc("/api/members/import/confirm", authMiddleware(requirePermission("manage_members", confirmMemberUpdates))).Methods("POST")
+	router.HandleFunc("/api/skills", authMiddleware(getSkillRegistry)).Methods("GET")
+	router.HandleFunc("/api/members/skills", authMiddleware(getMembersWithSkills)).Methods("GET")
+	router.HandleFunc("/api/members/{id:[0-9]+}/skills", authMiddleware(requirePermission("manage_members", updateMemberSkills))).Methods("PUT")
+	router.HandleFunc("/api/profile/me/skills", authMiddleware(updateProfileSkills)).Methods("PUT")
 
 	// Prospects API
 	router.HandleFunc("/api/prospects", authMiddleware(requirePermission("view_recruiting", getProspects))).Methods("GET")

@@ -40,6 +40,7 @@ type Member struct {
 	GlobalAliases       string `json:"global_aliases"`
 	PersonalAliases     string `json:"personal_aliases"`
 	Notes               string `json:"notes"`
+	Skills              string `json:"skills"` // comma-separated skill keys, e.g. "medical_aid"
 }
 
 type FormerMember struct {
@@ -449,6 +450,14 @@ type RankPermissions struct {
 	ManageComms          bool   `json:"manage_comms"`
 }
 
+// ValidSkillKeys is the canonical list of skill keys. Adding a new skill = add here only.
+var ValidSkillKeys = []string{"medical_aid"}
+
+// SkillLabels maps skill keys to human-readable labels for templates and API responses.
+var SkillLabels = map[string]string{
+	"medical_aid": "🩹 Medical Aid",
+}
+
 // PermissionRow is a single permission entry within a feature group (key + short label).
 type PermissionRow struct {
 	Key   string `json:"key"`
@@ -780,6 +789,7 @@ type PageData struct {
 	OCRBackendMode    string
 	AllianceName      string
 	AllianceTag       string
+	SkillLabels       map[string]string
 }
 
 // DashboardCard represents a single card in the dashboard with its visibility state.

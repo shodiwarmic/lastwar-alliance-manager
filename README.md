@@ -23,6 +23,7 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **Consistent Member Badges**: HQ level, Troop tier, Profession, and Squad type badges on member cards use the design system's semantic color tokens and adapt correctly to light and dark mode.
 - **Filter Chips**: The Members page rank/profession/troop/squad filter chips are compact pill-shaped buttons with a clear active state.
 - **Members Search & Sort**: Live search on the Members page uses [Fuse.js](https://www.fusejs.io/) fuzzy matching so partial or misspelled commander names still surface the right result. Results can be sorted by name, HQ level, power, squad power, or join order, with ascending/descending toggle.
+- **Skill Tracking**: Officers (R4/R5 with `manage_members`) can record which members hold Engineer skills (currently: Medical Aid) via the member edit modal. Members can also self-report their skills from their profile page. Skills appear as badges on member cards and can be filtered via a chip on the Roster page.
 
 ### 🏠 Overview Dashboard
 - **Customizable Landing Page**: The default landing page is a per-user dashboard surfacing key alliance data at a glance without navigating between pages. Cards can be reordered via drag-and-drop and toggled on or off; preferences are saved per account.
