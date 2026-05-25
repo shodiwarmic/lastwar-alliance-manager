@@ -4,6 +4,15 @@
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+// Assignment builder state
+let _assignmentTarget = null;
+let _assignmentSkillKey = null;
+let _assignmentSkillLabel = null;
+let _assignmentPairings = [];
+let _allOthers = [];
+const _assignmentDrafts = {};
+let _skillRegistryCache = null;
+
 // Returns unique variable names found in content, skipping {{escaped}} blocks.
 // Strips optional type prefix so {time:battle_time} → 'battle_time'.
 function extractVariables(content) {
@@ -41,6 +50,151 @@ function applyTemplate(content, values) {
     });
 }
 
+async function fetchSkillRegistry() {
+    if (_skillRegistryCache) return _skillRegistryCache;
+    const res = await fetch('/api/skills');
+    _skillRegistryCache = res.ok ? await res.json() : [];
+    return _skillRegistryCache;
+}
+
+async function openAssignmentModal(skillKey, targetTextarea) {
+    _assignmentPairings = [];
+    _assignmentTarget = null;
+    _assignmentSkillKey = null;
+    _assignmentSkillLabel = null;
+    _allOthers = [];
+
+    const statusEl = document.getElementById('assignment-modal-status');
+    const bodyEl = document.getElementById('assignment-builder-body');
+    const modal = document.getElementById('assignment-modal');
+    const titleEl = document.getElementById('assignment-modal-title');
+
+    statusEl.textContent = '';
+    statusEl.style.color = '';
+    bodyEl.replaceChildren();
+
+    const generateBtn = document.getElementById('assignment-generate-btn');
+    const formatRow = document.getElementById('assignment-format-row');
+    generateBtn.style.display = 'none';
+    formatRow.style.display = 'none';
+
+    document.getElementById('assignment-cancel-btn').onclick = () => {
+        modal.style.display = '';
+    };
+
+    const registry = await fetchSkillRegistry();
+    const skillEntry = registry.find(s => s.key === skillKey);
+
+    if (!skillEntry) {
+        titleEl.textContent = 'Assignment Builder';
+        statusEl.textContent = `Unknown skill key '${skillKey}'. Valid keys: ${registry.map(s => s.key).join(', ') || '(none registered)'}.`;
+        statusEl.style.color = 'var(--color-danger)';
+        modal.style.display = 'flex';
+        return;
+    }
+
+    _assignmentTarget = targetTextarea;
+    _assignmentSkillKey = skillKey;
+    _assignmentSkillLabel = skillEntry.label;
+    titleEl.textContent = `${skillEntry.label} Assignment Builder`;
+
+    const res = await fetch('/api/members/skills');
+    if (!res.ok) {
+        statusEl.textContent = 'Failed to load members. Please try again.';
+        statusEl.style.color = 'var(--color-danger)';
+        modal.style.display = 'flex';
+        return;
+    }
+    const members = await res.json();
+
+    const engineers = members.filter(m => m.skills && m.skills.split(',').includes(skillKey));
+    _allOthers = members.filter(m => !m.skills || !m.skills.split(',').includes(skillKey));
+
+    if (engineers.length === 0) {
+        statusEl.textContent = `No members currently have the ${skillEntry.label} skill. Assign it on the Roster page first.`;
+        statusEl.style.color = 'var(--color-warning)';
+    }
+
+    if (_assignmentDrafts[skillKey]) {
+        _assignmentPairings = _assignmentDrafts[skillKey];
+    } else {
+        _assignmentPairings = engineers.map(e => ({ engineer: e, member: null }));
+    }
+
+    renderAssignmentBuilder();
+
+    generateBtn.style.display = '';
+    formatRow.style.display = '';
+    generateBtn.onclick = () => {
+        _assignmentDrafts[_assignmentSkillKey] = _assignmentPairings.map(p => ({
+            engineer: p.engineer,
+            member: p.member,
+        }));
+
+        const fmt = document.getElementById('assignment-format-input').value || '• {engineer} → {member}';
+        const lines = [];
+        _assignmentPairings.forEach(p => {
+            if (p.member) {
+                lines.push(fmt.replace('{engineer}', p.engineer.name).replace('{member}', p.member.name));
+            }
+        });
+
+        _assignmentTarget.value = lines.join('\n');
+        modal.style.display = '';
+    };
+
+    modal.style.display = 'flex';
+}
+
+function renderAssignmentBuilder() {
+    const bodyEl = document.getElementById('assignment-builder-body');
+
+    if (_assignmentPairings.length === 0) {
+        bodyEl.replaceChildren();
+        return;
+    }
+
+    const rows = _assignmentPairings.map(pairing => {
+        const row = document.createElement('div');
+        row.className = 'assignment-engineer-row';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'assignment-engineer-name';
+        nameEl.textContent = pairing.engineer.name;
+        row.appendChild(nameEl);
+
+        const takenByOthers = new Set(
+            _assignmentPairings
+                .filter(p => p !== pairing && p.member !== null)
+                .map(p => p.member.id)
+        );
+
+        const sel = document.createElement('select');
+        sel.className = 'form-input';
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = '— unassigned —';
+        sel.appendChild(defaultOpt);
+        _allOthers.filter(m => !takenByOthers.has(m.id)).forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = String(m.id);
+            opt.textContent = m.name;
+            sel.appendChild(opt);
+        });
+        sel.value = pairing.member ? String(pairing.member.id) : '';
+        sel.addEventListener('change', () => {
+            const memberId = parseInt(sel.value);
+            pairing.member = memberId ? (_allOthers.find(m => m.id === memberId) || null) : null;
+            renderAssignmentBuilder();
+        });
+
+        row.appendChild(sel);
+        return row;
+    });
+
+    bodyEl.replaceChildren(...rows);
+}
+
 function buildVarInput(name, type) {
     if (type === 'multiline') {
         const ta = document.createElement('textarea');
@@ -74,6 +228,23 @@ function buildVarInput(name, type) {
         input.maxLength = 5;
         input.style.marginTop = '4px';
         return input;
+    }
+    if (type === 'assignment') {
+        const wrapper = document.createElement('div');
+        const ta = document.createElement('textarea');
+        ta.className = 'form-input';
+        ta.rows = 4;
+        ta.dataset.varName = name;
+        ta.placeholder = 'Click "Build…" to generate assignments';
+        ta.style.cssText = 'margin-top:4px;resize:vertical;font-family:monospace;font-size:0.85rem;';
+        const buildBtn = document.createElement('button');
+        buildBtn.type = 'button';
+        buildBtn.className = 'btn btn-secondary btn-sm';
+        buildBtn.textContent = 'Build…';
+        buildBtn.style.marginTop = '6px';
+        buildBtn.addEventListener('click', () => openAssignmentModal(name, ta));
+        wrapper.append(ta, buildBtn);
+        return wrapper;
     }
     const inputTypeMap = { number: 'number', date: 'date' };
     const input = document.createElement('input');

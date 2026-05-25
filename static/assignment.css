@@ -1,0 +1,26 @@
+/* assignment.css — Assignment builder modal styles */
+
+.modal-content--assignment {
+    max-width: 680px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.assignment-engineer-row {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+}
+
+.assignment-engineer-name {
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    font-size: 1rem;
+}
+
+.assignment-engineer-row .form-input {
+    margin-top: 4px;
+    width: 100%;
+}

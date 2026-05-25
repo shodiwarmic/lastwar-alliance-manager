@@ -296,6 +296,23 @@
     </div>
   </div>
 
+  <div id="assignment-modal" class="modal">
+    <div class="modal-content modal-content--assignment">
+      <h2 id="assignment-modal-title">Assignment Builder</h2>
+      <p id="assignment-modal-status" class="status-msg"></p>
+      <div id="assignment-format-row" style="margin-bottom:14px;display:none;">
+        <label for="assignment-format-input" style="font-size:0.85rem;color:var(--text-secondary);">Line format</label>
+        <input id="assignment-format-input" type="text" class="form-input" value="• {engineer} → {member}" style="margin-top:4px;">
+        <p style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">{engineer} and {member} are replaced with each person's name.</p>
+      </div>
+      <div id="assignment-builder-body"></div>
+      <div class="modal-actions">
+        <button id="assignment-generate-btn" class="btn btn-primary">Generate</button>
+        <button id="assignment-cancel-btn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/global.js"></script>
   <script src="/csrf.js"></script>
   <script src="/modal-focus.js"></script>
