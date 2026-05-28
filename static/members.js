@@ -17,6 +17,7 @@ let sortField = 'name';
 let sortDir = 'asc';
 let fuseInstance = null;
 let skillRegistry = []; // [{key, label}] — populated from GET /api/skills
+let currentFilteredMembers = [];
 
 const SORT_DEFAULTS = {
     name: 'asc', rank: 'desc', power: 'desc',
@@ -171,11 +172,45 @@ function updateDisplayedMembers() {
         return sortDir === 'asc' ? diff : -diff;
     });
 
+    currentFilteredMembers = filtered;
     displayMembers(filtered);
     updateMemberCount(filtered.length);
 
     const clearBtn = document.getElementById('clear-search');
     if (clearBtn) clearBtn.style.display = searchTerm ? 'flex' : 'none';
+}
+
+function buildExportTable(members) {
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ['Name', 'Rank', 'HQ Level', 'Power', 'Hero Power', 'Kills'].forEach(label => {
+        const th = document.createElement('th');
+        th.textContent = label;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    members.forEach(m => {
+        const tr = document.createElement('tr');
+        [
+            m.name || '',
+            m.rank || '',
+            m.level != null ? m.level : '',
+            m.power != null ? m.power : '',
+            m.hero_power != null ? m.hero_power : '',
+            m.current_kills != null ? m.current_kills : '',
+        ].forEach(val => {
+            const td = document.createElement('td');
+            td.textContent = val;
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    return table;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -211,6 +246,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupSearch();
     await loadSkillRegistry();
     loadMembers();
+
+    const membersList = document.getElementById('members-list');
+    if (membersList) {
+        const exportBar = document.createElement('div');
+        exportBar.className = 'tab-toolbar';
+        exportBar.style.justifyContent = 'flex-end';
+
+        const exportCsvBtn = document.createElement('button');
+        exportCsvBtn.className = 'btn btn-secondary btn-sm';
+        exportCsvBtn.textContent = '↓ CSV';
+        exportCsvBtn.addEventListener('click', () =>
+            exportTableToCSV(buildExportTable(currentFilteredMembers), 'members.csv'));
+
+        const exportXlsxBtn = document.createElement('button');
+        exportXlsxBtn.className = 'btn btn-secondary btn-sm';
+        exportXlsxBtn.textContent = '↓ XLSX';
+        exportXlsxBtn.addEventListener('click', () =>
+            exportTableToXLSX(buildExportTable(currentFilteredMembers), 'members.xlsx'));
+
+        exportBar.append(exportCsvBtn, exportXlsxBtn);
+        membersList.parentElement.insertBefore(exportBar, membersList);
+    }
 });
 
 function setupModalListeners() {
