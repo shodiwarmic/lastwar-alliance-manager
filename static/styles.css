@@ -661,15 +661,15 @@ main {
 
 
 .form-section {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 25px;
     border-radius: 10px;
     margin-bottom: 30px;
-    border: 2px solid var(--border-color);
+    border: 1px solid var(--color-border);
 }
 
 .form-section h3 {
-    color: var(--text-primary);
+    color: var(--color-text);
     margin-bottom: 20px;
     font-size: 1.5em;
 }
@@ -787,7 +787,7 @@ button {
 #search-input {
     width: 100%;
     padding: 12px 45px 12px 15px;
-    border: 2px solid #dee2e6;
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     font-size: 16px;
     transition: border-color 0.3s;
@@ -795,7 +795,7 @@ button {
 
 #search-input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--color-accent);
 }
 
 .clear-search {
@@ -803,8 +803,8 @@ button {
     right: 10px;
     top: 50%;
     transform: translateY(-50%);
-    background: #6c757d;
-    color: white;
+    background: var(--color-text-muted);
+    color: #fff;
     border: none;
     border-radius: 50%;
     width: 28px;
@@ -819,7 +819,7 @@ button {
 }
 
 .clear-search:hover {
-    background: #5a6268;
+    filter: brightness(0.85);
 }
 
 .members-list {
@@ -828,8 +828,8 @@ button {
 }
 
 .member-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 2px solid var(--color-border);
     border-radius: 10px;
     padding: 20px;
     display: flex;
@@ -839,7 +839,7 @@ button {
 }
 
 .member-card:hover {
-    border-color: #667eea;
+    border-color: var(--color-accent);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
     transform: translateY(-2px);
 }
@@ -873,8 +873,8 @@ button {
     border-radius: 15px;
     font-size: 0.85em;
     font-weight: 600;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     cursor: help;
 }
 
@@ -882,7 +882,7 @@ button {
 .rank-R4 { background: var(--color-danger-bg);   color: var(--color-danger); }
 .rank-R3 { background: var(--color-info-bg);     color: var(--color-info); }
 .rank-R2 { background: var(--color-success-bg);  color: var(--color-success); }
-.rank-R1 { background: var(--bg-tertiary);       color: var(--text-secondary); }
+.rank-R1 { background: var(--color-surface);      color: var(--color-text-mid); }
 
 .member-eligible {
     display: inline-block;
@@ -893,13 +893,13 @@ button {
 }
 
 .member-eligible.eligible {
-    background: #d4edda;
-    color: #155724;
+    background: var(--color-success-bg);
+    color: var(--color-success);
 }
 
 .member-eligible.not-eligible {
-    background: #f8d7da;
-    color: #721c24;
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
 }
 
 .member-actions {
@@ -908,63 +908,21 @@ button {
     flex-wrap: wrap;
 }
 
-.edit-btn,
-.delete-btn,
-.create-user-btn,
-.toggle-eligible-btn {
-    padding: 8px 16px;
-    font-size: 14px;
-    border-radius: 6px;
-}
-
-.edit-btn {
-    background: #28a745;
-    color: white;
-}
-
-.edit-btn:hover {
-    background: #218838;
-}
-
-.delete-btn {
-    background: #dc3545;
-    color: white;
-}
-
-.delete-btn:hover {
-    background: #c82333;
-}
-
-.create-user-btn {
-    background: #007bff;
-    color: white;
-}
-
-.create-user-btn:hover {
-    background: #0056b3;
-}
-
 .toggle-eligible-btn {
     font-size: 13px;
     padding: 6px 12px;
 }
 
 .toggle-eligible-btn.eligible {
-    background: #28a745;
-    color: white;
-}
-
-.toggle-eligible-btn.eligible:hover {
-    background: #218838;
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 
 .toggle-eligible-btn.not-eligible {
-    background: #6c757d;
-    color: white;
-}
-
-.toggle-eligible-btn.not-eligible:hover {
-    background: #5a6268;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
 }
 
 .checkbox-label {
@@ -985,7 +943,7 @@ button {
 .empty {
     text-align: center;
     padding: 40px;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-size: 1.1em;
 }
 
@@ -1087,15 +1045,6 @@ button {
         gap: 8px;
     }
 
-    .edit-btn,
-    .delete-btn,
-    .create-user-btn {
-        flex: 1;
-        min-width: 0;
-        padding: 8px 12px;
-        font-size: 13px;
-    }
-
     .toggle-eligible-btn {
         width: 100%;
         margin-top: 5px;
@@ -1168,12 +1117,8 @@ button {
         flex-direction: column;
     }
 
-    .edit-btn,
-    .delete-btn,
-    .create-user-btn {
-        width: 100%;
-    }
 }
+
 
 
 .csv-import-section {
@@ -1300,11 +1245,11 @@ button {
 }
 
 .stat-label.new {
-    color: #28a745;
+    color: var(--color-success);
 }
 
 .stat-label.change {
-    color: #ffc107;
+    color: var(--color-warning);
 }
 
 .stat-value {
@@ -1315,11 +1260,11 @@ button {
 }
 
 .stat-value.new {
-    color: #28a745;
+    color: var(--color-success);
 }
 
 .stat-value.change {
-    color: #ffc107;
+    color: var(--color-warning);
 }
 
 .csv-members-preview {
@@ -1339,25 +1284,25 @@ button {
     align-items: center;
     gap: 15px;
     padding: 12px;
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     transition: all 0.2s;
 }
 
 .csv-member-item:hover {
-    border-color: #667eea;
+    border-color: var(--color-accent);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .csv-member-item.new {
-    border-left: 4px solid #28a745;
-    background: linear-gradient(to right, rgba(40, 167, 69, 0.1) 0%, var(--container-bg) 100%);
+    border-left: 4px solid var(--color-success);
+    background: var(--color-success-bg);
 }
 
 .csv-member-item.changed {
-    border-left: 4px solid #ffc107;
-    background: linear-gradient(to right, rgba(255, 193, 7, 0.1) 0%, var(--container-bg) 100%);
+    border-left: 4px solid var(--color-warning);
+    background: var(--color-warning-bg);
 }
 
 .csv-member-item .member-checkbox {
@@ -1399,8 +1344,8 @@ button {
     gap: 10px;
     padding: 10px;
     margin-top: 8px;
-    background: #fff3cd;
-    border-left: 3px solid #ffc107;
+    background: var(--color-warning-bg);
+    border-left: 3px solid var(--color-warning);
     border-radius: 4px;
     font-size: 0.9em;
 }
@@ -1413,44 +1358,44 @@ button {
 .rename-select {
     flex: 1;
     padding: 6px 10px;
-    border: 1px solid #ffc107;
+    border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
     border-radius: 4px;
-    background: var(--container-bg);
+    background: var(--color-surface);
     font-size: 0.9em;
     cursor: pointer;
 }
 
 .rename-select:focus {
     outline: none;
-    border-color: #ff9800;
-    box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2);
+    border-color: var(--color-warning);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-warning) 20%, transparent);
 }
 
 .stat-value.warning {
-    color: #ff9800;
+    color: var(--color-warning);
 }
 
 .stat-label.warning {
-    color: #ff9800;
+    color: var(--color-warning);
 }
 
 .remove-members-section {
     margin-top: 25px;
     padding: 20px;
-    background: #fff3cd;
-    border: 2px solid #ffc107;
+    background: var(--color-warning-bg);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
     border-radius: 8px;
 }
 
 .remove-members-section h4 {
     margin: 0 0 10px 0;
-    color: #856404;
+    color: var(--color-warning);
     font-size: 1.1em;
 }
 
 .remove-help {
     margin: 0 0 15px 0;
-    color: #856404;
+    color: var(--color-warning);
     font-size: 0.9em;
 }
 
@@ -1461,7 +1406,7 @@ button {
     max-height: 300px;
     overflow-y: auto;
     padding: 10px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 6px;
 }
 
@@ -1470,15 +1415,15 @@ button {
     align-items: center;
     gap: 10px;
     padding: 10px;
-    background: var(--container-bg);
-    border: 1px solid #ffc107;
+    background: var(--color-surface);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
     border-radius: 6px;
     transition: all 0.2s;
 }
 
 .remove-member-item:hover {
-    background: #fffaeb;
-    border-color: #ff9800;
+    background: var(--color-warning-bg);
+    border-color: var(--color-warning);
 }
 
 .remove-checkbox {
@@ -1502,8 +1447,8 @@ button {
 }
 
 .csv-sync-option {
-    background: #fff3cd;
-    border: 2px solid #ffc107;
+    background: var(--color-warning-bg);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
     border-radius: 8px;
     padding: 15px;
     margin-bottom: 20px;
@@ -1530,13 +1475,13 @@ button {
 }
 
 .sync-text strong {
-    color: #856404;
+    color: var(--color-warning);
     font-size: 1em;
 }
 
 .sync-help {
     font-size: 0.85em;
-    color: #856404;
+    color: var(--color-warning);
     font-style: italic;
 }
 
@@ -1590,8 +1535,8 @@ button {
 
 .copy-btn {
     margin-top: 10px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     border: none;
     padding: 10px 20px;
     border-radius: 8px;
@@ -1602,25 +1547,27 @@ button {
 }
 
 .copy-btn:hover {
+    filter: brightness(1.1);
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 5px 15px var(--color-accent-border);
 }
 
 /* Conductor Messages */
 .conductor-messages-section {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 10px;
     margin-bottom: 30px;
+    color: var(--color-text);
 }
 
 .conductor-messages-section h3 {
-    color: var(--text-primary);
+    color: var(--color-text);
     margin-bottom: 10px;
 }
 
 .conductor-messages-section .info-text {
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     margin-bottom: 20px;
     font-size: 14px;
 }
@@ -1631,14 +1578,14 @@ button {
 }
 
 .conductor-message-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 15px;
 }
 
 .conductor-message-header {
-    color: var(--text-primary);
+    color: var(--color-text);
     margin-bottom: 10px;
     font-size: 16px;
 }
@@ -1646,19 +1593,19 @@ button {
 .conductor-message-content textarea {
     width: 100%;
     padding: 10px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 13px;
     resize: vertical;
-    background: var(--container-bg);
-    color: var(--text-primary);
+    background: var(--color-surface);
+    color: var(--color-text);
     margin-bottom: 10px;
 }
 
 .week-nav-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     border: none;
     padding: 10px 20px;
     border-radius: 8px;
@@ -1669,8 +1616,9 @@ button {
 }
 
 .week-nav-btn:hover {
+    filter: brightness(1.1);
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 5px 15px var(--color-accent-border);
 }
 
 #week-display {
@@ -1686,8 +1634,8 @@ button {
 }
 
 .auto-schedule-btn {
-    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-    color: white;
+    background: var(--color-success);
+    color: #fff;
     border: none;
     padding: 12px 30px;
     border-radius: 8px;
@@ -1698,8 +1646,8 @@ button {
 }
 
 .auto-schedule-btn:hover {
+    filter: brightness(0.9);
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(17, 153, 142, 0.4);
 }
 
 .schedule-grid {
@@ -1710,15 +1658,15 @@ button {
 }
 
 .day-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     overflow: hidden;
     transition: all 0.3s;
 }
 
 .day-card:hover {
-    border-color: #667eea;
+    border-color: var(--color-accent);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
@@ -1727,8 +1675,8 @@ button {
 }
 
 .day-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     padding: 15px;
     display: flex;
     justify-content: space-between;
@@ -1750,25 +1698,25 @@ button {
 }
 
 .schedule-info.success {
-    background: #d4edda;
+    background: var(--color-success-bg);
 }
 
 .schedule-info.warning {
-    background: #fff3cd;
+    background: var(--color-warning-bg);
 }
 
 .schedule-info .conductor,
 .schedule-info .backup {
     margin-bottom: 10px;
     padding: 8px;
-    background: rgba(255, 255, 255, 0.5);
+    background: var(--color-surface);
     border-radius: 5px;
 }
 
 .schedule-info .notes {
     margin-top: 10px;
     padding: 8px;
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--color-surface);
     border-radius: 5px;
     font-size: 0.9em;
     font-style: italic;
@@ -1805,8 +1753,8 @@ button {
     font-size: 0.9em;
     font-weight: 700;
     margin-left: 8px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
@@ -1816,14 +1764,14 @@ button {
 }
 
 .no-schedule p {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     margin-bottom: 15px;
 }
 
 .schedule-btn,
 .edit-schedule-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     border: none;
     padding: 10px 20px;
     border-radius: 8px;
@@ -1836,8 +1784,9 @@ button {
 
 .schedule-btn:hover,
 .edit-schedule-btn:hover {
+    filter: brightness(1.1);
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 5px 15px var(--color-accent-border);
 }
 
 .schedule-actions {
@@ -1859,17 +1808,17 @@ button {
 }
 
 .edit-schedule-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
 }
 
 .clear-schedule-btn {
-    background: #dc3545;
-    color: white;
+    background: var(--color-danger);
+    color: #fff;
 }
 
 .clear-schedule-btn:hover {
-    background: #c82333;
+    filter: brightness(0.9);
     transform: translateY(-2px);
 }
 
@@ -2145,11 +2094,11 @@ button {
 .history-section {
     margin-top: 40px;
     padding-top: 30px;
-    border-top: 2px solid #dee2e6;
+    border-top: 1px solid var(--color-border);
 }
 
 .history-section h3 {
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     margin-bottom: 20px;
 }
 
@@ -2162,25 +2111,25 @@ button {
 
 .filter-btn {
     padding: 8px 16px;
-    border: 2px solid var(--border-color);
-    background: var(--container-bg);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
     border-radius: 8px;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .filter-btn:hover {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: var(--color-accent);
+    color: var(--color-accent);
 }
 
 .filter-btn.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-color: #667eea;
+    background: var(--color-accent);
+    color: #fff;
+    border-color: var(--color-accent);
 }
 
 .history-grid {
@@ -2189,29 +2138,29 @@ button {
 }
 
 .history-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 15px;
     transition: all 0.3s;
 }
 
 .history-card:hover {
-    border-color: #667eea;
+    border-color: var(--color-accent);
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
 }
 
 .history-card.success {
-    border-left: 5px solid #28a745;
+    border-left: 4px solid var(--color-success);
 }
 
 .history-card.warning {
-    border-left: 5px solid #ffc107;
+    border-left: 4px solid var(--color-warning);
 }
 
 .history-date {
     font-weight: 700;
-    color: #667eea;
+    color: var(--color-accent);
     margin-bottom: 10px;
     font-size: 1.1em;
 }
@@ -2225,11 +2174,11 @@ button {
 .history-notes {
     margin-top: 8px;
     padding: 8px;
-    background: var(--card-bg);
+    background: var(--color-surface);
     border-radius: 5px;
     font-size: 0.9em;
     font-style: italic;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
 }
 
 @media (max-width: 768px) {
@@ -2288,22 +2237,22 @@ button {
 }
 
 .save-btn {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-    color: white;
+    background: var(--color-success);
+    color: #fff;
 }
 
 .save-btn:hover {
+    filter: brightness(0.9);
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
 }
 
 .clear-btn {
-    background: #dc3545;
-    color: white;
+    background: var(--color-danger);
+    color: #fff;
 }
 
 .clear-btn:hover {
-    background: #c82333;
+    filter: brightness(0.9);
     transform: translateY(-2px);
 }
 
@@ -2315,8 +2264,8 @@ button {
 }
 
 .award-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 20px;
     transition: all 0.3s;
@@ -2324,7 +2273,7 @@ button {
 }
 
 .award-card:hover {
-    border-color: #667eea;
+    border-color: var(--color-accent);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
@@ -2334,18 +2283,18 @@ button {
     align-items: center;
     margin-bottom: 15px;
     padding-bottom: 10px;
-    border-bottom: 2px solid #e9ecef;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .award-title {
     margin: 0;
-    color: #667eea;
+    color: var(--color-accent);
     font-size: 1.1em;
 }
 
 .toggle-award-btn {
-    background: #dc3545;
-    color: white;
+    background: var(--color-danger);
+    color: #fff;
     border: none;
     border-radius: 4px;
     padding: 4px 8px;
@@ -2356,21 +2305,21 @@ button {
 }
 
 .toggle-award-btn:hover {
-    background: #c82333;
+    filter: brightness(0.9);
     transform: scale(1.1);
 }
 
 .inactive-awards-section {
     grid-column: 1 / -1;
-    background: var(--card-bg);
-    border: 2px dashed var(--border-color);
+    background: var(--color-surface);
+    border: 1px dashed var(--color-border);
     border-radius: 10px;
     padding: 20px;
     margin-top: 20px;
 }
 
 .inactive-title {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-size: 1.1em;
     margin: 0 0 15px 0;
     text-align: center;
@@ -2384,9 +2333,9 @@ button {
 }
 
 .inactive-award-chip {
-    background: var(--container-bg);
-    color: var(--text-primary);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
     border-radius: 20px;
     padding: 8px 16px;
     font-size: 14px;
@@ -2395,11 +2344,11 @@ button {
 }
 
 .inactive-award-chip:hover {
-    background: #667eea;
-    color: white;
-    border-color: #667eea;
+    background: var(--color-accent);
+    color: #fff;
+    border-color: var(--color-accent);
     transform: translateY(-2px);
-    box-shadow: 0 3px 8px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 3px 8px var(--color-accent-border);
 }
 
 .award-position {
@@ -2410,7 +2359,7 @@ button {
     display: block;
     margin-bottom: 5px;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-size: 0.95em;
 }
 
@@ -2471,16 +2420,16 @@ button {
 .week-history {
     margin-bottom: 40px;
     padding: 20px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 10px;
 }
 
 .week-history-title {
     margin: 0 0 20px 0;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-size: 1.3em;
     padding-bottom: 10px;
-    border-bottom: 2px solid #dee2e6;
+    border-bottom: 2px solid var(--color-border);
 }
 
 .awards-history-grid {
@@ -2490,18 +2439,18 @@ button {
 }
 
 .history-award-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     padding: 15px;
 }
 
 .history-award-title {
     margin: 0 0 10px 0;
-    color: #667eea;
+    color: var(--color-accent);
     font-size: 1em;
     padding-bottom: 8px;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .history-award-item {
@@ -2518,7 +2467,7 @@ button {
 
 .history-award-item.rank-2 {
     background: #c0c0c0;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .history-award-item.rank-3 {
@@ -2546,7 +2495,7 @@ button {
 
 /* Recommendations Page Styles */
 .recommendation-form-section {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 25px;
     border-radius: 10px;
     margin: 30px;
@@ -2554,20 +2503,20 @@ button {
 
 .recommendation-form-section h3 {
     margin-bottom: 20px;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .recommendation-form {
-    background: var(--container-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 8px;
-    border: 2px solid var(--border-color);
+    border: 1px solid var(--color-border);
 }
 
 .notes-input {
     width: 100%;
     padding: 10px;
-    border: 2px solid #dee2e6;
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     font-size: 14px;
     font-family: inherit;
@@ -2577,7 +2526,7 @@ button {
 
 .notes-input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--color-accent);
 }
 
 .recommendations-list-section {
@@ -2586,7 +2535,7 @@ button {
 
 .recommendations-list-section h3 {
     margin-bottom: 20px;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .filter-section {
@@ -2606,14 +2555,14 @@ button {
     padding: 5px 12px;
     min-width: 36px;
     text-align: center;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 20px;
-    background: var(--container-bg);
+    background: var(--color-surface);
     cursor: pointer;
     font-size: 0.82rem;
     font-weight: 600;
     transition: all 0.2s;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .filter-chip:hover {
@@ -2629,7 +2578,7 @@ button {
 
 .filter-chip-label {
     font-size: 0.85em;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     min-width: 64px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -2653,24 +2602,24 @@ button {
 
 .toggle-btn {
     padding: 10px 20px;
-    border: 2px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
-    background: var(--container-bg);
+    background: var(--color-surface);
     cursor: pointer;
     font-size: 0.9em;
     transition: all 0.3s;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .toggle-btn:hover {
-    border-color: #667eea;
-    background: var(--card-bg);
+    border-color: var(--color-accent);
+    background: var(--color-accent-bg);
 }
 
 .toggle-btn.active {
-    background: #667eea;
-    color: white;
-    border-color: #667eea;
+    background: var(--color-accent);
+    color: #fff;
+    border-color: var(--color-accent);
 }
 
 /* Statistics Dashboard */
@@ -2784,8 +2733,8 @@ button {
 
 /* Grouped View Styles */
 .grouped-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 20px;
     margin-bottom: 15px;
@@ -2793,7 +2742,7 @@ button {
 }
 
 .grouped-card:hover {
-    border-color: #667eea;
+    border-color: var(--color-accent);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
@@ -2803,7 +2752,7 @@ button {
     align-items: center;
     margin-bottom: 15px;
     padding-bottom: 15px;
-    border-bottom: 2px solid #e9ecef;
+    border-bottom: 1px solid var(--color-border);
     flex-wrap: wrap;
     gap: 10px;
 }
@@ -2817,7 +2766,7 @@ button {
 .member-name-large {
     font-size: 1.3em;
     font-weight: 700;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .grouped-badges {
@@ -2833,13 +2782,13 @@ button {
 }
 
 .active-count {
-    background: #667eea;
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
 }
 
 .assigned-count {
-    background: #28a745;
-    color: white;
+    background: var(--color-success);
+    color: #fff;
 }
 
 .grouped-recommendations {
@@ -2849,23 +2798,23 @@ button {
 }
 
 .recommendation-item {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 12px 15px;
     border-radius: 8px;
-    border-left: 4px solid #e9ecef;
+    border-left: 4px solid var(--color-border);
     transition: all 0.3s;
 }
 
 .recommendation-item:hover {
-    background: #e9ecef;
+    background: var(--color-accent-bg);
 }
 
 .recommendation-item.active-rec {
-    border-left-color: #667eea;
+    border-left-color: var(--color-accent);
 }
 
 .recommendation-item.expired-rec {
-    border-left-color: #28a745;
+    border-left-color: var(--color-success);
     opacity: 0.8;
 }
 
@@ -2880,44 +2829,44 @@ button {
 
 .rec-by {
     font-size: 0.9em;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-weight: 500;
 }
 
 .rec-date {
     font-size: 0.85em;
-    color: #adb5bd;
+    color: var(--color-text-muted);
 }
 
 .delete-btn-small {
     padding: 4px 10px;
     border: none;
     border-radius: 5px;
-    background: #dc3545;
-    color: white;
+    background: var(--color-danger);
+    color: #fff;
     cursor: pointer;
     font-size: 0.85em;
     transition: all 0.3s;
 }
 
 .delete-btn-small:hover {
-    background: #c82333;
+    filter: brightness(0.9);
 }
 
 .rec-notes-small {
     font-size: 0.9em;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     font-style: italic;
     padding: 8px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 5px;
     margin-top: 5px;
 }
 
 .active-badge {
     padding: 4px 10px;
-    background: #667eea;
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     font-size: 0.75em;
     border-radius: 12px;
     font-weight: 600;
@@ -2930,8 +2879,8 @@ button {
 }
 
 .recommendation-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 20px;
     transition: all 0.3s;
@@ -2939,17 +2888,17 @@ button {
 
 .recommendation-card.expired {
     opacity: 0.7;
-    background: var(--card-bg);
-    border-color: #28a745;
+    background: var(--color-card);
+    border-color: var(--color-success);
 }
 
 .recommendation-card:hover {
-    border-color: #667eea;
+    border-color: var(--color-accent);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
 .recommendation-card.expired:hover {
-    border-color: #28a745;
+    border-color: var(--color-success);
 }
 
 .recommendation-header {
@@ -2958,7 +2907,7 @@ button {
     align-items: center;
     margin-bottom: 15px;
     padding-bottom: 15px;
-    border-bottom: 2px solid #e9ecef;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .recommendation-member {
@@ -2970,8 +2919,8 @@ button {
 
 .expired-badge {
     padding: 4px 10px;
-    background: #28a745;
-    color: white;
+    background: var(--color-success);
+    color: #fff;
     font-size: 0.75em;
     border-radius: 12px;
     font-weight: 600;
@@ -3013,15 +2962,15 @@ button {
     padding: 8px 15px;
     border: none;
     border-radius: 6px;
-    background: #dc3545;
-    color: white;
+    background: var(--color-danger);
+    color: #fff;
     cursor: pointer;
     font-size: 14px;
     transition: all 0.3s;
 }
 
 .delete-btn:hover {
-    background: #c82333;
+    filter: brightness(0.9);
     transform: translateY(-2px);
 }
 
@@ -3036,24 +2985,24 @@ button {
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 10px;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-size: 0.9em;
 }
 
 .recommended-by strong {
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .recommendation-date {
-    color: #adb5bd;
+    color: var(--color-text-muted);
 }
 
 .recommendation-notes {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 12px;
     border-radius: 6px;
-    border-left: 4px solid #667eea;
-    color: var(--text-muted);
+    border-left: 4px solid var(--color-accent);
+    color: var(--color-text-muted);
     font-style: italic;
     margin-top: 5px;
 }
@@ -3061,7 +3010,7 @@ button {
 .no-data {
     text-align: center;
     padding: 40px;
-    color: #adb5bd;
+    color: var(--color-text-muted);
     font-size: 1.1em;
 }
 
@@ -3086,50 +3035,50 @@ button {
 .settings-group {
     margin-bottom: 30px;
     padding: 20px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 8px;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid var(--color-accent);
 }
 
 .settings-group h4 {
     margin-bottom: 15px;
-    color: #667eea;
+    color: var(--color-accent);
     font-size: 1.1em;
 }
 
 .help-text {
     display: block;
     font-size: 0.85em;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     margin-top: 5px;
     font-style: italic;
 }
 
 .info-text {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     margin-bottom: 20px;
     padding: 15px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 5px;
-    border-left: 4px solid #2196F3;
+    border-left: 4px solid var(--color-info);
 }
 
 .info-section {
-    background: var(--container-bg);
+    background: var(--color-card);
     padding: 30px;
-    border-top: 2px solid var(--border-color);
+    border-top: 1px solid var(--color-border);
 }
 
 .info-section h3 {
-    color: #667eea;
+    color: var(--color-accent);
     margin-bottom: 15px;
 }
 
 .info-card {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 8px;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid var(--color-accent);
 }
 
 .info-card ul {
@@ -3143,16 +3092,16 @@ button {
 }
 
 .info-card strong {
-    color: #667eea;
+    color: var(--color-accent);
 }
 
 .info-box {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 15px;
     border-radius: 5px;
-    border-left: 4px solid #4a90e2;
+    border-left: 4px solid var(--color-info);
     margin-bottom: 20px;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .info-box p {
@@ -3161,22 +3110,22 @@ button {
 }
 
 .info-box code {
-    background: var(--container-bg);
+    background: var(--color-surface);
     padding: 2px 6px;
     border-radius: 3px;
     font-family: 'Courier New', monospace;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 /* Rankings page styles */
 .charts-section {
-    background: var(--container-bg);
+    background: var(--color-card);
     padding: 30px;
     margin-top: 20px;
 }
 
 .charts-section h3 {
-    color: #667eea;
+    color: var(--color-accent);
     margin-bottom: 20px;
 }
 
@@ -3188,15 +3137,15 @@ button {
 }
 
 .chart-container {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 10px;
-    border: 2px solid var(--border-color);
+    border: 1px solid var(--color-border);
     min-height: 350px;
 }
 
 .chart-container h4 {
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     margin-bottom: 15px;
     text-align: center;
     font-size: 1.1em;
@@ -3213,7 +3162,7 @@ button {
     justify-content: center;
     margin: 20px 0;
     padding: 15px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 8px;
     flex-wrap: wrap;
 }
@@ -3224,15 +3173,15 @@ button {
     gap: 8px;
     cursor: pointer;
     padding: 8px 15px;
-    background: var(--container-bg);
+    background: var(--color-surface);
     border-radius: 6px;
-    border: 2px solid var(--border-color);
+    border: 1px solid var(--color-border);
     transition: all 0.3s ease;
 }
 
 .chart-options label:hover {
-    border-color: #667eea;
-    background: #f0f4ff;
+    border-color: var(--color-accent);
+    background: var(--color-accent-bg);
 }
 
 .chart-options input[type="checkbox"],
@@ -3257,7 +3206,7 @@ button {
 .member-search-box input {
     flex: 1;
     padding: 10px 15px;
-    border: 2px solid #dee2e6;
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     font-size: 1em;
     transition: border-color 0.3s ease;
@@ -3265,21 +3214,21 @@ button {
 
 .member-search-box input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--color-accent);
 }
 
 .member-search-box .clear-search {
     padding: 10px 20px;
-    background: #6c757d;
-    color: white;
+    background: var(--color-text-muted);
+    color: #fff;
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    transition: background 0.3s ease;
+    transition: filter 0.3s ease;
 }
 
 .member-search-box .clear-search:hover {
-    background: #5a6268;
+    filter: brightness(0.85);
 }
 
 .member-charts-grid {
@@ -3428,10 +3377,10 @@ button {
 
 .system-note {
     padding: 15px;
-    background: #fff3cd;
-    border-left: 4px solid #ffc107;
+    background: var(--color-warning-bg);
+    border-left: 4px solid var(--color-warning);
     border-radius: 4px;
-    color: #856404;
+    color: var(--color-warning);
     line-height: 1.6;
 }
 
@@ -3442,8 +3391,8 @@ button {
 }
 
 .ranking-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 20px;
     transition: all 0.3s;
@@ -3455,18 +3404,18 @@ button {
 }
 
 .rank-first {
-    border-color: #FFD700;
-    background: linear-gradient(to right, rgba(255, 215, 0, 0.1), var(--container-bg));
+    border-color: #ffd700;
+    background: color-mix(in srgb, #ffd700 8%, var(--color-card));
 }
 
 .rank-second {
-    border-color: #C0C0C0;
-    background: linear-gradient(to right, rgba(192, 192, 192, 0.1), var(--container-bg));
+    border-color: #c0c0c0;
+    background: color-mix(in srgb, #c0c0c0 8%, var(--color-card));
 }
 
 .rank-third {
-    border-color: #CD7F32;
-    background: linear-gradient(to right, rgba(205, 127, 50, 0.1), var(--container-bg));
+    border-color: #cd7f32;
+    background: color-mix(in srgb, #cd7f32 8%, var(--color-card));
 }
 
 .ranking-header {
@@ -3475,7 +3424,7 @@ button {
     align-items: center;
     margin-bottom: 20px;
     padding-bottom: 15px;
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 1px solid var(--color-border);
 }
 
 .ranking-position {
@@ -3487,21 +3436,21 @@ button {
 .position-number {
     font-size: 1.2em;
     font-weight: 700;
-    color: #667eea;
+    color: var(--color-accent);
 }
 
 .ranking-position h4 {
     margin: 0;
     font-size: 1.5em;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .total-score {
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
     padding: 15px 25px;
     border-radius: 10px;
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
@@ -3525,14 +3474,14 @@ button {
 }
 
 .detail-section {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 15px;
     border-radius: 8px;
 }
 
 .detail-section h5 {
     margin: 0 0 15px 0;
-    color: #667eea;
+    color: var(--color-accent);
     font-size: 1.1em;
 }
 
@@ -3546,7 +3495,7 @@ button {
 
 .section-header-with-toggle h5 {
     margin: 0;
-    color: #667eea;
+    color: var(--color-accent);
     font-size: 1.1em;
 }
 
@@ -3571,25 +3520,25 @@ button {
     display: flex;
     justify-content: space-between;
     padding: 10px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 5px;
-    border-left: 3px solid var(--border-color);
+    border-left: 3px solid var(--color-border);
 }
 
 .detail-item.positive {
-    border-left-color: #28a745;
+    border-left-color: var(--color-success);
 }
 
 .detail-item.positive .detail-value {
-    color: #28a745;
+    color: var(--color-success);
 }
 
 .detail-item.negative {
-    border-left-color: #dc3545;
+    border-left-color: var(--color-danger);
 }
 
 .detail-item.negative .detail-value {
-    color: #dc3545;
+    color: var(--color-danger);
 }
 
 .detail-label {
@@ -3610,11 +3559,11 @@ button {
 .award-chip {
     display: inline-block;
     padding: 6px 12px;
-    background: var(--container-bg);
-    border: 1px solid #667eea;
+    background: var(--color-surface);
+    border: 1px solid var(--color-accent);
     border-radius: 20px;
     font-size: 0.9em;
-    color: #667eea;
+    color: var(--color-accent);
     font-weight: 600;
 }
 
@@ -3630,9 +3579,9 @@ button {
     align-items: center;
     gap: 10px;
     padding: 10px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 6px;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid var(--color-accent);
 }
 
 .award-icon {
@@ -3652,7 +3601,7 @@ button {
 
 .award-points {
     font-weight: 700;
-    color: #28a745;
+    color: var(--color-success);
     text-align: right;
 }
 
@@ -3668,29 +3617,29 @@ button {
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 20px;
-    border: 1px solid #dee2e6;
+    border: 1px solid var(--color-border);
     font-size: 0.9em;
     transition: all 0.2s;
 }
 
 .award-compact-item:hover {
-    background: #e9ecef;
-    border-color: #667eea;
+    background: var(--color-accent-bg);
+    border-color: var(--color-accent);
 }
 
 .award-compact-item.expired-award {
     opacity: 0.5;
-    background: var(--card-bg);
-    border-color: #ced4da;
+    background: var(--color-card);
+    border-color: var(--color-border);
     border-style: dashed;
 }
 
 .award-compact-item.expired-award:hover {
     opacity: 0.7;
-    background: #e9ecef;
-    border-color: #adb5bd;
+    background: var(--color-surface);
+    border-color: var(--color-text-muted);
 }
 
 .award-compact-item.expired-award .award-type-compact {
@@ -3727,12 +3676,12 @@ button {
 
 .award-points-compact {
     font-weight: 700;
-    color: #28a745;
+    color: var(--color-success);
     margin-left: 5px;
 }
 
 .no-awards {
-    color: #adb5bd;
+    color: var(--color-text-muted);
     font-style: italic;
     text-align: center;
     padding: 20px;
@@ -3749,33 +3698,33 @@ button {
     flex-direction: column;
     gap: 5px;
     padding: 10px;
-    background: var(--container-bg);
+    background: var(--color-card);
     border-radius: 5px;
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
 }
 
 .stat-label {
     font-size: 0.85em;
-    color: var(--text-secondary) !important;
+    color: var(--color-text-mid) !important;
     font-weight: 600;
 }
 
 .stat-value {
     font-size: 1.2em;
     font-weight: 700;
-    color: var(--text-primary) !important;
+    color: var(--color-text) !important;
 }
 
 .loading, .error, .empty {
     text-align: center;
     padding: 40px;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-style: italic;
 }
 
 .error {
-    color: #dc3545;
+    color: var(--color-danger);
 }
 
 @media (max-width: 768px) {
@@ -3915,11 +3864,11 @@ button {
 }
 
 .storm-building {
-    background: var(--container-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    border-left: 4px solid #6c757d;
+    border-left: 4px solid var(--color-text-muted);
     transition: transform 0.3s, box-shadow 0.3s;
 }
 
@@ -3929,22 +3878,22 @@ button {
 }
 
 .storm-building.critical {
-    border-left-color: #dc3545;
-    background: linear-gradient(to right, rgba(220, 53, 69, 0.1) 0%, var(--container-bg) 100%);
+    border-left-color: var(--color-danger);
+    background: var(--color-danger-bg);
 }
 
 .storm-building.high {
-    border-left-color: #fd7e14;
-    background: linear-gradient(to right, rgba(253, 126, 20, 0.1) 0%, var(--container-bg) 100%);
+    border-left-color: var(--color-warning);
+    background: var(--color-warning-bg);
 }
 
 .storm-building.medium {
-    border-left-color: #ffc107;
-    background: linear-gradient(to right, rgba(255, 193, 7, 0.1) 0%, var(--container-bg) 100%);
+    border-left-color: var(--color-warning);
+    background: var(--color-warning-bg);
 }
 
 .storm-building.low {
-    border-left-color: #6c757d;
+    border-left-color: var(--color-text-muted);
 }
 
 .building-header {
@@ -3956,7 +3905,7 @@ button {
 
 .building-header h5 {
     margin: 0;
-    color: var(--text-primary);
+    color: var(--color-text);
     font-size: 1.1em;
 }
 
@@ -3966,25 +3915,26 @@ button {
     font-size: 0.75em;
     font-weight: bold;
     text-transform: uppercase;
-    color: white;
+    color: #fff;
 }
 
 .priority-badge.critical {
-    background: #dc3545;
+    background: var(--color-danger);
     animation: pulse 2s infinite;
 }
 
 .priority-badge.high {
-    background: #fd7e14;
+    background: var(--color-warning);
+    color: #212529;
 }
 
 .priority-badge.medium {
-    background: #ffc107;
-    color: var(--text-primary);
+    background: var(--color-warning);
+    color: #212529;
 }
 
 .priority-badge.low {
-    background: #6c757d;
+    background: var(--color-text-muted);
 }
 
 @keyframes pulse {
@@ -4004,13 +3954,13 @@ button {
 }
 
 .building-info .points {
-    color: #28a745;
+    color: var(--color-success);
     font-weight: bold;
     font-size: 0.9em;
 }
 
 .building-info .boost {
-    color: #667eea;
+    color: var(--color-accent);
     font-size: 0.85em;
     font-style: italic;
 }
@@ -4250,7 +4200,7 @@ button {
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    background: var(--color-accent);
     transition: width 0.5s ease;
     width: 0%;
 }
@@ -4311,8 +4261,8 @@ button {
 }
 
 .detected-member-card {
-    background: var(--container-bg);
-    border: 2px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 15px;
     display: flex;
@@ -4327,13 +4277,13 @@ button {
 }
 
 .detected-member-card.new {
-    border-color: #28a745;
-    background: linear-gradient(to right, rgba(40, 167, 69, 0.1) 0%, var(--container-bg) 100%);
+    border-color: var(--color-success);
+    background: var(--color-success-bg);
 }
 
 .detected-member-card.changed {
-    border-color: #ffc107;
-    background: linear-gradient(to right, #fff8e1 0%, white 100%);
+    border-color: var(--color-warning);
+    background: var(--color-warning-bg);
 }
 
 .detected-member-card .member-name {
@@ -4360,7 +4310,7 @@ button {
 }
 
 .success-message h4 {
-    color: #28a745;
+    color: var(--color-success);
     font-size: 1.5em;
     margin-bottom: 30px;
 }
@@ -4369,7 +4319,7 @@ button {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 20px;
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 30px;
     border-radius: 10px;
 }
@@ -5148,21 +5098,12 @@ button {
 }
 
 .login-row.failed {
-    background: rgba(229, 62, 62, 0.1);
-}
-
-.status-badge {
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 1.2em;
-}
-
-.status-badge.success {
-    background: rgba(72, 187, 120, 0.2);
+    background: var(--color-danger-bg);
 }
 
 .status-badge.failed {
-    background: rgba(229, 62, 62, 0.2);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
 }
 
 .device-info {
@@ -5370,7 +5311,7 @@ button {
 /* High-Contrast Code Blocks */
 code {
     background-color: var(--color-card);
-    color: #e83e8c;
+    color: var(--color-accent);
     padding: 2px 6px;
     border-radius: 4px;
     font-family: 'Courier New', Courier, monospace;

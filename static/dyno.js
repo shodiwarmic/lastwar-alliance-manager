@@ -620,7 +620,7 @@ function createDynoCard(rec, compact = false) {
 
     if (!rec.expired && currentUsername && rec.created_by === currentUsername) {
         const editBtn = document.createElement('button');
-        editBtn.className = 'edit-btn';
+        editBtn.className = 'btn btn-sm btn-secondary';
         editBtn.textContent = '✏️ Edit';
         editBtn.addEventListener('click', () => editDynoRecommendation(rec.id));
         actions.appendChild(editBtn);
@@ -628,7 +628,7 @@ function createDynoCard(rec, compact = false) {
 
     if (canManageDyno || (currentUsername && rec.created_by === currentUsername)) {
         const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'delete-btn';
+        deleteBtn.className = 'btn btn-sm btn-danger';
         deleteBtn.textContent = '🗑️ Delete';
         deleteBtn.addEventListener('click', () => deleteDynoRecommendation(rec.id));
         actions.appendChild(deleteBtn);
