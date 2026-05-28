@@ -1874,6 +1874,9 @@ button {
     animation: slideUp 0.25s ease-out;
 }
 
+.modal-sm  { max-width: 420px; }
+.modal-md  { max-width: 540px; }
+
 /* Wide modal — tables, CSV preview */
 .modal-lg {
     max-width: 800px;
