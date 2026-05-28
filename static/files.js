@@ -120,6 +120,8 @@ async function openFile(id, type, title, ext) {
         const imageModal = document.getElementById('image-modal');
         imageModal.style.display = 'flex';
         trapFocus(imageModal);
+    } else if (ext === '.pdf') {
+        window.open(`/api/files/download/${id}`, '_blank', 'noopener noreferrer');
     } else if (!COLLABORA_SUPPORTED.has(ext)) {
         // CSV and other plain-text formats can't be opened in Collabora Online — download instead
         window.location.href = `/api/files/download/${id}`;
