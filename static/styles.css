@@ -15,9 +15,9 @@
     --text-secondary: #666;
     --text-muted: #6c757d;
     --card-bg: #f8f9fa;
-    --border-color: #e9ecef;
+    --border: 2px solid var(--color-border);
     --input-bg: white;
-    --input-border: #dee2e6;
+    --input-border: var(--color-border);
     /* Semantic layer aliases */
     --bg-primary: white;
     --bg-secondary: #f8f9fa;
@@ -121,9 +121,9 @@ html.theme-light {
     --text-secondary: #666;
     --text-muted: #6c757d;
     --card-bg: #f8f9fa;
-    --border-color: #e9ecef;
+    --border: 2px solid var(--color-border);
     --input-bg: white;
-    --input-border: #dee2e6;
+    --input-border: var(--color-border);
     --bg-primary: white;
     --bg-secondary: #f8f9fa;
     --bg-tertiary: #edf2f7;
@@ -226,7 +226,7 @@ a,
 input,
 select,
 textarea {
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.3);
+    -webkit-tap-highlight-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 /* Prevent text selection on interactive elements */
@@ -533,26 +533,26 @@ main {
 }
 
 .primary-action-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--color-accent);
     color: white;
 }
 
 .primary-action-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 5px 15px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
 .secondary-action-btn {
-    background: var(--container-bg);
-    color: #667eea;
-    border: 2px solid #667eea;
+    background: var(--color-surface);
+    color: var(--color-accent);
+    border: 2px solid var(--color-accent);
 }
 
 .secondary-action-btn:hover {
-    background: #667eea;
+    background: var(--color-accent);
     color: white;
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 5px 15px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 .btn-icon {
@@ -581,32 +581,32 @@ main {
 }
 
 .csv-import-card {
-    background: var(--container-bg);
+    background: var(--color-card);
     padding: 25px;
     border-radius: 12px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--color-border);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .csv-import-card h4 {
-    color: var(--text-primary);
+    color: var(--color-text);
     margin-bottom: 15px;
     font-size: 1.3em;
 }
 
 .csv-help {
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     margin-bottom: 20px;
     font-size: 0.95em;
     line-height: 1.6;
 }
 
 .csv-help code {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 3px 8px;
     border-radius: 4px;
     font-family: 'Courier New', monospace;
-    color: #e83e8c;
+    color: var(--color-accent);
     font-size: 0.9em;
 }
 
@@ -693,7 +693,7 @@ main {
 .form-row--divided {
     padding-top: 15px;
     margin-top: 5px;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--color-border);
 }
 
 .form-group--checkbox {
@@ -719,7 +719,7 @@ main {
 .form-group label {
     display: block;
     margin-bottom: 8px;
-    color: var(--text-primary);
+    color: var(--color-text);
     font-weight: 600;
 }
 
@@ -729,12 +729,12 @@ main {
 .form-input {
     width: 100%;
     padding: 12px;
-    border: 2px solid var(--input-border);
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     font-size: 16px;
     transition: border-color 0.3s;
-    background: var(--input-bg);
-    color: var(--text-primary);
+    background: var(--color-surface);
+    color: var(--color-text);
     box-sizing: border-box;
 }
 
@@ -745,8 +745,8 @@ main {
 }
 
 .form-group select option {
-    background: var(--input-bg);
-    color: var(--text-primary);
+    background: var(--color-surface);
+    color: var(--color-text);
 }
 
 .form-group input:focus,
@@ -774,7 +774,7 @@ button {
 
 
 .members-section h3 {
-    color: var(--text-primary);
+    color: var(--color-text);
     margin-bottom: 20px;
     font-size: 1.5em;
 }
@@ -855,7 +855,7 @@ button {
 .member-name {
     font-size: 1.3em;
     font-weight: 700;
-    color: var(--text-primary);
+    color: var(--color-text);
     flex-basis: 100%;
 }
 
@@ -1124,27 +1124,27 @@ button {
 .csv-import-section {
     margin-top: 30px;
     padding-top: 30px;
-    border-top: 2px solid #dee2e6;
+    border-top: 2px solid var(--color-border);
 }
 
 .csv-import-section h4 {
-    color: var(--text-primary);
+    color: var(--color-text);
     margin-bottom: 10px;
     font-size: 1.2em;
 }
 
 .csv-help {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-size: 0.9em;
     margin-bottom: 15px;
 }
 
 .csv-help code {
-    background: #e9ecef;
+    background: var(--color-surface);
     padding: 2px 6px;
     border-radius: 4px;
     font-family: monospace;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .csv-upload {
@@ -1157,7 +1157,7 @@ button {
 #csv-file {
     flex: 1;
     padding: 10px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     font-size: 14px;
 }
@@ -1228,7 +1228,7 @@ button {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 15px;
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 8px;
 }
@@ -1240,7 +1240,7 @@ button {
 .stat-label {
     display: block;
     font-size: 0.85em;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     margin-bottom: 5px;
 }
 
@@ -1256,7 +1256,7 @@ button {
     display: block;
     font-size: 1.8em;
     font-weight: bold;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .stat-value.new {
@@ -1332,7 +1332,7 @@ button {
 
 .csv-member-item .member-status {
     font-size: 0.85em;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-weight: 600;
     min-width: 100px;
     text-align: right;
@@ -1442,7 +1442,7 @@ button {
 
 .remove-member-name {
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text);
     font-size: 0.95em;
 }
 
@@ -1487,7 +1487,7 @@ button {
 
 /* Train Schedule Styles */
 .schedule-controls {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 10px;
     margin-bottom: 30px;
@@ -1507,14 +1507,14 @@ button {
 }
 
 .weekly-message-section {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 10px;
     margin-bottom: 30px;
 }
 
 .weekly-message-section h3 {
-    color: var(--text-primary);
+    color: var(--color-text);
     margin-bottom: 15px;
 }
 
@@ -1525,12 +1525,12 @@ button {
 .message-box textarea {
     width: 100%;
     padding: 15px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     font-family: 'Courier New', monospace;
     font-size: 14px;
     resize: vertical;
-    background: var(--container-bg);
+    background: var(--color-surface);
 }
 
 .copy-btn {
@@ -1622,7 +1622,7 @@ button {
 }
 
 #week-display {
-    color: var(--text-primary);
+    color: var(--color-text);
     font-size: 1.3em;
     margin: 0;
 }
@@ -1890,7 +1890,7 @@ button {
 /* ---- Shared heading style ---- */
 .modal-content h2,
 .modal-content h3 {
-    color: var(--text-primary);
+    color: var(--color-text);
     font-size: 1.4em;
     margin-top: 0;
     margin-bottom: 20px;
@@ -1904,14 +1904,14 @@ button {
     top: 20px;
     font-size: 26px;
     font-weight: bold;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     cursor: pointer;
     transition: color 0.2s;
     line-height: 1;
 }
 
 .close:hover {
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 /* ---- Button row ---- */
@@ -2016,17 +2016,17 @@ button {
 }
 
 .date-display {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 10px;
     border-radius: 5px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .dropdown-search {
     width: 100%;
     padding: 8px 12px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--color-border);
     border-radius: 6px;
     font-size: 14px;
     margin-bottom: 8px;
@@ -2035,14 +2035,14 @@ button {
 
 .dropdown-search:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--color-accent);
 }
 
 #conductor-select,
 #backup-select {
     width: 100%;
     padding: 8px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--color-border);
     border-radius: 6px;
     font-size: 14px;
 }
@@ -2062,15 +2062,15 @@ button {
     display: flex;
     align-items: center;
     padding: 10px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.3s;
 }
 
 .radio-label:hover {
-    border-color: #667eea;
-    background: var(--card-bg);
+    border-color: var(--color-accent);
+    background: var(--color-card);
 }
 
 .radio-label input[type="radio"] {
@@ -2083,11 +2083,14 @@ button {
 }
 
 .cancel-btn {
-    background: #6c757d;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
 }
 
 .cancel-btn:hover {
-    background: #5a6268;
+    background: var(--color-accent-bg);
+    border-color: var(--color-accent);
 }
 
 /* History Section */
@@ -2197,7 +2200,7 @@ button {
 
 /* Awards Page Styles */
 .awards-controls {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 10px;
     margin-bottom: 30px;
@@ -2209,12 +2212,12 @@ button {
 
 .week-info h3 {
     margin: 0;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .week-subtitle {
     margin: 5px 0 0 0;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-size: 0.9em;
 }
 
@@ -2366,7 +2369,7 @@ button {
 .member-search {
     width: 100%;
     padding: 8px 12px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--color-border);
     border-radius: 6px;
     font-size: 14px;
     margin-bottom: 5px;
@@ -2375,13 +2378,13 @@ button {
 
 .member-search:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--color-accent);
 }
 
 .member-select {
     width: 100%;
     padding: 8px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--color-border);
     border-radius: 6px;
     font-size: 14px;
 }
@@ -2393,7 +2396,7 @@ button {
 .history-search,
 .week-filter {
     padding: 10px 15px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     font-size: 14px;
     transition: border-color 0.3s;
@@ -2406,7 +2409,7 @@ button {
 .history-search:focus,
 .week-filter:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--color-accent);
 }
 
 .week-filter {
@@ -2624,7 +2627,7 @@ button {
 
 /* Statistics Dashboard */
 .stats-dashboard {
-    background: var(--container-bg);
+    background: var(--color-surface);
     padding: 30px;
     border-radius: 15px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
@@ -2639,7 +2642,7 @@ button {
 }
 
 .stat-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--color-accent);
     border-radius: 12px;
     padding: 20px;
     display: flex;
@@ -2654,15 +2657,15 @@ button {
 }
 
 .stat-card:nth-child(2) {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: var(--color-danger);
 }
 
 .stat-card:nth-child(3) {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    background: var(--color-info);
 }
 
 .stat-card:nth-child(4) {
-    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    background: var(--color-success);
 }
 
 .stat-icon {
@@ -2693,7 +2696,7 @@ button {
 
 /* Charts Section */
 .charts-section {
-    background: var(--container-bg);
+    background: var(--color-surface);
     padding: 30px;
     border-radius: 15px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
@@ -2709,7 +2712,7 @@ button {
 
 .chart-container {
     background: var(--section-bg);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
     padding: 20px;
     position: relative;
@@ -2722,7 +2725,7 @@ button {
 
 .chart-container h4 {
     margin: 0 0 15px 0;
-    color: var(--text-primary);
+    color: var(--color-text);
     font-size: 1.1em;
     text-align: center;
 }
@@ -2929,7 +2932,7 @@ button {
 .member-name {
     font-size: 1.2em;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .member-rank {
@@ -2940,7 +2943,7 @@ button {
 }
 
 /* Badge classes for JS-generated member cards */
-.badge-hq         { background: var(--bg-tertiary);              color: var(--text-secondary); }
+.badge-hq         { background: var(--color-surface);              color: var(--color-text-mid); }
 .badge-troop      { background: rgba(221,107,32,0.15);           color: #dd6b20; } /* amber — intentional, no token */
 .badge-profession { background: var(--color-purple-bg);          color: var(--color-purple); }
 .badge-squad-type { background: var(--color-info-bg);            color: var(--color-info); }
@@ -2954,7 +2957,7 @@ button {
     font-size: 0.9em;
     font-weight: 600;
 }
-.badge-alias-global   { background: var(--bg-tertiary);          color: var(--text-secondary); }
+.badge-alias-global   { background: var(--color-surface);          color: var(--color-text-mid); }
 .badge-alias-personal { background: var(--color-info-bg);        color: var(--color-info); }
 .badge-alias-ocr      { background: var(--color-danger-bg);      color: var(--color-danger); }
 
@@ -3199,7 +3202,7 @@ button {
     margin: 20px auto;
     max-width: 600px;
     padding: 15px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 8px;
 }
 
@@ -3239,14 +3242,14 @@ button {
 }
 
 .member-timeline-chart {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 10px;
-    border: 2px solid #e9ecef;
+    border: 2px solid var(--color-border);
 }
 
 .member-timeline-chart h5 {
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     margin-bottom: 15px;
     text-align: center;
     font-size: 1.05em;
@@ -3258,13 +3261,13 @@ button {
 }
 
 .rankings-section {
-    background: var(--container-bg);
+    background: var(--color-surface);
     padding: 30px;
     margin-top: 20px;
 }
 
 .rankings-section h3 {
-    color: #667eea;
+    color: var(--color-accent);
     margin-bottom: 20px;
 }
 
@@ -3283,9 +3286,9 @@ button {
     gap: 15px;
     margin-bottom: 20px;
     padding: 15px;
-    background: var(--card-bg);
+    background: var(--color-card);
     border-radius: 8px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     flex-wrap: wrap;
 }
 
@@ -3297,7 +3300,7 @@ button {
 
 .filter-group label {
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     white-space: nowrap;
 }
 
@@ -3312,16 +3315,16 @@ button {
 
 .filter-group input[type="text"]:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px var(--color-accent-bg);
 }
 
 .filter-group select {
     padding: 8px 12px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 5px;
     font-size: 1em;
-    background: var(--container-bg);
+    background: var(--color-surface);
     cursor: pointer;
     min-width: 150px;
     transition: border-color 0.3s;
@@ -3329,23 +3332,23 @@ button {
 
 .filter-group select:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px var(--color-accent-bg);
 }
 
 .info-badge {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 10px 20px;
     border-radius: 20px;
-    border-left: 4px solid #2196F3;
-    color: var(--text-primary);
+    border-left: 4px solid var(--color-info);
+    color: var(--color-text);
 }
 
 .system-info-card {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 25px;
     border-radius: 8px;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid var(--color-accent);
 }
 
 .system-info-grid {
@@ -3360,19 +3363,19 @@ button {
     justify-content: space-between;
     align-items: center;
     padding: 12px;
-    background: var(--container-bg);
+    background: var(--color-card);
     border-radius: 6px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
 }
 
 .info-label {
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .info-value {
     font-weight: 700;
-    color: #667eea;
+    color: var(--color-accent);
 }
 
 .system-note {
@@ -3543,7 +3546,7 @@ button {
 
 .detail-label {
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .detail-value {
@@ -3591,11 +3594,11 @@ button {
 
 .award-type {
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 .award-rank {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-size: 0.9em;
 }
 
@@ -3643,12 +3646,12 @@ button {
 }
 
 .award-compact-item.expired-award .award-type-compact {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     text-decoration: line-through;
 }
 
 .award-compact-item.expired-award .award-points-compact {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     text-decoration: line-through;
 }
 
@@ -3664,13 +3667,13 @@ button {
 
 .award-type-compact {
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text);
     line-height: 1.2;
 }
 
 .award-week-compact {
     font-size: 0.85em;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     line-height: 1;
 }
 
@@ -3804,7 +3807,7 @@ button {
    ======================================== */
 
 .storm-strategy {
-    background: var(--card-bg);
+    background: var(--color-card);
 }
 
 .strategy-phases {
@@ -3815,7 +3818,7 @@ button {
 }
 
 .phase-card {
-    background: var(--container-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -3823,7 +3826,7 @@ button {
 
 .phase-card h4 {
     margin: 0 0 15px 0;
-    color: var(--text-primary);
+    color: var(--color-text);
     font-size: 1.1em;
 }
 
@@ -3844,17 +3847,17 @@ button {
 }
 
 .storm-stage {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 10px;
 }
 
 .storm-stage-title {
     margin: 0 0 20px 0;
-    color: var(--text-primary);
+    color: var(--color-text);
     font-size: 1.2em;
     padding-bottom: 10px;
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 2px solid var(--color-border);
 }
 
 .storm-stage-buildings {
@@ -3980,7 +3983,7 @@ button {
 
 .slot-container label {
     font-size: 0.85em;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-weight: 600;
 }
 
@@ -3992,10 +3995,10 @@ button {
 .search-input {
     width: 100%;
     padding: 8px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--color-border);
     border-radius: 6px;
     font-size: 0.9em;
-    background: var(--container-bg);
+    background: var(--color-surface);
     cursor: text;
     transition: border-color 0.3s;
 }
@@ -4050,7 +4053,7 @@ button {
 .member-select-storm {
     width: 100%;
     padding: 8px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--color-border);
     border-radius: 6px;
     font-size: 0.9em;
     transition: border-color 0.3s;
@@ -4058,16 +4061,16 @@ button {
 
 .member-select-storm:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--color-accent);
 }
 
 .member-select-storm option:first-child {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-style: italic;
 }
 
 .mail-content {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 8px;
     font-family: 'Courier New', monospace;
@@ -4076,7 +4079,7 @@ button {
     line-height: 1.6;
     max-height: 600px;
     overflow-y: auto;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--color-border);
 }
 
 .mail-header {
@@ -4104,7 +4107,7 @@ button {
    ======================================== */
 
 .upload-instructions {
-    background: var(--card-bg);
+    background: var(--color-card);
     padding: 20px;
     border-radius: 8px;
     margin-bottom: 20px;
@@ -4112,7 +4115,7 @@ button {
 
 .upload-instructions h4 {
     margin: 0 0 15px 0;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .upload-instructions ol {
@@ -4138,8 +4141,8 @@ button {
 
 .file-preview {
     position: relative;
-    background: var(--card-bg);
-    border: 2px solid #dee2e6;
+    background: var(--color-card);
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     padding: 10px;
     text-align: center;
@@ -4158,7 +4161,7 @@ button {
 }
 
 .file-size {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-size: 0.9em;
 }
 
@@ -4166,8 +4169,8 @@ button {
     position: absolute;
     top: 5px;
     right: 5px;
-    background: #dc3545;
-    color: white;
+    background: var(--color-danger);
+    color: #fff;
     border: none;
     border-radius: 50%;
     width: 30px;
@@ -4181,7 +4184,7 @@ button {
 }
 
 .remove-file-btn:hover {
-    background: #c82333;
+    filter: brightness(0.9);
 }
 
 .processing-status {
@@ -4192,7 +4195,7 @@ button {
 .progress-bar {
     width: 100%;
     height: 30px;
-    background: #e9ecef;
+    background: var(--color-surface);
     border-radius: 15px;
     overflow: hidden;
     margin-bottom: 20px;
@@ -4207,7 +4210,7 @@ button {
 
 #processing-message {
     font-size: 1.1em;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .results-summary {
@@ -4218,7 +4221,7 @@ button {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--color-accent);
     padding: 30px;
     border-radius: 10px;
     color: white;
@@ -4242,7 +4245,7 @@ button {
 }
 
 .summary-value.new {
-    color: #90ee90;
+    color: var(--color-success);
 }
 
 .summary-value.change {
@@ -4251,7 +4254,7 @@ button {
 
 .detected-members h4 {
     margin: 0 0 20px 0;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .members-grid {
@@ -4300,7 +4303,7 @@ button {
 
 .detected-member-card .member-status {
     font-size: 0.85em;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-weight: 600;
 }
 
@@ -4327,7 +4330,7 @@ button {
 .stat-item {
     text-align: center;
     padding: 20px;
-    background: var(--container-bg);
+    background: var(--color-card);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -4335,7 +4338,7 @@ button {
 .stat-label {
     display: block;
     font-size: 0.9em;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
     margin-bottom: 10px;
 }
 
@@ -4343,7 +4346,7 @@ button {
     display: block;
     font-size: 2.5em;
     font-weight: bold;
-    color: #667eea;
+    color: var(--color-accent);
 }
 
 /* ===== ADDITIONAL MOBILE STYLES FOR ALL PAGES ===== */
@@ -4905,9 +4908,9 @@ button {
 
 .user-card:hover {
     background: var(--color-surface);
-    border-color: rgba(102, 126, 234, 0.5);
+    border-color: var(--color-accent);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    box-shadow: 0 4px 12px var(--color-accent-border);
 }
 
 .user-header {
@@ -4935,18 +4938,18 @@ button {
 }
 
 .admin-badge {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--color-accent);
     color: white;
     padding: 3px 12px;
     border-radius: 20px;
     font-size: 0.75em;
     font-weight: bold;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 .member-badge {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    color: white;
+    background: var(--color-purple);
+    color: #fff;
     padding: 4px 12px;
     border-radius: 15px;
     font-size: 0.9em;
@@ -5442,184 +5445,184 @@ html.theme-dark .import-result.warning {
 
 @media (prefers-color-scheme: dark) {
     html.theme-auto .flatpickr-calendar {
-        background: var(--input-bg);
-        border-color: var(--input-border);
+        background: var(--color-surface);
+        border-color: var(--color-border);
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-        color: var(--text-primary);
+        color: var(--color-text);
     }
     html.theme-auto .flatpickr-calendar.arrowTop::before,
     html.theme-auto .flatpickr-calendar.arrowTop::after {
-        border-bottom-color: var(--input-bg);
+        border-bottom-color: var(--color-surface);
     }
     html.theme-auto .flatpickr-months,
     html.theme-auto .flatpickr-month {
-        background: var(--input-bg);
-        color: var(--text-primary);
-        fill: var(--text-primary);
+        background: var(--color-surface);
+        color: var(--color-text);
+        fill: var(--color-text);
     }
     html.theme-auto .flatpickr-current-month .flatpickr-monthDropdown-months,
     html.theme-auto .flatpickr-current-month input.cur-year {
         background: transparent;
-        color: var(--text-primary);
+        color: var(--color-text);
     }
     html.theme-auto .flatpickr-prev-month,
     html.theme-auto .flatpickr-next-month {
-        fill: var(--text-primary);
+        fill: var(--color-text);
     }
     html.theme-auto .flatpickr-prev-month:hover svg,
     html.theme-auto .flatpickr-next-month:hover svg {
-        fill: #667eea;
+        fill: var(--color-accent);
     }
     html.theme-auto span.flatpickr-weekday {
-        background: var(--input-bg);
-        color: var(--text-muted);
+        background: var(--color-surface);
+        color: var(--color-text-muted);
     }
     html.theme-auto .flatpickr-days {
-        border-color: var(--input-border);
+        border-color: var(--color-border);
     }
     html.theme-auto .dayContainer {
-        background: var(--input-bg);
+        background: var(--color-surface);
     }
     html.theme-auto .flatpickr-day {
-        color: var(--text-primary);
+        color: var(--color-text);
     }
     html.theme-auto .flatpickr-day:hover,
     html.theme-auto .flatpickr-day:focus {
-        background: rgba(102, 126, 234, 0.2);
-        border-color: rgba(102, 126, 234, 0.4);
-        color: var(--text-primary);
+        background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+        border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+        color: var(--color-text);
     }
     html.theme-auto .flatpickr-day.today {
-        border-color: rgba(102, 126, 234, 0.6);
+        border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
     }
     html.theme-auto .flatpickr-day.today:hover {
-        background: rgba(102, 126, 234, 0.3);
-        border-color: #667eea;
-        color: var(--text-primary);
+        background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+        border-color: var(--color-accent);
+        color: var(--color-text);
     }
     html.theme-auto .flatpickr-day.selected,
     html.theme-auto .flatpickr-day.selected:hover {
-        background: #667eea;
-        border-color: #667eea;
+        background: var(--color-accent);
+        border-color: var(--color-accent);
         color: #fff;
     }
     html.theme-auto .flatpickr-day.flatpickr-disabled,
     html.theme-auto .flatpickr-day.prevMonthDay,
     html.theme-auto .flatpickr-day.nextMonthDay {
-        color: var(--text-muted);
+        color: var(--color-text-muted);
         opacity: 0.4;
     }
     html.theme-auto .flatpickr-time {
-        border-color: var(--input-border);
+        border-color: var(--color-border);
     }
     html.theme-auto .flatpickr-time input,
     html.theme-auto .flatpickr-time .flatpickr-time-separator {
-        background: var(--input-bg);
-        color: var(--text-primary);
+        background: var(--color-surface);
+        color: var(--color-text);
     }
     html.theme-auto .flatpickr-time input:hover,
     html.theme-auto .flatpickr-time input:focus {
-        background: var(--bg-secondary);
+        background: var(--color-surface);
     }
     html.theme-auto .numInputWrapper span.arrowUp,
     html.theme-auto .numInputWrapper span.arrowDown {
-        border-color: var(--input-border);
+        border-color: var(--color-border);
     }
     html.theme-auto .numInputWrapper span.arrowUp::after {
-        border-bottom-color: var(--text-muted);
+        border-bottom-color: var(--color-text-muted);
     }
     html.theme-auto .numInputWrapper span.arrowDown::after {
-        border-top-color: var(--text-muted);
+        border-top-color: var(--color-text-muted);
     }
 }
 
 html.theme-dark .flatpickr-calendar {
-    background: var(--input-bg);
-    border-color: var(--input-border);
+    background: var(--color-surface);
+    border-color: var(--color-border);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 html.theme-dark .flatpickr-calendar.arrowTop::before,
 html.theme-dark .flatpickr-calendar.arrowTop::after {
-    border-bottom-color: var(--input-bg);
+    border-bottom-color: var(--color-surface);
 }
 html.theme-dark .flatpickr-months,
 html.theme-dark .flatpickr-month {
-    background: var(--input-bg);
-    color: var(--text-primary);
-    fill: var(--text-primary);
+    background: var(--color-surface);
+    color: var(--color-text);
+    fill: var(--color-text);
 }
 html.theme-dark .flatpickr-current-month .flatpickr-monthDropdown-months,
 html.theme-dark .flatpickr-current-month input.cur-year {
     background: transparent;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 html.theme-dark .flatpickr-prev-month,
 html.theme-dark .flatpickr-next-month {
-    fill: var(--text-primary);
+    fill: var(--color-text);
 }
 html.theme-dark .flatpickr-prev-month:hover svg,
 html.theme-dark .flatpickr-next-month:hover svg {
-    fill: #667eea;
+    fill: var(--color-accent);
 }
 html.theme-dark span.flatpickr-weekday {
-    background: var(--input-bg);
-    color: var(--text-muted);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
 }
 html.theme-dark .flatpickr-days {
-    border-color: var(--input-border);
+    border-color: var(--color-border);
 }
 html.theme-dark .dayContainer {
-    background: var(--input-bg);
+    background: var(--color-surface);
 }
 html.theme-dark .flatpickr-day {
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 html.theme-dark .flatpickr-day:hover,
 html.theme-dark .flatpickr-day:focus {
-    background: rgba(102, 126, 234, 0.2);
-    border-color: rgba(102, 126, 234, 0.4);
-    color: var(--text-primary);
+    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    color: var(--color-text);
 }
 html.theme-dark .flatpickr-day.today {
-    border-color: rgba(102, 126, 234, 0.6);
+    border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
 }
 html.theme-dark .flatpickr-day.today:hover {
-    background: rgba(102, 126, 234, 0.3);
-    border-color: #667eea;
-    color: var(--text-primary);
+    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+    border-color: var(--color-accent);
+    color: var(--color-text);
 }
 html.theme-dark .flatpickr-day.selected,
 html.theme-dark .flatpickr-day.selected:hover {
-    background: #667eea;
-    border-color: #667eea;
+    background: var(--color-accent);
+    border-color: var(--color-accent);
     color: #fff;
 }
 html.theme-dark .flatpickr-day.flatpickr-disabled,
 html.theme-dark .flatpickr-day.prevMonthDay,
 html.theme-dark .flatpickr-day.nextMonthDay {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     opacity: 0.4;
 }
 html.theme-dark .flatpickr-time {
-    border-color: var(--input-border);
+    border-color: var(--color-border);
 }
 html.theme-dark .flatpickr-time input,
 html.theme-dark .flatpickr-time .flatpickr-time-separator {
-    background: var(--input-bg);
-    color: var(--text-primary);
+    background: var(--color-surface);
+    color: var(--color-text);
 }
 html.theme-dark .flatpickr-time input:hover,
 html.theme-dark .flatpickr-time input:focus {
-    background: var(--bg-secondary);
+    background: var(--color-surface);
 }
 html.theme-dark .numInputWrapper span.arrowUp,
 html.theme-dark .numInputWrapper span.arrowDown {
-    border-color: var(--input-border);
+    border-color: var(--color-border);
 }
 html.theme-dark .numInputWrapper span.arrowUp::after {
-    border-bottom-color: var(--text-muted);
+    border-bottom-color: var(--color-text-muted);
 }
 html.theme-dark .numInputWrapper span.arrowDown::after {
-    border-top-color: var(--text-muted);
+    border-top-color: var(--color-text-muted);
 }
