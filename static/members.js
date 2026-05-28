@@ -1208,7 +1208,7 @@ function showCSVPreview(result) {
         if (member.squad_power) {
             const s = document.createElement('span');
             s.className = 'member-power';
-            s.style.cssText = 'font-size:0.85em;color:var(--color-primary);';
+            s.style.cssText = 'font-size:0.85em;color:var(--color-accent);';
             s.textContent = `🛡️ ${(member.squad_power / 1000000).toFixed(1)}M`;
             memberInfo.appendChild(s);
         }

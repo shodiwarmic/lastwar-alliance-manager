@@ -89,7 +89,7 @@ function renderHeader(profile) {
 
     const strikeBadge = document.createElement('span');
     strikeBadge.className = 'acc-tag';
-    strikeBadge.style.background = 'rgba(0,0,0,0.08)';
+    strikeBadge.style.background = 'var(--color-border)';
     strikeBadge.textContent = profile.active_strikes + ' active strike' + (profile.active_strikes !== 1 ? 's' : '');
 
     header.append(nameDiv, tagSpan, strikeBadge);

@@ -14,7 +14,7 @@ let rawKillData = [];
 // --- Global Chart.js Styling ---
 // This ensures the charts match your app's typography and adapt to light/dark themes
 Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-Chart.defaults.color = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+Chart.defaults.color = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted').trim();
 Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(26, 32, 44, 0.9)';
 Chart.defaults.plugins.tooltip.padding = 12;
 Chart.defaults.plugins.tooltip.cornerRadius = 8;
