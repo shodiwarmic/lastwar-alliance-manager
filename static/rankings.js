@@ -10,6 +10,33 @@ let charts = {
 let rawGrowthData = [];
 let allVsData = [];
 let rawKillData = [];
+let currentVsWeek = null;
+
+function getChartPalette() {
+    const cs = getComputedStyle(document.documentElement);
+    const t = n => cs.getPropertyValue(n).trim();
+    return {
+        text:    t('--color-text-muted'),
+        card:    t('--color-card'),
+        accent:  t('--color-accent'),
+        success: t('--color-success'),
+        warning: t('--color-warning'),
+        danger:  t('--color-danger'),
+        info:    t('--color-info'),
+        purple:  t('--color-purple'),
+        muted:   t('--color-text-muted'),
+        series: [
+            t('--color-accent'),
+            t('--color-purple'),
+            t('--color-info'),
+            t('--color-success'),
+            t('--color-warning'),
+            t('--color-danger'),
+            t('--color-text-mid'),
+            t('--color-text-muted'),
+        ],
+    };
+}
 
 // --- Global Chart.js Styling ---
 // This ensures the charts match your app's typography and adapt to light/dark themes
@@ -182,6 +209,9 @@ function renderCompositionCharts() {
         }
     });
 
+    const p = getChartPalette();
+    Chart.defaults.color = p.text;
+
     const troopCanvas = document.getElementById('troopChart').getContext('2d');
     if (charts.troop) charts.troop.destroy();
 
@@ -191,9 +221,9 @@ function renderCompositionCharts() {
             labels: Object.keys(troops),
             datasets: [{
                 data: Object.values(troops),
-                backgroundColor: ['#667eea', '#764ba2', '#4facfe', '#00f2fe', '#f093fb', '#f5576c', '#ed8936', '#48bb78'],
+                backgroundColor: p.series,
                 borderWidth: 2,
-                borderColor: '#ffffff',
+                borderColor: p.card,
                 hoverOffset: 4
             }]
         },
@@ -235,14 +265,9 @@ function renderCompositionCharts() {
             labels: Object.keys(squads),
             datasets: [{
                 data: Object.values(squads),
-                backgroundColor: [
-                    '#f6ad55', // Tank (Orange)
-                    '#63b3ed', // Aircraft (Blue)
-                    '#fc8181', // Missile (Red)
-                    '#cbd5e0'  // Unknown (Gray)
-                ],
+                backgroundColor: [p.warning, p.info, p.danger, p.muted],
                 borderWidth: 2,
-                borderColor: '#ffffff',
+                borderColor: p.card,
                 hoverOffset: 4
             }]
         },
@@ -418,6 +443,8 @@ function buildVSRow(v, idx) {
 }
 
 function renderVSWeek(weekDate) {
+    currentVsWeek = weekDate;
+
     let weekData = allVsData.filter(v => v.week_date === weekDate);
 
     // Calculate totals and sort by Highest Total
@@ -425,6 +452,9 @@ function renderVSWeek(weekDate) {
         v.total = v.monday + v.tuesday + v.wednesday + v.thursday + v.friday + v.saturday;
         return v;
     }).sort((a, b) => b.total - a.total);
+
+    const vp = getChartPalette();
+    Chart.defaults.color = vp.text;
 
     // 1. Render Massive Stacked Bar Chart
     const vsCanvas = document.getElementById('vsChart').getContext('2d');
@@ -438,12 +468,12 @@ function renderVSWeek(weekDate) {
         data: {
             labels: chartData.map(v => v.member_name),
             datasets: [
-                { label: 'Mon (Radar)', data: chartData.map(v => v.monday), backgroundColor: '#f6ad55', borderRadius: 2 },
-                { label: 'Tue (Base)', data: chartData.map(v => v.tuesday), backgroundColor: '#68d391', borderRadius: 2 },
-                { label: 'Wed (Tech)', data: chartData.map(v => v.wednesday), backgroundColor: '#4fd1c5', borderRadius: 2 },
-                { label: 'Thu (Hero)', data: chartData.map(v => v.thursday), backgroundColor: '#63b3ed', borderRadius: 2 },
-                { label: 'Fri (Train)', data: chartData.map(v => v.friday), backgroundColor: '#b794f4', borderRadius: 2 },
-                { label: 'Sat (Kill)', data: chartData.map(v => v.saturday), backgroundColor: '#fc8181', borderRadius: { topLeft: 4, topRight: 4 } }
+                { label: 'Mon (Radar)', data: chartData.map(v => v.monday), backgroundColor: vp.warning, borderRadius: 2 },
+                { label: 'Tue (Base)', data: chartData.map(v => v.tuesday), backgroundColor: vp.success, borderRadius: 2 },
+                { label: 'Wed (Tech)', data: chartData.map(v => v.wednesday), backgroundColor: vp.info, borderRadius: 2 },
+                { label: 'Thu (Hero)', data: chartData.map(v => v.thursday), backgroundColor: vp.accent, borderRadius: 2 },
+                { label: 'Fri (Train)', data: chartData.map(v => v.friday), backgroundColor: vp.purple, borderRadius: 2 },
+                { label: 'Sat (Kill)', data: chartData.map(v => v.saturday), backgroundColor: vp.danger, borderRadius: { topLeft: 4, topRight: 4 } }
             ]
         },
         options: {
@@ -494,6 +524,14 @@ document.getElementById('kills-search')?.addEventListener('input', (e) => {
     const term = e.target.value.toLowerCase();
     const filtered = rawKillData.filter(k => k.member_name.toLowerCase().includes(term));
     renderKillTable(filtered);
+});
+
+// --- Theme adaptation ---
+window.addEventListener('themechange', () => {
+    const p = getChartPalette();
+    Chart.defaults.color = p.text;
+    if (rawGrowthData.length) renderCompositionCharts();
+    if (currentVsWeek) renderVSWeek(currentVsWeek);
 });
 
 // --- Initialization ---

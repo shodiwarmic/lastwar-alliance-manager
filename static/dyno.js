@@ -16,6 +16,28 @@ let pointsChart = null;
 let membersChart = null;
 let timelineChart = null;
 
+function getDynoPalette() {
+    const cs = getComputedStyle(document.documentElement);
+    const t = n => cs.getPropertyValue(n).trim();
+    return {
+        success: t('--color-success'),
+        danger:  t('--color-danger'),
+        muted:   t('--color-text-muted'),
+        border:  t('--color-border'),
+    };
+}
+
+// Convert a hex color to rgba(r,g,b,alpha) for semi-transparent fills.
+function withAlpha(hex, alpha) {
+    if (hex.startsWith('#') && hex.length === 7) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    return hex;
+}
+
 function fetchPermissions() {
     const cfg = document.getElementById('page-config').dataset;
     currentUsername = cfg.username || '';
@@ -202,22 +224,15 @@ function updatePointsChart() {
         pointsChart.destroy();
     }
 
+    const dp = getDynoPalette();
     pointsChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: ['Positive', 'Negative', 'Neutral'],
             datasets: [{
                 data: [positiveCount, negativeCount, neutralCount],
-                backgroundColor: [
-                    'rgba(67, 233, 123, 0.8)',
-                    'rgba(245, 87, 108, 0.8)',
-                    'rgba(156, 163, 175, 0.8)'
-                ],
-                borderColor: [
-                    'rgba(67, 233, 123, 1)',
-                    'rgba(245, 87, 108, 1)',
-                    'rgba(156, 163, 175, 1)'
-                ],
+                backgroundColor: [dp.success, dp.danger, dp.muted],
+                borderColor:     [dp.success, dp.danger, dp.muted],
                 borderWidth: 2
             }]
         },
@@ -271,8 +286,9 @@ function updateMembersChart() {
 
     const labels = sorted.map(([name]) => name);
     const data = sorted.map(([, points]) => points);
-    const colors = data.map(points => points >= 0 ? 'rgba(67, 233, 123, 0.8)' : 'rgba(245, 87, 108, 0.8)');
-    const borderColors = data.map(points => points >= 0 ? 'rgba(67, 233, 123, 1)' : 'rgba(245, 87, 108, 1)');
+    const mp = getDynoPalette();
+    const colors = data.map(points => points >= 0 ? mp.success : mp.danger);
+    const borderColors = colors;
 
     if (membersChart) {
         membersChart.destroy();
@@ -311,7 +327,7 @@ function updateMembersChart() {
                 x: {
                     beginAtZero: true,
                     grid: {
-                        color: 'rgba(0, 0, 0, 0.05)'
+                        color: mp.border
                     }
                 },
                 y: {
@@ -365,6 +381,7 @@ function updateTimelineChart() {
         timelineChart.destroy();
     }
 
+    const tp = getDynoPalette();
     timelineChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -372,8 +389,8 @@ function updateTimelineChart() {
             datasets: [{
                 label: 'Positive',
                 data: positiveData,
-                borderColor: 'rgba(67, 233, 123, 1)',
-                backgroundColor: 'rgba(67, 233, 123, 0.1)',
+                borderColor: tp.success,
+                backgroundColor: withAlpha(tp.success, 0.1),
                 tension: 0.3,
                 fill: true,
                 pointRadius: 4,
@@ -381,8 +398,8 @@ function updateTimelineChart() {
             }, {
                 label: 'Negative',
                 data: negativeData,
-                borderColor: 'rgba(245, 87, 108, 1)',
-                backgroundColor: 'rgba(245, 87, 108, 0.1)',
+                borderColor: tp.danger,
+                backgroundColor: withAlpha(tp.danger, 0.1),
                 tension: 0.3,
                 fill: true,
                 pointRadius: 4,
@@ -415,7 +432,7 @@ function updateTimelineChart() {
                         stepSize: 1
                     },
                     grid: {
-                        color: 'rgba(0, 0, 0, 0.05)'
+                        color: tp.border
                     }
                 },
                 x: {
@@ -820,6 +837,10 @@ function setupFilters() {
 }
 
 // Run on page load
+window.addEventListener('themechange', () => {
+    if (document.getElementById('dyno-list')) updateCharts();
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Guard: Only run if we are actually on the Dyno page
     const dynoList = document.getElementById('dyno-list');
