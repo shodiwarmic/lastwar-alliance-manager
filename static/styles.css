@@ -4775,38 +4775,6 @@ button {
 /* ADMIN PANEL STYLES */
 /* ================================================ */
 
-/* Tabs */
-.tabs {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 25px;
-    border-bottom: 2px solid var(--color-border);
-    flex-wrap: wrap;
-}
-
-.tab-button {
-    background: transparent;
-    border: none;
-    color: var(--color-text-mid);
-    padding: 15px 25px;
-    cursor: pointer;
-    font-size: 16px;
-    font-weight: 500;
-    border-bottom: 3px solid transparent;
-    transition: all 0.3s ease;
-    white-space: nowrap;
-}
-
-.tab-button:hover {
-    color: var(--color-text);
-    background: var(--color-card);
-}
-
-.tab-button.active {
-    color: var(--color-accent);
-    border-bottom-color: var(--color-accent);
-    background: var(--color-accent-bg);
-}
 
 /* ── Scrollable table wrapper ────────────────────────────────────────────── */
 
@@ -5257,15 +5225,6 @@ button {
         grid-template-columns: 1fr;
     }
     
-    .tabs {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    .tab-button {
-        padding: 12px 20px;
-        font-size: 14px;
-    }
 }
 
 /* Very small screens */

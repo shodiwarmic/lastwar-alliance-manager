@@ -50,7 +50,7 @@ Chart.defaults.plugins.tooltip.bodyFont = { size: 13 };
 
 // --- Tab Management ---
 function switchTab(tabId) {
-    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
     document.getElementById(`tab-btn-${tabId}`).classList.add('active');
