@@ -24,10 +24,7 @@
     <div id="tab-allies" class="tab-content">
         {{if .Permissions.ManageAllies}}
         <div class="action-bar">
-            <button type="button" id="add-ally-btn" class="primary-action-btn">
-                <span class="btn-icon">➕</span>
-                <span class="btn-text">Add Ally</span>
-            </button>
+            <button type="button" id="add-ally-btn" class="btn btn-primary">Add Ally</button>
             <label class="toggle-label">
                 <input type="checkbox" id="show-inactive-toggle">
                 Show inactive
@@ -41,10 +38,7 @@
     <!-- Agreement Types Tab -->
     <div id="tab-types" class="tab-content">
         <div class="action-bar">
-            <button type="button" id="add-type-btn" class="primary-action-btn">
-                <span class="btn-icon">➕</span>
-                <span class="btn-text">Add Type</span>
-            </button>
+            <button type="button" id="add-type-btn" class="btn btn-primary">Add Type</button>
         </div>
         <div id="types-list"></div>
     </div>
@@ -65,23 +59,23 @@
         <form id="ally-form">
             <div class="form-group">
                 <label for="ally-server">Server</label>
-                <input type="text" id="ally-server" placeholder="e.g. S123" required>
+                <input type="text" id="ally-server" class="form-input" placeholder="e.g. S123" required>
             </div>
             <div class="form-group">
                 <label for="ally-tag">Tag</label>
-                <input type="text" id="ally-tag" placeholder="e.g. WAR" required>
+                <input type="text" id="ally-tag" class="form-input" placeholder="e.g. WAR" required>
             </div>
             <div class="form-group">
                 <label for="ally-name">Alliance Name</label>
-                <input type="text" id="ally-name" placeholder="e.g. War Machine" required>
+                <input type="text" id="ally-name" class="form-input" placeholder="e.g. War Machine" required>
             </div>
             <div class="form-group">
                 <label for="ally-contact">Contact</label>
-                <input type="text" id="ally-contact" placeholder="Main point of contact">
+                <input type="text" id="ally-contact" class="form-input" placeholder="Main point of contact">
             </div>
             <div class="form-group">
                 <label for="ally-notes">Notes</label>
-                <textarea id="ally-notes" rows="3" placeholder="Additional notes"></textarea>
+                <textarea id="ally-notes" class="form-input" rows="3" placeholder="Additional notes"></textarea>
             </div>
             <div class="form-group" id="ally-agreements-group">
                 <label>Agreements</label>
@@ -108,7 +102,7 @@
         <form id="type-form">
             <div class="form-group">
                 <label for="type-name">Name</label>
-                <input type="text" id="type-name" placeholder="e.g. Trucks" required>
+                <input type="text" id="type-name" class="form-input" placeholder="e.g. Trucks" required>
             </div>
             <p class="status-msg" id="type-modal-status"></p>
             <div class="modal-actions">

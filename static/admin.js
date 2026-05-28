@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Tab Switching
 function switchTab(tabName) {
-    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById('tab-btn-' + tabName).classList.add('active');
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
     document.getElementById(tabName + '-tab').classList.add('active');

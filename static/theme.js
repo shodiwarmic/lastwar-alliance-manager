@@ -42,6 +42,11 @@ function applyTheme(theme) {
         : theme;
     html.setAttribute('data-theme', resolved);
 
+    // Notify subscribers (chart/canvas redraws) that the resolved theme changed.
+    // Only fires on explicit user switches — page-load callers register AFTER
+    // theme.js runs and call their own init functions directly.
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: resolved } }));
+
     // Update theme selector if it exists
     updateThemeSelector(theme);
 }

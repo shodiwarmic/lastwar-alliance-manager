@@ -34,6 +34,35 @@ let settings     = {};
 let stormSlotTimes = [];
 let stormTFConfig  = {};
 
+// Tracks the last canvas draw call so themechange can redraw it.
+let lastDraw = null;
+
+function getCanvasPalette() {
+    const cs = getComputedStyle(document.documentElement);
+    const t = n => cs.getPropertyValue(n).trim();
+    return {
+        pageBg1:    t('--color-bg'),
+        pageBg2:    t('--color-surface'),
+        cardBg:     t('--color-card'),
+        cardBorder: t('--color-border'),
+        hdrBg1:     t('--color-accent'),
+        hdrBg2:     t('--color-accent'),
+        hdrText:    '#ffffff',        // white text on accent header — intentional
+        dateText:   '#ffffff',
+        seasonText: 'rgba(255,255,255,0.75)', // overlay on accent header — intentional
+        vsText:     'rgba(255,255,255,0.65)',
+        evtName:    t('--color-text'),
+        evtTime:    t('--color-text-muted'),
+        notesText:  t('--color-text-muted'),
+        divider:    t('--color-border'),
+        bannerBg:   t('--color-accent-bg'),
+        bannerText: t('--color-text'),
+        stormBg:    t('--color-warning-bg'),
+        stormText:  t('--color-warning'),
+        stormBorder: t('--color-warning'),
+    };
+}
+
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 function todayGameDate() {
@@ -1097,29 +1126,12 @@ function buildTextOutput() {
 // ── Canvas: Week Image ────────────────────────────────────────────────────────
 
 function drawWeekImage() {
+    lastDraw = { fn: drawWeekImage, args: [] };
+
     const dates = weekDates(currentWeekStart);
 
-    // ── Palette (matches site theme) ──────────────────────────────────────
-    const C = {
-        pageBg1:     '#0d1b35',          // deep navy top
-        pageBg2:     '#162344',          // deep navy bottom
-        cardBg:      '#1a2540',          // card fill — solid, readable
-        cardBorder:  '#2e3f6e',          // subtle blue border
-        hdrBg1:      '#667eea',          // accent gradient start (site primary)
-        hdrBg2:      '#764ba2',          // accent gradient end  (site primary)
-        hdrText:     '#ffffff',
-        dateText:    '#ffffff',
-        seasonText:  'rgba(255,255,255,0.75)',
-        vsText:      'rgba(255,255,255,0.65)',
-        evtName:     '#e9ecef',          // --text-primary dark
-        evtTime:     '#a0aec0',          // muted
-        divider:     '#2e3f6e',
-        bannerBg:    '#1e3a5f',          // server event teal-navy strip
-        bannerText:  '#90cdf4',
-        stormBg:     '#7c4f08',          // amber toned down so text is readable
-        stormText:   '#fcd34d',          // bright amber text
-        stormBorder: '#f59e0b',
-    };
+    // ── Palette — reads current theme tokens at draw time ─────────────────
+    const C = getCanvasPalette();
 
     // ── Layout ─────────────────────────────────────────────────────────────
     const numCols = parseInt(document.getElementById('week-image-cols').value, 10) || 4;
@@ -1294,27 +1306,10 @@ function drawWeekImage() {
 // ── Canvas: Day Card ──────────────────────────────────────────────────────────
 
 function drawDayCard(dateStr) {
-    // ── Palette (same as week image) ──────────────────────────────────────
-    const C = {
-        pageBg1:    '#0d1b35',
-        pageBg2:    '#162344',
-        cardBg:     '#1a2540',
-        cardBorder: '#2e3f6e',
-        hdrBg1:     '#667eea',
-        hdrBg2:     '#764ba2',
-        hdrText:    '#ffffff',
-        seasonText: 'rgba(255,255,255,0.75)',
-        vsText:     'rgba(255,255,255,0.80)',
-        evtName:    '#e9ecef',
-        evtTime:    '#a0aec0',
-        notesText:  'rgba(255,255,255,0.45)',
-        divider:    '#2e3f6e',
-        bannerBg:   '#1e3a5f',
-        bannerText: '#90cdf4',
-        stormBg:    '#7c4f08',
-        stormText:  '#fcd34d',
-        stormBorder:'#f59e0b',
-    };
+    lastDraw = { fn: drawDayCard, args: [dateStr] };
+
+    // ── Palette — reads current theme tokens at draw time ─────────────────
+    const C = getCanvasPalette();
 
     const font  = 'Segoe UI, Tahoma, Verdana, sans-serif';
     const pad   = 32;  // horizontal padding inside card
@@ -1534,6 +1529,12 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.quadraticCurveTo(x,     y,     x + tl,     y);
     ctx.closePath();
 }
+
+// ── Theme adaptation ──────────────────────────────────────────────────────────
+
+window.addEventListener('themechange', () => {
+    if (lastDraw) lastDraw.fn(...lastDraw.args);
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

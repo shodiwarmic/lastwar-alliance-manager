@@ -36,7 +36,7 @@
                         <h4>🛡️ Role-Based Access Control (RBAC) Matrix</h4>
                         <p class="help-text">Configure which game ranks can view pages and edit data. Admins bypass these restrictions.</p>
                         
-                        <div id="permissions-matrix" style="overflow-x: auto; margin-top: 15px; border: 1px solid var(--border-color); border-radius: 8px;"></div>
+                        <div id="permissions-matrix" style="overflow-x: auto; margin-top: 15px; border: 1px solid var(--color-border); border-radius: 8px;"></div>
                     </div>
 
                     <div class="settings-group">
@@ -85,7 +85,7 @@
                         <p class="help-text">Select which local times are shown on the Storm page dropdown to help international members coordinate.</p>
                         
                         <div style="margin-bottom: 15px;">
-                            <p style="font-weight: 600; margin: 0 0 8px 0; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Americas</p>
+                            <p style="font-weight: 600; margin: 0 0 8px 0; color: var(--color-text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Americas</p>
                             <div class="checkbox-group" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-bottom: 14px;">
                                 <label><input type="checkbox" class="tz-checkbox" value="America/New_York"> US Eastern (EST/EDT)</label>
                                 <label><input type="checkbox" class="tz-checkbox" value="America/Chicago"> US Central (CST/CDT)</label>
@@ -94,7 +94,7 @@
                                 <label><input type="checkbox" class="tz-checkbox" value="America/Anchorage"> Alaska (AKST/AKDT)</label>
                                 <label><input type="checkbox" class="tz-checkbox" value="America/Sao_Paulo"> Brazil (BRT/BRST)</label>
                             </div>
-                            <p style="font-weight: 600; margin: 0 0 8px 0; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Europe</p>
+                            <p style="font-weight: 600; margin: 0 0 8px 0; color: var(--color-text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Europe</p>
                             <div class="checkbox-group" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-bottom: 14px;">
                                 <label><input type="checkbox" class="tz-checkbox" value="Europe/London"> UK (GMT/BST)</label>
                                 <label><input type="checkbox" class="tz-checkbox" value="Europe/Paris"> Paris (CET/CEST)</label>
@@ -103,7 +103,7 @@
                                 <label><input type="checkbox" class="tz-checkbox" value="Europe/Moscow"> Moscow (MSK)</label>
                                 <label><input type="checkbox" class="tz-checkbox" value="Europe/Istanbul"> Istanbul (TRT)</label>
                             </div>
-                            <p style="font-weight: 600; margin: 0 0 8px 0; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Asia-Pacific</p>
+                            <p style="font-weight: 600; margin: 0 0 8px 0; color: var(--color-text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Asia-Pacific</p>
                             <div class="checkbox-group" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
                                 <label><input type="checkbox" class="tz-checkbox" value="Asia/Dubai"> Dubai (GST)</label>
                                 <label><input type="checkbox" class="tz-checkbox" value="Asia/Kolkata"> India (IST)</label>
@@ -117,7 +117,7 @@
                             </div>
                         </div>
 
-                        <div style="border-top: 1px solid var(--border-color); padding-top: 15px;">
+                        <div style="border-top: 1px solid var(--color-border); padding-top: 15px;">
                             <label style="display: flex; align-items: center; gap: 10px; font-weight: bold; cursor: pointer;">
                                 <input type="checkbox" id="storm_respect_dst" style="width: 20px; height: 20px;">
                                 Automatically respect Daylight Saving Time (DST)
@@ -188,7 +188,7 @@
                 <h3>🏆 Season Hub</h3>
 
                 <h4>Default Score Levels</h4>
-                <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:8px;">Applied when creating a new season. Changing this does not affect existing seasons.</p>
+                <p style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:8px;">Applied when creating a new season. Changing this does not affect existing seasons.</p>
                 <div style="overflow-x:auto;">
                     <table class="data-table" id="score-levels-table">
                         <thead><tr><th>Key</th><th>Label</th><th>Points</th><th></th></tr></thead>
@@ -202,7 +202,7 @@
                 </div>
 
                 <h4 style="margin-top:24px;">Season Templates</h4>
-                <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:8px;">Templates are one-time blueprints. Editing a template has no effect on existing seasons.</p>
+                <p style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:8px;">Templates are one-time blueprints. Editing a template has no effect on existing seasons.</p>
                 <div id="season-templates-list"></div>
                 <button type="button" class="btn btn-secondary btn-sm" id="btn-add-season-template" style="margin-top:8px;">+ Add Season Template</button>
             </section>

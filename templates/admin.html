@@ -14,10 +14,10 @@
 
 {{define "content"}}
         <!-- Tabs -->
-        <div class="tabs">
-            <button class="tab-button active" id="tab-btn-users">👥 User Management</button>
-            <button class="tab-button" id="tab-btn-logins">📊 Login History</button>
-            <button class="tab-button" id="tab-btn-security">🔐 Security & API</button>
+        <div class="tab-bar">
+            <button class="tab-btn active" id="tab-btn-users">👥 User Management</button>
+            <button class="tab-btn" id="tab-btn-logins">📊 Login History</button>
+            <button class="tab-btn" id="tab-btn-security">🔐 Security & API</button>
         </div>
 
         <!-- User Management Tab -->
@@ -76,7 +76,7 @@
                 </div>
                 
                 <div class="form-section" style="padding: 20px;">
-                    <div class="settings-group" style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">
+                    <div class="settings-group" style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--color-border);">
                         <h4>🔒 Password Policy</h4>
                         <p class="help-text">Enforce strict password requirements for all users.</p>
                         <form id="password-policy-form">
@@ -104,7 +104,7 @@
                         </form>
                     </div>
 
-                    <div class="settings-group" style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">
+                    <div class="settings-group" style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--color-border);">
                         <h4>🔌 Microservice Routing (CV Worker)</h4>
                         <p class="help-text">Configure the external Cloud Run Python worker URL used for OCR processing.</p>
                         <form id="cv-worker-form">
@@ -120,7 +120,7 @@
                         <h4>☁️ Google Cloud Vision (OCR)</h4>
                         <p class="help-text">Upload a Service Account JSON key to enable automated data extraction from game screenshots.</p>
 
-                        <div style="background: var(--bg-secondary); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
+                        <div style="background: var(--color-surface); padding: 15px; border-radius: 8px; border: 1px solid var(--color-border);">
                             <form id="gcp-upload-form">
                                 <div class="form-group">
                                     <label for="gcp-json-file">Select Service Account JSON File:</label>
@@ -134,14 +134,14 @@
                         </div>
                     </div>
 
-                    <div class="settings-group" style="margin-top:30px;padding-top:20px;border-top:1px solid var(--border-color);">
+                    <div class="settings-group" style="margin-top:30px;padding-top:20px;border-top:1px solid var(--color-border);">
                         <h4>⚙️ Advanced Settings</h4>
                         <p class="help-text">⚠️ These values reflect game constants. Only change if the game updates them.</p>
 
                         <h5 style="margin:16px 0 8px;">Desert Storm Battle Slots</h5>
                         <p class="help-text">Configure the server time for each numbered slot. Officers assign task forces to slots on the Storm page.</p>
                         <div id="storm-slots-form">
-                            <div class="storm-slot-row" style="display:grid;grid-template-columns:60px 1fr 100px;gap:8px;align-items:center;margin-bottom:6px;font-weight:600;font-size:0.85em;color:var(--text-muted);">
+                            <div class="storm-slot-row" style="display:grid;grid-template-columns:60px 1fr 100px;gap:8px;align-items:center;margin-bottom:6px;font-weight:600;font-size:0.85em;color:var(--color-text-muted);">
                                 <span>Slot</span><span>Label</span><span>Time (ST)</span>
                             </div>
                             <div id="storm-slots-rows">

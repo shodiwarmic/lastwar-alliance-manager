@@ -41,11 +41,11 @@
     white-space: nowrap;
 }
 .acc-tag--reliable {
-    background: rgba(40, 167, 69, 0.18);
+    background: var(--color-success-bg);
     color: var(--color-success);
 }
 .acc-tag--needs-improvement {
-    background: rgba(255, 193, 7, 0.22);
+    background: var(--color-warning-bg);
     color: var(--color-warning);
 }
 .acc-tag--at-risk {
@@ -185,23 +185,3 @@ tr.acc-row--below-vs {
     color: var(--color-text);
 }
 
-/* --- Warning button (not in global styles) --- */
-.btn-warning {
-    background: var(--color-warning);
-    color: #212529;
-    padding: 12px 24px;
-    border: none;
-    border-radius: 8px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.btn-warning:hover {
-    background: #e0a800;
-    transform: translateY(-1px);
-}
-.btn-sm.btn-warning {
-    padding: 6px 12px;
-    font-size: 0.85rem;
-}

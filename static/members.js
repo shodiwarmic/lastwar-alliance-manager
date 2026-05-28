@@ -500,14 +500,14 @@ function buildMemberCard(member) {
         actions.className = 'member-actions';
 
         const editBtn = document.createElement('button');
-        editBtn.className = 'edit-btn';
+        editBtn.className = 'btn btn-sm btn-secondary';
         editBtn.textContent = 'Edit';
         editBtn.addEventListener('click', () => editMember(member));
         actions.appendChild(editBtn);
 
         if (member.rank !== 'EX') {
             const archiveBtn = document.createElement('button');
-            archiveBtn.className = 'delete-btn';
+            archiveBtn.className = 'btn btn-sm btn-danger';
             archiveBtn.textContent = 'Archive';
             archiveBtn.addEventListener('click', () => archiveMember(member.id, member.name, actions, archiveBtn));
             actions.appendChild(archiveBtn);
@@ -1208,7 +1208,7 @@ function showCSVPreview(result) {
         if (member.squad_power) {
             const s = document.createElement('span');
             s.className = 'member-power';
-            s.style.cssText = 'font-size:0.85em;color:var(--color-primary);';
+            s.style.cssText = 'font-size:0.85em;color:var(--color-accent);';
             s.textContent = `🛡️ ${(member.squad_power / 1000000).toFixed(1)}M`;
             memberInfo.appendChild(s);
         }

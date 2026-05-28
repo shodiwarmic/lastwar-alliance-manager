@@ -82,7 +82,7 @@
 
         <div class="acc-toolbar">
             <div class="acc-toolbar-left">
-                <label for="storm-date-input" style="font-size:0.9rem;color:var(--text-secondary);">Storm Date</label>
+                <label for="storm-date-input" style="font-size:0.9rem;color:var(--color-text-muted);">Storm Date</label>
                 <input type="date" id="storm-date-input" class="form-input" style="width:180px;">
                 <button id="btn-storm-load" class="btn btn-secondary btn-sm">Load</button>
             </div>
@@ -93,7 +93,7 @@
         </div>
 
         <div id="storm-member-list">
-            <p style="color:var(--text-muted);font-size:0.9rem;">Select a date and click Load to view or log attendance.</p>
+            <p style="color:var(--color-text-muted);font-size:0.9rem;">Select a date and click Load to view or log attendance.</p>
         </div>
     </div>
     {{end}}
@@ -153,11 +153,11 @@
             <textarea id="strike-reason" class="form-input" rows="3"></textarea>
         </div>
         <div class="form-group">
-            <label for="strike-ref-date">Reference Date <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+            <label for="strike-ref-date">Reference Date <span style="color:var(--color-text-muted);font-weight:400;">(optional)</span></label>
             <input type="date" id="strike-ref-date" class="form-input">
         </div>
         <p id="strike-modal-status" class="status-msg"></p>
-        <div class="button-group">
+        <div class="modal-actions">
             <button id="btn-strike-save" class="btn btn-primary">Save Strike</button>
             <button id="btn-strike-cancel" class="btn btn-secondary">Cancel</button>
         </div>
