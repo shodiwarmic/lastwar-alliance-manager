@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -475,7 +476,8 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 		`, userID).Scan(&userRank, &canViewAnon)
 
 		if err != nil && err != sql.ErrNoRows {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			slog.Error("getDynoRecommendations: rank lookup failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 	}
@@ -496,7 +498,8 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 		ORDER BY dr.created_at DESC
 	`)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("getDynoRecommendations: query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -507,7 +510,8 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&dr.ID, &dr.MemberID, &dr.MemberName, &dr.MemberRank,
 			&dr.Points, &dr.Notes, &dr.CreatedBy, &dr.CreatedByID, &dr.CreatedAt, &dr.Expired,
 			&dr.IsAuthorPublic, &dr.MinViewRank); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			slog.Error("getDynoRecommendations: row scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 
