@@ -468,7 +468,7 @@ func getDynoRecommendations(w http.ResponseWriter, r *http.Request) {
 
 	if userID > 0 {
 		err := db.QueryRow(`
-			SELECT COALESCE(m.rank, ''), COALESCE(rp.view_anonymous_authors, 0)
+			SELECT COALESCE(m.rank, ''), COALESCE(json_extract(rp.permissions, '$.view_anonymous_authors'), 0)
 			FROM users u
 			LEFT JOIN members m ON u.member_id = m.id
 			LEFT JOIN rank_permissions rp ON m.rank = rp.rank
