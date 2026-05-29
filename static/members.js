@@ -206,7 +206,10 @@ function buildExportTable(members) {
             m.squad_type || '',
             m.squad_power != null ? m.squad_power : '',
             m.troop_level != null ? m.troop_level : '',
-            m.skills || '',
+            m.skills ? m.skills.split(',').map(k => {
+                const entry = skillRegistry.find(s => s.key === k);
+                return entry ? entry.label : k;
+            }).join(', ') : '',
         ].forEach(val => {
             const td = document.createElement('td');
             td.textContent = val;
