@@ -668,7 +668,7 @@ func deleteDynoRecommendation(w http.ResponseWriter, r *http.Request) {
 	var canManageDyno bool
 	if !isAdmin {
 		err := db.QueryRow(`
-			SELECT COALESCE(rp.manage_dyno, 0)
+			SELECT COALESCE(json_extract(rp.permissions, '$.manage_dyno'), 0)
 			FROM users u
 			LEFT JOIN members m ON u.member_id = m.id
 			LEFT JOIN rank_permissions rp ON m.rank = rp.rank
