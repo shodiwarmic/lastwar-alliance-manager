@@ -184,7 +184,7 @@ function buildExportTable(members) {
     const table = document.createElement('table');
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
-    ['Name', 'Rank', 'HQ Level', 'Power', 'Hero Power', 'Kills'].forEach(label => {
+    ['Name', 'Rank', 'HQ Level', 'Power', 'Hero Power', 'Kills', 'Profession', 'Squad Type', 'Squad Power', 'Troop Level', 'Skills'].forEach(label => {
         const th = document.createElement('th');
         th.textContent = label;
         headerRow.appendChild(th);
@@ -202,6 +202,11 @@ function buildExportTable(members) {
             m.power != null ? m.power : '',
             m.hero_power != null ? m.hero_power : '',
             m.current_kills != null ? m.current_kills : '',
+            m.profession || '',
+            m.squad_type || '',
+            m.squad_power != null ? m.squad_power : '',
+            m.troop_level != null ? m.troop_level : '',
+            m.skills || '',
         ].forEach(val => {
             const td = document.createElement('td');
             td.textContent = val;
