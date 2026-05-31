@@ -250,6 +250,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (hqInput) hqInput.addEventListener('input', updateTroopLevelOptions);
 
     setupModalListeners();
+    setupArchiveModal();
     setupCSVImport();
     setupSearch();
     await loadSkillRegistry();
@@ -574,7 +575,7 @@ function buildMemberCard(member) {
             const archiveBtn = document.createElement('button');
             archiveBtn.className = 'btn btn-sm btn-danger';
             archiveBtn.textContent = 'Archive';
-            archiveBtn.addEventListener('click', () => archiveMember(member.id, member.name, actions, archiveBtn));
+            archiveBtn.addEventListener('click', () => archiveMember(member.id, member.name));
             actions.appendChild(archiveBtn);
         }
 
@@ -807,45 +808,53 @@ window.editMember = function (member) {
     openMemberModal(true);
 };
 
-async function archiveMember(id, name, actionsContainer, archiveBtn) {
-    if (!await showConfirm(`Archive ${name}?`, 'Archive')) return;
+let archiveTargetId = null;
 
-    archiveBtn.style.display = 'none';
-    const reasonSpan = document.createElement('span');
-    reasonSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;';
-    const reasonInput = document.createElement('input');
-    reasonInput.type = 'text';
-    reasonInput.placeholder = 'Reason for leaving (optional)';
-    reasonInput.style.cssText = 'font-size:0.85rem;padding:3px 6px;border:1px solid var(--color-border);border-radius:4px;min-width:180px;';
-    const confirmBtn = document.createElement('button');
-    confirmBtn.className = 'btn btn-danger btn-sm';
-    confirmBtn.textContent = 'Confirm';
-    const skipBtn = document.createElement('button');
-    skipBtn.className = 'btn btn-secondary btn-sm';
-    skipBtn.textContent = 'Skip';
+function setupArchiveModal() {
+    const modal = document.getElementById('archive-member-modal');
+    const reasonInput = document.getElementById('archive-reason-input');
+    const confirmBtn = document.getElementById('archive-confirm-btn');
 
-    async function doArchive(leaveReason) {
+    const closeModal = () => {
+        modal.style.display = '';
+        reasonInput.value = '';
+        archiveTargetId = null;
+    };
+
+    document.getElementById('close-archive-modal').addEventListener('click', closeModal);
+    document.getElementById('archive-cancel-btn').addEventListener('click', closeModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+    reasonInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') confirmBtn.click();
+    });
+
+    confirmBtn.addEventListener('click', async () => {
+        if (!archiveTargetId) return;
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Archiving…';
         try {
-            const response = await fetch(`${API_URL}/${id}/archive`, {
+            const response = await fetch(`${API_URL}/${archiveTargetId}/archive`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ leave_reason: leaveReason }),
+                body: JSON.stringify({ leave_reason: reasonInput.value.trim() }),
             });
-            if (!response.ok) throw new Error('Failed to archive member');
+            if (!response.ok) throw new Error('Failed');
+            closeModal();
             await loadMembers();
         } catch (error) {
             console.error('Error archiving member:', error);
-            reasonSpan.remove();
             showToast('Failed to archive.', 'error');
-            archiveBtn.style.display = '';
         }
-    }
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Archive';
+    });
+}
 
-    confirmBtn.addEventListener('click', () => doArchive(reasonInput.value.trim()));
-    skipBtn.addEventListener('click', () => doArchive(''));
-
-    reasonSpan.append(reasonInput, confirmBtn, skipBtn);
-    actionsContainer.appendChild(reasonSpan);
+function archiveMember(id, name) {
+    archiveTargetId = id;
+    document.getElementById('archive-modal-title').textContent = `Archive ${name}`;
+    document.getElementById('archive-member-modal').style.display = 'flex';
 }
 
 window.toggleEligible = async function (id, currentStatus, actionsContainer, toggleBtn) {

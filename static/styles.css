@@ -1595,7 +1595,7 @@ button {
     padding: 10px;
     border: 1px solid var(--color-border);
     border-radius: 6px;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: inherit;
     font-size: 13px;
     resize: vertical;
     background: var(--color-surface);

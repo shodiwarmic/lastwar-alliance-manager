@@ -58,10 +58,8 @@ function updateThemeSelector(theme) {
         const optionTheme = option.dataset.theme;
         if (optionTheme === theme) {
             option.classList.add('active');
-            option.innerHTML = option.innerHTML.replace('○', '●');
         } else {
             option.classList.remove('active');
-            option.innerHTML = option.innerHTML.replace('●', '○');
         }
     });
 }
