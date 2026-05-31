@@ -12,15 +12,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Page handler
-// ---------------------------------------------------------------------------
-
-func handleCommsPage(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "Alliance Communications", "comms")
-	renderTemplate(w, r, "comms.html", data)
-}
-
-// ---------------------------------------------------------------------------
 // Templates — list / by-slug / create / update / delete
 // ---------------------------------------------------------------------------
 

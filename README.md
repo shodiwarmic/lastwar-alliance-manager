@@ -119,6 +119,7 @@ A central hub for all alliance-wide mail templates, announcements, and reference
 - **Resources Tab**: Store named external links (guides, spreadsheets, infographics) with optional descriptions for quick alliance-wide reference.
 - **Search & Browse**: Live search filters across titles and content. When no search is active, templates group into collapsible category sections with session-persistent open/closed state.
 - **Permission-Gated Access**: `view_comms` (R3–R5 default) and `manage_comms` (R4–R5 default), configurable via the permissions matrix.
+- **Poll Tracker**: Two dedicated tabs — Poll Templates and Polls — let officers track who has and hasn't responded to in-game polls. Define a reusable poll template (question, options, named or anonymous, single or multi-select), then launch discrete tracked instances per poll run. Named polls show a full per-member pending/responded split with inline mark-responded buttons. Anonymous polls show option-count inputs only. Response progress (X/Y members responded) is shown on every poll card. Permissions are independent: `view_polls` / `manage_polls` allow a user to access poll functionality without necessarily having access to the rest of the Comms page.
 
 ### ⚖️ Member Accountability
 - **Tag System**: Each active member is automatically tagged as Reliable, Needs Improvement, or At Risk based on their current active strike count. The strike thresholds for each tag are configurable in Alliance Settings.

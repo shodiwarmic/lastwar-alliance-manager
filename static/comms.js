@@ -24,6 +24,8 @@ function switchTab(tabName) {
         if (tabName === 'mail') loadTemplates('mail');
         else if (tabName === 'announcement') loadTemplates('announcement');
         else if (tabName === 'resources') loadResources();
+        else if (tabName === 'poll-templates') window.loadPollTemplates?.();
+        else if (tabName === 'polls') window.loadPollInstances?.();
     }
 }
 
@@ -34,28 +36,31 @@ tabBtns.forEach(btn => {
 // ── Initialise first tab ─────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    switchTab('mail');
+    // Pick the first rendered tab rather than hardcoding 'mail' —
+    // a polls-only user may have the comms tabs gated out.
+    const firstTab = document.querySelector('.tab-btn');
+    if (firstTab) switchTab(firstTab.dataset.tab);
 
     document.getElementById('new-mail-btn')?.addEventListener('click', () => openTemplateModal('mail'));
     document.getElementById('new-announcement-btn')?.addEventListener('click', () => openTemplateModal('announcement'));
     document.getElementById('new-resource-btn')?.addEventListener('click', openResourceModal);
 
-    document.getElementById('mail-search').addEventListener('input', () => renderTemplateList('mail'));
-    document.getElementById('announcement-search').addEventListener('input', () => renderTemplateList('announcement'));
-    document.getElementById('resource-search').addEventListener('input', renderResourceList);
+    document.getElementById('mail-search')?.addEventListener('input', () => renderTemplateList('mail'));
+    document.getElementById('announcement-search')?.addEventListener('input', () => renderTemplateList('announcement'));
+    document.getElementById('resource-search')?.addEventListener('input', renderResourceList);
 
-    document.getElementById('template-save-btn').addEventListener('click', saveTemplate);
-    document.getElementById('template-cancel-btn').addEventListener('click', () => {
+    document.getElementById('template-save-btn')?.addEventListener('click', saveTemplate);
+    document.getElementById('template-cancel-btn')?.addEventListener('click', () => {
         document.getElementById('modal-template').style.display = '';
     });
-    document.getElementById('resource-save-btn').addEventListener('click', saveResource);
-    document.getElementById('resource-cancel-btn').addEventListener('click', () => {
+    document.getElementById('resource-save-btn')?.addEventListener('click', saveResource);
+    document.getElementById('resource-cancel-btn')?.addEventListener('click', () => {
         document.getElementById('modal-resource').style.display = '';
     });
 
     // Live variable preview in the content textarea
-    document.getElementById('template-content-input').addEventListener('input', updateVarsPreview);
-    document.getElementById('template-required-vars-input').addEventListener('input', updateVarsPreview);
+    document.getElementById('template-content-input')?.addEventListener('input', updateVarsPreview);
+    document.getElementById('template-required-vars-input')?.addEventListener('input', updateVarsPreview);
 });
 
 // ── Template loading & rendering ─────────────────────────────────────────────

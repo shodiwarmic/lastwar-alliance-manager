@@ -171,7 +171,6 @@ func main() {
 	router.HandleFunc("/api/season-hub/rewards", authMiddleware(requirePermission("manage_season_rewards", handleRewardSave))).Methods("POST")
 	router.HandleFunc("/api/season-hub/rewards/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleRewardUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/rewards/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleRewardDelete))).Methods("DELETE")
-	router.HandleFunc("/comms", authMiddleware(requirePermission("view_comms", handleCommsPage))).Methods("GET")
 	router.HandleFunc("/api/comms/templates", authMiddleware(requirePermission("view_comms", handleCommsTemplateList))).Methods("GET")
 	router.HandleFunc("/api/comms/templates/slug/{slug}", authMiddleware(requirePermission("view_comms", handleCommsTemplateBySlug))).Methods("GET")
 	router.HandleFunc("/api/comms/templates", authMiddleware(requirePermission("manage_comms", handleCommsTemplateCreate))).Methods("POST")
@@ -181,6 +180,22 @@ func main() {
 	router.HandleFunc("/api/comms/resources", authMiddleware(requirePermission("manage_comms", handleCommsResourceCreate))).Methods("POST")
 	router.HandleFunc("/api/comms/resources/{id:[0-9]+}", authMiddleware(requirePermission("manage_comms", handleCommsResourceUpdate))).Methods("PUT")
 	router.HandleFunc("/api/comms/resources/{id:[0-9]+}", authMiddleware(requirePermission("manage_comms", handleCommsResourceDelete))).Methods("DELETE")
+	// Poll templates
+	router.HandleFunc("/api/comms/poll-templates",             authMiddleware(requirePermission("view_polls",   handlePollTemplateList))).Methods("GET")
+	router.HandleFunc("/api/comms/poll-templates",             authMiddleware(requirePermission("manage_polls", handlePollTemplateCreate))).Methods("POST")
+	router.HandleFunc("/api/comms/poll-templates/{id:[0-9]+}", authMiddleware(requirePermission("manage_polls", handlePollTemplateUpdate))).Methods("PUT")
+	router.HandleFunc("/api/comms/poll-templates/{id:[0-9]+}", authMiddleware(requirePermission("manage_polls", handlePollTemplateDelete))).Methods("DELETE")
+	// Poll instances
+	router.HandleFunc("/api/comms/poll-instances",                     authMiddleware(requirePermission("view_polls",   handlePollInstanceList))).Methods("GET")
+	router.HandleFunc("/api/comms/poll-instances",                     authMiddleware(requirePermission("manage_polls", handlePollInstanceCreate))).Methods("POST")
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}",         authMiddleware(requirePermission("manage_polls", handlePollInstanceUpdate))).Methods("PUT")
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}",         authMiddleware(requirePermission("manage_polls", handlePollInstanceDelete))).Methods("DELETE")
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/detail",  authMiddleware(requirePermission("view_polls",   handlePollInstanceDetail))).Methods("GET")
+	// Poll responses
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/responses",                   authMiddleware(requirePermission("manage_polls", handlePollResponseSet))).Methods("POST")
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/responses/{memberID:[0-9]+}", authMiddleware(requirePermission("manage_polls", handlePollResponseClear))).Methods("DELETE")
+	// Anonymous counts
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/anonymous-counts", authMiddleware(requirePermission("manage_polls", handlePollAnonCountsUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/trackables", authMiddleware(requirePermission("view_season_hub", handleSeasonTrackableList))).Methods("GET")
 	router.HandleFunc("/api/season-hub/trackables", authMiddleware(requirePermission("manage_season_hub", handleSeasonTrackableCreate))).Methods("POST")
 	router.HandleFunc("/api/season-hub/trackables/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_hub", handleSeasonTrackableUpdate))).Methods("PUT")
@@ -501,7 +516,7 @@ func main() {
 			"accountability":  data.Permissions.ViewAccountability,
 			"season-hub":      data.Permissions.ViewSeasonHub,
 			"files":           data.Permissions.ViewFiles,
-			"comms":           data.Permissions.ViewComms,
+			"comms":           data.Permissions.ViewComms || data.Permissions.ViewPolls,
 			}
 
 			// 3. Custom 403 Handler for Access Denied

@@ -448,6 +448,8 @@ type RankPermissions struct {
 	ManageSeasonRewards  bool   `json:"manage_season_rewards"`
 	ViewComms            bool   `json:"view_comms"`
 	ManageComms          bool   `json:"manage_comms"`
+	ViewPolls            bool   `json:"view_polls"`
+	ManagePolls          bool   `json:"manage_polls"`
 }
 
 // ValidSkillKeys is the canonical list of skill keys. Adding a new skill = add here only.
@@ -536,6 +538,10 @@ var PermissionGroups = []PermissionGroup{
 		{Key: "view_comms", Label: "View"},
 		{Key: "manage_comms", Label: "Manage"},
 	}},
+	{Feature: "Polls", Rows: []PermissionRow{
+		{Key: "view_polls", Label: "View"},
+		{Key: "manage_polls", Label: "Manage"},
+	}},
 	{Feature: "Settings", Rows: []PermissionRow{
 		{Key: "manage_settings", Label: "Access"},
 	}},
@@ -575,6 +581,45 @@ type CommsResource struct {
 	Description string `json:"description"`
 	CreatedBy   string `json:"created_by"`
 	CreatedAt   string `json:"created_at"`
+}
+
+type PollTemplate struct {
+	ID          int    `json:"id"`
+	Title       string `json:"title"`
+	Question    string `json:"question"`
+	Options     string `json:"options"`     // JSON array ["Yes","No","Abstain"]
+	PollType    string `json:"poll_type"`   // "named" | "anonymous"
+	MultiSelect bool   `json:"multi_select"`
+	CreatedBy   string `json:"created_by"`
+	CreatedAt   string `json:"created_at"`
+}
+
+type PollInstance struct {
+	ID             int     `json:"id"`
+	TemplateID     *int    `json:"template_id"` // nullable — template may be deleted
+	Label          string  `json:"label"`
+	Question       string  `json:"question"`     // snapshotted at launch
+	Options        string  `json:"options"`      // snapshotted at launch (JSON)
+	PollType       string  `json:"poll_type"`    // snapshotted at launch
+	MultiSelect    bool    `json:"multi_select"` // snapshotted at launch
+	RankFilter     *string `json:"rank_filter"`  // NULL = all active; JSON ["R4","R5"] = subset
+	TotalEligible  int     `json:"total_eligible"`  // snapshotted at launch
+	CreatedBy      string  `json:"created_by"`
+	CreatedAt      string  `json:"created_at"`
+	RespondedCount int     `json:"responded_count"` // computed on list queries
+}
+
+type PollMemberStatus struct {
+	MemberID   int      `json:"member_id"`
+	MemberName string   `json:"member_name"`
+	Rank       string   `json:"rank"`
+	Responded  bool     `json:"responded"`
+	Options    []string `json:"options"` // selected option(s), empty if pending
+}
+
+type PollAnonCount struct {
+	OptionKey     string `json:"option_key"`
+	ResponseCount int    `json:"response_count"`
 }
 
 type ActivityLog struct {

@@ -46,7 +46,7 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 **Batching**: consecutive `"created"` calls for the same `entity_type` by the same user within 15 minutes are automatically merged (count increments). All other actions always create a new row.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -403,6 +403,7 @@ btn.addEventListener('click', () => editMember(member.id));
 | `static/activity.js` | ✅ Done |
 | `static/allies.js` | ✅ Done |
 | `static/comms.js` | ✅ Done |
+| `static/polls.js` | ✅ Done (written with safe patterns from the start) |
 | `static/dashboard.js` | ✅ Done (reference implementation of the `el()` helper pattern) |
 | `static/season-hub.js` | ✅ Done |
 | `static/train.js` | ✅ Done |

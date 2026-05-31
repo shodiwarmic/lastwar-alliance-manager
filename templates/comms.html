@@ -3,7 +3,7 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
         Alliance Communications
     </h1>
-    <h2>Mail, Announcements &amp; Resources</h2>
+    <h2>Mail, Announcements, Resources &amp; Polls</h2>
 {{end}}
 
 {{define "head_tags"}}
@@ -15,11 +15,18 @@
 
 {{define "content"}}
 <div class="tab-bar">
-    <button class="tab-btn active" data-tab="mail">Mail</button>
+    {{if .Permissions.ViewComms}}
+    <button class="tab-btn{{if not .Permissions.ViewPolls}} active{{end}}" data-tab="mail">Mail</button>
     <button class="tab-btn" data-tab="announcement">Announcements</button>
     <button class="tab-btn" data-tab="resources">Resources</button>
+    {{end}}
+    {{if .Permissions.ViewPolls}}
+    <button class="tab-btn{{if not .Permissions.ViewComms}} active{{end}}" data-tab="poll-templates">Poll Templates</button>
+    <button class="tab-btn" data-tab="polls">Polls</button>
+    {{end}}
 </div>
 
+{{if .Permissions.ViewComms}}
 <div id="tab-mail" class="tab-content">
     <div class="comms-toolbar">
         <input type="search" id="mail-search" class="form-input comms-search" placeholder="Search mail templates…" autocomplete="off">
@@ -51,12 +58,35 @@
 </div>
 {{end}}
 
+{{if .Permissions.ViewPolls}}
+<div id="tab-poll-templates" class="tab-content">
+    <div class="comms-toolbar">
+        {{if .Permissions.ManagePolls}}
+        <button class="btn btn-primary btn-sm" id="new-poll-template-btn">+ New Poll Template</button>
+        {{end}}
+    </div>
+    <div id="poll-template-list"></div>
+</div>
+
+<div id="tab-polls" class="tab-content">
+    <div class="comms-toolbar">
+        {{if .Permissions.ManagePolls}}
+        <button class="btn btn-primary btn-sm" id="new-poll-instance-btn">+ New Poll</button>
+        {{end}}
+    </div>
+    <div id="poll-instance-list"></div>
+</div>
+{{end}}
+{{end}}
+
 {{define "scripts"}}
 <div id="page-config"
     data-can-manage="{{if .Permissions.ManageComms}}true{{else}}false{{end}}"
+    data-can-manage-polls="{{if .Permissions.ManagePolls}}true{{else}}false{{end}}"
     hidden></div>
 <script src="/mail.js"></script>
 <script src="/comms.js"></script>
+<script src="/polls.js"></script>
 {{end}}
 
 {{define "modals"}}
@@ -127,6 +157,111 @@
             <button id="resource-cancel-btn" class="btn btn-secondary">Cancel</button>
         </div>
         <p id="resource-status" class="status-msg"></p>
+    </div>
+</div>
+
+<div id="modal-poll-template" class="modal">
+    <div class="modal-content modal-md">
+        <h2 id="modal-poll-template-title">New Poll Template</h2>
+        <input type="hidden" id="poll-template-id" value="">
+
+        <div class="form-group">
+            <label for="poll-template-title-input">Title</label>
+            <input type="text" id="poll-template-title-input" class="form-input" placeholder="e.g. Weekly Storm Vote" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="poll-template-question-input">Question</label>
+            <textarea id="poll-template-question-input" class="form-input" rows="3" placeholder="e.g. Will you participate in Desert Storm this week?" style="resize:vertical;"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Poll Type</label>
+            <div class="poll-type-toggle">
+                <label class="poll-type-option">
+                    <input type="radio" name="poll-type" value="named" checked> Named (track per member)
+                </label>
+                <label class="poll-type-option">
+                    <input type="radio" name="poll-type" value="anonymous"> Anonymous (count only)
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="poll-template-multiselect"> Allow multiple selections
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label>Options <span class="comms-hint-inline">(min 2)</span></label>
+            <div id="poll-options-builder"></div>
+            <button type="button" class="btn btn-secondary btn-sm" id="poll-add-option-btn" style="margin-top:6px;">+ Add Option</button>
+        </div>
+
+        <div class="modal-actions">
+            <button id="poll-template-save-btn" class="btn btn-primary">Save</button>
+            <button id="poll-template-cancel-btn" class="btn btn-secondary">Cancel</button>
+        </div>
+        <p id="poll-template-status" class="status-msg"></p>
+    </div>
+</div>
+
+<div id="modal-poll-instance" class="modal">
+    <div class="modal-content modal-md">
+        <h2 id="modal-poll-instance-title">Launch Poll</h2>
+        <input type="hidden" id="poll-instance-id" value="">
+        <input type="hidden" id="poll-instance-template-id" value="">
+
+        <div id="poll-instance-question-preview" class="poll-question-preview"></div>
+
+        <div id="poll-instance-info-group" class="poll-instance-info"></div>
+
+        <div class="form-group" id="poll-instance-question-group">
+            <label for="poll-instance-question-input">Question</label>
+            <textarea id="poll-instance-question-input" class="form-input" rows="3" style="resize:vertical;"></textarea>
+        </div>
+
+        <div class="form-group" id="poll-instance-options-group">
+            <label>Options <span class="comms-hint-inline">(count is locked — text only)</span></label>
+            <div id="poll-instance-options-builder"></div>
+        </div>
+
+        <div class="form-group">
+            <label for="poll-instance-label-input">Label <span class="comms-hint-inline">(identifies this run)</span></label>
+            <input type="text" id="poll-instance-label-input" class="form-input" placeholder="e.g. Week 3 Storm Vote" autocomplete="off">
+        </div>
+
+        <div class="form-group" id="poll-rank-filter-group">
+            <label>Limit to ranks <span class="comms-hint-inline">(leave all unchecked for full roster)</span></label>
+            <div class="poll-rank-checkboxes">
+                <label><input type="checkbox" name="poll-rank" value="R5"> R5</label>
+                <label><input type="checkbox" name="poll-rank" value="R4"> R4</label>
+                <label><input type="checkbox" name="poll-rank" value="R3"> R3</label>
+                <label><input type="checkbox" name="poll-rank" value="R2"> R2</label>
+                <label><input type="checkbox" name="poll-rank" value="R1"> R1</label>
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button id="poll-instance-save-btn" class="btn btn-primary">Launch</button>
+            <button id="poll-instance-cancel-btn" class="btn btn-secondary">Cancel</button>
+        </div>
+        <p id="poll-instance-status" class="status-msg"></p>
+    </div>
+</div>
+
+<div id="modal-poll-detail" class="modal">
+    <div class="modal-content modal-lg">
+        <div class="poll-detail-header">
+            <div>
+                <h2 id="poll-detail-label"></h2>
+                <p id="poll-detail-question" class="poll-question-preview"></p>
+            </div>
+            <button id="poll-detail-close-btn" class="btn btn-secondary btn-sm">Close</button>
+        </div>
+        <p id="poll-detail-progress" class="poll-detail-progress"></p>
+        <div id="poll-detail-body"></div>
     </div>
 </div>
 {{end}}

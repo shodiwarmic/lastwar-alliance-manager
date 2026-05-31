@@ -47,6 +47,8 @@ const ENTITY_LABELS = {
     season_template:       'season template',
     season_trackable:      'season trackable',
     season_event:          'season event',
+    poll_template:         'Poll Template',
+    poll_instance:         'Poll',
 };
 
 const ENTITY_LABELS_PLURAL = {
@@ -73,6 +75,8 @@ const ENTITY_LABELS_PLURAL = {
     season_template:       'season templates',
     season_trackable:      'season trackables',
     season_event:          'season events',
+    poll_template:         'Poll Templates',
+    poll_instance:         'Polls',
 };
 
 function entityLabel(type, count) {
