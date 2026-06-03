@@ -158,7 +158,7 @@ function renderAllyCard(ally) {
         meta.className = 'ally-meta';
         if (ally.contact) {
             const contactLine = document.createElement('span');
-            contactLine.textContent = '📞 ' + ally.contact;
+            contactLine.append(svgIcon('phone', 13), document.createTextNode(' ' + ally.contact));
             meta.appendChild(contactLine);
         }
         if (ally.notes) {

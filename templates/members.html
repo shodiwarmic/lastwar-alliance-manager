@@ -13,16 +13,16 @@
 {{define "content"}}
             <div class="action-bar">
                 <button type="button" id="add-member-btn" class="btn btn-primary">
-                    ➕ Add Member
+                    <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add Member
                 </button>
                 <button type="button" id="import-csv-trigger-btn" class="btn btn-secondary">
-                    📥 Import CSV
+                    <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-download"/></svg> Import CSV
                 </button>
             </div>
 
             <section class="csv-import-section" id="csv-import-section" style="display: none;">
                 <div class="csv-import-card">
-                    <h4>📥 Import from CSV</h4>
+                    <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-download"/></svg> Import from CSV</h4>
                         <p class="csv-help">Upload a CSV file containing headers. Columns are detected automatically based on names like <code>Username</code>, <code>Rank</code>, <code>Power</code>, and <code>Level</code> (or <code>HQ</code>). Other columns are ignored. <em>Only Username is strictly required.</em></p>
                     <div class="csv-upload">
                         <input type="file" id="csv-file" accept=".csv" />
@@ -41,7 +41,7 @@
                     <div class="filter-sort-top">
                         <div class="member-search-wrap">
                             <input type="text" id="search-input" class="form-input" placeholder="Search members...">
-                            <button id="clear-search" style="display: none;">✖</button>
+                            <button id="clear-search" style="display: none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
                         </div>
                     </div>
 
@@ -83,9 +83,9 @@
                             <div class="filter-row">
                                 <span class="filter-chip-label">Squad:</span>
                                 <button class="filter-chip squad-chip active" data-squad="all">All</button>
-                                <button class="filter-chip squad-chip" data-squad="Tank">🛡️ Tank</button>
-                                <button class="filter-chip squad-chip" data-squad="Aircraft">✈️ Aircraft</button>
-                                <button class="filter-chip squad-chip" data-squad="Missile">🚀 Missile</button>
+                                <button class="filter-chip squad-chip" data-squad="Tank"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tank"/></svg> Tank</button>
+                                <button class="filter-chip squad-chip" data-squad="Aircraft"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plane-tilt"/></svg> Aircraft</button>
+                                <button class="filter-chip squad-chip" data-squad="Missile"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-rocket"/></svg> Missile</button>
                             </div>
                         </div>
 
@@ -134,7 +134,6 @@
 {{define "modals"}}
     <div id="member-modal" class="modal" style="display: none;">
         <div class="modal-content">
-            <span class="close" id="close-member-modal">&times;</span>
             <h2 id="modal-form-title">Add New Member</h2>
             <form id="member-form">
                 <div class="form-group">
@@ -222,9 +221,9 @@
                         <label for="member-squad-type">Primary Squad:</label>
                         <select id="member-squad-type" class="form-input">
                             <option value="">Unknown</option>
-                            <option value="Tank">🛡️ Tank</option>
-                            <option value="Aircraft">✈️ Aircraft</option>
-                            <option value="Missile">🚀 Missile</option>
+                            <option value="Tank">Tank</option>
+                            <option value="Aircraft">Aircraft</option>
+                            <option value="Missile">Missile</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -263,27 +262,25 @@
 
     <div id="csv-preview-modal" class="modal" style="display: none;">
         <div class="modal-content modal-lg">
-            <span class="close" id="close-csv-modal">&times;</span>
-            <h2>📋 Review CSV Import</h2>
+            <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-copy"/></svg> Review CSV Import</h2>
             <div id="csv-summary" class="csv-summary"></div>
             <div id="csv-members-preview" class="csv-members-preview"></div>
             
             <div id="remove-members-section" class="remove-members-section" style="display: none;">
-                <h4>🗑️ Members Not in CSV</h4>
+                <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trash"/></svg> Members Not in CSV</h4>
                 <p class="remove-help">Select members to remove from the database:</p>
                 <div id="members-to-remove-list" class="members-to-remove-list"></div>
             </div>
             
             <div class="modal-actions">
-                <button type="button" id="confirm-csv-btn" class="btn btn-primary">✔ Confirm & Import Selected</button>
-                <button type="button" id="cancel-csv-btn" class="btn btn-secondary">✖ Cancel</button>
+                <button type="button" id="confirm-csv-btn" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-check"/></svg> Confirm &amp; Import Selected</button>
+                <button type="button" id="cancel-csv-btn" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
 
     <div id="archive-member-modal" class="modal">
         <div class="modal-content">
-            <span class="close" id="close-archive-modal">&times;</span>
             <h2 id="archive-modal-title">Archive Member</h2>
             <div class="form-group">
                 <label for="archive-reason-input">Reason for leaving <span style="color:var(--color-text-muted);font-weight:normal;">(optional)</span></label>
@@ -298,7 +295,6 @@
 
     <div id="alias-modal" class="modal" style="display: none;">
         <div class="modal-content">
-            <span class="close" id="close-alias-modal">&times;</span>
             <h2 id="alias-modal-title">Manage Nicknames</h2>
             <p class="help-text">Set custom nicknames to help OCR Image Recognition match screenshots to the correct player.</p>
             
@@ -308,7 +304,7 @@
                         <label for="new-alias-input">New Nickname:</label>
                         <input type="text" id="new-alias-input" class="form-input" required placeholder="e.g. StarLord">
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm">➕ Add</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
                 </form>
                 <p id="alias-add-status" class="status-msg" style="color: var(--color-danger); margin: 6px 0 0;"></p>
                 <div id="global-alias-checkbox-wrapper" style="margin-top: 10px; display: none;">

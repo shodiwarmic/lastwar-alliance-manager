@@ -384,8 +384,7 @@ function buildEventCard(evt, dateStr) {
 
         const editBtn = document.createElement('button');
         editBtn.className = 'btn btn-ghost btn-sm event-card-action-btn';
-        const editIcon = document.createElement('span');
-        editIcon.textContent = '✏️';
+        const editIcon = svgIcon('pencil');
         const editLabel = document.createElement('span');
         editLabel.className = 'btn-label';
         editLabel.textContent = 'Edit';
@@ -396,8 +395,7 @@ function buildEventCard(evt, dateStr) {
 
         const delBtn = document.createElement('button');
         delBtn.className = 'btn btn-danger btn-sm event-card-action-btn';
-        const delIcon = document.createElement('span');
-        delIcon.textContent = '🗑';
+        const delIcon = svgIcon('trash');
         const delLabel = document.createElement('span');
         delLabel.className = 'btn-label';
         delLabel.textContent = 'Delete';
@@ -669,7 +667,7 @@ function renderEventTypes() {
             if (!et.is_system) {
                 const editBtn = document.createElement('button');
                 editBtn.className = 'btn btn-ghost btn-sm';
-                editBtn.textContent = '✏️ Edit';
+                editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
                 editBtn.addEventListener('click', () => openEditEventTypeModal(et));
                 actions.appendChild(editBtn);
 
@@ -816,7 +814,7 @@ function renderServerEvents() {
 
             const editBtn = document.createElement('button');
             editBtn.className = 'btn btn-ghost btn-sm';
-            editBtn.textContent = '✏️ Edit';
+            editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
             editBtn.addEventListener('click', () => openEditServerEventModal(evt));
             actions.appendChild(editBtn);
 
@@ -1648,7 +1646,9 @@ function bindEvents() {
 
     function showWeekImage() {
         const sec = document.getElementById('canvas-section');
-        document.getElementById('canvas-section-title').textContent = '🖼️ Week Image';
+        const title = document.getElementById('canvas-section-title');
+        title.dataset.mode = 'week';
+        title.replaceChildren(svgIcon('photo', 16), document.createTextNode(' Week Image'));
         document.getElementById('text-output-section').classList.add('hidden');
         sec.classList.remove('hidden');
         drawWeekImage();
@@ -1658,7 +1658,7 @@ function bindEvents() {
 
     document.getElementById('week-image-cols').addEventListener('change', () => {
         if (!document.getElementById('canvas-section').classList.contains('hidden') &&
-            document.getElementById('canvas-section-title').textContent.startsWith('🖼️')) {
+            document.getElementById('canvas-section-title').dataset.mode === 'week') {
             drawWeekImage();
         }
     });
@@ -1666,7 +1666,9 @@ function bindEvents() {
     document.getElementById('btn-day-card').addEventListener('click', () => {
         const dateStr = document.getElementById('day-card-picker').value;
         const sec = document.getElementById('canvas-section');
-        document.getElementById('canvas-section-title').textContent = '📅 Day Card – ' + formatDateShort(dateStr);
+        const title = document.getElementById('canvas-section-title');
+        title.dataset.mode = 'day';
+        title.replaceChildren(svgIcon('calendar', 16), document.createTextNode(' Day Card – ' + formatDateShort(dateStr)));
         document.getElementById('text-output-section').classList.add('hidden');
         sec.classList.remove('hidden');
         drawDayCard(dateStr);

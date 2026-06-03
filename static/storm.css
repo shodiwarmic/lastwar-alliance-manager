@@ -38,6 +38,10 @@
 /* ── Capacity Bar ─────────────────────────────────────────────────────────── */
 
 .capacity-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 6px;
@@ -76,10 +80,10 @@
 .pool-card .pool-reg  { font-size: 0.75em; margin-top: 2px; }
 
 .reg-avail { color: var(--color-success); }
-.reg-sub   { color: var(--color-warning); }
+.reg-sub   { display: inline-flex; align-items: center; gap: 3px; color: var(--color-warning); }
 .reg-none  { color: var(--color-text-mid); }
-.reg-other { font-size: 0.75em; margin-left: 6px; opacity: 0.75; }
-.pool-squad-power { color: var(--color-warning); font-size: 0.8em; }
+.reg-other { display: inline-flex; align-items: center; gap: 3px; font-size: 0.75em; margin-left: 6px; opacity: 0.75; }
+.pool-squad-power { display: inline-flex; align-items: center; gap: 2px; color: var(--color-warning); font-size: 0.8em; }
 
 /* ── Group Cards ──────────────────────────────────────────────────────────── */
 
@@ -152,7 +156,7 @@
 .member-chip[draggable="true"] { cursor: grab; }
 .member-chip[draggable="true"]:active { cursor: grabbing; }
 .member-chip.is-sub { opacity: 0.75; font-style: italic; border-style: dashed; }
-.member-chip .chip-power { font-size: 0.8em; color: var(--color-text-mid); }
+.member-chip .chip-power { display: inline-flex; align-items: center; gap: 3px; font-size: 0.8em; color: var(--color-text-mid); }
 .member-chip .chip-sub-toggle {
     cursor: pointer;
     font-size: 0.72em;
@@ -216,7 +220,9 @@
 .reg-table th  { background: var(--color-surface); font-weight: 600; white-space: nowrap; }
 
 .reg-pill {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 0.8em;

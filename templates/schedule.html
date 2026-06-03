@@ -16,11 +16,11 @@
 
     <!-- Tab Bar -->
     <div class="tab-bar">
-        <button class="tab-btn active" data-tab="schedule">📅 Schedule</button>
-        <button class="tab-btn" data-tab="server-events">🌐 Server Events</button>
-        <button class="tab-btn" data-tab="event-types">🏷️ Event Types</button>
+        <button class="tab-btn active" data-tab="schedule"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Schedule</button>
+        <button class="tab-btn" data-tab="server-events"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-world"/></svg> Server Events</button>
+        <button class="tab-btn" data-tab="event-types"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tag"/></svg> Event Types</button>
         {{if .Permissions.ManageSchedule}}
-        <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+        <button class="tab-btn" data-tab="settings"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg> Settings</button>
         {{end}}
     </div>
 
@@ -41,40 +41,40 @@
 
         <!-- Output buttons -->
         <div class="schedule-output-bar">
-            <button class="btn btn-secondary btn-sm" id="btn-text-output">📄 Text</button>
+            <button class="btn btn-secondary btn-sm" id="btn-text-output"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Text</button>
             <span style="display:inline-flex;align-items:center;gap:4px;">
-                <button class="btn btn-secondary btn-sm" id="btn-week-image">🖼️ Week Image</button>
+                <button class="btn btn-secondary btn-sm" id="btn-week-image"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-photo"/></svg> Week Image</button>
                 <select id="week-image-cols" class="day-card-picker" title="Layout columns">
                     <option value="4">4 cols</option>
                     <option value="2">2 cols</option>
                 </select>
             </span>
             <span style="display:inline-flex;align-items:center;gap:4px;">
-                <button class="btn btn-secondary btn-sm" id="btn-day-card">📅 Day Card</button>
+                <button class="btn btn-secondary btn-sm" id="btn-day-card"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Day Card</button>
                 <select id="day-card-picker" class="day-card-picker" title="Select day for card"></select>
             </span>
         </div>
 
         <!-- Text output area -->
         <div id="text-output-section" class="form-section hidden">
-            <h3>📄 Discord / Chat Text</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Discord / Chat Text</h3>
             <textarea id="text-output" rows="20" readonly
-                style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+                style="width:100%;font-family:var(--font-mono);font-size:13px;"></textarea>
             <div class="modal-actions">
                 <button class="btn btn-secondary" id="btn-copy-text">Copy to Clipboard</button>
-                <button class="btn btn-ghost btn-sm" id="btn-close-text">✕ Close</button>
+                <button class="btn btn-ghost btn-sm" id="btn-close-text"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Close</button>
             </div>
         </div>
 
         <!-- Canvas area (Week Image + Day Card) -->
         <div id="canvas-section" class="form-section hidden">
-            <h3 id="canvas-section-title">🖼️ Week Image</h3>
+            <h3 id="canvas-section-title" class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-photo"/></svg> Week Image</h3>
             <div style="overflow-x:auto;">
                 <canvas id="schedule-canvas"></canvas>
             </div>
             <div class="modal-actions" style="margin-top:12px;">
-                <button class="btn btn-primary" id="btn-download-png">⬇️ Download PNG</button>
-                <button class="btn btn-ghost btn-sm" id="btn-close-canvas">✕ Close</button>
+                <button class="btn btn-primary" id="btn-download-png"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-download"/></svg> Download PNG</button>
+                <button class="btn btn-ghost btn-sm" id="btn-close-canvas"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Close</button>
             </div>
         </div>
 
@@ -83,7 +83,7 @@
     <!-- ── Tab: Server Events ─────────────────────────────────────────────── -->
     <div id="tab-server-events" class="tab-content">
         <div class="panel-header">
-            <h3>🌐 Server Events</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-world"/></svg> Server Events</h3>
             {{if .Permissions.ManageSchedule}}
             <button class="btn btn-primary" id="btn-add-server-event">+ Add</button>
             {{end}}
@@ -97,7 +97,7 @@
     <!-- ── Tab: Event Types ───────────────────────────────────────────────── -->
     <div id="tab-event-types" class="tab-content">
         <div class="panel-header">
-            <h3>🏷️ Event Types</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tag"/></svg> Event Types</h3>
             {{if .Permissions.ManageSchedule}}
             <button class="btn btn-primary" id="btn-add-event-type">+ Add</button>
             {{end}}
@@ -134,7 +134,7 @@
             </div>
 
             <div class="modal-actions" style="margin-top:16px;">
-                <button class="btn btn-primary" id="btn-save-settings">💾 Save Settings</button>
+                <button class="btn btn-primary" id="btn-save-settings"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Settings</button>
                 <span id="settings-status" class="status-msg"></span>
             </div>
         </div>
@@ -142,7 +142,7 @@
         <hr style="border-color:var(--color-border);margin:24px 0;">
 
         <div class="form-section">
-            <h3>⚡ Generate Events</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-bolt"/></svg> Generate Events</h3>
 
             <div class="generate-section">
                 <h4>MG Rules</h4>
@@ -205,7 +205,7 @@
                     <label><input type="checkbox" id="gen-zs" checked> Generate ZS</label>
                 </div>
                 <div class="modal-actions" style="margin-top:12px;">
-                    <button class="btn btn-primary" id="btn-generate">⚡ Generate Events</button>
+                    <button class="btn btn-primary" id="btn-generate"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-bolt"/></svg> Generate Events</button>
                     <span id="generate-status" class="status-msg"></span>
                 </div>
             </div>

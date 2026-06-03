@@ -19,9 +19,10 @@ This document is the canonical reference for all UI/CSS work in this codebase. I
    - [Cards](#cards)
    - [Status and Feedback](#status-and-feedback)
 6. [Typography](#typography)
-7. [Dark Mode Rules](#dark-mode-rules)
-8. [JavaScript DOM Standards](#javascript-dom-standards)
-9. [Approved Exceptions](#approved-exceptions)
+7. [Icon System](#icon-system)
+8. [Dark Mode Rules](#dark-mode-rules)
+9. [JavaScript DOM Standards](#javascript-dom-standards)
+10. [Approved Exceptions](#approved-exceptions)
 
 ---
 
@@ -163,10 +164,10 @@ static/feature.css  — Page-specific layout only. Link via {{define "head_tags"
 
 ```
 .data-table          .filter-chip / .filter-chip-label
-.tab-toolbar         .status-msg
+.tab-toolbar         .status-msg / .loading-msg / .empty-state
 .tab-bar / .tab-btn  .badge-hq / .badge-troop / .badge-profession / .badge-squad-type
-.btn / .btn-primary / .btn-secondary / .btn-danger / .btn-sm / .btn-warning
-.form-input          .modal / .modal-content
+.btn / .btn-primary / .btn-secondary / .btn-danger / .btn-warning / .btn-ghost / .btn-sm
+.button-group        .form-input          .modal / .modal-content
 ```
 
 Page CSS is for page-specific layout only (grid arrangements, per-page card shapes, per-page overrides). Global pattern CSS goes in `styles.css`.
@@ -226,6 +227,22 @@ Flex row for filter controls above a tab panel. Provides the right `gap` and `fl
 
 Inline async status text (e.g. "Saving…" / "Saved"). Always clear it after a timeout.
 
+### `.loading-msg` / `.empty-state`
+
+Canonical pair for asynchronous list/table states:
+
+- `.empty-state` — full-section "no results" placeholder (centered, generous padding). Use
+  for an empty list, no search matches, or a not-yet-loaded panel.
+- `.loading-msg` — row-level loading indicator inside a `.data-table` `<td>` while data loads.
+
+```html
+<tbody id="rows"><tr><td colspan="6" class="loading-msg">Loading…</td></tr></tbody>
+<div id="list"><p class="empty-state">No members found.</p></div>
+```
+
+Deprecated (still in `styles.css`, do not use in new code): `.loading` / `.empty` — superseded
+by `.empty-state`.
+
 ---
 
 ## Component Patterns
@@ -237,11 +254,19 @@ Inline async status text (e.g. "Saving…" / "Saved"). Always clear it after a t
 <button class="btn btn-secondary">Cancel</button>
 <button class="btn btn-danger btn-sm">Delete</button>
 <button class="btn btn-warning btn-sm">Flag</button>
+<button class="btn btn-ghost btn-sm">Clear</button>
 ```
 
+- `.btn-primary` / `.btn-secondary` / `.btn-danger` / `.btn-warning` — standard weights.
+- `.btn-ghost` — tertiary / low-weight actions (e.g. "Edit" inside a card, "Clear filter",
+  "Today" nav, modal "Close"). Transparent background with a `--color-border` border; less
+  visual weight than `.btn-secondary`.
 - Do not use `.primary-action-btn` / `.secondary-action-btn` — deprecated.
 - `btn-sm` reduces padding for inline/table contexts.
-- Buttons in flex rows: wrap them in a `display:flex; gap:6px` container, never rely on `margin-right`.
+- `.btn` is `display:inline-flex` with `gap:6px`, so an SVG icon + text label align
+  automatically — `<button class="btn btn-primary"><svg class="svg-icon"…><use href="/icons.svg#icon-device-floppy"/></svg> Save</button>`.
+- **`.button-group`** — a `display:flex; gap:10px` container for a set of buttons. Use it
+  instead of `margin-right` when laying out multiple buttons in a row.
 
 ### Modals
 
@@ -282,12 +307,40 @@ modal.addEventListener('click', e => {
 });
 ```
 
+**Close affordance — no corner `×`.** A modal closes via a `Cancel` (or `Close`) button in
+the `.modal-actions` footer, plus backdrop click. Do **not** add a corner close glyph.
+
+```html
+<!-- ✅ Do -->
+<div class="modal-actions">
+  <button class="btn btn-primary">Save</button>
+  <button class="btn btn-secondary">Cancel</button>
+</div>
+
+<!-- ❌ Don't -->
+<span class="close" id="my-modal-close">&times;</span>
+```
+
+Viewer-style modals with no footer (image/document preview) close on backdrop click alone.
+
 ### Tabs
 
 See [`.tab-bar` / `.tab-btn`](#tab-bar--tab-btn) above. Key rules:
 
 - Show with `style.display = 'block'` — never `style.display = ''` (the global rule sets `.tab-content { display: none }`, so clearing inline style re-hides it).
 - The active tab button gets `.active` class; the active panel gets `style.display = 'block'` (not a class).
+
+**Non-canonical patterns — do not use.** Two divergent tab patterns exist in older pages
+and must not be used in new code:
+
+```
+❌ Class-toggled:  .tab-content.active { display:block }   (Rankings, Admin)
+❌ Hidden-class:   .tab-panel + .hidden                    (Train, Accountability)
+```
+
+Both work today but bypass the global `.tab-content { display:none }` rule. Migration of
+those pages is deferred; the canonical `.tab-content` + `style.display='block'` pattern is
+the only one for new work.
 
 ### Data Tables
 
@@ -422,6 +475,73 @@ clearAllFieldErrors(document.getElementById('my-form'));
 
 Use `font-size: 0.875rem` as the default for modal form labels and table body text.
 
+**Monospace.** All monospace text (code snippets, CSV-help `<code>`, message-box textareas,
+Discord/chat output) must use the `--font-mono` token:
+
+```css
+font-family: var(--font-mono);   /* ui-monospace, 'Cascadia Code', 'Courier New', monospace */
+```
+
+Never write a bare `monospace` or `'Courier New', monospace` stack in page CSS — the token is
+defined once in `:root`.
+
+---
+
+## Icon System
+
+All icons use **Tabler Icons** (outline set): `viewBox="0 0 24 24"`, `stroke-width="2"`,
+`stroke-linecap="round"`, `stroke-linejoin="round"`, `fill="none"`, MIT licensed. They are
+delivered as a single SVG sprite at `static/icons.svg`, each icon a `<symbol id="icon-{slug}">`.
+
+**In templates** — reference by `<use>`, with `class="svg-icon"` for alignment:
+
+```html
+<svg class="svg-icon" width="14" height="14" aria-hidden="true"><use href="/icons.svg#icon-device-floppy"/></svg>
+```
+
+The `.svg-icon` class (`vertical-align: middle`) centres the icon with adjacent text in
+any container, at any size. The `svgIcon()` JS helper adds it automatically.
+
+**Icons in headings** — add `class="icon-heading"` to the heading element. `vertical-align`
+references the font's x-height, which sits a fixed-size icon low next to large heading text;
+`.icon-heading` flex-centres it on the heading's optical centre instead:
+
+```html
+<h3 class="icon-heading"><svg class="svg-icon" width="16" height="16" aria-hidden="true"><use href="/icons.svg#icon-mail"/></svg> Battle Mail</h3>
+```
+
+**Icon-only wrappers** (a badge/pill/button containing *only* an icon, no text) — the wrapper
+must centre the icon itself. `vertical-align` on the icon can't help because there is no text
+to align against, so the icon falls to the line-box baseline. Make the wrapper a centring
+flex box:
+
+```css
+.my-icon-badge { display: inline-flex; align-items: center; justify-content: center; }
+```
+
+Alignment is decided by the icon's **parent**, not the icon. Icon **+ text** in one inline
+element works via `.svg-icon`; an icon **alone** needs its wrapper to flex-centre (or the row
+that lays it out to use `align-items: center`).
+
+**In JavaScript** — use the `svgIcon(name, size = 14)` helper from `global.js`:
+
+```javascript
+btn.replaceChildren(svgIcon('pencil'), document.createTextNode(' Edit'));   // icon + label
+delBtn.setAttribute('aria-label', 'Delete'); delBtn.appendChild(svgIcon('trash')); // icon-only
+```
+
+Icons inherit colour via `currentColor`, so they adapt to text colour and theme automatically.
+Standalone pages that aren't built on `layout.html` (e.g. `login.html`) must include
+`<script src="/global.js"></script>` before their page script to get `svgIcon`.
+
+**Adding a new icon:** copy the path elements from
+`https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/{slug}.svg`
+and add a `<symbol id="icon-{slug}">` to `static/icons.svg`.
+
+**Emoji policy.** No emoji in UI chrome — section headings, tab labels, button faces, stat
+cards, badges, page illustrations, and category labels all use SVG icons. See
+[Approved Exceptions](#approved-exceptions) for the narrow set of permitted non-icon glyphs.
+
 ---
 
 ## Dark Mode Rules
@@ -527,6 +647,28 @@ Prefer `showConfirm` in all new code — the swap pattern exists for legacy comp
 ---
 
 ## Approved Exceptions
+
+### Emoji & non-icon glyphs
+
+UI chrome uses SVG icons (see [Icon System](#icon-system)). The only places a literal glyph
+or emoji is permitted:
+
+- **Copy-to-game text output.** Strings the user copies into the game (Desert Storm battle
+  mail, Schedule Discord/chat text, the schedule canvas PNG) may contain emoji — SVG cannot
+  render in plaintext, and the marker is part of the copied content (`🏜️ ⏰ 💪 ⚡`).
+- **User-entered icon fields.** The Schedule event-type "Icon" inputs (`et-icon`, `se-icon`)
+  and the season-template icon cell store a user-chosen emoji as data; their placeholders
+  (`📅`, `🌐`, `🎯`) hint that an emoji is expected.
+- **Plain-text typographic symbols.** `✓` (U+2713), `✗` (U+2717), `★` (U+2605), `✕` (U+2715),
+  `—` used inline in compact status text / column headers are typographic glyphs (not
+  emoji-presentation) and render consistently across platforms. New code should still prefer
+  `svgIcon('check')` / `svgIcon('x')` for prominent status; these are tolerated inline only.
+- **`<option>` labels.** SVG cannot live inside `<option>`; squad-type and upload-category
+  selects use plain text labels (the icon is shown on the resulting card/badge instead).
+
+No other emoji belong in headings, buttons, badges, tabs, or page illustrations.
+
+### Hardcoded colours
 
 The following hardcoded colour values are intentional and should not be replaced with tokens.
 

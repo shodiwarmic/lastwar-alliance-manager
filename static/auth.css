@@ -86,7 +86,7 @@ body {
 .login-banner strong { display: block; margin-bottom: 6px; font-size: 14px; }
 .login-banner code {
   background: var(--color-card);
-  padding: 1px 5px; border-radius: 3px; font-family: monospace;
+  padding: 1px 5px; border-radius: 3px; font-family: var(--font-mono);
 }
 
 /* Invite-specific */
@@ -101,7 +101,7 @@ body {
 }
 
 .field-hint      { margin-top: 4px; font-size: 12px; color: var(--color-text-muted); }
-.field-hint code { background: var(--color-card); padding: 1px 4px; border-radius: 3px; font-family: monospace; }
+.field-hint code { background: var(--color-card); padding: 1px 4px; border-radius: 3px; font-family: var(--font-mono); }
 .error-hint      { color: var(--color-danger); }
 
 .invite-error-state { text-align: center; padding: 10px 0; }

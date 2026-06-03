@@ -35,7 +35,7 @@
         {{if .Permissions.ManageRecruiting}}
         <div class="action-bar" style="margin-bottom: 20px;">
             <button type="button" id="add-transfer-btn" class="btn btn-primary">
-                <span class="btn-icon">➕</span>
+                <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg></span>
                 <span class="btn-text">Add Transfer</span>
             </button>
         </div>
@@ -50,7 +50,7 @@
         {{if .Permissions.ManageRecruiting}}
         <div class="action-bar" style="margin-bottom: 20px;">
             <button type="button" id="add-prospect-btn" class="btn btn-primary">
-                <span class="btn-icon">➕</span>
+                <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg></span>
                 <span class="btn-text">Add Prospect</span>
             </button>
         </div>
@@ -82,7 +82,6 @@
     <!-- Reactivate Modal -->
     <div id="reactivate-modal" class="modal" style="display: none;">
         <div class="modal-content modal-sm">
-            <span class="close" id="close-reactivate-modal">&times;</span>
             <h2>Reactivate Member</h2>
             <p id="reactivate-member-name" style="color: var(--color-text-mid); margin-bottom: 16px;"></p>
             <div class="form-group">
@@ -106,7 +105,6 @@
     <!-- Edit Former Member Modal -->
     <div id="edit-former-modal" class="modal" style="display: none;">
         <div class="modal-content modal-sm">
-            <span class="close" id="close-edit-former-modal">&times;</span>
             <h2>Edit Former Member</h2>
             <form id="edit-former-form">
                 <div class="form-group">
@@ -129,7 +127,6 @@
     <!-- Former Member Alias Modal -->
     <div id="former-alias-modal" class="modal" style="display: none;">
         <div class="modal-content">
-            <span class="close" id="close-former-alias-modal">&times;</span>
             <h2 id="former-alias-modal-title">Manage Nicknames</h2>
             <p class="help-text">Set custom nicknames to help OCR Image Recognition match screenshots to the correct player.</p>
 
@@ -139,7 +136,7 @@
                         <label for="former-new-alias-input">New Nickname:</label>
                         <input type="text" id="former-new-alias-input" class="form-input" required placeholder="e.g. StarLord">
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm">➕ Add</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
                 </form>
                 <p id="former-alias-add-status" class="status-msg" style="color: var(--color-danger); margin: 6px 0 0;"></p>
                 <div id="former-global-alias-checkbox-wrapper" style="margin-top: 10px; display: none;">
@@ -157,7 +154,6 @@
     <!-- Convert Prospect to Member Modal -->
     <div id="convert-modal" class="modal" style="display: none;">
         <div class="modal-content modal-sm">
-            <span class="close" id="close-convert-modal">&times;</span>
             <h2>Convert to Member</h2>
             <p id="convert-prospect-name" style="color: var(--color-text-mid); margin-bottom: 16px;"></p>
             <form id="convert-form">
@@ -193,7 +189,6 @@
     <!-- Add/Edit Prospect Modal -->
     <div id="prospect-modal" class="modal" style="display: none;">
         <div class="modal-content">
-            <span class="close" id="close-prospect-modal">&times;</span>
             <h2 id="prospect-modal-title">Add Transfer</h2>
             <form id="prospect-form">
                 <div class="form-row">

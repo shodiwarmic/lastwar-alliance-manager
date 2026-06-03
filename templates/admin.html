@@ -15,23 +15,23 @@
 {{define "content"}}
         <!-- Tabs -->
         <div class="tab-bar">
-            <button class="tab-btn active" id="tab-btn-users">👥 User Management</button>
-            <button class="tab-btn" id="tab-btn-logins">📊 Login History</button>
-            <button class="tab-btn" id="tab-btn-security">🔐 Security & API</button>
+            <button class="tab-btn active" id="tab-btn-users"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> User Management</button>
+            <button class="tab-btn" id="tab-btn-logins"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Login History</button>
+            <button class="tab-btn" id="tab-btn-security"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-lock"/></svg> Security &amp; API</button>
         </div>
 
         <!-- User Management Tab -->
         <div id="users-tab" class="tab-content active">
             <div class="card">
                 <div class="card-header">
-                    <h2>👥 User Management</h2>
+                    <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> User Management</h2>
                     <button class="btn btn-primary" id="create-user-btn">
-                        ➕ Create New User
+                        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Create New User
                     </button>
                 </div>
 
                 <div class="search-box">
-                    <input type="text" id="user-search" placeholder="🔍 Search users by username...">
+                    <input type="text" id="user-search" placeholder="Search users by username...">
                 </div>
 
                 <div id="users-list" class="users-list">
@@ -44,7 +44,7 @@
         <div id="logins-tab" class="tab-content">
             <div class="card">
                 <div class="card-header">
-                    <h2>📊 Login History</h2>
+                    <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Login History</h2>
                     <div class="filter-controls">
                         <select id="login-filter">
                             <option value="">All Users</option>
@@ -72,12 +72,12 @@
         <div id="security-tab" class="tab-content">
             <div class="card">
                 <div class="card-header">
-                    <h2>🔐 Security & API Configuration</h2>
+                    <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-lock"/></svg> Security &amp; API Configuration</h2>
                 </div>
                 
                 <div class="form-section" style="padding: 20px;">
                     <div class="settings-group" style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--color-border);">
-                        <h4>🔒 Password Policy</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-lock"/></svg> Password Policy</h4>
                         <p class="help-text">Enforce strict password requirements for all users.</p>
                         <form id="password-policy-form">
                             <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
@@ -100,24 +100,24 @@
                                 <label><input type="checkbox" id="pwd-require-lower"> Require Lowercase</label>
                                 <label><input type="checkbox" id="pwd-require-number"> Require Number</label>
                             </div>
-                            <button type="submit" class="btn btn-primary">💾 Save Password Policy</button>
+                            <button type="submit" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Password Policy</button>
                         </form>
                     </div>
 
                     <div class="settings-group" style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--color-border);">
-                        <h4>🔌 Microservice Routing (CV Worker)</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plug"/></svg> Microservice Routing (CV Worker)</h4>
                         <p class="help-text">Configure the external Cloud Run Python worker URL used for OCR processing.</p>
                         <form id="cv-worker-form">
                             <div class="form-group">
                                 <label for="cv-worker-url">Worker URL:</label>
                                 <input type="url" id="cv-worker-url" class="form-input" placeholder="https://cv-worker-service-xyz.a.run.app" style="width: 100%; max-width: 500px;">
                             </div>
-                            <button type="submit" class="btn btn-primary">💾 Save Worker URL</button>
+                            <button type="submit" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Worker URL</button>
                         </form>
                     </div>
 
                     <div class="settings-group">
-                        <h4>☁️ Google Cloud Vision (OCR)</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud"/></svg> Google Cloud Vision (OCR)</h4>
                         <p class="help-text">Upload a Service Account JSON key to enable automated data extraction from game screenshots.</p>
 
                         <div style="background: var(--color-surface); padding: 15px; border-radius: 8px; border: 1px solid var(--color-border);">
@@ -127,16 +127,16 @@
                                     <input type="file" id="gcp-json-file" accept=".json" class="form-input" required>
                                 </div>
                                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                                    <button type="submit" class="btn btn-primary">⬆️ Securely Upload & Encrypt Key</button>
-                                    <button type="button" id="delete-gcp-btn" class="btn btn-danger">🗑️ Delete Active Key</button>
+                                    <button type="submit" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-download"/></svg> Securely Upload &amp; Encrypt Key</button>
+                                    <button type="button" id="delete-gcp-btn" class="btn btn-danger"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trash"/></svg> Delete Active Key</button>
                                 </div>
                             </form>
                         </div>
                     </div>
 
                     <div class="settings-group" style="margin-top:30px;padding-top:20px;border-top:1px solid var(--color-border);">
-                        <h4>⚙️ Advanced Settings</h4>
-                        <p class="help-text">⚠️ These values reflect game constants. Only change if the game updates them.</p>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg> Advanced Settings</h4>
+                        <p class="help-text icon-label"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> These values reflect game constants. Only change if the game updates them.</p>
 
                         <h5 style="margin:16px 0 8px;">Desert Storm Battle Slots</h5>
                         <p class="help-text">Configure the server time for each numbered slot. Officers assign task forces to slots on the Storm page.</p>
@@ -149,7 +149,7 @@
                             </div>
                         </div>
                         <div style="margin-top:12px;display:flex;align-items:center;gap:12px;">
-                            <button class="btn btn-primary" id="btn-save-storm-slots">💾 Save Slot Times</button>
+                            <button class="btn btn-primary" id="btn-save-storm-slots"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Slot Times</button>
                             <span id="storm-slots-status" class="status-msg"></span>
                         </div>
                     </div>
@@ -162,7 +162,6 @@
     <!-- Create/Edit User Modal -->
     <div id="user-modal" class="modal">
         <div class="modal-content">
-            <span class="close" id="user-modal-close">&times;</span>
             <h2 id="modal-title">Create New User</h2>
 
             <form id="user-form">
@@ -213,7 +212,6 @@
     <!-- Reset Password Modal -->
     <div id="reset-password-modal" class="modal">
         <div class="modal-content">
-            <span class="close" id="reset-password-modal-close">&times;</span>
             <h2>Reset Password</h2>
             
             <div id="reset-password-info">
@@ -226,8 +224,8 @@
                     <p><strong>Password Reset Successful!</strong></p>
                     <p>Username: <strong id="result-username"></strong></p>
                     <p>New Password: <strong id="result-password" style="font-size: 1.2em; color: var(--color-danger);"></strong></p>
-                    <p style="color: var(--color-danger); margin-top: 10px;">⚠️ Make sure to copy this password now - it won't be shown again!</p>
-                    <button class="btn btn-secondary" id="copy-password-btn">📋 Copy Password</button>
+                    <p class="icon-label" style="color: var(--color-danger); margin-top: 10px;"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> Make sure to copy this password now - it won't be shown again!</p>
+                    <button class="btn btn-secondary" id="copy-password-btn"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-copy"/></svg> Copy Password</button>
                 </div>
             </div>
 
@@ -241,8 +239,7 @@
     <!-- Transfer Files Modal -->
     <div id="transfer-files-modal" class="modal">
         <div class="modal-content">
-            <span class="close" id="transfer-files-modal-close">&times;</span>
-            <h2>⚠️ Files Detected</h2>
+            <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> Files Detected</h2>
 
             <div class="warning-message">
                 <p>User <strong id="transfer-username"></strong> owns <strong id="transfer-file-count"></strong> file(s).</p>
@@ -264,8 +261,7 @@
     <!-- Delete GCP Credentials Modal -->
      <div id="delete-gcp-modal" class="modal">
         <div class="modal-content">
-            <span class="close" id="delete-gcp-modal-close">&times;</span>
-            <h2>⚠️ Disable OCR Pipelines?</h2>
+            <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> Disable OCR Pipelines?</h2>
             
             <div class="warning-message">
                 <p><strong>Warning:</strong> Deleting the Google Cloud Vision credentials will immediately disable the automated screenshot scanning feature for all users.</p>

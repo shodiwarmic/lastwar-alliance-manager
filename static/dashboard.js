@@ -8,12 +8,12 @@ const IS_ADMIN   = cfg.isAdmin === 'true';
 // --- Card metadata ---
 
 const CARD_META = {
-    'health':       { label: 'Alliance Health',  icon: '🛡️' },
-    'vs':           { label: 'VS Performance',   icon: '⚔️' },
-    'schedule':     { label: 'Schedule',         icon: '📅' },
-    'diplomacy':    { label: 'Diplomacy',        icon: '🤝' },
-    'leader-flags':    { label: 'Leader Flags',    icon: '⚠️' },
-    'accountability':  { label: 'Accountability',  icon: '⚖️' },
+    'health':       { label: 'Alliance Health',  icon: 'shield' },
+    'vs':           { label: 'VS Performance',   icon: 'swords' },
+    'schedule':     { label: 'Schedule',         icon: 'calendar' },
+    'diplomacy':    { label: 'Diplomacy',        icon: 'heart' },
+    'leader-flags':    { label: 'Leader Flags',    icon: 'alert-triangle' },
+    'accountability':  { label: 'Accountability',  icon: 'scale' },
 };
 
 // --- Formatting helpers ---
@@ -109,10 +109,10 @@ function errorEl(msg) {
 }
 
 function buildCard(id) {
-    const meta = CARD_META[id] || { label: id, icon: '📌' };
+    const meta = CARD_META[id] || { label: id, icon: 'map-pin' };
     const card = el('div', { className: 'dash-card', 'data-card-id': id });
-    const h3 = el('h3');
-    h3.appendChild(document.createTextNode(meta.icon + ' ' + meta.label));
+    const h3 = el('h3', { className: 'icon-heading' });
+    h3.append(svgIcon(meta.icon, 16), document.createTextNode(meta.label));
     card.appendChild(h3);
     card.appendChild(loadingEl());
     return card;
@@ -250,7 +250,9 @@ function renderLeaderFlags(card, members, vsRows) {
     card.querySelector('.dash-card-loading')?.remove();
 
     if (!below.length) {
-        card.appendChild(el('p', { textContent: '✅ All members are meeting the VS minimum this week.' }));
+        const p = el('p');
+        p.append(svgIcon('check'), document.createTextNode(' All members are meeting the VS minimum this week.'));
+        card.appendChild(p);
         return;
     }
 
@@ -353,7 +355,7 @@ function openCustomizePanel(available) {
     ];
 
     ordered.forEach(card => {
-        const meta = CARD_META[card.id] || { label: card.id, icon: '📌' };
+        const meta = CARD_META[card.id] || { label: card.id, icon: 'map-pin' };
         const pref = currentPrefs.find(p => p.id === card.id) || card;
 
         const li = document.createElement('li');
@@ -362,7 +364,8 @@ function openCustomizePanel(available) {
         const handle = el('span', { className: 'customize-drag-handle', textContent: '⠿' });
         const cb = el('input', { type: 'checkbox' });
         cb.checked = pref.visible !== false;
-        const lbl = el('span', { className: 'customize-label', textContent: meta.icon + ' ' + meta.label });
+        const lbl = el('span', { className: 'customize-label' });
+        lbl.append(svgIcon(meta.icon, 15), document.createTextNode(' ' + meta.label));
 
         li.append(handle, cb, lbl);
         list.appendChild(li);

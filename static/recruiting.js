@@ -155,7 +155,8 @@ function renderFormerMembers(members, container) {
         const aliasBtn = document.createElement('button');
         aliasBtn.className = 'btn btn-secondary btn-sm';
         aliasBtn.style.marginLeft = '6px';
-        aliasBtn.textContent = '🏷️';
+        aliasBtn.setAttribute('aria-label', 'Manage Nicknames');
+        aliasBtn.appendChild(svgIcon('tag'));
         aliasBtn.title = 'Manage Nicknames';
         aliasBtn.addEventListener('click', () => openFormerAliasModal(m.id, m.name));
         actionsTd.appendChild(aliasBtn);
@@ -303,7 +304,8 @@ async function loadFormerAliases() {
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'alias-delete-btn';
                 deleteBtn.title = 'Remove Nickname';
-                deleteBtn.textContent = '✖';
+                deleteBtn.setAttribute('aria-label', 'Remove Nickname');
+                deleteBtn.appendChild(svgIcon('x'));
                 deleteBtn.addEventListener('click', () => deleteFormerAlias(a.id));
                 row.appendChild(deleteBtn);
             }

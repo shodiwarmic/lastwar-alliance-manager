@@ -15,7 +15,7 @@
 
     <div class="card">
         <div class="card-header">
-            <h2>📁 Alliance Documents</h2>
+            <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-folder"/></svg> Alliance Documents</h2>
         </div>
         <div id="files-grid" class="members-grid" style="display: grid; gap: 15px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
             <div class="loading">Loading files...</div>
@@ -26,7 +26,6 @@
 {{define "modals"}}
     <div id="edit-modal" class="modal">
         <div class="modal-content">
-            <span class="close" id="edit-modal-close">&times;</span>
             <h2>Edit File Details</h2>
             <form id="edit-form">
                 <div class="form-group">
@@ -63,7 +62,6 @@
 
     <div id="upload-modal" class="modal">
         <div class="modal-content">
-            <span class="close" id="upload-modal-close">&times;</span>
             <h2>Upload File</h2>
             <form id="upload-form">
                 <div class="form-group">
@@ -104,7 +102,6 @@
 
     <div id="image-modal" class="modal">
         <div class="modal-content modal-lg" style="text-align: center;">
-            <span class="close" id="image-modal-close">&times;</span>
             <h2 id="image-modal-title"></h2>
             <img id="image-modal-img" src="" style="max-width: 100%; height: auto; border-radius: 8px; margin-top: 15px;">
         </div>
@@ -112,7 +109,6 @@
 
     <div id="document-modal" class="modal">
         <div class="modal-content modal-xl">
-            <span class="close" id="document-modal-close">&times;</span>
             <div id="document-modal-body" style="height: 100%; width: 100%; padding-top: 30px;">
             </div>
         </div>

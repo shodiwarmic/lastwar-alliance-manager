@@ -14,7 +14,7 @@
 
     <!-- Section 1: Battle Configuration -->
     <section class="form-section">
-        <h3>⚙️ Battle Configuration</h3>
+        <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg> Battle Configuration</h3>
         <div class="form-row" style="gap:16px; flex-wrap:wrap; align-items:flex-end;">
             <div class="form-group">
                 <span style="display:block; margin-bottom:6px; font-weight:500;">Task Force</span>
@@ -66,7 +66,7 @@
             <div style="display:flex; gap:16px; flex-wrap:wrap;">
                 <div class="capacity-cell" id="cap-primaries">Primaries: —</div>
                 <div class="capacity-cell" id="cap-subs">Substitutes: —</div>
-                <div class="capacity-cell" id="cap-power">⚡ —</div>
+                <div class="capacity-cell" id="cap-power"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-bolt"/></svg> —</div>
                 {{if .Permissions.ManageStorm}}<div class="capacity-cell" id="cap-unassigned">Unassigned: —</div>{{end}}
             </div>
         </section>
@@ -75,7 +75,7 @@
             {{if .Permissions.ManageStorm}}
             <!-- Member Pool -->
             <section class="form-section" style="flex:0 0 260px; min-width:220px; position:sticky; top:12px;">
-                <h3>👥 Member Pool</h3>
+                <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> Member Pool</h3>
                 <input type="text" id="pool-search" class="form-input" placeholder="Search members..." style="margin-bottom:8px;">
                 <div id="member-pool"></div>
             </section>
@@ -84,7 +84,7 @@
             <!-- Groups Column -->
             <div style="flex:1; min-width:300px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <h3 style="margin:0;">📋 Groups</h3>
+                    <h3 style="margin:0;" class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> Groups</h3>
                     {{if .Permissions.ManageStorm}}
                     <div style="display:flex;gap:6px;">
                         <button class="btn btn-primary btn-sm" id="btn-add-group">+ Add Group</button>
@@ -100,7 +100,7 @@
     <!-- My Registration Tab -->
     <div id="tab-my-reg" class="tab-content">
         <section class="form-section">
-            <h3>📝 My Availability</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> My Availability</h3>
             {{if not .Rank}}
             <p class="help-text">Your account is not linked to a member. Contact an admin to set up your profile.</p>
             {{else}}
@@ -116,7 +116,7 @@
     {{if .Permissions.ManageStorm}}
     <div id="tab-reg-view" class="tab-content">
         <section class="form-section">
-            <h3>📊 Registration View</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Registration View</h3>
             <div id="reg-view-container"></div>
         </section>
     </div>
@@ -125,10 +125,10 @@
     <!-- Battle Mail Tab -->
     <div id="tab-mail" class="tab-content">
         <section class="form-section">
-            <h3>📧 Battle Mail</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-mail"/></svg> Battle Mail</h3>
             <button class="btn btn-primary" id="btn-generate-mail">Generate Mail</button>
             <div id="mail-output" class="hidden" style="margin-top:12px;">
-                <button class="btn btn-secondary" id="btn-copy-mail" style="margin-bottom:8px;">📋 Copy to Clipboard</button>
+                <button class="btn btn-secondary" id="btn-copy-mail" style="margin-bottom:8px;"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-copy"/></svg> Copy to Clipboard</button>
                 <pre id="mail-content" style="background:var(--color-card); border:1px solid var(--color-border); padding:12px; border-radius:6px; overflow-x:auto; white-space:pre-wrap;"></pre>
             </div>
         </section>

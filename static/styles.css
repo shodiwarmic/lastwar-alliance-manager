@@ -55,6 +55,7 @@
     --color-sidebar-border: rgba(255,255,255,0.07);
     --color-sidebar-hover:  rgba(255,255,255,0.05);
     --card-shadow:          0 1px 2px rgba(0,0,0,0.03);
+    --font-mono:            ui-monospace, 'Cascadia Code', 'Courier New', monospace;
 }
 
 /* Auto theme - respects browser preference */
@@ -605,7 +606,7 @@ main {
     background: var(--color-card);
     padding: 3px 8px;
     border-radius: 4px;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-mono);
     color: var(--color-accent);
     font-size: 0.9em;
 }
@@ -868,7 +869,9 @@ button {
 }
 
 .member-power {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     padding: 5px 12px;
     border-radius: 15px;
     font-size: 0.85em;
@@ -885,7 +888,9 @@ button {
 .rank-R1 { background: var(--color-surface);      color: var(--color-text-mid); }
 
 .member-eligible {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     padding: 4px 12px;
     border-radius: 15px;
     font-size: 0.85em;
@@ -909,6 +914,9 @@ button {
 }
 
 .toggle-eligible-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 13px;
     padding: 6px 12px;
 }
@@ -1143,7 +1151,7 @@ button {
     background: var(--color-surface);
     padding: 2px 6px;
     border-radius: 4px;
-    font-family: monospace;
+    font-family: var(--font-mono);
     color: var(--color-text-mid);
 }
 
@@ -1351,6 +1359,9 @@ button {
 }
 
 .similar-match-notice .warning-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 1.2em;
     flex-shrink: 0;
 }
@@ -1527,7 +1538,7 @@ button {
     padding: 15px;
     border: 2px solid var(--color-border);
     border-radius: 8px;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-mono);
     font-size: 14px;
     resize: vertical;
     background: var(--color-surface);
@@ -1723,7 +1734,9 @@ button {
 }
 
 .status-badge {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 2px 8px;
     border-radius: 12px;
     font-size: 0.85em;
@@ -1945,7 +1958,10 @@ button {
 
 /* ---- Shared button base ---- */
 .btn {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     padding: 12px 24px;
     border: none;
     border-radius: 8px;
@@ -1954,6 +1970,40 @@ button {
     cursor: pointer;
     transition: all 0.2s;
     text-decoration: none;
+}
+
+/* Sprite icons (template <use> + JS svgIcon() both carry .svg-icon) — centre on the
+   line box so they align with adjacent text regardless of icon size or the container's
+   font-size, and never shrink in flex rows. In flex containers (.btn, .filter-chip)
+   vertical-align is ignored and the parent's align-items handles it. Plain class
+   selector — no :has() dependency, so it works in every browser. */
+.svg-icon {
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+/* Headings with a leading sprite icon: flex-centre so the fixed-size icon sits on
+   the heading's optical centre (vertical-align:middle references x-height, which sits
+   the icon low next to large heading text). Plain class — no :has() dependency. */
+.icon-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Dyno expiry / anonymous badges — icon + text, flex-centre the icon. */
+.expiry-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Utility: inline label/prose that leads with a sprite icon (e.g. a bold caption,
+   a <label>, a help note). Use this class instead of inline flex styles. */
+.icon-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .btn:disabled {
@@ -2016,6 +2066,19 @@ button {
 .btn-sm.btn-warning {
     padding: 6px 12px;
     font-size: 0.875em;
+}
+
+/* Ghost button — tertiary/low-weight actions (transparent, bordered). */
+.btn-ghost {
+    background: transparent;
+    color: var(--color-text-mid);
+    border: 1px solid var(--color-border);
+}
+
+.btn-ghost:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
 }
 
 .date-display {
@@ -2233,6 +2296,10 @@ button {
 
 .save-btn,
 .clear-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     padding: 10px 25px;
     border: none;
     border-radius: 8px;
@@ -2558,6 +2625,10 @@ button {
 }
 
 .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     padding: 5px 12px;
     min-width: 36px;
     text-align: center;
@@ -2607,6 +2678,9 @@ button {
 }
 
 .toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 10px 20px;
     border: 1px solid var(--color-border);
     border-radius: 8px;
@@ -2672,6 +2746,9 @@ button {
 }
 
 .stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 2.5em;
     opacity: 0.9;
 }
@@ -2950,9 +3027,12 @@ button {
 .badge-troop      { background: rgba(221,107,32,0.15);           color: #dd6b20; } /* amber — intentional, no token */
 .badge-profession { background: var(--color-purple-bg);          color: var(--color-purple); }
 .badge-squad-type { background: var(--color-info-bg);            color: var(--color-info); }
-/* Emoji-only skill badge — standalone style, not based on .member-rank */
+/* Icon-only skill badge — flex-centre so the icon sits in the middle of the pill
+   (an icon-only inline-block has no text to centre against, so it falls to the baseline). */
 .badge-skill {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: var(--color-success-bg);
     color: var(--color-success);
     padding: 5px 8px;
@@ -3119,7 +3199,7 @@ button {
     background: var(--color-surface);
     padding: 2px 6px;
     border-radius: 3px;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-mono);
     color: var(--color-text);
 }
 
@@ -4076,7 +4156,7 @@ button {
     background: var(--color-card);
     padding: 20px;
     border-radius: 8px;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-mono);
     white-space: pre-wrap;
     font-size: 0.9em;
     line-height: 1.6;
@@ -4852,6 +4932,9 @@ button {
 }
 
 .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 8px 20px;
     background: none;
     border: none;
@@ -5024,12 +5107,15 @@ button {
 }
 
 .login-location {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     color: var(--color-text);
 }
 
 .login-ip {
     color: var(--color-text-mid);
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-mono);
 }
 
 .login-time {
@@ -5081,6 +5167,9 @@ button {
 }
 
 .device-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 0.9em;
     color: var(--color-text-mid);
 }
@@ -5135,7 +5224,7 @@ button {
     border-radius: 8px;
     display: inline-block;
     margin: 10px 0;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-mono);
     letter-spacing: 2px;
 }
 
@@ -5279,7 +5368,7 @@ code {
     color: var(--color-accent);
     padding: 2px 6px;
     border-radius: 4px;
-    font-family: 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
     font-size: 0.95em;
     font-weight: 600;
     border: 1px solid var(--color-border);

@@ -1540,7 +1540,7 @@
         tdAct.appendChild(saveBtn);
 
         const delBtn = document.createElement('button');
-        delBtn.type = 'button'; delBtn.className = 'btn btn-danger btn-sm'; delBtn.textContent = '✕';
+        delBtn.type = 'button'; delBtn.className = 'btn btn-danger btn-sm'; delBtn.setAttribute('aria-label', 'Delete'); delBtn.appendChild(svgIcon('x'));
         delBtn.style.marginLeft = '4px';
         delBtn.addEventListener('click', () => {
             if (!tk.id) { tr.remove(); return; }
@@ -1681,7 +1681,7 @@
         tdAct.appendChild(saveBtn);
 
         const delBtn = document.createElement('button');
-        delBtn.type = 'button'; delBtn.className = 'btn btn-danger btn-sm'; delBtn.textContent = '✕';
+        delBtn.type = 'button'; delBtn.className = 'btn btn-danger btn-sm'; delBtn.setAttribute('aria-label', 'Delete'); delBtn.appendChild(svgIcon('x'));
         delBtn.style.marginLeft = '4px';
         delBtn.addEventListener('click', () => {
             if (!ev.id) { tr.remove(); return; }

@@ -55,11 +55,11 @@
 
     <div id="force-password-modal" class="modal">
         <div class="modal-content">
-            <h3>🔒 Password Update Required</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-lock"/></svg> Password Update Required</h3>
             <p style="margin-bottom: 15px; font-size: 0.9em; color: var(--color-text-muted);">Your password has expired or an admin requires you to update it.</p>
 
             <ul id="password-rules" class="password-rules" style="list-style: none;">
-                <li style="color: var(--color-text-muted);">⚪ Loading requirements...</li>
+                <li style="color: var(--color-text-muted);">Loading requirements...</li>
             </ul>
 
             <form id="force-password-form">
@@ -79,6 +79,7 @@
     </div>
 
     <script src="/csrf.js"></script>
+    <script src="/global.js"></script>
     <script src="/login.js"></script>
 </body>
 </html>
