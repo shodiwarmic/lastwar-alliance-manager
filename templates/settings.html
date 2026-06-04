@@ -19,7 +19,7 @@
                 
                 <form id="settings-form">
                     <div class="settings-group">
-                        <h4>🏰 Alliance Identity</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-flag"/></svg> Alliance Identity</h4>
                         <div class="form-group">
                             <label for="alliance-name">Alliance Name:</label>
                             <input type="text" id="alliance-name" class="form-input" maxlength="60" placeholder="e.g. Warmic">
@@ -33,14 +33,14 @@
                     </div>
 
                     <div class="settings-group">
-                        <h4>🛡️ Role-Based Access Control (RBAC) Matrix</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-shield"/></svg> Role-Based Access Control (RBAC) Matrix</h4>
                         <p class="help-text">Configure which game ranks can view pages and edit data. Admins bypass these restrictions.</p>
                         
                         <div id="permissions-matrix" style="overflow-x: auto; margin-top: 15px; border: 1px solid var(--color-border); border-radius: 8px;"></div>
                     </div>
 
                     <div class="settings-group">
-                        <h4>⚡ Tracking Features</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-activity"/></svg> Tracking Features</h4>
                         <div class="form-group">
                             <label class="checkbox-label" style="margin-bottom: 10px;">
                                 <input type="checkbox" id="squad-tracking-enabled">
@@ -55,15 +55,15 @@
                         
                         {{if .HasGCPCredentials}}
                         <div id="power-upload-link" style="display: none; margin-top: 15px; padding: 15px; background: var(--color-card); border-radius: 8px; border: 2px solid var(--color-accent);">
-                            <p style="margin: 0 0 10px 0; color: var(--color-accent); font-weight: bold;">📸 Screenshot Upload Available</p>
+                            <p class="icon-label" style="margin: 0 0 10px 0; color: var(--color-accent); font-weight: bold;"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-camera"/></svg> Screenshot Upload Available</p>
                             <p style="margin: 0 0 10px 0; font-size: 14px;">Visit the dedicated Upload page to process game screenshots with OCR or manually enter data.</p>
-                            <a href="/upload" class="btn btn-primary">📸 Go to Upload Page</a>
+                            <a href="/upload" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-camera"/></svg> Go to Upload Page</a>
                         </div>
                         {{end}}
                     </div>
 
                      <div class="settings-group">
-                        <h4>🏰 Game Limits</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-flag"/></svg> Game Limits</h4>
                         <div class="form-group">
                             <label for="max-hq-level">Maximum HQ Level:</label>
                             <input type="number" id="max-hq-level" min="30" required>
@@ -72,7 +72,7 @@
                     </div>
 
                     <div class="settings-group">
-                        <h4>🚪 Login Screen Banner</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-desktop"/></svg> Login Screen Banner</h4>
                         <div class="form-group">
                             <label for="settings-login-message">Banner Content (Supports HTML):</label>
                             <textarea id="settings-login-message" rows="6" placeholder="Message to display below the login button..."></textarea>
@@ -81,7 +81,7 @@
                     </div>
 
                     <div class="settings-group">
-                        <h4>🕒 Desert Storm Timezone Display</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-clock"/></svg> Desert Storm Timezone Display</h4>
                         <p class="help-text">Select which local times are shown on the Storm page dropdown to help international members coordinate.</p>
                         
                         <div style="margin-bottom: 15px;">
@@ -126,7 +126,7 @@
                     </div>
 
                     <div class="settings-group">
-                        <h4>🚂 Train Tracker</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-train"/></svg> Train Tracker</h4>
                         <div class="form-group">
                             <label for="train-free-limit">Free Train Daily Limit:</label>
                             <input type="number" id="train-free-limit" min="1" max="10" required>
@@ -140,7 +140,7 @@
                     </div>
 
                     <div class="settings-group">
-                        <h4>📊 VS Points</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> VS Points</h4>
                         <div class="form-group">
                             <label for="vs-minimum-points">VS Minimum Points:</label>
                             <input type="number" id="vs-minimum-points" min="0" step="100000" required>
@@ -149,7 +149,7 @@
                     </div>
 
                     <div class="settings-group">
-                        <h4>⚖️ Accountability Strike Thresholds</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-scale"/></svg> Accountability Strike Thresholds</h4>
                         <div class="form-group">
                             <label for="strike-needs-improvement-threshold">Needs Improvement (strikes ≥):</label>
                             <input type="number" id="strike-needs-improvement-threshold" min="1" max="10" required>
@@ -163,7 +163,7 @@
                     </div>
 
                     <div class="settings-group">
-                        <h4>🎯 Recruiting</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-target"/></svg> Recruiting</h4>
                         <div class="form-group">
                             <label for="alliance-max-members">Alliance Max Members:</label>
                             <input type="number" id="alliance-max-members" min="1" max="500" required>
@@ -177,7 +177,7 @@
                     </div>
 
                     <div class="button-group">
-                        <button type="submit" class="btn btn-primary">💾 Save Settings</button>
+                        <button type="submit" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Settings</button>
                         <span id="settings-save-status" style="margin-left:12px;font-size:0.9em;"></span>
                     </div>
                 </form>
@@ -185,7 +185,7 @@
 
 {{if .Permissions.ManageSettings}}
             <section class="form-section">
-                <h3>🏆 Season Hub</h3>
+                <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trophy"/></svg> Season Hub</h3>
 
                 <h4>Default Score Levels</h4>
                 <p style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:8px;">Applied when creating a new season. Changing this does not affect existing seasons.</p>

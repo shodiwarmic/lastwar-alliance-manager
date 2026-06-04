@@ -150,6 +150,18 @@ function clearButtonLoading(btn) {
     btn.textContent = btn._originalText ?? btn.textContent;
 }
 
+function svgIcon(name, size = 14) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', size);
+    svg.setAttribute('height', size);
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('class', 'svg-icon');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', `/icons.svg#icon-${name}`);
+    svg.appendChild(use);
+    return svg;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const usernameDisplay = document.getElementById('username-display');
     // Toggle user dropdown menu

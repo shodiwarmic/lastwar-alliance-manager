@@ -456,6 +456,7 @@
     <a class="sub" href="#comp-cards">Cards</a>
     <a class="sub" href="#comp-feedback">Feedback</a>
     <a href="#typography">Typography</a>
+    <a href="#icons">Icon System</a>
     <a href="#darkmode">Dark Mode Rules</a>
     <a href="#js">JS DOM Standards</a>
     <a href="#exceptions">Approved Exceptions</a>
@@ -644,13 +645,18 @@ static/feature.css — Page-specific layout only.
       <div class="utility-chip">.btn-secondary</div>
       <div class="utility-chip">.btn-danger</div>
       <div class="utility-chip">.btn-warning</div>
+      <div class="utility-chip">.btn-ghost</div>
       <div class="utility-chip">.btn-sm</div>
+      <div class="utility-chip">.button-group</div>
+      <div class="utility-chip">.loading-msg</div>
+      <div class="utility-chip">.empty-state</div>
       <div class="utility-chip">.form-input</div>
       <div class="utility-chip">.badge-hq</div>
       <div class="utility-chip">.badge-troop</div>
       <div class="utility-chip">.badge-profession</div>
       <div class="utility-chip">.badge-squad-type</div>
     </div>
+    <p><code>.empty-state</code> — full-section "no results" placeholder. <code>.loading-msg</code> — row-level loading text inside a <code>.data-table</code> cell. The older <code>.loading</code> / <code>.empty</code> pair is deprecated.</p>
 
     <h3>Tab switching</h3>
     <p>The global rule sets <code>.tab-content { display: none }</code>. You must show the initial active tab explicitly on <code>DOMContentLoaded</code>, and always use <code>style.display = 'block'</code> — never <code>style.display = ''</code>.</p>
@@ -666,14 +672,20 @@ static/feature.css — Page-specific layout only.
     <h2 id="components">Component Patterns</h2>
 
     <h3 id="comp-buttons">Buttons</h3>
-    <pre><span class="comment">&lt;!-- Standard sizes --&gt;</span>
+    <pre><span class="comment">&lt;!-- Standard weights --&gt;</span>
 &lt;button class="btn btn-primary"&gt;Save&lt;/button&gt;
 &lt;button class="btn btn-secondary"&gt;Cancel&lt;/button&gt;
 &lt;button class="btn btn-danger btn-sm"&gt;Delete&lt;/button&gt;
-&lt;button class="btn btn-warning btn-sm"&gt;Flag&lt;/button&gt;</pre>
+&lt;button class="btn btn-warning btn-sm"&gt;Flag&lt;/button&gt;
+&lt;button class="btn btn-ghost btn-sm"&gt;Clear&lt;/button&gt;
+
+<span class="comment">&lt;!-- Icon + label (icon from the sprite) --&gt;</span>
+&lt;button class="btn btn-primary"&gt;&lt;svg class="svg-icon" width="14" height="14" aria-hidden="true"&gt;&lt;use href="/icons.svg#icon-device-floppy"/&gt;&lt;/svg&gt; Save&lt;/button&gt;</pre>
     <ul>
+      <li><code>.btn-ghost</code> — tertiary / low-weight actions (card "Edit", "Clear filter", "Today" nav, modal "Close"). Transparent with a <code>--color-border</code> border; lighter than <code>.btn-secondary</code>.</li>
       <li>Do <strong>not</strong> use <code>.primary-action-btn</code> / <code>.secondary-action-btn</code> — deprecated.</li>
-      <li>Buttons in flex rows: wrap in a <code>display:flex; gap:6px</code> container, never use <code>margin-right</code>.</li>
+      <li><code>.btn</code> is <code>display:inline-flex; gap:6px</code>, so an SVG icon + text label align automatically.</li>
+      <li><code>.button-group</code> — a <code>display:flex; gap:10px</code> container for a row of buttons. Use it instead of <code>margin-right</code>.</li>
       <li><code>.btn-sm</code> reduces padding for inline/table contexts.</li>
     </ul>
 
@@ -698,6 +710,7 @@ document.getElementById('my-modal').style.display = '';
 <span class="comment">// Backdrop click</span>
 modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = ''; });</pre>
     <div class="callout callout-warn">Never add <code>class="hidden"</code> to a <code>.modal</code> — it is already <code>display:none</code> by default. Adding <code>.hidden</code> (<code>display:none !important</code>) prevents <code>style.display='flex'</code> from taking effect.</div>
+    <p><strong>No corner <code>×</code>.</strong> Close via a <code>Cancel</code>/<code>Close</code> button in <code>.modal-actions</code> plus backdrop click. Do not add <code>&lt;span class="close"&gt;&amp;times;&lt;/span&gt;</code>. Viewer-style modals (image/document preview) with no footer close on backdrop click alone.</p>
 
     <h3 id="comp-tabs">Tabs</h3>
     <pre>&lt;div class="tab-bar"&gt;
@@ -706,6 +719,7 @@ modal.addEventListener('click', e => { if (e.target === modal) modal.style.displ
 &lt;/div&gt;
 &lt;div id="tab-overview" class="tab-content"&gt;...&lt;/div&gt;
 &lt;div id="tab-history"  class="tab-content"&gt;...&lt;/div&gt;</pre>
+    <div class="callout callout-warn"><strong>Non-canonical patterns — do not use.</strong> <code>.tab-content.active</code> (Rankings, Admin) and <code>.tab-panel + .hidden</code> (Train, Accountability) both bypass the global <code>.tab-content { display:none }</code> rule. Migration is deferred; new code uses <code>.tab-content</code> + <code>style.display='block'</code> only.</div>
 
     <h3 id="comp-tables">Data Tables</h3>
     <pre>&lt;div style="overflow-x:auto"&gt;
@@ -799,6 +813,24 @@ clearAllFieldErrors(document.getElementById('my-form'));</pre>
         <tr><td>18px / 1.125rem</td><td>Topbar h1 (fixed)</td></tr>
       </tbody>
     </table>
+    <p><strong>Monospace.</strong> All monospace text (code, CSV-help, message textareas, Discord/chat output) uses the <code>--font-mono</code> token (<code>ui-monospace, 'Cascadia Code', 'Courier New', monospace</code>). Never write a bare <code>monospace</code> stack in page CSS.</p>
+
+    <!-- ICON SYSTEM -->
+    <h2 id="icons">Icon System</h2>
+    <p>All icons use <strong>Tabler Icons</strong> (outline set): <code>viewBox="0 0 24 24"</code>, <code>stroke-width="2"</code>, round caps/joins, <code>fill="none"</code>, MIT licensed. They ship as a single sprite at <code>static/icons.svg</code>, each a <code>&lt;symbol id="icon-{slug}"&gt;</code>.</p>
+    <pre><span class="comment">&lt;!-- In templates: reference by &lt;use&gt; --&gt;</span>
+&lt;svg class="svg-icon" width="14" height="14" aria-hidden="true"&gt;&lt;use href="/icons.svg#icon-device-floppy"/&gt;&lt;/svg&gt;</pre>
+    <pre><span class="comment">// In JS: use the svgIcon(name, size = 14) helper from global.js</span>
+btn.replaceChildren(svgIcon('pencil'), document.createTextNode(' Edit'));   <span class="comment">// icon + label</span>
+delBtn.setAttribute('aria-label', 'Delete'); delBtn.appendChild(svgIcon('trash')); <span class="comment">// icon-only</span></pre>
+    <ul>
+      <li><code>.svg-icon</code> (<code>vertical-align: middle</code>) aligns the icon with adjacent text in any inline context; the <code>svgIcon()</code> helper adds it automatically.</li>
+      <li><strong>Icons in headings:</strong> add <code>class="icon-heading"</code> to the heading — it flex-centres the fixed-size icon on the heading's optical centre (plain <code>vertical-align</code> sits it low next to large text).</li>
+      <li>Icons inherit colour via <code>currentColor</code> — they adapt to text colour and theme automatically.</li>
+      <li>Standalone pages not built on <code>layout.html</code> (e.g. <code>login.html</code>) must include <code>&lt;script src="/global.js"&gt;</code> before their page script to get <code>svgIcon</code>.</li>
+      <li><strong>Adding an icon:</strong> copy the paths from <code>github.com/tabler/tabler-icons/.../outline/{slug}.svg</code> into a new <code>&lt;symbol&gt;</code>.</li>
+    </ul>
+    <div class="callout callout-warn"><strong>Emoji policy.</strong> No emoji in UI chrome — headings, tabs, buttons, stat cards, badges, illustrations, and category labels all use SVG icons. See <a href="#exceptions">Approved Exceptions</a> for the narrow permitted set (copy-to-game text, user-entered icon fields, plain typographic glyphs, <code>&lt;option&gt;</code> labels).</div>
 
     <!-- DARK MODE -->
     <h2 id="darkmode">Dark Mode Rules</h2>
@@ -875,6 +907,19 @@ el.style.cssText =
 
     <!-- EXCEPTIONS -->
     <h2 id="exceptions">Approved Exceptions</h2>
+
+    <h3>Emoji &amp; non-icon glyphs</h3>
+    <p>UI chrome uses SVG icons (see <a href="#icons">Icon System</a>). A literal glyph or emoji is permitted only here:</p>
+    <div class="exception-block">
+      <ul style="margin:0;">
+        <li><strong>Copy-to-game text output</strong> — Desert Storm battle mail, Schedule Discord/chat text, the schedule canvas PNG. SVG can't render in plaintext, and the marker is part of the copied content (<code>🏜️ ⏰ 💪 ⚡</code>).</li>
+        <li><strong>User-entered icon fields</strong> — Schedule event-type icon inputs (<code>et-icon</code>, <code>se-icon</code>) and the season-template icon cell store a user-chosen emoji as data; placeholders (<code>📅 🌐 🎯</code>) hint an emoji is expected.</li>
+        <li><strong>Plain-text typographic symbols</strong> — <code>✓ ✗ ★ ✕ —</code> used inline in compact status text / column headers render consistently and are tolerated. Prefer <code>svgIcon('check')</code> / <code>svgIcon('x')</code> for prominent status.</li>
+        <li><strong><code>&lt;option&gt;</code> labels</strong> — SVG can't live in <code>&lt;option&gt;</code>; squad-type and upload-category selects use plain text (the icon shows on the resulting card/badge).</li>
+      </ul>
+    </div>
+
+    <h3>Hardcoded colours</h3>
     <p>The following hardcoded colour values are intentional and must not be replaced with tokens.</p>
 
     <div class="exception-block">

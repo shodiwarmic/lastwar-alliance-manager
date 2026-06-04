@@ -293,7 +293,8 @@ function renderTrainHistory(trainHistory) {
         const tdType = document.createElement('td');
         tdType.textContent = t.train_type === 'FREE' ? 'Free' : 'Purchased';
         const tdShowed = document.createElement('td');
-        tdShowed.textContent = t.showed_up ? '✅' : '❌';
+        tdShowed.setAttribute('aria-label', t.showed_up ? 'Showed up' : 'No show');
+        tdShowed.appendChild(svgIcon(t.showed_up ? 'check' : 'x', 16));
         tr.append(tdDate, tdType, tdShowed);
         tbody.appendChild(tr);
     });

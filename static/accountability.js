@@ -573,9 +573,9 @@ async function loadReport() {
 
     const vsUnderEl = document.getElementById('report-vs-under');
     if (!report.vs_underperformers || !report.vs_underperformers.length) {
-        vsUnderEl.replaceChildren(Object.assign(document.createElement('p'), {
-            textContent: '✅ All members meeting VS minimum.',
-        }));
+        const p = document.createElement('p');
+        p.append(svgIcon('check'), document.createTextNode(' All members meeting VS minimum.'));
+        vsUnderEl.replaceChildren(p);
     } else {
         vsUnderEl.replaceChildren(memberListEl(report.vs_underperformers, fmtNumber));
     }

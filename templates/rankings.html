@@ -12,14 +12,14 @@
 
 {{define "content"}}
     <div class="tab-bar">
-        <button class="tab-btn active" id="tab-btn-growth">📈 Commander Growth</button>
-        <button class="tab-btn" id="tab-btn-vs">⚔️ VS Duel Activity</button>
-        <button class="tab-btn" id="tab-btn-kills">💀 Troop Kills</button>
+        <button class="tab-btn active" id="tab-btn-growth"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Commander Growth</button>
+        <button class="tab-btn" id="tab-btn-vs"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-swords"/></svg> VS Duel Activity</button>
+        <button class="tab-btn" id="tab-btn-kills"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-skull"/></svg> Troop Kills</button>
     </div>
 
     <div id="tab-growth" class="tab-content active">
         <section class="charts-section" style="margin-top: 0;">
-            <h3>🛡️ Alliance Composition</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-shield"/></svg> Alliance Composition</h3>
             <div class="charts-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
                 <div class="chart-container">
                     <h4>Troop Tier Distribution</h4>
@@ -33,10 +33,10 @@
         </section>
 
         <section class="rankings-section">
-            <h3>📈 Power Growth Leaderboard</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Power Growth Leaderboard</h3>
             <div class="filter-controls">
                 <div class="filter-group">
-                    <label for="growth-search">🔍 Search:</label>
+                    <label for="growth-search" class="icon-label"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-search"/></svg> Search:</label>
                     <input type="text" id="growth-search" placeholder="Commander name...">
                 </div>
             </div>
@@ -66,9 +66,9 @@
     <div id="tab-vs" class="tab-content">
         <section class="charts-section" style="margin-top: 0;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3>⚔️ VS Duel Contributions</h3>
+                <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-swords"/></svg> VS Duel Contributions</h3>
                 <div class="filter-group">
-                    <label for="vs-week-select">📅 Select Week:</label>
+                    <label for="vs-week-select" class="icon-label"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Select Week:</label>
                     <select id="vs-week-select" style="min-width: 200px; padding: 8px; border-radius: 6px;"></select>
                 </div>
             </div>
@@ -80,7 +80,7 @@
         </section>
 
         <section class="rankings-section">
-            <h3>🏆 Weekly VS Leaderboard</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trophy"/></svg> Weekly VS Leaderboard</h3>
             <div style="overflow-x: auto;">
                 <table class="analytics-table" id="vs-table" data-export-csv="vs-leaderboard.csv">
                     <thead>
@@ -105,10 +105,10 @@
     </div>
     <div id="tab-kills" class="tab-content">
         <section class="rankings-section">
-            <h3>💀 Troop Kills Leaderboard</h3>
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-skull"/></svg> Troop Kills Leaderboard</h3>
             <div class="filter-controls">
                 <div class="filter-group">
-                    <label for="kills-search">🔍 Search:</label>
+                    <label for="kills-search" class="icon-label"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-search"/></svg> Search:</label>
                     <input type="text" id="kills-search" placeholder="Commander name...">
                 </div>
             </div>

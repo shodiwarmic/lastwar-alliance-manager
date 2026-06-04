@@ -215,6 +215,9 @@ p.empty {
 .alias-badge-ocr      { background: var(--color-danger-bg);  color: var(--color-danger); }
 
 .alias-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     color: var(--color-danger);

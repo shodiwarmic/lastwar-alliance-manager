@@ -574,7 +574,7 @@ function addGroup(existingConditions) {
 
     const removeGrpBtn = document.createElement('button');
     removeGrpBtn.className = 'btn btn-ghost btn-sm';
-    removeGrpBtn.textContent = '✕ Remove Group';
+    removeGrpBtn.append(svgIcon('x'), document.createTextNode(' Remove Group'));
     removeGrpBtn.addEventListener('click', () => {
         // Remove the group and any adjacent OR divider
         const prev = group.previousElementSibling;
@@ -653,7 +653,8 @@ function addCondition(container, existing) {
     // Remove button
     const rmBtn = document.createElement('button');
     rmBtn.className = 'btn btn-ghost btn-sm';
-    rmBtn.textContent = '✕';
+    rmBtn.setAttribute('aria-label', 'Remove');
+    rmBtn.appendChild(svgIcon('x'));
     rmBtn.addEventListener('click', () => row.remove());
     row.appendChild(rmBtn);
 

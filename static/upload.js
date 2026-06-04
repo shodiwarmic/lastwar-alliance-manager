@@ -142,7 +142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         processImageBtn.disabled = true;
 
         try {
-            showResult(`🔍 Compiling ${selectedFiles.length} screenshot(s) for Smart Analysis...`, 'info');
+            showResult(`Compiling ${selectedFiles.length} screenshot(s) for Smart Analysis...`, 'info');
 
             const formData = new FormData();
             selectedFiles.forEach(file => {
@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             resultBox.className = 'result-box result-success';
 
             const strong = document.createElement('strong');
-            strong.textContent = `✅ ${result.message}`;
+            strong.textContent = `${result.message}`;
             resultBox.appendChild(strong);
             resultBox.appendChild(document.createElement('br'));
 
@@ -224,9 +224,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Show any hard OCR chunking errors before popping the modal
             if (result.errors && result.errors.length > 0) {
-                showResultMultiline('⚠️ OCR Warning:', result.errors, 'error');
+                showResultMultiline('OCR Warning:', result.errors, 'error');
             } else {
-                showResult('✅ OCR Complete. Please review the extracted data in the popup.', 'success');
+                showResult('OCR Complete. Please review the extracted data in the popup.', 'success');
             }
 
             renderPreviewModal(result);
@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } catch (error) {
             console.error('Error processing images:', error);
-            showResult(`❌ Processing failed: ${error.message}`, 'error');
+            showResult(`Processing failed: ${error.message}`, 'error');
         } finally {
             processImageBtn.textContent = originalText;
             processImageBtn.disabled = false;
@@ -286,7 +286,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // 2. Warn if Power Tracking is off
             if (!settings.power_tracking_enabled) {
-                showResult('⚠️ Power tracking is not enabled globally. Power screenshots will be rejected by the server.', 'info');
+                showResult('Power tracking is not enabled globally. Power screenshots will be rejected by the server.', 'info');
             }
         }
     } catch (error) {
@@ -522,7 +522,7 @@ function renderManualCategoryUI(uncategorizedFiles) {
     outerBox.className = 'result-box result-error';
 
     const heading = document.createElement('strong');
-    heading.textContent = '⚠️ Manual Categorization Required';
+    heading.textContent = 'Manual Categorization Required';
     outerBox.appendChild(heading);
     outerBox.appendChild(document.createElement('br'));
 

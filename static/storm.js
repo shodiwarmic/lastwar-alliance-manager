@@ -212,12 +212,14 @@ function renderPool() {
         const metaDiv = document.createElement('div');
         metaDiv.className = 'pool-meta';
         const powerStr = m.power != null ? Number(m.power).toLocaleString() : '—';
-        metaDiv.textContent = `${m.rank} · ⚡${powerStr}`;
+        metaDiv.append(document.createTextNode(`${m.rank} · `), svgIcon('bolt', 11), document.createTextNode(powerStr));
         if (m.squad_power != null && m.squad_power > 0) {
-            const SQUAD_ICON = { Tank: '🛡️', Aircraft: '✈️', Missile: '🚀' };
+            const SQUAD_ICON = { Tank: 'tank', Aircraft: 'plane-tilt', Missile: 'rocket' };
             const sqSpan = document.createElement('span');
             sqSpan.className = 'pool-squad-power';
-            sqSpan.textContent = ` · ${SQUAD_ICON[m.squad_type] || ''}${Number(m.squad_power).toLocaleString()}`;
+            sqSpan.appendChild(document.createTextNode(' · '));
+            if (SQUAD_ICON[m.squad_type]) sqSpan.appendChild(svgIcon(SQUAD_ICON[m.squad_type], 11));
+            sqSpan.appendChild(document.createTextNode(Number(m.squad_power).toLocaleString()));
             metaDiv.appendChild(sqSpan);
         }
         card.appendChild(metaDiv);
@@ -234,7 +236,7 @@ function renderPool() {
             badge.textContent = '✓ Available';
         } else if (regVal === 2) {
             badge.className = 'reg-sub';
-            badge.textContent = '⚡ Sub Only';
+            badge.append(svgIcon('bolt', 12), document.createTextNode(' Sub Only'));
         } else {
             badge.className = 'reg-none';
             badge.textContent = 'Not registered';
@@ -251,7 +253,7 @@ function renderPool() {
             const ob = document.createElement('span');
             ob.className = 'reg-other reg-sub';
             ob.title = `Sub only for TF-${otherTF}`;
-            ob.textContent = `TF-${otherTF} ⚡`;
+            ob.append(document.createTextNode(`TF-${otherTF} `), svgIcon('bolt', 11));
             regDiv.appendChild(ob);
         }
 
@@ -285,12 +287,17 @@ function formatPowerSum(memberIds) {
         if (m.power != null) total += Number(m.power);
         else unknown++;
     }
-    let str = '⚡' + total.toLocaleString();
+    let str = total.toLocaleString();
     if (unknown > 0) str += ` (+${unknown} unknown)`;
     return str;
 }
 
-const SQUAD_ICON_MAP = { Tank: '🛡️', Aircraft: '✈️', Missile: '🚀' };
+// Returns [boltIcon, textNode] for a power-sum label.
+function powerSumNodes(memberIds) {
+    return [svgIcon('bolt', 11), document.createTextNode(formatPowerSum(memberIds))];
+}
+
+const SQUAD_ICON_MAP = { Tank: 'tank', Aircraft: 'plane-tilt', Missile: 'rocket' };
 
 function memberChipBadges(member) {
     if (!member) return [];
@@ -298,14 +305,14 @@ function memberChipBadges(member) {
     if (member.power != null) {
         const span = document.createElement('span');
         span.className = 'chip-power';
-        span.textContent = `⚡${Number(member.power).toLocaleString()}`;
+        span.append(svgIcon('bolt', 11), document.createTextNode(Number(member.power).toLocaleString()));
         badges.push(span);
     }
-    const icon = SQUAD_ICON_MAP[member.squad_type];
-    if (icon && member.squad_power != null && member.squad_power > 0) {
+    const iconName = SQUAD_ICON_MAP[member.squad_type];
+    if (iconName && member.squad_power != null && member.squad_power > 0) {
         const span = document.createElement('span');
         span.className = 'chip-power';
-        span.textContent = `${icon}${Number(member.squad_power).toLocaleString()}`;
+        span.append(svgIcon(iconName, 11), document.createTextNode(Number(member.squad_power).toLocaleString()));
         badges.push(span);
     }
     return badges;
@@ -395,7 +402,7 @@ function buildBuildingSlot(g, b) {
 
     const powerSpan = document.createElement('span');
     powerSpan.style.cssText = 'font-weight:400;font-size:0.85em;color:var(--color-text-mid);';
-    powerSpan.textContent = ` ${formatPowerSum(b.members.map(m => m.member_id))}`;
+    powerSpan.append(document.createTextNode(' '), ...powerSumNodes(b.members.map(m => m.member_id)));
     header.appendChild(powerSpan);
     slot.appendChild(header);
 
@@ -431,7 +438,7 @@ function buildDirectSlot(g) {
 
     const powerSpan = document.createElement('span');
     powerSpan.style.cssText = 'font-weight:400;font-size:0.85em;color:var(--color-text-mid);';
-    powerSpan.textContent = ` ${formatPowerSum(g.direct_members.map(m => m.member_id))}`;
+    powerSpan.append(document.createTextNode(' '), ...powerSumNodes(g.direct_members.map(m => m.member_id)));
     header.appendChild(powerSpan);
     slot.appendChild(header);
 
@@ -483,14 +490,18 @@ function buildGroupCard(g) {
 
     const powerInfo = document.createElement('span');
     powerInfo.style.cssText = 'font-size:0.8em;color:var(--color-text-mid);';
-    powerInfo.textContent = `Primary: ${formatPowerSum(primaryIds)} | Sub: ${formatPowerSum(subIds)}`;
+    powerInfo.append(
+        document.createTextNode('Primary: '), ...powerSumNodes(primaryIds),
+        document.createTextNode(' | Sub: '), ...powerSumNodes(subIds)
+    );
     header.appendChild(powerInfo);
 
     if (canManage) {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-danger';
         deleteBtn.style.cssText = 'padding:2px 8px;';
-        deleteBtn.textContent = '✕';
+        deleteBtn.setAttribute('aria-label', 'Delete group');
+        deleteBtn.appendChild(svgIcon('x'));
         deleteBtn.addEventListener('click', async () => {
             if (!await showConfirm('Delete this group?', 'Delete')) return;
             deleteGroup(g.id);
@@ -898,7 +909,7 @@ function updateCapacityBar() {
     }
 
     const unassigned = allMembers.length - assigned.size;
-    const powerStr = '⚡' + totalPower.toLocaleString() + (unknownPower > 0 ? ` (+${unknownPower} unknown)` : '');
+    const powerStr = totalPower.toLocaleString() + (unknownPower > 0 ? ` (+${unknownPower} unknown)` : '');
 
     const setCell = (id, text, warn, danger) => {
         const el = document.getElementById(id);
@@ -911,7 +922,8 @@ function updateCapacityBar() {
 
     setCell('cap-primaries', `Primaries: ${primaries}`, primaries >= 18, primaries >= 20);
     setCell('cap-subs', `Substitutes: ${subs}`, subs >= 8, subs >= 10);
-    setCell('cap-power', powerStr, false, false);
+    const capPower = document.getElementById('cap-power');
+    if (capPower) capPower.replaceChildren(svgIcon('bolt', 13), document.createTextNode(' ' + powerStr));
     setCell('cap-unassigned', `Unassigned: ${unassigned}`, false, false);
 }
 
@@ -1006,14 +1018,15 @@ function renderMyRegistration() {
         const threeWay = document.createElement('div');
         threeWay.className = 'three-way';
 
-        for (const [btnVal, btnClass, btnText] of [
-            [0, val === 0 ? 'active-unavail' : '', 'Not Available'],
-            [1, val === 1 ? 'active-avail' : '', '✓ Available'],
-            [2, val === 2 ? 'active-sub' : '', '⚡ Sub Only'],
+        for (const [btnVal, btnClass, btnIcon, btnText] of [
+            [0, val === 0 ? 'active-unavail' : '', null, 'Not Available'],
+            [1, val === 1 ? 'active-avail' : '', 'check', 'Available'],
+            [2, val === 2 ? 'active-sub' : '', 'bolt', 'Sub Only'],
         ]) {
             const btn = document.createElement('button');
             if (btnClass) btn.className = btnClass;
-            btn.textContent = btnText;
+            if (btnIcon) btn.append(svgIcon(btnIcon, 13), document.createTextNode(' ' + btnText));
+            else btn.textContent = btnText;
             btn.addEventListener('click', () => setMySlot(slotKey, btnVal));
             threeWay.appendChild(btn);
         }
@@ -1115,7 +1128,8 @@ function renderRegistrationView() {
             pill.dataset.memberId = reg.member_id;
             pill.dataset.slot = s;
             pill.dataset.val = val;
-            pill.textContent = val === 0 ? '—' : val === 1 ? '✓' : '⚡';
+            if (val === 0) pill.textContent = '—';
+            else pill.appendChild(svgIcon(val === 1 ? 'check' : 'bolt', 13));
             pill.addEventListener('click', () => cycleRegPill(pill));
             td.appendChild(pill);
             tr.appendChild(td);
@@ -1497,37 +1511,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (poolSearch) poolSearch.addEventListener('input', renderPool);
 
     const btnAddGroup = document.getElementById('btn-add-group');
-    if (btnAddGroup) {
+    const groupNameModal = document.getElementById('group-name-modal');
+    const groupNameInput = document.getElementById('group-name-input');
+    if (btnAddGroup && groupNameModal && groupNameInput) {
+        const closeGroupModal = () => { releaseFocus(groupNameModal); groupNameModal.style.display = ''; groupNameInput.value = ''; };
+        const submitGroup = () => {
+            const name = groupNameInput.value.trim();
+            if (!name) return;
+            createGroup(name);
+            closeGroupModal();
+        };
         btnAddGroup.addEventListener('click', () => {
-            btnAddGroup.style.display = 'none';
-            const inlineForm = document.createElement('span');
-            inlineForm.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-            const nameInput = document.createElement('input');
-            nameInput.type = 'text';
-            nameInput.placeholder = 'Group name';
-            nameInput.style.cssText = 'padding:2px 6px;font-size:0.85rem;border-radius:4px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text);width:120px;';
-            const createBtn = document.createElement('button');
-            createBtn.className = 'btn btn-primary btn-sm';
-            createBtn.textContent = 'Create';
-            const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'btn btn-secondary btn-sm';
-            cancelBtn.textContent = 'Cancel';
-            const submit = () => {
-                const name = nameInput.value.trim();
-                if (name) createGroup(name);
-                inlineForm.remove();
-                btnAddGroup.style.display = '';
-            };
-            const cancel = () => { inlineForm.remove(); btnAddGroup.style.display = ''; };
-            createBtn.addEventListener('click', submit);
-            cancelBtn.addEventListener('click', cancel);
-            nameInput.addEventListener('keydown', e => {
-                if (e.key === 'Enter') submit();
-                if (e.key === 'Escape') cancel();
-            });
-            inlineForm.append(nameInput, createBtn, cancelBtn);
-            btnAddGroup.insertAdjacentElement('afterend', inlineForm);
-            nameInput.focus();
+            groupNameInput.value = '';
+            groupNameModal.style.display = 'flex';
+            trapFocus(groupNameModal);
+            groupNameInput.focus();
+        });
+        document.getElementById('group-name-save').addEventListener('click', submitGroup);
+        document.getElementById('group-name-cancel').addEventListener('click', closeGroupModal);
+        groupNameModal.addEventListener('click', e => { if (e.target === groupNameModal) closeGroupModal(); });
+        groupNameInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); submitGroup(); }
+            if (e.key === 'Escape') closeGroupModal();
         });
     }
 

@@ -285,7 +285,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const tdDel = document.createElement('td');
         const btnDel = document.createElement('button');
-        btnDel.type = 'button'; btnDel.className = 'btn btn-danger btn-sm'; btnDel.textContent = '✕';
+        btnDel.type = 'button'; btnDel.className = 'btn btn-danger btn-sm'; btnDel.setAttribute('aria-label', 'Delete'); btnDel.appendChild(svgIcon('x'));
         btnDel.addEventListener('click', () => tr.remove());
         tdDel.appendChild(btnDel); tr.appendChild(tdDel);
 
@@ -398,7 +398,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const delBtn = document.createElement('button');
             delBtn.type = 'button';
             delBtn.className = 'btn btn-danger btn-sm';
-            delBtn.textContent = '✕';
+            delBtn.setAttribute('aria-label', 'Delete');
+            delBtn.appendChild(svgIcon('x'));
             delBtn.style.padding = '2px 6px';
             delBtn.addEventListener('click', () => tr.remove());
 
@@ -525,13 +526,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             { text: 'Wk✕',    title: 'Last week this event runs. If less than Wk★ (e.g. 0 when Wk★≥1), treated as "open-ended through end of season"' },
             { text: 'Level',   title: 'Optional numeric level tag (e.g. 1 for L1 city clash)' },
             { text: 'Notes',   title: 'Optional notes pushed to schedule' },
-            { text: '🌐 Svr',  title: 'Server event — pushed to Server Events section of schedule instead of alliance schedule' },
+            { text: 'Svr', icon: 'world', title: 'Server event — pushed to Server Events section of schedule instead of alliance schedule' },
             { text: 'Days',    title: 'Duration in days (server events only)' },
             { text: '',        title: 'Remove row' },
         ];
         COLS.forEach(c => {
             const th = document.createElement('th');
-            th.textContent = c.text;
+            if (c.icon) {
+                th.append(svgIcon(c.icon, 13), document.createTextNode(' ' + c.text));
+            } else {
+                th.textContent = c.text;
+            }
             th.title = c.title;
             th.style.padding = '6px 6px';
             hrow.appendChild(th);
@@ -611,7 +616,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const delBtn = document.createElement('button');
             delBtn.type = 'button';
             delBtn.className = 'btn btn-danger btn-sm';
-            delBtn.textContent = '✕';
+            delBtn.setAttribute('aria-label', 'Remove row');
+            delBtn.appendChild(svgIcon('x'));
             delBtn.style.padding = '2px 5px';
             delBtn.addEventListener('click', () => tr.remove());
             cell(delBtn);

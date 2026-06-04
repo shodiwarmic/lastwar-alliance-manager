@@ -457,7 +457,7 @@ var ValidSkillKeys = []string{"medical_aid"}
 
 // SkillLabels maps skill keys to human-readable labels for templates and API responses.
 var SkillLabels = map[string]string{
-	"medical_aid": "🩹 Medical Aid",
+	"medical_aid": "Medical Aid",
 }
 
 // PermissionRow is a single permission entry within a feature group (key + short label).

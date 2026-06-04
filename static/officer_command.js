@@ -175,14 +175,16 @@ function render() {
             const renameBtn = document.createElement('button');
             renameBtn.className = 'btn btn-sm btn-secondary';
             renameBtn.title = 'Rename';
-            renameBtn.textContent = '✎';
+            renameBtn.setAttribute('aria-label', 'Rename');
+            renameBtn.appendChild(svgIcon('pencil'));
             renameBtn.addEventListener('click', () => startRenameCategory(ci));
             header.appendChild(renameBtn);
 
             const delCatBtn = document.createElement('button');
             delCatBtn.className = 'btn btn-sm btn-danger';
             delCatBtn.title = 'Delete category';
-            delCatBtn.textContent = '🗑';
+            delCatBtn.setAttribute('aria-label', 'Delete category');
+            delCatBtn.appendChild(svgIcon('trash'));
             delCatBtn.addEventListener('click', async () => {
                 if (!await showConfirm('Delete this category?', 'Delete')) return;
                 deleteCategory(ci);

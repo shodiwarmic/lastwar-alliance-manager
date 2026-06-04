@@ -52,25 +52,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('delete-gcp-btn').addEventListener('click', showDeleteGCPModal);
 
         // User modal
-        document.getElementById('user-modal-close').addEventListener('click', closeUserModal);
         document.getElementById('user-form').addEventListener('submit', saveUser);
         document.getElementById('user-cancel-btn').addEventListener('click', closeUserModal);
 
         // Reset password modal
-        document.getElementById('reset-password-modal-close').addEventListener('click', closeResetPasswordModal);
         document.getElementById('copy-password-btn').addEventListener('click', copyPassword);
         document.getElementById('confirm-reset-btn').addEventListener('click', confirmResetPassword);
         document.getElementById('reset-password-cancel-btn').addEventListener('click', closeResetPasswordModal);
 
         // Transfer files modal
-        document.getElementById('transfer-files-modal-close').addEventListener('click', closeTransferFilesModal);
         document.getElementById('transfer-files-confirm-btn').addEventListener('click', confirmTransferFiles);
         document.getElementById('transfer-files-cancel-btn').addEventListener('click', closeTransferFilesModal);
 
         // Delete GCP modal
-        document.getElementById('delete-gcp-modal-close').addEventListener('click', closeDeleteGCPModal);
         document.getElementById('confirm-delete-gcp-btn').addEventListener('click', confirmDeleteGCP);
         document.getElementById('delete-gcp-cancel-btn').addEventListener('click', closeDeleteGCPModal);
+
+        // Close modals on backdrop click (no corner × per design standard)
+        ['user-modal', 'reset-password-modal', 'transfer-files-modal', 'delete-gcp-modal'].forEach(id => {
+            const modal = document.getElementById(id);
+            if (modal) modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = ''; });
+        });
     }
 
     // Wire storm slots save button (only present on admin page)
@@ -127,7 +129,7 @@ function buildRecentLoginsSection(user) {
 
         const locSpan = document.createElement('span');
         locSpan.className = 'login-location';
-        locSpan.textContent = `📍 ${location}`;
+        locSpan.append(svgIcon('map-pin', 13), document.createTextNode(' ' + location));
 
         const ipSpan = document.createElement('span');
         ipSpan.className = 'login-ip';
@@ -183,17 +185,17 @@ function buildUserCard(user) {
 
     const editBtn = document.createElement('button');
     editBtn.className = 'btn btn-sm btn-secondary';
-    editBtn.textContent = '✏️ Edit';
+    editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
     editBtn.addEventListener('click', () => editUser(user.id));
 
     const resetBtn = document.createElement('button');
     resetBtn.className = 'btn btn-sm btn-warning';
-    resetBtn.textContent = '🔑 Reset Password';
+    resetBtn.append(svgIcon('key'), document.createTextNode(' Reset Password'));
     resetBtn.addEventListener('click', () => showResetPasswordModal(user.id, user.username));
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'btn btn-sm btn-danger';
-    deleteBtn.textContent = '🗑️ Delete';
+    deleteBtn.append(svgIcon('trash'), document.createTextNode(' Delete'));
     deleteBtn.addEventListener('click', () => deleteUser(user.id, user.username));
 
     actions.append(editBtn, resetBtn, deleteBtn);
@@ -561,13 +563,13 @@ function populateLoginFilter() {
     );
 }
 
-function buildStatCard(icon, value, label) {
+function buildStatCard(iconName, value, label) {
     const card = document.createElement('div');
     card.className = 'stat-card';
 
     const iconDiv = document.createElement('div');
     iconDiv.className = 'stat-icon';
-    iconDiv.textContent = icon;
+    iconDiv.appendChild(svgIcon(iconName, 24));
 
     const info = document.createElement('div');
     info.className = 'stat-info';
@@ -596,15 +598,14 @@ function displayLoginStats(logins) {
     const uniqueIPs = new Set(logins.map(l => l.ip_address).filter(Boolean)).size;
 
     statsDiv.replaceChildren(
-        buildStatCard('✅', successLogins, 'Successful Logins'),
-        buildStatCard('❌', failedLogins, 'Failed Attempts'),
-        buildStatCard('👥', uniqueUsers, 'Unique Users'),
-        buildStatCard('🌐', uniqueIPs, 'Unique IPs')
+        buildStatCard('check', successLogins, 'Successful Logins'),
+        buildStatCard('x', failedLogins, 'Failed Attempts'),
+        buildStatCard('users', uniqueUsers, 'Unique Users'),
+        buildStatCard('world', uniqueIPs, 'Unique IPs')
     );
 }
 
 function buildLoginRow(login) {
-    const status = login.success ? '✅' : '❌';
     const statusClass = login.success ? 'success' : 'failed';
     const time = new Date(login.login_time).toLocaleString(undefined, { hour12: false });
     const location = [login.city, login.country].filter(v => v).join(', ') || 'Unknown';
@@ -618,7 +619,8 @@ function buildLoginRow(login) {
     const tdStatus = document.createElement('td');
     const statusBadge = document.createElement('span');
     statusBadge.className = `status-badge ${statusClass}`;
-    statusBadge.textContent = status;
+    statusBadge.setAttribute('aria-label', login.success ? 'Success' : 'Failed');
+    statusBadge.appendChild(svgIcon(login.success ? 'check' : 'x', 16));
     tdStatus.appendChild(statusBadge);
 
     const tdUser = document.createElement('td');
@@ -630,7 +632,7 @@ function buildLoginRow(login) {
     tdTime.textContent = time;
 
     const tdLocation = document.createElement('td');
-    tdLocation.textContent = `📍 ${location}`;
+    tdLocation.append(svgIcon('map-pin', 13), document.createTextNode(' ' + location));
 
     const tdIP = document.createElement('td');
     const code = document.createElement('code');
@@ -642,7 +644,7 @@ function buildLoginRow(login) {
 
     const tdDevice = document.createElement('td');
     tdDevice.className = 'device-info';
-    tdDevice.textContent = device;
+    tdDevice.append(svgIcon(device.icon, 14), document.createTextNode(` ${device.label} • ${device.browser}`));
 
     tr.append(tdStatus, tdUser, tdTime, tdLocation, tdIP, tdISP, tdDevice);
     return tr;
@@ -680,31 +682,31 @@ function displayLoginHistory(logins) {
     loginsList.replaceChildren(table);
 }
 
-// Extract device info from user agent
+// Extract device info from user agent → { icon, label, browser }
 function extractDeviceInfo(userAgent) {
-    if (!userAgent) return 'Unknown';
+    if (!userAgent) return { icon: 'device-desktop', label: 'Unknown', browser: '' };
 
     const ua = userAgent.toLowerCase();
-    let device = '';
-    let browser = '';
+    let icon, label;
 
     // Device detection
     if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
-        device = '📱 Mobile';
+        icon = 'device-mobile'; label = 'Mobile';
     } else if (ua.includes('tablet') || ua.includes('ipad')) {
-        device = '📱 Tablet';
+        icon = 'device-mobile'; label = 'Tablet';
     } else {
-        device = '💻 Desktop';
+        icon = 'device-desktop'; label = 'Desktop';
     }
 
     // Browser detection
+    let browser;
     if (ua.includes('edge')) browser = 'Edge';
     else if (ua.includes('chrome')) browser = 'Chrome';
     else if (ua.includes('firefox')) browser = 'Firefox';
     else if (ua.includes('safari')) browser = 'Safari';
     else browser = 'Other';
 
-    return `${device} • ${browser}`;
+    return { icon, label, browser };
 }
 
 // Close modals when clicking outside
@@ -752,10 +754,10 @@ async function loadSecuritySettings() {
         if (deleteBtn) {
             if (settings.has_gcp_credentials) {
                 deleteBtn.disabled = false;
-                deleteBtn.textContent = '🗑️ Delete Active Key';
+                deleteBtn.replaceChildren(svgIcon('trash'), document.createTextNode(' Delete Active Key'));
             } else {
                 deleteBtn.disabled = true;
-                deleteBtn.textContent = '❌ No Key Configured';
+                deleteBtn.replaceChildren(svgIcon('x'), document.createTextNode(' No Key Configured'));
             }
         }
     } catch (error) {

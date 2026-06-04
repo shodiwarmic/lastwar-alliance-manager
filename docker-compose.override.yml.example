@@ -8,6 +8,13 @@ services:
       # Replace these with your actual WSL or Windows LAN IP
       - APP_DOMAIN=192.168.1.X:8080
       - COLLABORA_DOMAIN=192.168.1.X:9980
+    volumes:
+      # Dev hot-reload: serve UI from the host instead of the baked-in image copy.
+      # templates are ParseFiles'd per request and static is served via http.Dir,
+      # so edits to .html / .css / .js / .svg show on a browser refresh — no rebuild,
+      # no container restart. (Go code changes still need `docker compose up -d --build`.)
+      - ./templates:/app/templates:ro
+      - ./static:/app/static:ro
 
   collabora:
     environment:

@@ -71,7 +71,7 @@ function setupModal() {
         modal.style.display = 'flex';
         trapFocus(modal);
 
-        document.getElementById('modal-title').textContent = '➕ Add a Shoutout';
+        document.getElementById('modal-title').replaceChildren(svgIcon('plus', 16), document.createTextNode(' Add a Shoutout'));
         document.getElementById('edit-shoutout-id').value = '';
 
         // Dynamically parse ranks for visibility dropdown to prevent hardcoding
@@ -561,16 +561,16 @@ function createDynoCard(rec, compact = false) {
     card.className = `recommendation-card ${rec.expired ? 'expired' : ''}`;
 
     const pointsClass = rec.points > 0 ? 'positive' : (rec.points < 0 ? 'negative' : 'neutral');
-    const pointsIcon = rec.points > 0 ? '✅' : (rec.points < 0 ? '❌' : '➖');
+    const pointsIconName = rec.points > 0 ? 'check' : (rec.points < 0 ? 'x' : 'minus');
 
     const createdDate = new Date(rec.created_at);
     const now = new Date();
     const expiryDate = new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
     const daysLeft = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
 
-    const expiryText = rec.expired
-        ? '⏱️ Expired'
-        : `⏱️ ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left`;
+    const expiryLabel = rec.expired
+        ? 'Expired'
+        : `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left`;
 
     // Header
     const recHeader = document.createElement('div');
@@ -591,7 +591,7 @@ function createDynoCard(rec, compact = false) {
 
     const pointsDiv = document.createElement('div');
     pointsDiv.className = `rec-points ${pointsClass}`;
-    pointsDiv.textContent = `${pointsIcon} ${rec.points > 0 ? '+' : ''}${rec.points}`;
+    pointsDiv.append(svgIcon(pointsIconName), document.createTextNode(` ${rec.points > 0 ? '+' : ''}${rec.points}`));
     recHeader.appendChild(pointsDiv);
 
     // Notes
@@ -618,7 +618,7 @@ function createDynoCard(rec, compact = false) {
         anonBadge.className = 'expiry-badge';
         anonBadge.style.cssText = 'background: var(--color-text-muted); color: #fff;';
         anonBadge.title = 'Your name is hidden from members without the view permission';
-        anonBadge.textContent = '🕵️ Anonymous to Alliance';
+        anonBadge.append(svgIcon('eye-off', 12), document.createTextNode(' Anonymous to Alliance'));
         meta.appendChild(anonBadge);
     }
 
@@ -629,7 +629,7 @@ function createDynoCard(rec, compact = false) {
 
     const expiryBadge = document.createElement('span');
     expiryBadge.className = `expiry-badge ${rec.expired ? 'expired' : ''}`;
-    expiryBadge.textContent = expiryText;
+    expiryBadge.append(svgIcon('hourglass', 12), document.createTextNode(' ' + expiryLabel));
     meta.appendChild(expiryBadge);
 
     const actions = document.createElement('div');
@@ -638,7 +638,7 @@ function createDynoCard(rec, compact = false) {
     if (!rec.expired && currentUsername && rec.created_by === currentUsername) {
         const editBtn = document.createElement('button');
         editBtn.className = 'btn btn-sm btn-secondary';
-        editBtn.textContent = '✏️ Edit';
+        editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
         editBtn.addEventListener('click', () => editDynoRecommendation(rec.id));
         actions.appendChild(editBtn);
     }
@@ -646,7 +646,7 @@ function createDynoCard(rec, compact = false) {
     if (canManageDyno || (currentUsername && rec.created_by === currentUsername)) {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-sm btn-danger';
-        deleteBtn.textContent = '🗑️ Delete';
+        deleteBtn.append(svgIcon('trash'), document.createTextNode(' Delete'));
         deleteBtn.addEventListener('click', () => deleteDynoRecommendation(rec.id));
         actions.appendChild(deleteBtn);
     }
@@ -744,7 +744,7 @@ function editDynoRecommendation(id) {
 
     // Set hidden ID and Title
     document.getElementById('edit-shoutout-id').value = rec.id;
-    document.getElementById('modal-title').textContent = '✏️ Edit Shoutout';
+    document.getElementById('modal-title').replaceChildren(svgIcon('pencil', 16), document.createTextNode(' Edit Shoutout'));
 
     // Populate form fields
     document.getElementById('member-select').value = rec.member_id;

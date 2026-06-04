@@ -38,7 +38,7 @@ async function loadSystemSettings() {
                     li.id = r.id;
                     li.dataset.text = r.text;
                     li.style.cssText = 'color: var(--color-text-mid); transition: color 0.3s;';
-                    li.textContent = `⚪ ${r.text}`;
+                    li.append(svgIcon('circle', 13), document.createTextNode(' ' + r.text));
                     return li;
                 });
                 rulesList.replaceChildren(...items);
@@ -153,10 +153,10 @@ function checkPasswordRequirements() {
         if (!el) return;
         const baseText = el.getAttribute('data-text');
         if (isMet) {
-            el.textContent = `✅ ${baseText}`;
+            el.replaceChildren(svgIcon('check', 13), document.createTextNode(' ' + baseText));
             el.style.color = 'var(--color-success)';
         } else {
-            el.textContent = `❌ ${baseText}`;
+            el.replaceChildren(svgIcon('x', 13), document.createTextNode(' ' + baseText));
             el.style.color = 'var(--color-danger)';
             allRulesMet = false;
         }
@@ -173,7 +173,7 @@ function checkPasswordRequirements() {
         const rulesList = document.getElementById('password-rules');
         const listItems = rulesList.getElementsByTagName('li');
         for (let li of listItems) {
-            li.textContent = `⚪ ${li.getAttribute('data-text')}`;
+            li.replaceChildren(svgIcon('circle', 13), document.createTextNode(' ' + li.getAttribute('data-text')));
             li.style.color = 'var(--color-text-muted)';
         }
     }
@@ -182,11 +182,11 @@ function checkPasswordRequirements() {
     if (confirmPwd.length > 0) {
         matchStatus.style.display = 'block';
         if (newPwd === confirmPwd) {
-            matchStatus.textContent = '✅ Passwords match';
+            matchStatus.replaceChildren(svgIcon('check', 13), document.createTextNode(' Passwords match'));
             matchStatus.style.color = 'var(--color-success)';
             passwordsMatch = true;
         } else {
-            matchStatus.textContent = '❌ Passwords do not match';
+            matchStatus.replaceChildren(svgIcon('x', 13), document.createTextNode(' Passwords do not match'));
             matchStatus.style.color = 'var(--color-danger)';
         }
     } else {
@@ -254,7 +254,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showToast('Failed to change password: ' + error.message, 'error');
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.textContent = '🔒 Change Password';
+                submitBtn.replaceChildren(svgIcon('lock'), document.createTextNode(' Change Password'));
             }
         });
         
@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     showToast('Failed to update stats.', 'error');
                 } finally {
                     submitBtn.disabled = false;
-                    submitBtn.textContent = '💾 Save Stats';
+                    submitBtn.replaceChildren(svgIcon('device-floppy'), document.createTextNode(' Save Stats'));
                 }
             });
         }

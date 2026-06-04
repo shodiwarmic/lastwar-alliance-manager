@@ -224,7 +224,8 @@ function renderTemplateCard(t) {
             const chip = document.createElement('span');
             const isSystem = requiredVars.includes(v);
             chip.className = 'var-chip ' + (isSystem ? 'var-chip-system' : 'var-chip-user');
-            chip.textContent = (isSystem ? '🔒 ' : '') + '{' + v + '}';
+            if (isSystem) chip.appendChild(svgIcon('lock', 12));
+            chip.appendChild(document.createTextNode((isSystem ? ' ' : '') + '{' + v + '}'));
             chip.title = isSystem ? 'System-provided (auto-filled by integrations)' : 'Fill in when copying';
             varsRow.appendChild(chip);
         });
@@ -398,7 +399,8 @@ function updateVarsPreview() {
         const chip = document.createElement('span');
         const isSystem = requiredVars.includes(v);
         chip.className = 'var-chip ' + (isSystem ? 'var-chip-system' : 'var-chip-user');
-        chip.textContent = (isSystem ? '🔒 ' : '') + '{' + v + '}';
+        if (isSystem) chip.appendChild(svgIcon('lock', 12));
+        chip.appendChild(document.createTextNode((isSystem ? ' ' : '') + '{' + v + '}'));
         chipsEl.appendChild(chip);
     });
 }

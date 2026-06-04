@@ -403,7 +403,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (toggleBtn) {
                 toggleBtn.addEventListener('click', () => {
                     isTotalMode = !isTotalMode;
-                    toggleBtn.textContent = isTotalMode ? '🔙 Return to Day 6 Entry' : '🧮 Enter Weekly Totals';
+                    toggleBtn.replaceChildren(
+                        svgIcon(isTotalMode ? 'corner-down-left' : 'file-text'),
+                        document.createTextNode(isTotalMode ? ' Return to Day 6 Entry' : ' Enter Weekly Totals')
+                    );
                     toggleBtn.style.background = isTotalMode ? 'var(--color-warning)' : 'var(--color-accent)';
                     renderTable();
                 });

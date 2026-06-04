@@ -24,7 +24,7 @@ const SORT_DEFAULTS = {
     hq: 'desc', hero_power: 'desc', kills: 'desc', squad_power: 'desc',
 };
 
-const SKILL_EMOJI = { medical_aid: '🩹' };
+const SKILL_ICON = { medical_aid: 'first-aid-kit' };
 
 // Define the HQ requirements for each Troop Tier
 const TROOP_HQ_REQ = { 1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35 };
@@ -458,8 +458,9 @@ function buildMemberCard(member) {
     const aliasBtn = document.createElement('button');
     aliasBtn.className = 'icon-btn';
     aliasBtn.title = 'Manage Nicknames';
-    aliasBtn.style.cssText = 'background:none;border:none;cursor:pointer;opacity:0.6;padding:0;';
-    aliasBtn.textContent = '🏷️';
+    aliasBtn.setAttribute('aria-label', 'Manage Nicknames');
+    aliasBtn.style.cssText = 'background:none;border:none;cursor:pointer;opacity:0.6;padding:0;display:inline-flex;align-items:center;';
+    aliasBtn.appendChild(svgIcon('tag'));
     aliasBtn.addEventListener('click', () => openAliasModal(member.id, member.name));
     nameDiv.appendChild(aliasBtn);
 
@@ -502,7 +503,7 @@ function buildMemberCard(member) {
             if (memberSkills.includes(key)) {
                 const badge = document.createElement('span');
                 badge.className = 'badge-skill';
-                badge.textContent = SKILL_EMOJI[key] || '⚕️';
+                badge.appendChild(svgIcon(SKILL_ICON[key] || 'star', 13));
                 badge.title = label;
                 info.appendChild(badge);
             }
@@ -520,14 +521,12 @@ function buildMemberCard(member) {
 
     // Squad
     if (isSquadTrackingEnabled && (member.squad_type || member.squad_power)) {
-        let typeIcon = '';
-        if (member.squad_type === 'Tank') typeIcon = '🛡️ ';
-        else if (member.squad_type === 'Aircraft') typeIcon = '✈️ ';
-        else if (member.squad_type === 'Missile') typeIcon = '🚀 ';
+        const squadIconMap = { Tank: 'tank', Aircraft: 'plane-tilt', Missile: 'rocket' };
         const span = document.createElement('span');
         span.className = 'member-power';
         span.title = `Squad Power: ${member.squad_power ? member.squad_power.toLocaleString() : 0}`;
-        span.textContent = `${typeIcon}${formatPower(member.squad_power)}`;
+        if (squadIconMap[member.squad_type]) span.append(svgIcon(squadIconMap[member.squad_type], 13), document.createTextNode(' '));
+        span.appendChild(document.createTextNode(formatPower(member.squad_power)));
         info.appendChild(span);
     }
 
@@ -536,7 +535,7 @@ function buildMemberCard(member) {
         const span = document.createElement('span');
         span.className = 'member-power';
         span.title = `Total Hero Power: ${member.hero_power.toLocaleString()}`;
-        span.textContent = `🦸 ${formatPower(member.hero_power)}`;
+        span.append(svgIcon('user', 13), document.createTextNode(' ' + formatPower(member.hero_power)));
         info.appendChild(span);
     }
 
@@ -545,7 +544,7 @@ function buildMemberCard(member) {
         const span = document.createElement('span');
         span.className = 'member-power';
         span.title = `Troop Kills: ${member.current_kills.toLocaleString()}`;
-        span.textContent = `💀 ${formatPower(member.current_kills)}`;
+        span.append(svgIcon('skull', 13), document.createTextNode(' ' + formatPower(member.current_kills)));
         info.appendChild(span);
     }
 
@@ -554,7 +553,7 @@ function buildMemberCard(member) {
         const eligible = member.eligible !== false;
         const span = document.createElement('span');
         span.className = `member-eligible ${eligible ? 'eligible' : 'not-eligible'}`;
-        span.textContent = eligible ? '✓ Eligible' : '✗ Not Eligible';
+        span.append(svgIcon(eligible ? 'check' : 'x', 13), document.createTextNode(eligible ? ' Eligible' : ' Not Eligible'));
         info.appendChild(span);
     }
 
@@ -591,7 +590,7 @@ function buildMemberCard(member) {
             const eligible = member.eligible !== false;
             const toggleBtn = document.createElement('button');
             toggleBtn.className = `toggle-eligible-btn ${eligible ? 'eligible' : 'not-eligible'}`;
-            toggleBtn.textContent = eligible ? '✓ Eligible' : '✗ Not Eligible';
+            toggleBtn.append(svgIcon(eligible ? 'check' : 'x', 13), document.createTextNode(eligible ? ' Eligible' : ' Not Eligible'));
             toggleBtn.addEventListener('click', () => toggleEligible(member.id, eligible, actions, toggleBtn));
             actions.appendChild(toggleBtn);
         }
@@ -821,7 +820,6 @@ function setupArchiveModal() {
         archiveTargetId = null;
     };
 
-    document.getElementById('close-archive-modal').addEventListener('click', closeModal);
     document.getElementById('archive-cancel-btn').addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 
@@ -1063,7 +1061,6 @@ function setupCSVImport() {
     const importBtn = document.getElementById('import-btn');
     const fileInput = document.getElementById('csv-file');
     const modal = document.getElementById('csv-preview-modal');
-    const closeModal = document.getElementById('close-csv-modal');
     const confirmBtn = document.getElementById('confirm-csv-btn');
     const cancelBtn = document.getElementById('cancel-csv-btn');
 
@@ -1114,8 +1111,8 @@ function setupCSVImport() {
     });
 
     const closeCSVModal = () => { releaseFocus(modal); modal.style.display = 'none'; };
-    closeModal.addEventListener('click', closeCSVModal);
     cancelBtn.addEventListener('click', closeCSVModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeCSVModal(); });
 
     confirmBtn.addEventListener('click', async () => {
         const selectedMembers = detectedCSVMembers.filter((_, i) => selectedCSVMembers.has(i));
@@ -1165,7 +1162,7 @@ async function doImport(selectedMembers, removeMemberIDs, renames, confirmBtn, m
         displayCSVModalStatus('Error importing members. Please try again.');
     } finally {
         confirmBtn.disabled = false;
-        confirmBtn.textContent = '✔ Confirm & Import Selected';
+        confirmBtn.replaceChildren(svgIcon('check'), document.createTextNode(' Confirm & Import Selected'));
     }
 }
 
@@ -1276,14 +1273,14 @@ function showCSVPreview(result) {
             const s = document.createElement('span');
             s.className = 'member-power';
             s.style.cssText = 'font-size:0.85em;';
-            s.textContent = `⚡ ${(member.power / 1000000).toFixed(1)}M`;
+            s.append(svgIcon('bolt', 12), document.createTextNode(` ${(member.power / 1000000).toFixed(1)}M`));
             memberInfo.appendChild(s);
         }
         if (member.squad_power) {
             const s = document.createElement('span');
             s.className = 'member-power';
             s.style.cssText = 'font-size:0.85em;color:var(--color-accent);';
-            s.textContent = `🛡️ ${(member.squad_power / 1000000).toFixed(1)}M`;
+            s.append(svgIcon('tank', 12), document.createTextNode(` ${(member.squad_power / 1000000).toFixed(1)}M`));
             memberInfo.appendChild(s);
         }
 
@@ -1301,7 +1298,7 @@ function showCSVPreview(result) {
 
             const icon = document.createElement('span');
             icon.className = 'warning-icon';
-            icon.textContent = '⚠️';
+            icon.appendChild(svgIcon('alert-triangle', 14));
 
             const text = document.createElement('span');
             text.textContent = 'Similar name(s) found.';
@@ -1446,9 +1443,10 @@ function renderAliases() {
         const canDelete = a.is_mine || window.isAdmin || ((a.category === 'global' || a.category === 'ocr') && canManageRanks);
         if (canDelete) {
             const deleteBtn = document.createElement('button');
-            deleteBtn.style.cssText = 'background:none;border:none;color:var(--color-danger);cursor:pointer;';
+            deleteBtn.style.cssText = 'background:none;border:none;color:var(--color-danger);cursor:pointer;display:inline-flex;align-items:center;';
             deleteBtn.title = 'Remove Nickname';
-            deleteBtn.textContent = '✖';
+            deleteBtn.setAttribute('aria-label', 'Remove Nickname');
+            deleteBtn.appendChild(svgIcon('x'));
             deleteBtn.addEventListener('click', () => deleteAlias(a.id, row, deleteBtn));
             row.appendChild(deleteBtn);
         }

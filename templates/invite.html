@@ -31,7 +31,7 @@
             <div class="login-form">
                 {{if .Error}}
                 <div class="invite-error-state">
-                    <p class="invite-error-icon">🔗</p>
+                    <p class="invite-error-icon"><svg width="48" height="48" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-unlink"/></svg></p>
                     <h2>Invite Link Invalid</h2>
                     <p>{{.Error}}</p>
                     <a href="/login" class="login-btn" style="display:block;text-align:center;text-decoration:none;margin-top:20px;">Go to Login</a>

@@ -11,22 +11,25 @@ document.addEventListener('DOMContentLoaded', () => {
     canUploadFiles = cfg.canUpload === 'true';
 
     document.getElementById('upload-file-btn')?.addEventListener('click', showUploadModal);
-    document.getElementById('edit-modal-close').addEventListener('click', closeEditModal);
     document.getElementById('edit-cancel-btn').addEventListener('click', closeEditModal);
     document.getElementById('edit-form').addEventListener('submit', handleEdit);
-    document.getElementById('upload-modal-close').addEventListener('click', closeUploadModal);
     document.getElementById('upload-cancel-btn').addEventListener('click', closeUploadModal);
     document.getElementById('upload-form').addEventListener('submit', handleUpload);
-    document.getElementById('image-modal-close').addEventListener('click', closeImageModal);
-    document.getElementById('document-modal-close').addEventListener('click', closeDocumentModal);
+
+    // Close modals on backdrop click (no corner × per design standard)
+    [['edit-modal', closeEditModal], ['upload-modal', closeUploadModal],
+     ['image-modal', closeImageModal], ['document-modal', closeDocumentModal]].forEach(([id, fn]) => {
+        const modal = document.getElementById(id);
+        if (modal) modal.addEventListener('click', e => { if (e.target === modal) fn(); });
+    });
 
     loadFiles();
 });
 
 function buildFileCard(file) {
-    let icon = '📄';
-    if (file.file_type === 'image') icon = '🖼️';
-    if (file.file_type === 'spreadsheet') icon = '📊';
+    let iconName = 'file-text';
+    if (file.file_type === 'image') iconName = 'photo';
+    if (file.file_type === 'spreadsheet') iconName = 'chart-line';
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -38,8 +41,8 @@ function buildFileCard(file) {
     const infoDiv = document.createElement('div');
 
     const h3 = document.createElement('h3');
-    h3.style.cssText = 'margin: 0; font-size: 1.1em; color: var(--color-text);';
-    h3.textContent = `${icon} ${file.title}`;
+    h3.style.cssText = 'margin: 0; font-size: 1.1em; color: var(--color-text); display: flex; align-items: center; gap: 6px;';
+    h3.append(svgIcon(iconName, 16), document.createTextNode(file.title));
 
     const metaDiv = document.createElement('div');
     metaDiv.style.cssText = 'font-size: 0.85em; color: var(--color-text-muted); margin-top: 5px;';
@@ -72,13 +75,15 @@ function buildFileCard(file) {
     if (canManageFiles || file.is_owner) {
         const editBtn = document.createElement('button');
         editBtn.className = 'btn btn-sm btn-secondary';
-        editBtn.textContent = '✏️';
+        editBtn.setAttribute('aria-label', 'Edit');
+        editBtn.appendChild(svgIcon('pencil'));
         editBtn.addEventListener('click', () => showEditModal(file.id));
         actionsDiv.appendChild(editBtn);
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-sm btn-danger';
-        deleteBtn.textContent = '🗑️';
+        deleteBtn.setAttribute('aria-label', 'Delete');
+        deleteBtn.appendChild(svgIcon('trash'));
         deleteBtn.addEventListener('click', () => deleteFile(file.id));
         actionsDiv.appendChild(deleteBtn);
     }

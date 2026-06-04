@@ -71,7 +71,7 @@
 .ally-tag {
     font-size: 0.85rem;
     color: var(--color-text-mid);
-    font-family: monospace;
+    font-family: var(--font-mono);
 }
 
 .ally-name {

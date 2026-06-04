@@ -12,7 +12,7 @@
 
 {{define "content"}}
 <div id="missing-credentials-msg" style="display: none; text-align: center; padding: 60px 20px; max-width: 600px; margin: 40px auto; background: var(--color-card); border-radius: 12px; border: 1px solid var(--color-border);">
-    <div style="font-size: 64px; margin-bottom: 20px;">🔌</div>
+    <div style="margin-bottom: 20px;"><svg width="64" height="64" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plug"/></svg></div>
     <h2>OCR Pipelines Disabled</h2>
     <p style="color: var(--color-text-muted); line-height: 1.6; font-size: 16px;">
         The computer vision pipeline is currently offline. An administrator must configure {{if eq .OCRBackendMode "local"}}the local OCR sidecar URL in the Security Settings{{else}}<b>both</b> the Google Cloud Vision credentials and the CV Worker routing URL in the Security Settings{{end}} to enable automated screenshot processing.
@@ -21,20 +21,20 @@
 
 {{if eq .OCRBackendMode "local"}}
 <div id="local-ocr-notice" style="max-width: 800px; margin: 0 auto 20px; padding: 16px 20px; background: var(--color-info-bg); color: var(--color-info); border-radius: 8px; line-height: 1.5;">
-    <b>🛡️ Local OCR mode</b> — Screenshots are processed entirely on this machine via the PaddleOCR sidecar. No API costs and no images leave the network. <b>You must select the screen + day for each batch</b> below; auto-detection isn't available in local mode because the local engine can't reliably read stylised game-UI titles.
+    <b class="icon-label"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-shield"/></svg> Local OCR mode</b> — Screenshots are processed entirely on this machine via the PaddleOCR sidecar. No API costs and no images leave the network. <b>You must select the screen + day for each batch</b> below; auto-detection isn't available in local mode because the local engine can't reliably read stylised game-UI titles.
 </div>
 {{end}}
 
 <div class="upload-container" id="main-upload-container">
     <div class="upload-section">
-        <h3 style="margin-top: 0;">📸 Upload Screenshots</h3>
+        <h3 style="margin-top: 0;" class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-camera"/></svg> Upload Screenshots</h3>
         <p class="help-text">Upload game screenshots. Our smart OCR will automatically stitch them together and detect if they are Power Rankings or VS Points.</p>
         
         <div class="screenshot-types" style="margin: 20px 0; padding: 15px; background: var(--color-card); border-radius: 8px;">
-            <p style="margin: 0 0 10px 0; font-weight: bold; color: var(--color-accent);">📋 Supported Screenshot Types:</p>
+            <p class="icon-label" style="margin: 0 0 10px 0; font-weight: bold; color: var(--color-accent);"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Supported Screenshot Types:</p>
             <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-                <li><strong>⚡ Power Rankings</strong> - Track member power progression over time</li>
-                <li><strong>⚔️ VS Points (Daily Rank)</strong> - Record daily VS points with automatic day detection</li>
+                <li><strong>Power Rankings</strong> - Track member power progression over time</li>
+                <li><strong>VS Points (Daily Rank)</strong> - Record daily VS points with automatic day detection</li>
             </ul>
         </div>
 
@@ -42,8 +42,8 @@
             <div id="week-selector" style="flex: 1; padding: 15px; background: var(--color-surface); border-radius: 8px; border: 1px solid var(--color-border);">
                 <label for="vs-week" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">VS Points Week:</label>
                 <select id="vs-week" class="form-input" style="width: 100%;">
-                    <option value="current">📅 Current Week</option>
-                    <option value="last">📅 Last Week</option>
+                    <option value="current">Current Week</option>
+                    <option value="last">Last Week</option>
                 </select>
                 <p class="help-text" style="margin-top: 8px; font-size: 0.85em;">Only applies to VS Points.</p>
             </div>
@@ -52,34 +52,34 @@
                 <label for="force-category" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Image Category:</label>
                 <select id="force-category" class="form-input" style="width: 100%;" data-backend="{{.OCRBackendMode}}">
                     {{if ne .OCRBackendMode "local"}}
-                    <option value="auto">🤖 Auto-Detect (Smart Sorting)</option>
-                    <option value="total">📊 Force: Weekly Total (Auto-Calculates Sat)</option>
+                    <option value="auto">Auto-Detect (Smart Sorting)</option>
+                    <option value="total">Force: Weekly Total (Auto-Calculates Sat)</option>
                     {{end}}
-                    <option value="power">⚡ Power Rankings</option>
-                    <option value="kills">⚔️ Strength — Kills</option>
-                    <option value="donation_daily">🎁 Strength — Donation (Daily)</option>
-                    <option value="donation_weekly">🎁 Strength — Donation (Weekly)</option>
+                    <option value="power">Power Rankings</option>
+                    <option value="kills">Strength — Kills</option>
+                    <option value="donation_daily">Strength — Donation (Daily)</option>
+                    <option value="donation_weekly">Strength — Donation (Weekly)</option>
                     <option disabled>───── Daily VS ─────</option>
-                    <option value="monday">📅 Monday</option>
-                    <option value="tuesday">📅 Tuesday</option>
-                    <option value="wednesday">📅 Wednesday</option>
-                    <option value="thursday">📅 Thursday</option>
-                    <option value="friday">📅 Friday</option>
-                    <option value="saturday">📅 Saturday</option>
-                    <option value="weekly">📊 Weekly Rank Total</option>
+                    <option value="monday">Monday</option>
+                    <option value="tuesday">Tuesday</option>
+                    <option value="wednesday">Wednesday</option>
+                    <option value="thursday">Thursday</option>
+                    <option value="friday">Friday</option>
+                    <option value="saturday">Saturday</option>
+                    <option value="weekly">Weekly Rank Total</option>
                     <option disabled>───── Alliance Contribution ─────</option>
-                    <option value="mutual_assistance_daily">🤝 Mutual Assistance — Daily</option>
-                    <option value="mutual_assistance_weekly">🤝 Mutual Assistance — Weekly</option>
-                    <option value="mutual_assistance_season">🤝 Mutual Assistance — Season Total</option>
-                    <option value="siege_daily">🏰 Siege — Daily</option>
-                    <option value="siege_weekly">🏰 Siege — Weekly</option>
-                    <option value="siege_season">🏰 Siege — Season Total</option>
-                    <option value="rare_soil_war_daily">🌿 Rare Soil War — Daily</option>
-                    <option value="rare_soil_war_weekly">🌿 Rare Soil War — Weekly</option>
-                    <option value="rare_soil_war_season">🌿 Rare Soil War — Season Total</option>
-                    <option value="defeat_daily">💀 Defeat — Daily</option>
-                    <option value="defeat_weekly">💀 Defeat — Weekly</option>
-                    <option value="defeat_season">💀 Defeat — Season Total</option>
+                    <option value="mutual_assistance_daily">Mutual Assistance — Daily</option>
+                    <option value="mutual_assistance_weekly">Mutual Assistance — Weekly</option>
+                    <option value="mutual_assistance_season">Mutual Assistance — Season Total</option>
+                    <option value="siege_daily">Siege — Daily</option>
+                    <option value="siege_weekly">Siege — Weekly</option>
+                    <option value="siege_season">Siege — Season Total</option>
+                    <option value="rare_soil_war_daily">Rare Soil War — Daily</option>
+                    <option value="rare_soil_war_weekly">Rare Soil War — Weekly</option>
+                    <option value="rare_soil_war_season">Rare Soil War — Season Total</option>
+                    <option value="defeat_daily">Defeat — Daily</option>
+                    <option value="defeat_weekly">Defeat — Weekly</option>
+                    <option value="defeat_season">Defeat — Season Total</option>
                 </select>
                 <p class="help-text" style="margin-top: 8px; font-size: 0.85em;">{{if eq .OCRBackendMode "local"}}<b>Required.</b> Pick the exact screen + tab the screenshots show.{{else}}Bypass auto-detection for specific uploads.{{end}}</p>
             </div>
@@ -91,7 +91,7 @@
         
         <div id="drop-zone" class="drop-zone">
             <div id="drop-content">
-                <div class="drop-icon">📁</div>
+                <div class="drop-icon"><svg width="48" height="48" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-camera"/></svg></div>
                 <p style="margin: 10px 0; font-weight: bold; font-size: 18px;">Tap to upload or drag & drop</p>
                 <p style="margin: 0; color: var(--color-text-muted);">PNG, JPG, JPEG - Max 10MB each, up to 100 files</p>
             </div>
@@ -99,14 +99,14 @@
             <div id="preview-container" class="preview-container">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <p id="files-count" style="margin: 0; font-weight: bold; color: var(--color-accent);"></p>
-                    <button id="clear-btn" class="btn btn-secondary btn-sm">🗑️ Clear All</button>
+                    <button id="clear-btn" class="btn btn-secondary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trash"/></svg> Clear All</button>
                 </div>
                 <div id="preview-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-height: 400px; overflow-y: auto;"></div>
             </div>
         </div>
         
         <button id="process-image-btn" class="btn btn-primary" style="display: none;">
-            🔍 Stitch & Process Images
+            <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-search"/></svg> Stitch &amp; Process Images
         </button>
 
         <div id="result-container"></div>

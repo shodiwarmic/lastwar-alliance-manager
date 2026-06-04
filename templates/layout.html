@@ -16,30 +16,30 @@
   <!-- DRY nav links — rendered in sidebar AND more-sheet -->
   {{define "nav-links"}}
     <a href="/" class="sidebar-link {{if eq .ActivePage "dashboard"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-home"/></svg>
       Dashboard
     </a>
     <a href="/members" class="sidebar-link {{if eq .ActivePage "members"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg>
       Members
     </a>
 
     <div class="sidebar-section-label">Combat</div>
     {{if .Permissions.ViewVSPoints}}
     <a href="/vs" class="sidebar-link {{if eq .ActivePage "vs"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/><polyline points="9.5 6.5 21 18 21 21 18 21 6.5 9.5"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-swords"/></svg>
       VS Points
     </a>
     {{end}}
     {{if .Permissions.ViewStorm}}
     <a href="/storm" class="sidebar-link {{if eq .ActivePage "storm"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-bolt"/></svg>
       Desert Storm
     </a>
     {{end}}
     {{if .Permissions.ViewSeasonHub}}
     <a href="/season-hub" class="sidebar-link {{if eq .ActivePage "season-hub"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 22 12 18 16 22"/><line x1="12" y1="18" x2="12" y2="13"/><path d="M5 2h14v7a7 7 0 01-14 0V2z"/><path d="M5 5H2a2 2 0 000 4h2.1M19 5h3a2 2 0 010 4h-2.1"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trophy"/></svg>
       Season Hub
     </a>
     {{end}}
@@ -47,25 +47,25 @@
     <div class="sidebar-section-label">Operations</div>
     {{if .Permissions.ViewSchedule}}
     <a href="/schedule" class="sidebar-link {{if eq .ActivePage "schedule"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg>
       Schedule
     </a>
     {{end}}
     {{if .Permissions.ViewTrain}}
     <a href="/train" class="sidebar-link {{if eq .ActivePage "train"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 11h16M12 4v7M8 19l-2 3M16 19l2 3M9 15h.01M15 15h.01"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-train"/></svg>
       Train
     </a>
     {{end}}
     {{if .Permissions.ViewOfficerCommand}}
     <a href="/officer-command" class="sidebar-link {{if eq .ActivePage "officer-command"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-flag"/></svg>
       Officers
     </a>
     {{end}}
     {{if .Permissions.ViewRecruiting}}
     <a href="/recruiting" class="sidebar-link {{if eq .ActivePage "recruiting"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-target"/></svg>
       Recruiting
     </a>
     {{end}}
@@ -73,25 +73,25 @@
     <div class="sidebar-section-label">Alliance</div>
     {{if .Permissions.ViewAllies}}
     <a href="/allies" class="sidebar-link {{if eq .ActivePage "allies"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.42 4.58a5.4 5.4 0 00-7.65 0l-.77.78-.77-.78a5.4 5.4 0 00-7.65 7.65l1.06 1.06L12 21.23l7.77-7.77 1.06-1.06a5.4 5.4 0 000-7.65z"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-heart"/></svg>
       Allies
     </a>
     {{end}}
     {{if .Permissions.ViewAccountability}}
     <a href="/accountability" class="sidebar-link {{if eq .ActivePage "accountability"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 22H8M12 2v6M5 6l7 2 7-2M3 11l2 7h14l2-7"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-scale"/></svg>
       Accountability
     </a>
     {{end}}
     {{if or .Permissions.ViewActivity .IsAdmin}}
     <a href="/activity" class="sidebar-link {{if eq .ActivePage "activity"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-activity"/></svg>
       Activity
     </a>
     {{end}}
     {{if or .Permissions.ViewComms .Permissions.ViewPolls}}
     <a href="/comms" class="sidebar-link {{if eq .ActivePage "comms"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-mail"/></svg>
       Comms
     </a>
     {{end}}
@@ -99,42 +99,42 @@
     <div class="sidebar-section-label">Data</div>
     {{if .Permissions.ViewRankings}}
     <a href="/rankings" class="sidebar-link {{if eq .ActivePage "rankings"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><polyline points="2 20 22 20"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-bar"/></svg>
       Tracking
     </a>
     {{end}}
     {{if .Permissions.ViewDyno}}
     <a href="/dyno" class="sidebar-link {{if eq .ActivePage "dyno"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-volume"/></svg>
       Shoutouts
     </a>
     {{end}}
     {{if .Permissions.ViewFiles}}
     <a href="/files" class="sidebar-link {{if eq .ActivePage "files"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-folder"/></svg>
       Files
     </a>
     {{end}}
     {{if and .Permissions.ViewUpload .OCRPipelineReady}}
     <a href="/upload" class="sidebar-link {{if eq .ActivePage "upload"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-camera"/></svg>
       Upload
     </a>
     {{end}}
 
     <a href="/profile" class="sidebar-link {{if eq .ActivePage "profile"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-user"/></svg>
       My Profile
     </a>
     {{if .Permissions.ManageSettings}}
     <a href="/settings" class="sidebar-link {{if eq .ActivePage "settings"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg>
       Settings
     </a>
     {{end}}
     {{if .IsAdmin}}
     <a href="/admin" class="sidebar-link {{if eq .ActivePage "admin"}}active{{end}}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-lock"/></svg>
       Admin
     </a>
     {{end}}
@@ -144,20 +144,20 @@
   {{define "theme-links"}}
     <div class="sidebar-section-label">Theme</div>
     <a href="#" class="sidebar-link theme-option" data-theme="auto">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M5.64 5.64l1.41 1.41M2 12h2M5.64 18.36l1.41-1.41M12 22v-2"/><circle cx="12" cy="12" r="5"/><path d="M12 7a5 5 0 010 10z" fill="currentColor" stroke="none"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-brightness-auto"/></svg>
       Auto (System)
     </a>
     <a href="#" class="sidebar-link theme-option" data-theme="light">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-sun"/></svg>
       Light
     </a>
     <a href="#" class="sidebar-link theme-option" data-theme="dark">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-moon"/></svg>
       Dark
     </a>
     <div class="dropdown-divider"></div>
     <a href="#" class="sidebar-link logout-btn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-logout"/></svg>
       Logout
     </a>
   {{end}}
@@ -169,9 +169,7 @@
       <div class="sidebar-brand">
         <div class="sidebar-brand-row">
           <div class="sidebar-brand-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
+            <svg width="18" height="18" aria-hidden="true" style="color:white" class="svg-icon"><use href="/icons.svg#icon-shield"/></svg>
           </div>
           <div>
             <div class="sidebar-brand-name">{{if .AllianceName}}{{.AllianceName}}{{else}}Alliance{{end}}</div>
@@ -193,7 +191,7 @@
         </div>
         <div class="user-dropdown">
           <button id="username-display" class="username-btn" aria-label="User menu">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            <svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg>
           </button>
           <div id="user-dropdown-menu" class="dropdown-menu">
             {{template "theme-links" .}}
@@ -205,14 +203,14 @@
     <!-- Mobile header (≤768px) -->
     <div class="mobile-header">
       <div class="sidebar-brand-icon">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <svg width="15" height="15" aria-hidden="true" style="color:white" class="svg-icon"><use href="/icons.svg#icon-shield"/></svg>
       </div>
       <div style="flex:1">
         <div class="mobile-header-name">{{if .AllianceName}}{{.AllianceName}}{{else}}Alliance{{end}}</div>
         <div class="mobile-header-sub">{{if .AllianceTag}}[{{.AllianceTag}}] · {{end}}Alliance Manager</div>
       </div>
       <button id="mobile-menu-btn" class="menu-btn" aria-label="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <svg width="20" height="20" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-menu-2"/></svg>
       </button>
     </div>
 
@@ -234,27 +232,27 @@
   <!-- Bottom tabs (mobile ≤768px) -->
   <nav class="bottom-tabs">
     <a href="/" class="bottom-tab {{if eq .ActivePage "dashboard"}}active{{end}}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-home"/></svg>
       Home
     </a>
     <a href="/members" class="bottom-tab {{if eq .ActivePage "members"}}active{{end}}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg>
       Members
     </a>
     {{if .Permissions.ViewVSPoints}}
     <a href="/vs" class="bottom-tab {{if eq .ActivePage "vs"}}active{{end}}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/><polyline points="9.5 6.5 21 18 21 21 18 21 6.5 9.5"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-swords"/></svg>
       VS
     </a>
     {{end}}
     {{if .Permissions.ViewSchedule}}
     <a href="/schedule" class="bottom-tab {{if eq .ActivePage "schedule"}}active{{end}}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg>
       Schedule
     </a>
     {{end}}
     <button class="bottom-tab" id="more-tab-btn">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-menu-2"/></svg>
       More
     </button>
   </nav>
@@ -262,7 +260,7 @@
   <!-- More sheet (mobile) -->
   <div id="more-sheet" class="more-sheet">
     <div class="more-sheet-close">
-      <button id="more-sheet-close-btn" class="btn btn-secondary btn-sm">✕ Close</button>
+      <button id="more-sheet-close-btn" class="btn btn-secondary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Close</button>
     </div>
     <nav class="sidebar-nav">
       {{template "nav-links" .}}
