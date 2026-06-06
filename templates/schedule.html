@@ -241,18 +241,18 @@
 
             <div class="form-group">
                 <label for="event-type-select">Event Type</label>
-                <select id="event-type-select" required></select>
+                <select id="event-type-select" class="form-input" required></select>
             </div>
 
             <div class="form-group">
                 <label for="event-date-input">Date</label>
-                <input type="date" id="event-date-input" required>
+                <input type="date" id="event-date-input" class="form-input" required>
             </div>
 
             <div class="form-group">
                 <label for="event-time-input">Time (ST, HH:MM)</label>
                 <div class="event-time-row">
-                    <input type="text" id="event-time-input" placeholder="HH:MM" maxlength="5">
+                    <input type="text" id="event-time-input" class="form-input" placeholder="HH:MM" maxlength="5">
                     <label class="event-allday-label" for="event-allday-input">
                         <input type="checkbox" id="event-allday-input">
                         All Day
@@ -266,12 +266,12 @@
                 <label for="event-level-input">Level Override
                     <span class="help-text">(leave blank to use baseline)</span>
                 </label>
-                <input type="number" id="event-level-input" min="1" max="30" style="width:80px;">
+                <input type="number" id="event-level-input" class="form-input" min="1" max="30" style="width:80px;">
             </div>
 
             <div class="form-group">
                 <label for="event-notes-input">Notes <span class="help-text">(optional)</span></label>
-                <textarea id="event-notes-input" maxlength="500" rows="3" style="resize:vertical;width:100%;box-sizing:border-box;"></textarea>
+                <textarea id="event-notes-input" class="form-input" maxlength="500" rows="3" style="resize:vertical;width:100%;box-sizing:border-box;"></textarea>
             </div>
 
             <div class="modal-actions">
@@ -292,17 +292,17 @@
 
             <div class="form-group">
                 <label for="et-name">Full Name</label>
-                <input type="text" id="et-name" maxlength="60" required>
+                <input type="text" id="et-name" class="form-input" maxlength="60" required>
             </div>
 
             <div class="form-group">
                 <label for="et-short">Short Name</label>
-                <input type="text" id="et-short" maxlength="8" required>
+                <input type="text" id="et-short" class="form-input" maxlength="8" required>
             </div>
 
             <div class="form-group">
                 <label for="et-icon">Icon (emoji)</label>
-                <input type="text" id="et-icon" maxlength="8" placeholder="📅">
+                <input type="text" id="et-icon" class="form-input" maxlength="8" placeholder="📅">
             </div>
 
             <div class="form-group">
@@ -328,26 +328,26 @@
             <div class="form-row" style="gap:12px;flex-wrap:wrap;">
                 <div class="form-group" style="flex:1;min-width:160px;">
                     <label for="se-name">Name</label>
-                    <input type="text" id="se-name" maxlength="60" required>
+                    <input type="text" id="se-name" class="form-input" maxlength="60" required>
                 </div>
                 <div class="form-group" style="width:100px;">
                     <label for="se-short">Short Name</label>
-                    <input type="text" id="se-short" maxlength="8" required>
+                    <input type="text" id="se-short" class="form-input" maxlength="8" required>
                 </div>
                 <div class="form-group" style="width:80px;">
                     <label for="se-icon">Icon</label>
-                    <input type="text" id="se-icon" maxlength="8" placeholder="🌐">
+                    <input type="text" id="se-icon" class="form-input" maxlength="8" placeholder="🌐">
                 </div>
             </div>
 
             <div class="form-row" style="gap:12px;flex-wrap:wrap;">
                 <div class="form-group">
                     <label for="se-duration">Duration (days)</label>
-                    <input type="number" id="se-duration" min="1" max="30" value="1" style="width:70px;" required>
+                    <input type="number" id="se-duration" class="form-input" min="1" max="30" value="1" style="width:70px;" required>
                 </div>
                 <div class="form-group">
                     <label for="se-repeat">Repeat</label>
-                    <select id="se-repeat" required>
+                    <select id="se-repeat" class="form-input" required>
                         <option value="none">None (single)</option>
                         <option value="weekly">Weekly</option>
                         <option value="biweekly">Biweekly</option>
@@ -359,7 +359,7 @@
             <!-- Weekday (weekly / biweekly) -->
             <div class="form-group" id="se-weekday-group" style="display:none;">
                 <label for="se-weekday">Day of week</label>
-                <select id="se-weekday">
+                <select id="se-weekday" class="form-input">
                     <option value="0">Monday</option>
                     <option value="1">Tuesday</option>
                     <option value="2">Wednesday</option>
@@ -373,13 +373,13 @@
             <!-- Every N days -->
             <div class="form-group" id="se-interval-group" style="display:none;">
                 <label for="se-interval">Interval (days)</label>
-                <input type="number" id="se-interval" min="2" max="365" style="width:80px;">
+                <input type="number" id="se-interval" class="form-input" min="2" max="365" style="width:80px;">
             </div>
 
             <!-- Anchor/event date (always shown) -->
             <div class="form-group" id="se-anchor-group">
                 <label for="se-anchor" id="se-anchor-label">Anchor Date</label>
-                <input type="date" id="se-anchor">
+                <input type="date" id="se-anchor" class="form-input">
                 <span class="help-text">First/reference occurrence date.</span>
             </div>
 
