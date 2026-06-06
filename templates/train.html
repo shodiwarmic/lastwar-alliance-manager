@@ -103,18 +103,18 @@
 
         <div class="form-group">
             <label for="log-date">Date (Game Time)</label>
-            <input type="date" id="log-date">
+            <input type="date" id="log-date" class="form-input">
         </div>
         <div class="form-group">
             <label for="log-type">Train Type</label>
-            <select id="log-type">
+            <select id="log-type" class="form-input">
                 <option value="FREE">Free</option>
                 <option value="PURCHASED">Purchased</option>
             </select>
         </div>
         <div class="form-group">
             <label for="log-conductor">Conductor</label>
-            <select id="log-conductor">
+            <select id="log-conductor" class="form-input">
                 <option value="">— select member —</option>
             </select>
         </div>
@@ -122,10 +122,10 @@
         <div class="form-group">
             <label>VIP (optional)</label>
             <div class="vip-row">
-                <select id="log-vip" style="flex:1;">
+                <select id="log-vip" class="form-input" style="flex:1;">
                     <option value="">— none —</option>
                 </select>
-                <select id="log-vip-type" style="width:170px;">
+                <select id="log-vip-type" class="form-input" style="width:170px;">
                     <option value="SPECIAL_GUEST">Special Guest</option>
                     <option value="GUARDIAN_DEFENDER">Guardian Defender</option>
                 </select>
@@ -134,7 +134,7 @@
 
         <div class="form-group">
             <label for="log-notes">Notes</label>
-            <textarea id="log-notes" rows="2" style="width:100%;resize:vertical;"></textarea>
+            <textarea id="log-notes" class="form-input" rows="2" style="width:100%;resize:vertical;"></textarea>
         </div>
 
         <div id="log-limit-warning" class="warning-message hidden">
@@ -158,18 +158,18 @@
 
         <div class="form-group">
             <label for="rule-name">Rule Name</label>
-            <input type="text" id="rule-name" maxlength="80" style="width:100%;" placeholder="e.g. Free Train Eligibility">
+            <input type="text" id="rule-name" class="form-input" maxlength="80" style="width:100%;" placeholder="e.g. Free Train Eligibility">
         </div>
 
         <div class="form-group">
             <label>Selection Method</label>
             <div class="selection-method-row">
-                <select id="rule-sm-type">
+                <select id="rule-sm-type" class="form-input">
                     <option value="RANDOM">Random</option>
                     <option value="GREATEST">Greatest</option>
                     <option value="LEAST">Least</option>
                 </select>
-                <select id="rule-sm-field" style="display:none;">
+                <select id="rule-sm-field" class="form-input" style="display:none;">
                     <option value="days_since_free_conducted">Days since free train</option>
                     <option value="days_since_any_conducted">Days since any train</option>
                     <option value="vs_total_week">VS total (this week)</option>
