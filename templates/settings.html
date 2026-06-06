@@ -66,7 +66,7 @@
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-flag"/></svg> Game Limits</h4>
                         <div class="form-group">
                             <label for="max-hq-level">Maximum HQ Level:</label>
-                            <input type="number" id="max-hq-level" min="30" required>
+                            <input type="number" id="max-hq-level" class="form-input" min="30" required>
                             <span class="help-text">Caps the maximum level a member can be assigned. Cannot be set lower than 30. Update this when the game increases the level cap.</span>
                         </div>
                     </div>
@@ -75,7 +75,7 @@
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-desktop"/></svg> Login Screen Banner</h4>
                         <div class="form-group">
                             <label for="settings-login-message">Banner Content (Supports HTML):</label>
-                            <textarea id="settings-login-message" rows="6" placeholder="Message to display below the login button..."></textarea>
+                            <textarea id="settings-login-message" class="form-input" rows="6" placeholder="Message to display below the login button..."></textarea>
                             <span class="help-text">Leave blank to hide entirely. Useful for Discord links or onboarding instructions.</span>
                         </div>
                     </div>
@@ -129,12 +129,12 @@
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-train"/></svg> Train Tracker</h4>
                         <div class="form-group">
                             <label for="train-free-limit">Free Train Daily Limit:</label>
-                            <input type="number" id="train-free-limit" min="1" max="10" required>
+                            <input type="number" id="train-free-limit" class="form-input" min="1" max="10" required>
                             <span class="help-text">Maximum Free trains that can be logged per game day before a warning is shown.</span>
                         </div>
                         <div class="form-group">
                             <label for="train-purchased-limit">Purchased Train Daily Limit:</label>
-                            <input type="number" id="train-purchased-limit" min="1" max="10" required>
+                            <input type="number" id="train-purchased-limit" class="form-input" min="1" max="10" required>
                             <span class="help-text">Maximum Purchased trains that can be logged per game day before a warning is shown.</span>
                         </div>
                     </div>
@@ -143,7 +143,7 @@
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> VS Points</h4>
                         <div class="form-group">
                             <label for="vs-minimum-points">VS Minimum Points:</label>
-                            <input type="number" id="vs-minimum-points" min="0" step="100000" required>
+                            <input type="number" id="vs-minimum-points" class="form-input" min="0" step="100000" required>
                             <span class="help-text">Weekly VS points threshold shown on the Dashboard. Members below this total appear in the Leader Flags section for R4/R5.</span>
                         </div>
                     </div>
@@ -152,12 +152,12 @@
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-scale"/></svg> Accountability Strike Thresholds</h4>
                         <div class="form-group">
                             <label for="strike-needs-improvement-threshold">Needs Improvement (strikes ≥):</label>
-                            <input type="number" id="strike-needs-improvement-threshold" min="1" max="10" required>
+                            <input type="number" id="strike-needs-improvement-threshold" class="form-input" min="1" max="10" required>
                             <span class="help-text">Members with this many or more active strikes are tagged Needs Improvement.</span>
                         </div>
                         <div class="form-group">
                             <label for="strike-at-risk-threshold">At Risk (strikes ≥):</label>
-                            <input type="number" id="strike-at-risk-threshold" min="1" max="10" required>
+                            <input type="number" id="strike-at-risk-threshold" class="form-input" min="1" max="10" required>
                             <span class="help-text">Members with this many or more active strikes are tagged At Risk.</span>
                         </div>
                     </div>
@@ -166,12 +166,12 @@
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-target"/></svg> Recruiting</h4>
                         <div class="form-group">
                             <label for="alliance-max-members">Alliance Max Members:</label>
-                            <input type="number" id="alliance-max-members" min="1" max="500" required>
+                            <input type="number" id="alliance-max-members" class="form-input" min="1" max="500" required>
                             <span class="help-text">Used to calculate open spots on the Recruiting page.</span>
                         </div>
                         <div class="form-group">
                             <label for="join-requirements">Join Requirements:</label>
-                            <textarea id="join-requirements" rows="3" placeholder="e.g. Minimum HQ 20, 50M+ power, active in VS events..."></textarea>
+                            <textarea id="join-requirements" class="form-input" rows="3" placeholder="e.g. Minimum HQ 20, 50M+ power, active in VS events..."></textarea>
                             <span class="help-text">Displayed on the Recruiting page header for officers to reference.</span>
                         </div>
                     </div>
