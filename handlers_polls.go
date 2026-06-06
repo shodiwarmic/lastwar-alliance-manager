@@ -704,7 +704,7 @@ func handlePollInstanceDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respRows, err := db.Query(
-		`SELECT member_id, option_key FROM poll_responses WHERE instance_id = ?`, id)
+		`SELECT member_id, option_key, recorded_at FROM poll_responses WHERE instance_id = ? ORDER BY recorded_at ASC`, id)
 	if err != nil {
 		slog.Error("handlePollInstanceDetail: response query", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -713,11 +713,14 @@ func handlePollInstanceDetail(w http.ResponseWriter, r *http.Request) {
 	defer respRows.Close()
 	for respRows.Next() {
 		var mid int
-		var key string
-		respRows.Scan(&mid, &key)
+		var key, recordedAt string
+		respRows.Scan(&mid, &key, &recordedAt)
 		if ms, ok := statusMap[mid]; ok {
 			ms.Responded = true
 			ms.Options = append(ms.Options, key)
+			if ms.RespondedAt == "" {
+				ms.RespondedAt = recordedAt // rows ordered ascending — first seen is earliest
+			}
 		}
 	}
 

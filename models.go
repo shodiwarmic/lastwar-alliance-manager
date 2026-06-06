@@ -610,11 +610,12 @@ type PollInstance struct {
 }
 
 type PollMemberStatus struct {
-	MemberID   int      `json:"member_id"`
-	MemberName string   `json:"member_name"`
-	Rank       string   `json:"rank"`
-	Responded  bool     `json:"responded"`
-	Options    []string `json:"options"` // selected option(s), empty if pending
+	MemberID    int      `json:"member_id"`
+	MemberName  string   `json:"member_name"`
+	Rank        string   `json:"rank"`
+	Responded   bool     `json:"responded"`
+	Options     []string `json:"options"`      // selected option(s), empty if pending
+	RespondedAt string   `json:"responded_at"` // earliest recorded_at across this member's options; empty if pending
 }
 
 type PollAnonCount struct {

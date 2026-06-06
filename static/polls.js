@@ -256,7 +256,154 @@ function renderPollInstanceCard(pi) {
     }
     card.appendChild(progressWrap);
 
+    // Export row — available to anyone who can view the poll
+    const exportRow = document.createElement('div');
+    exportRow.className = 'poll-export-row';
+
+    const csvBtn = document.createElement('button');
+    csvBtn.className = 'btn btn-secondary btn-sm';
+    csvBtn.textContent = 'Export CSV';
+    csvBtn.addEventListener('click', async () => {
+        const data = await fetchPollDetail(pi.id);
+        if (!data) return;
+        exportPollRowsCSV(buildPollExportRows(pi, data), pollFilenameSlug(pi.label) + '.csv');
+    });
+
+    const xlsxBtn = document.createElement('button');
+    xlsxBtn.className = 'btn btn-secondary btn-sm';
+    xlsxBtn.textContent = 'Export XLSX';
+    xlsxBtn.addEventListener('click', async () => {
+        const data = await fetchPollDetail(pi.id);
+        if (!data) return;
+        exportPollRowsXLSX(buildPollExportRows(pi, data), pollFilenameSlug(pi.label) + '.xlsx');
+    });
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn btn-secondary btn-sm';
+    copyBtn.textContent = 'Copy Summary';
+    copyBtn.addEventListener('click', async () => {
+        const data = await fetchPollDetail(pi.id);
+        if (!data) return;
+        const text = buildPollSummaryText(pi, data);
+        try {
+            // writeToClipboard (mail.js, loaded before polls.js on this page) falls
+            // back to execCommand in non-secure HTTP contexts where navigator.clipboard
+            // is unavailable.
+            await writeToClipboard(text);
+            showToast('Summary copied to clipboard.');
+        } catch {
+            showToast('Failed to copy to clipboard.', 'error');
+        }
+    });
+
+    exportRow.append(csvBtn, xlsxBtn, copyBtn);
+    card.appendChild(exportRow);
+
     return card;
+}
+
+// ── Poll export (CSV / XLSX / text summary) ───────────────────────────────────
+
+async function fetchPollDetail(id) {
+    try {
+        const res = await fetch('/api/comms/poll-instances/' + id + '/detail');
+        if (!res.ok) throw new Error('fetch failed');
+        return await res.json();
+    } catch {
+        showToast('Failed to load poll data.', 'error');
+        return null;
+    }
+}
+
+// Build the tabular export rows (array-of-arrays, first row = header).
+// Column scope is identical for CSV and XLSX — no action columns.
+function buildPollExportRows(pi, data) {
+    if (pi.poll_type === 'anonymous') {
+        const counts = data.counts || [];
+        const total = counts.reduce((s, c) => s + (c.response_count || 0), 0);
+        const rows = [['Option', 'Response Count', '% of Total']];
+        counts.forEach(c => {
+            const pct = total > 0 ? (c.response_count / total * 100).toFixed(1) : '0.0';
+            rows.push([c.option_key, c.response_count, pct + '%']);
+        });
+        return rows;
+    }
+
+    // Named: one row per member-option pair; non-responders get one blank row.
+    const rows = [['Member Name', 'Rank', 'Option', 'Responded At']];
+    (data.responded || []).forEach(m => {
+        const opts = (m.options && m.options.length) ? m.options : [''];
+        opts.forEach(opt => {
+            rows.push([m.member_name, m.rank, opt, formatDateTime(m.responded_at)]);
+        });
+    });
+    (data.pending || []).forEach(m => {
+        rows.push([m.member_name, m.rank, '', '']);
+    });
+    return rows;
+}
+
+function buildPollSummaryText(pi, data) {
+    const lines = [pi.label, pi.question, ''];
+
+    if (pi.poll_type === 'anonymous') {
+        const counts = data.counts || [];
+        const total = counts.reduce((s, c) => s + (c.response_count || 0), 0);
+        lines.push('Total responses: ' + total);
+        counts.forEach(c => {
+            const pct = total > 0 ? (c.response_count / total * 100).toFixed(1) : '0.0';
+            lines.push('  ' + c.option_key + ': ' + c.response_count + ' (' + pct + '%)');
+        });
+        return lines.join('\n');
+    }
+
+    const responded = data.responded || [];
+    const pending = data.pending || [];
+
+    lines.push('Responded (' + responded.length + '):');
+    responded.forEach(m => {
+        const opts = (m.options && m.options.length) ? ' — ' + m.options.join(', ') : '';
+        lines.push('  ' + m.member_name + opts);
+    });
+    lines.push('');
+    lines.push('Not Responded (' + pending.length + '):');
+    pending.forEach(m => lines.push('  ' + m.member_name));
+
+    return lines.join('\n');
+}
+
+function pollRowsToCSV(rows) {
+    return '﻿' + rows.map(row =>
+        row.map(val => {
+            const s = String(val ?? '');
+            return (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r'))
+                ? '"' + s.replace(/"/g, '""') + '"'
+                : s;
+        }).join(',')
+    ).join('\r\n');
+}
+
+function exportPollRowsCSV(rows, filename) {
+    const blob = new Blob([pollRowsToCSV(rows)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function exportPollRowsXLSX(rows, filename) {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, filename);
+}
+
+function pollFilenameSlug(label) {
+    return (label || 'poll').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'poll';
 }
 
 // ── Poll Template Modal ───────────────────────────────────────────────────────
@@ -738,6 +885,14 @@ function formatDate(isoStr) {
     if (!isoStr) return '';
     const d = new Date(isoStr.replace(' ', 'T') + 'Z');
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDateTime(isoStr) {
+    if (!isoStr) return '';
+    const d = new Date(isoStr.replace(' ', 'T') + 'Z');
+    return d.toLocaleString(undefined, {
+        month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
 }
 
 // ── DOMContentLoaded wiring ───────────────────────────────────────────────────
