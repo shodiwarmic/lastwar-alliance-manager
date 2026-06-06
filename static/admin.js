@@ -291,6 +291,10 @@ function showCreateUserModal() {
     document.getElementById('modal-title').textContent = 'Create New User';
     document.getElementById('user-form').reset();
     document.getElementById('user-id').value = '';
+    // form.reset() fires the form's "reset" event, which Choices.js handles by
+    // restoring the dropdown to its initial (empty) state — discarding the members
+    // loaded via setChoices at page load. Re-populate so the list is present.
+    populateMemberDropdown();
     memberIdChoices.setChoiceByValue('');
 
     // Default to true for new users
