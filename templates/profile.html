@@ -16,17 +16,17 @@
                 
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label for="stat-name">In-Game Name:</label>
-                    <input type="text" id="stat-name" required class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                    <input type="text" id="stat-name" required class="form-input" style="width: 100%;">
                 </div>
 
                 <div style="display: flex; gap: 15px; margin-bottom: 15px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="stat-level">HQ Level:</label>
-                        <input type="number" id="stat-level" class="form-input" min="1" max="40" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                        <input type="number" id="stat-level" class="form-input" min="1" max="40" style="width: 100%;">
                     </div>
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="stat-troop-level">Troop Level:</label>
-                        <select id="stat-troop-level" class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                        <select id="stat-troop-level" class="form-input" style="width: 100%;">
                             <option value="0">None / Unknown</option>
                             <option value="1">T1 (HQ 1+)</option>
                             <option value="2">T2 (HQ 4+)</option>
@@ -46,7 +46,7 @@
                 <div style="display: flex; gap: 15px; margin-bottom: 15px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="stat-profession">Profession:</label>
-                        <select id="stat-profession" class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                        <select id="stat-profession" class="form-input" style="width: 100%;">
                             <option value="">None</option>
                             <option value="Engineer">Engineer</option>
                             <option value="War Leader">War Leader</option>
@@ -55,7 +55,7 @@
                     </div>
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="stat-power">Overall Power:</label>
-                        <input type="number" id="stat-power" class="form-input" min="0" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                        <input type="number" id="stat-power" class="form-input" min="0" style="width: 100%;">
                         <span id="stat-power-timestamp" class="help-text"></span>
                     </div>
                 </div>
@@ -63,12 +63,12 @@
                 <div style="display: flex; gap: 15px; margin-bottom: 15px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="stat-kill-count">Troop Kills:</label>
-                        <input type="number" id="stat-kill-count" class="form-input" min="0" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                        <input type="number" id="stat-kill-count" class="form-input" min="0" style="width: 100%;">
                         <span id="stat-kill-count-timestamp" class="help-text"></span>
                     </div>
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="stat-hero-power">Total Hero Power:</label>
-                        <input type="number" id="stat-hero-power" class="form-input" min="0" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                        <input type="number" id="stat-hero-power" class="form-input" min="0" style="width: 100%;">
                         <span id="stat-hero-power-timestamp" class="help-text"></span>
                     </div>
                 </div>
@@ -76,7 +76,7 @@
                 <div style="display: flex; gap: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--color-border);">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="stat-squad-type">Primary Squad:</label>
-                        <select id="stat-squad-type" class="form-input" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                        <select id="stat-squad-type" class="form-input" style="width: 100%;">
                             <option value="">Unknown</option>
                             <option value="Tank">Tank</option>
                             <option value="Aircraft">Aircraft</option>
@@ -85,7 +85,7 @@
                     </div>
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="stat-squad-power">Squad Power:</label>
-                        <input type="number" id="stat-squad-power" class="form-input" min="0" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                        <input type="number" id="stat-squad-power" class="form-input" min="0" style="width: 100%;">
                         <span id="stat-squad-power-timestamp" class="help-text"></span>
                     </div>
                 </div>
@@ -131,18 +131,18 @@
             <form id="password-form">
                 <div class="form-group">
                     <label for="current-password">Current Password:</label>
-                    <input type="password" id="current-password" required>
+                    <input type="password" id="current-password" class="form-input" required>
                 </div>
                 <div class="form-group">
                     <label for="new-password">New Password:</label>
-                    <input type="password" id="new-password" required>
+                    <input type="password" id="new-password" class="form-input" required>
                     <ul id="password-rules" style="margin-top: 8px; padding-left: 0; list-style: none; font-size: 0.85em; line-height: 1.6;">
                         <li style="color: var(--color-text-mid);">Loading requirements...</li>
                     </ul>
                 </div>
                 <div class="form-group">
                     <label for="confirm-password">Confirm New Password:</label>
-                    <input type="password" id="confirm-password" required>
+                    <input type="password" id="confirm-password" class="form-input" required>
                     <div id="match-status" style="margin-top: 5px; font-size: 0.85em; font-weight: bold; display: none;"></div>
                 </div>
                 <div class="button-group">
