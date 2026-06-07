@@ -248,6 +248,14 @@ if (activeBtn) {
 ```
 
 `.tab-bar` / `.tab-btn` styles are defined in `styles.css` (globally available). No need to add them to page CSS — they work automatically on any page that uses `.tab-bar` / `.tab-btn` markup.
+
+### Choices.js + `form.reset()` wipes dynamically-loaded options
+When a [Choices.js](https://cdn.jsdelivr.net/npm/choices.js@10.2) `<select>` lives inside a `<form>`, Choices attaches a `reset` listener to that form. On `form.reset()` it restores the dropdown to the state captured **at init** — i.e. only the `<option>`s present in the template HTML — silently discarding anything you added later via `setChoices()`.
+
+This bit `admin.js`: the roster is loaded once at page-load (`populateMemberDropdown` → `setChoices`), but `showCreateUserModal()` calls `user-form.reset()`, which emptied the member dropdown every time the New User modal opened.
+
+If you call `form.reset()` on a form containing a Choices select, **re-run your `setChoices()` populate immediately after the reset** (see `showCreateUserModal` in `admin.js`). Selecting a value with `setChoiceByValue()` is not enough — that sets the selection, it does not restore the option list.
+
 ### CSRF is handled globally
 `static/csrf.js` intercepts all `fetch` calls and injects `X-CSRF-Token` on POST/PUT/DELETE automatically. You don't need to manually attach the token in page JS.
 
