@@ -799,17 +799,22 @@ function setupViewToggle() {
 
     if (!listBtn || !groupedBtn) return;
 
+    const setActive = (active, inactive) => {
+        active.classList.add('btn-primary');
+        active.classList.remove('btn-ghost');
+        inactive.classList.add('btn-ghost');
+        inactive.classList.remove('btn-primary');
+    };
+
     listBtn.addEventListener('click', () => {
         currentView = 'list';
-        listBtn.classList.add('active');
-        groupedBtn.classList.remove('active');
+        setActive(listBtn, groupedBtn);
         renderDynoRecommendations();
     });
 
     groupedBtn.addEventListener('click', () => {
         currentView = 'grouped';
-        groupedBtn.classList.add('active');
-        listBtn.classList.remove('active');
+        setActive(groupedBtn, listBtn);
         renderDynoRecommendations();
     });
 }

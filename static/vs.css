@@ -1,45 +1,19 @@
 /* static/vs.css - Styles for VS Points page */
 
-.vs-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--color-card);
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: var(--card-shadow);
-}
-
-.vs-table th {
-    background: var(--color-accent);
-    color: #fff;
-    padding: 12px;
-    text-align: left;
-    font-weight: 600;
+/* VS table builds on the global .data-table; these rules add the
+   sortable-header affordances .data-table doesn't provide. */
+#vs-table th {
     cursor: pointer;
     user-select: none;
-    transition: background 0.2s ease;
 }
 
-.vs-table th:hover {
+#vs-table th:hover {
     opacity: 0.88;
 }
 
 /* Sorting Indicators */
-.vs-table th.sort-asc::after  { content: " ▲"; font-size: 0.8em; }
-.vs-table th.sort-desc::after { content: " ▼"; font-size: 0.8em; }
-
-.vs-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--color-border);
-}
-
-.vs-table tr:last-child td {
-    border-bottom: none;
-}
-
-.vs-table tr:hover {
-    background: var(--color-accent-bg);
-}
+#vs-table th.sort-asc::after  { content: " ▲"; font-size: 0.8em; }
+#vs-table th.sort-desc::after { content: " ▼"; font-size: 0.8em; }
 
 .vs-input {
     width: 100%;
@@ -85,10 +59,6 @@
     text-align: center;
 }
 
-.calc-mode-btn {
-    background: var(--color-accent);
-}
-
 /* Highlights the input boxes when in Total Calculation mode */
 .total-mode-input {
     background-color: var(--color-warning-bg) !important;
@@ -125,29 +95,6 @@
     gap: 15px;
 }
 
-.week-nav-btn {
-    padding: 10px 20px;
-    background: var(--color-accent);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s ease;
-}
-
-.week-nav-btn:hover {
-    opacity: 0.88;
-    transform: translateY(-2px);
-}
-
-.week-nav-btn:disabled {
-    background: var(--color-border);
-    cursor: not-allowed;
-    transform: none;
-    opacity: 0.6;
-}
-
 .week-info h3 {
     margin: 0;
     color: var(--color-text);
@@ -164,49 +111,8 @@
     gap: 10px;
 }
 
-.save-btn {
-    padding: 10px 20px;
-    background: var(--color-success);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s ease;
-}
-
-.save-btn:hover { opacity: 0.88; transform: translateY(-2px); }
-
-.csv-btn {
-    background: var(--color-warning);
-}
-.csv-btn:hover { opacity: 0.88; }
-
-.clear-btn {
-    padding: 10px 20px;
-    background: var(--color-danger);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s ease;
-}
-
-.clear-btn:hover { opacity: 0.88; transform: translateY(-2px); }
-
-.search-box {
-    width: 100%;
-    max-width: 300px;
-    padding: 10px 15px;
-    border: 2px solid var(--color-border);
-    border-radius: 8px;
-    font-size: 14px;
-    background: var(--color-surface);
-    color: var(--color-text);
-}
-
-.search-box:focus { outline: none; border-color: var(--color-accent); }
+/* Keep the member search compact — .form-input is full-width by default */
+#search-box { max-width: 300px; }
 .table-wrapper { overflow-x: auto; }
 
 /* Hidden utility class for permissions */
@@ -214,5 +120,5 @@
 
 @media (max-width: 768px) {
     .vs-input { width: 50px; padding: 4px 6px; font-size: 12px; }
-    .vs-table th, .vs-table td { padding: 8px 6px; font-size: 13px; }
+    #vs-table th, #vs-table td { padding: 8px 6px; font-size: 13px; }
 }

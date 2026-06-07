@@ -34,7 +34,7 @@
                     <p class="invite-error-icon"><svg width="48" height="48" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-unlink"/></svg></p>
                     <h2>Invite Link Invalid</h2>
                     <p>{{.Error}}</p>
-                    <a href="/login" class="login-btn" style="display:block;text-align:center;text-decoration:none;margin-top:20px;">Go to Login</a>
+                    <a href="/login" class="btn btn-primary" style="display:block;text-align:center;text-decoration:none;margin-top:20px;">Go to Login</a>
                 </div>
                 {{else}}
                 <div id="server-error" class="error-message" style="display:none"></div>
@@ -45,6 +45,7 @@
                     <div class="form-group">
                         <label for="username">Username:</label>
                         <input type="text" id="username" name="username" value="{{.DefaultUsername}}"
+                            class="form-input"
                             required minlength="3" maxlength="30"
                             pattern="[a-zA-Z0-9._\-]+"
                             autocomplete="username">
@@ -54,12 +55,12 @@
 
                     <div class="form-group">
                         <label for="password">Password:</label>
-                        <input type="password" id="password" name="password" required autocomplete="new-password">
+                        <input type="password" id="password" name="password" class="form-input" required autocomplete="new-password">
                     </div>
 
                     <div class="form-group">
                         <label for="confirm-password">Confirm Password:</label>
-                        <input type="password" id="confirm-password" name="confirm_password" required autocomplete="new-password">
+                        <input type="password" id="confirm-password" name="confirm_password" class="form-input" required autocomplete="new-password">
                         <div id="match-status" style="margin-top:5px;font-size:0.85em;font-weight:bold;display:none;"></div>
                     </div>
 
@@ -71,7 +72,7 @@
                         {{if .PwdRequireSpecial}}<li data-rule="special">Special character required</li>{{end}}
                     </ul>
 
-                    <button type="submit" class="login-btn" id="submit-btn" disabled style="opacity:0.6;cursor:not-allowed;">
+                    <button type="submit" class="btn btn-primary" id="submit-btn" disabled style="opacity:0.6;cursor:not-allowed;">
                         Create Account &amp; Log In
                     </button>
                 </form>

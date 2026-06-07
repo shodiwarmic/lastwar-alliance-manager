@@ -56,21 +56,8 @@ body {
   padding: 32px 30px;
 }
 
-/* Full-width submit button */
-.login-btn {
-  width: 100%;
-  padding: 11px;
-  background: var(--color-accent);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-family: inherit; font-size: 15px; font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s, transform 0.15s;
-}
-
-.login-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
-.login-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+/* Auth submit buttons span the full form width */
+.login-form .btn { width: 100%; }
 
 /* Login-page banner (admin message) */
 .login-banner {

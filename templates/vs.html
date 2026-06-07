@@ -13,29 +13,29 @@
 {{define "content"}}
     <section class="controls">
         <div class="week-selector">
-            <button id="prev-week" class="week-nav-btn">← Previous Week</button>
+            <button id="prev-week" class="btn btn-ghost">← Previous Week</button>
             <div class="week-info">
                 <h3 id="week-display">Loading...</h3>
                 <p class="week-subtitle">Day 1 - Day 6 VS Points</p>
             </div>
-            <button id="next-week" class="week-nav-btn">Next Week →</button>
+            <button id="next-week" class="btn btn-ghost">Next Week →</button>
         </div>
         <div class="action-buttons" id="admin-actions">
-            <button id="toggle-mode-btn" class="save-btn calc-mode-btn hidden"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Enter Weekly Totals</button>
+            <button id="toggle-mode-btn" class="btn btn-secondary hidden"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Enter Weekly Totals</button>
 
             <input type="file" id="csv-file-input" accept=".csv" class="hidden">
-            <button id="csv-import-btn" class="save-btn csv-btn hidden"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-download"/></svg> Import CSV</button>
-            <button id="save-btn" class="save-btn hidden"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Points</button>
-            <button id="clear-btn" class="clear-btn hidden"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trash"/></svg> Clear Week</button>
+            <button id="csv-import-btn" class="btn btn-secondary hidden"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-download"/></svg> Import CSV</button>
+            <button id="save-btn" class="btn btn-primary hidden"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Points</button>
+            <button id="clear-btn" class="btn btn-danger hidden"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trash"/></svg> Clear Week</button>
         </div>
     </section>
 
     <section>
-        <input type="text" id="search-box" class="search-box" placeholder="Search member...">
+        <input type="text" id="search-box" class="form-input" placeholder="Search member...">
     </section>
 
     <section class="table-wrapper">
-        <table class="vs-table" id="vs-table" data-export-csv="vs-points.csv">
+        <table class="data-table" id="vs-table" data-export-csv="vs-points.csv">
             <thead>
                 <tr>
                     <th data-sort="name" class="sort-asc">Member</th>

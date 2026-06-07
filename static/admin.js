@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadStormSlots();
 
         // Tab buttons
+        document.getElementById('users-tab').style.display = 'block';
         document.getElementById('tab-btn-users').addEventListener('click', () => switchTab('users'));
         document.getElementById('tab-btn-logins').addEventListener('click', () => switchTab('logins'));
         document.getElementById('tab-btn-security').addEventListener('click', () => switchTab('security'));
@@ -86,8 +87,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 function switchTab(tabName) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById('tab-btn-' + tabName).classList.add('active');
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-    document.getElementById(tabName + '-tab').classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+    document.getElementById(tabName + '-tab').style.display = 'block';
     if (tabName === 'logins') {
         loadLoginHistory();
     }

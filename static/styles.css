@@ -1614,24 +1614,6 @@ button {
     margin-bottom: 10px;
 }
 
-.week-nav-btn {
-    background: var(--color-accent);
-    color: #fff;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.week-nav-btn:hover {
-    filter: brightness(1.1);
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px var(--color-accent-border);
-}
-
 #week-display {
     color: var(--color-text);
     font-size: 1.3em;
@@ -2254,11 +2236,7 @@ button {
     .week-selector {
         flex-direction: column;
     }
-    
-    .week-nav-btn {
-        width: 100%;
-    }
-    
+
     .schedule-grid {
         grid-template-columns: 1fr;
     }
@@ -2292,41 +2270,6 @@ button {
     gap: 10px;
     justify-content: center;
     margin-top: 15px;
-}
-
-.save-btn,
-.clear-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 10px 25px;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.save-btn {
-    background: var(--color-success);
-    color: #fff;
-}
-
-.save-btn:hover {
-    filter: brightness(0.9);
-    transform: translateY(-2px);
-}
-
-.clear-btn {
-    background: var(--color-danger);
-    color: #fff;
-}
-
-.clear-btn:hover {
-    filter: brightness(0.9);
-    transform: translateY(-2px);
 }
 
 .awards-grid {
@@ -2675,31 +2618,6 @@ button {
 .view-toggle {
     display: flex;
     gap: 10px;
-}
-
-.toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 20px;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-surface);
-    cursor: pointer;
-    font-size: 0.9em;
-    transition: all 0.3s;
-    color: var(--color-text);
-}
-
-.toggle-btn:hover {
-    border-color: var(--color-accent);
-    background: var(--color-accent-bg);
-}
-
-.toggle-btn.active {
-    background: var(--color-accent);
-    color: #fff;
-    border-color: var(--color-accent);
 }
 
 /* Statistics Dashboard */
@@ -4456,12 +4374,6 @@ button {
     .awards-actions {
         flex-direction: column;
         gap: 8px;
-    }
-
-    .save-btn,
-    .clear-btn {
-        width: 100%;
-        padding: 12px;
     }
 
     .awards-grid {
