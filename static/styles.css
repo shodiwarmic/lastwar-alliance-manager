@@ -2692,6 +2692,23 @@ button {
     color: white;
 }
 
+/* Shoutout stat cards — soft tinted panels (token-driven, theme-aware).
+   Scoped to .stats-dashboard so other pages' .stat-card usage is untouched.
+   Strong colour for the number/icon, light tint behind, readable label. */
+.stats-dashboard .stat-card {
+    background: var(--color-accent-bg);
+    color: var(--color-accent);
+    border: 1px solid var(--color-border);
+}
+
+.stats-dashboard .stat-card:nth-child(2) { background: var(--color-success-bg); color: var(--color-success); }
+.stats-dashboard .stat-card:nth-child(3) { background: var(--color-danger-bg);  color: var(--color-danger); }
+.stats-dashboard .stat-card:nth-child(4) { background: var(--color-warning-bg); color: var(--color-warning); }
+
+.stats-dashboard .stat-icon  { color: inherit; opacity: 1; }
+.stats-dashboard .stat-value { color: inherit; }
+.stats-dashboard .stat-label { color: var(--color-text-mid); opacity: 1; }
+
 /* Charts Section */
 .charts-section {
     background: var(--color-surface);
