@@ -49,7 +49,7 @@
 
                     <div class="filter-sort-grid">
 
-                        <div class="filter-row" id="sort-chips-row" style="grid-column: 1 / -1">
+                        <div class="filter-row filter-row-full" id="sort-chips-row">
                             <span class="filter-chip-label">Sort:</span>
                             <button class="filter-chip sort-chip active" data-sort="name">Name ↑</button>
                             <button class="filter-chip sort-chip" data-sort="rank">Rank</button>
@@ -89,7 +89,7 @@
                             </div>
                         </div>
 
-                        <div class="filter-row" style="grid-column: 1 / -1">
+                        <div class="filter-row filter-row-full">
                             <span class="filter-chip-label">Troops:</span>
                             <button class="filter-chip troop-chip active" data-troop="all">All</button>
                             <button class="filter-chip troop-chip" data-troop="11">T11</button>
@@ -105,7 +105,7 @@
                             <button class="filter-chip troop-chip" data-troop="1">T1</button>
                         </div>
 
-                        <div class="filter-row" id="eligible-filter-row" style="display:none; grid-column: 1 / -1">
+                        <div class="filter-row filter-row-full" id="eligible-filter-row" style="display:none">
                             <span class="filter-chip-label">Status:</span>
                             <button class="filter-chip eligible-chip active" data-eligible="all">All</button>
                             <button class="filter-chip eligible-chip" data-eligible="eligible">Eligible</button>
@@ -113,7 +113,7 @@
                         </div>
 
                         {{if .SkillLabels}}
-                        <div class="filter-row" style="grid-column: 1 / -1">
+                        <div class="filter-row filter-row-full">
                             <span class="filter-chip-label">Skills:</span>
                             <button class="filter-chip skill-chip active" data-skill="all">All</button>
                             {{range $key, $label := .SkillLabels}}
@@ -241,9 +241,9 @@
                 {{if .SkillLabels}}
                 <div class="form-group">
                     <label>Skills:</label>
-                    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;">
+                    <div class="skills-check-grid">
                         {{range $key, $label := .SkillLabels}}
-                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                        <label class="skill-check-label">
                             <input type="checkbox" data-skill-key="{{$key}}">
                             <span>{{$label}}</span>
                         </label>
@@ -298,31 +298,31 @@
             <h2 id="alias-modal-title">Manage Nicknames</h2>
             <p class="help-text">Set custom nicknames to help OCR Image Recognition match screenshots to the correct player.</p>
             
-            <div style="margin: 20px 0; padding: 15px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;">
-                <form id="add-alias-form" style="display: flex; gap: 10px; align-items: flex-end;">
+            <div class="alias-add-card">
+                <form id="add-alias-form">
                     <div style="flex: 1;">
                         <label for="new-alias-input">New Nickname:</label>
                         <input type="text" id="new-alias-input" class="form-input" required placeholder="e.g. StarLord">
                     </div>
                     <button type="submit" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
                 </form>
-                <p id="alias-add-status" class="status-msg" style="color: var(--color-danger); margin: 6px 0 0;"></p>
+                <p id="alias-add-status" class="status-msg"></p>
                 <div id="global-alias-checkbox-wrapper" style="margin-top: 10px; display: none;">
-                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--color-text-muted); font-size: 0.9em;">
+                    <label class="global-alias-label">
                         <input type="checkbox" id="new-alias-global" style="width: 16px; height: 16px;">
                         Make this a Global Alias (Applies to all users)
                     </label>
                 </div>
             </div>
 
-            <div id="alias-filter-bar" style="display:flex;gap:6px;margin:10px 0 6px;">
+            <div id="alias-filter-bar">
                 <button class="btn btn-secondary btn-sm active-filter" data-alias-filter="all">All</button>
                 <button class="btn btn-secondary btn-sm" data-alias-filter="global">Global</button>
                 <button class="btn btn-secondary btn-sm" data-alias-filter="personal">Personal</button>
                 <button class="btn btn-secondary btn-sm" data-alias-filter="ocr">OCR</button>
             </div>
 
-            <div id="aliases-list" style="max-height: 300px; overflow-y: auto;">
+            <div id="aliases-list">
             </div>
         </div>
     </div>

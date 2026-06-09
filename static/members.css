@@ -37,6 +37,11 @@
     align-items: center;
 }
 
+/* Filter rows that span the full width of the filter grid */
+.filter-row-full {
+    grid-column: 1 / -1;
+}
+
 .member-search-wrap {
     flex: 1;
     min-width: 250px;
@@ -57,6 +62,61 @@
     border: none;
     cursor: pointer;
     color: var(--color-text-mid);
+}
+
+/* ── Member modal: skills checkboxes ──────────────────────────────────── */
+.skills-check-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.skill-check-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+/* ── Alias / nickname modal ───────────────────────────────────────────── */
+.alias-add-card {
+    margin: 20px 0;
+    padding: 15px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+}
+
+#add-alias-form {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+#alias-add-status {
+    color: var(--color-danger);
+    margin: 6px 0 0;
+}
+
+.global-alias-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 0.9em;
+}
+
+#alias-filter-bar {
+    display: flex;
+    gap: 6px;
+    margin: 10px 0 6px;
+}
+
+#aliases-list {
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 
