@@ -193,6 +193,20 @@
     align-items: center;
 }
 
+/* Button + layout-select pairs inside the output bar */
+.output-btn-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Discord/chat text output area */
+#text-output {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
 .day-card-picker {
     font-size: 0.82rem;
     padding: 3px 6px;
@@ -276,6 +290,10 @@ span.flatpickr-weekday {
     border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 16px;
+}
+
+.generate-section + .generate-section {
+    margin-top: 20px;
 }
 
 .generate-section h4 {

@@ -42,14 +42,14 @@
         <!-- Output buttons -->
         <div class="schedule-output-bar">
             <button class="btn btn-secondary btn-sm" id="btn-text-output"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Text</button>
-            <span style="display:inline-flex;align-items:center;gap:4px;">
+            <span class="output-btn-group">
                 <button class="btn btn-secondary btn-sm" id="btn-week-image"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-photo"/></svg> Week Image</button>
                 <select id="week-image-cols" class="day-card-picker" title="Layout columns">
                     <option value="4">4 cols</option>
                     <option value="2">2 cols</option>
                 </select>
             </span>
-            <span style="display:inline-flex;align-items:center;gap:4px;">
+            <span class="output-btn-group">
                 <button class="btn btn-secondary btn-sm" id="btn-day-card"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Day Card</button>
                 <select id="day-card-picker" class="day-card-picker" title="Select day for card"></select>
             </span>
@@ -58,8 +58,7 @@
         <!-- Text output area -->
         <div id="text-output-section" class="form-section hidden">
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Discord / Chat Text</h3>
-            <textarea id="text-output" rows="20" readonly
-                style="width:100%;font-family:var(--font-mono);font-size:13px;"></textarea>
+            <textarea id="text-output" rows="20" readonly></textarea>
             <div class="modal-actions">
                 <button class="btn btn-secondary" id="btn-copy-text">Copy to Clipboard</button>
                 <button class="btn btn-ghost btn-sm" id="btn-close-text"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Close</button>
@@ -154,7 +153,7 @@
                 </div>
             </div>
 
-            <div class="generate-section" style="margin-top:20px;">
+            <div class="generate-section">
                 <h4>ZS Rules</h4>
                 <div class="form-group">
                     <label>Schedule Mode</label>
@@ -189,7 +188,7 @@
                 </div>
             </div>
 
-            <div class="generate-section" style="margin-top:20px;">
+            <div class="generate-section">
                 <div class="form-row" style="gap:16px;flex-wrap:wrap;align-items:flex-end;">
                     <div class="form-group">
                         <label for="gen-from">Generate From</label>
