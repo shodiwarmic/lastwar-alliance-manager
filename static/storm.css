@@ -272,3 +272,54 @@
     color: var(--color-danger);
     border-color: var(--color-danger);
 }
+
+/* ── Planning tab layout ──────────────────────────────────────────────────── */
+.capacity-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.planning-layout {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.member-pool-panel {
+    flex: 0 0 260px;
+    min-width: 220px;
+    position: sticky;
+    top: 12px;
+}
+
+#pool-search {
+    margin-bottom: 8px;
+}
+
+.groups-column {
+    flex: 1;
+    min-width: 300px;
+}
+
+.groups-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.groups-header h3 {
+    margin: 0;
+}
+
+/* ── Battle mail output ───────────────────────────────────────────────────── */
+#mail-content {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+}

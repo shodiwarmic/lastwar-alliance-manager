@@ -63,7 +63,7 @@
     <div id="tab-planning" class="tab-content">
         <!-- Capacity Bar -->
         <section class="form-section" style="margin-top:0; border-top:none;">
-            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+            <div class="capacity-row">
                 <div class="capacity-cell" id="cap-primaries">Primaries: —</div>
                 <div class="capacity-cell" id="cap-subs">Substitutes: —</div>
                 <div class="capacity-cell" id="cap-power"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-bolt"/></svg> —</div>
@@ -71,20 +71,20 @@
             </div>
         </section>
 
-        <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+        <div class="planning-layout">
             {{if .Permissions.ManageStorm}}
             <!-- Member Pool -->
-            <section class="form-section" style="flex:0 0 260px; min-width:220px; position:sticky; top:12px;">
+            <section class="form-section member-pool-panel">
                 <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> Member Pool</h3>
-                <input type="text" id="pool-search" class="form-input" placeholder="Search members..." style="margin-bottom:8px;">
+                <input type="text" id="pool-search" class="form-input" placeholder="Search members...">
                 <div id="member-pool"></div>
             </section>
             {{end}}
 
             <!-- Groups Column -->
-            <div style="flex:1; min-width:300px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <h3 style="margin:0;" class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> Groups</h3>
+            <div class="groups-column">
+                <div class="groups-header">
+                    <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> Groups</h3>
                     {{if .Permissions.ManageStorm}}
                     <div style="display:flex;gap:6px;">
                         <button class="btn btn-primary btn-sm" id="btn-add-group">+ Add Group</button>
@@ -129,7 +129,7 @@
             <button class="btn btn-primary" id="btn-generate-mail">Generate Mail</button>
             <div id="mail-output" class="hidden" style="margin-top:12px;">
                 <button class="btn btn-secondary" id="btn-copy-mail" style="margin-bottom:8px;"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-copy"/></svg> Copy to Clipboard</button>
-                <pre id="mail-content" style="background:var(--color-card); border:1px solid var(--color-border); padding:12px; border-radius:6px; overflow-x:auto; white-space:pre-wrap;"></pre>
+                <pre id="mail-content"></pre>
             </div>
         </section>
     </div>
