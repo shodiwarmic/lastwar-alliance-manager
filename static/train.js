@@ -96,11 +96,18 @@ function setupTabs() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('.tab-content').forEach(p => p.style.display = 'none');
             btn.classList.add('active');
-            document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+            document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
         });
     });
+
+    // CSS hides all .tab-content by default — show the initial active tab explicitly.
+    const activeBtn = document.querySelector('.tab-btn.active');
+    if (activeBtn) {
+        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
+        if (target) target.style.display = 'block';
+    }
 }
 
 // ── Members ───────────────────────────────────────────────────────────────────
@@ -478,9 +485,9 @@ function renderEligibleList(members) {
         logBtn.textContent = 'Log Train';
         logBtn.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('.tab-content').forEach(p => p.style.display = 'none');
             document.querySelector('[data-tab="logs"]').classList.add('active');
-            document.getElementById('tab-logs').classList.remove('hidden');
+            document.getElementById('tab-logs').style.display = 'block';
             openLogModal({ conductor_id: m.member_id, conductor_name: m.name, train_type: 'FREE', date: gameToday(), notes: '', vip_id: null, vip_type: null });
         });
         card.appendChild(logBtn);

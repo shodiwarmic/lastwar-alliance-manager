@@ -5,10 +5,6 @@
     margin: 0 auto;
 }
 
-.tab-panel.hidden {
-    display: none;
-}
-
 /* ── Panel Header ─────────────────────────────────────────────────────────── */
 
 .panel-header {
