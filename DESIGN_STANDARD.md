@@ -163,7 +163,7 @@ static/feature.css  — Page-specific layout only. Link via {{define "head_tags"
 **Before writing any page CSS**, check whether `styles.css` already provides what you need:
 
 ```
-.data-table          .filter-chip / .filter-chip-label
+.card / .card-header .data-table          .filter-chip / .filter-chip-label
 .tab-toolbar         .status-msg / .loading-msg / .empty-state
 .tab-bar / .tab-btn  .badge-hq / .badge-troop / .badge-profession / .badge-squad-type
 .btn / .btn-primary / .btn-secondary / .btn-danger / .btn-warning / .btn-ghost / .btn-sm
@@ -322,6 +322,49 @@ the `.modal-actions` footer, plus backdrop click. Do **not** add a corner close 
 ```
 
 Viewer-style modals with no footer (image/document preview) close on backdrop click alone.
+
+### Cards
+
+`.card` is the canonical surface panel — a `--color-surface` box with border, radius,
+padding, and the standard card shadow. Use it for any grouped content block; never hand-roll
+a panel with a bespoke background / border / shadow.
+
+```html
+<div class="card">
+  <div class="card-header">
+    <h2 class="icon-heading">Section Title</h2>
+    <button class="btn btn-primary">Action</button>
+  </div>
+  <!-- body -->
+</div>
+```
+
+- `.card-header` is the title + actions row (flex, space-between, bottom border). The title is
+  an `<h2>`; trailing buttons sit on the right.
+- Drop the card's default `margin-bottom` (inline `margin-bottom:0`) when cards sit in a grid
+  or flex row that already supplies the gap.
+
+**Stat tiles.** A row of small metric cards (a number + a caption) is a grid of `.card`s —
+not a bespoke `.stat-card`. Value/caption typography is inline with tokens (there is no
+dedicated class):
+
+```html
+<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:20px;">
+  <div class="card" style="margin-bottom:0; text-align:center;">
+    <div style="font-size:2em; font-weight:bold; line-height:1; color:var(--color-text);">42</div>
+    <div style="font-size:0.85em; color:var(--color-text-mid); margin-top:5px;">Active</div>
+  </div>
+</div>
+```
+
+Colour the value with a semantic token (`--color-success` / `--color-danger` /
+`--color-warning`) when the metric carries a sentiment. Used on Shoutouts, Admin, and
+Accountability.
+
+**Deprecated — removed from `styles.css`, do not reintroduce:** `.stats-dashboard`,
+`.stat-card`, `.stat-icon`, `.charts-section`, `.view-toggle`, `.filter-section`, `.info-box`,
+and the `.search-box` class — all superseded by `.card` plus standard filter/search inputs
+(`.form-input`).
 
 ### Tabs
 

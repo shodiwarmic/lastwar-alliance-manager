@@ -14,7 +14,7 @@
 4. **Handler file** — one file per feature, e.g. `handlers_feature.go`.
 5. **Template** — `templates/feature.html`. Define `header_text` (page-specific title, not the app title), `head_tags`, `content`, `scripts`, and `modals` blocks. All modals go in `{{define "modals"}}` — not inside `{{define "content"}}`.
 6. **CSS** — `static/feature.css`, linked via `{{define "head_tags"}}`. Never embed `<style>` blocks in templates.
-6a. **Global utility check** — before adding any CSS to your page file, check if `styles.css` already provides what you need: `.data-table`, `.filter-chip`, `.tab-toolbar`, `.status-msg`, `.badge-*`, `.btn`, `.form-input`, `.tab-bar`, `.tab-btn`. Page CSS is for page-specific layout only.
+6a. **Global utility check** — before adding any CSS to your page file, check if `styles.css` already provides what you need: `.card`/`.card-header`, `.data-table`, `.filter-chip`, `.tab-toolbar`, `.status-msg`, `.badge-*`, `.btn`, `.form-input`, `.tab-bar`, `.tab-btn`. For metric tiles use a grid of `.card`s (see DESIGN_STANDARD.md → Cards), not a bespoke `.stat-card`. Page CSS is for page-specific layout only.
 7. **JS** — `static/feature.js`, loaded in `{{define "scripts"}}`.
 8. **Activity log** — call `logActivity` for every write operation (see section below).
 
