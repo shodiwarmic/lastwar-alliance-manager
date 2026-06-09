@@ -66,20 +66,6 @@
     font-weight: bold;
 }
 
-.calc-btn {
-    background: var(--color-accent);
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 0.8em;
-    cursor: pointer;
-    font-weight: bold;
-    transition: background 0.2s;
-}
-
-.calc-btn:hover { opacity: 0.88; }
-
 .controls {
     display: flex;
     justify-content: space-between;
