@@ -50,7 +50,7 @@
     <!-- ── Rankings ──────────────────────────────────────────────────────── -->
     <div id="tab-rankings" class="tab-content">
         <div class="tab-toolbar">
-            <input type="text" id="rankings-search" class="form-input" placeholder="Search members…" style="width:220px;">
+            <input type="text" id="rankings-search" class="form-input" placeholder="Search members…">
             <span id="rankings-count" class="tab-count"></span>
         </div>
         <div id="no-season-msg" class="info-panel" style="display:none">
@@ -116,7 +116,7 @@
                     <option value="0">Season Total</option>
                 </select>
             </div>
-            <input type="text" id="contrib-manual-search" class="form-input" placeholder="Search members…" style="width:200px;">
+            <input type="text" id="contrib-manual-search" class="form-input" placeholder="Search members…">
             <button class="btn btn-primary" id="btn-contrib-manual-save">Save</button>
             <button class="btn btn-secondary" id="btn-contrib-ocr">Import from Screenshots</button>
             <span id="contrib-manual-status" class="status-msg"></span>
@@ -204,12 +204,12 @@
                     <option value="">Loading templates…</option>
                 </select>
             </div>
-            <div id="cs-template-preview" style="display:none;font-size:0.85rem;color:var(--color-text-mid);margin:-4px 0 8px;"></div>
+            <div id="cs-template-preview" style="display:none"></div>
             <div class="form-group">
                 <label for="cs-start-date">Start Date</label>
                 <input type="date" id="cs-start-date" class="form-input" required>
             </div>
-            <h4 style="margin:12px 0 6px;">Reward Tier Thresholds</h4>
+            <h4 class="modal-subhead">Reward Tier Thresholds</h4>
             <div class="form-row">
                 <div class="form-group">
                     <label for="cs-tier-active">Active % Floor</label>
@@ -220,7 +220,7 @@
                     <input type="number" id="cs-tier-at-risk" class="form-input" value="60" min="0" max="100">
                 </div>
             </div>
-            <h4 style="margin:12px 0 6px;">Reward Tier Slots</h4>
+            <h4 class="modal-subhead">Reward Tier Slots</h4>
             <div class="form-row">
                 <div class="form-group">
                     <label for="cs-tier-leader">Alliance Leader</label>
@@ -295,7 +295,7 @@
                     <input type="number" id="es-tier-at-risk" class="form-input" min="0" max="100">
                 </div>
             </div>
-            <h4 style="margin:12px 0 6px;">Reward Tier Slots</h4>
+            <h4 class="modal-subhead">Reward Tier Slots</h4>
             <div class="form-row">
                 <div class="form-group">
                     <label for="es-tier-leader">Alliance Leader</label>
@@ -314,7 +314,7 @@
                     <input type="number" id="es-tier-valued" class="form-input" min="0">
                 </div>
             </div>
-            <h4 style="margin:12px 0 6px;">Trackables</h4>
+            <h4 class="modal-subhead">Trackables</h4>
             <table class="data-table" id="es-trackables-table">
                 <thead><tr><th>Key</th><th>Label</th><th></th></tr></thead>
                 <tbody id="es-trackables-tbody"></tbody>
@@ -322,7 +322,7 @@
             <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-trackable" style="margin-top:4px;">+ Add Trackable</button>
 
             </div>
-            <h4 style="margin:12px 0 6px;">Season Events</h4>
+            <h4 class="modal-subhead">Season Events</h4>
             <div style="overflow-x:auto;">
             <table class="data-table" id="es-events-table" style="font-size:0.8rem;white-space:nowrap;">
                 <thead>
@@ -418,7 +418,7 @@
         </div>
         <div id="contrib-import-status" class="status-msg" style="min-height:1.2em;"></div>
         <div id="contrib-preview-card" style="display:none;margin-top:8px;">
-            <p id="contrib-preview-summary" style="font-size:0.85rem;color:var(--color-text-mid);margin:0 0 8px;"></p>
+            <p id="contrib-preview-summary"></p>
             <table class="data-table">
                 <thead>
                     <tr><th>OCR Name</th><th>Matched Member</th><th>Match Type</th><th>Points</th></tr>

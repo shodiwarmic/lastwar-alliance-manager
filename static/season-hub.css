@@ -86,6 +86,10 @@
     color: var(--color-text-muted);
 }
 
+/* Toolbar search inputs */
+#rankings-search { width: 220px; }
+#contrib-manual-search { width: 200px; }
+
 /* ── Info panel ───────────────────────────────────────────────────────── */
 .info-panel {
     padding: 16px;
@@ -384,6 +388,31 @@
 }
 
 /* ── Modal helpers ────────────────────────────────────────────────────── */
+/* Section subheadings inside modals */
+.modal-subhead {
+    margin: 12px 0 6px;
+}
+
+/* Create-season template preview line (visibility toggled by JS) */
+#cs-template-preview {
+    font-size: 0.85rem;
+    color: var(--color-text-mid);
+    margin: -4px 0 8px;
+}
+
+/* Edit-season events table */
+#es-events-table {
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+/* OCR import preview summary line */
+#contrib-preview-summary {
+    font-size: 0.85rem;
+    color: var(--color-text-mid);
+    margin: 0 0 8px;
+}
+
 .form-row {
     display: flex;
     gap: 12px;
