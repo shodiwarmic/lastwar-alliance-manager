@@ -151,12 +151,13 @@ function buildUserCard(user) {
     const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString(undefined, { hour12: false }) : 'Never';
 
     const card = document.createElement('div');
-    card.className = 'user-card';
+    card.className = 'card';
+    card.style.marginBottom = '0';
     card.dataset.username = user.username.toLowerCase();
 
     // Header
     const header = document.createElement('div');
-    header.className = 'user-header';
+    header.className = 'card-header';
 
     const userInfo = document.createElement('div');
     userInfo.className = 'user-info';
@@ -568,27 +569,20 @@ function populateLoginFilter() {
     );
 }
 
-function buildStatCard(iconName, value, label) {
+function buildStatCard(value, label) {
     const card = document.createElement('div');
-    card.className = 'stat-card';
-
-    const iconDiv = document.createElement('div');
-    iconDiv.className = 'stat-icon';
-    iconDiv.appendChild(svgIcon(iconName, 24));
-
-    const info = document.createElement('div');
-    info.className = 'stat-info';
+    card.className = 'card';
+    card.style.cssText = 'margin-bottom:0;text-align:center;';
 
     const valDiv = document.createElement('div');
-    valDiv.className = 'stat-value';
+    valDiv.style.cssText = 'font-size:2em;font-weight:bold;line-height:1;color:var(--color-text);';
     valDiv.textContent = value;
 
     const labelDiv = document.createElement('div');
-    labelDiv.className = 'stat-label';
+    labelDiv.style.cssText = 'font-size:0.85em;color:var(--color-text-mid);margin-top:5px;';
     labelDiv.textContent = label;
 
-    info.append(valDiv, labelDiv);
-    card.append(iconDiv, info);
+    card.append(valDiv, labelDiv);
     return card;
 }
 
@@ -603,10 +597,10 @@ function displayLoginStats(logins) {
     const uniqueIPs = new Set(logins.map(l => l.ip_address).filter(Boolean)).size;
 
     statsDiv.replaceChildren(
-        buildStatCard('check', successLogins, 'Successful Logins'),
-        buildStatCard('x', failedLogins, 'Failed Attempts'),
-        buildStatCard('users', uniqueUsers, 'Unique Users'),
-        buildStatCard('world', uniqueIPs, 'Unique IPs')
+        buildStatCard(successLogins, 'Successful Logins'),
+        buildStatCard(failedLogins, 'Failed Attempts'),
+        buildStatCard(uniqueUsers, 'Unique Users'),
+        buildStatCard(uniqueIPs, 'Unique IPs')
     );
 }
 
@@ -669,7 +663,7 @@ function displayLoginHistory(logins) {
     }
 
     const table = document.createElement('table');
-    table.className = 'login-table';
+    table.className = 'data-table';
 
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');

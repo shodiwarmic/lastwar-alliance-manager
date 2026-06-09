@@ -30,9 +30,7 @@
                     </button>
                 </div>
 
-                <div class="search-box">
-                    <input type="text" id="user-search" placeholder="Search users by username...">
-                </div>
+                <input type="text" id="user-search" class="form-input" placeholder="Search users by username..." style="margin-bottom: 20px;">
 
                 <div id="users-list" class="users-list">
                     <div class="loading">Loading users...</div>
@@ -58,7 +56,7 @@
                     </div>
                 </div>
 
-                <div id="login-stats" class="stats-grid">
+                <div id="login-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px;">
                     <!-- Stats will be populated here -->
                 </div>
 
