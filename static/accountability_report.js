@@ -10,12 +10,13 @@ function fmtNumber(n) {
 
 function statCard(value, label) {
     const card = document.createElement('div');
-    card.className = 'acc-stat-card';
+    card.className = 'card';
+    card.style.cssText = 'margin-bottom:0;text-align:center;';
     const val = document.createElement('div');
-    val.className = 'acc-stat-card-value';
+    val.style.cssText = 'font-size:2em;font-weight:bold;line-height:1;color:var(--color-text);';
     val.textContent = value;
     const lbl = document.createElement('div');
-    lbl.className = 'acc-stat-card-label';
+    lbl.style.cssText = 'font-size:0.85em;color:var(--color-text-mid);margin-top:5px;';
     lbl.textContent = label;
     card.append(val, lbl);
     return card;

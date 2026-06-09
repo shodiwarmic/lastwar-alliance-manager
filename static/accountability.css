@@ -143,31 +143,6 @@ tr.acc-row--below-vs {
 }
 
 /* --- Report page --- */
-.acc-stat-cards {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 1.5rem;
-}
-.acc-stat-card {
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 14px 20px;
-    min-width: 140px;
-    flex: 1;
-    text-align: center;
-}
-.acc-stat-card-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--color-text);
-}
-.acc-stat-card-label {
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
-    margin-top: 2px;
-}
 .acc-report-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
