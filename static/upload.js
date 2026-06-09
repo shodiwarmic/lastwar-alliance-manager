@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const originalText = processImageBtn.textContent;
         const loadSpan = document.createElement('span');
-        loadSpan.className = 'loading';
+        loadSpan.className = 'loading-msg';
         processImageBtn.replaceChildren(loadSpan, document.createTextNode(' Analyzing & Processing...'));
         processImageBtn.disabled = true;
 

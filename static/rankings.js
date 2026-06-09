@@ -140,7 +140,7 @@ function renderKillTable(data) {
         const tr = document.createElement('tr');
         const td = document.createElement('td');
         td.colSpan = 6;
-        td.className = 'empty';
+        td.className = 'empty-state';
         td.style.cssText = 'text-align: center; padding: 20px;';
         td.textContent = 'No kill data recorded yet.';
         tr.appendChild(td);
@@ -348,7 +348,7 @@ function renderGrowthTable(data) {
         const tr = document.createElement('tr');
         const td = document.createElement('td');
         td.colSpan = 8;
-        td.className = 'empty';
+        td.className = 'empty-state';
         td.style.cssText = 'text-align: center; padding: 20px;';
         td.textContent = 'No active commanders found.';
         tr.appendChild(td);
@@ -384,7 +384,7 @@ async function loadVSData() {
             const tr = document.createElement('tr');
             const td = document.createElement('td');
             td.colSpan = 9;
-            td.className = 'empty';
+            td.className = 'empty-state';
             td.style.cssText = 'text-align: center; padding: 20px;';
             td.textContent = 'No VS data recorded yet.';
             tr.appendChild(td);

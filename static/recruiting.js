@@ -91,7 +91,7 @@ async function loadFormerMembers() {
     } catch (err) {
         console.error(err);
         const p = document.createElement('p');
-        p.className = 'empty';
+        p.className = 'empty-state';
         p.textContent = 'Failed to load former members.';
         container.replaceChildren(p);
     }
@@ -100,7 +100,7 @@ async function loadFormerMembers() {
 function renderFormerMembers(members, container) {
     if (!members || members.length === 0) {
         const p = document.createElement('p');
-        p.className = 'empty';
+        p.className = 'empty-state';
         p.textContent = 'No former members.';
         container.replaceChildren(p);
         return;
@@ -353,7 +353,7 @@ async function loadAllProspects() {
         console.error(err);
         const makeErrP = () => {
             const p = document.createElement('p');
-            p.className = 'empty';
+            p.className = 'empty-state';
             p.textContent = 'Failed to load.';
             return p;
         };
@@ -365,7 +365,7 @@ async function loadAllProspects() {
 function renderProspects(items, container, typeContext) {
     if (!items || items.length === 0) {
         const p = document.createElement('p');
-        p.className = 'empty';
+        p.className = 'empty-state';
         if (typeContext === 'transfer') {
             p.textContent = CAN_MANAGE_RECRUITING ? 'No transfers yet. Add one to get started.' : 'No transfers.';
         } else {

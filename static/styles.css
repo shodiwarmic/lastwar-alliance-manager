@@ -942,14 +942,6 @@ button {
     cursor: pointer;
 }
 
-.loading,
-.empty {
-    text-align: center;
-    padding: 40px;
-    color: var(--color-text-mid);
-    font-size: 1.1em;
-}
-
 /* ===== RESPONSIVE STYLES ===== */
 
 /* Tablet and below */
@@ -1085,8 +1077,8 @@ button {
     }
 
     /* Loading and empty states */
-    .loading,
-    .empty {
+    .loading-msg,
+    .empty-state {
         padding: 30px 15px;
         font-size: 1em;
     }
@@ -3586,7 +3578,7 @@ button {
     color: var(--color-text) !important;
 }
 
-.loading, .error, .empty {
+.error {
     text-align: center;
     padding: 40px;
     color: var(--color-text-muted);
@@ -4956,7 +4948,7 @@ button {
     opacity: 0.8;
 }
 
-.loading {
+.loading-msg {
     text-align: center;
     padding: 40px;
     color: var(--color-text-mid);

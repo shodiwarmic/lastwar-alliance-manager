@@ -406,7 +406,7 @@ async function loadMembers() {
         const membersList = document.getElementById('members-list');
         if (membersList) {
             const p = document.createElement('p');
-            p.className = 'empty';
+            p.className = 'empty-state';
             p.textContent = 'Error loading members. Please try again.';
             membersList.replaceChildren(p);
         }
@@ -419,7 +419,7 @@ function displayMembers(members) {
 
     if (!members || members.length === 0) {
         const p = document.createElement('p');
-        p.className = 'empty';
+        p.className = 'empty-state';
         p.textContent = 'No members yet. Add your first alliance member!';
         membersList.replaceChildren(p);
         return;
