@@ -428,38 +428,23 @@ function displayMembers(members) {
     });
 }
 
-// Keep aliases inline next to the name while they fit; otherwise move them to
-// their own line under the name and collapse the overflow into a +N indicator.
-// Idempotent so it can re-run on resize.
+// Keep aliases inline beside the name. When they would overflow the row (i.e.
+// reach the action buttons), hide chips from the end and show a +N indicator
+// so the row stays on one line. Idempotent so it can re-run on resize.
 function layoutMemberAliases(card) {
-    const nameDiv = card.querySelector('.member-name');
     const aliasGroup = card.querySelector('.member-aliases');
-    if (!nameDiv || !aliasGroup) return;
-    const aliasBtn = nameDiv.querySelector('.icon-btn');
+    if (!aliasGroup) return;
 
-    // Reset to the inline state.
-    const oldRow = card.querySelector('.member-alias-row');
-    if (oldRow) {
-        nameDiv.insertBefore(aliasGroup, aliasBtn);
-        oldRow.remove();
-    }
+    // Reset: show all chips, remove any previous +N.
     const oldMore = aliasGroup.querySelector('.alias-more');
     if (oldMore) oldMore.remove();
     for (const chip of aliasGroup.children) chip.style.display = '';
 
-    // Fits inline beside the name? Leave it.
-    if (nameDiv.scrollWidth <= nameDiv.clientWidth + 1) return;
+    // Fits on the alias line? Done.
+    if (aliasGroup.scrollWidth <= aliasGroup.clientWidth + 1) return;
 
-    // Move the aliases onto their own line under the name.
-    const aliasRow = document.createElement('div');
-    aliasRow.className = 'member-alias-row';
-    aliasRow.appendChild(aliasGroup);
-    nameDiv.after(aliasRow);
-
-    // Fits on its own single line? Done.
-    if (aliasGroup.scrollWidth <= aliasRow.clientWidth + 1) return;
-
-    // Otherwise hide chips from the end and show how many were collapsed.
+    // Otherwise hide alias chips from the end and show how many were collapsed
+    // until the line fits.
     const moreChip = document.createElement('span');
     moreChip.className = 'alias-chip alias-more';
     aliasGroup.appendChild(moreChip);
@@ -470,7 +455,7 @@ function layoutMemberAliases(card) {
         chips[i].style.display = 'none';
         hidden++;
         moreChip.textContent = `+${hidden}`;
-        if (aliasGroup.scrollWidth <= aliasRow.clientWidth + 1) break;
+        if (aliasGroup.scrollWidth <= aliasGroup.clientWidth + 1) break;
     }
 }
 
@@ -498,11 +483,27 @@ function buildMemberCard(member) {
     const nameDiv = document.createElement('div');
     nameDiv.className = 'member-name';
 
+    // Top line: name + alias-manager button.
+    const nameTop = document.createElement('div');
+    nameTop.className = 'member-name-top';
+
     const nameText = document.createElement('span');
     nameText.className = 'member-name-text';
     nameText.textContent = member.name;
-    nameDiv.appendChild(nameText);
+    nameTop.appendChild(nameText);
 
+    const aliasBtn = document.createElement('button');
+    aliasBtn.className = 'icon-btn';
+    aliasBtn.title = 'Manage Nicknames';
+    aliasBtn.setAttribute('aria-label', 'Manage Nicknames');
+    aliasBtn.style.cssText = 'background:none;border:none;cursor:pointer;opacity:0.6;padding:0;display:inline-flex;align-items:center;';
+    aliasBtn.appendChild(svgIcon('tag'));
+    aliasBtn.addEventListener('click', () => openAliasModal(member.id, member.name));
+    nameTop.appendChild(aliasBtn);
+
+    nameDiv.appendChild(nameTop);
+
+    // Second line (same cell): aliases, truncated to +N by layoutMemberAliases().
     const aliasGroup = document.createElement('span');
     aliasGroup.className = 'member-aliases';
     const addAliasChips = (raw, cls) => {
@@ -517,15 +518,6 @@ function buildMemberCard(member) {
     addAliasChips(member.personal_aliases, 'alias-personal');
     addAliasChips(member.global_aliases, 'alias-global');
     if (aliasGroup.children.length) nameDiv.appendChild(aliasGroup);
-
-    const aliasBtn = document.createElement('button');
-    aliasBtn.className = 'icon-btn';
-    aliasBtn.title = 'Manage Nicknames';
-    aliasBtn.setAttribute('aria-label', 'Manage Nicknames');
-    aliasBtn.style.cssText = 'background:none;border:none;cursor:pointer;opacity:0.6;padding:0;display:inline-flex;align-items:center;';
-    aliasBtn.appendChild(svgIcon('tag'));
-    aliasBtn.addEventListener('click', () => openAliasModal(member.id, member.name));
-    nameDiv.appendChild(aliasBtn);
 
     info.appendChild(nameDiv);
 

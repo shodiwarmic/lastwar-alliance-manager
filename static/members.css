@@ -64,36 +64,52 @@
     color: var(--color-text-mid);
 }
 
-/* ── Member name row + alias chips ────────────────────────────────────── */
-/* Allow the info column to shrink to the card width instead of being widened
-   by long nowrap aliases (which would overflow the card). */
+/* ── Member name cell (name + aliases stacked) ────────────────────────── */
+/* Let the info column shrink to the card width instead of being widened by
+   long nowrap aliases (which would overflow the card). */
 .member-info {
     min-width: 0;
 }
 
+/* The name "cell": name (+ alias button) on top, aliases on the line below. */
 .member-name {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+}
+
+.member-name-top {
     display: flex;
     align-items: center;
     gap: 8px;
+    max-width: 100%;
     min-width: 0;
-    overflow: hidden; /* clip overflow so it never spills outside the card */
+    overflow: hidden;
 }
 
 .member-name-text {
+    min-width: 0;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* Don't let the alias group shrink — the overflow must happen at the name-row
-   level so layoutMemberAliases() can detect it and move the aliases below. */
+/* Alias line — one line, constrained to the cell width, truncated to +N.
+   Chips don't shrink so the overflow (and its measurement) is reliable. */
 .member-aliases {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 4px;
-    flex-shrink: 0;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
     white-space: nowrap;
 }
 
 .alias-chip {
+    flex-shrink: 0;
     font-size: 0.85em;
     font-weight: 400;
     white-space: nowrap;
@@ -107,14 +123,6 @@
 .member-aliases .alias-chip:not(:last-child)::after {
     content: ",";
     color: var(--color-text-muted);
-}
-
-/* Aliases moved onto their own line under the name (single line, truncated). */
-.member-alias-row {
-    flex-basis: 100%;
-    width: 100%;
-    margin-top: 2px;
-    overflow: hidden;
 }
 
 /* Member-card action buttons collapse to icon-only on mobile (≤768px, where
