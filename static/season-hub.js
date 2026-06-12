@@ -1853,9 +1853,13 @@
                 .then(r => {
                     if (!r.ok) return r.text().then(t => { throw new Error(t); });
                     showToast('Season deleted.');
+                    // Clear the deleted season's data; loadSeasonList selects the
+                    // next season and reloads its data (rewards/mail lazy-load on
+                    // tab focus). Don't fetch rewards/mail here — activeSeason still
+                    // points at the just-deleted season until loadSeasonData resolves.
+                    if (CAN_MANAGE) { allRewards = []; renderRewardsTable(); }
+                    allMailItems = []; renderMailList();
                     loadSeasonList();
-                    loadRewards();
-                    loadSeasonMail();
                 })
                 .catch(err => showToast(err.message || 'Delete failed.', 'error'));
         });
