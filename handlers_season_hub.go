@@ -1200,7 +1200,18 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 
 func handleParticipationGet(w http.ResponseWriter, r *http.Request) {
 
-	season, err := loadActiveSeason()
+	var season *Season
+	var err error
+	if sidStr := r.URL.Query().Get("season_id"); sidStr != "" {
+		sid, _ := strconv.Atoi(sidStr)
+		season, err = loadSeasonByID(sid)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Season not found", http.StatusNotFound)
+			return
+		}
+	} else {
+		season, err = loadActiveSeason()
+	}
 	if err != nil {
 		slog.Error("handleParticipationGet: load season", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1726,7 +1737,18 @@ func handleContributionsManual(w http.ResponseWriter, r *http.Request) {
 
 func handleRewardsGet(w http.ResponseWriter, r *http.Request) {
 
-	season, err := loadActiveSeason()
+	var season *Season
+	var err error
+	if sidStr := r.URL.Query().Get("season_id"); sidStr != "" {
+		sid, _ := strconv.Atoi(sidStr)
+		season, err = loadSeasonByID(sid)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Season not found", http.StatusNotFound)
+			return
+		}
+	} else {
+		season, err = loadActiveSeason()
+	}
 	if err != nil {
 		slog.Error("handleRewardsGet: load season", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
