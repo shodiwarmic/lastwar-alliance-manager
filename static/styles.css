@@ -4538,18 +4538,11 @@ button {
         width: 100%;
     }
 
-    /* Action bar mobile */
+    /* Action bar mobile — stays a wrapping row (base .action-bar), just tighter
+       spacing. Buttons sit side-by-side and wrap only if they don't fit. */
     .action-bar {
-        flex-direction: column;
         margin-bottom: 20px;
         gap: 10px;
-    }
-
-    .primary-action-btn,
-    .secondary-action-btn {
-        width: 100%;
-        justify-content: center;
-        padding: 12px 20px;
     }
 
     .csv-import-card {
