@@ -1041,10 +1041,6 @@ button {
         gap: 8px;
     }
 
-    .toggle-eligible-btn {
-        width: 100%;
-        margin-top: 5px;
-    }
 
     /* Search box */
     #search-input {
