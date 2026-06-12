@@ -243,14 +243,18 @@ document.addEventListener('DOMContentLoaded', () => {
             cur = cur.parentElement;
         }
 
+        // Group the export buttons in a right-aligned wrapper so they sit at
+        // the end of the toolbar regardless of the toolbar's other content.
+        const exportActions = document.createElement('div');
+        exportActions.className = 'table-export-actions';
+        exportActions.append(csvBtn, xlsxBtn);
+
         if (toolbar) {
-            toolbar.appendChild(csvBtn);
-            toolbar.appendChild(xlsxBtn);
+            toolbar.appendChild(exportActions);
         } else {
             const wrap = document.createElement('div');
             wrap.className = 'tab-toolbar';
-            wrap.appendChild(csvBtn);
-            wrap.appendChild(xlsxBtn);
+            wrap.appendChild(exportActions);
             table.parentNode.insertBefore(wrap, table);
         }
     });

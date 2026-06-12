@@ -103,10 +103,10 @@
     gap: 10px;
 }
 
-/* Member search sits inline with the export buttons (appended into the same
-   .tab-toolbar by the table export auto-wire); margin-right:auto pushes the
-   CSV/XLSX buttons to the right of the row. */
-#search-box { max-width: 300px; margin-right: auto; }
+/* Member search sits inline with the export buttons in the same .tab-toolbar;
+   the export auto-wire right-aligns the CSV/XLSX buttons (.table-export-actions),
+   so the search just stays compact on the left. */
+#search-box { max-width: 300px; }
 .table-wrapper { overflow-x: auto; }
 
 /* Hidden utility class for permissions */

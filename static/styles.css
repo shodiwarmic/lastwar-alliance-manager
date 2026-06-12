@@ -4738,6 +4738,14 @@ button {
     flex-wrap: wrap;
 }
 
+/* Auto-wired CSV/XLSX export buttons (see global.js) — right-align them at
+   the end of their toolbar, after any search/filter/action controls. */
+.table-export-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
 .status-msg {
     font-size: 0.85rem;
     color: var(--color-text-muted);
