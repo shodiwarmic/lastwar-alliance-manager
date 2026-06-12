@@ -181,44 +181,52 @@ function updateDisplayedMembers() {
     if (clearBtn) clearBtn.style.display = searchTerm ? 'flex' : 'none';
 }
 
-// Collapsible sort/filter panel — toggled via the "Sort & Filter" button,
-// state remembered in localStorage (collapsed by default to save space).
+const FILTER_GROUPS = [
+    ['.rank-chip', 'rank'], ['.prof-chip', 'prof'], ['.squad-chip', 'squad'],
+    ['.troop-chip', 'troop'], ['.eligible-chip', 'eligible'], ['.skill-chip', 'skill'],
+];
+
+// Collapsible sort/filter panel — toggled via the "Sort & Filter" button.
+// Always starts collapsed (to save space) and wires the Clear button.
 function setupFilterToggle() {
     const toggle = document.getElementById('toggle-filters');
     const panel = document.getElementById('filter-collapse');
-    if (!toggle || !panel) return;
+    if (toggle && panel) {
+        const setOpen = (open) => {
+            panel.classList.toggle('open', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        };
+        setOpen(false);
+        toggle.addEventListener('click', () => setOpen(!panel.classList.contains('open')));
+    }
 
-    const setOpen = (open) => {
-        panel.classList.toggle('open', open);
-        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        try { localStorage.setItem('membersFiltersOpen', open ? '1' : '0'); } catch (_) {}
-    };
-
-    let stored = null;
-    try { stored = localStorage.getItem('membersFiltersOpen'); } catch (_) {}
-    setOpen(stored === '1');
-
-    toggle.addEventListener('click', () => setOpen(!panel.classList.contains('open')));
+    const clearBtn = document.getElementById('clear-filters');
+    if (clearBtn) clearBtn.addEventListener('click', clearAllFilters);
 }
 
-// Badge showing how many filter categories are narrowed (i.e. not on "All"),
-// so active filters are visible even while the panel is collapsed.
+// Reset every filter group to its "All" chip (sort and search are left alone).
+function clearAllFilters() {
+    FILTER_GROUPS.forEach(([sel, attr]) => {
+        document.querySelectorAll(sel).forEach(c => {
+            c.classList.toggle('active', c.dataset[attr] === 'all');
+        });
+    });
+    updateDisplayedMembers();
+}
+
+// Count filter groups narrowed off "All"; drives the toggle badge and the
+// enabled state of the Clear button, so active filters are visible (and
+// clearable) even while the panel is collapsed.
 function updateActiveFilterBadge() {
-    const badge = document.getElementById('active-filter-count');
-    if (!badge) return;
-    const narrowed = (sel, attr) => {
+    const count = FILTER_GROUPS.reduce((n, [sel, attr]) => {
         const active = Array.from(document.querySelectorAll(`${sel}.active`));
-        return active.length > 0 && !active.some(c => c.dataset[attr] === 'all') ? 1 : 0;
-    };
-    const count =
-        narrowed('.rank-chip', 'rank') +
-        narrowed('.prof-chip', 'prof') +
-        narrowed('.squad-chip', 'squad') +
-        narrowed('.troop-chip', 'troop') +
-        narrowed('.eligible-chip', 'eligible') +
-        narrowed('.skill-chip', 'skill');
-    badge.textContent = String(count);
-    badge.hidden = count === 0;
+        return n + (active.length > 0 && !active.some(c => c.dataset[attr] === 'all') ? 1 : 0);
+    }, 0);
+
+    const badge = document.getElementById('active-filter-count');
+    if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
+    const clearBtn = document.getElementById('clear-filters');
+    if (clearBtn) clearBtn.disabled = count === 0;
 }
 
 function buildExportTable(members) {
@@ -1660,8 +1668,14 @@ document.querySelectorAll('[data-alias-filter]').forEach(btn => {
     btn.addEventListener('click', () => setAliasFilter(btn.dataset.aliasFilter));
 });
 
-document.getElementById('close-alias-modal')?.addEventListener('click', () => {
+function closeAliasModal() {
     const aliasModal = document.getElementById('alias-modal');
+    if (!aliasModal) return;
     releaseFocus(aliasModal);
     aliasModal.style.display = 'none';
+}
+document.getElementById('close-alias-modal')?.addEventListener('click', closeAliasModal);
+// Backdrop click (works on desktop and mobile, alongside the Close button).
+document.getElementById('alias-modal')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeAliasModal();
 });
