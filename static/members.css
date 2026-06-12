@@ -65,22 +65,31 @@
 }
 
 /* ── Member name row + alias chips ────────────────────────────────────── */
+/* Allow the info column to shrink to the card width instead of being widened
+   by long nowrap aliases (which would overflow the card). */
+.member-info {
+    min-width: 0;
+}
+
 .member-name {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
+    overflow: hidden; /* clip overflow so it never spills outside the card */
 }
 
 .member-name-text {
     white-space: nowrap;
 }
 
+/* Don't let the alias group shrink — the overflow must happen at the name-row
+   level so layoutMemberAliases() can detect it and move the aliases below. */
 .member-aliases {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    min-width: 0;
+    flex-shrink: 0;
     white-space: nowrap;
 }
 
