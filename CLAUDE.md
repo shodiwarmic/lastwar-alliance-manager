@@ -549,6 +549,16 @@ These names appear in older code but are NOT defined in `styles.css`. They silen
 
 Keep `README.md` up to date whenever a user-facing feature is added, changed, or removed. Each feature should have an entry under the appropriate `###` section in the Features block, written in the same style as existing entries (bullet points, bolded lead phrase, plain-English description of what it does and its permission model). Do not document internal implementation details — README is for end users and operators.
 
+## Icons
+
+All icons are **Tabler Icons** (outline set), delivered as a sprite at `static/icons.svg`.
+`static/icons.svg` holds only the icons added so far — it is **not** the set to choose from.
+When a feature needs an icon, pick the semantically correct one from the **full** Tabler
+library (~5,900 icons, <https://tabler.io/icons>) and add its `<symbol>` to the sprite in the
+existing format; don't reuse an approximate icon just because it's already there. Reference by
+`<use href="/icons.svg#icon-{slug}">` in templates or `svgIcon('{slug}')` in JS. Full details:
+DESIGN_STANDARD.md → Icon System.
+
 ## Running locally
 
 ```bash
@@ -556,3 +566,9 @@ go run .
 ```
 
 Migrations run automatically on startup via `initDB()`.
+
+**Static asset caching:** in non-production (`PRODUCTION != "true"`) the server sends
+`Cache-Control: no-store` for `static/` files (see `main.go`), so JS/CSS/SVG edits reload
+without stale-cache issues. Production is unaffected. Templates and `static/` are served from
+disk (dev volume mounts), so `.html`/`.css`/`.js`/`.svg` edits show on refresh with no rebuild;
+Go changes still need `docker compose up -d --build` (or restart `go run .`).

@@ -223,6 +223,13 @@ if (activeBtn) {
 
 Flex row for filter controls above a tab panel. Provides the right `gap` and `flex-wrap` without extra CSS.
 
+**Table export buttons** (CSV / XLSX) are auto-wired by `global.js` for any
+`<table data-export-csv="…">`: the two buttons are grouped in a right-aligned
+`.table-export-actions` wrapper (`margin-left: auto`) and appended to the nearest preceding
+`.tab-toolbar`. So put a `.tab-toolbar` above the table — it can also hold that section's
+search/filter controls — and the export buttons land at its right end. A page that builds its
+own export buttons (card lists with no real table, e.g. Members) right-aligns them the same way.
+
 ### `.status-msg`
 
 Inline async status text (e.g. "Saving…" / "Saved"). Always clear it after a timeout.
@@ -262,7 +269,14 @@ by `.empty-state`.
   "Today" nav, modal "Close"). Transparent background with a `--color-border` border; less
   visual weight than `.btn-secondary`.
 - Do not use `.primary-action-btn` / `.secondary-action-btn` — deprecated.
-- `btn-sm` reduces padding for inline/table contexts.
+- **Two sizes only.** Default `.btn` and `.btn .btn-sm` — there is no `.btn-lg`. Heuristic: a
+  button inside a card, table row, toolbar, or chip cluster takes `.btn-sm`; a standalone
+  page-level primary action or a modal-footer button stays full-size `.btn`. Size and weight
+  are independent (a small destructive button is `btn btn-danger btn-sm`).
+- **Mobile icon collapse.** Where a row of icon+label buttons is tight on mobile, the label may
+  collapse to icon-only by hiding a label span under a breakpoint — keep `title` + `aria-label`
+  so the action stays clear and accessible. Reference: `members.js` `memberActionBtn()` building
+  `<svg> + <span class="member-action-label">`, hidden `@media (max-width: 768px)`.
 - `.btn` is `display:inline-flex` with `gap:6px`, so an SVG icon + text label align
   automatically — `<button class="btn btn-primary"><svg class="svg-icon"…><use href="/icons.svg#icon-device-floppy"/></svg> Save</button>`.
 - **`.button-group`** — a `display:flex; gap:10px` container for a set of buttons. Use it
@@ -577,9 +591,18 @@ Icons inherit colour via `currentColor`, so they adapt to text colour and theme 
 Standalone pages that aren't built on `layout.html` (e.g. `login.html`) must include
 `<script src="/global.js"></script>` before their page script to get `svgIcon`.
 
-**Adding a new icon:** copy the path elements from
+**Choosing an icon — the whole Tabler set is in scope, not just the sprite.**
+`static/icons.svg` contains only the subset of Tabler icons added so far; it is **not** the
+palette to choose from. The full Tabler library (~5,900 outline icons, browsable at
+<https://tabler.io/icons>) is available to us. When a feature needs an icon, find the
+semantically correct Tabler icon and add it — do **not** settle for an approximate icon just
+because it already happens to be in the sprite.
+
+**Adding a new icon:** copy the `<path>` elements from
 `https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/{slug}.svg`
-and add a `<symbol id="icon-{slug}">` to `static/icons.svg`.
+and add a `<symbol id="icon-{slug}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` to `static/icons.svg`,
+matching the existing symbols (strip Tabler's transparent background `<path>`).
 
 **Emoji policy.** No emoji in UI chrome — section headings, tab labels, button faces, stat
 cards, badges, page illustrations, and category labels all use SVG icons. See
