@@ -119,5 +119,22 @@
     overflow-y: auto;
 }
 
+/* ── Invite-link modal ────────────────────────────────────────────────── */
+.invite-link-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 12px 0;
+}
+
+.invite-link-row .form-input {
+    flex: 1;
+    font-size: 0.85rem;
+}
+
+.invite-link-row .btn {
+    flex-shrink: 0;
+}
+
 
 

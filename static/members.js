@@ -251,6 +251,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setupModalListeners();
     setupArchiveModal();
+    setupInviteModal();
     setupCSVImport();
     setupSearch();
     await loadSkillRegistry();
@@ -582,7 +583,7 @@ function buildMemberCard(member) {
             const inviteUserBtn = document.createElement('button');
             inviteUserBtn.className = 'btn btn-sm btn-primary';
             inviteUserBtn.textContent = 'Invite User';
-            inviteUserBtn.addEventListener('click', () => inviteUserForMember(member.id, member.name, actions, inviteUserBtn));
+            inviteUserBtn.addEventListener('click', () => inviteUserForMember(member.id, member.name));
             actions.appendChild(inviteUserBtn);
         }
 
@@ -895,9 +896,36 @@ function fallbackCopy(text, onSuccess) {
     }
 }
 
-window.inviteUserForMember = async function (memberId, memberName, actionsContainer, inviteBtn) {
+let currentInviteUrl = '';
+
+function setupInviteModal() {
+    const modal = document.getElementById('invite-link-modal');
+    if (!modal) return;
+    const copyBtn = document.getElementById('invite-link-copy');
+
+    const closeModal = () => {
+        releaseFocus(modal);
+        modal.style.display = '';
+    };
+
+    copyBtn.addEventListener('click', () => {
+        const onSuccess = () => {
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(currentInviteUrl).then(onSuccess).catch(() => fallbackCopy(currentInviteUrl, onSuccess));
+        } else {
+            fallbackCopy(currentInviteUrl, onSuccess);
+        }
+    });
+
+    document.getElementById('invite-link-close').addEventListener('click', closeModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+}
+
+window.inviteUserForMember = async function (memberId, memberName) {
     if (!await showConfirm(`Send invite to ${memberName}?`, 'Send')) return;
-    inviteBtn.style.display = 'none';
     try {
         const response = await fetch(`${API_URL}/${memberId}/invite`, { method: 'POST' });
         if (!response.ok) {
@@ -905,47 +933,18 @@ window.inviteUserForMember = async function (memberId, memberName, actionsContai
             throw new Error(errText);
         }
         const result = await response.json();
-        const inviteBox = document.createElement('div');
-        inviteBox.style.cssText = 'display:flex;flex-direction:column;gap:6px;font-size:0.85rem;padding:10px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;max-width:320px;';
-        const heading = document.createElement('span');
-        heading.style.fontWeight = 'bold';
-        heading.textContent = 'Invite link (valid 48h):';
-        const linkRow = document.createElement('div');
-        linkRow.style.cssText = 'display:flex;gap:6px;align-items:center;';
-        const linkAnchor = document.createElement('a');
-        linkAnchor.href = result.invite_url;
-        linkAnchor.textContent = window.location.origin + result.invite_url;
-        linkAnchor.style.cssText = 'font-size:0.8rem;word-break:break-all;';
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'btn btn-secondary btn-sm';
-        copyBtn.textContent = 'Copy';
-        copyBtn.style.flexShrink = '0';
-        copyBtn.addEventListener('click', () => {
-            const fullURL = window.location.origin + result.invite_url;
-            const onSuccess = () => {
-                copyBtn.textContent = 'Copied!';
-                setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
-            };
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(fullURL).then(onSuccess).catch(() => fallbackCopy(fullURL, onSuccess));
-            } else {
-                fallbackCopy(fullURL, onSuccess);
-            }
-        });
-        linkRow.append(linkAnchor, copyBtn);
-        const dismissBtn = document.createElement('button');
-        dismissBtn.className = 'btn btn-secondary btn-sm';
-        dismissBtn.textContent = 'Dismiss';
-        dismissBtn.addEventListener('click', async () => {
-            inviteBox.remove();
-            await loadMembers();
-        });
-        inviteBox.append(heading, linkRow, dismissBtn);
-        actionsContainer.appendChild(inviteBox);
+        currentInviteUrl = window.location.origin + result.invite_url;
+
+        document.getElementById('invite-link-member').textContent = memberName;
+        document.getElementById('invite-link-url').value = currentInviteUrl;
+        document.getElementById('invite-link-copy').textContent = 'Copy';
+
+        const modal = document.getElementById('invite-link-modal');
+        modal.style.display = 'flex';
+        trapFocus(modal);
     } catch (error) {
         console.error('Error generating invite:', error);
         showToast(error.message || 'Failed to generate invite.', 'error');
-        inviteBtn.style.display = '';
     }
 };
 

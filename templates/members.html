@@ -326,6 +326,20 @@
             </div>
         </div>
     </div>
+
+    <div id="invite-link-modal" class="modal">
+        <div class="modal-content modal-md">
+            <h2>Invite Link</h2>
+            <p class="help-text">Share this link with <strong id="invite-link-member"></strong>. Valid for 48 hours.</p>
+            <div class="invite-link-row">
+                <input type="text" id="invite-link-url" class="form-input" readonly>
+                <button type="button" id="invite-link-copy" class="btn btn-secondary btn-sm">Copy</button>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="invite-link-close" class="btn btn-primary">Done</button>
+            </div>
+        </div>
+    </div>
 {{end}}
 
 {{define "scripts"}}
