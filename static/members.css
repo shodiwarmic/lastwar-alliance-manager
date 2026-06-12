@@ -64,6 +64,50 @@
     color: var(--color-text-mid);
 }
 
+/* ── Member name row + alias chips ────────────────────────────────────── */
+.member-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.member-name-text {
+    white-space: nowrap;
+}
+
+.member-aliases {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.alias-chip {
+    font-size: 0.85em;
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+.alias-chip.alias-personal { color: var(--color-info); }
+.alias-chip.alias-global   { color: var(--color-text-muted); }
+.alias-chip.alias-more     { color: var(--color-text-muted); font-weight: 600; }
+
+/* Comma between visible alias chips (hidden chips hide their own comma). */
+.member-aliases .alias-chip:not(:last-child)::after {
+    content: ",";
+    color: var(--color-text-muted);
+}
+
+/* Aliases moved onto their own line under the name (single line, truncated). */
+.member-alias-row {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 2px;
+    overflow: hidden;
+}
+
 /* Member-card action buttons collapse to icon-only on mobile (≤768px, where
    the card stacks) so the per-card action row stays compact. Labels and
    title/aria-label keep them readable on desktop and accessible on touch. */

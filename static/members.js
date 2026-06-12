@@ -422,7 +422,66 @@ function displayMembers(members) {
     }
 
     membersList.replaceChildren(...members.map(buildMemberCard));
+    // Aliases need measured widths, so lay them out once the cards are in the DOM.
+    requestAnimationFrame(() => {
+        membersList.querySelectorAll('.member-card').forEach(layoutMemberAliases);
+    });
 }
+
+// Keep aliases inline next to the name while they fit; otherwise move them to
+// their own line under the name and collapse the overflow into a +N indicator.
+// Idempotent so it can re-run on resize.
+function layoutMemberAliases(card) {
+    const nameDiv = card.querySelector('.member-name');
+    const aliasGroup = card.querySelector('.member-aliases');
+    if (!nameDiv || !aliasGroup) return;
+    const aliasBtn = nameDiv.querySelector('.icon-btn');
+
+    // Reset to the inline state.
+    const oldRow = card.querySelector('.member-alias-row');
+    if (oldRow) {
+        nameDiv.insertBefore(aliasGroup, aliasBtn);
+        oldRow.remove();
+    }
+    const oldMore = aliasGroup.querySelector('.alias-more');
+    if (oldMore) oldMore.remove();
+    for (const chip of aliasGroup.children) chip.style.display = '';
+
+    // Fits inline beside the name? Leave it.
+    if (nameDiv.scrollWidth <= nameDiv.clientWidth + 1) return;
+
+    // Move the aliases onto their own line under the name.
+    const aliasRow = document.createElement('div');
+    aliasRow.className = 'member-alias-row';
+    aliasRow.appendChild(aliasGroup);
+    nameDiv.after(aliasRow);
+
+    // Fits on its own single line? Done.
+    if (aliasGroup.scrollWidth <= aliasRow.clientWidth + 1) return;
+
+    // Otherwise hide chips from the end and show how many were collapsed.
+    const moreChip = document.createElement('span');
+    moreChip.className = 'alias-chip alias-more';
+    aliasGroup.appendChild(moreChip);
+
+    const chips = Array.from(aliasGroup.children).filter(c => c !== moreChip);
+    let hidden = 0;
+    for (let i = chips.length - 1; i >= 0; i--) {
+        chips[i].style.display = 'none';
+        hidden++;
+        moreChip.textContent = `+${hidden}`;
+        if (aliasGroup.scrollWidth <= aliasRow.clientWidth + 1) break;
+    }
+}
+
+// Re-flow aliases when the viewport width changes (debounced).
+let aliasLayoutTimer = null;
+window.addEventListener('resize', () => {
+    clearTimeout(aliasLayoutTimer);
+    aliasLayoutTimer = setTimeout(() => {
+        document.querySelectorAll('#members-list .member-card').forEach(layoutMemberAliases);
+    }, 150);
+});
 
 function buildMemberCard(member) {
     const card = document.createElement('div');
@@ -432,24 +491,32 @@ function buildMemberCard(member) {
     const info = document.createElement('div');
     info.className = 'member-info';
 
-    // Name + aliases + alias button
+    // Name + aliases + alias button. Aliases render as comma-separated chips
+    // that stay inline while they fit; layoutMemberAliases() (run once the card
+    // is in the DOM) moves them onto their own line under the name and adds a
+    // +N indicator when they would overflow.
     const nameDiv = document.createElement('div');
     nameDiv.className = 'member-name';
-    nameDiv.style.cssText = 'display:flex;align-items:center;gap:8px;';
-    nameDiv.appendChild(document.createTextNode(member.name));
 
-    if (member.personal_aliases) {
-        const span = document.createElement('span');
-        span.style.cssText = 'color:var(--color-info);font-size:0.85em;';
-        span.textContent = `(${member.personal_aliases})`;
-        nameDiv.appendChild(span);
-    }
-    if (member.global_aliases) {
-        const span = document.createElement('span');
-        span.style.cssText = 'color:var(--color-text-muted);font-size:0.85em;';
-        span.textContent = `[${member.global_aliases}]`;
-        nameDiv.appendChild(span);
-    }
+    const nameText = document.createElement('span');
+    nameText.className = 'member-name-text';
+    nameText.textContent = member.name;
+    nameDiv.appendChild(nameText);
+
+    const aliasGroup = document.createElement('span');
+    aliasGroup.className = 'member-aliases';
+    const addAliasChips = (raw, cls) => {
+        if (!raw) return;
+        raw.split(',').map(s => s.trim()).filter(Boolean).forEach(alias => {
+            const chip = document.createElement('span');
+            chip.className = `alias-chip ${cls}`;
+            chip.textContent = alias;
+            aliasGroup.appendChild(chip);
+        });
+    };
+    addAliasChips(member.personal_aliases, 'alias-personal');
+    addAliasChips(member.global_aliases, 'alias-global');
+    if (aliasGroup.children.length) nameDiv.appendChild(aliasGroup);
 
     const aliasBtn = document.createElement('button');
     aliasBtn.className = 'icon-btn';

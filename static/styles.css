@@ -1007,7 +1007,8 @@ button {
     .member-name {
         font-size: 1.1em;
         margin-bottom: 8px;
-        padding-right: 150px; /* keep the name clear of the corner icons */
+        padding-right: 150px;  /* keep the name clear of the corner icons */
+        min-height: 44px;      /* so the alias line clears the corner icons */
     }
 
     .member-rank {
