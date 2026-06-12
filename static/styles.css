@@ -902,31 +902,19 @@ button {
     color: var(--color-danger);
 }
 
+/* Train managers can click the eligibility badge to toggle it. */
+.member-eligible.clickable {
+    cursor: pointer;
+}
+
+.member-eligible.clickable:hover {
+    filter: brightness(0.95);
+}
+
 .member-actions {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
-}
-
-.toggle-eligible-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    padding: 4px 10px;
-    border-radius: 999px;
-}
-
-.toggle-eligible-btn.eligible {
-    background: var(--color-success-bg);
-    color: var(--color-success);
-    border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
-}
-
-.toggle-eligible-btn.not-eligible {
-    background: var(--color-surface);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
 }
 
 .checkbox-label {
@@ -1028,13 +1016,6 @@ button {
         padding: 4px 12px;
     }
 
-    .member-eligible {
-        display: block;
-        margin-left: 0;
-        margin-top: 8px;
-        width: fit-content;
-    }
-
     .member-actions {
         margin-top: 10px;
         width: 100%;
@@ -1099,10 +1080,6 @@ button {
 
     .member-name {
         font-size: 1em;
-    }
-
-    .member-actions {
-        flex-direction: column;
     }
 
 }

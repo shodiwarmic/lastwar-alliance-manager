@@ -544,13 +544,19 @@ function buildMemberCard(member) {
         info.appendChild(span);
     }
 
-    // Eligible status (read-only). Hidden for managers who get the interactive
-    // toggle in the actions column, so it isn't shown in two places.
-    if (canViewTrain && !(canManageRanks && canManageTrain)) {
+    // Eligible status — inline with the other stat badges. Train managers can
+    // click it to toggle eligibility (no separate action button needed).
+    if (canViewTrain) {
         const eligible = member.eligible !== false;
         const span = document.createElement('span');
         span.className = `member-eligible ${eligible ? 'eligible' : 'not-eligible'}`;
         span.append(svgIcon('train', 13), document.createTextNode(eligible ? ' Eligible' : ' Not Eligible'));
+        if (canManageTrain) {
+            span.classList.add('clickable');
+            span.title = 'Toggle train eligibility';
+            span.setAttribute('role', 'button');
+            span.addEventListener('click', () => toggleEligible(member.id, eligible, info, span));
+        }
         info.appendChild(span);
     }
 
@@ -575,16 +581,6 @@ function buildMemberCard(member) {
             const inviteUserBtn = memberActionBtn('btn btn-sm btn-primary', 'user-plus', 'Invite User');
             inviteUserBtn.addEventListener('click', () => inviteUserForMember(member.id, member.name));
             actions.appendChild(inviteUserBtn);
-        }
-
-        if (canManageTrain) {
-            const eligible = member.eligible !== false;
-            const label = eligible ? 'Eligible' : 'Not Eligible';
-            const toggleBtn = memberActionBtn(
-                `toggle-eligible-btn ${eligible ? 'eligible' : 'not-eligible'}`,
-                'train', label);
-            toggleBtn.addEventListener('click', () => toggleEligible(member.id, eligible, actions, toggleBtn));
-            actions.appendChild(toggleBtn);
         }
 
         card.appendChild(actions);
