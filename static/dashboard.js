@@ -328,6 +328,12 @@ function initGridSortable(grid) {
         ghostClass: 'sortable-ghost',
         dragClass: 'sortable-drag',
         direction: 'vertical',
+        // On touch devices, require a short press-and-hold before a drag starts
+        // so a normal finger-swipe scrolls the page instead of grabbing a card.
+        // Mouse dragging stays instant (delayOnTouchOnly).
+        delay: 200,
+        delayOnTouchOnly: true,
+        touchStartThreshold: 5,
         onEnd() {
             // Rebuild prefs from current DOM order
             const order = [...grid.querySelectorAll('.dash-card')].map(c => c.dataset.cardId);
