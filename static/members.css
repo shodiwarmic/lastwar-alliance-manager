@@ -101,7 +101,7 @@
 .member-aliases {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 0;
     width: 100%;
     min-width: 0;
     overflow: hidden;
@@ -117,11 +117,16 @@
 
 .alias-chip.alias-personal { color: var(--color-info); }
 .alias-chip.alias-global   { color: var(--color-text-muted); }
-.alias-chip.alias-more     { color: var(--color-text-muted); font-weight: 600; }
 
-/* Comma between visible alias chips (hidden chips hide their own comma). */
-.member-aliases .alias-chip:not(:last-child)::after {
-    content: ",";
+/* Overflow counters, colour-matched to the alias type they collapse. */
+.alias-more          { font-weight: 600; }
+.alias-more-personal { color: var(--color-info); }
+.alias-more-global   { color: var(--color-text-muted); }
+
+/* Separator before each chip except the first, so a trailing hidden counter
+   never leaves a dangling comma. */
+.member-aliases .alias-chip:not(:first-child)::before {
+    content: ", ";
     color: var(--color-text-muted);
 }
 

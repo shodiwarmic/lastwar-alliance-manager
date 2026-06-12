@@ -435,26 +435,39 @@ function layoutMemberAliases(card) {
     const aliasGroup = card.querySelector('.member-aliases');
     if (!aliasGroup) return;
 
-    // Reset: show all chips, remove any previous +N.
-    const oldMore = aliasGroup.querySelector('.alias-more');
-    if (oldMore) oldMore.remove();
+    // Reset: show all chips, remove any previous +N indicators.
+    aliasGroup.querySelectorAll('.alias-more').forEach(m => m.remove());
     for (const chip of aliasGroup.children) chip.style.display = '';
 
     // Fits on the alias line? Done.
     if (aliasGroup.scrollWidth <= aliasGroup.clientWidth + 1) return;
 
-    // Otherwise hide alias chips from the end and show how many were collapsed
-    // until the line fits.
-    const moreChip = document.createElement('span');
-    moreChip.className = 'alias-chip alias-more';
-    aliasGroup.appendChild(moreChip);
+    // Chips are ordered personal-then-global, so truncating from the end hides
+    // global first, then personal. Track each separately and show a colour-
+    // matched +N for each kind that was collapsed.
+    const chips = Array.from(aliasGroup.children);
+    const morePersonal = document.createElement('span');
+    morePersonal.className = 'alias-chip alias-more alias-more-personal';
+    morePersonal.style.display = 'none';
+    const moreGlobal = document.createElement('span');
+    moreGlobal.className = 'alias-chip alias-more alias-more-global';
+    moreGlobal.style.display = 'none';
+    aliasGroup.append(morePersonal, moreGlobal);
 
-    const chips = Array.from(aliasGroup.children).filter(c => c !== moreChip);
-    let hidden = 0;
+    let hp = 0, hg = 0;
     for (let i = chips.length - 1; i >= 0; i--) {
         chips[i].style.display = 'none';
-        hidden++;
-        moreChip.textContent = `+${hidden}`;
+        if (chips[i].classList.contains('alias-personal')) hp++; else hg++;
+        if (hg > 0) {
+            moreGlobal.style.display = '';
+            moreGlobal.textContent = `+${hg}`;
+            moreGlobal.title = `${hg} more global alias${hg !== 1 ? 'es' : ''}`;
+        }
+        if (hp > 0) {
+            morePersonal.style.display = '';
+            morePersonal.textContent = `+${hp}`;
+            morePersonal.title = `${hp} more personal alias${hp !== 1 ? 'es' : ''}`;
+        }
         if (aliasGroup.scrollWidth <= aliasGroup.clientWidth + 1) break;
     }
 }
