@@ -550,7 +550,13 @@ func main() {
 			return
 		}
 
-		// The file exists (like style.css or app.js), serve it normally
+		// The file exists (like style.css or app.js), serve it normally.
+		// In the test/dev environment (PRODUCTION != "true") disable browser
+		// caching so edited JS/CSS/SVG always reload — avoids stale assets,
+		// especially on mobile. Production is unaffected.
+		if os.Getenv("PRODUCTION") != "true" {
+			w.Header().Set("Cache-Control", "no-store, must-revalidate")
+		}
 		http.FileServer(http.Dir("static")).ServeHTTP(w, r)
 	})
 
