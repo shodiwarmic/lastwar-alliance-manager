@@ -79,6 +79,12 @@
     display: flex;
     align-items: center;
     gap: 15px;
+    flex: 1 1 100%;
+}
+
+.week-info {
+    flex: 1;
+    text-align: center;
 }
 
 .week-info h3 {
@@ -97,8 +103,10 @@
     gap: 10px;
 }
 
-/* Keep the member search compact — .form-input is full-width by default */
-#search-box { max-width: 300px; }
+/* Member search sits inline with the export buttons (appended into the same
+   .tab-toolbar by the table export auto-wire); margin-right:auto pushes the
+   CSV/XLSX buttons to the right of the row. */
+#search-box { max-width: 300px; margin-right: auto; }
 .table-wrapper { overflow-x: auto; }
 
 /* Hidden utility class for permissions */
