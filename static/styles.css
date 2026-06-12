@@ -994,16 +994,11 @@ button {
         width: 100%;
     }
 
-    /* Member cards */
+    /* Member cards — keep the desktop-style row (info left, actions on the
+       right) rather than stacking the action icons below the card. */
     .member-card {
-        flex-direction: column;
         align-items: flex-start;
         padding: 15px;
-    }
-
-    .member-info {
-        width: 100%;
-        margin-bottom: 10px;
     }
 
     .member-name {
@@ -1017,9 +1012,8 @@ button {
     }
 
     .member-actions {
-        margin-top: 10px;
-        width: 100%;
         gap: 8px;
+        flex-shrink: 0;
     }
 
 
