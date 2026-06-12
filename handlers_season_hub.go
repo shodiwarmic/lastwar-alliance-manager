@@ -848,13 +848,20 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// season_trackables, season_member_records, season_events cascade via ON DELETE CASCADE.
-	// season_rewards, season_mail, season_participation, season_score_levels do not — delete explicitly.
-	for _, tbl := range []string{"season_participation", "season_score_levels", "season_rewards", "season_mail"} {
+	// season_rewards, season_participation, season_score_levels do not — delete explicitly.
+	for _, tbl := range []string{"season_participation", "season_score_levels", "season_rewards"} {
 		if _, err := tx.Exec(`DELETE FROM `+tbl+` WHERE season_id = ?`, id); err != nil {
 			slog.Error("handleSeasonDelete: delete children", "table", tbl, "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
+	}
+	// Season mail was folded into comms_templates (migration 041); the old
+	// season_mail table no longer exists. Remove this season's mail templates.
+	if _, err := tx.Exec(`DELETE FROM comms_templates WHERE season_id = ?`, id); err != nil {
+		slog.Error("handleSeasonDelete: delete season mail", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
 	if _, err := tx.Exec(`DELETE FROM seasons WHERE id = ?`, id); err != nil {
 		slog.Error("handleSeasonDelete: delete season", "error", err)
