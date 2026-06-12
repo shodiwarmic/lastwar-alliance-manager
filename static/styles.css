@@ -3178,6 +3178,12 @@ button {
     box-shadow: 0 0 0 2px var(--color-accent-bg);
 }
 
+/* Power Tracking search inputs sit inline with the export buttons in a
+   .tab-toolbar — keep them compact rather than full-width. */
+.rankings-search {
+    max-width: 280px;
+}
+
 .filter-group select {
     padding: 8px 12px;
     border: 1px solid var(--color-border);
