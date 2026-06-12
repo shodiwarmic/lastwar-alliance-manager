@@ -45,6 +45,9 @@
 .customize-label {
     flex: 1;
     font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
 }
 
 #dashboard-grid {

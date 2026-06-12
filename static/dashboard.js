@@ -365,7 +365,7 @@ function openCustomizePanel(available) {
         const cb = el('input', { type: 'checkbox' });
         cb.checked = pref.visible !== false;
         const lbl = el('span', { className: 'customize-label' });
-        lbl.append(svgIcon(meta.icon, 15), document.createTextNode(' ' + meta.label));
+        lbl.append(svgIcon(meta.icon, 15), document.createTextNode(meta.label));
 
         li.append(handle, cb, lbl);
         list.appendChild(li);
