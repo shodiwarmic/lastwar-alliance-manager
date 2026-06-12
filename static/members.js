@@ -580,7 +580,7 @@ function buildMemberCard(member) {
 
         if (isR5OrAdmin && !member.has_user) {
             const inviteUserBtn = document.createElement('button');
-            inviteUserBtn.className = 'invite-user-btn';
+            inviteUserBtn.className = 'btn btn-sm btn-primary';
             inviteUserBtn.textContent = 'Invite User';
             inviteUserBtn.addEventListener('click', () => inviteUserForMember(member.id, member.name, actions, inviteUserBtn));
             actions.appendChild(inviteUserBtn);
