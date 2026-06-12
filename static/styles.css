@@ -994,16 +994,19 @@ button {
         width: 100%;
     }
 
-    /* Member cards — keep the desktop-style row (info left, actions on the
-       right) rather than stacking the action icons below the card. */
+    /* Member cards — pin the action icons to the top-right corner (inline with
+       the name) and take them out of flow, so the info/badges span the full
+       width and flow beneath the icons instead of being confined to a reserved
+       right column. */
     .member-card {
-        align-items: flex-start;
+        position: relative;
         padding: 15px;
     }
 
     .member-name {
         font-size: 1.1em;
         margin-bottom: 8px;
+        padding-right: 150px; /* keep the name clear of the corner icons */
     }
 
     .member-rank {
@@ -1012,8 +1015,11 @@ button {
     }
 
     .member-actions {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        margin: 0;
         gap: 8px;
-        flex-shrink: 0;
     }
 
 
