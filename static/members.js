@@ -560,33 +560,28 @@ function buildMemberCard(member) {
         const actions = document.createElement('div');
         actions.className = 'member-actions';
 
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn btn-sm btn-secondary';
-        editBtn.textContent = 'Edit';
+        const editBtn = memberActionBtn('btn btn-sm btn-secondary', 'pencil', 'Edit');
         editBtn.addEventListener('click', () => editMember(member));
         actions.appendChild(editBtn);
 
         if (member.rank !== 'EX') {
-            const archiveBtn = document.createElement('button');
-            archiveBtn.className = 'btn btn-sm btn-danger';
-            archiveBtn.textContent = 'Archive';
+            const archiveBtn = memberActionBtn('btn btn-sm btn-danger', 'logout', 'Archive');
             archiveBtn.addEventListener('click', () => archiveMember(member.id, member.name));
             actions.appendChild(archiveBtn);
         }
 
         if (isR5OrAdmin && !member.has_user) {
-            const inviteUserBtn = document.createElement('button');
-            inviteUserBtn.className = 'btn btn-sm btn-primary';
-            inviteUserBtn.textContent = 'Invite User';
+            const inviteUserBtn = memberActionBtn('btn btn-sm btn-primary', 'user-plus', 'Invite User');
             inviteUserBtn.addEventListener('click', () => inviteUserForMember(member.id, member.name));
             actions.appendChild(inviteUserBtn);
         }
 
         if (canManageTrain) {
             const eligible = member.eligible !== false;
-            const toggleBtn = document.createElement('button');
-            toggleBtn.className = `toggle-eligible-btn ${eligible ? 'eligible' : 'not-eligible'}`;
-            toggleBtn.append(svgIcon(eligible ? 'check' : 'x', 13), document.createTextNode(eligible ? ' Eligible' : ' Not Eligible'));
+            const label = eligible ? 'Eligible' : 'Not Eligible';
+            const toggleBtn = memberActionBtn(
+                `toggle-eligible-btn ${eligible ? 'eligible' : 'not-eligible'}`,
+                eligible ? 'check' : 'x', label);
             toggleBtn.addEventListener('click', () => toggleEligible(member.id, eligible, actions, toggleBtn));
             actions.appendChild(toggleBtn);
         }
@@ -595,6 +590,21 @@ function buildMemberCard(member) {
     }
 
     return card;
+}
+
+// Member-card action button: SVG icon + a label that collapses to icon-only
+// on mobile (.member-action-label is hidden ≤768px). title/aria-label keep the
+// action discoverable when the text is hidden.
+function memberActionBtn(className, icon, label) {
+    const btn = document.createElement('button');
+    btn.className = className;
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    const span = document.createElement('span');
+    span.className = 'member-action-label';
+    span.textContent = label;
+    btn.append(svgIcon(icon, 14), span);
+    return btn;
 }
 
 async function handleMemberFormSubmit(e) {

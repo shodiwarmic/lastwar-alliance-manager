@@ -64,6 +64,15 @@
     color: var(--color-text-mid);
 }
 
+/* Member-card action buttons collapse to icon-only on mobile (≤768px, where
+   the card stacks) so the per-card action row stays compact. Labels and
+   title/aria-label keep them readable on desktop and accessible on touch. */
+@media (max-width: 768px) {
+    .member-action-label {
+        display: none;
+    }
+}
+
 /* ── Member modal: skills checkboxes ──────────────────────────────────── */
 .skills-check-grid {
     display: flex;
