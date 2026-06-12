@@ -175,9 +175,50 @@ function updateDisplayedMembers() {
     currentFilteredMembers = filtered;
     displayMembers(filtered);
     updateMemberCount(filtered.length);
+    updateActiveFilterBadge();
 
     const clearBtn = document.getElementById('clear-search');
     if (clearBtn) clearBtn.style.display = searchTerm ? 'flex' : 'none';
+}
+
+// Collapsible sort/filter panel — toggled via the "Sort & Filter" button,
+// state remembered in localStorage (collapsed by default to save space).
+function setupFilterToggle() {
+    const toggle = document.getElementById('toggle-filters');
+    const panel = document.getElementById('filter-collapse');
+    if (!toggle || !panel) return;
+
+    const setOpen = (open) => {
+        panel.classList.toggle('open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        try { localStorage.setItem('membersFiltersOpen', open ? '1' : '0'); } catch (_) {}
+    };
+
+    let stored = null;
+    try { stored = localStorage.getItem('membersFiltersOpen'); } catch (_) {}
+    setOpen(stored === '1');
+
+    toggle.addEventListener('click', () => setOpen(!panel.classList.contains('open')));
+}
+
+// Badge showing how many filter categories are narrowed (i.e. not on "All"),
+// so active filters are visible even while the panel is collapsed.
+function updateActiveFilterBadge() {
+    const badge = document.getElementById('active-filter-count');
+    if (!badge) return;
+    const narrowed = (sel, attr) => {
+        const active = Array.from(document.querySelectorAll(`${sel}.active`));
+        return active.length > 0 && !active.some(c => c.dataset[attr] === 'all') ? 1 : 0;
+    };
+    const count =
+        narrowed('.rank-chip', 'rank') +
+        narrowed('.prof-chip', 'prof') +
+        narrowed('.squad-chip', 'squad') +
+        narrowed('.troop-chip', 'troop') +
+        narrowed('.eligible-chip', 'eligible') +
+        narrowed('.skill-chip', 'skill');
+    badge.textContent = String(count);
+    badge.hidden = count === 0;
 }
 
 function buildExportTable(members) {
@@ -254,6 +295,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupInviteModal();
     setupCSVImport();
     setupSearch();
+    setupFilterToggle();
     await loadSkillRegistry();
     loadMembers();
 

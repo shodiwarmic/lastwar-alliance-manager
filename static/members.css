@@ -58,10 +58,49 @@
     right: 12px;
     top: 50%;
     transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
     background: none;
     border: none;
     cursor: pointer;
     color: var(--color-text-mid);
+}
+
+/* ── Collapsible sort/filter panel ────────────────────────────────────── */
+.filter-collapse {
+    display: none;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.filter-collapse.open {
+    display: flex;
+}
+
+.filter-toggle {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.filter-toggle .chevron {
+    transition: transform 0.2s;
+}
+
+.filter-toggle[aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+}
+
+.filter-count-badge {
+    background: var(--color-accent);
+    color: #fff;
+    border-radius: 999px;
+    padding: 0 6px;
+    font-size: 0.75em;
+    font-weight: 600;
+    min-width: 1.4em;
+    text-align: center;
 }
 
 /* ── Member name cell (name + aliases stacked) ────────────────────────── */
