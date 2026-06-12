@@ -119,6 +119,25 @@
     overflow-y: auto;
 }
 
+/* ── Member list header (title + export actions) ──────────────────────── */
+.members-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.members-list-header h3 {
+    margin-bottom: 0;
+}
+
+.member-export-actions {
+    display: flex;
+    gap: 8px;
+}
+
 /* ── Invite-link modal ────────────────────────────────────────────────── */
 .invite-link-row {
     display: flex;

@@ -257,12 +257,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadSkillRegistry();
     loadMembers();
 
-    const membersList = document.getElementById('members-list');
-    if (membersList) {
-        const exportBar = document.createElement('div');
-        exportBar.className = 'tab-toolbar';
-        exportBar.style.justifyContent = 'flex-end';
-
+    const exportBar = document.getElementById('members-export-bar');
+    if (exportBar) {
         const exportCsvBtn = document.createElement('button');
         exportCsvBtn.className = 'btn btn-secondary btn-sm';
         exportCsvBtn.textContent = '↓ CSV';
@@ -276,7 +272,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             exportTableToXLSX(buildExportTable(currentFilteredMembers), 'members.xlsx'));
 
         exportBar.append(exportCsvBtn, exportXlsxBtn);
-        membersList.parentElement.insertBefore(exportBar, membersList);
     }
 });
 
