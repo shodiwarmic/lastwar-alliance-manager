@@ -921,15 +921,21 @@ button {
 .member-card .member-power,
 .member-card .member-eligible,
 .member-card .badge-skill {
-    padding: 4px 10px;
-    font-size: 0.85em;
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    height: 24px;            /* fixed height = identical for text, icon+text, icon-only */
+    padding: 0 10px;
+    font-size: 0.8em;
+    line-height: 1;
+    border-radius: 12px;
 }
 
 .member-card .member-power .svg-icon,
 .member-card .member-eligible .svg-icon,
 .member-card .badge-skill .svg-icon {
-    width: 1em;
-    height: 1em;
+    width: 14px;
+    height: 14px;
 }
 
 .member-actions {
