@@ -1013,7 +1013,8 @@ button {
         min-height: 44px;      /* so the alias line clears the corner icons */
     }
 
-    .member-card .member-rank {
+    .member-card .member-rank,
+    .member-card .member-power {
         font-size: 0.85em;
         padding: 4px 12px;
     }
