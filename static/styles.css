@@ -2058,6 +2058,17 @@ button {
     transform: translateY(-1px);
 }
 
+/* Filled buttons get a subtle dark edge so their visible fill is inset the
+   same ~1px as the outlined buttons (.btn-secondary/.btn-ghost). A light
+   border (--color-border) barely shows on a saturated fill, so use a dark
+   overlay edge instead — this makes filled and outlined buttons look the same
+   size, not just measure the same. */
+.btn-primary, .primary-btn,
+.btn-danger,
+.btn-warning {
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
 .btn-sm.btn-warning {
     padding: 6px 12px;
     font-size: 0.875em;
