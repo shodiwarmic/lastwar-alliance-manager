@@ -912,6 +912,26 @@ button {
     filter: brightness(0.95);
 }
 
+/* Uniform info badges in the member card — rank / HQ / troop / profession,
+   power / squad / kills / hero, eligibility and skills all share one padding
+   and font size, regardless of whether they carry an icon. Icons are sized to
+   the text (1em) so an icon-bearing badge isn't taller or chunkier than a
+   text-only one. */
+.member-card .member-rank,
+.member-card .member-power,
+.member-card .member-eligible,
+.member-card .badge-skill {
+    padding: 4px 10px;
+    font-size: 0.85em;
+}
+
+.member-card .member-power .svg-icon,
+.member-card .member-eligible .svg-icon,
+.member-card .badge-skill .svg-icon {
+    width: 1em;
+    height: 1em;
+}
+
 .member-actions {
     display: flex;
     gap: 10px;
@@ -1011,12 +1031,6 @@ button {
         margin-bottom: 8px;
         padding-right: 150px;  /* keep the name clear of the corner icons */
         min-height: 44px;      /* so the alias line clears the corner icons */
-    }
-
-    .member-card .member-rank,
-    .member-card .member-power {
-        font-size: 0.85em;
-        padding: 4px 12px;
     }
 
     .member-card .member-actions {
