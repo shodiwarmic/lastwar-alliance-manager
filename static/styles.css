@@ -4665,6 +4665,45 @@ button {
     padding: 20px;
 }
 
+/* ── Mobile: freeze the first column of wide tables ───────────────────────
+   When a wide table scrolls horizontally on mobile, pin its first column (the
+   row identifier — member/name) so you don't lose track of which row you're
+   reading/editing. Applies to the global table classes so it covers tables
+   app-wide; it's a no-op for tables that don't overflow. The frozen cells need
+   opaque backgrounds (matching the row state) + the table's own overflow set to
+   visible so it doesn't clip the sticky cells. */
+@media (max-width: 768px) {
+    .data-table,
+    .analytics-table {
+        overflow: visible;
+    }
+
+    .data-table th:first-child,
+    .data-table td:first-child,
+    .analytics-table th:first-child,
+    .analytics-table td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        border-right: 1px solid var(--color-border);
+    }
+
+    /* Opaque backgrounds so scrolling cells pass behind the frozen column. */
+    .data-table td:first-child                          { background: var(--color-bg); }
+    .data-table tbody tr.row-alt td:first-child         { background: var(--color-surface); }
+    .data-table tbody tr:hover td:first-child,
+    .data-table tbody tr.row-alt:hover td:first-child   { background: var(--color-card); }
+    .analytics-table td:first-child                     { background: var(--color-card); }
+    .analytics-table tr:hover td:first-child            { background: var(--color-surface); }
+
+    /* Header corner above everything, keeping the header colour. */
+    .data-table thead th:first-child,
+    .analytics-table thead th:first-child {
+        z-index: 2;
+        background: var(--color-accent);
+    }
+}
+
 /* ── Tab component (shared across all tabbed pages) ─────────────────────── */
 
 .tab-bar {
