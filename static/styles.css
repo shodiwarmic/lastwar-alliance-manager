@@ -922,7 +922,7 @@ button {
    badge-hq/troop/profession, badge-power, badge-eligible-*, badge-skill). This
    keeps every badge the same size regardless of whether it holds text, icon +
    text, or just an icon, and stops sizes from drifting per type. */
-.member-badge {
+.member-info-badge {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -936,7 +936,7 @@ button {
     white-space: nowrap;
 }
 
-.member-badge .svg-icon {
+.member-info-badge .svg-icon {
     width: 14px;
     height: 14px;
 }
