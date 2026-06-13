@@ -1004,19 +1004,21 @@ button {
         padding: 15px;
     }
 
-    .member-name {
+    /* Scoped to .member-card so these don't leak onto .member-name / .member-rank
+       reused in other tables (e.g. the VS Points table). */
+    .member-card .member-name {
         font-size: 1.1em;
         margin-bottom: 8px;
         padding-right: 150px;  /* keep the name clear of the corner icons */
         min-height: 44px;      /* so the alias line clears the corner icons */
     }
 
-    .member-rank {
+    .member-card .member-rank {
         font-size: 0.85em;
         padding: 4px 12px;
     }
 
-    .member-actions {
+    .member-card .member-actions {
         position: absolute;
         top: 15px;
         right: 15px;
