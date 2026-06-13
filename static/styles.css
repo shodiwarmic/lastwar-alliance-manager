@@ -1955,7 +1955,10 @@ button {
     justify-content: center;
     gap: 6px;
     padding: 12px 24px;
-    border: none;
+    /* Transparent border so every button shares the same box regardless of
+       colour — colour classes only set border-color (outlined vs filled), so
+       sizing stays independent of colour. */
+    border: 1px solid transparent;
     border-radius: 8px;
     font-size: 15px;
     font-weight: 600;
@@ -2025,7 +2028,7 @@ button {
 .secondary-btn {
     background: var(--color-surface);
     color: var(--color-text);
-    border: 1px solid var(--color-border);
+    border-color: var(--color-border);
 }
 
 .btn-secondary:hover,
@@ -2064,7 +2067,7 @@ button {
 .btn-ghost {
     background: transparent;
     color: var(--color-text-mid);
-    border: 1px solid var(--color-border);
+    border-color: var(--color-border);
 }
 
 .btn-ghost:hover {
