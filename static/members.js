@@ -586,14 +586,14 @@ function buildMemberCard(member) {
 
     // Rank badge
     const rankBadge = document.createElement('span');
-    rankBadge.className = `member-rank rank-${member.rank.replace(/\s+/g, '-')}`;
+    rankBadge.className = `member-badge rank-${member.rank.replace(/\s+/g, '-')}`;
     rankBadge.textContent = member.rank;
     info.appendChild(rankBadge);
 
     // HQ badge
     if (member.level) {
         const badge = document.createElement('span');
-        badge.className = 'member-rank badge-hq';
+        badge.className = 'member-badge badge-hq';
         badge.textContent = `HQ ${member.level}`;
         info.appendChild(badge);
     }
@@ -601,7 +601,7 @@ function buildMemberCard(member) {
     // Troop badge
     if (member.troop_level) {
         const badge = document.createElement('span');
-        badge.className = 'member-rank badge-troop';
+        badge.className = 'member-badge badge-troop';
         badge.textContent = `T${member.troop_level}`;
         info.appendChild(badge);
     }
@@ -609,7 +609,7 @@ function buildMemberCard(member) {
     // Profession badge
     if (member.profession) {
         const badge = document.createElement('span');
-        badge.className = 'member-rank badge-profession';
+        badge.className = 'member-badge badge-profession';
         badge.textContent = member.profession;
         info.appendChild(badge);
     }
@@ -620,7 +620,7 @@ function buildMemberCard(member) {
         skillRegistry.forEach(({ key, label }) => {
             if (memberSkills.includes(key)) {
                 const badge = document.createElement('span');
-                badge.className = 'badge-skill';
+                badge.className = 'member-badge badge-skill';
                 badge.appendChild(svgIcon(SKILL_ICON[key] || 'star', 13));
                 badge.title = label;
                 info.appendChild(badge);
@@ -631,7 +631,7 @@ function buildMemberCard(member) {
     // Power
     if (isPowerTrackingEnabled && member.power) {
         const span = document.createElement('span');
-        span.className = 'member-power';
+        span.className = 'member-badge badge-power';
         span.title = `Overall Power: ${member.power.toLocaleString()}`;
         span.textContent = formatPower(member.power);
         info.appendChild(span);
@@ -641,7 +641,7 @@ function buildMemberCard(member) {
     if (isSquadTrackingEnabled && (member.squad_type || member.squad_power)) {
         const squadIconMap = { Tank: 'tank', Aircraft: 'plane-tilt', Missile: 'rocket' };
         const span = document.createElement('span');
-        span.className = 'member-power';
+        span.className = 'member-badge badge-power';
         span.title = `Squad Power: ${member.squad_power ? member.squad_power.toLocaleString() : 0}`;
         if (squadIconMap[member.squad_type]) span.append(svgIcon(squadIconMap[member.squad_type], 13), document.createTextNode(' '));
         span.appendChild(document.createTextNode(formatPower(member.squad_power)));
@@ -651,7 +651,7 @@ function buildMemberCard(member) {
     // Hero Power
     if (member.hero_power > 0) {
         const span = document.createElement('span');
-        span.className = 'member-power';
+        span.className = 'member-badge badge-power';
         span.title = `Total Hero Power: ${member.hero_power.toLocaleString()}`;
         span.append(svgIcon('user', 13), document.createTextNode(' ' + formatPower(member.hero_power)));
         info.appendChild(span);
@@ -660,7 +660,7 @@ function buildMemberCard(member) {
     // Troop Kills
     if (member.current_kills > 0) {
         const span = document.createElement('span');
-        span.className = 'member-power';
+        span.className = 'member-badge badge-power';
         span.title = `Troop Kills: ${member.current_kills.toLocaleString()}`;
         span.append(svgIcon('skull', 13), document.createTextNode(' ' + formatPower(member.current_kills)));
         info.appendChild(span);
@@ -671,10 +671,10 @@ function buildMemberCard(member) {
     if (canViewTrain) {
         const eligible = member.eligible !== false;
         const span = document.createElement('span');
-        span.className = `member-eligible ${eligible ? 'eligible' : 'not-eligible'}`;
+        span.className = `member-badge ${eligible ? 'badge-eligible-yes' : 'badge-eligible-no'}`;
         span.append(svgIcon('train', 13), document.createTextNode(eligible ? ' Eligible' : ' Not Eligible'));
         if (canManageTrain) {
-            span.classList.add('clickable');
+            span.classList.add('badge-clickable');
             span.title = 'Toggle train eligibility';
             span.setAttribute('role', 'button');
             span.addEventListener('click', () => toggleEligible(member.id, eligible, info, span));

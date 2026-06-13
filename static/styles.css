@@ -917,25 +917,53 @@ button {
    and font size, regardless of whether they carry an icon. Icons are sized to
    the text (1em) so an icon-bearing badge isn't taller or chunkier than a
    text-only one. */
-.member-card .member-rank,
-.member-card .member-power,
-.member-card .member-eligible,
-.member-card .badge-skill {
+/* Member-card info badges separate SIZE from COLOUR: `.member-badge` is the
+   single source of badge sizing; colour comes from a separate class (rank-R*,
+   badge-hq/troop/profession, badge-power, badge-eligible-*, badge-skill). This
+   keeps every badge the same size regardless of whether it holds text, icon +
+   text, or just an icon, and stops sizes from drifting per type. */
+.member-badge {
     display: inline-flex;
     align-items: center;
+    gap: 4px;
     box-sizing: border-box;
-    height: 24px;            /* fixed height = identical for text, icon+text, icon-only */
+    height: 24px;
     padding: 0 10px;
-    font-size: 0.8em;
-    line-height: 1;
     border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
 }
 
-.member-card .member-power .svg-icon,
-.member-card .member-eligible .svg-icon,
-.member-card .badge-skill .svg-icon {
+.member-badge .svg-icon {
     width: 14px;
     height: 14px;
+}
+
+/* Colour-only badge classes (rank-R1..R5 and badge-hq/troop/profession already
+   exist as colour-only classes and are reused as-is). */
+.badge-power {
+    background: var(--color-accent);
+    color: #fff;
+}
+
+.badge-eligible-yes {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.badge-eligible-no {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+.badge-clickable {
+    cursor: pointer;
+}
+
+.badge-clickable:hover {
+    filter: brightness(0.95);
 }
 
 .member-actions {
@@ -2835,18 +2863,11 @@ button {
 .badge-troop      { background: rgba(221,107,32,0.15);           color: #dd6b20; } /* amber — intentional, no token */
 .badge-profession { background: var(--color-purple-bg);          color: var(--color-purple); }
 .badge-squad-type { background: var(--color-info-bg);            color: var(--color-info); }
-/* Icon-only skill badge — flex-centre so the icon sits in the middle of the pill
-   (an icon-only inline-block has no text to centre against, so it falls to the baseline). */
+/* Colour-only skill badge — sizing comes from .member-badge (which also
+   flex-centres the icon-only content). */
 .badge-skill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     background: var(--color-success-bg);
     color: var(--color-success);
-    padding: 5px 8px;
-    border-radius: 20px;
-    font-size: 0.9em;
-    font-weight: 600;
 }
 .badge-alias-global   { background: var(--color-surface);          color: var(--color-text-mid); }
 .badge-alias-personal { background: var(--color-info-bg);        color: var(--color-info); }
