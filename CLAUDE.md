@@ -158,14 +158,25 @@ const CAN_MANAGE = cfg.canManage === 'true';
 
 If you need layout.html-level JS (e.g. mobile nav handlers), add it to `static/global.js` — not as an inline script.
 
-### Nav hamburger breakpoint must account for body padding
+### One structural width breakpoint — everything else is fluid
 
-The hamburger media query threshold (`@media (max-width: 946px)`) was updated during the design standards pass. The mobile header layout now uses a unified controls row — both the hamburger button and the username button are in a single flex row above the page title, with matched `border-radius: 20px`. The hamburger is `position: static` (was `position: absolute`). If the nav item count changes, recalculate the breakpoint using:
+The site has a **single** width breakpoint: `@media (max-width: 768px)` (and its
+complement `@media (min-width: 769px)`). It exists for one structural reason — it
+swaps the whole navigation chrome: desktop sidebar ↔ mobile header + fixed
+bottom-tabs + off-canvas menu (`.app-shell` goes column, `.sidebar` hidden). That
+discrete component swap can't be expressed fluidly, so it stays.
 
-```
-container_needed = items × 44px
-viewport = (container_needed / 0.95) + 20
-```
+**Do not add new width breakpoints.** All other responsiveness is fluid:
+- **Type & spacing** → `clamp(min, vw-based, max)` (e.g. `main { padding: clamp(15px, 3vw, 30px) }`).
+- **Card/column grids** → intrinsic `columns: <width>` or `grid-template-columns: repeat(auto-fit, minmax(<min>, 1fr))` so they reflow on their own (see `#dashboard-grid`). For a *fixed set* of column counts, use **container queries** (`container-type: inline-size` + `@container`), which are component-scoped — not page breakpoints (see `.week-grid`'s 7/4/2/1 stepping).
+- **Toolbars / button rows / headers** → `flex-wrap` + `margin-left:auto` / `justify-content` (see `.season-header`).
+- **Overflowing tabs / wide tables** → `overflow-x: auto` (tab strip scrolls at all widths; tables use `.table-scroll`).
+
+A genuine *mobile-shell* behaviour (something that only makes sense because the
+bottom-tabs / off-canvas nav exists — e.g. the `--table-vh-buffer`, the mobile
+sticky first table column, capping a drag pool's height) belongs **inside the
+existing `≤768px` block**, not in a new breakpoint. Avoid coupling JS to a width
+via `matchMedia`; prefer CSS. If you must, key it to `768px` so CSS and JS agree.
 
 ### Former/archived members have rank `'EX'`, not `'Former'`
 Members removed from the alliance are stored with `rank = 'EX'`. Any query or JS filter that needs only active members must exclude this rank explicitly. Filtering by `'Former'` silently does nothing — that string does not exist in the data.

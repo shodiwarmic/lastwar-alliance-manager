@@ -8,6 +8,15 @@
 
 :root {
     color-scheme: light;
+    /* Vertical space reserved above+below a capped table scroll-viewport so the
+       wrapper fits entirely on screen (topbar + tab bar + toolbar + page
+       padding). When it fits, only the table scrolls internally and its sticky
+       header stays pinned in view. Desktop only needs to clear the topbar
+       (~52px) + page bottom padding, so this is kept tight to maximise table
+       height. Mobile needs more — it also has the mobile header on top (~55px)
+       and the fixed 72px bottom-tabs nav below — so it's overridden larger in
+       the ≤768px block. */
+    --table-vh-buffer: 8rem;
     --bg-gradient-start: #1e3c72;
     --bg-gradient-end: #2a5298;
     --container-bg: white;
@@ -262,7 +271,10 @@ button,
 }
 
 main {
-    padding: 30px;
+    /* Fluid page padding: scales 30px → 15px as the viewport narrows, replacing
+       the old 1024px step-down. The 768px block tightens horizontal padding
+       further for the mobile shell. */
+    padding: clamp(15px, 3vw, 30px);
 }
 
 /* ── Split Command App Shell ─────────────────────────────────────────────── */
@@ -989,12 +1001,6 @@ button {
 /* ===== RESPONSIVE STYLES ===== */
 
 /* Tablet and below */
-@media (max-width: 1024px) {
-    main {
-        padding: 20px;
-    }
-}
-
 /* Small screens */
 @media (max-width: 768px) {
     /* Main content */
@@ -1124,20 +1130,6 @@ button {
         font-size: 1em;
     }
 }
-
-/* Small mobile devices */
-@media (max-width: 480px) {
-    .form-section h3 {
-        font-size: 1.1em;
-    }
-
-    .member-name {
-        font-size: 1em;
-    }
-
-}
-
-
 
 .csv-import-section {
     margin-top: 30px;
@@ -2011,62 +2003,65 @@ button {
     font-size: 0.875em;
 }
 
+/* All buttons share one outlined treatment: a colour-coded border + matching
+   text on the surface, filling with the colour on hover. Buttons in this app
+   sit together as PEER actions, and a filled button optically reads larger and
+   heavier than an outlined one of identical size — wrong when the buttons are
+   equals, and it would over-emphasise the destructive (danger) one. Keeping a
+   single outlined weight makes a peer group read uniformly. Emphasis, where
+   needed, is done by SIZE (a larger button), not by fill. A persistent
+   selection state (e.g. a view toggle) is filled via .btn-toggle.active. */
 .btn-primary,
 .primary-btn {
-    background: var(--color-accent);
-    color: #fff;
+    background: var(--color-surface);
+    color: var(--color-accent);
+    border-color: var(--color-accent);
 }
 
 .btn-primary:hover,
 .primary-btn:hover {
-    filter: brightness(1.1);
+    background: var(--color-accent);
+    color: #fff;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px var(--color-accent-border);
 }
 
 .btn-secondary,
 .secondary-btn {
     background: var(--color-surface);
     color: var(--color-text);
-    border-color: var(--color-border);
+    border-color: var(--color-text);
 }
 
 .btn-secondary:hover,
 .secondary-btn:hover {
-    background: var(--color-accent-bg);
-    border-color: var(--color-accent);
+    background: var(--color-text);
+    color: var(--color-surface);
+    border-color: var(--color-text);
     transform: translateY(-1px);
 }
 
 .btn-danger {
-    background: var(--color-danger);
-    color: #fff;
+    background: var(--color-surface);
+    color: var(--color-danger);
+    border-color: var(--color-danger);
 }
 
 .btn-danger:hover {
-    filter: brightness(0.9);
+    background: var(--color-danger);
+    color: #fff;
     transform: translateY(-1px);
 }
 
 .btn-warning {
-    background: var(--color-warning);
-    color: #212529;
+    background: var(--color-surface);
+    color: var(--color-warning);
+    border-color: var(--color-warning);
 }
 
 .btn-warning:hover {
-    filter: brightness(0.9);
+    background: var(--color-warning);
+    color: #212529;
     transform: translateY(-1px);
-}
-
-/* Filled buttons get a subtle dark edge so their visible fill is inset the
-   same ~1px as the outlined buttons (.btn-secondary/.btn-ghost). A light
-   border (--color-border) barely shows on a saturated fill, so use a dark
-   overlay edge instead — this makes filled and outlined buttons look the same
-   size, not just measure the same. */
-.btn-primary, .primary-btn,
-.btn-danger,
-.btn-warning {
-    border-color: rgba(0, 0, 0, 0.15);
 }
 
 .btn-sm.btn-warning {
@@ -2074,9 +2069,9 @@ button {
     font-size: 0.875em;
 }
 
-/* Ghost button — tertiary/low-weight actions (transparent, bordered). */
+/* Ghost button — tertiary/low-weight actions; lighter (muted) outline. */
 .btn-ghost {
-    background: transparent;
+    background: var(--color-surface);
     color: var(--color-text-mid);
     border-color: var(--color-border);
 }
@@ -2085,6 +2080,28 @@ button {
     background: var(--color-surface);
     color: var(--color-text);
     border-color: var(--color-text-muted);
+    transform: translateY(-1px);
+}
+
+/* Segmented view toggle: the selected option is filled to signal STATE (this is
+   selection, not emphasis, so fill is the correct signal). Inactive options use
+   the same outlined weight as a ghost button. Toggle .active in JS. */
+.btn-toggle {
+    background: var(--color-surface);
+    color: var(--color-text-mid);
+    border-color: var(--color-border);
+}
+
+.btn-toggle:hover {
+    color: var(--color-text);
+    border-color: var(--color-accent);
+}
+
+.btn-toggle.active,
+.btn-toggle.active:hover {
+    background: var(--color-accent);
+    color: #fff;
+    border-color: var(--color-accent);
 }
 
 .date-display {
@@ -4623,39 +4640,6 @@ button {
     }
 }
 
-/* Small mobile adjustments (smaller phones) */
-@media (max-width: 480px) {
-    /* Further reduce padding and font sizes */
-    .award-title {
-        font-size: 1em;
-    }
-
-    .ranking-position {
-        font-size: 1.5em;
-    }
-
-    .total-score {
-        font-size: 1.2em;
-    }
-
-    .phase-card {
-        padding: 12px;
-    }
-
-    .storm-building {
-        padding: 12px;
-    }
-
-    .stat-value {
-        font-size: 2em;
-    }
-
-    /* Adjust chart containers for very small screens */
-    .chart-container {
-        min-height: 250px;
-    }
-}
-
 /* ================================================ */
 /* ADMIN PANEL STYLES */
 /* ================================================ */
@@ -4663,9 +4647,15 @@ button {
 
 /* ── Scrollable table wrapper ────────────────────────────────────────────── */
 
+/* Capped scroll viewport for wide/long tables: scrolls both axes within itself
+   so the sticky header (position:sticky; top:0 on th) freezes against this
+   wrapper's top edge instead of being trapped with no scroll height. The cap
+   leaves room for the topbar + page chrome; short tables simply don't scroll. */
 .table-scroll {
-    overflow-x: auto;
+    overflow: auto;
     -webkit-overflow-scrolling: touch;
+    max-height: calc(100vh - var(--table-vh-buffer));
+    max-height: calc(100dvh - var(--table-vh-buffer));
 }
 
 /* ── Data table (global utility) ─────────────────────────────────────────── */
@@ -4674,12 +4664,29 @@ button {
     width: 100%;
     border-collapse: collapse;
     border-radius: 8px;
-    overflow: hidden;
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
 
 .data-table thead tr {
     background: var(--color-accent);
+}
+
+/* Action button cluster inside a table-row cell (Edit / Delete, etc.). Keeps
+   the buttons together on one line instead of wrapping when the column is
+   squeezed; the table's own horizontal scroll handles any overflow. */
+.row-actions {
+    display: inline-flex;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+/* Row-action buttons (built via global.js rowActionBtn) collapse to icon-only
+   on narrow screens — the label hides while title/aria-label keep the action
+   clear and accessible. Mirrors .member-action-label for member cards. */
+@media (max-width: 768px) {
+    .action-label {
+        display: none;
+    }
 }
 
 .data-table th {
@@ -4689,7 +4696,21 @@ button {
     font-weight: 600;
     font-size: 0.85rem;
     white-space: nowrap;
+    /* Freeze the header row at the top while the body scrolls — the nearest
+       scroll container (.content-scroll, or a capped table wrapper) governs.
+       The background must live on the th itself (not just thead tr) so body
+       rows pass behind it instead of showing through. */
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--color-accent);
 }
+
+/* overflow:hidden was removed from .data-table so the sticky header isn't
+   trapped in the table's own scroll context; re-round the header's top corners
+   that the clip used to provide. */
+.data-table thead th:first-child { border-top-left-radius: 8px; }
+.data-table thead th:last-child  { border-top-right-radius: 8px; }
 
 .data-table td {
     padding: 9px 14px;
@@ -4752,25 +4773,54 @@ button {
     .analytics-table td:first-child                     { background: var(--color-card); }
     .analytics-table tr:hover td:first-child            { background: var(--color-surface); }
 
-    /* Header corner above everything, keeping the header colour. */
+    /* Header corner above everything (sticky on both axes), keeping the header
+       colour. Must beat the sticky header row (z-index 3) and the frozen first
+       column (z-index 1). */
     .data-table thead th:first-child,
     .analytics-table thead th:first-child {
-        z-index: 2;
+        z-index: 4;
         background: var(--color-accent);
+    }
+
+    /* Phones reserve much more vertical space than desktop: the mobile header
+       sits above the content and the bottom-tabs nav below it, plus the page
+       chrome (tab bar + toolbar). With too small a reserve the capped viewport
+       is taller than the visible screen, so the page scrolls the whole wrapper
+       — and its sticky header — up off the top. A generous reserve keeps the
+       wrapper fully on screen so only the table scrolls and the header stays
+       pinned just below the topbar. Driven via the token so every wrapper
+       (.table-scroll, .table-wrapper, #strikes-container) picks it up
+       regardless of which stylesheet defines the wrapper. ~16rem clears the
+       mobile header (~55px) + topbar (~52px) + fixed bottom-tabs (72px) with
+       margin to spare, while still leaving the table comfortably tall. */
+    :root {
+        --table-vh-buffer: 16rem;
     }
 }
 
 /* ── Tab component (shared across all tabbed pages) ─────────────────────── */
 
+/* The tab strip scrolls horizontally at all widths: tabs keep their natural
+   size (flex:0 0 auto) and never shrink, so the active underline always lines
+   up with the label and the strip simply scrolls when the tabs don't fit (any
+   viewport). One rule for every width — no separate mobile behaviour to keep in
+   sync. Scrollbar hidden; the global.js scroll cues show a chevron at whichever
+   edge has more tabs. */
 .tab-bar {
     display: flex;
+    flex-wrap: nowrap;
     gap: 4px;
     border-bottom: 2px solid var(--color-border);
     margin-bottom: 24px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
 }
+.tab-bar::-webkit-scrollbar { display: none; }
 
 .tab-btn {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 6px;
     padding: 8px 20px;
@@ -4780,6 +4830,7 @@ button {
     margin-bottom: -2px;
     cursor: pointer;
     font-size: 0.95rem;
+    white-space: nowrap;
     color: var(--color-text-mid);
     transition: color 0.15s, border-color 0.15s;
 }
@@ -4800,6 +4851,50 @@ button {
 
 .tab-content.active {
     display: block;
+}
+
+/* Scroll affordance for the tab strip (set up in global.js). The wrapper is the
+   positioning context; a chevron fades in at whichever edge has more tabs to
+   reach. Cues are purely visual (pointer-events:none) — swipe to scroll. The
+   fade uses the page background so tabs appear to dissolve under the arrow. */
+.tab-bar-scroll {
+    position: relative;
+    margin-bottom: 24px;          /* carries the tab strip's spacing */
+}
+.tab-bar-scroll > .tab-bar {
+    margin-bottom: 0;             /* moved to the wrapper */
+}
+.tab-scroll-cue {
+    position: absolute;
+    top: 0;
+    bottom: 2px;                  /* sit on top of the tab strip, above its border line */
+    width: 40px;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 2;
+}
+.tab-scroll-cue .svg-icon { color: var(--color-text-mid); }
+.tab-scroll-cue-left {
+    left: 0;
+    justify-content: flex-start;
+    background: linear-gradient(to right, var(--color-bg) 35%, transparent);
+}
+.tab-scroll-cue-right {
+    right: 0;
+    justify-content: flex-end;
+    background: linear-gradient(to left, var(--color-bg) 35%, transparent);
+}
+.tab-bar-scroll.can-scroll-left  .tab-scroll-cue-left  { opacity: 1; }
+.tab-bar-scroll.can-scroll-right .tab-scroll-cue-right { opacity: 1; }
+
+/* Mobile only tightens the tab padding so more tabs fit before scrolling. */
+@media (max-width: 768px) {
+    .tab-btn {
+        padding: 8px 14px;
+    }
 }
 
 .tab-toolbar {
@@ -5074,16 +5169,10 @@ button {
     }
 }
 
-/* Very small screens */
-@media (max-width: 480px) {
-    #logins-list {
-        overflow-x: auto;
-    }
-
-    .user-actions button {
-        font-size: 0.75em;
-        padding: 6px 8px;
-    }
+/* Login-history table scrolls horizontally on its own at any width if it can't
+   fit (was previously gated to ≤480px). */
+#logins-list {
+    overflow-x: auto;
 }
 
 /* Admin Panel Cards */
@@ -5152,14 +5241,19 @@ code {
     margin-top: 20px;
     background: var(--color-card);
     border-radius: 8px;
-    overflow: hidden;
 }
 .analytics-table th {
     background: var(--color-accent);
     color: white;
     padding: 12px;
     text-align: left;
+    /* Freeze header on scroll — see .data-table th note above. */
+    position: sticky;
+    top: 0;
+    z-index: 3;
 }
+.analytics-table thead th:first-child { border-top-left-radius: 8px; }
+.analytics-table thead th:last-child  { border-top-right-radius: 8px; }
 .analytics-table td {
     padding: 12px;
     border-bottom: 1px solid var(--color-border);

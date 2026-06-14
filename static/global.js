@@ -162,7 +162,63 @@ function svgIcon(name, size = 14) {
     return svg;
 }
 
+// Table-row action button: SVG icon + a label that collapses to icon-only on
+// narrow screens (.action-label is hidden ≤768px). title/aria-label keep the
+// action discoverable when the text is hidden. Mirrors members.js
+// memberActionBtn() for card actions. Wrap a row's buttons in a .row-actions
+// container so they stay on one line.
+function rowActionBtn(className, icon, label, onClick) {
+    const btn = document.createElement('button');
+    btn.className = className;
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    const span = document.createElement('span');
+    span.className = 'action-label';
+    span.textContent = label;
+    btn.append(svgIcon(icon, 14), span);
+    if (onClick) btn.addEventListener('click', onClick);
+    return btn;
+}
+
+// Scroll affordance for horizontally-scrollable tab bars (mobile). Wraps each
+// .tab-bar in a positioned container and shows a fading chevron at whichever
+// edge has more tabs to scroll to. Self-disabling: when the bar isn't
+// overflowing (e.g. desktop) neither cue shows. No template changes needed; no
+// JS reads .tab-bar directly, so reparenting it is safe.
+function setupTabScrollCues() {
+    document.querySelectorAll('.tab-bar').forEach(bar => {
+        if (bar.closest('.tab-bar-scroll')) return; // already wrapped
+
+        const wrap = document.createElement('div');
+        wrap.className = 'tab-bar-scroll';
+        bar.parentNode.insertBefore(wrap, bar);
+        wrap.appendChild(bar);
+
+        const left = document.createElement('span');
+        left.className = 'tab-scroll-cue tab-scroll-cue-left';
+        left.setAttribute('aria-hidden', 'true');
+        left.appendChild(svgIcon('chevron-left', 18));
+
+        const right = document.createElement('span');
+        right.className = 'tab-scroll-cue tab-scroll-cue-right';
+        right.setAttribute('aria-hidden', 'true');
+        right.appendChild(svgIcon('chevron-right', 18));
+
+        wrap.append(left, right);
+
+        const update = () => {
+            const max = bar.scrollWidth - bar.clientWidth;
+            wrap.classList.toggle('can-scroll-left', bar.scrollLeft > 1);
+            wrap.classList.toggle('can-scroll-right', bar.scrollLeft < max - 1);
+        };
+        bar.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update);
+        update();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    setupTabScrollCues();
     const usernameDisplay = document.getElementById('username-display');
     // Toggle user dropdown menu
     if (usernameDisplay) {

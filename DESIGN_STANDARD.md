@@ -174,6 +174,19 @@ Page CSS is for page-specific layout only (grid arrangements, per-page card shap
 
 ---
 
+## Responsive Layout
+
+**One structural width breakpoint: `@media (max-width: 768px)` / `(min-width: 769px)`.** It exists solely to swap the navigation chrome (sidebar ↔ mobile header + bottom-tabs + off-canvas). **Do not add other width breakpoints.** Make everything else fluid:
+
+- **Type & spacing** → `clamp(min, vw, max)` — e.g. `padding: clamp(15px, 3vw, 30px)`.
+- **Grids** → `columns: <width>` or `repeat(auto-fit, minmax(<min>, 1fr))` (reflow on their own). For a *discrete* set of column counts (e.g. the schedule's 7/4/2/1), use **container queries** (`container-type: inline-size` + `@container`) — component-scoped, keyed to the component's own width, so they're not page breakpoints.
+- **Toolbars / headers** → `flex-wrap` + `margin-left:auto` / `justify-content`.
+- **Tabs / wide tables** → `overflow-x: auto`.
+
+True mobile-shell behaviours (things that exist only because the bottom-tabs / off-canvas nav does) go *inside* the `≤768px` block, not a new breakpoint. Avoid JS `matchMedia` width checks; if unavoidable, key them to 768px. (Device-feature queries — `prefers-color-scheme`, `prefers-reduced-motion`, `hover/pointer` — are not width breakpoints and are fine.)
+
+---
+
 ## Global Utility Classes
 
 ### `.data-table`
@@ -264,10 +277,21 @@ by `.empty-state`.
 <button class="btn btn-ghost btn-sm">Clear</button>
 ```
 
-- `.btn-primary` / `.btn-secondary` / `.btn-danger` / `.btn-warning` — standard weights.
-- `.btn-ghost` — tertiary / low-weight actions (e.g. "Edit" inside a card, "Clear filter",
-  "Today" nav, modal "Close"). Transparent background with a `--color-border` border; less
-  visual weight than `.btn-secondary`.
+- **All buttons are outlined, one weight.** Every variant renders the same way: a colour-coded
+  border + matching text on the surface, filling with its colour on hover. The colour is the
+  only difference — `.btn-primary` accent, `.btn-secondary` neutral text colour, `.btn-danger`
+  red, `.btn-warning` amber, `.btn-ghost` a lighter muted outline for tertiary actions.
+  Rationale: buttons in this app sit together as **peer** actions, and a *filled* button
+  optically reads larger/heavier than an outlined one of identical size — which is wrong when
+  the buttons are equals, and would over-emphasise the destructive one. **Do not reintroduce
+  filled buttons for action emphasis.**
+- **Emphasis is by SIZE, not fill.** When one action should stand out, make it a larger button
+  (full-size `.btn` among `.btn-sm` siblings) — see the Train log's primary action. Never give
+  one peer a filled background to make it "pop".
+- **Selection state uses fill** via `.btn-toggle` (a segmented view/option toggle). The selected
+  option gets `.active` (filled accent); inactive options are outlined. Here fill signals
+  *state*, not emphasis. Toggle `.active` in JS. Reference: Shoutouts (dyno) view switcher,
+  Members alias-filter bar. (For pill-shaped filters use `.filter-chip.active` instead.)
 - Do not use `.primary-action-btn` / `.secondary-action-btn` — deprecated.
 - **Two sizes only.** Default `.btn` and `.btn .btn-sm` — there is no `.btn-lg`. Heuristic: a
   button inside a card, table row, toolbar, or chip cluster takes `.btn-sm`; a standalone
@@ -275,8 +299,14 @@ by `.empty-state`.
   are independent (a small destructive button is `btn btn-danger btn-sm`).
 - **Mobile icon collapse.** Where a row of icon+label buttons is tight on mobile, the label may
   collapse to icon-only by hiding a label span under a breakpoint — keep `title` + `aria-label`
-  so the action stays clear and accessible. Reference: `members.js` `memberActionBtn()` building
-  `<svg> + <span class="member-action-label">`, hidden `@media (max-width: 768px)`.
+  so the action stays clear and accessible. Card actions: `members.js` `memberActionBtn()`
+  building `<svg> + <span class="member-action-label">`. Table-row actions: the global
+  `rowActionBtn(className, icon, label, onClick)` helper (`global.js`) builds `<svg> +
+  <span class="action-label">`; `.action-label` is hidden `@media (max-width: 768px)`.
+- **Table-row action clusters.** Wrap a row cell's buttons (Edit / Delete / Excuse …) in a
+  `<div class="row-actions">` — `inline-flex; gap; white-space:nowrap` keeps them on one line
+  instead of wrapping when the column is squeezed; the table's horizontal scroll handles
+  overflow. Reference: Season Hub rewards, Accountability strikes.
 - `.btn` is `display:inline-flex` with `gap:6px`, so an SVG icon + text label align
   automatically — `<button class="btn btn-primary"><svg class="svg-icon"…><use href="/icons.svg#icon-device-floppy"/></svg> Save</button>`.
 - **`.button-group`** — a `display:flex; gap:10px` container for a set of buttons. Use it
