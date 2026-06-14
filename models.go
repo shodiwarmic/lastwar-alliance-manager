@@ -276,6 +276,13 @@ type Settings struct {
 	// when the operator opts into the local sidecar. See
 	// image_processing.go and install.sh for the deployment plumbing.
 	OCRBackendMode               string `json:"ocr_backend_mode"`
+	// OCRArchiveMode selects where OCR requests are archived (best-effort):
+	// "none" (default), "gcp", "local", or "both". Decoupled from OCRBackendMode.
+	// OCRArchiveBucket is the GCS bucket for the gcp/both destinations (set in the
+	// admin UI, like CVWorkerURL). The local destination's path is OCR_ARCHIVE_DIR
+	// (env). See ocr_archive.go.
+	OCRArchiveMode               string `json:"ocr_archive_mode"`
+	OCRArchiveBucket             string `json:"ocr_archive_bucket"`
 	TrainFreeDailyLimit          int    `json:"train_free_daily_limit"`
 	TrainPurchasedDailyLimit     int    `json:"train_purchased_daily_limit"`
 	AllianceMaxMembers           int    `json:"alliance_max_members"`
