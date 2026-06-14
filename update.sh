@@ -238,6 +238,43 @@ if [ -f .env ] && ! grep -q "^OCR_BACKEND_MODE=" .env; then
     fi
 fi
 
+# Existing installs that pre-date OCR request archival won't have an OCR_ARCHIVE_
+# key yet. Offer the prerequisite opt-in once (no DB writes; admin enables it in
+# Admin → Security afterward). Runs before the compose step so the new .env loads.
+if [ -f .env ] && ! grep -q "^OCR_ARCHIVE_" .env; then
+    echo ""
+    echo -e "${YELLOW}New: optional OCR request archival${NC}"
+    echo "Retain uploaded screenshots + parsed OCR response to improve OCR / debug mistakes."
+    echo "Off by default; you enable it afterward in Admin → Security."
+    CURRENT_BACKEND="cloud"
+    grep -q "^OCR_BACKEND_MODE=local" .env && CURRENT_BACKEND="local"
+    ARCHIVE_DIR_VALUE=""
+    # Guard the prompt: no TTY (cron/CI) or --git => default to N, never hang.
+    if [ -t 0 ] && [ "$1" != "--git" ]; then
+        if [ "$CURRENT_BACKEND" = "local" ]; then
+            echo "  WARNING: local-disk archiving can accumulate 10GB+ over the retention window;"
+            echo "  if the host disk fills, the database can halt/corrupt."
+            read -p "Set up local OCR archiving? [y/N]: " ENABLE_ARCHIVE
+        else
+            read -p "Plan to archive OCR requests to a GCS bucket? [y/N]: " ENABLE_ARCHIVE
+        fi
+    else
+        ENABLE_ARCHIVE="N"
+    fi
+    if [[ "$ENABLE_ARCHIVE" =~ ^[Yy]$ ]]; then
+        if [ "$CURRENT_BACKEND" = "local" ]; then
+            ARCHIVE_DIR_VALUE="/app/data/ocr-archive"
+            echo "OCR_ARCHIVE_RETENTION_DAYS=7" >> .env
+            echo -e "${GREEN}Local archiving prepared — turn it on under Admin → Security → OCR Request Archival.${NC}"
+        else
+            echo "  See the GCS archival setup (bucket + IAM) in IMAGE_RECOGNITION.md, then set the"
+            echo "  bucket name and mode in Admin → Security."
+        fi
+    fi
+    # Always write the sentinel so this prompt never re-fires.
+    echo "OCR_ARCHIVE_DIR=${ARCHIVE_DIR_VALUE}" >> .env
+fi
+
 echo -e "${YELLOW}[4/5] Building and starting Docker containers...${NC}"
 sudo docker compose pull
 sudo docker compose build

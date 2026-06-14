@@ -249,6 +249,41 @@ else
 fi
 echo ""
 
+# Optional: OCR request archival (prerequisites only — admin enables it later in
+# Admin → Security). No DB writes here; the OCR_ARCHIVE_DIR key is always written
+# (empty = off) so it doubles as the one-time-prompt sentinel for update.sh.
+echo -e "${YELLOW}OCR request archival (optional)${NC}"
+echo "Retain uploaded screenshots + parsed OCR response to improve OCR / debug mistakes."
+echo "Off by default; you enable it afterward in Admin → Security."
+ARCHIVE_DIR_VALUE=""
+if [ "$OCR_CHOICE" = "2" ]; then
+    if [ -t 0 ]; then
+        echo "  WARNING: local-disk archiving can accumulate 10GB+ over the retention window on"
+        echo "  this host's disk; if it fills, the database can halt/corrupt."
+        read -p "Set up local OCR archiving? [y/N]: " ENABLE_ARCHIVE
+    else
+        ENABLE_ARCHIVE="N"
+    fi
+    if [[ "$ENABLE_ARCHIVE" =~ ^[Yy]$ ]]; then
+        ARCHIVE_DIR_VALUE="/app/data/ocr-archive"
+        echo "OCR_ARCHIVE_RETENTION_DAYS=7" >> .env
+        echo -e "${GREEN}Local archiving prepared — turn it on under Admin → Security → OCR Request Archival.${NC}"
+    fi
+else
+    if [ -t 0 ]; then
+        read -p "Plan to archive OCR requests to a GCS bucket? [y/N]: " ENABLE_ARCHIVE
+    else
+        ENABLE_ARCHIVE="N"
+    fi
+    if [[ "$ENABLE_ARCHIVE" =~ ^[Yy]$ ]]; then
+        echo "  See the GCS archival setup (bucket + IAM) in IMAGE_RECOGNITION.md, then set the"
+        echo "  bucket name and mode in Admin → Security."
+    fi
+fi
+# Always write the sentinel (populated for a local opt-in, empty otherwise).
+echo "OCR_ARCHIVE_DIR=${ARCHIVE_DIR_VALUE}" >> .env
+echo ""
+
 echo -e "${GREEN}[6/6] Pulling and starting Docker containers...${NC}"
 sudo docker compose pull
 sudo docker compose up -d
