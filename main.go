@@ -339,7 +339,6 @@ func main() {
 	router.HandleFunc("/api/vs-points", authMiddleware(getVSPoints)).Methods("GET")
 	router.HandleFunc("/api/vs-points", authMiddleware(requirePermission("manage_vs_points", saveVSPoints))).Methods("POST")
 	router.HandleFunc("/api/vs-points/{week}", authMiddleware(requirePermission("manage_vs_points", deleteWeekVSPoints))).Methods("DELETE")
-	router.HandleFunc("/api/vs-points/process-screenshot", authMiddleware(requirePermission("manage_vs_points", processVSPointsScreenshot))).Methods("POST")
 
 	router.HandleFunc("/api/vs-points/import/preview", authMiddleware(requirePermission("manage_members", previewCSVImport))).Methods("POST")
 	router.HandleFunc("/api/vs-points/import/commit", authMiddleware(requirePermission("manage_members", commitCSVImport))).Methods("POST")
@@ -412,7 +411,6 @@ func main() {
 
 	router.HandleFunc("/api/power-history", authMiddleware(getPowerHistory)).Methods("GET")
 	router.HandleFunc("/api/power-history", authMiddleware(requirePermission("manage_members", addPowerRecord))).Methods("POST")
-	router.HandleFunc("/api/power-history/process-screenshot", authMiddleware(requirePermission("manage_members", processPowerScreenshot))).Methods("POST")
 
 	router.HandleFunc("/api/hero-power-history", authMiddleware(getHeroPowerHistory)).Methods("GET")
 	router.HandleFunc("/api/hero-power-history", authMiddleware(requirePermission("manage_members", addHeroPowerRecord))).Methods("POST")
