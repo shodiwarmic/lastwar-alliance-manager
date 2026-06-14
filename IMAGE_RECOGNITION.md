@@ -58,4 +58,49 @@ The microservice returns a clean JSON payload mapping categories to their extrac
 
 * **External Service:** The `lastwar-ocr-service` must be deployed to Google Cloud Run (or a similar container host).
 * **Admin Configuration:** The Cloud Run endpoint URL must be saved in the Alliance Manager's Admin Settings dashboard.
-* **Secure Credentials:** A Google Cloud Service Account JSON key with `Cloud Vision API` and `Cloud Run Invoker` permissions must be uploaded to the Go backend.
+* **Secure Credentials:** A Google Cloud Service Account JSON key with `Cloud Run Invoker` permission (to invoke the private OCR worker) must be uploaded to the Go backend. If you enable **OCR request archival to GCS** (below), the *same* service account additionally needs `Storage Object Creator` on the archive bucket — roles are additive and the extra grant does not affect OCR auth.
+
+> **Deploying the OCR service / Cloud Run instance** is documented in the [`lastwar-ocr-service`](https://github.com/shodiwarmic/lastwar-ocr-service) repository — follow its setup guide for the Cloud Run deployment, Vision API enablement, and service-account creation. This repo intentionally does not duplicate those steps.
+
+## OCR Request Archival (optional)
+
+The Alliance Manager can retain a best-effort copy of each OCR request — the
+uploaded screenshots plus the parsed response — to help improve OCR accuracy and
+diagnose extraction mistakes. It is **off by default**, never blocks or affects the
+user's OCR result, and is chosen in **Admin → Security → OCR Request Archival**
+(`none` / Google Cloud Storage / local disk / both). It works for either OCR
+backend (cloud or local).
+
+### Local-disk archival
+Set `OCR_ARCHIVE_DIR` (a path inside a mounted volume — the default
+`/app/data/ocr-archive` lives under the existing `./data` mount) and select
+**local** (or **both**) in the admin UI. Archives are auto-pruned after
+`OCR_ARCHIVE_RETENTION_DAYS` (default 7) by an in-app janitor. See `DEPLOYMENT.md`
+for the volume/retention operational notes.
+
+### GCS archival setup
+Reuses the same `gcp_vision` service account already used to invoke Cloud Run. One
+bucket, with a write-only grant (least privilege) and a server-side retention
+rule:
+
+```bash
+# 1. Create the bucket (same region as your Cloud Run service keeps data local)
+gcloud storage buckets create gs://lastwar-ocr-archive \
+  --project=<your-project> --location=<region> --uniform-bucket-level-access
+
+# 2. Add a 14-day auto-delete lifecycle rule (retention happens server-side)
+cat > /tmp/lifecycle.json <<'EOF'
+{ "lifecycle": { "rule": [ { "action": {"type":"Delete"}, "condition": {"age":14} } ] } }
+EOF
+gcloud storage buckets update gs://lastwar-ocr-archive --lifecycle-file=/tmp/lifecycle.json
+
+# 3. Grant the service account WRITE-ONLY access (cannot read/list/delete)
+gcloud storage buckets add-iam-policy-binding gs://lastwar-ocr-archive \
+  --member="serviceAccount:<your-sa>@<project>.iam.gserviceaccount.com" \
+  --role="roles/storage.objectCreator"
+```
+
+Then, in **Admin → Security → OCR Request Archival**, enter the bucket name and
+select **Google Cloud Storage** (or **both**). With the write-only `objectCreator`
+role, a smoke-test *delete* failing is the correct confirmation that least
+privilege is in effect.

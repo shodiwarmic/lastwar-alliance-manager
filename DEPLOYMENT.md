@@ -201,6 +201,34 @@ Because the database is stored in a Docker volume mapped to your host machine (`
 sqlite3 /opt/lastwar/data/alliance.db ".backup '/var/backups/lastwar/alliance_$(date +%Y%m%d).db'"
 ```
 
+### OCR Request Archival (optional)
+Archival is off by default and configured by an admin in **Admin → Security → OCR
+Request Archival**. The GCS bucket name + destination are set in that UI; the GCP
+bucket/IAM setup (bucket creation, 14-day lifecycle rule, `Storage Object Creator`
+grant) is documented in **IMAGE_RECOGNITION.md → GCS archival setup**.
+
+For **local-disk** archival:
+
+- **Where archives land:** set `OCR_ARCHIVE_DIR` in `.env`. The default
+  `/app/data/ocr-archive` already persists to the host via the existing
+  `./data:/app/data` mount (passed through `env_file: .env`) — **no new volume
+  needed**. ⚠️ A custom path *outside* a mounted volume writes to the container's
+  ephemeral layer and is **lost on the next `docker compose up`/recreate**; to use
+  another disk, bind-mount it at the host's `./data/ocr-archive` rather than
+  repointing `OCR_ARCHIVE_DIR` to an unmounted container path.
+- **Disk usage:** an active alliance can accumulate **10 GB+** over the retention
+  window. Ensure the host disk has headroom — if `./data` fills, the SQLite
+  database can halt/corrupt.
+- **Retention (default, in-app):** an in-app janitor prunes `OCR_ARCHIVE_DIR` to
+  `OCR_ARCHIVE_RETENTION_DAYS` (default `7`) automatically — nothing to set up.
+- **Retention (OS-native alternative):** set `OCR_ARCHIVE_RETENTION_DAYS` to a
+  negative value to disable the in-app janitor, then manage cleanup yourself, e.g.
+  a `systemd-tmpfiles.d` rule (`d /opt/lastwar/data/ocr-archive 0750 <user> <group> 7d`)
+  or a cron entry:
+  ```bash
+  find /opt/lastwar/data/ocr-archive -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +
+  ```
+
 ---
 
 ## 6. Update Procedure
