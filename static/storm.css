@@ -1,39 +1,36 @@
-/* ── Storm Tab Navigation ─────────────────────────────────────────────────── */
+/* Storm uses the global tab components (.tab-bar / .tab-btn) — including the
+   horizontal scroll + scroll-cues from styles.css/global.js. Visibility is the
+   global .tab-content { display:none } / .tab-content.active { display:block }. */
 
-.storm-tabs {
-    display: flex;
-    gap: 4px;
-    border-bottom: 2px solid var(--color-border);
-    margin-bottom: 0;
+/* ── Battle configuration row ─────────────────────────────────────────────── */
+.storm-config-row {
+    gap: 16px;
     flex-wrap: wrap;
+    align-items: flex-end;
 }
-
-.storm-tab {
-    padding: 10px 20px;
-    border: none;
-    background: transparent;
-    color: var(--color-text-mid);
-    cursor: pointer;
-    font-size: 0.95em;
-    font-weight: 500;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
-    transition: color 0.2s, border-color 0.2s;
+/* Keep the battle-time dropdowns a sane width: a min so flex can't shrink them
+   to nothing, a max so they don't sprawl now that the option text is compact. */
+.storm-config-row .form-input {
+    min-width: 160px;
+    max-width: 240px;
 }
-
-.storm-tab:hover {
-    color: var(--color-text);
-    background: var(--color-surface);
-    border-radius: 4px 4px 0 0;
+/* On the mobile shell, stack each control full-width instead of letting them
+   cluster to the left — except the two battle-time dropdowns, which share a row
+   side by side (full-width single dropdowns look oversized). */
+@media (max-width: 768px) {
+    /* Override the global mobile `.form-row { flex-direction: column; gap: 0 }`
+       so this row stays a wrapping flex row — otherwise everything stacks and
+       flex-basis controls height, not width (which is why the dropdowns paired
+       only on paper). */
+    .storm-config-row { flex-direction: row; flex-wrap: wrap; gap: 16px; align-items: stretch; }
+    .storm-config-row .form-group { flex: 1 1 100%; }
+    .storm-config-row .form-input { width: 100%; max-width: none; }
+    /* ~50% basis (minus half the 16px row gap) so the two dropdowns fill one
+       row and push the next full-width control onto its own line. A 0 basis lets
+       the following 100% control collapse onto this line and squash them. */
+    .storm-config-row .storm-time-group { flex: 1 1 calc(50% - 8px); min-width: 0; }
+    .storm-config-row .storm-time-group .form-input { min-width: 0; }
 }
-
-.storm-tab.active {
-    color: var(--color-text);
-    border-bottom-color: var(--color-accent);
-    font-weight: 600;
-}
-
-/* .tab-content visibility is governed by the global .tab-content { display:none } / .tab-content.active { display:block } rules in styles.css */
 
 /* ── Capacity Bar ─────────────────────────────────────────────────────────── */
 
@@ -60,9 +57,7 @@
     max-height: 60vh;
     overflow-y: auto;
 }
-@media (max-width: 640px) {
-    #member-pool { min-height: 0; max-height: 50vh; }
-}
+/* (The whole pool panel is hidden ≤768px — see .member-pool-panel below.) */
 
 .pool-card {
     border: 1px solid var(--color-border);
@@ -247,19 +242,26 @@
     border: 1px solid var(--color-border);
     border-radius: 4px;
     z-index: 200;
-    max-height: 180px;
+    max-height: 280px;
     overflow-y: auto;
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
-.inline-search .inline-dropdown div {
+/* Result rows mirror the pool cards (name / meta / registration). Scope padding
+   to the row itself (.inline-result), not every nested div, and divide rows. */
+.inline-search .inline-result {
     padding: 6px 10px;
     cursor: pointer;
-    font-size: 0.88em;
     color: var(--color-text);
+    border-bottom: 1px solid var(--color-border);
 }
-.inline-search .inline-dropdown div:hover {
+.inline-search .inline-result:last-child { border-bottom: none; }
+.inline-search .inline-result:hover {
     background: var(--color-accent-bg);
-    color: var(--color-text);
+}
+.inline-search .inline-empty {
+    padding: 6px 10px;
+    color: var(--color-text-mid);
+    font-size: 0.85em;
 }
 
 /* ── TF skip chip ─────────────────────────────────────────────────────────── */
@@ -292,6 +294,14 @@
     min-width: 220px;
     position: sticky;
     top: 12px;
+}
+/* The pool is a drag-and-drop source, which isn't usable on touch/narrow
+   layouts — hide it entirely there. Members are added via the inline "Add
+   member" search inside each group/building, which carries the same member
+   info (rank / power / squad / registration). Placed AFTER the base rule so
+   source order wins (media queries don't add specificity). */
+@media (max-width: 768px) {
+    .member-pool-panel { display: none; }
 }
 
 #pool-search {

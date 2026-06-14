@@ -56,32 +56,36 @@ let STORM_SLOTS = [
     { id: 3, start: "23:00", end: "23:30" }
 ];
 
-function formatStormTimes(selectedZonesStr, _respectDST, elementId) {
+// Configured display timezones (comma-separated keys), set from settings at init.
+// The on-screen config/registration-view show SERVER TIME ONLY to stay compact;
+// the per-zone breakdown is reserved for My Registration and the broadcast mail.
+let stormZones = 'America/New_York';
+
+// Full multi-zone label for a slot: "09:00 Server | 11:00 EDT | …".
+// Used by My Registration and Battle Mail, where per-zone times matter.
+function slotZoneLabel(slot) {
+    const [hours, minutes] = slot.start.split(':').map(Number);
+    // Server is UTC-2, so server 09:00 = UTC 11:00.
+    const serverTime = dayjs().utc().hour(hours - SERVER_UTC_OFFSET).minute(minutes).second(0);
+    const parts = [`${slot.start} Server`];
+    (stormZones ? stormZones.split(',') : []).forEach(zoneKey => {
+        if (!ZONE_LABELS[zoneKey]) return;
+        parts.push(serverTime.tz(zoneKey).format('HH:mm z'));
+    });
+    return parts.join(' | ');
+}
+
+// Populate a battle-time <select> with server-time-only options (compact UI).
+function formatStormTimes(elementId) {
     if (!elementId) elementId = 'storm-time-select-a';
-    const selectedZones = selectedZonesStr ? selectedZonesStr.split(',') : ["America/New_York"];
     const dropdown = document.getElementById(elementId);
     if (!dropdown) return;
 
     dropdown.replaceChildren();
-    const now = dayjs();
-
     STORM_SLOTS.forEach(slot => {
-        const [hours, minutes] = slot.start.split(':').map(Number);
-        // Build the server time moment: set hour/minute in UTC, then shift by SERVER_UTC_OFFSET
-        // Server is UTC-2, so server 09:00 = UTC 11:00
-        const serverTime = now.utc().hour(hours - SERVER_UTC_OFFSET).minute(minutes).second(0);
-
-        let labelParts = [`${slot.start} Server`];
-
-        selectedZones.forEach(zoneKey => {
-            if (!ZONE_LABELS[zoneKey]) return;
-            const local = serverTime.tz(zoneKey);
-            labelParts.push(local.format('HH:mm z'));
-        });
-
         const option = document.createElement('option');
         option.value = slot.id;
-        option.textContent = labelParts.join(' | ');
+        option.textContent = `${slot.start} Server`;
         dropdown.appendChild(option);
     });
 }
@@ -157,6 +161,71 @@ function getRegVal(memberId, slotIdx) {
     return val;
 }
 
+const SQUAD_ICON = { Tank: 'tank', Aircraft: 'plane-tilt', Missile: 'rocket' };
+
+// Build the shared member info rows (name / meta / registration) used by both
+// the drag pool cards and the inline "Add member" search results, so every
+// place a member is shown carries the same rank/power/squad/registration info.
+// Returns the three nodes plus the active-slot registration value.
+function memberInfoNodes(m) {
+    const activeSlotIdx = tfConfig[currentTF];
+    const otherTF = currentTF === 'A' ? 'B' : 'A';
+    const otherSlotIdx = tfConfig[otherTF];
+    const regVal = getRegVal(m.id, activeSlotIdx);
+    const otherRegVal = otherSlotIdx && otherSlotIdx !== activeSlotIdx ? getRegVal(m.id, otherSlotIdx) : 0;
+
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'pool-name';
+    nameDiv.textContent = m.name;
+
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'pool-meta';
+    const powerStr = m.power != null ? Number(m.power).toLocaleString() : '—';
+    metaDiv.append(document.createTextNode(`${m.rank} · `), svgIcon('bolt', 11), document.createTextNode(powerStr));
+    if (m.squad_power != null && m.squad_power > 0) {
+        const sqSpan = document.createElement('span');
+        sqSpan.className = 'pool-squad-power';
+        sqSpan.appendChild(document.createTextNode(' · '));
+        if (SQUAD_ICON[m.squad_type]) sqSpan.appendChild(svgIcon(SQUAD_ICON[m.squad_type], 11));
+        sqSpan.appendChild(document.createTextNode(Number(m.squad_power).toLocaleString()));
+        metaDiv.appendChild(sqSpan);
+    }
+
+    const regDiv = document.createElement('div');
+    regDiv.className = 'pool-reg';
+    const badge = document.createElement('span');
+    if (!activeSlotIdx) {
+        badge.className = 'reg-none';
+        badge.textContent = 'No slot set';
+    } else if (regVal === 1) {
+        badge.className = 'reg-avail';
+        badge.textContent = '✓ Available';
+    } else if (regVal === 2) {
+        badge.className = 'reg-sub';
+        badge.append(svgIcon('bolt', 12), document.createTextNode(' Sub Only'));
+    } else {
+        badge.className = 'reg-none';
+        badge.textContent = 'Not registered';
+    }
+    regDiv.appendChild(badge);
+
+    if (otherRegVal === 1) {
+        const ob = document.createElement('span');
+        ob.className = 'reg-other reg-avail';
+        ob.title = `Also available for TF-${otherTF}`;
+        ob.textContent = `TF-${otherTF} ✓`;
+        regDiv.appendChild(ob);
+    } else if (otherRegVal === 2) {
+        const ob = document.createElement('span');
+        ob.className = 'reg-other reg-sub';
+        ob.title = `Sub only for TF-${otherTF}`;
+        ob.append(document.createTextNode(`TF-${otherTF} `), svgIcon('bolt', 11));
+        regDiv.appendChild(ob);
+    }
+
+    return { nameDiv, metaDiv, regDiv, regVal };
+}
+
 function renderPool() {
     const pool = document.getElementById('member-pool');
     if (!pool) return;
@@ -195,8 +264,7 @@ function renderPool() {
     }
 
     const cards = unassigned.map(m => {
-        const regVal = getRegVal(m.id, activeSlotIdx);
-        const otherRegVal = otherSlotIdx && otherSlotIdx !== activeSlotIdx ? getRegVal(m.id, otherSlotIdx) : 0;
+        const { nameDiv, metaDiv, regDiv, regVal } = memberInfoNodes(m);
 
         const card = document.createElement('div');
         card.className = 'pool-card' + (activeSlotIdx && regVal === 0 ? ' dimmed' : '');
@@ -204,60 +272,7 @@ function renderPool() {
         card.dataset.memberId = m.id;
         card.dataset.isSub = (regVal === 2) ? 'true' : 'false';
 
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'pool-name';
-        nameDiv.textContent = m.name;
-        card.appendChild(nameDiv);
-
-        const metaDiv = document.createElement('div');
-        metaDiv.className = 'pool-meta';
-        const powerStr = m.power != null ? Number(m.power).toLocaleString() : '—';
-        metaDiv.append(document.createTextNode(`${m.rank} · `), svgIcon('bolt', 11), document.createTextNode(powerStr));
-        if (m.squad_power != null && m.squad_power > 0) {
-            const SQUAD_ICON = { Tank: 'tank', Aircraft: 'plane-tilt', Missile: 'rocket' };
-            const sqSpan = document.createElement('span');
-            sqSpan.className = 'pool-squad-power';
-            sqSpan.appendChild(document.createTextNode(' · '));
-            if (SQUAD_ICON[m.squad_type]) sqSpan.appendChild(svgIcon(SQUAD_ICON[m.squad_type], 11));
-            sqSpan.appendChild(document.createTextNode(Number(m.squad_power).toLocaleString()));
-            metaDiv.appendChild(sqSpan);
-        }
-        card.appendChild(metaDiv);
-
-        const regDiv = document.createElement('div');
-        regDiv.className = 'pool-reg';
-
-        const badge = document.createElement('span');
-        if (!activeSlotIdx) {
-            badge.className = 'reg-none';
-            badge.textContent = 'No slot set';
-        } else if (regVal === 1) {
-            badge.className = 'reg-avail';
-            badge.textContent = '✓ Available';
-        } else if (regVal === 2) {
-            badge.className = 'reg-sub';
-            badge.append(svgIcon('bolt', 12), document.createTextNode(' Sub Only'));
-        } else {
-            badge.className = 'reg-none';
-            badge.textContent = 'Not registered';
-        }
-        regDiv.appendChild(badge);
-
-        if (otherRegVal === 1) {
-            const ob = document.createElement('span');
-            ob.className = 'reg-other reg-avail';
-            ob.title = `Also available for TF-${otherTF}`;
-            ob.textContent = `TF-${otherTF} ✓`;
-            regDiv.appendChild(ob);
-        } else if (otherRegVal === 2) {
-            const ob = document.createElement('span');
-            ob.className = 'reg-other reg-sub';
-            ob.title = `Sub only for TF-${otherTF}`;
-            ob.append(document.createTextNode(`TF-${otherTF} `), svgIcon('bolt', 11));
-            regDiv.appendChild(ob);
-        }
-
-        card.appendChild(regDiv);
+        card.append(nameDiv, metaDiv, regDiv);
         return card;
     });
 
@@ -713,31 +728,50 @@ function renderGroups() {
 
 function showInlineDropdown(dropdown, q, groupId, buildingId, isDirect) {
     const assigned = allAssignedIds();
+    const activeSlotIdx = tfConfig[currentTF];
     const filtered = allMembers.filter(m => {
         if (assigned.has(m.id)) return false;
-        if (q && !m.name.toLowerCase().includes(q) && !m.rank.toLowerCase().includes(q)) return false;
+        if (q && !m.name.toLowerCase().includes(q) &&
+            !m.rank.toLowerCase().includes(q) &&
+            !(m.squad_type || '').toLowerCase().includes(q)) return false;
         return true;
-    }).slice(0, 20);
+    });
 
-    if (filtered.length === 0) {
+    // Same ordering as the pool: available first, then sub-only, then the rest;
+    // ties broken by power. Keeps the most relevant adds at the top.
+    const regPriority = v => v === 1 ? 0 : v === 2 ? 1 : 2;
+    filtered.sort((a, b) => {
+        const ra = regPriority(getRegVal(a.id, activeSlotIdx));
+        const rb = regPriority(getRegVal(b.id, activeSlotIdx));
+        if (ra !== rb) return ra - rb;
+        return (b.power || 0) - (a.power || 0);
+    });
+
+    const shown = filtered.slice(0, 20);
+
+    if (shown.length === 0) {
         const div = document.createElement('div');
-        div.style.cssText = 'padding:6px 10px;color:var(--color-text-mid);font-size:0.85em;';
+        div.className = 'inline-empty';
         div.textContent = 'No members available';
         dropdown.replaceChildren(div);
         return;
     }
 
-    const items = filtered.map(m => {
-        const div = document.createElement('div');
-        div.dataset.memberId = m.id;
-        div.textContent = `${m.name} (${m.rank})`;
-        div.addEventListener('click', () => {
-            handleDrop(groupId, buildingId, isDirect, m.id, false);
+    const items = shown.map(m => {
+        const { nameDiv, metaDiv, regDiv, regVal } = memberInfoNodes(m);
+        const item = document.createElement('div');
+        item.className = 'inline-result';
+        item.dataset.memberId = m.id;
+        item.append(nameDiv, metaDiv, regDiv);
+        item.addEventListener('click', () => {
+            // Add as a substitute when the member is registered Sub Only for the
+            // active slot — matching the drag-from-pool behaviour.
+            handleDrop(groupId, buildingId, isDirect, m.id, regVal === 2);
             dropdown.replaceChildren();
             const input = dropdown.previousElementSibling;
             if (input) input.value = '';
         });
-        return div;
+        return item;
     });
 
     dropdown.replaceChildren(...items);
@@ -1001,11 +1035,8 @@ function renderMyRegistration() {
     const rows = STORM_SLOTS.map(slot => {
         const slotKey = `slot_${slot.id}`;
         const val = myRegState[slotKey] || 0;
-        const selectA = document.getElementById('storm-time-select-a');
-        let timeLabel = `Slot ${slot.id}: ${slot.start} Server Time`;
-        if (selectA && selectA.options[slot.id - 1]) {
-            timeLabel = `Slot ${slot.id}: ${selectA.options[slot.id - 1].text}`;
-        }
+        // My Registration shows the full per-zone breakdown (server + local times).
+        const timeLabel = `Slot ${slot.id}: ${slotZoneLabel(slot)}`;
 
         const row = document.createElement('div');
         row.className = 'my-slot-row';
@@ -1219,9 +1250,14 @@ async function saveConfig() {
 
 // ── Battle mail helpers ───────────────────────────────────────────
 function getBattleTimeText() {
+    // Mail variable — include the full per-zone breakdown, not the server-only
+    // text shown in the select.
     const selId = currentTF === 'A' ? 'storm-time-select-a' : 'storm-time-select-b';
     const sel = document.getElementById(selId);
-    if (sel && sel.selectedIndex !== -1) return sel.options[sel.selectedIndex].text;
+    if (sel && sel.value) {
+        const slot = STORM_SLOTS.find(s => String(s.id) === sel.value);
+        if (slot) return slotZoneLabel(slot);
+    }
     return '';
 }
 
@@ -1270,8 +1306,10 @@ function generateMail() {
     const selId = isA ? 'storm-time-select-a' : 'storm-time-select-b';
     const timeSelect = document.getElementById(selId);
     let timeText = '';
-    if (timeSelect && timeSelect.selectedIndex !== -1) {
-        timeText = timeSelect.options[timeSelect.selectedIndex].text;
+    if (timeSelect && timeSelect.value) {
+        // Mail includes the full per-zone breakdown (broadcast text, not UI).
+        const slot = STORM_SLOTS.find(s => String(s.id) === timeSelect.value);
+        if (slot) timeText = slotZoneLabel(slot);
     }
 
     let mail = `🏜️ DESERT STORM - TASK FORCE ${currentTF}\n`;
@@ -1396,13 +1434,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (settingsRes.ok) {
             const settings = await settingsRes.json();
-            formatStormTimes(settings.storm_timezones, settings.storm_respect_dst, 'storm-time-select-a');
-            formatStormTimes(settings.storm_timezones, settings.storm_respect_dst, 'storm-time-select-b');
+            stormZones = settings.storm_timezones || 'America/New_York';
+            formatStormTimes('storm-time-select-a');
+            formatStormTimes('storm-time-select-b');
         }
     } catch (e) {
         console.error('Error loading settings:', e);
-        formatStormTimes('America/New_York', true, 'storm-time-select-a');
-        formatStormTimes('America/New_York', true, 'storm-time-select-b');
+        stormZones = 'America/New_York';
+        formatStormTimes('storm-time-select-a');
+        formatStormTimes('storm-time-select-b');
     }
 
     try {
@@ -1468,16 +1508,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderAll();
     renderMyRegistration();
 
-    document.querySelectorAll('.storm-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    const defaultTabBtn = document.querySelector('.storm-tab[data-tab="my-reg"]');
+    const defaultTabBtn = document.querySelector('.tab-btn[data-tab="my-reg"]');
     const defaultContent = document.getElementById('tab-my-reg');
     if (defaultTabBtn) defaultTabBtn.classList.add('active');
     if (defaultContent) defaultContent.classList.add('active');
 
-    document.querySelectorAll('.storm-tab').forEach(tab => {
+    document.querySelectorAll('.tab-btn').forEach(tab => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.storm-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             tab.classList.add('active');
             const target = document.getElementById('tab-' + tab.dataset.tab);

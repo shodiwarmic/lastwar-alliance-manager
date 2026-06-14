@@ -15,7 +15,7 @@
     <!-- Section 1: Battle Configuration -->
     <section class="form-section">
         <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg> Battle Configuration</h3>
-        <div class="form-row" style="gap:16px; flex-wrap:wrap; align-items:flex-end;">
+        <div class="form-row storm-config-row">
             <div class="form-group">
                 <span style="display:block; margin-bottom:6px; font-weight:500;">Task Force</span>
                 <div style="display:flex; gap:8px;">
@@ -23,13 +23,13 @@
                     <span class="filter-chip" data-tf="B">Task Force B</span>
                 </div>
             </div>
-            <div class="form-group">
+            <div class="form-group storm-time-group">
                 <label for="storm-time-select-a">TF-A Battle Time</label>
                 <select id="storm-time-select-a" class="form-input" {{if not .Permissions.ManageStorm}}disabled{{end}}>
                     <option value="">Loading...</option>
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group storm-time-group">
                 <label for="storm-time-select-b">TF-B Battle Time</label>
                 <select id="storm-time-select-b" class="form-input" {{if not .Permissions.ManageStorm}}disabled{{end}}>
                     <option value="">Loading...</option>
@@ -50,13 +50,13 @@
     </section>
 
     <!-- Section 2: Inner Tab Bar -->
-    <div class="storm-tabs">
-        <button class="storm-tab" data-tab="my-reg">My Registration</button>
-        <button class="storm-tab" data-tab="planning">Planning</button>
+    <div class="tab-bar">
+        <button class="tab-btn" data-tab="my-reg">My Registration</button>
+        <button class="tab-btn" data-tab="planning">Planning</button>
         {{if .Permissions.ManageStorm}}
-        <button class="storm-tab" data-tab="reg-view">Registration View</button>
+        <button class="tab-btn" data-tab="reg-view">Registration View</button>
         {{end}}
-        <button class="storm-tab" data-tab="mail">Battle Mail</button>
+        <button class="tab-btn" data-tab="mail">Battle Mail</button>
     </div>
 
     <!-- Planning Tab -->
