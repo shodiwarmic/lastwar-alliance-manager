@@ -719,7 +719,8 @@ func updateCVWorkerURL(w http.ResponseWriter, r *http.Request) {
 	_, err := db.Exec("UPDATE settings SET cv_worker_url = ? WHERE id = 1", cleanURL)
 
 	if err != nil {
-		http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to update CV worker URL", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
