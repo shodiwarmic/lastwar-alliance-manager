@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Forms
         document.getElementById('password-policy-form').addEventListener('submit', savePasswordPolicy);
         document.getElementById('cv-worker-form').addEventListener('submit', saveCVWorkerUrl);
+        document.getElementById('ocr-archive-form').addEventListener('submit', saveOCRArchiveSettings);
         document.getElementById('gcp-upload-form').addEventListener('submit', uploadGCPCredentials);
         document.getElementById('delete-gcp-btn').addEventListener('click', showDeleteGCPModal);
 
@@ -759,8 +760,62 @@ async function loadSecuritySettings() {
                 deleteBtn.replaceChildren(svgIcon('x'), document.createTextNode(' No Key Configured'));
             }
         }
+
+        // OCR archival
+        const bucketInput = document.getElementById('ocr-archive-bucket');
+        if (bucketInput) bucketInput.value = settings.ocr_archive_bucket || '';
+        const modeSel = document.getElementById('ocr-archive-mode');
+        if (modeSel) {
+            const gcsOK = !!settings.archive_gcs_available;
+            const localOK = !!settings.archive_local_available;
+            for (const opt of modeSel.options) {
+                if (opt.value === 'gcp') opt.disabled = !gcsOK;
+                else if (opt.value === 'local') opt.disabled = !localOK;
+                else if (opt.value === 'both') opt.disabled = !(gcsOK && localOK);
+            }
+            modeSel.value = settings.ocr_archive_mode || 'none';
+        }
+        const archStatus = document.getElementById('ocr-archive-status');
+        if (archStatus) {
+            const errAt = settings.archive_last_error_at ? new Date(settings.archive_last_error_at) : null;
+            const okAt = settings.archive_last_success_at ? new Date(settings.archive_last_success_at) : null;
+            if (errAt && (!okAt || errAt > okAt)) {
+                archStatus.textContent = '⚠️ Archiving is failing: ' + (settings.archive_last_error || 'unknown error') + ' (' + errAt.toLocaleString() + ')';
+                archStatus.style.color = 'var(--color-danger)';
+            } else if (okAt) {
+                archStatus.textContent = 'Last archived successfully: ' + okAt.toLocaleString();
+                archStatus.style.color = 'var(--text-muted)';
+            } else {
+                archStatus.textContent = '';
+            }
+        }
     } catch (error) {
         console.error('Error loading security settings:', error);
+    }
+}
+
+// Save OCR archival destination + bucket
+async function saveOCRArchiveSettings(event) {
+    event.preventDefault();
+    const mode = document.getElementById('ocr-archive-mode').value;
+    const bucket = document.getElementById('ocr-archive-bucket').value.trim();
+
+    if ((mode === 'gcp' || mode === 'both') && !bucket) {
+        showToast('Enter a GCS bucket name for the selected mode.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/security/ocr-archive', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ocr_archive_mode: mode, ocr_archive_bucket: bucket })
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+        showToast('OCR archival settings updated.');
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
     }
 }
 

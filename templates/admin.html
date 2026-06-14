@@ -133,6 +133,28 @@
                     </div>
 
                     <div class="settings-group" style="margin-top:30px;padding-top:20px;border-top:1px solid var(--color-border);">
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-archive"/></svg> OCR Request Archival</h4>
+                        <p class="help-text">Optionally retain uploaded screenshots and the parsed OCR response (to improve OCR / diagnose mistakes). Best-effort and off by default. GCS archives use the bucket's lifecycle rule for retention; local-disk archives are auto-pruned after <code>OCR_ARCHIVE_RETENTION_DAYS</code> (default 7) by the in-app janitor.</p>
+                        <p id="ocr-archive-status" class="help-text" style="margin-top:0;"></p>
+                        <form id="ocr-archive-form">
+                            <div class="form-group">
+                                <label for="ocr-archive-bucket">GCS Bucket Name (for GCP archival):</label>
+                                <input type="text" id="ocr-archive-bucket" class="form-input" placeholder="lastwar-ocr-archive" style="width: 100%; max-width: 500px;">
+                            </div>
+                            <div class="form-group">
+                                <label for="ocr-archive-mode">Archive Destination:</label>
+                                <select id="ocr-archive-mode" class="form-input" style="width: 100%; max-width: 500px;">
+                                    <option value="none">Off (do not archive)</option>
+                                    <option value="gcp">Google Cloud Storage</option>
+                                    <option value="local">Local disk</option>
+                                    <option value="both">Both (GCS + local disk)</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Archival Settings</button>
+                        </form>
+                    </div>
+
+                    <div class="settings-group" style="margin-top:30px;padding-top:20px;border-top:1px solid var(--color-border);">
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg> Advanced Settings</h4>
                         <p class="help-text icon-label"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> These values reflect game constants. Only change if the game updates them.</p>
 
