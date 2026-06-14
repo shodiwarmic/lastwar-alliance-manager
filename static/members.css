@@ -169,6 +169,10 @@
     color: var(--color-text-muted);
 }
 
+/* The Edit / Archive / Invite outlined treatment now comes from the global
+   .btn-* rules in styles.css (every button in the app uses the same outlined,
+   colour-coded weight), so no member-specific button overrides are needed. */
+
 /* Member-card action buttons collapse to icon-only on mobile (≤768px, where
    the card stacks) so the per-card action row stays compact. Labels and
    title/aria-label keep them readable on desktop and accessible on touch. */

@@ -1520,7 +1520,7 @@ const ALIAS_EMPTY_MESSAGES = {
 function setAliasFilter(filter) {
     activeAliasFilter = filter;
     document.querySelectorAll('[data-alias-filter]').forEach(btn => {
-        btn.classList.toggle('active-filter', btn.dataset.aliasFilter === filter);
+        btn.classList.toggle('active', btn.dataset.aliasFilter === filter);
     });
     renderAliases();
 }
@@ -1587,7 +1587,7 @@ async function openAliasModal(memberId, memberName) {
     document.getElementById('alias-modal-title').textContent = `Nicknames for ${memberName}`;
 
     document.querySelectorAll('[data-alias-filter]').forEach(btn => {
-        btn.classList.toggle('active-filter', btn.dataset.aliasFilter === 'all');
+        btn.classList.toggle('active', btn.dataset.aliasFilter === 'all');
     });
 
     const globalWrapper = document.getElementById('global-alias-checkbox-wrapper');

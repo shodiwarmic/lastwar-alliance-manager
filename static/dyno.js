@@ -800,10 +800,8 @@ function setupViewToggle() {
     if (!listBtn || !groupedBtn) return;
 
     const setActive = (active, inactive) => {
-        active.classList.add('btn-primary');
-        active.classList.remove('btn-ghost');
-        inactive.classList.add('btn-ghost');
-        inactive.classList.remove('btn-primary');
+        active.classList.add('active');
+        inactive.classList.remove('active');
     };
 
     listBtn.addEventListener('click', () => {
