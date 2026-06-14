@@ -50,15 +50,12 @@
     gap: 0.4rem;
 }
 
+/* Intrinsic columns capped at 2: the count (2) restores the original max-two
+   layout while the width (22rem) reflows it down to 1 on its own as the page
+   narrows — no breakpoint needed, and it never grows to a 3rd column. */
 #dashboard-grid {
-    column-count: 2;
+    columns: 22rem 2;
     column-gap: 1rem;
-}
-
-@media (max-width: 700px) {
-    #dashboard-grid {
-        column-count: 1;
-    }
 }
 
 .dash-card {

@@ -7,7 +7,10 @@ body {
   min-height: 100vh;
   background: var(--color-bg);
   display: flex;
-  align-items: center;
+  /* "safe" keeps the box centred, but falls back to top-aligned when the form
+     is taller than the viewport (small screens / large fonts) so the top never
+     gets clipped — replaces the old ≤480px align-items flip, no breakpoint. */
+  align-items: safe center;
   justify-content: center;
 }
 
@@ -26,7 +29,7 @@ body {
 /* Dark brand header — always sidebar-dark regardless of content theme */
 .login-header {
   background: var(--color-sidebar, #1c2030);
-  padding: 32px 30px;
+  padding: clamp(24px, 5vw, 32px) clamp(20px, 4vw, 30px);
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -53,7 +56,7 @@ body {
 }
 
 .login-form {
-  padding: 32px 30px;
+  padding: clamp(24px, 5vw, 32px) clamp(20px, 4vw, 30px);
 }
 
 /* Auth submit buttons span the full form width */
@@ -95,9 +98,3 @@ body {
 .invite-error-icon  { font-size: 2.5em; margin-bottom: 10px; }
 .invite-error-state h2 { margin-bottom: 10px; color: var(--color-text); }
 .invite-error-state p  { color: var(--color-text-muted); font-size: 14px; }
-
-@media (max-width: 480px) {
-  body           { align-items: flex-start; padding-top: 32px; }
-  .login-header  { padding: 24px 20px; }
-  .login-form    { padding: 24px 20px; }
-}

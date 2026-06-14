@@ -15,16 +15,6 @@
     min-width: 160px;
 }
 
-/* Mobile day label — hidden on desktop, shown on mobile inside .week-nav */
-.mobile-day-label {
-    display: none;
-    font-weight: 600;
-    font-size: 0.95rem;
-    text-align: center;
-    flex: 1;
-    min-width: 140px;
-}
-
 /* ── Server event banner strips (inline in each day-col) ───────────────── */
 .server-banner-strip {
     border-radius: 4px;
@@ -39,24 +29,32 @@
     color: #fff;
 }
 
-/* ── Week grid — 4+3 two-row layout ─────────────────────────────────────── */
+/* ── Week grid — stepped column counts (7 / 4 / 2 / 1) ───────────────────────
+   The grid only ever shows 7, 4, 2, or 1 columns (never 3/5/6). Container
+   queries pick the count from the grid's OWN width — component-scoped, not a
+   page breakpoint, so it's consistent with the single-structural-breakpoint
+   rule. Flex (not grid) + a per-count cell width makes full rows fill edge to
+   edge, while a partial last row keeps the same cell width and is centred in
+   the view (`justify-content: center` only has slack to act on the last row).
+   The 0.5px trim absorbs sub-pixel rounding so a full row never wraps early. */
+#tab-schedule { container-type: inline-size; }
+
 .week-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: auto auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 8px;
+    --cols: 1;
 }
-
-/* Fri–Sun (last 3) sit on the second row, centred under the 4-col top row */
-.week-grid .day-col:nth-child(5),
-.week-grid .day-col:nth-child(6),
-.week-grid .day-col:nth-child(7) {
-    grid-row: 2;
+.week-grid > .day-col {
+    flex: 0 0 auto;
+    width: calc((100% - (var(--cols) - 1) * 8px) / var(--cols) - 0.5px);
 }
-
-.week-grid .day-col:nth-child(5) { grid-column: 1; }
-.week-grid .day-col:nth-child(6) { grid-column: 2; }
-.week-grid .day-col:nth-child(7) { grid-column: 3; }
+/* Thresholds set the minimum card width: each count only kicks in with enough
+   room for ~195px-wide cells at the low edge of its band. */
+@container (min-width: 400px)  { .week-grid { --cols: 2; } }
+@container (min-width: 800px)  { .week-grid { --cols: 4; } }
+@container (min-width: 1400px) { .week-grid { --cols: 7; } }
 
 .day-col {
     background: var(--color-card);
@@ -412,36 +410,4 @@ span.flatpickr-weekday {
 
 .error-msg {
     color: var(--color-danger);
-}
-
-/* ── Mobile: single-day view ────────────────────────────────────────────── */
-@media (max-width: 600px) {
-    .week-grid {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto;
-    }
-
-    /* Reset the 4+3 row/column placements so every day spans the full width */
-    .week-grid .day-col:nth-child(5),
-    .week-grid .day-col:nth-child(6),
-    .week-grid .day-col:nth-child(7) {
-        grid-row: auto;
-        grid-column: 1;
-    }
-
-    .day-col {
-        display: none;
-    }
-
-    .day-col.mobile-active {
-        display: flex;
-    }
-
-    .week-nav .week-range-label {
-        display: none;
-    }
-
-    .week-nav .mobile-day-label {
-        display: block;
-    }
 }

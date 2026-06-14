@@ -25,7 +25,6 @@ const cfg = document.getElementById('page-config') ? document.getElementById('pa
 const CAN_MANAGE = cfg.canManage === 'true';
 
 let currentWeekStart = '';   // "YYYY-MM-DD" of the Monday being shown
-let mobileActiveDayIndex = 0; // 0–6 index within the current week
 
 let eventTypes   = [];
 let serverEvents = [];
@@ -256,8 +255,6 @@ async function loadWeek() {
 
 function renderWeek(dates) {
     renderGrid(dates);
-    // Mobile: show current mobile day
-    syncMobileDay(dates);
 }
 
 
@@ -282,7 +279,6 @@ function buildDayCol(dateStr, idx) {
     col.className = 'day-col';
     col.dataset.date = dateStr;
     col.id = 'day-col-' + dateStr;
-    if (idx === mobileActiveDayIndex) col.classList.add('mobile-active');
 
     // Server event strips (above date in header)
     const seBanners = serverEvents.filter(e =>
@@ -460,23 +456,6 @@ function buildStormCard(entry) {
 
     card.appendChild(row);
     return card;
-}
-
-// ── Mobile navigation ─────────────────────────────────────────────────────────
-
-function syncMobileDay(dates) {
-    const label = document.getElementById('mobile-day-label');
-    const d = dates[mobileActiveDayIndex];
-    label.textContent = formatDateShort(d);
-
-    // Show only active day column
-    document.querySelectorAll('.day-col').forEach((col, i) => {
-        if (i === mobileActiveDayIndex) {
-            col.classList.add('mobile-active');
-        } else {
-            col.classList.remove('mobile-active');
-        }
-    });
 }
 
 // ── Event CRUD ────────────────────────────────────────────────────────────────
@@ -1573,7 +1552,6 @@ async function init() {
     }
 
     currentWeekStart = currentGameMonday();
-    mobileActiveDayIndex = 0;
     await loadWeek();
 
     bindEvents();
@@ -1582,44 +1560,18 @@ async function init() {
 // ── Event binding ─────────────────────────────────────────────────────────────
 
 function bindEvents() {
-    // Week / day navigation — prev/next buttons behave as day-nav on mobile (≤600px)
-    function isMobileView() { return window.matchMedia('(max-width: 600px)').matches; }
-
+    // Week navigation — prev/next always move by a full week (all 7 days are
+    // shown via the fluid reflow grid; there is no single-day mobile mode).
     document.getElementById('btn-prev-week').addEventListener('click', async () => {
-        if (isMobileView()) {
-            if (mobileActiveDayIndex > 0) {
-                mobileActiveDayIndex--;
-                syncMobileDay(weekDates(currentWeekStart));
-            } else {
-                currentWeekStart = addDays(currentWeekStart, -7);
-                mobileActiveDayIndex = 6;
-                await loadWeek();
-            }
-        } else {
-            currentWeekStart = addDays(currentWeekStart, -7);
-            mobileActiveDayIndex = 0;
-            await loadWeek();
-        }
+        currentWeekStart = addDays(currentWeekStart, -7);
+        await loadWeek();
     });
     document.getElementById('btn-next-week').addEventListener('click', async () => {
-        if (isMobileView()) {
-            if (mobileActiveDayIndex < 6) {
-                mobileActiveDayIndex++;
-                syncMobileDay(weekDates(currentWeekStart));
-            } else {
-                currentWeekStart = addDays(currentWeekStart, 7);
-                mobileActiveDayIndex = 0;
-                await loadWeek();
-            }
-        } else {
-            currentWeekStart = addDays(currentWeekStart, 7);
-            mobileActiveDayIndex = 0;
-            await loadWeek();
-        }
+        currentWeekStart = addDays(currentWeekStart, 7);
+        await loadWeek();
     });
     document.getElementById('btn-today').addEventListener('click', async () => {
         currentWeekStart = currentGameMonday();
-        mobileActiveDayIndex = 0;
         await loadWeek();
     });
 
