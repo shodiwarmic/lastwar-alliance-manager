@@ -155,6 +155,7 @@ To maintain a lightweight core application, heavy image processing and Optical C
 - **Two OCR Backends**: The app ships two backends, switchable in Admin Settings:
   - **Cloud** (default): Sends images to Google Cloud Vision via an OIDC-authenticated Cloud Run worker. Fully automatic screen-type detection. Requires GCP credentials configured in Admin Settings.
   - **Local**: Runs a [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) sidecar (`lastwar-ocr-service:local`) in Docker with no external dependencies. The user selects the image category manually per batch because PaddleOCR's English model cannot reliably detect Last War's stylised headers. Enable by selecting "Local" during `install.sh` / `update.sh`, or by setting `OCR_BACKEND_MODE=local` in `.env`.
+- **OCR Request Archival** (admin-only, off by default): Optionally retains a best-effort copy of each OCR request's uploaded screenshots and parsed response — useful for improving OCR accuracy and diagnosing extraction mistakes. The destination is chosen in **Admin → Security → OCR Request Archival**: `none`, **Google Cloud Storage** (set a bucket name; reuses the same service-account key, which additionally needs the *Storage Object Creator* role on that bucket; retention via the bucket's own lifecycle rule), **local disk** (set `OCR_ARCHIVE_DIR`; auto-pruned after `OCR_ARCHIVE_RETENTION_DAYS`, default 7), or **both**. Archival never blocks or affects the OCR result. Works for either OCR backend.
 - See [image_recognition.md](image_recognition.md) for detailed technical documentation.
 
 ---
@@ -240,4 +241,4 @@ openssl rand -hex 32
 2. Set the output as the `CREDENTIAL_ENCRYPTION_KEY` in your `.env` file and start the Go server.
 3. Log in as an Admin and navigate to the **Settings** dashboard.
 4. Provide the deployed URL of your Python CV Worker.
-5. Upload your Google Cloud Service Account JSON key (with Cloud Vision API access). The Go backend will encrypt this at rest and use it to securely invoke the private Cloud Run endpoint via OIDC tokens.
+5. Upload your Google Cloud Service Account JSON key. The key needs the **Cloud Run Invoker** role (to invoke the private OCR worker) and, *only if* you enable GCS request archival, **Storage Object Creator** on the archive bucket. The Go backend will encrypt this at rest and use it to securely invoke the private Cloud Run endpoint via OIDC tokens. See [image_recognition.md](image_recognition.md) for the optional OCR-archival GCS bucket setup.

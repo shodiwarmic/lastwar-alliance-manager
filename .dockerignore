@@ -2,6 +2,11 @@
 .git
 .gitignore
 
+# Runtime data — bind-mounted at runtime, never belongs in the image. Also keeps
+# the build context from choking on archive dirs the host user can't read.
+data/
+uploads/
+
 # Database files (will be stored in volume)
 *.db
 *.db-shm

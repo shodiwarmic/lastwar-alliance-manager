@@ -109,6 +109,19 @@ func ProcessImagesViaWorker(ctx context.Context, files []*multipart.FileHeader, 
 		return nil, fmt.Errorf("no images provided for processing")
 	}
 
+	// Decide whether to capture this request for archival (best-effort). Acquires
+	// an archiveSem slot when capturing; the deferred release is panic-safe and is
+	// cleared (acquired=false) only when ownership is handed to the archive
+	// goroutine below.
+	capture, archMode, archBucket := beginOCRArchiveCapture(files)
+	acquired := capture
+	defer func() {
+		if acquired {
+			releaseArchiveSlot()
+		}
+	}()
+	var archImgs []archivedImage
+
 	// 1. Retrieve and decrypt the GCP credentials from your database
 	plaintextJSON, err := getDecryptedGCPKey()
 	if err != nil {
@@ -145,10 +158,24 @@ func ProcessImagesViaWorker(ctx context.Context, files []*multipart.FileHeader, 
 			return nil, fmt.Errorf("failed to create form file buffer: %v", err)
 		}
 
-		_, err = io.Copy(part, file)
+		// When archiving, tee the same single read into a per-file buffer — no
+		// extra read, no extra latency.
+		dst := io.Writer(part)
+		var capBuf bytes.Buffer
+		if capture {
+			dst = io.MultiWriter(part, &capBuf)
+		}
+		_, err = io.Copy(dst, file)
 		file.Close()
 		if err != nil {
 			return nil, fmt.Errorf("failed to copy image bytes to buffer: %v", err)
+		}
+		if capture {
+			archImgs = append(archImgs, archivedImage{
+				name:        fileHeader.Filename,
+				contentType: fileHeader.Header.Get("Content-Type"),
+				data:        capBuf.Bytes(),
+			})
 		}
 	}
 
@@ -183,6 +210,22 @@ func ProcessImagesViaWorker(ctx context.Context, files []*multipart.FileHeader, 
 		return nil, fmt.Errorf("failed to decode worker JSON response: %v", err)
 	}
 
+	// Best-effort archive (cloud backend). Marshal synchronously so the goroutine
+	// never shares the live result map; hand off the archiveSem slot to it.
+	if capture {
+		respJSON, _ := json.Marshal(result)
+		keys := make([]string, 0, len(result))
+		for k := range result {
+			keys = append(keys, k)
+		}
+		imgs := archImgs
+		acquired = false
+		go func() {
+			defer releaseArchiveSlot()
+			archiveOCRRequest(imgs, respJSON, keys, "cloud", "", archMode, archBucket)
+		}()
+	}
+
 	return result, nil
 }
 
@@ -209,6 +252,16 @@ func ProcessImagesViaLocalWorker(ctx context.Context, files []*multipart.FileHea
 		return nil, fmt.Errorf("local OCR mode requires a category (the user-selected screen+tab) — auto-classification is unreliable on PaddleOCR's stylised-header read")
 	}
 
+	// Best-effort archival capture (see ProcessImagesViaWorker for the pattern).
+	capture, archMode, archBucket := beginOCRArchiveCapture(files)
+	acquired := capture
+	defer func() {
+		if acquired {
+			releaseArchiveSlot()
+		}
+	}()
+	var archImgs []archivedImage
+
 	// 1. Multipart payload — same shape as the cloud worker, plus a
 	//    'category' form field that the OCR service treats as a
 	//    classification override.
@@ -225,10 +278,22 @@ func ProcessImagesViaLocalWorker(ctx context.Context, files []*multipart.FileHea
 			file.Close()
 			return nil, fmt.Errorf("failed to create form file buffer: %v", err)
 		}
-		_, err = io.Copy(part, file)
+		dst := io.Writer(part)
+		var capBuf bytes.Buffer
+		if capture {
+			dst = io.MultiWriter(part, &capBuf)
+		}
+		_, err = io.Copy(dst, file)
 		file.Close()
 		if err != nil {
 			return nil, fmt.Errorf("failed to copy image bytes to buffer: %v", err)
+		}
+		if capture {
+			archImgs = append(archImgs, archivedImage{
+				name:        fileHeader.Filename,
+				contentType: fileHeader.Header.Get("Content-Type"),
+				data:        capBuf.Bytes(),
+			})
 		}
 	}
 
@@ -262,6 +327,21 @@ func ProcessImagesViaLocalWorker(ctx context.Context, files []*multipart.FileHea
 	var result CVWorkerResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode local OCR JSON response: %v", err)
+	}
+
+	// Best-effort archive (local backend). Records the user-selected category.
+	if capture {
+		respJSON, _ := json.Marshal(result)
+		keys := make([]string, 0, len(result))
+		for k := range result {
+			keys = append(keys, k)
+		}
+		imgs := archImgs
+		acquired = false
+		go func() {
+			defer releaseArchiveSlot()
+			archiveOCRRequest(imgs, respJSON, keys, "local", category, archMode, archBucket)
+		}()
 	}
 	return result, nil
 }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
@@ -478,6 +479,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(pwd_require_number, 0), COALESCE(pwd_history_count, 4),
         COALESCE(pwd_validity_days, 180), COALESCE(squad_tracking_enabled, 0),
         COALESCE(cv_worker_url, ''),
+        COALESCE(ocr_archive_mode, 'none'), COALESCE(ocr_archive_bucket, ''),
         COALESCE(train_free_daily_limit, 1), COALESCE(train_purchased_daily_limit, 2),
         COALESCE(alliance_max_members, 100), COALESCE(join_requirements, ''),
         COALESCE(vs_minimum_points, 2500000),
@@ -496,6 +498,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.PwdRequireLower, &s.PwdRequireNumber, &s.PwdHistoryCount, &s.PwdValidityDays,
 		&s.SquadTrackingEnabled,
 		&s.CVWorkerURL,
+		&s.OCRArchiveMode, &s.OCRArchiveBucket,
 		&s.TrainFreeDailyLimit, &s.TrainPurchasedDailyLimit,
 		&s.AllianceMaxMembers, &s.JoinRequirements,
 		&s.VSMinimumPoints,
@@ -531,17 +534,38 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	var hasGCPKey bool
 	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCPKey)
 
+	// Archive status snapshot (for the admin "archiving is failing" banner).
+	archErr, archErrAt, archOK := getArchiveStatus()
+	fmtTime := func(t time.Time) string {
+		if t.IsZero() {
+			return ""
+		}
+		return t.Format(time.RFC3339)
+	}
+
 	// Wrap the standard settings struct with our status booleans
 	type extendedSettings struct {
 		Settings               // Embeds your existing struct fields automatically
 		HasGCPCredentials bool `json:"has_gcp_credentials"`
 		OCRPipelineReady  bool `json:"ocr_pipeline_ready"`
+		// Archive availability gating for the UI: gcp option needs creds (bucket is
+		// validated separately at save), local option needs OCR_ARCHIVE_DIR set.
+		ArchiveGCSAvailable   bool   `json:"archive_gcs_available"`
+		ArchiveLocalAvailable bool   `json:"archive_local_available"`
+		ArchiveLastError      string `json:"archive_last_error"`
+		ArchiveLastErrorAt    string `json:"archive_last_error_at"`
+		ArchiveLastSuccessAt  string `json:"archive_last_success_at"`
 	}
 
 	response := extendedSettings{
-		Settings:          s,
-		HasGCPCredentials: hasGCPKey,
-		OCRPipelineReady:  hasGCPKey && s.CVWorkerURL != "", // Requires BOTH to be true
+		Settings:              s,
+		HasGCPCredentials:     hasGCPKey,
+		OCRPipelineReady:      hasGCPKey && s.CVWorkerURL != "", // Requires BOTH to be true
+		ArchiveGCSAvailable:   hasGCPKey,
+		ArchiveLocalAvailable: os.Getenv("OCR_ARCHIVE_DIR") != "",
+		ArchiveLastError:      archErr,
+		ArchiveLastErrorAt:    fmtTime(archErrAt),
+		ArchiveLastSuccessAt:  fmtTime(archOK),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -729,6 +753,63 @@ func updateCVWorkerURL(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Microservice routing updated successfully"})
+}
+
+// updateOCRArchiveSettings persists the OCR archival destination + bucket. These
+// columns are written ONLY here — deliberately kept out of the mass updateSettings
+// UPDATE so a general Settings save can't blank them.
+func updateOCRArchiveSettings(w http.ResponseWriter, r *http.Request) {
+	var p struct {
+		OCRArchiveMode   string `json:"ocr_archive_mode"`
+		OCRArchiveBucket string `json:"ocr_archive_bucket"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	mode := strings.TrimSpace(p.OCRArchiveMode)
+	bucket := strings.TrimSpace(p.OCRArchiveBucket)
+
+	switch mode {
+	case "none", "gcp", "local", "both":
+	default:
+		http.Error(w, "Invalid archive mode (must be none, gcp, local, or both)", http.StatusBadRequest)
+		return
+	}
+
+	// Re-validate prerequisites server-side (the UI gates these too, but never trust
+	// the client).
+	if mode == "gcp" || mode == "both" {
+		if bucket == "" {
+			http.Error(w, "A GCS bucket name is required for the selected mode", http.StatusBadRequest)
+			return
+		}
+		var hasGCPKey bool
+		db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCPKey)
+		if !hasGCPKey {
+			http.Error(w, "GCS archival requires Google Cloud Vision credentials to be configured first", http.StatusBadRequest)
+			return
+		}
+	}
+	if mode == "local" || mode == "both" {
+		if os.Getenv("OCR_ARCHIVE_DIR") == "" {
+			http.Error(w, "Local archival requires OCR_ARCHIVE_DIR to be set in the server environment", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if _, err := db.Exec("UPDATE settings SET ocr_archive_mode = ?, ocr_archive_bucket = ? WHERE id = 1", mode, bucket); err != nil {
+		slog.Error("failed to update OCR archive settings", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "updated", "settings", "OCR archival", true, "mode: "+mode)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "OCR archival settings updated successfully"})
 }
 
 // Admin: Delete an external API credential

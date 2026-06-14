@@ -124,6 +124,9 @@ func main() {
 	}
 	defer db.Close()
 
+	// Start the local-archive retention janitor (no-op unless OCR_ARCHIVE_DIR set).
+	startLocalArchiveJanitor()
+
 	router := mux.NewRouter()
 
 	// Auth routes (public)
@@ -227,6 +230,7 @@ func main() {
 	// Add these to the Admin Routes section in main.go
 	router.HandleFunc("/api/admin/security/password-policy", authMiddleware(adminMiddleware(updatePasswordPolicy))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/cv-worker", authMiddleware(adminMiddleware(updateCVWorkerURL))).Methods("PUT")
+	router.HandleFunc("/api/admin/security/ocr-archive", authMiddleware(adminMiddleware(updateOCRArchiveSettings))).Methods("PUT")
 	router.HandleFunc("/api/admin/credentials", authMiddleware(adminMiddleware(updateExternalCredentials))).Methods("POST")
 	router.HandleFunc("/api/admin/credentials/{service}", authMiddleware(adminMiddleware(deleteExternalCredential))).Methods("DELETE")
 
