@@ -956,22 +956,20 @@
 
             if (CAN_MANAGE_REWARDS) {
                 const tdActions = document.createElement('td');
-                const editBtn = document.createElement('button');
-                editBtn.className = 'btn btn-secondary btn-sm';
-                editBtn.textContent = 'Edit';
-                editBtn.addEventListener('click', () => openRewardModal(rw));
-                tdActions.appendChild(editBtn);
+                const actionWrap = document.createElement('div');
+                actionWrap.className = 'row-actions';
 
-                // Inline delete confirm
-                const delBtn = document.createElement('button');
-                delBtn.className = 'btn btn-danger btn-sm';
-                delBtn.textContent = 'Delete';
-                delBtn.style.marginLeft = '4px';
-                delBtn.addEventListener('click', async () => {
-                    if (!await showConfirm('Delete this reward?', 'Delete')) return;
-                    deleteReward(rw.id);
-                });
-                tdActions.appendChild(delBtn);
+                actionWrap.appendChild(
+                    rowActionBtn('btn btn-secondary btn-sm', 'pencil', 'Edit', () => openRewardModal(rw))
+                );
+                actionWrap.appendChild(
+                    rowActionBtn('btn btn-danger btn-sm', 'trash', 'Delete', async () => {
+                        if (!await showConfirm('Delete this reward?', 'Delete')) return;
+                        deleteReward(rw.id);
+                    })
+                );
+
+                tdActions.appendChild(actionWrap);
                 tr.appendChild(tdActions);
             }
 

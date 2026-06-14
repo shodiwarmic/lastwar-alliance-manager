@@ -1,22 +1,21 @@
 /* season-hub.css — Season Hub page styles */
 
 /* ── Season header bar ────────────────────────────────────────────────── */
+/* Wraps fluidly at every width (not at a hard breakpoint): when the select +
+   badge + action buttons don't fit on one line the .season-actions block drops
+   to the next line, right-aligned. This must hold at all widths — if the header
+   overflows instead, it widens .content-scroll horizontally, which then makes
+   the tab strip think its tabs fit and breaks its own scroll/cues. */
 .season-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
     margin-bottom: 16px;
     padding: 12px 16px;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 8px;
-}
-
-.season-title-area {
-    display: flex;
-    align-items: center;
-    gap: 10px;
 }
 
 .season-name {
@@ -27,6 +26,7 @@
 
 .season-badge {
     display: inline-block;
+    min-width: 0;            /* allow the badge to shrink + wrap when squeezed */
     padding: 2px 10px;
     border-radius: 12px;
     font-size: 0.75rem;
@@ -52,8 +52,11 @@
 
 .season-actions {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 8px;
     flex-shrink: 0;
+    margin-left: auto;   /* push the action buttons to the right of the header */
 }
 
 /* ── Season selector ─────────────────────────────────────────────────── */
@@ -62,6 +65,21 @@
     min-width: 180px;
     font-size: 1rem;
     font-weight: 600;
+}
+
+/* Mobile: give the select the full first row (flex-basis 100% forces the wrap)
+   so the status badge and action buttons share the second row — badge on the
+   left, buttons right-aligned. The header already wraps at all widths (above);
+   this just changes where the break falls on a phone. */
+@media (max-width: 768px) {
+    .season-select {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+    }
+    .season-badge {
+        white-space: normal;
+    }
 }
 
 /* ── Sortable table headers ───────────────────────────────────────────── */
@@ -101,10 +119,10 @@
 
 /* .data-table global utility moved to styles.css */
 
-/* Scroll wrapper for wide tables */
-.tab-content {
-    overflow-x: auto;
-}
+/* Wide/long tables scroll inside their own .table-scroll wrapper (global,
+   capped-height viewport) so the sticky header freezes and the tab toolbar
+   above stays put — previously .tab-content scrolled as a whole, which trapped
+   the sticky header and would have scrolled the toolbar off with it. */
 
 /* ── Rankings table ───────────────────────────────────────────────────── */
 .col-rank {

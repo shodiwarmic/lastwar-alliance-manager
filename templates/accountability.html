@@ -27,10 +27,8 @@
     <!-- ── Members ───────────────────────────────────────────────────────── -->
     <div id="tab-members" class="tab-content">
 
-        <div class="acc-toolbar">
-            <div class="acc-toolbar-left">
-                <input type="text" id="member-search" class="form-input" placeholder="Search members…" style="width:220px;">
-            </div>
+        <div class="tab-toolbar">
+            <input type="text" id="member-search" class="form-input" placeholder="Search members…" style="width:220px;">
         </div>
 
         <div id="vs-flag-banner" style="display:none" class="acc-flag-banner">
@@ -41,21 +39,23 @@
             {{end}}
         </div>
 
-        <table class="data-table" id="members-table" data-export-csv="accountability.csv">
-            <thead>
-                <tr>
-                    <th>Member</th>
-                    <th>Rank</th>
-                    <th>Tag</th>
-                    <th>Active Strikes</th>
-                    <th>VS This Week</th>
-                    <th data-no-export></th>
-                </tr>
-            </thead>
-            <tbody id="members-tbody">
-                <tr><td colspan="6" class="loading-msg">Loading…</td></tr>
-            </tbody>
-        </table>
+        <div class="table-wrapper">
+            <table class="data-table" id="members-table" data-export-csv="accountability.csv">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Rank</th>
+                        <th>Tag</th>
+                        <th>Active Strikes</th>
+                        <th>VS This Week</th>
+                        <th data-no-export></th>
+                    </tr>
+                </thead>
+                <tbody id="members-tbody">
+                    <tr><td colspan="6" class="loading-msg">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- ── Strikes ───────────────────────────────────────────────────────── -->

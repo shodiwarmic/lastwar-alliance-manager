@@ -17,6 +17,18 @@
     flex-wrap: wrap;
 }
 
+/* Capped scroll viewports so the toolbars (search / export / status filter) and
+   the VS-minimum banner stay put while the table scrolls inside, and the sticky
+   header (see styles.css .data-table th) freezes against the wrapper top.
+   #strikes-container is the JS-built strikes table's wrapper. Buffer + dvh come
+   from the global --table-vh-buffer token (larger on mobile). */
+.table-wrapper,
+#strikes-container {
+    overflow: auto;
+    max-height: calc(100vh - var(--table-vh-buffer));
+    max-height: calc(100dvh - var(--table-vh-buffer));
+}
+
 /* --- Flag banner for VS underperformers --- */
 .acc-flag-banner {
     background: var(--color-danger-bg);

@@ -108,7 +108,15 @@
    the export auto-wire right-aligns the CSV/XLSX buttons (.table-export-actions),
    so the search just stays compact on the left. */
 #search-box { max-width: 300px; }
-.table-wrapper { overflow-x: auto; }
+/* Capped viewport so the sticky table header (see styles.css .data-table th)
+   freezes against the wrapper top while the wide VS grid scrolls both ways.
+   Buffer + dvh come from the global --table-vh-buffer token (larger on mobile,
+   where the URL bar inflates vh and there's a mobile header + bottom nav). */
+.table-wrapper {
+    overflow: auto;
+    max-height: calc(100vh - var(--table-vh-buffer));
+    max-height: calc(100dvh - var(--table-vh-buffer));
+}
 
 /* Hidden utility class for permissions */
 .hidden { display: none !important; }

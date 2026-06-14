@@ -375,19 +375,17 @@ async function loadStrikes() {
 
         if (CAN_MANAGE) {
             const tdAct = document.createElement('td');
+            const actionWrap = document.createElement('div');
+            actionWrap.className = 'row-actions';
             if (s.status === 'active') {
-                const excuseBtn = document.createElement('button');
-                excuseBtn.className = 'btn btn-secondary btn-sm';
-                excuseBtn.textContent = 'Excuse';
-                excuseBtn.addEventListener('click', () => excuseStrikeInline(s.id));
-                tdAct.appendChild(excuseBtn);
+                actionWrap.appendChild(
+                    rowActionBtn('btn btn-secondary btn-sm', 'check', 'Excuse', () => excuseStrikeInline(s.id))
+                );
             }
-            const delBtn = document.createElement('button');
-            delBtn.className = 'btn btn-danger btn-sm';
-            delBtn.textContent = 'Delete';
-            delBtn.style.marginLeft = s.status === 'active' ? '6px' : '0';
-            delBtn.addEventListener('click', () => deleteStrikeInline(s.id));
-            tdAct.appendChild(delBtn);
+            actionWrap.appendChild(
+                rowActionBtn('btn btn-danger btn-sm', 'trash', 'Delete', () => deleteStrikeInline(s.id))
+            );
+            tdAct.appendChild(actionWrap);
             tr.appendChild(tdAct);
         }
 

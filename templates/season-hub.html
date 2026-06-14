@@ -20,18 +20,16 @@
 
     <!-- Season header bar -->
     <div class="season-header" id="season-header">
-        <div class="season-title-area">
-            <select id="season-select" class="form-input season-select">
-                <option value="">No seasons</option>
-            </select>
-            <span id="season-status-badge" class="season-badge" style="display:none"></span>
-        </div>
+        <select id="season-select" class="form-input season-select">
+            <option value="">No seasons</option>
+        </select>
+        <span id="season-status-badge" class="season-badge" style="display:none"></span>
         {{if .Permissions.ManageSeasonRewards}}
         <div class="season-actions">
-            <button class="btn btn-secondary btn-sm" id="btn-create-season">+ New Season</button>
-            <button class="btn btn-secondary btn-sm" id="btn-edit-season" style="display:none">Edit</button>
-            <button class="btn btn-danger btn-sm" id="btn-archive-season" style="display:none">Archive</button>
-            <button class="btn btn-danger btn-sm" id="btn-delete-season" style="display:none">Delete</button>
+            <button class="btn btn-secondary btn-sm" id="btn-create-season" title="New Season" aria-label="New Season"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> <span class="action-label">New Season</span></button>
+            <button class="btn btn-secondary btn-sm" id="btn-edit-season" title="Edit" aria-label="Edit" style="display:none"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-pencil"/></svg> <span class="action-label">Edit</span></button>
+            <button class="btn btn-danger btn-sm" id="btn-archive-season" title="Archive" aria-label="Archive" style="display:none"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-archive"/></svg> <span class="action-label">Archive</span></button>
+            <button class="btn btn-danger btn-sm" id="btn-delete-season" title="Delete" aria-label="Delete" style="display:none"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trash"/></svg> <span class="action-label">Delete</span></button>
         </div>
         {{end}}
     </div>
@@ -56,23 +54,25 @@
         <div id="no-season-msg" class="info-panel" style="display:none">
             No active season. {{if .Permissions.ManageSeasonRewards}}Create one above to get started.{{end}}
         </div>
-        <table class="data-table sortable-table" id="rankings-table" style="display:none" data-export-csv="rankings.csv">
-            <thead>
-                <tr>
-                    <th class="col-rank" data-sort="rank_position">#</th>
-                    <th data-sort="name">Member</th>
-                    <th data-sort="rank">Rank</th>
-                    <th data-sort="participation_pct" class="sort-desc">Participation</th>
-                    <th data-sort="contribution_pct">Contribution</th>
-                    <th data-sort="key_event_attendance" id="key-event-col-header">Key Event</th>
-                    <th data-sort="class_tag">Tag</th>
-                    <th data-sort="reward_tier">Reward Tier</th>
-                </tr>
-            </thead>
-            <tbody id="rankings-tbody">
-                <tr><td colspan="8" class="loading-msg">Loading…</td></tr>
-            </tbody>
-        </table>
+        <div class="table-scroll">
+            <table class="data-table sortable-table" id="rankings-table" style="display:none" data-export-csv="rankings.csv">
+                <thead>
+                    <tr>
+                        <th class="col-rank" data-sort="rank_position">#</th>
+                        <th data-sort="name">Member</th>
+                        <th data-sort="rank">Rank</th>
+                        <th data-sort="participation_pct" class="sort-desc">Participation</th>
+                        <th data-sort="contribution_pct">Contribution</th>
+                        <th data-sort="key_event_attendance" id="key-event-col-header">Key Event</th>
+                        <th data-sort="class_tag">Tag</th>
+                        <th data-sort="reward_tier">Reward Tier</th>
+                    </tr>
+                </thead>
+                <tbody id="rankings-tbody">
+                    <tr><td colspan="8" class="loading-msg">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- ── Participation ─────────────────────────────────────────────────── -->
@@ -86,7 +86,7 @@
             <button class="btn btn-primary" id="btn-save-participation">Save Week</button>
             <span id="participation-status" class="status-msg"></span>
         </div>
-        <div id="participation-grid-wrap">
+        <div id="participation-grid-wrap" class="table-scroll">
             <table class="data-table" id="participation-table" data-export-csv="participation.csv">
                 <thead>
                     <tr>
@@ -122,18 +122,20 @@
             <span id="contrib-manual-status" class="status-msg"></span>
         </div>
 
-        <table class="data-table" id="contrib-manual-table" data-export-csv="contributions.csv">
-            <thead>
-                <tr id="contrib-manual-thead-row">
-                    <th>Member</th>
-                    <th>Rank</th>
-                    <!-- trackable columns injected by JS from season.trackables -->
-                </tr>
-            </thead>
-            <tbody id="contrib-manual-tbody">
-                <tr><td colspan="4" class="loading-msg">Loading…</td></tr>
-            </tbody>
-        </table>
+        <div class="table-scroll">
+            <table class="data-table" id="contrib-manual-table" data-export-csv="contributions.csv">
+                <thead>
+                    <tr id="contrib-manual-thead-row">
+                        <th>Member</th>
+                        <th>Rank</th>
+                        <!-- trackable columns injected by JS from season.trackables -->
+                    </tr>
+                </thead>
+                <tbody id="contrib-manual-tbody">
+                    <tr><td colspan="4" class="loading-msg">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
 
     </div>
     {{end}}
@@ -145,23 +147,25 @@
             <button class="btn btn-primary btn-sm" id="btn-assign-reward">+ Assign Reward</button>
         </div>
         {{end}}
-        <table class="data-table" id="rewards-table" data-export-csv="rewards.csv">
-            <thead>
-                <tr>
-                    <th>Member</th>
-                    <th>Rank</th>
-                    <th>Tier</th>
-                    <th>Participation %</th>
-                    <th>Contribution %</th>
-                    <th>Note</th>
-                    <th>Logged By</th>
-                    {{if .Permissions.ManageSeasonRewards}}<th data-no-export></th>{{end}}
-                </tr>
-            </thead>
-            <tbody id="rewards-tbody">
-                <tr><td colspan="8" class="loading-msg">Loading…</td></tr>
-            </tbody>
-        </table>
+        <div class="table-scroll">
+            <table class="data-table" id="rewards-table" data-export-csv="rewards.csv">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Rank</th>
+                        <th>Tier</th>
+                        <th>Participation %</th>
+                        <th>Contribution %</th>
+                        <th>Note</th>
+                        <th>Logged By</th>
+                        {{if .Permissions.ManageSeasonRewards}}<th data-no-export></th>{{end}}
+                    </tr>
+                </thead>
+                <tbody id="rewards-tbody">
+                    <tr><td colspan="8" class="loading-msg">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- ── Season Mail ───────────────────────────────────────────────────── -->
