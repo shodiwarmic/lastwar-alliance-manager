@@ -975,6 +975,7 @@ type MobileCommitResponse struct {
 	Message           string   `json:"message"`
 	VSRecordsSaved    int      `json:"vs_records_saved"`
 	PowerRecordsSaved int      `json:"power_records_saved"`
+	KillRecordsSaved  int      `json:"kill_records_saved"`
 	AliasesSaved      int      `json:"aliases_saved"`
 	Errors            []string `json:"errors"`
 }

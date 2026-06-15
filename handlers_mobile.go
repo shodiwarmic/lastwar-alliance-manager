@@ -13,6 +13,7 @@ import (
 var validMobileCategories = map[string]bool{
 	"monday": true, "tuesday": true, "wednesday": true,
 	"thursday": true, "friday": true, "saturday": true, "power": true,
+	"kills": true,
 }
 
 // mobileRosterQuerier is the subset of *sql.DB / *sql.Tx that
@@ -189,6 +190,7 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	var commitErrors []string
 	vsRecordsSaved := 0
 	powerRecordsSaved := 0
+	killRecordsSaved := 0
 
 	// Group VS records by member_id so we do one upsert per member.
 	// vsFields[memberID] = map of day -> score
@@ -215,6 +217,13 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 				commitErrors = append(commitErrors, fmt.Sprintf("power insert failed for member_id %d: database error", rec.MemberID))
 			} else {
 				powerRecordsSaved++
+			}
+		} else if rec.Category == "kills" {
+			if _, err := tx.Exec("INSERT INTO kill_history (member_id, kills) VALUES (?, ?)", rec.MemberID, rec.Score); err != nil {
+				slog.Error("mobileCommit: kills insert failed", "error", err)
+				commitErrors = append(commitErrors, fmt.Sprintf("kills insert failed for member_id %d: database error", rec.MemberID))
+			} else {
+				killRecordsSaved++
 			}
 		} else {
 			if vsFields[rec.MemberID] == nil {
@@ -320,14 +329,18 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	if powerRecordsSaved > 0 {
 		logActivity(claims.UserID, claims.Username, "imported", "power_records", req.WeekDate, false, fmt.Sprintf("%d records", powerRecordsSaved))
 	}
+	if killRecordsSaved > 0 {
+		logActivity(claims.UserID, claims.Username, "imported", "kill_count", req.WeekDate, false, fmt.Sprintf("%d records", killRecordsSaved))
+	}
 
-	msg := fmt.Sprintf("Import successful. Saved VS data for %d member(s), power data for %d member(s), registered %d new alias(es).",
-		vsRecordsSaved, powerRecordsSaved, aliasesSaved)
+	msg := fmt.Sprintf("Import successful. Saved VS data for %d member(s), power data for %d member(s), kill data for %d member(s), registered %d new alias(es).",
+		vsRecordsSaved, powerRecordsSaved, killRecordsSaved, aliasesSaved)
 
 	resp := MobileCommitResponse{
 		Message:           msg,
 		VSRecordsSaved:    vsRecordsSaved,
 		PowerRecordsSaved: powerRecordsSaved,
+		KillRecordsSaved:  killRecordsSaved,
 		AliasesSaved:      aliasesSaved,
 		Errors:            commitErrors,
 	}
@@ -339,7 +352,7 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// validCategories returns true if cat is one of the seven accepted category values.
+// validCategories returns true if cat is one of the accepted category values.
 func validCategories(cat string) bool {
 	return validMobileCategories[cat]
 }

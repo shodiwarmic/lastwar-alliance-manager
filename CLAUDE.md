@@ -133,7 +133,7 @@ This intentionally differs from the OCR-service path, which sends `candidates[]`
 
 ### Activity logging
 
-`mobileCommit` already calls `logActivity` for each VS / power record write (`vs_points`, `power_records` entity types — same as the web import path). New mobile endpoints that write data must do the same.
+`mobileCommit` already calls `logActivity` for each VS / power / kill record write (`vs_points`, `power_records`, `kill_count` entity types — same as the web import path). New mobile endpoints that write data must do the same.
 
 ## Known gotchas
 
