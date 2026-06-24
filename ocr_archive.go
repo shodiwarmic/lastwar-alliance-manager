@@ -152,7 +152,7 @@ func generateRequestID() string {
 // configured destination(s). Always run as a goroutine; must never panic or block
 // the caller. meta.json is written FIRST as a sentinel so the retention janitor
 // can reclaim partially-written (interrupted) archives.
-func archiveOCRRequest(images []archivedImage, responseJSON []byte, categoryKeys []string, mode, requestedCategory, archiveMode, bucket string) {
+func archiveOCRRequest(images []archivedImage, responseJSON, diagnosticsJSON []byte, categoryKeys []string, mode, requestedCategory, archiveMode, bucket string) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("ocr archive: panic recovered", "panic", r)
@@ -162,6 +162,20 @@ func archiveOCRRequest(images []archivedImage, responseJSON []byte, categoryKeys
 	requestID := generateRequestID()
 	prefix := time.Now().UTC().Format(archiveDateLayout) + "/" + requestID
 
+	// Lift a couple of summary fields out of the (opaque) diagnostics blob so the
+	// archive is scannable without opening diagnostics.json. Best-effort: absent
+	// or unparseable diagnostics simply omit them.
+	hasDiagnostics := len(diagnosticsJSON) > 0
+	var diagEngine string
+	if hasDiagnostics {
+		var d struct {
+			Engine string `json:"engine"`
+		}
+		if json.Unmarshal(diagnosticsJSON, &d) == nil {
+			diagEngine = d.Engine
+		}
+	}
+
 	meta := map[string]any{
 		"request_id":          requestID,
 		"archived_at":         time.Now().UTC().Format(time.RFC3339),
@@ -169,6 +183,8 @@ func archiveOCRRequest(images []archivedImage, responseJSON []byte, categoryKeys
 		"ocr_backend_mode":    mode,
 		"requested_category":  requestedCategory,
 		"detected_categories": categoryKeys,
+		"has_diagnostics":     hasDiagnostics,
+		"engine":              diagEngine,
 	}
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {
@@ -181,7 +197,7 @@ func archiveOCRRequest(images []archivedImage, responseJSON []byte, categoryKeys
 
 	if archiveMode == "local" || archiveMode == "both" {
 		if dir := os.Getenv("OCR_ARCHIVE_DIR"); dir != "" {
-			if err := archiveToLocalDisk(dir, prefix, images, responseJSON, metaJSON); err != nil {
+			if err := archiveToLocalDisk(dir, prefix, images, responseJSON, diagnosticsJSON, metaJSON); err != nil {
 				slog.Warn("ocr archive: local write failed", "prefix", prefix, "error", err)
 				if firstErr == nil {
 					firstErr = err
@@ -194,7 +210,7 @@ func archiveOCRRequest(images []archivedImage, responseJSON []byte, categoryKeys
 
 	if archiveMode == "gcp" || archiveMode == "both" {
 		if bucket != "" {
-			if err := archiveToGCS(bucket, prefix, images, responseJSON, metaJSON); err != nil {
+			if err := archiveToGCS(bucket, prefix, images, responseJSON, diagnosticsJSON, metaJSON); err != nil {
 				slog.Warn("ocr archive: GCS write failed", "prefix", prefix, "error", err)
 				if firstErr == nil {
 					firstErr = err
@@ -215,7 +231,7 @@ func archiveOCRRequest(images []archivedImage, responseJSON []byte, categoryKeys
 }
 
 // archiveToLocalDisk writes the archive under <dir>/<prefix>/. meta.json first.
-func archiveToLocalDisk(dir, prefix string, images []archivedImage, responseJSON, metaJSON []byte) error {
+func archiveToLocalDisk(dir, prefix string, images []archivedImage, responseJSON, diagnosticsJSON, metaJSON []byte) error {
 	target := filepath.Join(dir, prefix)
 	// 0755/0644 matches the rest of the app's stored files (e.g. uploads, the DB)
 	// so archives are inspectable from the host — the whole point of local archival.
@@ -228,6 +244,12 @@ func archiveToLocalDisk(dir, prefix string, images []archivedImage, responseJSON
 	}
 	if err := os.WriteFile(filepath.Join(target, "response.json"), responseJSON, 0o644); err != nil {
 		return fmt.Errorf("response: %w", err)
+	}
+	// diagnostics.json — only when the OCR service returned the diagnostics block.
+	if len(diagnosticsJSON) > 0 {
+		if err := os.WriteFile(filepath.Join(target, "diagnostics.json"), diagnosticsJSON, 0o644); err != nil {
+			return fmt.Errorf("diagnostics: %w", err)
+		}
 	}
 	for i, img := range images {
 		// filepath.Base strips any path components from the user-supplied filename
@@ -243,7 +265,7 @@ func archiveToLocalDisk(dir, prefix string, images []archivedImage, responseJSON
 // archiveToGCS writes the archive to gs://<bucket>/<prefix>/. meta.json first.
 // Re-decrypts the gcp_vision key independently (it wipes its own copy), so the
 // existing in-worker decrypt/wipe is untouched and this works for either backend.
-func archiveToGCS(bucket, prefix string, images []archivedImage, responseJSON, metaJSON []byte) error {
+func archiveToGCS(bucket, prefix string, images []archivedImage, responseJSON, diagnosticsJSON, metaJSON []byte) error {
 	key, err := getDecryptedGCPKey()
 	if err != nil {
 		return fmt.Errorf("credentials: %w", err)
@@ -281,6 +303,13 @@ func archiveToGCS(bucket, prefix string, images []archivedImage, responseJSON, m
 	}
 	if err := writeObj(prefix+"/response.json", "application/json", responseJSON); err != nil {
 		return fmt.Errorf("response: %w", err)
+	}
+	// diagnostics.json — explicit application/json so it renders inline in the GCS
+	// console instead of defaulting to application/octet-stream.
+	if len(diagnosticsJSON) > 0 {
+		if err := writeObj(prefix+"/diagnostics.json", "application/json", diagnosticsJSON); err != nil {
+			return fmt.Errorf("diagnostics: %w", err)
+		}
 	}
 	for i, img := range images {
 		ct := img.contentType

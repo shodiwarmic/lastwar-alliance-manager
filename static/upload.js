@@ -482,7 +482,10 @@ async function commitImport() {
     const payload = {
         week_date: currentWeekDate,
         records: finalRecords,
-        save_aliases: saveAliases
+        save_aliases: saveAliases,
+        // Echo the OCR diagnostics summary from the preview so the server can
+        // enrich the activity-log entry (absent/empty on legacy OCR responses).
+        ocr_summary: currentImportPayload?.ocr_summary || ''
     };
 
     try {

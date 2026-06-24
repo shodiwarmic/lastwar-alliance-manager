@@ -456,7 +456,7 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	// Ship the entire batch to the Python Worker and let it do the heavily lifting
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	workerResults, err := ProcessImagesViaWorker(ctx, files, workerURL)
+	workerResults, ocrDiag, err := ProcessImagesViaWorker(ctx, files, workerURL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Microservice processing failed: %v", err), http.StatusInternalServerError)
 		return
@@ -553,5 +553,8 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 		"matched":          response.Matched,
 		"unresolved":       response.Unresolved,
 		"week_date":        weekDate,
+		// Compact OCR diagnostics summary; the client echoes it back on commit so
+		// commitCSVImport can enrich the activity-log entry (empty on legacy OCR).
+		"ocr_summary": summarizeOCRDiagnostics(ocrDiag),
 	})
 }

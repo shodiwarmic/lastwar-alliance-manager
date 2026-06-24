@@ -74,6 +74,19 @@ Handlers should call `ProcessImages(ctx, files, category)` (in
 based on `LoadOCRBackendConfig()`. Don't hand-roll the dispatch in new
 handlers.
 
+These return `(CVWorkerResponse, *OCRDiagnostics, error)`. The worker
+response is read by `decodeWorkerResponse`, which is **tolerant of two
+shapes**: the legacy bare `{category: [...]}` map and the newer
+`{"results": {...}, "diagnostics": {...}}` envelope (discriminated by the
+top-level `results` key). The legacy branch is a **temporary** backward-compat
+shim so this repo and `lastwar-ocr-service` don't need a lock-step deploy —
+remove it once the envelope ships everywhere. The `diagnostics` block is
+persisted opaquely as `diagnostics.json` in the OCR archive (alongside
+`response.json`) and parsed into the lean `*OCRDiagnostics` only to build the
+one-line activity-log summary via `summarizeOCRDiagnostics` (`nil` /`""` when
+the OCR service returns no diagnostics — always nil-check). It is treated as an
+opaque blob for storage, so OCR-side schema changes need no Go change.
+
 `category` is required for local mode and ignored for cloud mode.
 Allowed values are the same as the OCR service's `VALID_CATEGORIES`
 list — `monday`–`saturday`, `weekly`, `power`, `kills`,

@@ -1428,7 +1428,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workerResp, err := ProcessImages(context.Background(), files, category)
+	workerResp, ocrDiag, err := ProcessImages(context.Background(), files, category)
 	if err != nil {
 		slog.Error("handleContributionsImport: OCR", "error", err)
 		http.Error(w, "OCR processing failed", http.StatusInternalServerError)
@@ -1578,9 +1578,13 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	if weekNumber == 0 {
 		weekLabel = "Season Total"
 	}
+	details := fmt.Sprintf("%d committed, %d resolved", len(matched), resolvedCount)
+	if summary := summarizeOCRDiagnostics(ocrDiag); summary != "" {
+		details += " · " + summary
+	}
 	logActivity(user.ID, user.Username, "imported", "season_contributions",
 		fmt.Sprintf("%s — %s %s", s.Name, strings.ReplaceAll(category, "_", " "), weekLabel), false,
-		fmt.Sprintf("%d committed, %d resolved", len(matched), resolvedCount))
+		details)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{

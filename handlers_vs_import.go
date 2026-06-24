@@ -227,6 +227,9 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	if aliasCount > 0 {
 		details += ", " + strconv.Itoa(aliasCount) + " aliases saved"
 	}
+	if req.OCRSummary != "" {
+		details += " · " + req.OCRSummary
+	}
 	logActivity(userID, user.Username, "imported", "vs_points", req.WeekDate, false, details)
 
 	response := map[string]interface{}{

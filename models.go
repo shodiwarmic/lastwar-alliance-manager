@@ -898,6 +898,10 @@ type VSImportCommitRequest struct {
 	WeekDate    string            `json:"week_date"`
 	Records     []VSImportRow     `json:"records"`
 	SaveAliases []NewAliasMapping `json:"save_aliases"`
+	// OCRSummary is the compact OCR diagnostics line from the smart-screenshot
+	// preview, echoed back by the client so the activity entry can be enriched.
+	// Empty for CSV imports and legacy OCR responses. Informational log text only.
+	OCRSummary string `json:"ocr_summary,omitempty"`
 }
 
 // --- Mobile API Payloads ---
