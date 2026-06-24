@@ -446,17 +446,20 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 
 	forceCategory := r.FormValue("force_category")
 
-	var workerURL string
-	err = db.QueryRow("SELECT COALESCE(cv_worker_url, '') FROM settings WHERE id = 1").Scan(&workerURL)
-	if err != nil || workerURL == "" {
-		http.Error(w, "CV Worker URL is not configured in the Admin Settings", http.StatusInternalServerError)
-		return
+	// Dispatch through the configured backend (cloud Vision worker OR the local
+	// PaddleOCR sidecar) instead of calling the cloud worker directly, so the
+	// upload page works in local mode too. In local mode the selected category is
+	// required and forwarded as the classification override; in cloud mode the
+	// worker ignores it (auto-detect) and it's only applied as the force-category
+	// override in the loop below. "auto"/"total" are cloud-only UI sentinels, not
+	// real categories, so they map to "" (no override).
+	ocrCategory := forceCategory
+	if ocrCategory == "auto" || ocrCategory == "total" {
+		ocrCategory = ""
 	}
-
-	// Ship the entire batch to the Python Worker and let it do the heavily lifting
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	workerResults, ocrDiag, err := ProcessImagesViaWorker(ctx, files, workerURL)
+	workerResults, ocrDiag, err := ProcessImages(ctx, files, ocrCategory)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Microservice processing failed: %v", err), http.StatusInternalServerError)
 		return
