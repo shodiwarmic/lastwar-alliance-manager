@@ -91,6 +91,15 @@ func lastRankApplyPairedStats(tx *sql.Tx, memberID int, power, hero *int64, base
 	return
 }
 
+// addGlobalAliasOverwritingOCR adds a global alias, first removing any OCR or
+// stale global alias with the same name (member_aliases has no unique index, so
+// INSERT OR IGNORE can't dedupe). Global is authoritative over background OCR;
+// per-user personal aliases are left alone (they win via the resolution order).
+func addGlobalAliasOverwritingOCR(tx *sql.Tx, memberID int, alias string) {
+	tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND category IN ('ocr', 'global')", alias)
+	tx.Exec("INSERT INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", memberID, alias)
+}
+
 // lastRankInsertHistory appends a 'lastrank'-sourced datapoint. recordedAtSQLite
 // empty → fall back to CURRENT_TIMESTAMP (capture date was unparseable).
 func lastRankInsertHistory(tx *sql.Tx, table, valueCol string, memberID int, value int64, recordedAtSQLite string) error {
@@ -196,6 +205,11 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 		if newRank := lastRankRankToString(lm.AllianceRank); newRank != "" && newRank != member.Rank {
 			diff.RankDiff = &LastRankRankDiff{Current: member.Rank, New: newRank}
 		}
+		// Matched via an alias whose name differs from our primary → likely a
+		// rename. Surface it for review (case-only differences are ignored).
+		if !strings.EqualFold(lm.Name, member.Name) {
+			diff.NameChange = &LastRankNameChange{Current: member.Name, New: lm.Name}
+		}
 		resp.Matched = append(resp.Matched, diff)
 	}
 
@@ -250,11 +264,30 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	var powerN, heroN, hqN, rankN, aliasN, renameN, addN int
+	var powerN, heroN, hqN, rankN, aliasN, renameN, addN, nameN int
 
 	for _, m := range req.Members {
 		if m.MemberID == 0 {
 			continue
+		}
+		// Name change disposition (matched-via-alias rename).
+		if m.NameNew != "" {
+			switch m.NameAction {
+			case "rename":
+				var oldName string
+				tx.QueryRow("SELECT name FROM members WHERE id = ?", m.MemberID).Scan(&oldName)
+				if _, err := tx.Exec("UPDATE members SET name = ? WHERE id = ?", m.NameNew, m.MemberID); err == nil {
+					nameN++
+					if oldName != "" && !strings.EqualFold(oldName, m.NameNew) {
+						addGlobalAliasOverwritingOCR(tx, m.MemberID, oldName)
+					}
+					// The new primary may have matched via an OCR alias — now redundant.
+					tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND category = 'ocr'", m.NameNew)
+				}
+			case "alias":
+				addGlobalAliasOverwritingOCR(tx, m.MemberID, m.NameNew)
+				nameN++
+			}
 		}
 		if m.Power != nil {
 			if err := lastRankInsertHistory(tx, "power_history", "power", m.MemberID, *m.Power, recordedAt); err == nil {
@@ -278,9 +311,9 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 		}
 		// Always capture the public_id + mark synced, even with no stat change.
 		if m.LastRankPublicID != 0 {
-			tx.Exec("UPDATE members SET lastrank_public_id = ?, lastrank_synced_at = CURRENT_TIMESTAMP WHERE id = ?", m.LastRankPublicID, m.MemberID)
+			tx.Exec("UPDATE members SET lastrank_public_id = ?, lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?", m.LastRankPublicID, m.MemberID)
 		} else {
-			tx.Exec("UPDATE members SET lastrank_synced_at = CURRENT_TIMESTAMP WHERE id = ?", m.MemberID)
+			tx.Exec("UPDATE members SET lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?", m.MemberID)
 		}
 	}
 
@@ -290,19 +323,17 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 			if u.MemberID == 0 {
 				continue
 			}
-			// Global alias — clear any same-named global/ocr alias first.
-			tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?)", u.LastRankName)
-			if _, err := tx.Exec("INSERT INTO member_aliases (member_id, category, alias) VALUES (?, 'global', ?)", u.MemberID, u.LastRankName); err == nil {
-				aliasN++
-				if u.LastRankPublicID != 0 {
-					tx.Exec("UPDATE members SET lastrank_public_id = ?, lastrank_synced_at = CURRENT_TIMESTAMP WHERE id = ?", u.LastRankPublicID, u.MemberID)
-				}
-				if u.ApplyStats {
-					p, h, hq := lastRankApplyPairedStats(tx, u.MemberID, u.Power, u.HeroPower, u.BaseLevel, recordedAt, req.CaptureDate)
-					powerN += p
-					heroN += h
-					hqN += hq
-				}
+			// Global alias supersedes any same-named OCR/global alias.
+			addGlobalAliasOverwritingOCR(tx, u.MemberID, u.LastRankName)
+			aliasN++
+			if u.LastRankPublicID != 0 {
+				tx.Exec("UPDATE members SET lastrank_public_id = ?, lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?", u.LastRankPublicID, u.MemberID)
+			}
+			if u.ApplyStats {
+				p, h, hq := lastRankApplyPairedStats(tx, u.MemberID, u.Power, u.HeroPower, u.BaseLevel, recordedAt, req.CaptureDate)
+				powerN += p
+				heroN += h
+				hqN += hq
 			}
 		case "rename":
 			if u.MemberID == 0 {
@@ -311,7 +342,7 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 			if _, err := tx.Exec("UPDATE members SET name = ? WHERE id = ?", u.LastRankName, u.MemberID); err == nil {
 				renameN++
 				if u.LastRankPublicID != 0 {
-					tx.Exec("UPDATE members SET lastrank_public_id = ?, lastrank_synced_at = CURRENT_TIMESTAMP WHERE id = ?", u.LastRankPublicID, u.MemberID)
+					tx.Exec("UPDATE members SET lastrank_public_id = ?, lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?", u.LastRankPublicID, u.MemberID)
 				}
 				if u.ApplyStats {
 					p, h, hq := lastRankApplyPairedStats(tx, u.MemberID, u.Power, u.HeroPower, u.BaseLevel, recordedAt, req.CaptureDate)
@@ -370,6 +401,9 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 	if aliasN > 0 || renameN > 0 || addN > 0 {
 		details += "; " + strconv.Itoa(aliasN) + " aliases, " + strconv.Itoa(renameN) + " renames, " + strconv.Itoa(addN) + " added"
 	}
+	if nameN > 0 {
+		details += "; " + strconv.Itoa(nameN) + " name changes"
+	}
 	if archiveN > 0 {
 		details += "; " + strconv.Itoa(archiveN) + " archived"
 	}
@@ -402,8 +436,8 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var pubID sql.NullInt64
-	var name string
-	err := db.QueryRow("SELECT lastrank_public_id, name FROM members WHERE id = ?", req.MemberID).Scan(&pubID, &name)
+	var name, curPhoto string
+	err := db.QueryRow("SELECT lastrank_public_id, name, COALESCE(lastrank_photo_url, '') FROM members WHERE id = ?", req.MemberID).Scan(&pubID, &name, &curPhoto)
 	if err != nil {
 		http.Error(w, "Member not found", http.StatusNotFound)
 		return
@@ -416,7 +450,10 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	player, err := fetchLastRankPlayer(r.Context(), int(pubID.Int64))
+	// Bulk sync: cheap cached GET, upgraded to a live enrich only when the record
+	// is stale (older than the freshness window). Recently-enriched members stay
+	// fast; the GET is the fallback if a stale member's enrich is slow/fails.
+	player, err := lastRankPlayerBulk(r.Context(), int(pubID.Int64))
 	if err != nil {
 		slogLastRank("lastrank player fetch failed", err)
 		http.Error(w, "Couldn't reach LastRank for this player.", http.StatusBadGateway)
@@ -427,6 +464,7 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 	out.Kills = &kills
 	out.LastRankName = player.Name
 	out.CaptureDate = player.LastSeenAt
+	out.PhotoUpdated = player.PhotoURL != "" && player.PhotoURL != curPhoto
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -448,10 +486,18 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Power, hero power, and HQ ride along for free (already in the record).
+	// Power/hero use per-metric staleness gating; HQ only ever increases.
+	power := player.Power
+	pN, hN, hqN := lastRankApplyPairedStats(tx, req.MemberID, &power, player.HeroPower, player.BaseLevel, recordedAt, player.LastSeenAt)
+	out.PowerApplied = pN > 0
+	out.HeroApplied = hN > 0
+	out.HQApplied = hqN > 0
+
 	// Always advance synced_at so the oldest-first Phase-2 ordering progresses
 	// even when a member is skipped (keeps re-runs from re-fetching the same one).
 	// Avatar URLs are refreshed here too (hotlinked from the game CDN).
-	tx.Exec("UPDATE members SET lastrank_synced_at = CURRENT_TIMESTAMP, lastrank_public_id = ?, lastrank_photo_url = ?, lastrank_photo_failover = ? WHERE id = ?",
+	tx.Exec("UPDATE members SET lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now'), lastrank_public_id = ?, lastrank_photo_url = ?, lastrank_photo_failover = ? WHERE id = ?",
 		pubID.Int64, player.PhotoURL, player.PhotoURLFailover, req.MemberID)
 
 	if err := tx.Commit(); err != nil {
@@ -479,8 +525,11 @@ func lastRankFinish(w http.ResponseWriter, r *http.Request) {
 		}
 	default: // "extended"
 		if req.MembersSynced > 0 {
-			logActivity(user.ID, user.Username, "imported", "lastrank_sync", "Extended sync",
-				false, "via LastRank — army kills updated for "+strconv.Itoa(req.MembersSynced)+" members ("+strconv.Itoa(req.KillRecords)+" records)")
+			details := "via LastRank — " + strconv.Itoa(req.MembersSynced) + " members synced; " +
+				strconv.Itoa(req.KillRecords) + " kills, " + strconv.Itoa(req.PowerRecords) + " power, " +
+				strconv.Itoa(req.HeroRecords) + " hero, " + strconv.Itoa(req.HQRecords) + " HQ, " +
+				strconv.Itoa(req.PhotoRecords) + " photos updated"
+			logActivity(user.ID, user.Username, "imported", "lastrank_sync", "Extended sync", false, details)
 		}
 	}
 	writeJSON(w, map[string]string{"status": "ok"})
@@ -521,9 +570,18 @@ func lastRankProspectLookup(w http.ResponseWriter, r *http.Request) {
 		pubID = int(stored.Int64)
 	}
 
-	player, err := fetchLastRankPlayer(r.Context(), pubID)
+	// Single on-demand lookup → force a fresh enrich. Bulk refresh → the gentle
+	// GET-then-enrich-if-stale hybrid, same as the member extended sync, so a
+	// recruiter with many linked prospects doesn't trigger a live pull each.
+	var player *lastrankPlayerResp
+	var err error
+	if req.Bulk {
+		player, err = lastRankPlayerBulk(r.Context(), pubID)
+	} else {
+		player, err = lastRankPlayerFresh(r.Context(), pubID)
+	}
 	if err != nil {
-		slogLastRank("lastrank prospect fetch failed", err)
+		slogLastRank("lastrank prospect lookup failed", err)
 		http.Error(w, "Couldn't reach LastRank for this player.", http.StatusBadGateway)
 		return
 	}

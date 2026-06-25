@@ -149,7 +149,7 @@
 
     function hasChange(m) {
         return (m.power && m.power.apply) || (m.hero_power && m.hero_power.apply)
-            || (m.hq_level && m.hq_level.apply) || !!m.rank_diff;
+            || (m.hq_level && m.hq_level.apply) || !!m.rank_diff || !!m.name_change;
     }
 
     function statField(label, diff, member, key, klass) {
@@ -174,6 +174,22 @@
         const row = el('div', { className: 'lr-row' },
             el('div', { className: 'lr-row-name', textContent: name })
         );
+
+        // Name change (matched via alias) — ask what to do; default keeps the name.
+        if (m.name_change) {
+            const sel = el('select', { className: 'form-input' },
+                el('option', { value: '', textContent: `Keep "${m.name_change.current}"` }),
+                el('option', { value: 'rename', textContent: `Rename to "${m.name_change.new}"` }),
+                el('option', { value: 'alias', textContent: `Add "${m.name_change.new}" as global alias` })
+            );
+            m._nameAction = sel;
+            row.appendChild(el('div', { className: 'lr-field lr-rank' },
+                el('span', {}, 'Name on LastRank: '),
+                el('span', { className: 'lr-new', textContent: m.name_change.new }),
+                el('span', { className: 'lr-skip', textContent: `  (roster: ${m.name_change.current})` })));
+            row.appendChild(el('div', { className: 'lr-unmatched-controls' }, sel));
+        }
+
         const pf = statField('Power', m.power, m, 'power');
         const hf = statField('Hero Power', m.hero_power, m, 'hero');
         if (pf) row.appendChild(pf);
@@ -245,6 +261,10 @@
             if (m.hero_power && m.hero_power.apply && cb.hero && cb.hero.checked) out.hero_power = m.hero_power.new;
             if (m.hq_level && m.hq_level.apply && cb.hq && cb.hq.checked) out.hq_level = m.hq_level.new;
             if (m.rank_diff && cb.rank && cb.rank.checked) out.new_rank = m.rank_diff.new;
+            if (m.name_change && m._nameAction && m._nameAction.value) {
+                out.name_action = m._nameAction.value; // 'rename' | 'alias'
+                out.name_new = m.name_change.new;
+            }
             return out;
         });
 
@@ -302,15 +322,18 @@
             showToast('Could not load roster.', 'error');
             return;
         }
+        // Oldest-synced first so an interrupted run resumes where it left off.
+        // localeCompare returns 0 on ties (the old a<b?-1:1 returned 1 on ties,
+        // which mis-ordered equal timestamps and made re-runs restart at the top).
         const pool = (members || [])
             .filter(m => m.lastrank_public_id)
-            .sort((a, b) => (a.lastrank_synced_at || '') < (b.lastrank_synced_at || '') ? -1 : 1);
+            .sort((a, b) => (a.lastrank_synced_at || '').localeCompare(b.lastrank_synced_at || ''));
 
         if (pool.length === 0) {
             showToast('No members have a LastRank ID yet. Run "Fetch Alliance Data" first.', 'info');
             return;
         }
-        if (!await showConfirm(`Fetch extended info for ${pool.length} member(s)? This runs at ~1/second.`, 'Start')) return;
+        if (!await showConfirm(`Fetch full stats (kills, power, hero, HQ) + photos for ${pool.length} member(s)? This pulls each from LastRank at ~1/second.`, 'Start')) return;
 
         extendedBtn.disabled = true;
         fetchBtn.disabled = true;
@@ -325,7 +348,7 @@
             progressEl.appendChild(row);
         });
 
-        let synced = 0, killRecords = 0, i = 0;
+        let synced = 0, killRecords = 0, powerRecords = 0, heroRecords = 0, hqRecords = 0, photoRecords = 0, i = 0;
         for (const m of pool) {
             i++;
             setStatus(`Fetching ${i} of ${pool.length}…`);
@@ -340,10 +363,20 @@
                 if (!r.ok) throw new Error(await r.text());
                 const data = await r.json();
                 synced++;
-                if (data.kills_applied) {
-                    killRecords++;
+                if (data.kills_applied) killRecords++;
+                if (data.power_applied) powerRecords++;
+                if (data.hero_applied) heroRecords++;
+                if (data.hq_applied) hqRecords++;
+                if (data.photo_updated) photoRecords++;
+                if (data.kills_applied || data.power_applied || data.hero_applied || data.hq_applied || data.photo_updated) {
+                    const parts = [];
+                    if (data.kills_applied) parts.push('kills');
+                    if (data.power_applied) parts.push('power');
+                    if (data.hero_applied) parts.push('hero');
+                    if (data.hq_applied) parts.push('HQ');
+                    if (data.photo_updated) parts.push('photo');
                     row.className = 'lr-prog-row done';
-                    status.textContent = '✓ kills updated';
+                    status.textContent = '✓ ' + parts.join(' + ') + ' updated';
                 } else {
                     row.className = 'lr-prog-row skip';
                     status.textContent = data.skip_reason === 'no_id' ? 'no LastRank id'
@@ -359,11 +392,11 @@
         try {
             await fetch('/api/lastrank/finish', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kind: 'extended', members_synced: synced, kill_records: killRecords })
+                body: JSON.stringify({ kind: 'extended', members_synced: synced, kill_records: killRecords, power_records: powerRecords, hero_records: heroRecords, hq_records: hqRecords, photo_records: photoRecords })
             });
         } catch (e) { /* logging only — ignore */ }
 
-        showToast(`Extended sync complete — ${killRecords} kill update(s) across ${synced} member(s).`);
+        showToast(`Extended sync complete across ${synced} member(s) — ${killRecords} kills, ${powerRecords} power, ${heroRecords} hero, ${hqRecords} HQ, ${photoRecords} photos.`);
         extendedBtn.disabled = false;
         fetchBtn.disabled = false;
         if (typeof loadMembers === 'function') loadMembers();

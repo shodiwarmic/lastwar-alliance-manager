@@ -34,6 +34,10 @@ var lastRankLimiter = rate.NewLimiter(rate.Every(time.Second), 1)
 
 var lastRankHTTP = &http.Client{Timeout: 10 * time.Second}
 
+// enrich forces a live game re-pull server-side, so it's much slower than a
+// cached GET — give it a longer ceiling. Used only for single on-demand lookups.
+var lastRankEnrichHTTP = &http.Client{Timeout: 25 * time.Second}
+
 // --- Raw wire structs (never leave this file) ---
 
 type lastrankAllianceMember struct {
@@ -75,28 +79,34 @@ type lastrankPlayerResp struct {
 	ArmyKill     int64   `json:"army_kill"`
 	BaseLevel        *int   `json:"base_level"`
 	CareerLv         int    `json:"career_lv"`
-	LastSeenAt       string `json:"last_seen_at"`
+	LastSeenAt       string `json:"last_seen_at"`     // game-side "last active" (as-of date)
+	LastEnrichedAt   string `json:"last_enriched_at"` // when lastrank last re-pulled this record
 	PhotoURL         string `json:"photo_url"`
 	PhotoURLFailover string `json:"photo_url_failover"`
 }
 
 // --- Fetch ---
 
-// lastRankGet performs a throttled GET against the lastrank API and decodes JSON
-// into out. Returns errLastRankUpstream (wrapped with context) on any failure.
-func lastRankGet(ctx context.Context, path string, out interface{}) error {
+// lastRankDo performs a throttled request against the lastrank API and decodes
+// the JSON response into out. Returns errLastRankUpstream (wrapped) on failure.
+func lastRankDo(ctx context.Context, method, path string, out interface{}) error {
 	if err := lastRankLimiter.Wait(ctx); err != nil {
 		return fmt.Errorf("%w: throttle wait: %v", errLastRankUpstream, err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, lastRankBaseURL+path, nil)
+	req, err := http.NewRequestWithContext(ctx, method, lastRankBaseURL+path, nil)
 	if err != nil {
 		return fmt.Errorf("%w: build request: %v", errLastRankUpstream, err)
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "alliance-manager/1.0 (+enrichment)")
 
-	resp, err := lastRankHTTP.Do(req)
+	// enrich (POST) does a live pull and is slow; give it the longer-timeout client.
+	client := lastRankHTTP
+	if method == http.MethodPost {
+		client = lastRankEnrichHTTP
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errLastRankUpstream, err)
 	}
@@ -116,18 +126,77 @@ func lastRankGet(ctx context.Context, path string, out interface{}) error {
 
 func fetchLastRankAlliance(ctx context.Context, allianceID string) (*lastrankAllianceResp, error) {
 	var a lastrankAllianceResp
-	if err := lastRankGet(ctx, "/v1/alliances/"+allianceID, &a); err != nil {
+	if err := lastRankDo(ctx, http.MethodGet, "/v1/alliances/"+allianceID, &a); err != nil {
 		return nil, err
 	}
 	return &a, nil
 }
 
-func fetchLastRankPlayer(ctx context.Context, publicID int) (*lastrankPlayerResp, error) {
+// getLastRankPlayer reads the cached player record (fast). Used by the bulk
+// extended sync — enriching the whole roster would mean ~100 live game pulls,
+// which is slow and abusive to the volunteer service.
+func getLastRankPlayer(ctx context.Context, publicID int) (*lastrankPlayerResp, error) {
 	var p lastrankPlayerResp
-	if err := lastRankGet(ctx, "/v1/players/"+strconv.Itoa(publicID), &p); err != nil {
+	if err := lastRankDo(ctx, http.MethodGet, "/v1/players/"+strconv.Itoa(publicID), &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
+}
+
+// enrichLastRankPlayer POSTs to the per-player /enrich endpoint, which forces
+// lastrank to re-pull the player from the game CDN and returns the freshest
+// record (the plain GET can serve a stale cached copy). Slow — reserve for
+// single on-demand lookups, not bulk.
+func enrichLastRankPlayer(ctx context.Context, publicID int) (*lastrankPlayerResp, error) {
+	var p lastrankPlayerResp
+	if err := lastRankDo(ctx, http.MethodPost, "/v1/players/"+strconv.Itoa(publicID)+"/enrich", &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// lastRankPlayerFresh enriches (live pull) for an on-demand single lookup, with
+// a graceful fallback to the cached GET if enrich fails or times out — so the
+// caller still gets data rather than an error.
+func lastRankPlayerFresh(ctx context.Context, publicID int) (*lastrankPlayerResp, error) {
+	if p, err := enrichLastRankPlayer(ctx, publicID); err == nil {
+		return p, nil
+	} else {
+		slogLastRank("lastrank enrich failed; falling back to cached GET", err)
+	}
+	return getLastRankPlayer(ctx, publicID)
+}
+
+// lastRankEnrichMaxAge is how stale a record's last_enriched_at may be before the
+// bulk sync upgrades a cheap GET to a live enrich. Tunable: lower = fresher data
+// but more live pulls; higher = lighter on the volunteer service.
+const lastRankEnrichMaxAge = 24 * time.Hour
+
+func lastRankNeedsEnrich(lastEnrichedISO string) bool {
+	t, ok := lastRankParseTime(lastEnrichedISO)
+	if !ok {
+		return true // unknown/never enriched → refresh
+	}
+	return time.Since(t) > lastRankEnrichMaxAge
+}
+
+// lastRankPlayerBulk reads the cheap cached GET, then upgrades to a live enrich
+// only when the record's last_enriched_at is older than the freshness window.
+// A recently-enriched roster stays fast (GET only); stale records get refreshed.
+// The GET is always available, so a slow/failed enrich falls back to it.
+func lastRankPlayerBulk(ctx context.Context, publicID int) (*lastrankPlayerResp, error) {
+	p, err := getLastRankPlayer(ctx, publicID)
+	if err != nil {
+		return nil, err
+	}
+	if lastRankNeedsEnrich(p.LastEnrichedAt) {
+		if fresh, eerr := enrichLastRankPlayer(ctx, publicID); eerr == nil {
+			return fresh, nil
+		} else {
+			slogLastRank("lastrank bulk enrich failed; using cached GET", eerr)
+		}
+	}
+	return p, nil
 }
 
 // --- Helpers ---

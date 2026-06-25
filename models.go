@@ -863,6 +863,10 @@ type PageData struct {
 	AllianceName      string
 	AllianceTag       string
 	SkillLabels       map[string]string
+	// LastRank avatar for the logged-in user's linked member, shown in the
+	// sidebar user tile (falls back to initials when empty or blocked).
+	UserPhotoURL      string
+	UserPhotoFailover string
 }
 
 // DashboardCard represents a single card in the dashboard with its visibility state.
@@ -1069,16 +1073,25 @@ type LastRankRankDiff struct {
 	New     string `json:"new"`     // e.g. "R5"
 }
 
+// LastRankNameChange flags a matched member whose current in-game name on LastRank
+// differs from our roster's primary name (i.e. they were matched via an alias).
+// Surfaced for review — never auto-applied.
+type LastRankNameChange struct {
+	Current string `json:"current"` // our roster primary name
+	New     string `json:"new"`     // LastRank's current in-game name
+}
+
 // LastRankMemberDiff is one matched roster member with its proposed Phase-1 changes.
 type LastRankMemberDiff struct {
 	LastRankName     string            `json:"lastrank_name"`
 	LastRankPublicID int               `json:"lastrank_public_id"`
 	MatchedMember    *Member           `json:"matched_member"`
 	MatchType        string            `json:"match_type"`
-	Power            *LastRankStatDiff `json:"power,omitempty"`
-	HeroPower        *LastRankStatDiff `json:"hero_power,omitempty"`
-	HQLevel          *LastRankHQDiff   `json:"hq_level,omitempty"`
-	RankDiff         *LastRankRankDiff `json:"rank_diff,omitempty"`
+	Power            *LastRankStatDiff   `json:"power,omitempty"`
+	HeroPower        *LastRankStatDiff   `json:"hero_power,omitempty"`
+	HQLevel          *LastRankHQDiff     `json:"hq_level,omitempty"`
+	RankDiff         *LastRankRankDiff   `json:"rank_diff,omitempty"`
+	NameChange       *LastRankNameChange `json:"name_change,omitempty"`
 }
 
 // LastRankUnmatched is a LastRank member that did not resolve to any roster member.
@@ -1118,6 +1131,11 @@ type LastRankCommitMember struct {
 	HeroPower        *int64 `json:"hero_power,omitempty"`
 	HQLevel          *int   `json:"hq_level,omitempty"`
 	NewRank          string `json:"new_rank,omitempty"`
+	// Name-change disposition: "rename" (adopt NameNew as primary, old → global
+	// alias) or "alias" (add NameNew as a global alias, keep primary). NameNew is
+	// the LastRank current name.
+	NameAction string `json:"name_action,omitempty"`
+	NameNew    string `json:"name_new,omitempty"`
 }
 
 // LastRankUnmatchedAction is the officer's chosen disposition for an unmatched name.
@@ -1155,6 +1173,10 @@ type LastRankPlayerSyncResponse struct {
 	LastRankName string `json:"lastrank_name"`
 	Kills        *int64 `json:"kills"`
 	KillsApplied bool   `json:"kills_applied"`
+	PowerApplied bool   `json:"power_applied"`
+	HeroApplied  bool   `json:"hero_applied"`
+	HQApplied    bool   `json:"hq_applied"`
+	PhotoUpdated bool   `json:"photo_updated"`
 	SkipReason   string `json:"skip_reason,omitempty"` // "unchanged" | "stale" | "no_id"
 	CaptureDate  string `json:"capture_date"`
 	SyncedAt     string `json:"synced_at"`
@@ -1166,6 +1188,10 @@ type LastRankFinishRequest struct {
 	Kind            string `json:"kind"` // "extended" | "prospects"
 	MembersSynced   int    `json:"members_synced"`
 	KillRecords     int    `json:"kill_records"`
+	PowerRecords    int    `json:"power_records"`
+	HeroRecords     int    `json:"hero_records"`
+	HQRecords       int    `json:"hq_records"`
+	PhotoRecords    int    `json:"photo_records"`
 	ProspectsSynced int    `json:"prospects_synced"`
 }
 

@@ -395,11 +395,14 @@ function buildProspectCard(p, typeContext) {
     const header = document.createElement('div');
     header.className = 'prospect-header';
 
-    // Seat color dot (before name)
-    if (p.seat_color) {
+    const seatTitle = p.seat_color ? p.seat_color.charAt(0).toUpperCase() + p.seat_color.slice(1) + ' seat' : '';
+
+    // Seat color dot — only when there's no avatar to carry the seat color as a
+    // border (see below).
+    if (p.seat_color && !p.lastrank_photo_url) {
         const dot = document.createElement('span');
         dot.className = `seat-dot seat-${p.seat_color}`;
-        dot.title = p.seat_color.charAt(0).toUpperCase() + p.seat_color.slice(1) + ' seat';
+        dot.title = seatTitle;
         header.appendChild(dot);
     }
 
@@ -410,9 +413,16 @@ function buildProspectCard(p, typeContext) {
     nameGroup.className = 'inline-icon-actions';
     nameGroup.style.minWidth = '0';
 
-    // LastRank avatar (hotlinked; falls over to the backup CDN, then hides).
+    // LastRank avatar (hotlinked; falls over to the backup CDN, then hides). When
+    // the prospect has a seat color, it rings the avatar as a colored border
+    // instead of a separate dot.
     if (p.lastrank_photo_url) {
-        nameGroup.appendChild(buildLastRankAvatar(p.lastrank_photo_url, p.lastrank_photo_failover));
+        const av = buildLastRankAvatar(p.lastrank_photo_url, p.lastrank_photo_failover);
+        if (p.seat_color) {
+            av.classList.add('seat-edge', `seat-edge-${p.seat_color}`);
+            av.title = seatTitle;
+        }
+        nameGroup.appendChild(av);
     }
 
     const nameEl = document.createElement('span');

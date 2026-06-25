@@ -37,6 +37,10 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 			data.Rank = user.Rank
 			if user.MemberID != nil {
 				data.MemberID = *user.MemberID
+				db.QueryRow(
+					"SELECT COALESCE(lastrank_photo_url, ''), COALESCE(lastrank_photo_failover, '') FROM members WHERE id = ?",
+					*user.MemberID,
+				).Scan(&data.UserPhotoURL, &data.UserPhotoFailover)
 			}
 			if user.IsAdmin {
 				data.IsAdmin = true
