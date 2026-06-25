@@ -186,8 +186,10 @@ over background OCR, leaving per-user personal aliases alone.
 **Avatars** are hotlinked from the game CDN (`lastwar-cdn.akamaized.net` /
 `lastwar-cdn.lastwarapp.net`) — built via `buildLastRankAvatar()` in `global.js`
 with host failover. These hosts MUST be in the reverse-proxy CSP `img-src`
-(`install.sh`); without them avatars are blocked in production (they work in dev
-because there's no proxy CSP) and fall back to initials.
+(`install.sh` for new installs; `update.sh` auto-patches the Caddyfile on
+existing ones, keyed on the CDN host being absent). Without them avatars are
+blocked in production (they work in dev because there's no proxy CSP) and fall
+back to initials.
 
 **Two rules that must hold for every history write from LastRank:**
 1. **Staleness** — only insert if LastRank's capture date (`last_seen_at` /
