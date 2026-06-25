@@ -565,6 +565,11 @@ function buildMemberCard(member) {
     const nameTop = document.createElement('div');
     nameTop.className = 'member-name-top';
 
+    // LastRank avatar (hotlinked; falls over to the backup CDN, then hides).
+    if (member.lastrank_photo_url) {
+        nameTop.appendChild(buildLastRankAvatar(member.lastrank_photo_url, member.lastrank_photo_failover));
+    }
+
     const nameText = document.createElement('span');
     nameText.className = 'member-name-text';
     nameText.textContent = member.name;

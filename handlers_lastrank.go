@@ -450,7 +450,9 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 
 	// Always advance synced_at so the oldest-first Phase-2 ordering progresses
 	// even when a member is skipped (keeps re-runs from re-fetching the same one).
-	tx.Exec("UPDATE members SET lastrank_synced_at = CURRENT_TIMESTAMP, lastrank_public_id = ? WHERE id = ?", pubID.Int64, req.MemberID)
+	// Avatar URLs are refreshed here too (hotlinked from the game CDN).
+	tx.Exec("UPDATE members SET lastrank_synced_at = CURRENT_TIMESTAMP, lastrank_public_id = ?, lastrank_photo_url = ?, lastrank_photo_failover = ? WHERE id = ?",
+		pubID.Int64, player.PhotoURL, player.PhotoURLFailover, req.MemberID)
 
 	if err := tx.Commit(); err != nil {
 		http.Error(w, "Failed to save changes", http.StatusInternalServerError)
@@ -531,7 +533,8 @@ func lastRankProspectLookup(w http.ResponseWriter, r *http.Request) {
 	if player.HeroPower != nil {
 		heroVal = *player.HeroPower
 	}
-	db.Exec("UPDATE prospects SET power = ?, hero_power = ? WHERE id = ?", player.Power, heroVal, req.ProspectID)
+	db.Exec("UPDATE prospects SET power = ?, hero_power = ?, lastrank_photo_url = ?, lastrank_photo_failover = ? WHERE id = ?",
+		player.Power, heroVal, player.PhotoURL, player.PhotoURLFailover, req.ProspectID)
 
 	out := LastRankProspectLookupResponse{
 		ProspectID:       req.ProspectID,

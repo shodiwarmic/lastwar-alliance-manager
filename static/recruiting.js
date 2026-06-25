@@ -410,6 +410,11 @@ function buildProspectCard(p, typeContext) {
     nameGroup.className = 'inline-icon-actions';
     nameGroup.style.minWidth = '0';
 
+    // LastRank avatar (hotlinked; falls over to the backup CDN, then hides).
+    if (p.lastrank_photo_url) {
+        nameGroup.appendChild(buildLastRankAvatar(p.lastrank_photo_url, p.lastrank_photo_failover));
+    }
+
     const nameEl = document.createElement('span');
     nameEl.className = 'prospect-name';
     nameEl.textContent = p.name;

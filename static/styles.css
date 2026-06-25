@@ -277,6 +277,18 @@ button,
     min-height: 0;
 }
 
+/* LastRank avatar (hotlinked from the game CDN). Rendering in production needs
+   the CDN hosts allowlisted in the reverse-proxy CSP img-src. */
+.lr-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+}
+
 /* User Dropdown */
 
 /* Theme Options */

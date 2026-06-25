@@ -26,7 +26,8 @@ func getProspects(w http.ResponseWriter, r *http.Request) {
 			p.status, p.notes,
 			p.hero_power, p.seat_color, p.interested_in_r4,
 			p.first_contacted, p.created_at, p.updated_at,
-			p.prospect_type, p.lastrank_public_id
+			p.prospect_type, p.lastrank_public_id,
+			COALESCE(p.lastrank_photo_url, ''), COALESCE(p.lastrank_photo_failover, '')
 		FROM prospects p
 		LEFT JOIN members m ON m.id = p.recruiter_id
 		ORDER BY p.name
@@ -51,6 +52,7 @@ func getProspects(w http.ResponseWriter, r *http.Request) {
 			&p.HeroPower, &p.SeatColor, &p.InterestedInR4,
 			&p.FirstContacted, &p.CreatedAt, &p.UpdatedAt,
 			&p.ProspectType, &p.LastRankPublicID,
+			&p.LastRankPhotoURL, &p.LastRankPhotoFailover,
 		); err != nil {
 			slog.Error("Failed to scan prospect row", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)

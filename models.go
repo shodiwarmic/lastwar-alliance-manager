@@ -46,6 +46,9 @@ type Member struct {
 	// oldest-first ordering of the Phase-2 extended sync).
 	LastRankPublicID *int    `json:"lastrank_public_id"`
 	LastRankSyncedAt *string `json:"lastrank_synced_at"`
+	// Avatar URLs hotlinked from the game CDN (populated by the extended sync).
+	LastRankPhotoURL      string `json:"lastrank_photo_url"`
+	LastRankPhotoFailover string `json:"lastrank_photo_failover"`
 }
 
 type FormerMember struct {
@@ -78,6 +81,9 @@ type Prospect struct {
 	// LastRankPublicID is pasted/derived once by an officer; recruiting lookups
 	// fetch the per-player endpoint on demand. No synced_at — no history kept.
 	LastRankPublicID *int `json:"lastrank_public_id"`
+	// Avatar URLs hotlinked from the game CDN (populated on lookup).
+	LastRankPhotoURL      string `json:"lastrank_photo_url"`
+	LastRankPhotoFailover string `json:"lastrank_photo_failover"`
 }
 
 type Alias struct {

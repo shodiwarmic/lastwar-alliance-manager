@@ -81,7 +81,8 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			   COALESCE(lk.kills, 0) as latest_kills,
 			   COALESCE(lk.recorded_at, '') as latest_kills_date,
 			   COALESCE(msa.skills, '') as skills,
-			   m.lastrank_public_id, m.lastrank_synced_at
+			   m.lastrank_public_id, m.lastrank_synced_at,
+			   COALESCE(m.lastrank_photo_url, ''), COALESCE(m.lastrank_photo_failover, '')
 		FROM members m
 		LEFT JOIN latest_power lp ON lp.member_id = m.id
 		LEFT JOIN latest_squad_power lsp ON lsp.member_id = m.id
@@ -112,6 +113,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			&m.CurrentKills, &m.KillsUpdatedAt,
 			&m.Skills,
 			&m.LastRankPublicID, &m.LastRankSyncedAt,
+			&m.LastRankPhotoURL, &m.LastRankPhotoFailover,
 		); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

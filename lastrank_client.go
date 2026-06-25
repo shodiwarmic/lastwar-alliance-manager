@@ -73,9 +73,11 @@ type lastrankPlayerResp struct {
 	Power        int64   `json:"power"`
 	HeroPower    *int64  `json:"hero_power"`
 	ArmyKill     int64   `json:"army_kill"`
-	BaseLevel    *int    `json:"base_level"`
-	CareerLv     int     `json:"career_lv"`
-	LastSeenAt   string  `json:"last_seen_at"`
+	BaseLevel        *int   `json:"base_level"`
+	CareerLv         int    `json:"career_lv"`
+	LastSeenAt       string `json:"last_seen_at"`
+	PhotoURL         string `json:"photo_url"`
+	PhotoURLFailover string `json:"photo_url_failover"`
 }
 
 // --- Fetch ---
