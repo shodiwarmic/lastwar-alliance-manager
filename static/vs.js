@@ -632,11 +632,9 @@ async function commitImport() {
     const payload = {
         week_date: formatDate(currentWeekDate),
         records: finalRecords,
-        save_aliases: saveAliases
+        save_aliases: saveAliases,
+        source: 'csv' // datapoint provenance for power/kill history rows
     };
-
-    // DEBUG: Log the payload so we can check it in the browser's developer console
-    console.log("Sending Payload:", payload);
 
     try {
         const response = await fetch('/api/vs-points/import/commit', {

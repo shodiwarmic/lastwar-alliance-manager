@@ -37,6 +37,10 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 			data.Rank = user.Rank
 			if user.MemberID != nil {
 				data.MemberID = *user.MemberID
+				db.QueryRow(
+					"SELECT COALESCE(lastrank_photo_url, ''), COALESCE(lastrank_photo_failover, '') FROM members WHERE id = ?",
+					*user.MemberID,
+				).Scan(&data.UserPhotoURL, &data.UserPhotoFailover)
 			}
 			if user.IsAdmin {
 				data.IsAdmin = true
@@ -342,6 +346,15 @@ func main() {
 
 	router.HandleFunc("/api/vs-points/import/preview", authMiddleware(requirePermission("manage_members", previewCSVImport))).Methods("POST")
 	router.HandleFunc("/api/vs-points/import/commit", authMiddleware(requirePermission("manage_members", commitCSVImport))).Methods("POST")
+
+	// LastRank.fun enrichment (manual trigger; client-side rate-limited globally)
+	router.HandleFunc("/api/lastrank/preview", authMiddleware(requirePermission("manage_members", lastRankPreview))).Methods("POST")
+	router.HandleFunc("/api/lastrank/commit", authMiddleware(requirePermission("manage_members", lastRankCommit))).Methods("POST")
+	router.HandleFunc("/api/lastrank/player", authMiddleware(requirePermission("manage_members", lastRankSyncPlayer))).Methods("POST")
+	router.HandleFunc("/api/lastrank/finish", authMiddleware(requirePermission("manage_members", lastRankFinish))).Methods("POST")
+	router.HandleFunc("/api/lastrank/prospect", authMiddleware(requirePermission("manage_recruiting", lastRankProspectLookup))).Methods("POST")
+	// Same finish handler, gated for recruiting officers (kind="prospects").
+	router.HandleFunc("/api/lastrank/prospect/finish", authMiddleware(requirePermission("manage_recruiting", lastRankFinish))).Methods("POST")
 
 	// Mobile API (bearer token auth, CSRF exempt)
 	router.HandleFunc("/api/mobile/login", mobileLogin).Methods("POST")

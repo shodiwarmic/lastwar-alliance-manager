@@ -485,7 +485,8 @@ async function commitImport() {
         save_aliases: saveAliases,
         // Echo the OCR diagnostics summary from the preview so the server can
         // enrich the activity-log entry (absent/empty on legacy OCR responses).
-        ocr_summary: currentImportPayload?.ocr_summary || ''
+        ocr_summary: currentImportPayload?.ocr_summary || '',
+        source: 'ocr' // datapoint provenance for power/kill history rows
     };
 
     try {

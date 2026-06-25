@@ -262,6 +262,35 @@ button,
     }
 }
 
+/* Small inline icon-action groups (e.g. the nickname / LastRank icons beside a
+   member or prospect name) opt out of the 44px touch min-size so the icons stay
+   tight together instead of inflating into spaced-apart boxes on mobile. */
+.inline-icon-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+.inline-icon-actions > button,
+.inline-icon-actions > a {
+    min-width: 0;
+    min-height: 0;
+}
+
+/* LastRank avatar (hotlinked from the game CDN). Rendering in production needs
+   the CDN hosts allowlisted in the reverse-proxy CSP img-src. */
+.lr-avatar {
+    /* Fluid: ~36px on a phone up to 52px on desktop. Rounded square to match the
+       sidebar user tile, not a circle. */
+    width: clamp(36px, 5.5vw, 52px);
+    height: clamp(36px, 5.5vw, 52px);
+    border-radius: 12px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+}
+
 /* User Dropdown */
 
 /* Theme Options */
@@ -357,6 +386,12 @@ main {
     font-size: 12px; font-weight: 800; color: #fff;
     flex-shrink: 0;
     text-transform: uppercase;
+    overflow: hidden; /* clip the photo to the rounded square */
+}
+.sidebar-user-photo {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
 }
 .sidebar-user-name { font-size: 12px; font-weight: 600; color: #fff; }
 .sidebar-user-role { font-size: 10px; color: var(--color-sidebar-muted); }

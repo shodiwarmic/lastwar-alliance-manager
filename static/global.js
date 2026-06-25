@@ -162,6 +162,53 @@ function svgIcon(name, size = 14) {
     return svg;
 }
 
+// Swap the sidebar user tile's initials for the logged-in user's LastRank photo
+// when present. Falls back to initials if the photo (and failover) fail to load
+// or are blocked by CSP, so production stays safe before the CDN is allowlisted.
+document.addEventListener('DOMContentLoaded', () => {
+    const su = document.querySelector('.sidebar-user-avatar');
+    if (!su || !su.dataset.lrPhoto) return;
+    const failover = su.dataset.lrPhotoFailover || '';
+    const initials = su.textContent.trim();
+    const img = document.createElement('img');
+    img.className = 'sidebar-user-photo';
+    img.alt = '';
+    let triedFailover = false;
+    img.addEventListener('error', () => {
+        if (!triedFailover && failover) {
+            triedFailover = true;
+            img.src = failover;
+        } else {
+            su.textContent = initials; // restore initials on total failure
+        }
+    });
+    img.src = su.dataset.lrPhoto;
+    su.textContent = '';
+    su.appendChild(img);
+});
+
+// LastRank avatar <img>, hotlinked from the game CDN. Falls over to the backup
+// CDN host on the first load error, then removes itself if that also fails (so a
+// blocked/dead image leaves no broken-icon artifact). No inline onerror — the
+// handler is attached here so it stays CSP-safe once the CDN hosts are allowlisted.
+function buildLastRankAvatar(primary, failover) {
+    const img = document.createElement('img');
+    img.className = 'lr-avatar';
+    img.alt = '';
+    img.loading = 'lazy';
+    img.src = primary;
+    let triedFailover = false;
+    img.addEventListener('error', () => {
+        if (!triedFailover && failover) {
+            triedFailover = true;
+            img.src = failover;
+        } else {
+            img.remove();
+        }
+    });
+    return img;
+}
+
 // Table-row action button: SVG icon + a label that collapses to icon-only on
 // narrow screens (.action-label is hidden ≤768px). title/aria-label keep the
 // action discoverable when the text is hidden. Mirrors members.js

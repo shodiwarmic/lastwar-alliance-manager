@@ -395,18 +395,54 @@ function buildProspectCard(p, typeContext) {
     const header = document.createElement('div');
     header.className = 'prospect-header';
 
-    // Seat color dot (before name)
-    if (p.seat_color) {
+    const seatTitle = p.seat_color ? p.seat_color.charAt(0).toUpperCase() + p.seat_color.slice(1) + ' seat' : '';
+
+    // Seat color dot — only when there's no avatar to carry the seat color as a
+    // border (see below).
+    if (p.seat_color && !p.lastrank_photo_url) {
         const dot = document.createElement('span');
         dot.className = `seat-dot seat-${p.seat_color}`;
-        dot.title = p.seat_color.charAt(0).toUpperCase() + p.seat_color.slice(1) + ' seat';
+        dot.title = seatTitle;
         header.appendChild(dot);
+    }
+
+    // Name + LastRank link grouped so the header's space-between doesn't pull
+    // the icon away from the name (and the shared class keeps the icon tight to
+    // the name on mobile rather than inflating to the 44px touch min-size).
+    const nameGroup = document.createElement('span');
+    nameGroup.className = 'inline-icon-actions';
+    nameGroup.style.minWidth = '0';
+
+    // LastRank avatar (hotlinked; falls over to the backup CDN, then hides). When
+    // the prospect has a seat color, it rings the avatar as a colored border
+    // instead of a separate dot.
+    if (p.lastrank_photo_url) {
+        const av = buildLastRankAvatar(p.lastrank_photo_url, p.lastrank_photo_failover);
+        if (p.seat_color) {
+            av.classList.add('seat-edge', `seat-edge-${p.seat_color}`);
+            av.title = seatTitle;
+        }
+        nameGroup.appendChild(av);
     }
 
     const nameEl = document.createElement('span');
     nameEl.className = 'prospect-name';
     nameEl.textContent = p.name;
-    header.appendChild(nameEl);
+    nameGroup.appendChild(nameEl);
+
+    // LastRank profile link (public data) — only when this prospect is linked.
+    if (p.lastrank_public_id) {
+        const lrLink = document.createElement('a');
+        lrLink.href = 'https://lastrank.fun/p/' + p.lastrank_public_id;
+        lrLink.target = '_blank';
+        lrLink.rel = 'noopener noreferrer';
+        lrLink.title = 'View on LastRank';
+        lrLink.setAttribute('aria-label', 'View on LastRank');
+        lrLink.style.cssText = 'opacity:0.6;display:inline-flex;align-items:center;text-decoration:none;color:inherit;';
+        lrLink.appendChild(svgIcon('external-link'));
+        nameGroup.appendChild(lrLink);
+    }
+    header.appendChild(nameGroup);
 
     // R4 interest badge
     if (p.interested_in_r4) {
@@ -472,6 +508,12 @@ function buildProspectCard(p, typeContext) {
             moveBtn.textContent = typeContext === 'transfer' ? 'Move to Prospects' : 'Move to Transfers';
             moveBtn.addEventListener('click', () => moveProspect(p, typeContext === 'transfer' ? 'prospect' : 'transfer'));
             actions.appendChild(moveBtn);
+
+            const lrBtn = document.createElement('button');
+            lrBtn.className = 'btn btn-secondary btn-sm';
+            lrBtn.textContent = p.lastrank_public_id ? 'Refresh LastRank' : 'Look up on LastRank';
+            lrBtn.addEventListener('click', () => openLastRankProspectModal(p));
+            actions.appendChild(lrBtn);
         }
 
         if (CAN_MANAGE_MEMBERS) {
@@ -867,4 +909,100 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('cancel-prospect-btn')?.addEventListener('click', closeProspectModal);
     window.addEventListener('click', e => { if (e.target === prospectModal) closeProspectModal(); });
     document.getElementById('prospect-form')?.addEventListener('submit', handleProspectSubmit);
+
+    // LastRank prospect lookup modal
+    const lrModal = document.getElementById('lastrank-prospect-modal');
+    const closeLrModal = () => { if (lrModal) { releaseFocus(lrModal); lrModal.style.display = ''; } };
+    document.getElementById('lr-prospect-close-btn')?.addEventListener('click', closeLrModal);
+    window.addEventListener('click', e => { if (e.target === lrModal) closeLrModal(); });
+    document.getElementById('lr-prospect-fetch-btn')?.addEventListener('click', doLastRankProspectFetch);
+
+    // LastRank bulk refresh (one button per tab)
+    document.querySelectorAll('.lastrank-bulk-btn').forEach(btn => {
+        btn.addEventListener('click', () => doLastRankProspectBulk(btn.dataset.type));
+    });
 });
+
+// ── LastRank prospect enrichment ──────────────────────────────────────────────
+let lrCurrentProspect = null;
+
+function openLastRankProspectModal(p) {
+    lrCurrentProspect = p;
+    const modal = document.getElementById('lastrank-prospect-modal');
+    document.getElementById('lr-prospect-name').textContent = p.name + (p.lastrank_public_id ? ` (saved ID: ${p.lastrank_public_id})` : '');
+    document.getElementById('lr-prospect-input').value = '';
+    document.getElementById('lr-prospect-result').textContent = '';
+    document.getElementById('lr-prospect-search').href = 'https://lastrank.fun/search?q=' + encodeURIComponent(p.name);
+    if (modal) { modal.style.display = 'flex'; if (typeof trapFocus === 'function') trapFocus(modal); }
+}
+
+async function doLastRankProspectFetch() {
+    if (!lrCurrentProspect) return;
+    const input = document.getElementById('lr-prospect-input');
+    const result = document.getElementById('lr-prospect-result');
+    const btn = document.getElementById('lr-prospect-fetch-btn');
+    btn.disabled = true;
+    result.textContent = 'Fetching…';
+    try {
+        const res = await fetch('/api/lastrank/prospect', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prospect_id: lrCurrentProspect.id, lastrank_input: input.value.trim() })
+        });
+        if (!res.ok) throw new Error((await res.text()) || 'Lookup failed');
+        const d = await res.json();
+        result.textContent = `${d.lastrank_name}: ${formatPower(d.power)} power`
+            + (d.hero_power != null ? `, ${formatPower(d.hero_power)} hero power` : '')
+            + (d.alliance_abbr ? ` · [${d.alliance_abbr}]` : '')
+            + (d.server_id ? ` · Server ${d.server_id}` : '');
+        showToast('Prospect updated from LastRank.');
+        await loadAllProspects();
+    } catch (e) {
+        result.textContent = '';
+        showToast(e.message || 'Lookup failed.', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function doLastRankProspectBulk(type) {
+    const statusEl = document.querySelector(`.lastrank-bulk-status[data-type="${type}"]`);
+    const setS = m => { if (statusEl) statusEl.textContent = m || ''; };
+    let prospects;
+    try {
+        const res = await fetch('/api/prospects');
+        prospects = await res.json();
+    } catch (e) { showToast('Could not load prospects.', 'error'); return; }
+
+    const pool = (prospects || []).filter(p => p.prospect_type === type && p.lastrank_public_id);
+    const noun = type === 'transfer' ? 'transfer' : 'prospect';
+    if (pool.length === 0) {
+        showToast(`No ${noun}s have a saved LastRank ID yet. Use "Look up on LastRank" on a card first.`, 'info');
+        return;
+    }
+    if (!await showConfirm(`Refresh ${pool.length} ${noun}(s) from LastRank? This runs at ~1/second.`, 'Start')) return;
+
+    document.querySelectorAll('.lastrank-bulk-btn').forEach(b => b.disabled = true);
+    let synced = 0, i = 0;
+    for (const p of pool) {
+        i++;
+        setS(`Refreshing ${i} of ${pool.length}…`);
+        try {
+            const res = await fetch('/api/lastrank/prospect', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prospect_id: p.id, bulk: true })
+            });
+            if (res.ok) synced++;
+        } catch (e) { /* skip individual failures */ }
+    }
+    setS('');
+    try {
+        await fetch('/api/lastrank/prospect/finish', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kind: 'prospects', prospects_synced: synced })
+        });
+    } catch (e) { /* logging only */ }
+
+    document.querySelectorAll('.lastrank-bulk-btn').forEach(b => b.disabled = false);
+    showToast(`Refreshed ${synced} ${noun}(s) from LastRank.`);
+    await loadAllProspects();
+}

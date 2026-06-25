@@ -184,7 +184,7 @@
 
       <!-- User row with theme/logout dropdown -->
       <div class="sidebar-user">
-        <div class="sidebar-user-avatar">{{printf "%.2s" .Username}}</div>
+        <div class="sidebar-user-avatar" data-lr-photo="{{.UserPhotoURL}}" data-lr-photo-failover="{{.UserPhotoFailover}}">{{printf "%.2s" .Username}}</div>
         <div style="flex:1;min-width:0">
           <div class="sidebar-user-name">{{.Username}}</div>
           <div class="sidebar-user-role">{{.Rank}}</div>
