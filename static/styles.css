@@ -262,6 +262,21 @@ button,
     }
 }
 
+/* Small inline icon-action groups (e.g. the nickname / LastRank icons beside a
+   member or prospect name) opt out of the 44px touch min-size so the icons stay
+   tight together instead of inflating into spaced-apart boxes on mobile. */
+.inline-icon-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+.inline-icon-actions > button,
+.inline-icon-actions > a {
+    min-width: 0;
+    min-height: 0;
+}
+
 /* User Dropdown */
 
 /* Theme Options */

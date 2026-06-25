@@ -80,7 +80,8 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			   COALESCE(lhp.recorded_at, '') as latest_hero_power_date,
 			   COALESCE(lk.kills, 0) as latest_kills,
 			   COALESCE(lk.recorded_at, '') as latest_kills_date,
-			   COALESCE(msa.skills, '') as skills
+			   COALESCE(msa.skills, '') as skills,
+			   m.lastrank_public_id, m.lastrank_synced_at
 		FROM members m
 		LEFT JOIN latest_power lp ON lp.member_id = m.id
 		LEFT JOIN latest_squad_power lsp ON lsp.member_id = m.id
@@ -110,6 +111,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			&m.HeroPower, &m.HeroPowerUpdatedAt,
 			&m.CurrentKills, &m.KillsUpdatedAt,
 			&m.Skills,
+			&m.LastRankPublicID, &m.LastRankSyncedAt,
 		); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -197,16 +199,17 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Fetch current values before overwriting so we can diff for the activity log
 	var old struct {
-		Name       string
-		Rank       string
-		Level      int
-		TroopLevel int
-		Profession string
-		SquadType  string
-		Eligible   bool
+		Name             string
+		Rank             string
+		Level            int
+		TroopLevel       int
+		Profession       string
+		SquadType        string
+		Eligible         bool
+		LastRankPublicID sql.NullInt64
 	}
-	err = db.QueryRow("SELECT name, rank, level, troop_level, profession, squad_type, eligible FROM members WHERE id = ?", id).Scan(
-		&old.Name, &old.Rank, &old.Level, &old.TroopLevel, &old.Profession, &old.SquadType, &old.Eligible,
+	err = db.QueryRow("SELECT name, rank, level, troop_level, profession, squad_type, eligible, lastrank_public_id FROM members WHERE id = ?", id).Scan(
+		&old.Name, &old.Rank, &old.Level, &old.TroopLevel, &old.Profession, &old.SquadType, &old.Eligible, &old.LastRankPublicID,
 	)
 	if err != nil {
 		log.Printf("Error fetching current member name: %v", err)
@@ -215,7 +218,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Perform the main UPDATE
-	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ?, notes = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, m.Notes, id)
+	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ?, notes = ?, lastrank_public_id = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, m.Notes, m.LastRankPublicID, id)
 	if err != nil {
 		log.Printf("DB Update Error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -258,6 +261,17 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 			return "ineligible"
 		}
 		changes = append(changes, eligStr(old.Eligible)+" → "+eligStr(m.Eligible))
+	}
+	oldPub := 0
+	if old.LastRankPublicID.Valid {
+		oldPub = int(old.LastRankPublicID.Int64)
+	}
+	newPub := 0
+	if m.LastRankPublicID != nil {
+		newPub = *m.LastRankPublicID
+	}
+	if oldPub != newPub {
+		changes = append(changes, "LastRank ID: "+strconv.Itoa(oldPub)+" → "+strconv.Itoa(newPub))
 	}
 	if len(changes) > 0 {
 		user := getAuthUser(r)
@@ -748,6 +762,7 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := ConfirmResult{}
+	src := provenanceSource(request.Source)
 
 	for _, rename := range request.Renames {
 		db.Exec("UPDATE members SET name = ? WHERE name = ?", rename.NewName, rename.OldName)
@@ -789,7 +804,7 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 			var currentPower int64 = -1
 			db.QueryRow("SELECT power FROM power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1", existingID).Scan(&currentPower)
 			if currentPower != member.Power {
-				db.Exec("INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)", existingID, member.Power)
+				db.Exec("INSERT INTO power_history (member_id, power, recorded_at, source) VALUES (?, ?, CURRENT_TIMESTAMP, ?)", existingID, member.Power, src)
 			}
 		}
 
@@ -797,7 +812,7 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 			var currentSquadPower int64 = -1
 			db.QueryRow("SELECT power FROM squad_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1", existingID).Scan(&currentSquadPower)
 			if currentSquadPower != member.SquadPower {
-				db.Exec("INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)", existingID, member.SquadPower)
+				db.Exec("INSERT INTO squad_power_history (member_id, power, recorded_at, source) VALUES (?, ?, CURRENT_TIMESTAMP, ?)", existingID, member.SquadPower, src)
 			}
 		}
 	}

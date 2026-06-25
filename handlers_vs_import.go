@@ -75,9 +75,12 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 
 	var req VSImportCommitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+
+	// Datapoint provenance: 'ocr' (upload.js) or 'csv' (vs.js); else 'import'.
+	src := provenanceSource(req.Source)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -117,7 +120,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 
 		// Save Power Record
 		if hasPower {
-			_, err = tx.Exec("INSERT INTO power_history (member_id, power) VALUES (?, ?)", row.MatchedMember.ID, powerVal)
+			_, err = tx.Exec("INSERT INTO power_history (member_id, power, source) VALUES (?, ?, ?)", row.MatchedMember.ID, powerVal, src)
 			if err != nil {
 				dbErrors = append(dbErrors, fmt.Sprintf("Power Error (%s): %v", row.OriginalName, err))
 			} else {
@@ -127,7 +130,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 
 		// Save Kill Count Record
 		if hasKills {
-			_, err = tx.Exec("INSERT INTO kill_history (member_id, kills) VALUES (?, ?)", row.MatchedMember.ID, killsVal)
+			_, err = tx.Exec("INSERT INTO kill_history (member_id, kills, source) VALUES (?, ?, ?)", row.MatchedMember.ID, killsVal, src)
 			if err != nil {
 				dbErrors = append(dbErrors, fmt.Sprintf("Kill Count Error (%s): %v", row.OriginalName, err))
 			} else {

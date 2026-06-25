@@ -17,6 +17,7 @@ async function loadSettings() {
         
         document.getElementById('alliance-name').value = settings.alliance_name ?? '';
         document.getElementById('alliance-tag').value = settings.alliance_tag ?? '';
+        document.getElementById('lastrank-alliance-id').value = settings.lastrank_alliance_id ?? '';
         document.getElementById('max-hq-level').value = settings.max_hq_level || 35;
         document.getElementById('settings-login-message').value = settings.login_message || '';
         document.getElementById('train-free-limit').value = settings.train_free_daily_limit ?? 1;
@@ -158,13 +159,35 @@ function showSettingsStatus(message, success) {
     _settingsStatusTimer = setTimeout(() => { el.textContent = ''; }, 4000);
 }
 
+// Show a "View alliance on LastRank" link once the field holds a valid id/URL.
+function updateLastRankAllianceLink() {
+    const input = document.getElementById('lastrank-alliance-id');
+    const view = document.getElementById('lastrank-alliance-view');
+    if (!input || !view) return;
+    const v = input.value.trim();
+    const m = v.match(/\/a\/([0-9a-fA-F]{32})/) || v.match(/^([0-9a-fA-F]{32})$/);
+    if (m) {
+        view.replaceChildren(document.createTextNode('Linked: '));
+        const a = document.createElement('a');
+        a.href = 'https://lastrank.fun/a/' + m[1].toLowerCase();
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = 'View alliance on LastRank ↗';
+        view.appendChild(a);
+    } else {
+        view.replaceChildren();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const settingsForm = document.getElementById('settings-form');
     
     if (settingsForm) {
         await fetchPermissions();
         await loadSettings();
-        
+        updateLastRankAllianceLink();
+        document.getElementById('lastrank-alliance-id')?.addEventListener('input', updateLastRankAllianceLink);
+
         settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -187,6 +210,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const settings = Object.assign({}, currentSettings, {
                 alliance_name: document.getElementById('alliance-name').value.trim(),
                 alliance_tag: document.getElementById('alliance-tag').value.trim(),
+                lastrank_alliance_id: document.getElementById('lastrank-alliance-id').value.trim(),
                 login_message: document.getElementById('settings-login-message').value,
                 max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,

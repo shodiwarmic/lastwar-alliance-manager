@@ -49,6 +49,7 @@ const ENTITY_LABELS = {
     season_event:          'season event',
     poll_template:         'Poll Template',
     poll_instance:         'Poll',
+    lastrank_sync:         'LastRank Sync',
 };
 
 const ENTITY_LABELS_PLURAL = {

@@ -489,7 +489,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(mg_anchor_date, ''), COALESCE(zs_schedule_mode, 'weekdays'),
         COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00'),
         COALESCE(season_score_levels_default, '[{"key":"full","label":"FULL","points":10},{"key":"partial","label":"PARTIAL","points":5},{"key":"absent","label":"ABSENT","points":0}]'),
-        COALESCE(alliance_name, ''), COALESCE(alliance_tag, '')
+        COALESCE(alliance_name, ''), COALESCE(alliance_tag, ''),
+        COALESCE(lastrank_alliance_id, '')
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -509,6 +510,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.ZSWeekdays, &s.ZSAnchorDate, &s.ZSAnchorTime,
 		&s.SeasonScoreLevelsDefault,
 		&s.AllianceName, &s.AllianceTag,
+		&s.LastRankAllianceID,
 	)
 
 	if err != nil {
@@ -581,6 +583,12 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 
 	actor := getAuthUser(r)
 
+	// Accept either a bare 32-hex id or a pasted /a/<id> URL for the LastRank id.
+	allianceID := strings.TrimSpace(settings.LastRankAllianceID)
+	if parsed, ok := parseLastRankAllianceID(allianceID); ok {
+		allianceID = parsed
+	}
+
 	// Note: current_season and season_start_date are no longer editable here —
 	// they are derived from the seasons table (owned by Season Hub).
 	_, err := db.Exec(`UPDATE settings SET
@@ -596,7 +604,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		mg_anchor_date = ?, zs_schedule_mode = ?,
 		zs_weekdays = ?, zs_anchor_date = ?, zs_anchor_time = ?,
 		season_score_levels_default = ?,
-		alliance_name = ?, alliance_tag = ?
+		alliance_name = ?, alliance_tag = ?,
+		lastrank_alliance_id = ?
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -611,6 +620,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.ZSWeekdays, settings.ZSAnchorDate, settings.ZSAnchorTime,
 		settings.SeasonScoreLevelsDefault,
 		settings.AllianceName, settings.AllianceTag,
+		allianceID,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)

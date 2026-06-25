@@ -46,7 +46,7 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 **Batching**: consecutive `"created"` calls for the same `entity_type` by the same user within 15 minutes are automatically merged (count increments). All other actions always create a new row.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -147,6 +147,46 @@ This intentionally differs from the OCR-service path, which sends `candidates[]`
 ### Activity logging
 
 `mobileCommit` already calls `logActivity` for each VS / power / kill record write (`vs_points`, `power_records`, `kill_count` entity types — same as the web import path). New mobile endpoints that write data must do the same.
+
+## LastRank integration (`/api/lastrank/*`)
+
+Enrichment from the unofficial `lastrank.fun` `/v1/` API. All upstream calls go
+through `lastrank_client.go`, which owns a single package-level
+`rate.NewLimiter(1/sec)` (shared across all callers — the volunteer-run service
+must never see more than 1 req/sec) and a 10s-timeout client. Wire structs there
+use pointers for every nullable field and never leave the file; handlers in
+`handlers_lastrank.go` translate to the app-facing payloads in `models.go`.
+Never return a raw upstream error to the client — log with `slogLastRank` and
+return a generic message.
+
+Two phases, both manual-trigger only:
+- **Phase 1** (`/preview` → `/commit`): one `fetchLastRankAlliance` call, matched
+  to the roster via `resolveMemberAlias`. Power/hero/HQ apply automatically; rank
+  diffs are review-only (never auto-applied); unmatched names → global alias /
+  rename / add. Member `lastrank_public_id` is captured here.
+- **Phase 2** (`/player` per member, then `/finish`): browser-driven loop,
+  oldest-`lastrank_synced_at` first so an interrupted run resumes. `/player`
+  writes are deferred-logged — `/finish` writes the single `lastrank_sync`
+  activity row. Prospect lookups (`/prospect`, `/prospect/finish`) mirror this.
+
+**Two rules that must hold for every history write from LastRank:**
+1. **Staleness** — only insert if LastRank's capture date (`last_seen_at` /
+   `captured_at`) is strictly newer than our latest `recorded_at` for that
+   member+metric (`lastRankCaptureNewer`), compared as parsed `time.Time`, never
+   as strings (ISO `T`/`Z` vs SQLite space form mis-sorts lexically). HQ never
+   regresses (only apply if higher).
+2. **Capture date as `recorded_at`** — inserted rows are stamped with the LastRank
+   capture date (`lastRankCaptureToSQLite`), not the sync time, so the history is
+   faithful and "stale never wins" falls out of the existing "latest by
+   recorded_at" query for free.
+
+**Datapoint provenance** — the four history tables (`power_history`,
+`hero_power_history`, `kill_history`, `squad_power_history`) carry a
+`source` column: `lastrank` | `ocr` | `csv` | `mobile` | `manual` (default
+`manual`; pre-migration rows can't be reclassified). New write paths must stamp
+their true source; `provenanceSource()` normalizes a client-declared origin. The
+OCR-vs-CSV split is carried by a `source` field on the import commit payloads
+(`upload.js`='ocr', `vs.js`='csv', roster `confirmMemberUpdates`='csv').
 
 ## Known gotchas
 

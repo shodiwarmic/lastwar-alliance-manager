@@ -48,6 +48,9 @@ function fetchPermissions() {
 
     const notesSection = document.getElementById('modal-notes-section');
     if (notesSection) notesSection.style.display = canManageRanks ? 'block' : 'none';
+
+    const lrSection = document.getElementById('modal-lastrank-section');
+    if (lrSection) lrSection.style.display = canManageRanks ? 'block' : 'none';
 }
 
 async function fetchSettings() {
@@ -380,9 +383,21 @@ function closeMemberModalFunc() {
     }
 }
 
+// Accept a lastrank.fun player URL (…/p/123) or a bare id. Returns an int, or
+// null for empty/unparseable input (callers distinguish the two by checking the
+// raw value first).
+function parseLastRankIdInput(v) {
+    v = (v || '').trim();
+    if (!v) return null;
+    const m = v.match(/\/p\/(\d+)/) || v.match(/^(\d+)$/);
+    return m ? parseInt(m[1], 10) : null;
+}
+
 function resetMemberForm() {
     editingMemberId = null;
     document.getElementById('member-form').reset();
+    const lrLink = document.getElementById('member-lastrank-link');
+    if (lrLink) lrLink.textContent = 'Set automatically when synced. Edit or clear here to fix a mistaken pairing.';
     document.getElementById('member-eligible').checked = true;
 
     const levelInput = document.getElementById('member-level');
@@ -555,6 +570,12 @@ function buildMemberCard(member) {
     nameText.textContent = member.name;
     nameTop.appendChild(nameText);
 
+    // Keep the icon actions glued together right after the name. The shared
+    // class also opts these icons out of the 44px mobile touch min-size so they
+    // stay tight instead of inflating into spaced-apart boxes.
+    const nameActions = document.createElement('span');
+    nameActions.className = 'inline-icon-actions';
+
     const aliasBtn = document.createElement('button');
     aliasBtn.className = 'icon-btn';
     aliasBtn.title = 'Manage Nicknames';
@@ -562,8 +583,23 @@ function buildMemberCard(member) {
     aliasBtn.style.cssText = 'background:none;border:none;cursor:pointer;opacity:0.6;padding:0;display:inline-flex;align-items:center;';
     aliasBtn.appendChild(svgIcon('tag'));
     aliasBtn.addEventListener('click', () => openAliasModal(member.id, member.name));
-    nameTop.appendChild(aliasBtn);
+    nameActions.appendChild(aliasBtn);
 
+    // LastRank profile link (public data) — only when this member is linked.
+    if (member.lastrank_public_id) {
+        const lrLink = document.createElement('a');
+        lrLink.className = 'icon-btn';
+        lrLink.href = 'https://lastrank.fun/p/' + member.lastrank_public_id;
+        lrLink.target = '_blank';
+        lrLink.rel = 'noopener noreferrer';
+        lrLink.title = 'View on LastRank';
+        lrLink.setAttribute('aria-label', 'View on LastRank');
+        lrLink.style.cssText = 'opacity:0.6;padding:0;display:inline-flex;align-items:center;text-decoration:none;color:inherit;';
+        lrLink.appendChild(svgIcon('external-link'));
+        nameActions.appendChild(lrLink);
+    }
+
+    nameTop.appendChild(nameActions);
     nameDiv.appendChild(nameTop);
 
     // Second line (same cell): aliases, truncated to +N by layoutMemberAliases().
@@ -763,6 +799,16 @@ async function handleMemberFormSubmit(e) {
     const notesInput = document.getElementById('member-notes');
     const notes = (notesInput && canManageRanks) ? notesInput.value.trim() : '';
 
+    const lrInput = document.getElementById('member-lastrank-id');
+    let lastrank_public_id = null;
+    if (lrInput && lrInput.value.trim() !== '') {
+        lastrank_public_id = parseLastRankIdInput(lrInput.value);
+        if (lastrank_public_id === null) {
+            showModalStatus('LastRank ID must be a player URL (…/p/123) or a number. Leave blank to clear.');
+            return;
+        }
+    }
+
     if (!name || !rank) {
         showModalStatus('Please fill in Name and Rank.');
         return;
@@ -774,7 +820,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id }),
             });
             if (!response.ok) throw new Error('Failed to update member');
             targetId = editingMemberId;
@@ -783,7 +829,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id }),
             });
             if (!response.ok) {
                 if (response.status === 403) throw new Error('Permission denied');
@@ -894,6 +940,23 @@ window.editMember = function (member) {
 
     const notesInput = document.getElementById('member-notes');
     if (notesInput) notesInput.value = notes;
+
+    const lrInput = document.getElementById('member-lastrank-id');
+    if (lrInput) lrInput.value = member.lastrank_public_id || '';
+    const lrLink = document.getElementById('member-lastrank-link');
+    if (lrLink) {
+        if (member.lastrank_public_id) {
+            lrLink.replaceChildren(document.createTextNode('View on LastRank: '));
+            const a = document.createElement('a');
+            a.href = 'https://lastrank.fun/p/' + member.lastrank_public_id;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = '/p/' + member.lastrank_public_id;
+            lrLink.appendChild(a);
+        } else {
+            lrLink.textContent = 'Not linked. Paste a lastrank.fun URL or ID to link manually.';
+        }
+    }
 
     const heroPowerInput = document.getElementById('member-hero-power');
     if (heroPowerInput) heroPowerInput.value = (heroPower && heroPower > 0) ? heroPower : '';
@@ -1265,7 +1328,7 @@ async function doImport(selectedMembers, removeMemberIDs, renames, confirmBtn, m
         const response = await fetch('/api/members/import/confirm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ members: selectedMembers, remove_member_ids: removeMemberIDs, renames }),
+            body: JSON.stringify({ members: selectedMembers, remove_member_ids: removeMemberIDs, renames, source: 'csv' }),
         });
         if (!response.ok) throw new Error('Failed to import members');
         const result = await response.json();

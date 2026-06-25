@@ -41,6 +41,11 @@ type Member struct {
 	PersonalAliases     string `json:"personal_aliases"`
 	Notes               string `json:"notes"`
 	Skills              string `json:"skills"` // comma-separated skill keys, e.g. "medical_aid"
+	// LastRank linkage. PublicID is auto-captured on a successful Phase-1 match;
+	// SyncedAt is the wall-clock of our last sync for this member (drives the
+	// oldest-first ordering of the Phase-2 extended sync).
+	LastRankPublicID *int    `json:"lastrank_public_id"`
+	LastRankSyncedAt *string `json:"lastrank_synced_at"`
 }
 
 type FormerMember struct {
@@ -70,6 +75,9 @@ type Prospect struct {
 	CreatedAt      string `json:"created_at"`
 	UpdatedAt      string `json:"updated_at"`
 	ProspectType   string `json:"prospect_type"`
+	// LastRankPublicID is pasted/derived once by an officer; recruiting lookups
+	// fetch the per-player endpoint on demand. No synced_at — no history kept.
+	LastRankPublicID *int `json:"lastrank_public_id"`
 }
 
 type Alias struct {
@@ -306,6 +314,9 @@ type Settings struct {
 	SeasonScoreLevelsDefault string `json:"season_score_levels_default"`
 	AllianceName             string `json:"alliance_name"`
 	AllianceTag              string `json:"alliance_tag"`
+	// LastRankAllianceID is the 32-char hex id for the alliance on lastrank.fun,
+	// used by the Phase-1 sync. Empty by default (operator pastes it in Settings).
+	LastRankAllianceID       string `json:"lastrank_alliance_id"`
 }
 
 type StormAssignment struct {
@@ -388,6 +399,9 @@ type ConfirmRequest struct {
 	Members         []DetectedMember `json:"members"`
 	RemoveMemberIDs []int            `json:"remove_member_ids"`
 	Renames         []RenameInfo     `json:"renames"`
+	// Source tags the provenance of any power/squad history written here.
+	// members.js sends 'csv'; absent/unknown → neutral 'import'.
+	Source string `json:"source,omitempty"`
 }
 
 type ConfirmResult struct {
@@ -902,6 +916,10 @@ type VSImportCommitRequest struct {
 	// preview, echoed back by the client so the activity entry can be enriched.
 	// Empty for CSV imports and legacy OCR responses. Informational log text only.
 	OCRSummary string `json:"ocr_summary,omitempty"`
+	// Source distinguishes the origin of this commit for datapoint provenance:
+	// "ocr" (upload.js) or "csv" (vs.js). Threaded into the history-table inserts.
+	// Falls back to "import" when absent/unrecognized (old clients).
+	Source string `json:"source,omitempty"`
 }
 
 // --- Mobile API Payloads ---
@@ -1004,4 +1022,168 @@ type Ally struct {
 	Contact          string `json:"contact"`
 	CreatedAt        string `json:"created_at"`
 	AgreementTypeIDs []int  `json:"agreement_type_ids"`
+}
+
+// --- LastRank Payloads ---
+//
+// These are the app-facing shapes exchanged with the frontend. The raw
+// lastrank.fun wire structs live in lastrank_client.go and never leave it.
+
+// LastRankAllianceMeta is the alliance-level summary shown above the Phase-1 review.
+type LastRankAllianceMeta struct {
+	AllianceID string `json:"alliance_id"`
+	Abbr       string `json:"abbr"`
+	Name       string `json:"name"`
+	ServerID   int    `json:"server_id"`
+	CurMember  int    `json:"cur_member"`
+	MaxMember  int    `json:"max_member"`
+	LastSeenAt string `json:"last_seen_at"` // ISO-8601 capture date for this pull
+}
+
+// LastRankStatDiff is a proposed numeric history update (power / hero power).
+// Apply is false when the value is unchanged or LastRank's data is stale.
+type LastRankStatDiff struct {
+	Current    *int64 `json:"current"` // our latest value, nil if none recorded
+	New        int64  `json:"new"`     // LastRank's value
+	Apply      bool   `json:"apply"`
+	SkipReason string `json:"skip_reason,omitempty"` // "unchanged" | "stale"
+}
+
+// LastRankHQDiff is a proposed members.level update (HQ never regresses).
+type LastRankHQDiff struct {
+	Current    int    `json:"current"`
+	New        int    `json:"new"`
+	Apply      bool   `json:"apply"`
+	SkipReason string `json:"skip_reason,omitempty"` // "not_higher"
+}
+
+// LastRankRankDiff is a rank mismatch surfaced for review. Never auto-applied.
+type LastRankRankDiff struct {
+	Current string `json:"current"` // e.g. "R4"
+	New     string `json:"new"`     // e.g. "R5"
+}
+
+// LastRankMemberDiff is one matched roster member with its proposed Phase-1 changes.
+type LastRankMemberDiff struct {
+	LastRankName     string            `json:"lastrank_name"`
+	LastRankPublicID int               `json:"lastrank_public_id"`
+	MatchedMember    *Member           `json:"matched_member"`
+	MatchType        string            `json:"match_type"`
+	Power            *LastRankStatDiff `json:"power,omitempty"`
+	HeroPower        *LastRankStatDiff `json:"hero_power,omitempty"`
+	HQLevel          *LastRankHQDiff   `json:"hq_level,omitempty"`
+	RankDiff         *LastRankRankDiff `json:"rank_diff,omitempty"`
+}
+
+// LastRankUnmatched is a LastRank member that did not resolve to any roster member.
+type LastRankUnmatched struct {
+	LastRankName     string `json:"lastrank_name"`
+	LastRankPublicID int    `json:"lastrank_public_id"`
+	Power            *int64 `json:"power"`
+	HeroPower        *int64 `json:"hero_power"`
+	Rank             string `json:"rank"` // mapped R-string for display
+	BaseLevel        *int   `json:"base_level"`
+}
+
+// LastRankArchiveCandidate is one of our active members who appears to have left
+// the alliance per LastRank (absent from the roster, or present but unranked).
+type LastRankArchiveCandidate struct {
+	MemberID int    `json:"member_id"`
+	Name     string `json:"name"`
+	Rank     string `json:"rank"`
+	Reason   string `json:"reason"`
+}
+
+// LastRankSyncPreviewResponse is the Phase-1 alliance-fetch result.
+type LastRankSyncPreviewResponse struct {
+	Alliance          LastRankAllianceMeta       `json:"alliance"`
+	Matched           []LastRankMemberDiff       `json:"matched"`
+	Unmatched         []LastRankUnmatched        `json:"unmatched"`
+	ArchiveCandidates []LastRankArchiveCandidate `json:"archive_candidates"`
+	AllMembers        []Member                   `json:"all_members"` // for the unmatched assign dropdown
+}
+
+// LastRankCommitMember is one confirmed set of Phase-1 changes to apply.
+// A nil pointer means "don't touch that field". NewRank present = officer-approved.
+type LastRankCommitMember struct {
+	MemberID         int    `json:"member_id"`
+	LastRankPublicID int    `json:"lastrank_public_id"`
+	Power            *int64 `json:"power,omitempty"`
+	HeroPower        *int64 `json:"hero_power,omitempty"`
+	HQLevel          *int   `json:"hq_level,omitempty"`
+	NewRank          string `json:"new_rank,omitempty"`
+}
+
+// LastRankUnmatchedAction is the officer's chosen disposition for an unmatched name.
+// When ApplyStats is set (alias/rename/add), the LastRank entry's power/hero/HQ are
+// applied to the paired/new member with the same stale + capture-date gating as a
+// matched member.
+type LastRankUnmatchedAction struct {
+	LastRankName     string `json:"lastrank_name"`
+	LastRankPublicID int    `json:"lastrank_public_id"`
+	Action           string `json:"action"`             // "alias" | "rename" | "add" | "ignore"
+	MemberID         int    `json:"member_id,omitempty"` // target for "alias"/"rename"
+	NewRank          string `json:"new_rank,omitempty"`  // rank for "add"
+	ApplyStats       bool   `json:"apply_stats,omitempty"`
+	Power            *int64 `json:"power,omitempty"`
+	HeroPower        *int64 `json:"hero_power,omitempty"`
+	BaseLevel        *int   `json:"base_level,omitempty"`
+}
+
+// LastRankCommitRequest is the Phase-1 confirm payload.
+type LastRankCommitRequest struct {
+	CaptureDate string                    `json:"capture_date"` // echoed alliance last_seen_at → recorded_at
+	Members     []LastRankCommitMember    `json:"members"`
+	Unmatched   []LastRankUnmatchedAction `json:"unmatched"`
+	Archive     []int                     `json:"archive"` // member IDs to archive (rank → EX)
+}
+
+// LastRankPlayerSyncRequest triggers one Phase-2 per-player fetch+write.
+type LastRankPlayerSyncRequest struct {
+	MemberID int `json:"member_id"`
+}
+
+// LastRankPlayerSyncResponse is one Phase-2 per-player result for the row UI.
+type LastRankPlayerSyncResponse struct {
+	MemberID     int    `json:"member_id"`
+	LastRankName string `json:"lastrank_name"`
+	Kills        *int64 `json:"kills"`
+	KillsApplied bool   `json:"kills_applied"`
+	SkipReason   string `json:"skip_reason,omitempty"` // "unchanged" | "stale" | "no_id"
+	CaptureDate  string `json:"capture_date"`
+	SyncedAt     string `json:"synced_at"`
+}
+
+// LastRankFinishRequest logs one summary activity row at the end of a browser-
+// driven batch (Phase-2 extended sync, or a recruiting bulk refresh).
+type LastRankFinishRequest struct {
+	Kind            string `json:"kind"` // "extended" | "prospects"
+	MembersSynced   int    `json:"members_synced"`
+	KillRecords     int    `json:"kill_records"`
+	ProspectsSynced int    `json:"prospects_synced"`
+}
+
+// LastRankProspectLookupRequest fetches a prospect's player data on demand.
+// LastRankInput (optional) is a pasted URL or bare id to store before fetching.
+// Bulk suppresses the per-call activity log (the bulk loop logs once via finish).
+type LastRankProspectLookupRequest struct {
+	ProspectID    int    `json:"prospect_id"`
+	LastRankInput string `json:"lastrank_input,omitempty"`
+	Bulk          bool   `json:"bulk,omitempty"`
+}
+
+// LastRankProspectLookupResponse is the recruiting on-demand lookup result.
+type LastRankProspectLookupResponse struct {
+	ProspectID       int    `json:"prospect_id"`
+	LastRankPublicID int    `json:"lastrank_public_id"`
+	LastRankName     string `json:"lastrank_name"`
+	Power            *int64 `json:"power"`
+	HeroPower        *int64 `json:"hero_power"`
+	AllianceAbbr     string `json:"alliance_abbr"`
+	AllianceName     string `json:"alliance_name"`
+	ServerID         int    `json:"server_id"`
+	BaseLevel        *int   `json:"base_level"`
+	Rank             string `json:"rank"`
+	CaptureDate      string `json:"capture_date"`
+	Updated          bool   `json:"updated"` // persisted power/hero to the prospect record
 }

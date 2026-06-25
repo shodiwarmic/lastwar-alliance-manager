@@ -30,6 +30,25 @@
                             <input type="text" id="alliance-tag" class="form-input" maxlength="10" placeholder="e.g. WARMC">
                             <span class="help-text">Short tag shown beside the app subtitle (e.g. [WARMC] · Alliance Manager). Leave blank to hide.</span>
                         </div>
+                        <div class="form-group">
+                            <label for="lastrank-alliance-id">LastRank Alliance ID:</label>
+                            <input type="text" id="lastrank-alliance-id" class="form-input" placeholder="7dd57e38b63d4a3989a0f603156398b3">
+                            <span id="lastrank-alliance-view" class="help-text" style="display:block;"></span>
+                            <span class="help-text">
+                                Links the roster sync to your alliance on
+                                <a href="https://lastrank.fun" target="_blank" rel="noopener noreferrer">lastrank.fun</a>.
+                                Paste either the 32-character ID or the full alliance page URL
+                                (<code>https://lastrank.fun/a/&lt;id&gt;</code>) — we'll extract the ID.
+                                <details style="margin-top:6px;">
+                                    <summary style="cursor:pointer;">How do I find it?</summary>
+                                    <ol style="margin:6px 0 0 1.1em;padding:0;">
+                                        <li>Open <a href="https://lastrank.fun" target="_blank" rel="noopener noreferrer">lastrank.fun</a> and search your alliance tag.</li>
+                                        <li>Open your alliance's page.</li>
+                                        <li>Copy the page URL (or the code after <code>/a/</code>) and paste it above.</li>
+                                    </ol>
+                                </details>
+                            </span>
+                        </div>
                     </div>
 
                     <div class="settings-group">

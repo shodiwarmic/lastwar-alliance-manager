@@ -212,14 +212,14 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if rec.Category == "power" {
-			if _, err := tx.Exec("INSERT INTO power_history (member_id, power) VALUES (?, ?)", rec.MemberID, rec.Score); err != nil {
+			if _, err := tx.Exec("INSERT INTO power_history (member_id, power, source) VALUES (?, ?, 'mobile')", rec.MemberID, rec.Score); err != nil {
 				slog.Error("mobileCommit: power insert failed", "error", err)
 				commitErrors = append(commitErrors, fmt.Sprintf("power insert failed for member_id %d: database error", rec.MemberID))
 			} else {
 				powerRecordsSaved++
 			}
 		} else if rec.Category == "kills" {
-			if _, err := tx.Exec("INSERT INTO kill_history (member_id, kills) VALUES (?, ?)", rec.MemberID, rec.Score); err != nil {
+			if _, err := tx.Exec("INSERT INTO kill_history (member_id, kills, source) VALUES (?, ?, 'mobile')", rec.MemberID, rec.Score); err != nil {
 				slog.Error("mobileCommit: kills insert failed", "error", err)
 				commitErrors = append(commitErrors, fmt.Sprintf("kills insert failed for member_id %d: database error", rec.MemberID))
 			} else {

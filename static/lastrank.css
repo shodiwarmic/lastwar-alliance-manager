@@ -1,0 +1,131 @@
+/* lastrank.css — LastRank sync section on the Members page + review modal.
+   Page-specific layout only; relies on global .card/.btn/.status-msg/.data-table. */
+
+.lastrank-section {
+    margin-bottom: 20px;
+}
+
+.lastrank-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: clamp(14px, 2.5vw, 22px);
+}
+
+.lastrank-help {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 8px 0 14px;
+    max-width: 70ch;
+}
+
+.lastrank-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Phase-2 per-member progress list */
+.lastrank-progress {
+    margin-top: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.lr-prog-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.88rem;
+}
+
+.lr-prog-row:last-child { border-bottom: none; }
+.lr-prog-name { color: var(--text-primary); }
+.lr-prog-status { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
+.lr-prog-row.active { background: var(--bg-secondary); }
+.lr-prog-row.active .lr-prog-status { color: var(--color-primary); }
+.lr-prog-row.done .lr-prog-status { color: var(--color-success); }
+.lr-prog-row.skip .lr-prog-status { color: var(--text-muted); }
+.lr-prog-row.err .lr-prog-status { color: var(--color-danger); }
+
+/* Review modal */
+.lastrank-meta {
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+
+.lastrank-meta strong { color: var(--text-primary); }
+
+.lastrank-review-body {
+    max-height: 55vh;
+    overflow-y: auto;
+}
+
+.lr-group-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 16px 0 8px;
+    font-size: 0.95rem;
+}
+
+.lr-empty {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    font-style: italic;
+    margin: 6px 0;
+}
+
+.lr-row {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.lr-row-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.lr-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.86rem;
+    color: var(--text-secondary);
+    padding: 2px 0;
+}
+
+.lr-field input[type="checkbox"] { width: 15px; height: 15px; }
+.lr-field .lr-new { color: var(--text-primary); font-weight: 600; }
+.lr-field.lr-rank .lr-new { color: var(--color-warning); }
+.lr-field.lr-skip { color: var(--text-muted); }
+
+.lr-unmatched-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.lr-unmatched-controls select {
+    flex: 1 1 160px;
+    min-width: 140px;
+}
+
+.lr-summary {
+    color: var(--text-muted);
+    font-size: 0.86rem;
+    margin: 8px 0 4px;
+}

@@ -38,6 +38,11 @@
                 <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg></span>
                 <span class="btn-text">Add Transfer</span>
             </button>
+            <button type="button" class="btn btn-secondary lastrank-bulk-btn" data-type="transfer">
+                <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg></span>
+                <span class="btn-text">Refresh from LastRank</span>
+            </button>
+            <span class="status-msg lastrank-bulk-status" data-type="transfer"></span>
         </div>
         {{end}}
         <div id="transfers-list">
@@ -53,6 +58,11 @@
                 <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg></span>
                 <span class="btn-text">Add Prospect</span>
             </button>
+            <button type="button" class="btn btn-secondary lastrank-bulk-btn" data-type="prospect">
+                <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg></span>
+                <span class="btn-text">Refresh from LastRank</span>
+            </button>
+            <span class="status-msg lastrank-bulk-status" data-type="prospect"></span>
         </div>
         {{end}}
         <div id="prospects-list">
@@ -79,6 +89,28 @@
 {{end}}
 
 {{define "modals"}}
+    <!-- LastRank Prospect Lookup Modal -->
+    <div id="lastrank-prospect-modal" class="modal">
+        <div class="modal-content modal-md">
+            <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> LastRank Lookup</h2>
+            <p class="help-text" id="lr-prospect-name" style="font-weight:600;"></p>
+            <ol class="help-text" style="margin:0 0 10px 1.1em;padding:0;">
+                <li><a id="lr-prospect-search" href="#" target="_blank" rel="noopener noreferrer">Search this player on LastRank</a> (opens a new tab).</li>
+                <li>Open the correct player, then copy the page URL (or the number after <code>/p/</code>).</li>
+                <li>Paste it below and fetch.</li>
+            </ol>
+            <div class="form-group">
+                <label for="lr-prospect-input">LastRank player URL or ID:</label>
+                <input type="text" id="lr-prospect-input" class="form-input" placeholder="https://lastrank.fun/p/1585224  — or just 1585224">
+            </div>
+            <div id="lr-prospect-result" class="status-msg"></div>
+            <div class="modal-actions">
+                <button type="button" id="lr-prospect-fetch-btn" class="btn btn-primary">Fetch</button>
+                <button type="button" id="lr-prospect-close-btn" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Reactivate Modal -->
     <div id="reactivate-modal" class="modal">
         <div class="modal-content modal-sm">

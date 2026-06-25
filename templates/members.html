@@ -1,5 +1,6 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="/members.css">
+<link rel="stylesheet" href="/lastrank.css">
 {{end}}
 
 {{define "header_text"}}
@@ -18,6 +19,9 @@
                 <button type="button" id="import-csv-trigger-btn" class="btn btn-secondary">
                     <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-download"/></svg> Import CSV
                 </button>
+                <button type="button" id="lastrank-trigger-btn" class="btn btn-secondary" style="display:none;">
+                    <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Sync from LastRank
+                </button>
             </div>
 
             <section class="csv-import-section" id="csv-import-section" style="display: none;">
@@ -30,6 +34,28 @@
                         <button type="button" id="cancel-import-btn" class="btn btn-secondary">Cancel</button>
                     </div>
                     <div id="import-result" class="import-result" style="display: none;"></div>
+                </div>
+            </section>
+
+            <section class="lastrank-section" id="lastrank-section" style="display: none;">
+                <div class="lastrank-card">
+                    <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Sync from LastRank</h4>
+                    <p class="lastrank-help">
+                        Pull power, hero power, HQ level and rank from
+                        <a href="https://lastrank.fun" target="_blank" rel="noopener noreferrer">lastrank.fun</a>.
+                        Stat updates apply only when newer than your data; rank changes and unmatched names are shown for review.
+                        Extended info (troop kills) is gathered per player and is slower.
+                    </p>
+                    <div class="lastrank-actions">
+                        <button type="button" id="lastrank-fetch-btn" class="btn btn-primary">
+                            <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Fetch Alliance Data
+                        </button>
+                        <button type="button" id="lastrank-extended-btn" class="btn btn-secondary">
+                            <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-crosshair"/></svg> Gather Extended Info (Kills)
+                        </button>
+                        <span id="lastrank-status" class="status-msg"></span>
+                    </div>
+                    <div id="lastrank-extended-progress" class="lastrank-progress" style="display: none;"></div>
                 </div>
             </section>
 
@@ -249,6 +275,12 @@
                     <textarea id="member-notes" class="form-input" rows="3" placeholder="Internal notes visible to officers only..."></textarea>
                 </div>
 
+                <div id="modal-lastrank-section" class="form-group" style="display: none;">
+                    <label for="member-lastrank-id">LastRank Player ID:</label>
+                    <input type="text" id="member-lastrank-id" class="form-input" placeholder="Paste lastrank.fun URL or ID — leave blank to clear">
+                    <span id="member-lastrank-link" class="help-text">Set automatically when synced. Edit or clear here to fix a mistaken pairing.</span>
+                </div>
+
                 {{if .SkillLabels}}
                 <div class="form-group">
                     <label>Skills:</label>
@@ -342,6 +374,18 @@
         </div>
     </div>
 
+    <div id="lastrank-modal" class="modal">
+        <div class="modal-content modal-lg">
+            <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Review LastRank Sync</h2>
+            <div id="lastrank-alliance-meta" class="lastrank-meta"></div>
+            <div id="lastrank-review-body" class="lastrank-review-body"></div>
+            <div class="modal-actions">
+                <button type="button" id="lastrank-confirm-btn" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-check"/></svg> Apply Selected Changes</button>
+                <button type="button" id="lastrank-cancel-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <div id="invite-link-modal" class="modal">
         <div class="modal-content modal-md">
             <h2>Invite Link</h2>
@@ -368,4 +412,5 @@
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 <script src="/members.js"></script>
+<script src="/lastrank.js"></script>
 {{end}}
