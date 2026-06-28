@@ -1,0 +1,20 @@
+# refresh-dev-db.conf — local config for refresh-dev-db.sh
+#
+# Copy this file to refresh-dev-db.conf (gitignored) and edit it:
+#     cp refresh-dev-db.conf.example refresh-dev-db.conf
+#
+# It is sourced by the script, so use shell syntax (VAR="value"). Any value set here —
+# or exported in the environment — overrides the script's default.
+
+# ─── REQUIRED: production server ────────────────────────────────────────────────
+PROD_SSH="user@your-prod-host"            # ssh target (uses your ~/.ssh config / keys)
+PROD_DIR="/opt/lastwar-alliance-manager"  # compose project dir on prod (contains ./data and ./uploads)
+
+# ─── OPTIONAL: override only if your setup differs from these defaults ───────────
+# DEV_DIR="/home/you/lastwar-alliance-manager"  # defaults to the script's own dir
+# DB_NAME="alliance.db"                          # DB filename inside ./data (matches DATABASE_PATH)
+# DEV_SERVICE="alliance-manager"                 # compose service to stop/start
+# APP_UID="1001"                                 # in-container app user that must own the files
+# IMG="alpine:latest"                            # throwaway image used for sqlite/tar work
+# SYNC_UPLOADS="1"                               # 1 = pull prod ./uploads (Files feature); 0 = skip
+# SYNC_OCR_ARCHIVE="0"                           # 1 = pull prod ./data/ocr-archive (bulky); 0 = skip
