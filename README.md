@@ -33,7 +33,7 @@ A comprehensive, self-hosted web application for managing your alliance in the o
 - **VS Performance Card**: Current week total points, average per member, percentage meeting the configured minimum, and top/bottom 3 contributors. The minimum threshold is configurable in Settings.
 - **Schedule Card**: The next 3 upcoming events from the active alliance schedule.
 - **Diplomacy Card**: Active allies with their agreement type tags.
-- **Leader Flags Card** *(R4/R5 only)*: Members falling below the weekly VS minimum, sorted by total. Helps officers identify who needs follow-up without manually scanning the VS page.
+- **Leader Flags Card** *(R4/R5 only)*: Members who fell below the **VS daily minimum** on N or more completed days this week (N is the configurable "Flag After N Days" setting), sorted by days missed. Only days that have finished and been imported are counted, so partial-week data doesn't cause false flags. Helps officers identify who needs follow-up without manually scanning the VS page.
 - **Members page** is still accessible via its own nav link at `/members`.
 
 ### 📈 Analytics & Activity Dashboard
@@ -130,7 +130,7 @@ A central hub for all alliance-wide mail templates, announcements, and reference
 - **Train No-Show Tracking**: Officers can mark any train log entry as a no-show directly from the Train Tracker page. Doing so auto-creates an accountability strike; toggling it back removes the strike.
 - **Storm Attendance Logging**: Officers log post-event storm attendance from the Accountability page — select the storm date, then mark each member as attended, no-show, or excused with an optional reason.
 - **Member Profile**: Each member has a dedicated accountability profile showing their current tag and strike count, full strike history (with excuse/delete controls for officers), VS history for the last 8 weeks, storm attendance history, and train log.
-- **Weekly Report**: A summary page showing top VS performers, members below the VS minimum, top power growth, and a breakdown of members by tag.
+- **Weekly Report**: A summary page showing top VS performers, members below the VS daily minimum, top power growth, and a breakdown of members by tag.
 - **Dashboard Card**: An Accountability card on the dashboard surfaces the At Risk / Needs Improvement / Reliable counts and the three members with the most active strikes at a glance.
 - **Permission-Gated Access**: `view_accountability` and `manage_accountability` default to R4/R5. Members cannot view their own accountability profile.
 

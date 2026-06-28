@@ -161,9 +161,14 @@
                     <div class="settings-group">
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> VS Points</h4>
                         <div class="form-group">
-                            <label for="vs-minimum-points">VS Minimum Points:</label>
+                            <label for="vs-minimum-points">VS Daily Minimum Points:</label>
                             <input type="number" id="vs-minimum-points" class="form-input" min="0" step="100000" required>
-                            <span class="help-text">Weekly VS points threshold shown on the Dashboard. Members below this total appear in the Leader Flags section for R4/R5.</span>
+                            <span class="help-text">Minimum VS points expected per member per day. Used by the Dashboard and Accountability to flag members.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="vs-flag-days">Flag After N Days Below Minimum:</label>
+                            <input type="number" id="vs-flag-days" class="form-input" min="1" max="6" required>
+                            <span class="help-text">Members are flagged when they fall below the daily minimum on this many completed days in the current VS week (1–6).</span>
                         </div>
                     </div>
 

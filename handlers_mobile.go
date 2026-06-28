@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 )
 
 var validMobileCategories = map[string]bool{
@@ -157,11 +156,13 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate week_date format
-	if _, err := time.Parse("2006-01-02", req.WeekDate); err != nil {
+	// Validate + snap to the game-time VS-week Monday so the client clock can't misfile the week.
+	normWeek, err := normalizeToGameWeekMonday(req.WeekDate)
+	if err != nil {
 		http.Error(w, "Invalid week_date: must be YYYY-MM-DD", http.StatusBadRequest)
 		return
 	}
+	req.WeekDate = normWeek
 
 	tx, err := db.Begin()
 	if err != nil {

@@ -58,6 +58,80 @@ func getMondayOfWeek(date time.Time) time.Time {
 	return date.AddDate(0, 0, offset)
 }
 
+// --- Game-time clock (single source of truth) ---
+//
+// The game day rolls over at a FIXED 02:00 UTC (10PM EDT / 9PM EST) — i.e. a fixed
+// UTC-2 offset with NO daylight saving. Do NOT use a DST zone like America/New_York;
+// the boundary is a constant UTC instant. VS weeks run Mon–Sat with week_date = the Monday.
+var gameLoc = time.FixedZone("Game (UTC-2)", -2*3600)
+
+// gameNow returns the current time in game time (UTC-2).
+func gameNow() time.Time { return time.Now().In(gameLoc) }
+
+// gameDate returns the current date in game time as "YYYY-MM-DD".
+func gameDate() string { return gameNow().Format("2006-01-02") }
+
+// gameWeekdayAt returns the game-time weekday of t with Mon=0 … Sun=6.
+func gameWeekdayAt(t time.Time) int { return (int(t.In(gameLoc).Weekday()) + 6) % 7 }
+
+// gameWeekday returns the current game-time weekday with Mon=0 … Sun=6.
+func gameWeekday() int { return gameWeekdayAt(time.Now()) }
+
+// completedVSDays returns how many VS days (Mon–Sat) have fully finished in the
+// current game-time week. Mon=0 … Sat=5, Sun=6 (days strictly before today).
+func completedVSDays() int { return gameWeekday() }
+
+// gameWeekStart returns the Monday (YYYY-MM-DD) of the VS week containing t,
+// going back weeksBack full weeks. VS weeks run Mon–Sat.
+func gameWeekStart(t time.Time, weeksBack int) string {
+	gt := t.In(gameLoc)
+	dow := (int(gt.Weekday()) + 6) % 7 // Mon=0 … Sun=6
+	monday := gt.AddDate(0, 0, -dow-weeksBack*7)
+	return monday.Format("2006-01-02")
+}
+
+// currentVSWeekMonday returns the Monday of the current game-time VS week.
+func currentVSWeekMonday() string { return gameWeekStart(time.Now(), 0) }
+
+// effectiveVSWeekAt returns the VS week to evaluate for the moment `now` and how
+// many of its days are complete. On Monday game-time (0 completed days) it falls
+// back to the previous, fully-finished week so flag/stat views show real data
+// instead of an empty week.
+func effectiveVSWeekAt(now time.Time) (weekDate string, completedDays int) {
+	if c := gameWeekdayAt(now); c > 0 {
+		return gameWeekStart(now, 0), c
+	}
+	return gameWeekStart(now, 1), 6
+}
+
+// effectiveVSWeek is effectiveVSWeekAt for the current moment.
+func effectiveVSWeek() (weekDate string, completedDays int) {
+	return effectiveVSWeekAt(time.Now())
+}
+
+// dayDate returns the date (YYYY-MM-DD) `add` days after a YYYY-MM-DD base.
+// Parsing is UTC (no DST), so AddDate increments exactly one calendar day.
+func dayDate(base string, add int) string {
+	t, err := parseDate(base)
+	if err != nil {
+		return base
+	}
+	return formatDateString(t.AddDate(0, 0, add))
+}
+
+// normalizeToGameWeekMonday snaps a client-supplied date-only week_date (YYYY-MM-DD)
+// to the Monday of the calendar week (Mon–Sun) that contains it, so CSV/mobile/save
+// writers can't misfile week_date. It does NOT apply the game-time instant shift —
+// the input is a calendar date with no time-of-day, so shifting it -2h would wrongly
+// roll a Monday back to the previous week.
+func normalizeToGameWeekMonday(dateStr string) (string, error) {
+	t, err := parseDate(dateStr)
+	if err != nil {
+		return "", err
+	}
+	return formatDateString(getMondayOfWeek(t)), nil
+}
+
 // Generate random alphanumeric password
 func generateRandomPassword(length int) (string, error) {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"

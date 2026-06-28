@@ -79,6 +79,14 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Snap to the game-time VS-week Monday so the client clock can't misfile the week.
+	if normWeek, err := normalizeToGameWeekMonday(req.WeekDate); err != nil {
+		http.Error(w, "Invalid week_date: must be YYYY-MM-DD", http.StatusBadRequest)
+		return
+	} else {
+		req.WeekDate = normWeek
+	}
+
 	// Datapoint provenance: 'ocr' (upload.js) or 'csv' (vs.js); else 'import'.
 	src := provenanceSource(req.Source)
 

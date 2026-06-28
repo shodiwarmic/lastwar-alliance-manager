@@ -90,6 +90,14 @@ func saveVSPoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Snap to the game-time VS-week Monday so the browser clock can't misfile the week.
+	normWeek, err := normalizeToGameWeekMonday(data.WeekDate)
+	if err != nil {
+		http.Error(w, "Invalid week_date: must be YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+	data.WeekDate = normWeek
+
 	tx, err := db.Begin()
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -465,18 +473,13 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate VS week date
-	now := time.Now()
+	// Calculate VS week date in game time (UTC-2), so the stored week_date matches
+	// the game-time Monday the dashboard/accountability evaluate against.
+	weeksBack := 0
 	if weekParam == "last" {
-		now = now.AddDate(0, 0, -7)
+		weeksBack = 1
 	}
-	weekday := now.Weekday()
-	daysFromMonday := int(weekday) - 1
-	if weekday == time.Sunday {
-		daysFromMonday = 6
-	}
-	monday := now.AddDate(0, 0, -daysFromMonday)
-	weekDate := monday.Format("2006-01-02")
+	weekDate := gameWeekStart(time.Now(), weeksBack)
 
 	tx, err := db.Begin()
 	if err != nil {

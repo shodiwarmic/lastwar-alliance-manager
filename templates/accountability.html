@@ -32,7 +32,7 @@
         </div>
 
         <div id="vs-flag-banner" style="display:none" class="acc-flag-banner">
-            <strong class="icon-label"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> Members below VS minimum this week:</strong>
+            <strong class="icon-label"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> <span id="vs-flag-heading">Members below the VS daily minimum:</span></strong>
             <span id="vs-flag-names"></span>
             {{if .Permissions.ManageAccountability}}
             <button id="btn-add-vs-strikes" class="btn btn-warning btn-sm" style="margin-left:8px;">Add VS Strikes</button>
@@ -168,6 +168,9 @@
 
 {{define "scripts"}}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
-<div id="page-config" data-can-manage="{{if .Permissions.ManageAccountability}}true{{else}}false{{end}}" hidden></div>
+<div id="page-config" data-can-manage="{{if .Permissions.ManageAccountability}}true{{else}}false{{end}}"
+     data-vs-completed="{{.VSCompletedDays}}"
+     data-vs-imported-completed="{{.VSImportedCompleted}}"
+     data-vs-fallback="{{if .VSFallbackActive}}true{{else}}false{{end}}" hidden></div>
 <script src="/accountability.js"></script>
 {{end}}

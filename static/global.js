@@ -1,5 +1,22 @@
 // static/global.js - Global JavaScript for handling mobile menu, user dropdown, and logout functionality
 
+// ---- Game-time clock (single source of truth) ----
+// The game day rolls over at a FIXED 02:00 UTC (10PM EDT / 9PM EST) — a fixed UTC-2
+// offset with NO daylight saving. The raw shifted Date is kept private so callers can't
+// accidentally read local-zone fields on it; only derived string/number helpers are
+// exposed (read via getUTC* internally). Do NOT use a DST zone like America/New_York.
+(function () {
+    const GAME_UTC_OFFSET_HOURS = -2;
+    const gt = () => new Date(Date.now() + GAME_UTC_OFFSET_HOURS * 3600 * 1000); // PRIVATE: read UTC only
+    window.gameDateStr = () => gt().toISOString().slice(0, 10);          // YYYY-MM-DD in game time
+    window.gameWeekday = () => (gt().getUTCDay() + 6) % 7;               // Mon=0 … Sun=6
+    window.currentVSWeekMonday = () => {                                 // Monday of the current game VS week
+        const d = gt();
+        d.setUTCDate(d.getUTCDate() - window.gameWeekday());
+        return d.toISOString().slice(0, 10);
+    };
+})();
+
 // ---- Table export (CSV + XLSX) ----
 
 function _extractTableData(tableEl) {

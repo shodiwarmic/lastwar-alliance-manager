@@ -1,8 +1,5 @@
 'use strict';
 
-// Game server is UTC-2 (same constant as storm.js)
-const SERVER_UTC_OFFSET = -2;
-
 function escapeHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -11,14 +8,10 @@ const cfg = document.getElementById('page-config').dataset;
 const CAN_MANAGE = cfg.canManage === 'true';
 
 // ── Game-time helpers ─────────────────────────────────────────────────────────
-
-function gameNow() {
-    return new Date(Date.now() + SERVER_UTC_OFFSET * 3600 * 1000);
-}
+// gameDateStr() is the shared game-time (UTC-2) date helper from global.js.
 
 function gameToday() {
-    const d = gameNow();
-    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+    return gameDateStr(); // YYYY-MM-DD in game time
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────

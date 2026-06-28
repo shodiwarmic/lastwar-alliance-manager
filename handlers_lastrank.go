@@ -360,7 +360,10 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 			if u.LastRankPublicID != 0 {
 				pubID = u.LastRankPublicID
 			}
-			res, err := tx.Exec("INSERT INTO members (name, rank, level, eligible, lastrank_public_id) VALUES (?, ?, 0, 1, ?)", u.LastRankName, rank, pubID)
+			// New member discovered via LastRank → default joined_at to today.
+			// TODO(joined-at UI): once the member join-date UI lands, prompt for the join
+			// date in the LastRank confirmation step instead of defaulting to today.
+			res, err := tx.Exec("INSERT INTO members (name, rank, level, eligible, lastrank_public_id, joined_at) VALUES (?, ?, 0, 1, ?, ?)", u.LastRankName, rank, pubID, gameDate())
 			if err == nil {
 				addN++
 				if u.ApplyStats {

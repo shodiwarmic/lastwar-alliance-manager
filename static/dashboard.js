@@ -5,6 +5,13 @@ const VS_MINIMUM = Number(cfg.vsMinimum) || 2500000;
 const USER_RANK  = cfg.userRank || '';
 const IS_ADMIN   = cfg.isAdmin === 'true';
 
+// Server-authoritative evaluated VS week (Monday fallback) — never recompute from the
+// browser clock, so the dashboard and accountability agree on the week.
+const VS_FLAG_DAYS = parseInt(cfg.vsFlagDays, 10) || 2;
+const VS_WEEK      = cfg.vsWeek || '';
+const VS_COMPLETED = parseInt(cfg.vsCompleted, 10) || 0;
+const VS_FALLBACK  = cfg.vsFallback === 'true';
+
 // --- Card metadata ---
 
 const CARD_META = {
@@ -38,23 +45,52 @@ function vsTotal(row) {
     return VS_DAYS.reduce((s, d) => s + (row[d] || 0), 0);
 }
 
-// --- Schedule: map day_number to a calendar date ---
-// day_number is 1-based. Within each 7-day block, position 1=Mon...7=Sun.
-// We align by treating Mon of the current week as position 1.
-function getWeekStart() {
-    const now = new Date();
-    const dow = now.getDay(); // 0=Sun,1=Mon...6=Sat
-    const offsetToMonday = (dow === 0) ? -6 : 1 - dow;
-    const monday = new Date(now);
-    monday.setHours(0, 0, 0, 0);
-    monday.setDate(now.getDate() + offsetToMonday);
-    return monday;
+// dayImportedForWeek returns, per VS day, whether it is both completed and imported
+// (any member has a non-zero score for it this week). Un-imported completed days are
+// skipped when flagging so import lag doesn't generate false "below minimum" flags.
+function dayImportedForWeek(vsRows) {
+    return VS_DAYS.map((d, i) => i < VS_COMPLETED && vsRows.some(r => (r[d] || 0) > 0));
+}
+
+// countDaysBelowMinimum counts completed + imported + post-join days below the daily
+// minimum. A missing row counts those applicable days as 0 (→ below). Mirrors Go vsDaysBelow.
+function countDaysBelowMinimum(row, min, joinedAt, dayImported) {
+    let count = 0;
+    for (let i = 0; i < VS_COMPLETED; i++) {
+        if (!dayImported[i]) continue;                                 // not imported yet
+        if (joinedAt && addGameDays(VS_WEEK, i) < joinedAt) continue;  // before the member joined
+        const v = row ? (row[VS_DAYS[i]] ?? 0) : 0;
+        if (v < min) count++;
+    }
+    return count;
+}
+
+function importedCompletedCount(dayImported) {
+    return dayImported.filter(Boolean).length;
+}
+
+// Appends the "(last week)" heading suffix (Monday fallback) and the import-lag note
+// to a dashboard card, so officers know which week and how much data the flags reflect.
+function appendWeekNotes(card, dayImported) {
+    if (VS_FALLBACK) {
+        const h3 = card.querySelector('h3');
+        if (h3) h3.appendChild(el('span', {
+            className: 'dash-week-note',
+            title: 'Current VS week has no completed days yet — showing last week',
+            textContent: ' (last week)',
+        }));
+    }
+    const imp = importedCompletedCount(dayImported);
+    if (imp < VS_COMPLETED) {
+        card.appendChild(el('p', {
+            className: 'dash-week-note',
+            textContent: `Flags based on ${imp} of ${VS_COMPLETED} completed days imported so far.`,
+        }));
+    }
 }
 
 function todayGameDateStr() {
-    // Game time = UTC-2
-    const d = new Date(Date.now() - 2 * 3600 * 1000);
-    return d.toISOString().slice(0, 10);
+    return gameDateStr(); // shared game-time (UTC-2) helper from global.js
 }
 
 function addGameDays(dateStr, n) {
@@ -134,7 +170,7 @@ function renderHealth(card, members) {
     card.appendChild(grid);
 }
 
-function renderVS(card, vsRows) {
+function renderVS(card, vsRows, members, joinedAtById, dayImported) {
     const totals = vsRows
         .filter(r => r.member_rank !== 'EX')
         .map(r => ({ name: r.member_name, rank: r.member_rank, total: vsTotal(r) }));
@@ -142,12 +178,21 @@ function renderVS(card, vsRows) {
 
     const weekTotal = totals.reduce((s, r) => s + r.total, 0);
     const avg = totals.length ? Math.round(weekTotal / totals.length) : 0;
-    const above = totals.filter(r => r.total >= VS_MINIMUM).length;
+
+    // On Track = active members not flagged (below daily min on < N imported days).
+    // Denominator is active members (not just rows present), so un-imported members count.
+    const rowById = {};
+    vsRows.forEach(r => { rowById[r.member_id] = r; });
+    const active = (members || []).filter(m => m.rank !== 'EX');
+    const onTrack = active.filter(m =>
+        countDaysBelowMinimum(rowById[m.id], VS_MINIMUM, joinedAtById[m.id], dayImported) < VS_FLAG_DAYS
+    ).length;
+    const onTrackLabel = importedCompletedCount(dayImported) === 0 ? '—' : fmtPct(onTrack, active.length);
 
     const grid = el('div', { className: 'dash-stat-grid' });
     grid.appendChild(statCell(fmtNumber(weekTotal), 'Week Total'));
     grid.appendChild(statCell(fmtNumber(avg), 'Avg/Member'));
-    grid.appendChild(statCell(fmtPct(above, totals.length), '≥ Min'));
+    grid.appendChild(statCell(onTrackLabel, 'On Track'));
 
     const topLabel = el('p', { className: 'dash-section-label', textContent: 'Top 3' });
     const topList = el('ul', { className: 'dash-list' });
@@ -169,6 +214,7 @@ function renderVS(card, vsRows) {
 
     card.querySelector('.dash-card-loading')?.remove();
     card.append(grid, topLabel, topList, botLabel, botList);
+    appendWeekNotes(card, dayImported);
 }
 
 function renderSchedule(card, events) {
@@ -234,30 +280,38 @@ function renderDiplomacy(card, allies, agreementTypes) {
     card.appendChild(list);
 }
 
-function renderLeaderFlags(card, members, vsRows) {
-    const totals = {};
-    vsRows.forEach(r => { totals[r.member_id] = vsTotal(r); });
+function renderLeaderFlags(card, members, vsRows, joinedAtById, dayImported) {
+    card.querySelector('.dash-card-loading')?.remove();
+
+    // Empty/no-import guard: if no completed day is imported, there's nothing to judge.
+    if (importedCompletedCount(dayImported) === 0) {
+        card.appendChild(el('p', { textContent: 'No VS data for this week yet.' }));
+        appendWeekNotes(card, dayImported);
+        return;
+    }
+
+    const rowById = {};
+    vsRows.forEach(r => { rowById[r.member_id] = r; });
 
     const below = members
         .filter(m => m.rank !== 'EX')
-        .filter(m => {
-            const t = totals[m.id] ?? null;
-            return t !== null && t < VS_MINIMUM;
-        })
-        .map(m => ({ name: m.name, rank: m.rank, total: totals[m.id] }))
-        .sort((a, b) => a.total - b.total);
-
-    card.querySelector('.dash-card-loading')?.remove();
+        .map(m => ({
+            name: m.name, rank: m.rank,
+            daysBelow: countDaysBelowMinimum(rowById[m.id], VS_MINIMUM, joinedAtById[m.id], dayImported),
+        }))
+        .filter(m => m.daysBelow >= VS_FLAG_DAYS)
+        .sort((a, b) => b.daysBelow - a.daysBelow || a.name.localeCompare(b.name));
 
     if (!below.length) {
         const p = el('p');
-        p.append(svgIcon('check'), document.createTextNode(' All members are meeting the VS minimum this week.'));
+        p.append(svgIcon('check'), document.createTextNode(' All members are meeting the VS daily minimum.'));
         card.appendChild(p);
+        appendWeekNotes(card, dayImported);
         return;
     }
 
     const label = el('p', { className: 'dash-section-label' });
-    label.textContent = 'Below VS minimum (' + fmtNumber(VS_MINIMUM) + ')';
+    label.textContent = 'Below daily min (' + fmtNumber(VS_MINIMUM) + ') on ' + VS_FLAG_DAYS + '+ days';
     card.appendChild(label);
 
     const list = el('ul', { className: 'dash-list' });
@@ -267,10 +321,11 @@ function renderLeaderFlags(card, members, vsRows) {
             r.name + ' ',
             el('span', { className: `member-rank rank-${r.rank}` }, r.rank)
         ));
-        li.appendChild(el('span', { className: 'dash-list-value', textContent: fmtNumber(r.total) }));
+        li.appendChild(el('span', { className: 'dash-list-value', textContent: r.daysBelow + ' day' + (r.daysBelow !== 1 ? 's' : '') }));
         list.appendChild(li);
     });
     card.appendChild(list);
+    appendWeekNotes(card, dayImported);
 }
 
 function renderAccountability(card, data) {
@@ -408,7 +463,8 @@ async function boot() {
 
     // Determine which cards we need data for
     const visibleIds = new Set(currentPrefs.filter(p => p.visible !== false).map(p => p.id));
-    const needMembers       = visibleIds.has('health') || visibleIds.has('leader-flags');
+    // VS card needs members too (for the On Track denominator + joined_at offset).
+    const needMembers       = visibleIds.has('health') || visibleIds.has('leader-flags') || visibleIds.has('vs');
     const needVS            = visibleIds.has('vs')     || visibleIds.has('leader-flags');
     const needSchedule      = visibleIds.has('schedule');
     const needAllies        = visibleIds.has('diplomacy');
@@ -427,7 +483,7 @@ async function boot() {
     // Fetch data in parallel
     const fetches = {};
     if (needMembers)  fetches.members  = fetch('/api/members').then(r => r.ok ? r.json() : Promise.reject());
-    if (needVS)       fetches.vs       = fetch('/api/vs-points').then(r => r.ok ? r.json() : Promise.reject());
+    if (needVS)       fetches.vs       = fetch('/api/vs-points?week=' + encodeURIComponent(VS_WEEK)).then(r => r.ok ? r.json() : Promise.reject());
     if (needSchedule) {
         const today = todayGameDateStr();
         const to13  = addGameDays(today, 13);
@@ -445,13 +501,19 @@ async function boot() {
         Object.entries(fetches).map(([key, p]) => p.then(v => { results[key] = v; }).catch(() => { results[key] = null; }))
     );
 
+    // Shared inputs for the VS card + Leader Flags: member→joined_at map and the
+    // per-day import gate (which completed days actually have data this week).
+    const joinedAtById = {};
+    (results.members || []).forEach(m => { joinedAtById[m.id] = m.joined_at || ''; });
+    const dayImported = results.vs ? dayImportedForWeek(results.vs) : VS_DAYS.map(() => false);
+
     // Render each visible card
     if (cardEls['health']) {
         if (results.members) renderHealth(cardEls['health'], results.members);
         else { cardEls['health'].querySelector('.dash-card-loading')?.remove(); cardEls['health'].appendChild(errorEl('Failed to load members.')); }
     }
     if (cardEls['vs']) {
-        if (results.vs) renderVS(cardEls['vs'], results.vs);
+        if (results.vs && results.members) renderVS(cardEls['vs'], results.vs, results.members, joinedAtById, dayImported);
         else { cardEls['vs'].querySelector('.dash-card-loading')?.remove(); cardEls['vs'].appendChild(errorEl('Failed to load VS data.')); }
     }
     if (cardEls['schedule']) {
@@ -463,7 +525,7 @@ async function boot() {
         else { cardEls['diplomacy'].querySelector('.dash-card-loading')?.remove(); cardEls['diplomacy'].appendChild(errorEl('Failed to load allies.')); }
     }
     if (cardEls['leader-flags']) {
-        if (results.members && results.vs) renderLeaderFlags(cardEls['leader-flags'], results.members, results.vs);
+        if (results.members && results.vs) renderLeaderFlags(cardEls['leader-flags'], results.members, results.vs, joinedAtById, dayImported);
         else { cardEls['leader-flags'].querySelector('.dash-card-loading')?.remove(); cardEls['leader-flags'].appendChild(errorEl('Failed to load leader flag data.')); }
     }
     if (cardEls['accountability']) {

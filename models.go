@@ -40,7 +40,8 @@ type Member struct {
 	GlobalAliases       string `json:"global_aliases"`
 	PersonalAliases     string `json:"personal_aliases"`
 	Notes               string `json:"notes"`
-	Skills              string `json:"skills"` // comma-separated skill keys, e.g. "medical_aid"
+	JoinedAt            string `json:"joined_at"` // YYYY-MM-DD (date-only); "" = unknown
+	Skills              string `json:"skills"`     // comma-separated skill keys, e.g. "medical_aid"
 	// LastRank linkage. PublicID is auto-captured on a successful Phase-1 match;
 	// SyncedAt is the wall-clock of our last sync for this member (drives the
 	// oldest-first ordering of the Phase-2 extended sync).
@@ -302,6 +303,7 @@ type Settings struct {
 	AllianceMaxMembers           int    `json:"alliance_max_members"`
 	JoinRequirements             string `json:"join_requirements"`
 	VSMinimumPoints              int    `json:"vs_minimum_points"`
+	VsFlagDaysThreshold          int    `json:"vs_flag_days_threshold"`
 	StrikeNeedsImprovementThreshold int `json:"strike_needs_improvement_threshold"`
 	StrikeAtRiskThreshold           int `json:"strike_at_risk_threshold"`
 	// Schedule defaults
@@ -854,7 +856,13 @@ type PageData struct {
 	HasGCPCredentials bool
 	OCRPipelineReady  bool
 	VSMinimumPoints   int
-	MemberID          int
+	// VS daily-minimum flagging (server-authoritative evaluated week — see vsEvalContext).
+	VsFlagDaysThreshold int
+	VSEvalWeek          string
+	VSCompletedDays     int
+	VSImportedCompleted int
+	VSFallbackActive    bool
+	MemberID            int
 	// OCRBackendMode is "cloud" (default — Cloud Vision auto-detect) or
 	// "local" (PaddleOCR sidecar; user picks scene per batch). Templates
 	// use this to swap help text and conditionally disable the

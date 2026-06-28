@@ -19,12 +19,12 @@ const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'sat
  * 1. DATE LOGIC & LOCALIZATION
  */
 
-function getMostRecentMonday(date = new Date()) {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = day === 0 ? 6 : day - 1;
-    d.setDate(d.getDate() - diff);
-    return d;
+function getMostRecentMonday() {
+    // Monday of the current game-time (UTC-2) VS week, as a local Date at midnight.
+    // Uses the shared currentVSWeekMonday() (global.js) so the page agrees with the
+    // server's game-time week; the server also normalizes week_date on save.
+    const [y, m, d] = currentVSWeekMonday().split('-').map(Number);
+    return new Date(y, m - 1, d);
 }
 
 function formatDate(date) {

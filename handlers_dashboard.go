@@ -36,12 +36,16 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var vsMin int
-	if err := db.QueryRow("SELECT COALESCE(vs_minimum_points, 2500000) FROM settings WHERE id = 1").Scan(&vsMin); err != nil {
-		slog.Error("dashboard: failed to read vs_minimum_points", "error", err)
-		vsMin = 2500000
-	}
+	vsMin, vsFlagDays := getVSAccountabilitySettings()
 	data.VSMinimumPoints = vsMin
+	data.VsFlagDaysThreshold = vsFlagDays
+
+	// Server-authoritative evaluated week (Monday fallback) so the dashboard and
+	// accountability agree on the week regardless of the browser clock.
+	weekDate, completed, _, _, fallbackActive := vsEvalContext()
+	data.VSEvalWeek = weekDate
+	data.VSCompletedDays = completed
+	data.VSFallbackActive = fallbackActive
 
 	renderTemplate(w, r, "dashboard.html", data)
 }

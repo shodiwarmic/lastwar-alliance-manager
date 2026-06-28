@@ -160,6 +160,14 @@
     margin: 0.75rem 0 0.25rem;
 }
 
+/* Muted "(last week)" / import-lag note on VS + Leader Flags cards. */
+.dash-week-note {
+    font-size: 0.78rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin: 0.4rem 0 0;
+}
+
 .dash-tag {
     display: inline-block;
     font-size: 0.75rem;
