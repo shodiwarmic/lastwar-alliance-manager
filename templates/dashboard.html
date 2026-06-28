@@ -32,6 +32,10 @@
 {{define "scripts"}}
 <div id="page-config"
      data-vs-minimum="{{.VSMinimumPoints}}"
+     data-vs-flag-days="{{.VsFlagDaysThreshold}}"
+     data-vs-week="{{.VSEvalWeek}}"
+     data-vs-completed="{{.VSCompletedDays}}"
+     data-vs-fallback="{{if .VSFallbackActive}}true{{else}}false{{end}}"
      data-user-rank="{{.Rank}}"
      data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}"
      hidden></div>

@@ -65,9 +65,8 @@ function getCanvasPalette() {
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 function todayGameDate() {
-    // UTC-2: subtract 2h from now
-    const d = new Date(Date.now() - 2 * 3600 * 1000);
-    return d.toISOString().slice(0, 10);
+    // Shared game-time (UTC-2) date helper from global.js.
+    return gameDateStr();
 }
 
 function currentGameMonday() {

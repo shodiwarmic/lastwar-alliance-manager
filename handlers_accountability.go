@@ -8,21 +8,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gorilla/mux"
 )
 
-// currentMondayDate returns today's Monday in YYYY-MM-DD format (UTC).
-func currentMondayDate() string {
-	now := time.Now().UTC()
-	wd := int(now.Weekday())
-	if wd == 0 {
-		wd = 7
-	}
-	monday := now.AddDate(0, 0, -(wd - 1))
-	return monday.Format("2006-01-02")
-}
+// VS week selection + day import detection live in helpers.go (gameWeekStart,
+// effectiveVSWeek) and vsEvalContext below.
 
 // strikeThresholds holds the configured tag boundaries.
 type strikeThresholds struct {
@@ -51,13 +42,59 @@ func memberTag(activeStrikes int, t strikeThresholds) string {
 	}
 }
 
-// vsMinimumPoints loads the configured VS minimum from settings.
-func vsMinimumPoints() int {
-	var v int
-	if err := db.QueryRow("SELECT COALESCE(vs_minimum_points, 2500000) FROM settings WHERE id = 1").Scan(&v); err != nil {
-		return 2500000
+// getVSAccountabilitySettings returns (daily minimum, flag-days threshold) in one read.
+func getVSAccountabilitySettings() (min, flagDays int) {
+	if err := db.QueryRow(`SELECT COALESCE(vs_minimum_points, 2500000),
+		COALESCE(vs_flag_days_threshold, 2) FROM settings WHERE id = 1`).Scan(&min, &flagDays); err != nil {
+		return 2500000, 2
 	}
-	return v
+	return min, flagDays
+}
+
+// vsEvalContext resolves the single VS week every flag/stat surface should evaluate,
+// plus which of its days have actually been imported. weekDate/completed come from
+// effectiveVSWeek (Monday → fallback to the previous complete week). dayImported[i] is
+// true when any member has a non-zero score for day i that week; importedCompleted is
+// how many completed days are imported; fallbackActive is true on the Monday fallback.
+// On query error it logs and returns safe defaults (nothing imported → callers flag nobody).
+func vsEvalContext() (weekDate string, completed int, dayImported [6]bool, importedCompleted int, fallbackActive bool) {
+	weekDate, completed = effectiveVSWeek()
+	fallbackActive = completedVSDays() == 0
+	var m [6]int
+	err := db.QueryRow(`SELECT
+		COALESCE(MAX(monday),0), COALESCE(MAX(tuesday),0), COALESCE(MAX(wednesday),0),
+		COALESCE(MAX(thursday),0), COALESCE(MAX(friday),0), COALESCE(MAX(saturday),0)
+		FROM vs_points WHERE week_date = ?`, weekDate).
+		Scan(&m[0], &m[1], &m[2], &m[3], &m[4], &m[5])
+	if err != nil {
+		slog.Error("vsEvalContext: day-import query failed", "error", err, "week", weekDate)
+		return weekDate, completed, dayImported, 0, fallbackActive
+	}
+	for i := 0; i < 6; i++ {
+		dayImported[i] = m[i] > 0 // an all-zero day reads as "not imported" — never happens for a real VS day
+		if i < completed && dayImported[i] {
+			importedCompleted++
+		}
+	}
+	return weekDate, completed, dayImported, importedCompleted, fallbackActive
+}
+
+// vsDaysBelow counts how many completed, imported, post-join days the member scored
+// below the daily minimum. Mirrors the JS countDaysBelowMinimum.
+func vsDaysBelow(scores [6]int, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) int {
+	n := 0
+	for i := 0; i < completed && i < 6; i++ {
+		if !dayImported[i] {
+			continue // day not imported yet
+		}
+		if joinedAt != "" && dayDate(weekDate, i) < joinedAt {
+			continue // before the member joined
+		}
+		if scores[i] < vsMin {
+			n++
+		}
+	}
+	return n
 }
 
 // --- Page handlers ---
@@ -72,6 +109,11 @@ func handleAccountability(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
+	// Evaluated-week context for the page-config notes (matches the members API).
+	_, completed, _, importedCompleted, fallbackActive := vsEvalContext()
+	data.VSCompletedDays = completed
+	data.VSImportedCompleted = importedCompleted
+	data.VSFallbackActive = fallbackActive
 	renderTemplate(w, r, "accountability.html", data)
 }
 
@@ -126,22 +168,24 @@ func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vsMin := vsMinimumPoints()
-	monday := currentMondayDate()
+	vsMin, vsFlagDays := getVSAccountabilitySettings()
+	weekDate, completed, dayImported, importedCompleted, _ := vsEvalContext()
 	thresholds := loadStrikeThresholds()
 
 	rows, err := db.Query(`
 		SELECT
-			m.id, m.name, m.rank,
+			m.id, m.name, m.rank, COALESCE(m.joined_at, ''),
 			COALESCE(SUM(CASE WHEN s.status='active' THEN 1 ELSE 0 END), 0) AS active_strikes,
-			COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total
+			COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total,
+			COALESCE(vp.monday,0), COALESCE(vp.tuesday,0), COALESCE(vp.wednesday,0),
+			COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0)
 		FROM members m
 		LEFT JOIN accountability_strikes s ON s.member_id = m.id
 		LEFT JOIN vs_points vp ON vp.member_id = m.id AND vp.week_date = ?
 		WHERE m.rank != 'EX'
 		GROUP BY m.id
 		ORDER BY active_strikes DESC, m.name ASC
-	`, monday)
+	`, weekDate)
 	if err != nil {
 		slog.Error("handleAccountabilityMembers: query failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -152,13 +196,20 @@ func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
 	members := []AccountabilityMember{}
 	for rows.Next() {
 		var m AccountabilityMember
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.ActiveStrikes, &m.VSTotal); err != nil {
+		var joinedAt string
+		var scores [6]int
+		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &joinedAt, &m.ActiveStrikes, &m.VSTotal,
+			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5]); err != nil {
 			slog.Error("handleAccountabilityMembers: scan failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		m.Tag = memberTag(m.ActiveStrikes, thresholds)
-		m.BelowThreshold = m.VSTotal < vsMin
+		// Below the daily minimum on N+ completed, imported, post-join days. When no
+		// completed day is imported yet, importedCompleted==0 → nobody is flagged.
+		if importedCompleted > 0 {
+			m.BelowThreshold = vsDaysBelow(scores, joinedAt, weekDate, completed, dayImported, vsMin) >= vsFlagDays
+		}
 		members = append(members, m)
 	}
 
@@ -374,22 +425,24 @@ func handleAccountabilitySummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vsMin := vsMinimumPoints()
-	monday := currentMondayDate()
+	vsMin, vsFlagDays := getVSAccountabilitySettings()
+	weekDate, completed, dayImported, importedCompleted, _ := vsEvalContext()
 	thresholds := loadStrikeThresholds()
 
 	rows, err := db.Query(`
 		SELECT
-			m.id, m.name, m.rank,
+			m.id, m.name, m.rank, COALESCE(m.joined_at, ''),
 			COALESCE(SUM(CASE WHEN s.status='active' THEN 1 ELSE 0 END), 0) AS active_strikes,
-			COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total
+			COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total,
+			COALESCE(vp.monday,0), COALESCE(vp.tuesday,0), COALESCE(vp.wednesday,0),
+			COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0)
 		FROM members m
 		LEFT JOIN accountability_strikes s ON s.member_id = m.id
 		LEFT JOIN vs_points vp ON vp.member_id = m.id AND vp.week_date = ?
 		WHERE m.rank != 'EX'
 		GROUP BY m.id
 		ORDER BY active_strikes DESC
-	`, monday)
+	`, weekDate)
 	if err != nil {
 		slog.Error("handleAccountabilitySummary: query failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -400,13 +453,18 @@ func handleAccountabilitySummary(w http.ResponseWriter, r *http.Request) {
 	summary := AccountabilitySummary{TopAtRisk: []AccountabilityMember{}}
 	for rows.Next() {
 		var m AccountabilityMember
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &m.ActiveStrikes, &m.VSTotal); err != nil {
+		var joinedAt string
+		var scores [6]int
+		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &joinedAt, &m.ActiveStrikes, &m.VSTotal,
+			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5]); err != nil {
 			slog.Error("handleAccountabilitySummary: scan failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		m.Tag = memberTag(m.ActiveStrikes, thresholds)
-		m.BelowThreshold = m.VSTotal < vsMin
+		if importedCompleted > 0 {
+			m.BelowThreshold = vsDaysBelow(scores, joinedAt, weekDate, completed, dayImported, vsMin) >= vsFlagDays
+		}
 		switch m.Tag {
 		case "At Risk":
 			summary.AtRisk++
@@ -443,6 +501,10 @@ type AccountabilityReportData struct {
 	TagCounts       map[string]int    `json:"tag_counts"`
 	TotalStrikes    int               `json:"total_strikes"`
 	VSMin           int               `json:"vs_min"`
+	// Evaluated-week context for the UI notes (mirrors the dashboard page-config).
+	Completed         int  `json:"completed"`
+	ImportedCompleted int  `json:"imported_completed"`
+	FallbackActive    bool `json:"fallback_active"`
 }
 
 func handleAccountabilityReportData(w http.ResponseWriter, r *http.Request) {
@@ -452,8 +514,8 @@ func handleAccountabilityReportData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vsMin := vsMinimumPoints()
-	monday := currentMondayDate()
+	vsMin, vsFlagDays := getVSAccountabilitySettings()
+	weekDate, completed, dayImported, importedCompleted, fallbackActive := vsEvalContext()
 	thresholds := loadStrikeThresholds()
 
 	report := AccountabilityReportData{
@@ -462,17 +524,22 @@ func handleAccountabilityReportData(w http.ResponseWriter, r *http.Request) {
 		PowerGrowth:       []ReportTopMember{},
 		TagCounts:         map[string]int{"At Risk": 0, "Needs Improvement": 0, "Reliable": 0},
 		VSMin:             vsMin,
+		Completed:         completed,
+		ImportedCompleted: importedCompleted,
+		FallbackActive:    fallbackActive,
 	}
 
-	// VS leaders and underperformers this week
+	// VS leaders (by weekly total) and underperformers (daily-minimum rule) this week.
 	vsRows, err := db.Query(`
-		SELECT m.id, m.name, m.rank,
-		       COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total
+		SELECT m.id, m.name, m.rank, COALESCE(m.joined_at, ''),
+		       COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total,
+		       COALESCE(vp.monday,0), COALESCE(vp.tuesday,0), COALESCE(vp.wednesday,0),
+		       COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0)
 		FROM members m
 		LEFT JOIN vs_points vp ON vp.member_id = m.id AND vp.week_date = ?
 		WHERE m.rank != 'EX'
 		ORDER BY vs_total DESC
-	`, monday)
+	`, weekDate)
 	if err != nil {
 		slog.Error("handleAccountabilityReportData: vs query failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -480,21 +547,30 @@ func handleAccountabilityReportData(w http.ResponseWriter, r *http.Request) {
 	}
 	defer vsRows.Close()
 
-	var allVS []ReportTopMember
+	type vsRow struct {
+		m     ReportTopMember
+		below bool
+	}
+	var allVS []vsRow
 	for vsRows.Next() {
 		var m ReportTopMember
-		if err := vsRows.Scan(&m.ID, &m.Name, &m.Rank, &m.Value); err != nil {
+		var joinedAt string
+		var scores [6]int
+		if err := vsRows.Scan(&m.ID, &m.Name, &m.Rank, &joinedAt, &m.Value,
+			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5]); err != nil {
 			slog.Error("handleAccountabilityReportData: vs scan failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
-		allVS = append(allVS, m)
+		below := importedCompleted > 0 && vsDaysBelow(scores, joinedAt, weekDate, completed, dayImported, vsMin) >= vsFlagDays
+		allVS = append(allVS, vsRow{m: m, below: below})
 	}
-	for i, m := range allVS {
+	for i, row := range allVS {
+		m := row.m
 		if i < 5 {
 			report.VSLeaders = append(report.VSLeaders, m)
 		}
-		if m.Value < vsMin {
+		if row.below {
 			report.VSUnderperformers = append(report.VSUnderperformers, m)
 		}
 	}

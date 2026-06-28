@@ -140,6 +140,29 @@ async function saveStrike() {
     strikesLoaded = false; // invalidate cache so next tab-switch refetches
 }
 
+// One-time evaluated-week notes (server-authoritative via page-config): "(last week)"
+// suffix on the VS-below heading (Monday fallback) + an import-lag note when not all
+// completed days are imported, so officers know which week/how much data the flags reflect.
+function applyVSWeekNotes() {
+    const heading = document.getElementById('vs-flag-heading');
+    if (!heading) return;
+    if (cfg.vsFallback === 'true') {
+        const s = document.createElement('span');
+        s.className = 'acc-week-note';
+        s.title = 'Current VS week has no completed days yet — showing last week';
+        s.textContent = ' (last week)';
+        heading.appendChild(s);
+    }
+    const completed = parseInt(cfg.vsCompleted, 10) || 0;
+    const imported = parseInt(cfg.vsImportedCompleted, 10) || 0;
+    if (imported < completed) {
+        const note = document.createElement('span');
+        note.className = 'acc-week-note';
+        note.textContent = ` (flags based on ${imported} of ${completed} completed days imported so far)`;
+        heading.appendChild(note);
+    }
+}
+
 // --- Tab: Members ---
 
 async function loadMembers() {
@@ -580,7 +603,7 @@ async function loadReport() {
     const vsUnderEl = document.getElementById('report-vs-under');
     if (!report.vs_underperformers || !report.vs_underperformers.length) {
         const p = document.createElement('p');
-        p.append(svgIcon('check'), document.createTextNode(' All members meeting VS minimum.'));
+        p.append(svgIcon('check'), document.createTextNode(' All members meeting the VS daily minimum.'));
         vsUnderEl.replaceChildren(p);
     } else {
         vsUnderEl.replaceChildren(memberListEl(report.vs_underperformers, fmtNumber));
@@ -622,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
     strikeRefDateFP = flatpickr('#strike-ref-date', { dateFormat: 'Y-m-d', allowInput: true });
 
     setupTabs();
+    applyVSWeekNotes();
     loadMembers();
 
     document.getElementById('member-search').addEventListener('input', loadMembers);

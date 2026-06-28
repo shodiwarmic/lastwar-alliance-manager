@@ -73,15 +73,28 @@ async function boot() {
     const vsLeadersEl = document.getElementById('report-vs-leaders');
     vsLeadersEl.replaceChildren(memberList(report.vs_leaders, fmtNumber));
 
-    // VS underperformers
+    // VS underperformers (daily-minimum rule). Evaluated-week notes mirror the dashboard.
     const vsUnderEl = document.getElementById('report-vs-under');
+    const underNodes = [];
     if (!report.vs_underperformers || !report.vs_underperformers.length) {
         const p = document.createElement('p');
-        p.append(svgIcon('check'), document.createTextNode(' All members are meeting the VS minimum.'));
-        vsUnderEl.replaceChildren(p);
+        p.append(svgIcon('check'), document.createTextNode(' All members are meeting the VS daily minimum.'));
+        underNodes.push(p);
     } else {
-        vsUnderEl.replaceChildren(memberList(report.vs_underperformers, fmtNumber));
+        underNodes.push(memberList(report.vs_underperformers, fmtNumber));
     }
+    if (report.fallback_active || (report.imported_completed < report.completed)) {
+        const note = document.createElement('p');
+        note.className = 'report-week-note';
+        const bits = [];
+        if (report.fallback_active) bits.push('showing last week');
+        if (report.imported_completed < report.completed) {
+            bits.push(`based on ${report.imported_completed} of ${report.completed} completed days imported so far`);
+        }
+        note.textContent = 'Flags ' + bits.join('; ') + '.';
+        underNodes.push(note);
+    }
+    vsUnderEl.replaceChildren(...underNodes);
 
     // Power growth
     const growthEl = document.getElementById('report-power-growth');

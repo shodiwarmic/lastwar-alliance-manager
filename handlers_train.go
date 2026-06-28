@@ -14,26 +14,13 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// gameDate returns the current date in game time (UTC-2) as "YYYY-MM-DD".
-func gameDate() string {
-	return time.Now().UTC().Add(-2 * time.Hour).Format("2006-01-02")
-}
-
-// gameWeekStart returns the Monday of the VS week that contains t (UTC-2 adjusted),
-// going back `weeksBack` full weeks.  VS weeks run Mon–Sat.
-func gameWeekStart(t time.Time, weeksBack int) string {
-	gt := t.UTC().Add(-2 * time.Hour)
-	// weekday: Monday=0 … Sunday=6
-	dow := int(gt.Weekday()+6) % 7 // Mon=0, Tue=1, …, Sun=6
-	monday := gt.AddDate(0, 0, -dow-weeksBack*7)
-	return monday.Format("2006-01-02")
-}
+// gameDate / gameWeekStart now live in helpers.go (shared game-time clock).
 
 // dayColForDate returns the vs_points column name for the day before `today`
 // within the current VS week (Mon–Sat).  Returns "" if yesterday is outside
 // the VS window (e.g. today is Monday game-time → yesterday = Sunday).
 func dayColForYesterday(today time.Time) string {
-	gt := today.UTC().Add(-2 * time.Hour)
+	gt := today.In(gameLoc)
 	yesterday := gt.AddDate(0, 0, -1)
 	cols := []string{"", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
 	wd := int(yesterday.Weekday()) // Sun=0, Mon=1, …, Sat=6

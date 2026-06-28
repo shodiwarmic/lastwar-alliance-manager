@@ -377,9 +377,10 @@ func convertProspectToMember(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+	// Accepting a prospect = a genuine new join → stamp joined_at with today's game date.
 	result, err := tx.Exec(
-		"INSERT INTO members (name, rank, level, eligible) VALUES (?, ?, ?, 1)",
-		prospectName, req.Rank, req.Level,
+		"INSERT INTO members (name, rank, level, eligible, joined_at) VALUES (?, ?, ?, 1, ?)",
+		prospectName, req.Rank, req.Level, gameDate(),
 	)
 	if err != nil {
 		slog.Error("Failed to insert member from prospect", "error", err)

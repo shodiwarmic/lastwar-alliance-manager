@@ -82,7 +82,8 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			   COALESCE(lk.recorded_at, '') as latest_kills_date,
 			   COALESCE(msa.skills, '') as skills,
 			   m.lastrank_public_id, m.lastrank_synced_at,
-			   COALESCE(m.lastrank_photo_url, ''), COALESCE(m.lastrank_photo_failover, '')
+			   COALESCE(m.lastrank_photo_url, ''), COALESCE(m.lastrank_photo_failover, ''),
+			   COALESCE(m.joined_at, '')
 		FROM members m
 		LEFT JOIN latest_power lp ON lp.member_id = m.id
 		LEFT JOIN latest_squad_power lsp ON lsp.member_id = m.id
@@ -114,6 +115,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			&m.Skills,
 			&m.LastRankPublicID, &m.LastRankSyncedAt,
 			&m.LastRankPhotoURL, &m.LastRankPhotoFailover,
+			&m.JoinedAt,
 		); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -143,9 +145,11 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	result, err := tx.Exec("INSERT INTO members (name, rank, level, eligible, squad_type, troop_level, profession) VALUES (?, ?, ?, ?, ?, ?, ?)", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession)
+	// Manual add = a genuine new join → stamp joined_at with today's game date.
+	result, err := tx.Exec("INSERT INTO members (name, rank, level, eligible, squad_type, troop_level, profession, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, gameDate())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("createMember: insert failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -776,7 +780,10 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 		err := db.QueryRow("SELECT id, rank FROM members WHERE name = ?", member.Name).Scan(&existingID, &existingRank)
 
 		if err == sql.ErrNoRows {
-			res, err := db.Exec("INSERT INTO members (name, rank, level) VALUES (?, ?, ?)", member.Name, member.Rank, member.Level)
+			// New member discovered via roster import → default joined_at to today.
+			// TODO(joined-at UI): once the member join-date UI lands, prompt for the join
+			// date in this import's confirmation step instead of defaulting to today.
+			res, err := db.Exec("INSERT INTO members (name, rank, level, joined_at) VALUES (?, ?, ?, ?)", member.Name, member.Rank, member.Level, gameDate())
 			if err == nil {
 				id, _ := res.LastInsertId()
 				existingID = int(id)

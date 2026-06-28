@@ -483,6 +483,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(train_free_daily_limit, 1), COALESCE(train_purchased_daily_limit, 2),
         COALESCE(alliance_max_members, 100), COALESCE(join_requirements, ''),
         COALESCE(vs_minimum_points, 2500000),
+        COALESCE(vs_flag_days_threshold, 2),
         COALESCE(strike_needs_improvement_threshold, 1), COALESCE(strike_at_risk_threshold, 3),
         COALESCE(mg_baseline, 11), COALESCE(zs_baseline, 7),
         COALESCE(mg_default_time, '00:30'), COALESCE(zs_default_time, '23:00'),
@@ -503,6 +504,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.TrainFreeDailyLimit, &s.TrainPurchasedDailyLimit,
 		&s.AllianceMaxMembers, &s.JoinRequirements,
 		&s.VSMinimumPoints,
+		&s.VsFlagDaysThreshold,
 		&s.StrikeNeedsImprovementThreshold, &s.StrikeAtRiskThreshold,
 		&s.MGBaseline, &s.ZSBaseline,
 		&s.MGDefaultTime, &s.ZSDefaultTime,
@@ -583,6 +585,13 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 
 	actor := getAuthUser(r)
 
+	// VS flag-days threshold must be 1–6 (a member can fall below the daily minimum on
+	// at most the 6 VS days). Reject out-of-range rather than silently clamping.
+	if settings.VsFlagDaysThreshold < 1 || settings.VsFlagDaysThreshold > 6 {
+		http.Error(w, "VS flag days threshold must be between 1 and 6", http.StatusBadRequest)
+		return
+	}
+
 	// Accept either a bare 32-hex id or a pasted /a/<id> URL for the LastRank id.
 	allianceID := strings.TrimSpace(settings.LastRankAllianceID)
 	if parsed, ok := parseLastRankAllianceID(allianceID); ok {
@@ -605,7 +614,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		zs_weekdays = ?, zs_anchor_date = ?, zs_anchor_time = ?,
 		season_score_levels_default = ?,
 		alliance_name = ?, alliance_tag = ?,
-		lastrank_alliance_id = ?
+		lastrank_alliance_id = ?,
+		vs_flag_days_threshold = ?
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -621,6 +631,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.SeasonScoreLevelsDefault,
 		settings.AllianceName, settings.AllianceTag,
 		allianceID,
+		settings.VsFlagDaysThreshold,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)
