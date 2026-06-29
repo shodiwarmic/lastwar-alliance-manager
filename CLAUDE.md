@@ -148,6 +148,10 @@ This intentionally differs from the OCR-service path, which sends `candidates[]`
 
 `mobileCommit` already calls `logActivity` for each VS / power / kill record write (`vs_points`, `power_records`, `kill_count` entity types — same as the web import path). New mobile endpoints that write data must do the same.
 
+### Week date normalization
+
+The server is authoritative on `week_date`. `mobileCommit` snaps every submitted value to the game-time VS-week Monday (UTC−2 fixed offset) via `normalizeToGameWeekMonday()` on ingest, overwriting whatever the client sent. Scanner clients need not compute the correct game-time Monday themselves — any Monday within ±3 days of the correct week is corrected server-side. (The `lastwar-android-scanner` repo should still compute it consistently so its local previews bucket the same way as the committed data.)
+
 ## LastRank integration (`/api/lastrank/*`)
 
 Enrichment from the unofficial `lastrank.fun` `/v1/` API. All upstream calls go

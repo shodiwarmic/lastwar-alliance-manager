@@ -157,6 +157,9 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate + snap to the game-time VS-week Monday so the client clock can't misfile the week.
+	// TODO(mobile-scanner): the server is authoritative on week_date — it overwrites whatever the
+	// client sends with the game-time Monday (UTC-2). Confirm the lastwar-android-scanner repo's own
+	// week_date computation agrees, so previews and commits land in the same bucket.
 	normWeek, err := normalizeToGameWeekMonday(req.WeekDate)
 	if err != nil {
 		http.Error(w, "Invalid week_date: must be YYYY-MM-DD", http.StatusBadRequest)
