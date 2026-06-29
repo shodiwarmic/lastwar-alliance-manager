@@ -526,7 +526,7 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	// and make this one active immediately.
 	// If the start date is in the future, the existing active season stays active;
 	// autoActivateUpcomingSeason will handle the transition when the date arrives.
-	today := time.Now().Format("2006-01-02")
+	today := gameDate()
 	isFuture := body.StartDate > today
 	if !isFuture {
 		if _, err := tx.Exec(`UPDATE seasons SET is_active = 0,
