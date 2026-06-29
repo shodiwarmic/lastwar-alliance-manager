@@ -98,7 +98,8 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query(query, userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("getMembers: query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -117,7 +118,8 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			&m.LastRankPhotoURL, &m.LastRankPhotoFailover,
 			&m.JoinedAt,
 		); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			slog.Error("getMembers: scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		members = append(members, m)
@@ -130,7 +132,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 func createMember(w http.ResponseWriter, r *http.Request) {
 	var m Member
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -198,8 +200,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 
 	var m Member
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		log.Printf("JSON Decode Error: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -226,8 +227,8 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	// 2. Perform the main UPDATE
 	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ?, notes = ?, lastrank_public_id = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, m.Notes, m.LastRankPublicID, id)
 	if err != nil {
-		log.Printf("DB Update Error: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("updateMember: exec failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -763,7 +764,7 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 	var request ConfirmRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -866,7 +867,8 @@ func getMemberStats(w http.ResponseWriter, r *http.Request) {
 		ORDER BY m.name
 	`)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("getMemberStats: query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -876,7 +878,8 @@ func getMemberStats(w http.ResponseWriter, r *http.Request) {
 		var s MemberStats
 		var lastDate sql.NullString
 		if err := rows.Scan(&s.ID, &s.Name, &s.Rank, &s.ConductorCount, &lastDate, &s.BackupCount, &s.BackupUsedCount, &s.ConductorNoShowCount); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			slog.Error("getMemberStats: scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		if lastDate.Valid {
