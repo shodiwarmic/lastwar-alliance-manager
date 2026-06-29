@@ -411,3 +411,46 @@ span.flatpickr-weekday {
 .error-msg {
     color: var(--color-danger);
 }
+
+/* ── Extracted page-layout styles (formerly inline) ───────────────────────── */
+
+/* Canvas (week image / day card) horizontal scroll wrapper */
+.canvas-scroll { overflow-x: auto; }
+
+/* Settings → Schedule Defaults row: wrap with a slightly wider gap */
+.schedule-defaults-row { flex-wrap: wrap; gap: 16px; }
+
+/* Divider between Defaults and Generate sections */
+.settings-divider { border-color: var(--color-border); margin: 24px 0; }
+
+/* ZS schedule-mode radio options */
+.zs-mode-options { display: flex; gap: 16px; margin-top: 4px; }
+
+/* ZS ASAP config row (visibility toggled by JS) */
+#zs-asap-config { gap: 16px; flex-wrap: wrap; }
+
+/* Generate date-range row (bottom-aligned inputs) */
+.gen-range-row { gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+
+/* Generate MG/ZS toggle row */
+.gen-toggle-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+
+/* Narrow numeric / time inputs */
+#set-mg-baseline,
+#set-zs-baseline,
+#event-level-input,
+#se-interval { width: 80px; }
+#gen-zs-anchor-time { width: 90px; }
+#se-duration { width: 70px; }
+
+/* Event modal: time hint + notes textarea */
+#event-time-hint { margin-top: 4px; display: block; }
+#event-notes-input { resize: vertical; width: 100%; box-sizing: border-box; }
+
+/* Server-event modal: rows that wrap their columns */
+.se-modal-row { gap: 12px; flex-wrap: wrap; }
+
+/* Modal form error lines */
+#event-form-error,
+#event-type-form-error,
+#server-event-form-error { margin-top: 8px; }
