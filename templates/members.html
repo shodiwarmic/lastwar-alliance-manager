@@ -326,7 +326,7 @@
         <div class="modal-content">
             <h2 id="archive-modal-title">Archive Member</h2>
             <div class="form-group">
-                <label for="archive-reason-input">Reason for leaving <span style="color:var(--color-text-muted);font-weight:normal;">(optional)</span></label>
+                <label for="archive-reason-input">Reason for leaving <span class="label-optional">(optional)</span></label>
                 <input type="text" id="archive-reason-input" class="form-input" placeholder="e.g. Moved to another alliance">
             </div>
             <div class="modal-actions">
@@ -343,16 +343,16 @@
             
             <div class="alias-add-card">
                 <form id="add-alias-form">
-                    <div style="flex: 1;">
+                    <div class="alias-input-field">
                         <label for="new-alias-input">New Nickname:</label>
                         <input type="text" id="new-alias-input" class="form-input" required placeholder="e.g. StarLord">
                     </div>
                     <button type="submit" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
                 </form>
                 <p id="alias-add-status" class="status-msg"></p>
-                <div id="global-alias-checkbox-wrapper" style="margin-top: 10px; display: none;">
+                <div id="global-alias-checkbox-wrapper" style="display: none;">
                     <label class="global-alias-label">
-                        <input type="checkbox" id="new-alias-global" style="width: 16px; height: 16px;">
+                        <input type="checkbox" id="new-alias-global">
                         Make this a Global Alias (Applies to all users)
                     </label>
                 </div>

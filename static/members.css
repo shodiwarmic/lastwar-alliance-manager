@@ -273,5 +273,28 @@
     flex-shrink: 0;
 }
 
+/* ── Extracted page-layout styles (formerly inline) ───────────────────────── */
+
+/* "(optional)" hint inside a label */
+.label-optional {
+    color: var(--color-text-muted);
+    font-weight: normal;
+}
+
+/* Alias modal: new-nickname input grows to fill the add-alias form row */
+.alias-input-field {
+    flex: 1;
+}
+
+/* Alias modal: global-alias checkbox wrapper spacing (visibility toggled by JS) */
+#global-alias-checkbox-wrapper {
+    margin-top: 10px;
+}
+
+#new-alias-global {
+    width: 16px;
+    height: 16px;
+}
+
 
 
