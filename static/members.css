@@ -279,6 +279,19 @@
     color: var(--color-text-mid);
 }
 
+/* CSV import preview: per-row join-date picker for new members */
+.csv-join-date {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 0.85em;
+}
+.csv-join-date .form-input {
+    width: auto;
+    max-width: 170px;
+}
+
 /* ── Extracted page-layout styles (formerly inline) ───────────────────────── */
 
 /* "(optional)" hint inside a label */

@@ -633,6 +633,8 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 			headerMap["power"] = i
 		} else if strings.Contains(lowerCol, "level") || strings.Contains(lowerCol, "hq") {
 			headerMap["level"] = i
+		} else if strings.Contains(lowerCol, "join") || strings.Contains(lowerCol, "since") {
+			headerMap["joined"] = i
 		}
 	}
 
@@ -732,6 +734,17 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Optional join-date column: keep only a valid YYYY-MM-DD value; anything
+		// else is ignored and falls back to today's game date at commit time.
+		if joinIdx, hasJoin := headerMap["joined"]; hasJoin && len(record) > joinIdx {
+			js := strings.TrimSpace(record[joinIdx])
+			if js != "" {
+				if _, perr := parseDate(js); perr == nil {
+					detected.JoinedAt = js
+				}
+			}
+		}
+
 		// --- RESOLVE MEMBER IDENTITY ---
 		var matchedMember Member
 		var isExisting bool
@@ -819,10 +832,15 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 		err := db.QueryRow("SELECT id, rank FROM members WHERE name = ?", member.Name).Scan(&existingID, &existingRank)
 
 		if err == sql.ErrNoRows {
-			// New member discovered via roster import → default joined_at to today.
-			// TODO(joined-at UI): once the member join-date UI lands, prompt for the join
-			// date in this import's confirmation step instead of defaulting to today.
-			res, err := db.Exec("INSERT INTO members (name, rank, level, joined_at) VALUES (?, ?, ?, ?)", member.Name, member.Rank, member.Level, gameDate())
+			// New member discovered via roster import. Use the per-member join date
+			// (from the CSV column or the preview UI) when valid; else today's game date.
+			joinDate := gameDate()
+			if member.JoinedAt != "" {
+				if _, perr := parseDate(member.JoinedAt); perr == nil {
+					joinDate = member.JoinedAt
+				}
+			}
+			res, err := db.Exec("INSERT INTO members (name, rank, level, joined_at) VALUES (?, ?, ?, ?)", member.Name, member.Rank, member.Level, joinDate)
 			if err == nil {
 				id, _ := res.LastInsertId()
 				existingID = int(id)

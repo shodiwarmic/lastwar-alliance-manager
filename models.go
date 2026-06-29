@@ -390,6 +390,7 @@ type DetectedMember struct {
 	SquadPower   int64    `json:"squad_power,omitempty"`
 	TroopLevel   int      `json:"troop_level,omitempty"`
 	Profession   string   `json:"profession,omitempty"`
+	JoinedAt     string   `json:"joined_at,omitempty"` // optional join date (YYYY-MM-DD); blank → today
 }
 
 type RenameInfo struct {
@@ -1156,6 +1157,7 @@ type LastRankUnmatchedAction struct {
 	Action           string `json:"action"`              // "alias" | "rename" | "add" | "ignore"
 	MemberID         int    `json:"member_id,omitempty"` // target for "alias"/"rename"
 	NewRank          string `json:"new_rank,omitempty"`  // rank for "add"
+	JoinedAt         string `json:"joined_at,omitempty"` // join date for "add" (YYYY-MM-DD); blank → today
 	ApplyStats       bool   `json:"apply_stats,omitempty"`
 	Power            *int64 `json:"power,omitempty"`
 	HeroPower        *int64 `json:"hero_power,omitempty"`

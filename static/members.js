@@ -1558,6 +1558,27 @@ function showCSVPreview(result) {
             item.appendChild(notice);
         }
 
+        // New members: optional per-row join date (prefilled from a CSV column when
+        // present). Blank → today's game date, applied server-side at commit.
+        if (member.is_new) {
+            const jd = document.createElement('div');
+            jd.className = 'csv-join-date';
+            const lbl = document.createElement('label');
+            lbl.textContent = 'Join date:';
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.className = 'form-input';
+            inp.placeholder = 'YYYY-MM-DD (today if blank)';
+            if (member.joined_at) inp.value = member.joined_at;
+            if (window.flatpickr) {
+                flatpickr(inp, { dateFormat: 'Y-m-d', allowInput: true, onChange: (_, str) => { member.joined_at = str; } });
+            } else {
+                inp.addEventListener('change', () => { member.joined_at = inp.value.trim(); });
+            }
+            jd.append(lbl, inp);
+            item.appendChild(jd);
+        }
+
         listDiv.appendChild(item);
     });
 
