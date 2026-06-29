@@ -3,6 +3,9 @@ services:
     image: ghcr.io/shodiwarmic/lastwar-alliance-manager:latest
     container_name: alliance-manager
     restart: unless-stopped
+    # Allow graceful shutdown (25s server drain + up to 10s archive drain) to
+    # finish before Docker sends SIGKILL. Default is 10s, which would cut it short.
+    stop_grace_period: 45s
     env_file: .env
     environment:
       # Ensure uploaded files always land in the mounted volume,

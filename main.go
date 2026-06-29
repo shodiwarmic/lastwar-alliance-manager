@@ -3,14 +3,18 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"html/template"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/mux"
@@ -632,6 +636,43 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	slog.Info("Server listening", "port", port)
-	log.Fatal(http.ListenAndServe(":"+port, appHandler)) // Use the new conditional appHandler
+
+	srv := &http.Server{Addr: ":" + port, Handler: appHandler}
+
+	go func() {
+		slog.Info("Server listening", "port", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("Server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	slog.Info("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+	}
+
+	// Drain in-flight OCR archive goroutines. archiveSem is acquire-by-send /
+	// release-by-receive (cap 4): sending cap times blocks until every active
+	// goroutine has released. BOUNDED — a hung cloud upload must not wedge exit.
+	drained := make(chan struct{})
+	go func() {
+		for i := 0; i < cap(archiveSem); i++ {
+			archiveSem <- struct{}{}
+		}
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		slog.Info("Archive goroutines drained")
+	case <-time.After(10 * time.Second):
+		slog.Warn("Archive drain timed out; exiting with in-flight archives")
+	}
+	slog.Info("Server stopped")
 }
