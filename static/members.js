@@ -3,7 +3,7 @@
 const API_URL = '/api/members';
 
 let editingMemberId = null;
-let joinDateFP = null; // Flatpickr instance for the edit-modal join date
+let joinDateWidget = null; // linked days-ago/date widget for the edit modal
 let currentUsername = '';
 let canManageRanks = false;
 let isR5OrAdmin = false;
@@ -364,10 +364,30 @@ function setupModalListeners() {
 
     if (memberForm) memberForm.addEventListener('submit', handleMemberFormSubmit);
 
-    const joinDateEl = document.getElementById('member-join-date');
-    if (joinDateEl && window.flatpickr) {
-        joinDateFP = flatpickr(joinDateEl, { dateFormat: 'Y-m-d', allowInput: true });
+    const joinHost = document.getElementById('member-join-date-host');
+    if (joinHost && window.buildJoinDateField) {
+        joinDateWidget = window.buildJoinDateField('');
+        joinHost.appendChild(joinDateWidget.row);
     }
+
+    setupJoinDisplayToggle();
+}
+
+// Per-user toggle: member cards show either "N days in alliance" or the join date.
+function setupJoinDisplayToggle() {
+    const toggle = document.getElementById('join-display-toggle');
+    if (!toggle || !window.UserPrefs) return;
+    const renderLabel = () => {
+        const mode = window.UserPrefs.get('memberSinceDisplay');
+        toggle.textContent = mode === 'date' ? 'Joined: date' : 'Joined: days';
+    };
+    renderLabel();
+    toggle.addEventListener('click', () => {
+        const mode = window.UserPrefs.get('memberSinceDisplay');
+        window.UserPrefs.set('memberSinceDisplay', mode === 'date' ? 'days' : 'date');
+        renderLabel();
+        updateDisplayedMembers();
+    });
 }
 
 function openMemberModal(editing = false) {
@@ -451,7 +471,7 @@ function resetMemberForm() {
     // Join date is an edit-only field — hide and clear it on the (add) reset.
     const joinDateSection = document.getElementById('modal-join-date-section');
     if (joinDateSection) joinDateSection.style.display = 'none';
-    if (joinDateFP) joinDateFP.clear();
+    if (joinDateWidget) joinDateWidget.clear();
 
     document.getElementById('modal-form-title').textContent = 'Add New Member';
     document.getElementById('submit-btn').textContent = 'Add Member';
@@ -556,16 +576,6 @@ window.addEventListener('resize', () => {
         document.querySelectorAll('#members-list .member-card').forEach(layoutMemberAliases);
     }, 150);
 });
-
-// Format a YYYY-MM-DD date-only string as e.g. "Jun 14 2026". Built from the
-// date parts (not new Date(str)) so it isn't shifted a day by UTC parsing.
-function formatMemberSince(str) {
-    if (!str) return '';
-    const [y, mo, d] = str.split('-');
-    const dt = new Date(+y, +mo - 1, +d);
-    if (isNaN(dt)) return '';
-    return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 function buildMemberCard(member) {
     const card = document.createElement('div');
@@ -744,14 +754,24 @@ function buildMemberCard(member) {
         info.appendChild(span);
     }
 
-    // Member Since — neutral calendar badge, only when a join date is known.
+    // Join-date badge — "N days in alliance" or the join date, per the user's display
+    // preference (toggle in the toolbar). Shown only when a join date is known.
     if (member.joined_at) {
-        const since = formatMemberSince(member.joined_at);
-        if (since) {
+        const dateStr = window.formatJoinDate(member.joined_at);
+        if (dateStr) {
+            const days = window.gameISOToDaysAgo(member.joined_at);
+            const showDays = (window.UserPrefs ? window.UserPrefs.get('memberSinceDisplay') : 'days') !== 'date';
             const span = document.createElement('span');
             span.className = 'member-info-badge badge-since';
-            span.title = `Member since ${since}`;
-            span.append(svgIcon('calendar', 13), document.createTextNode(' Since ' + since));
+            let label;
+            if (showDays && days != null && days >= 0) {
+                label = days + 'd';
+                span.title = `In alliance ${days} day${days === 1 ? '' : 's'} · joined ${dateStr}`;
+            } else {
+                label = 'Since ' + dateStr;
+                span.title = `Joined ${dateStr}`;
+            }
+            span.append(svgIcon('calendar', 13), document.createTextNode(' ' + label));
             info.appendChild(span);
         }
     }
@@ -855,8 +875,7 @@ async function handleMemberFormSubmit(e) {
     try {
         let targetId;
         if (editingMemberId) {
-            const joinDateEl = document.getElementById('member-join-date');
-            const joined_at = joinDateEl ? joinDateEl.value.trim() : '';
+            const joined_at = joinDateWidget ? joinDateWidget.getISO() : '';
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1033,10 +1052,7 @@ window.editMember = function (member) {
     // Join date: officer-only correction field, shown only when editing.
     const joinDateSection = document.getElementById('modal-join-date-section');
     if (joinDateSection) joinDateSection.style.display = 'block';
-    if (joinDateFP) {
-        if (member.joined_at) joinDateFP.setDate(member.joined_at, false);
-        else joinDateFP.clear();
-    }
+    if (joinDateWidget) joinDateWidget.setISO(member.joined_at || '');
 
     document.getElementById('modal-form-title').textContent = 'Edit Member';
     document.getElementById('submit-btn').textContent = 'Update Member';
@@ -1558,24 +1574,15 @@ function showCSVPreview(result) {
             item.appendChild(notice);
         }
 
-        // New members: optional per-row join date (prefilled from a CSV column when
-        // present). Blank → today's game date, applied server-side at commit.
+        // New members: optional per-row join date — linked days-ago/date widget,
+        // prefilled from a CSV column when present. Blank → today (server-side).
         if (member.is_new) {
             const jd = document.createElement('div');
             jd.className = 'csv-join-date';
             const lbl = document.createElement('label');
             lbl.textContent = 'Join date:';
-            const inp = document.createElement('input');
-            inp.type = 'text';
-            inp.className = 'form-input';
-            inp.placeholder = 'YYYY-MM-DD (today if blank)';
-            if (member.joined_at) inp.value = member.joined_at;
-            if (window.flatpickr) {
-                flatpickr(inp, { dateFormat: 'Y-m-d', allowInput: true, onChange: (_, str) => { member.joined_at = str; } });
-            } else {
-                inp.addEventListener('change', () => { member.joined_at = inp.value.trim(); });
-            }
-            jd.append(lbl, inp);
+            const widget = window.buildJoinDateField(member.joined_at || '', iso => { member.joined_at = iso; });
+            jd.append(lbl, widget.row);
             item.appendChild(jd);
         }
 

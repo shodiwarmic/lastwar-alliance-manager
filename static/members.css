@@ -287,9 +287,32 @@
     margin-top: 6px;
     font-size: 0.85em;
 }
-.csv-join-date .form-input {
+
+/* Linked "joined [N] days ago · [date]" entry (modal + import rows) */
+.join-date-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.join-date-row .join-days-input {
+    width: 4.5em;
+    text-align: center;
+}
+.join-date-row .join-date-input {
     width: auto;
-    max-width: 170px;
+    max-width: 150px;
+}
+
+/* Members toolbar: join-display (days/date) toggle + export bar grouping */
+.members-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.join-display-toggle {
+    white-space: nowrap;
 }
 
 /* ── Extracted page-layout styles (formerly inline) ───────────────────────── */

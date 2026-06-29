@@ -64,7 +64,10 @@
             <section class="members-section">
                 <div class="members-list-header">
                     <h3>Alliance Members</h3>
-                    <div id="members-export-bar" class="member-export-actions"></div>
+                    <div class="members-header-actions">
+                        <button type="button" id="join-display-toggle" class="btn btn-secondary btn-sm join-display-toggle" title="Toggle how join dates show on cards"></button>
+                        <div id="members-export-bar" class="member-export-actions"></div>
+                    </div>
                 </div>
 
                 <div class="filter-sort-controls">
@@ -283,11 +286,12 @@
                     <span id="member-lastrank-link" class="help-text">Set automatically when synced. Edit or clear here to fix a mistaken pairing.</span>
                 </div>
 
-                <!-- Officer-only join-date correction. Shown only when editing an existing member. -->
+                <!-- Officer-only join-date correction. Shown only when editing an existing member.
+                     The linked days-ago / date widget is injected into #member-join-date-host by JS. -->
                 <div id="modal-join-date-section" class="form-group" style="display: none;">
-                    <label for="member-join-date">Join Date:</label>
-                    <input type="text" id="member-join-date" class="form-input" placeholder="YYYY-MM-DD — leave blank to clear">
-                    <span class="help-text">When this member joined the alliance. Leave blank to clear an unknown date.</span>
+                    <label>Join Date:</label>
+                    <div id="member-join-date-host"></div>
+                    <span class="help-text">Set either field — the game shows "joined N days ago". Leave blank to clear an unknown date.</span>
                 </div>
 
                 {{if .SkillLabels}}

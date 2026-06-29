@@ -237,12 +237,12 @@
         applyLabel.style.display = 'none';
         u._applyStats = applyCb;
 
-        // Optional join date, shown only for "add". Blank → today's game date (server-side).
-        const joinInput = el('input', { type: 'text', className: 'form-input', placeholder: 'YYYY-MM-DD (today if blank)' });
-        const joinLabel = el('label', { className: 'lr-field' }, el('span', {}, 'Join date: '), joinInput);
+        // Optional join date, shown only for "add" — linked days-ago/date widget.
+        // Blank → today's game date (server-side).
+        const joinWidget = window.buildJoinDateField('');
+        u._joinWidget = joinWidget;
+        const joinLabel = el('label', { className: 'lr-field' }, el('span', {}, 'Join date: '), joinWidget.row);
         joinLabel.style.display = 'none';
-        u._joinDate = joinInput;
-        if (window.flatpickr) flatpickr(joinInput, { dateFormat: 'Y-m-d', allowInput: true });
 
         actionSel.addEventListener('change', () => {
             const a = actionSel.value;
@@ -289,7 +289,7 @@
             }
             if (action === 'add') {
                 entry.new_rank = u.rank || '';
-                entry.joined_at = u._joinDate ? u._joinDate.value.trim() : '';
+                entry.joined_at = u._joinWidget ? u._joinWidget.getISO() : '';
             }
             entry.apply_stats = u._applyStats ? u._applyStats.checked : false;
             if (entry.apply_stats) {

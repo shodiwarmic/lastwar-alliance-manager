@@ -734,13 +734,16 @@ func importCSV(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Optional join-date column: keep only a valid YYYY-MM-DD value; anything
-		// else is ignored and falls back to today's game date at commit time.
+		// Optional join-date column accepts either a YYYY-MM-DD date or a plain
+		// "days ago" integer (matching the in-game "joined N days ago" display).
+		// Anything else is ignored and falls back to today's game date at commit.
 		if joinIdx, hasJoin := headerMap["joined"]; hasJoin && len(record) > joinIdx {
 			js := strings.TrimSpace(record[joinIdx])
 			if js != "" {
 				if _, perr := parseDate(js); perr == nil {
 					detected.JoinedAt = js
+				} else if n, nerr := strconv.Atoi(js); nerr == nil && n >= 0 {
+					detected.JoinedAt = gameNow().AddDate(0, 0, -n).Format("2006-01-02")
 				}
 			}
 		}
