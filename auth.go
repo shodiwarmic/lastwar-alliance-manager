@@ -341,7 +341,6 @@ func changePassword(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Password changed successfully"})
 }
 
-
 func validatePasswordPolicy(password string, userID int) error {
 	var s Settings
 	// Updated query to include pwd_require_lower

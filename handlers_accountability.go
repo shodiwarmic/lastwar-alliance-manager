@@ -241,11 +241,11 @@ type StormAttendanceRecord struct {
 }
 
 type TrainLogRecord struct {
-	ID            int    `json:"id"`
-	Date          string `json:"date"`
-	TrainType     string `json:"train_type"`
-	ShowedUp      bool   `json:"showed_up"`
-	CreatedAt     string `json:"created_at"`
+	ID        int    `json:"id"`
+	Date      string `json:"date"`
+	TrainType string `json:"train_type"`
+	ShowedUp  bool   `json:"showed_up"`
+	CreatedAt string `json:"created_at"`
 }
 
 type VSWeekRecord struct {
@@ -411,11 +411,11 @@ func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
 // --- API: dashboard summary ---
 
 type AccountabilitySummary struct {
-	AtRisk          int                    `json:"at_risk"`
-	NeedsImprovement int                   `json:"needs_improvement"`
-	Reliable        int                    `json:"reliable"`
-	BelowVS         int                    `json:"below_vs"`
-	TopAtRisk       []AccountabilityMember `json:"top_at_risk"`
+	AtRisk           int                    `json:"at_risk"`
+	NeedsImprovement int                    `json:"needs_improvement"`
+	Reliable         int                    `json:"reliable"`
+	BelowVS          int                    `json:"below_vs"`
+	TopAtRisk        []AccountabilityMember `json:"top_at_risk"`
 }
 
 func handleAccountabilitySummary(w http.ResponseWriter, r *http.Request) {
@@ -495,12 +495,12 @@ type ReportTopMember struct {
 }
 
 type AccountabilityReportData struct {
-	VSLeaders       []ReportTopMember `json:"vs_leaders"`
+	VSLeaders         []ReportTopMember `json:"vs_leaders"`
 	VSUnderperformers []ReportTopMember `json:"vs_underperformers"`
-	PowerGrowth     []ReportTopMember `json:"power_growth"`
-	TagCounts       map[string]int    `json:"tag_counts"`
-	TotalStrikes    int               `json:"total_strikes"`
-	VSMin           int               `json:"vs_min"`
+	PowerGrowth       []ReportTopMember `json:"power_growth"`
+	TagCounts         map[string]int    `json:"tag_counts"`
+	TotalStrikes      int               `json:"total_strikes"`
+	VSMin             int               `json:"vs_min"`
 	// Evaluated-week context for the UI notes (mirrors the dashboard page-config).
 	Completed         int  `json:"completed"`
 	ImportedCompleted int  `json:"imported_completed"`

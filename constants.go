@@ -1,7 +1,7 @@
 package main
 
 const (
-	SessionMaxAge     = 86400   // 24 hours in seconds
+	SessionMaxAge     = 86400    // 24 hours in seconds
 	MaxFileUploadSize = 50 << 20 // 50 MB
 	MaxCSVUploadSize  = 10 << 20 // 10 MB
 	MinSessionKeyLen  = 32

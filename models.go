@@ -41,7 +41,7 @@ type Member struct {
 	PersonalAliases     string `json:"personal_aliases"`
 	Notes               string `json:"notes"`
 	JoinedAt            string `json:"joined_at"` // YYYY-MM-DD (date-only); "" = unknown
-	Skills              string `json:"skills"`     // comma-separated skill keys, e.g. "medical_aid"
+	Skills              string `json:"skills"`    // comma-separated skill keys, e.g. "medical_aid"
 	// LastRank linkage. PublicID is auto-captured on a successful Phase-1 match;
 	// SyncedAt is the wall-clock of our last sync for this member (drives the
 	// oldest-first ordering of the Phase-2 extended sync).
@@ -269,62 +269,62 @@ type AdminUserResponse struct {
 }
 
 type Settings struct {
-	ID                           int    `json:"id"`
-	ScheduleMessageTemplate      string `json:"schedule_message_template"`
-	DailyMessageTemplate         string `json:"daily_message_template"`
-	PowerTrackingEnabled         bool   `json:"power_tracking_enabled"`
-	StormTimezones               string `json:"storm_timezones"`
-	StormRespectDST              bool   `json:"storm_respect_dst"`
-	LoginMessage                 string `json:"login_message"`
-	MaxHQLevel                   int    `json:"max_hq_level"`
-	SquadTrackingEnabled         bool   `json:"squad_tracking_enabled"`
-	PwdMinLength                 int    `json:"pwd_min_length"`
-	PwdRequireSpecial            bool   `json:"pwd_require_special"`
-	PwdRequireUpper              bool   `json:"pwd_require_upper"`
-	PwdRequireLower              bool   `json:"pwd_require_lower"`
-	PwdRequireNumber             bool   `json:"pwd_require_number"`
-	PwdHistoryCount              int    `json:"pwd_history_count"`
-	PwdValidityDays              int    `json:"pwd_validity_days"`
-	CVWorkerURL                  string `json:"cv_worker_url"`
+	ID                      int    `json:"id"`
+	ScheduleMessageTemplate string `json:"schedule_message_template"`
+	DailyMessageTemplate    string `json:"daily_message_template"`
+	PowerTrackingEnabled    bool   `json:"power_tracking_enabled"`
+	StormTimezones          string `json:"storm_timezones"`
+	StormRespectDST         bool   `json:"storm_respect_dst"`
+	LoginMessage            string `json:"login_message"`
+	MaxHQLevel              int    `json:"max_hq_level"`
+	SquadTrackingEnabled    bool   `json:"squad_tracking_enabled"`
+	PwdMinLength            int    `json:"pwd_min_length"`
+	PwdRequireSpecial       bool   `json:"pwd_require_special"`
+	PwdRequireUpper         bool   `json:"pwd_require_upper"`
+	PwdRequireLower         bool   `json:"pwd_require_lower"`
+	PwdRequireNumber        bool   `json:"pwd_require_number"`
+	PwdHistoryCount         int    `json:"pwd_history_count"`
+	PwdValidityDays         int    `json:"pwd_validity_days"`
+	CVWorkerURL             string `json:"cv_worker_url"`
 	// OCRBackendMode = "cloud" (default — Google Cloud Vision via OIDC) or
 	// "local" (PaddleOCR sidecar via plain HTTP). Set during install/update
 	// when the operator opts into the local sidecar. See
 	// image_processing.go and install.sh for the deployment plumbing.
-	OCRBackendMode               string `json:"ocr_backend_mode"`
+	OCRBackendMode string `json:"ocr_backend_mode"`
 	// OCRArchiveMode selects where OCR requests are archived (best-effort):
 	// "none" (default), "gcp", "local", or "both". Decoupled from OCRBackendMode.
 	// OCRArchiveBucket is the GCS bucket for the gcp/both destinations (set in the
 	// admin UI, like CVWorkerURL). The local destination's path is OCR_ARCHIVE_DIR
 	// (env). See ocr_archive.go.
-	OCRArchiveMode               string `json:"ocr_archive_mode"`
-	OCRArchiveBucket             string `json:"ocr_archive_bucket"`
-	TrainFreeDailyLimit          int    `json:"train_free_daily_limit"`
-	TrainPurchasedDailyLimit     int    `json:"train_purchased_daily_limit"`
-	AllianceMaxMembers           int    `json:"alliance_max_members"`
-	JoinRequirements             string `json:"join_requirements"`
-	VSMinimumPoints              int    `json:"vs_minimum_points"`
-	VsFlagDaysThreshold          int    `json:"vs_flag_days_threshold"`
-	StrikeNeedsImprovementThreshold int `json:"strike_needs_improvement_threshold"`
-	StrikeAtRiskThreshold           int `json:"strike_at_risk_threshold"`
+	OCRArchiveMode                  string `json:"ocr_archive_mode"`
+	OCRArchiveBucket                string `json:"ocr_archive_bucket"`
+	TrainFreeDailyLimit             int    `json:"train_free_daily_limit"`
+	TrainPurchasedDailyLimit        int    `json:"train_purchased_daily_limit"`
+	AllianceMaxMembers              int    `json:"alliance_max_members"`
+	JoinRequirements                string `json:"join_requirements"`
+	VSMinimumPoints                 int    `json:"vs_minimum_points"`
+	VsFlagDaysThreshold             int    `json:"vs_flag_days_threshold"`
+	StrikeNeedsImprovementThreshold int    `json:"strike_needs_improvement_threshold"`
+	StrikeAtRiskThreshold           int    `json:"strike_at_risk_threshold"`
 	// Schedule defaults
-	MGBaseline     int    `json:"mg_baseline"`
-	ZSBaseline     int    `json:"zs_baseline"`
-	MGDefaultTime  string `json:"mg_default_time"`
-	ZSDefaultTime  string `json:"zs_default_time"`
-	CurrentSeason  *int   `json:"current_season"`
+	MGBaseline      int    `json:"mg_baseline"`
+	ZSBaseline      int    `json:"zs_baseline"`
+	MGDefaultTime   string `json:"mg_default_time"`
+	ZSDefaultTime   string `json:"zs_default_time"`
+	CurrentSeason   *int   `json:"current_season"`
 	SeasonStartDate string `json:"season_start_date"`
 	// Event generation rules
-	MGAnchorDate   string `json:"mg_anchor_date"`
-	ZSScheduleMode string `json:"zs_schedule_mode"`
-	ZSWeekdays     string `json:"zs_weekdays"`
-	ZSAnchorDate   string `json:"zs_anchor_date"`
-	ZSAnchorTime   string `json:"zs_anchor_time"`
+	MGAnchorDate             string `json:"mg_anchor_date"`
+	ZSScheduleMode           string `json:"zs_schedule_mode"`
+	ZSWeekdays               string `json:"zs_weekdays"`
+	ZSAnchorDate             string `json:"zs_anchor_date"`
+	ZSAnchorTime             string `json:"zs_anchor_time"`
 	SeasonScoreLevelsDefault string `json:"season_score_levels_default"`
 	AllianceName             string `json:"alliance_name"`
 	AllianceTag              string `json:"alliance_tag"`
 	// LastRankAllianceID is the 32-char hex id for the alliance on lastrank.fun,
 	// used by the Phase-1 sync. Empty by default (operator pastes it in Settings).
-	LastRankAllianceID       string `json:"lastrank_alliance_id"`
+	LastRankAllianceID string `json:"lastrank_alliance_id"`
 }
 
 type StormAssignment struct {
@@ -336,9 +336,9 @@ type StormAssignment struct {
 }
 
 type StormTFConfig struct {
-	TaskForce    string `json:"task_force"`
-	TimeSlot     *int   `json:"time_slot"`
-	Participating int   `json:"participating"`
+	TaskForce     string `json:"task_force"`
+	TimeSlot      *int   `json:"time_slot"`
+	Participating int    `json:"participating"`
 }
 
 type StormRegistration struct {
@@ -616,8 +616,8 @@ type PollTemplate struct {
 	ID          int    `json:"id"`
 	Title       string `json:"title"`
 	Question    string `json:"question"`
-	Options     string `json:"options"`     // JSON array ["Yes","No","Abstain"]
-	PollType    string `json:"poll_type"`   // "named" | "anonymous"
+	Options     string `json:"options"`   // JSON array ["Yes","No","Abstain"]
+	PollType    string `json:"poll_type"` // "named" | "anonymous"
 	MultiSelect bool   `json:"multi_select"`
 	CreatedBy   string `json:"created_by"`
 	CreatedAt   string `json:"created_at"`
@@ -627,12 +627,12 @@ type PollInstance struct {
 	ID             int     `json:"id"`
 	TemplateID     *int    `json:"template_id"` // nullable — template may be deleted
 	Label          string  `json:"label"`
-	Question       string  `json:"question"`     // snapshotted at launch
-	Options        string  `json:"options"`      // snapshotted at launch (JSON)
-	PollType       string  `json:"poll_type"`    // snapshotted at launch
-	MultiSelect    bool    `json:"multi_select"` // snapshotted at launch
-	RankFilter     *string `json:"rank_filter"`  // NULL = all active; JSON ["R4","R5"] = subset
-	TotalEligible  int     `json:"total_eligible"`  // snapshotted at launch
+	Question       string  `json:"question"`       // snapshotted at launch
+	Options        string  `json:"options"`        // snapshotted at launch (JSON)
+	PollType       string  `json:"poll_type"`      // snapshotted at launch
+	MultiSelect    bool    `json:"multi_select"`   // snapshotted at launch
+	RankFilter     *string `json:"rank_filter"`    // NULL = all active; JSON ["R4","R5"] = subset
+	TotalEligible  int     `json:"total_eligible"` // snapshotted at launch
 	CreatedBy      string  `json:"created_by"`
 	CreatedAt      string  `json:"created_at"`
 	RespondedCount int     `json:"responded_count"` // computed on list queries
@@ -770,20 +770,20 @@ type EligibilityRule struct {
 
 // EligibleMember is returned by the /run endpoint with per-member stats.
 type EligibleMember struct {
-	MemberID                  int     `json:"member_id"`
-	Name                      string  `json:"name"`
-	Rank                      string  `json:"rank"`
-	VSTotalWeek               int     `json:"vs_total_week"`
-	VSYesterday               int     `json:"vs_yesterday"`
-	VSTotalPrevWeek           int     `json:"vs_total_prev_week"`
-	VSDayMonday               int     `json:"vs_day_monday"`
-	VSDayTuesday              int     `json:"vs_day_tuesday"`
-	VSDayWednesday            int     `json:"vs_day_wednesday"`
-	VSDayThursday             int     `json:"vs_day_thursday"`
-	VSDayFriday               int     `json:"vs_day_friday"`
-	VSDaySaturday             int     `json:"vs_day_saturday"`
-	DaysSinceFreeConducted    float64 `json:"days_since_free_conducted"`    // 9999 = never
-	DaysSinceAnyConducted     float64 `json:"days_since_any_conducted"`     // 9999 = never
+	MemberID               int     `json:"member_id"`
+	Name                   string  `json:"name"`
+	Rank                   string  `json:"rank"`
+	VSTotalWeek            int     `json:"vs_total_week"`
+	VSYesterday            int     `json:"vs_yesterday"`
+	VSTotalPrevWeek        int     `json:"vs_total_prev_week"`
+	VSDayMonday            int     `json:"vs_day_monday"`
+	VSDayTuesday           int     `json:"vs_day_tuesday"`
+	VSDayWednesday         int     `json:"vs_day_wednesday"`
+	VSDayThursday          int     `json:"vs_day_thursday"`
+	VSDayFriday            int     `json:"vs_day_friday"`
+	VSDaySaturday          int     `json:"vs_day_saturday"`
+	DaysSinceFreeConducted float64 `json:"days_since_free_conducted"` // 9999 = never
+	DaysSinceAnyConducted  float64 `json:"days_since_any_conducted"`  // 9999 = never
 }
 
 type AllianceFile struct {
@@ -867,10 +867,10 @@ type PageData struct {
 	// "local" (PaddleOCR sidecar; user picks scene per batch). Templates
 	// use this to swap help text and conditionally disable the
 	// auto-detect option in the upload page.
-	OCRBackendMode    string
-	AllianceName      string
-	AllianceTag       string
-	SkillLabels       map[string]string
+	OCRBackendMode string
+	AllianceName   string
+	AllianceTag    string
+	SkillLabels    map[string]string
 	// LastRank avatar for the logged-in user's linked member, shown in the
 	// sidebar user tile (falls back to initials when empty or blocked).
 	UserPhotoURL      string
@@ -1091,10 +1091,10 @@ type LastRankNameChange struct {
 
 // LastRankMemberDiff is one matched roster member with its proposed Phase-1 changes.
 type LastRankMemberDiff struct {
-	LastRankName     string            `json:"lastrank_name"`
-	LastRankPublicID int               `json:"lastrank_public_id"`
-	MatchedMember    *Member           `json:"matched_member"`
-	MatchType        string            `json:"match_type"`
+	LastRankName     string              `json:"lastrank_name"`
+	LastRankPublicID int                 `json:"lastrank_public_id"`
+	MatchedMember    *Member             `json:"matched_member"`
+	MatchType        string              `json:"match_type"`
 	Power            *LastRankStatDiff   `json:"power,omitempty"`
 	HeroPower        *LastRankStatDiff   `json:"hero_power,omitempty"`
 	HQLevel          *LastRankHQDiff     `json:"hq_level,omitempty"`
@@ -1153,7 +1153,7 @@ type LastRankCommitMember struct {
 type LastRankUnmatchedAction struct {
 	LastRankName     string `json:"lastrank_name"`
 	LastRankPublicID int    `json:"lastrank_public_id"`
-	Action           string `json:"action"`             // "alias" | "rename" | "add" | "ignore"
+	Action           string `json:"action"`              // "alias" | "rename" | "add" | "ignore"
 	MemberID         int    `json:"member_id,omitempty"` // target for "alias"/"rename"
 	NewRank          string `json:"new_rank,omitempty"`  // rank for "add"
 	ApplyStats       bool   `json:"apply_stats,omitempty"`

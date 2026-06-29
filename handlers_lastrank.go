@@ -414,13 +414,13 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"power_updated":   powerN,
-		"hero_updated":    heroN,
-		"hq_updated":      hqN,
-		"rank_updated":    rankN,
-		"aliases_saved":   aliasN,
-		"members_renamed": renameN,
-		"members_added":   addN,
+		"power_updated":    powerN,
+		"hero_updated":     heroN,
+		"hq_updated":       hqN,
+		"rank_updated":     rankN,
+		"aliases_saved":    aliasN,
+		"members_renamed":  renameN,
+		"members_added":    addN,
 		"members_archived": archiveN,
 	})
 }
