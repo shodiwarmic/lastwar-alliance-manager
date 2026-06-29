@@ -134,14 +134,8 @@ type OCRSectionDiagnostic struct {
 	Note         *string `json:"note"`
 }
 
-// decodeWorkerResponse reads either the legacy bare category map OR the new
-// {results, diagnostics} envelope, returning the players map plus the opaque
-// diagnostics blob (nil on the legacy path).
-//
-// TEMPORARY: the legacy branch exists only so this repo and lastwar-ocr-service
-// don't need a lock-step deploy. Once the OCR service ships the envelope
-// everywhere, collapse this to a single envelope decode (see the diagnostics
-// plan's "Follow-up").
+// decodeWorkerResponse reads the OCR worker's {results, diagnostics} envelope,
+// returning the players map plus the opaque diagnostics blob (which may be nil).
 func decodeWorkerResponse(body io.Reader) (CVWorkerResponse, json.RawMessage, error) {
 	raw, err := io.ReadAll(body)
 	if err != nil {
@@ -154,39 +148,27 @@ func decodeWorkerResponse(body io.Reader) (CVWorkerResponse, json.RawMessage, er
 		return nil, nil, err
 	}
 
-	// Envelope iff a top-level "results" key is present ("results" is never a
-	// valid category, so this is an unambiguous discriminator).
-	if resRaw, isEnvelope := probe["results"]; isEnvelope {
-		var results CVWorkerResponse
-		if err := json.Unmarshal(resRaw, &results); err != nil {
-			return nil, nil, err
-		}
-		if warnRaw, ok := probe["warning"]; ok {
-			var warning string
-			json.Unmarshal(warnRaw, &warning)
-			if warning != "" {
-				slog.Info("ocr worker warning", "warning", warning)
-			}
-		}
-		return results, probe["diagnostics"], nil // diagnostics may be nil; passed through opaque
+	resRaw, ok := probe["results"]
+	if !ok {
+		return nil, nil, fmt.Errorf("OCR response missing 'results' envelope")
 	}
-
-	// Legacy: the whole body IS the category map. Decode each category's bytes
-	// once from probe — no second full-tree parse.
-	legacy := make(CVWorkerResponse, len(probe))
-	for cat, arr := range probe {
-		var players []OCRPlayer
-		if err := json.Unmarshal(arr, &players); err != nil {
-			return nil, nil, err
-		}
-		legacy[cat] = players
+	var results CVWorkerResponse
+	if err := json.Unmarshal(resRaw, &results); err != nil {
+		return nil, nil, err
 	}
-	return legacy, nil, nil
+	if warnRaw, ok := probe["warning"]; ok {
+		var warning string
+		json.Unmarshal(warnRaw, &warning)
+		if warning != "" {
+			slog.Info("ocr worker warning", "warning", warning)
+		}
+	}
+	return results, probe["diagnostics"], nil // diagnostics may be nil; passed through opaque
 }
 
 // parseOCRDiagnostics unmarshals the opaque diagnostics blob into the lean typed
 // view used for the activity-log summary. Returns nil when the blob is absent
-// (legacy OCR response) or unparseable — callers must nil-check.
+// (the OCR service sent no diagnostics) or unparseable — callers must nil-check.
 func parseOCRDiagnostics(raw json.RawMessage) *OCRDiagnostics {
 	if len(raw) == 0 {
 		return nil
@@ -204,7 +186,7 @@ func parseOCRDiagnostics(raw json.RawMessage) *OCRDiagnostics {
 //
 //	OCR cloud_vision, 14 imgs: 12×day_color_saturation@0.95, 2×day_text_fallback@0.75; 1 no_players
 //
-// Returns "" when d is nil (legacy OCR / temporary-shim path) so callers can
+// Returns "" when d is nil (no diagnostics in the response) so callers can
 // append unconditionally. Nil-safe on the pointer section fields.
 func summarizeOCRDiagnostics(d *OCRDiagnostics) string {
 	if d == nil {
@@ -403,8 +385,7 @@ func ProcessImagesViaWorker(ctx context.Context, files []*multipart.FileHeader, 
 		return nil, nil, fmt.Errorf("worker returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	// 5. Decode the structured JSON response (tolerant of the legacy bare map or
-	// the new {results, diagnostics} envelope — see decodeWorkerResponse).
+	// 5. Decode the {results, diagnostics} envelope — see decodeWorkerResponse.
 	result, diagJSON, err := decodeWorkerResponse(resp.Body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decode worker JSON response: %v", err)
@@ -525,7 +506,7 @@ func ProcessImagesViaLocalWorker(ctx context.Context, files []*multipart.FileHea
 		return nil, nil, fmt.Errorf("local OCR sidecar returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	// Tolerant decode (legacy map or {results, diagnostics} envelope).
+	// Decode the {results, diagnostics} envelope.
 	result, diagJSON, err := decodeWorkerResponse(resp.Body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decode local OCR JSON response: %v", err)
