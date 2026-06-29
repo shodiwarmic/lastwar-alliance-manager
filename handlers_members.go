@@ -204,6 +204,24 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Join date is optional; when present it must be a valid YYYY-MM-DD date.
+	if m.JoinedAt != "" {
+		if _, perr := parseDate(m.JoinedAt); perr != nil {
+			http.Error(w, "Invalid join date (expected YYYY-MM-DD)", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Read-modify-write in one transaction so the activity-log diff is consistent
+	// and concurrent edits can't interleave (matches createMember).
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("updateMember: begin failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
 	// 1. Fetch current values before overwriting so we can diff for the activity log
 	var old struct {
 		Name             string
@@ -214,9 +232,10 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		SquadType        string
 		Eligible         bool
 		LastRankPublicID sql.NullInt64
+		JoinedAt         string
 	}
-	err = db.QueryRow("SELECT name, rank, level, troop_level, profession, squad_type, eligible, lastrank_public_id FROM members WHERE id = ?", id).Scan(
-		&old.Name, &old.Rank, &old.Level, &old.TroopLevel, &old.Profession, &old.SquadType, &old.Eligible, &old.LastRankPublicID,
+	err = tx.QueryRow("SELECT name, rank, level, troop_level, profession, squad_type, eligible, lastrank_public_id, COALESCE(joined_at, '') FROM members WHERE id = ?", id).Scan(
+		&old.Name, &old.Rank, &old.Level, &old.TroopLevel, &old.Profession, &old.SquadType, &old.Eligible, &old.LastRankPublicID, &old.JoinedAt,
 	)
 	if err != nil {
 		log.Printf("Error fetching current member name: %v", err)
@@ -224,8 +243,8 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Perform the main UPDATE
-	_, err = db.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ?, notes = ?, lastrank_public_id = ? WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, m.Notes, m.LastRankPublicID, id)
+	// 2. Perform the main UPDATE. joined_at = NULLIF(?, '') so a blank clears it.
+	_, err = tx.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ?, notes = ?, lastrank_public_id = ?, joined_at = NULLIF(?, '') WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, m.Notes, m.LastRankPublicID, m.JoinedAt, id)
 	if err != nil {
 		slog.Error("updateMember: exec failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -234,7 +253,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 
 	// 3. If the name changed, save the old name as a Global Alias
 	if m.Name != "" && old.Name != m.Name {
-		_, aliasErr := db.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", id, old.Name)
+		_, aliasErr := tx.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", id, old.Name)
 		if aliasErr != nil {
 			log.Printf("Warning: Failed to auto-create global alias for name change (member %d): %v", id, aliasErr)
 		}
@@ -280,18 +299,24 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	if oldPub != newPub {
 		changes = append(changes, "LastRank ID: "+strconv.Itoa(oldPub)+" → "+strconv.Itoa(newPub))
 	}
-	if len(changes) > 0 {
-		user := getAuthUser(r)
-		logActivity(user.ID, user.Username, "updated", "member", m.Name, false, strings.Join(changes, "; "))
+	if old.JoinedAt != m.JoinedAt {
+		oldSince, newSince := old.JoinedAt, m.JoinedAt
+		if oldSince == "" {
+			oldSince = "(none)"
+		}
+		if newSince == "" {
+			newSince = "(none)"
+		}
+		changes = append(changes, "member since: "+oldSince+" → "+newSince)
 	}
 
 	// Handle Power History
 	if m.Power != nil {
 		var currentPower int64 = -1
-		_ = db.QueryRow(`SELECT power FROM power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentPower)
+		_ = tx.QueryRow(`SELECT power FROM power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentPower)
 
 		if currentPower != *m.Power {
-			_, insertErr := db.Exec(`INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.Power)
+			_, insertErr := tx.Exec(`INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.Power)
 			if insertErr != nil {
 				log.Printf("Warning: Failed to log power history for member %d: %v", id, insertErr)
 			}
@@ -301,28 +326,41 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	// Handle Squad Power History
 	if m.SquadPower != nil {
 		var currentSquadPower int64 = -1
-		_ = db.QueryRow(`SELECT power FROM squad_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentSquadPower)
+		_ = tx.QueryRow(`SELECT power FROM squad_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentSquadPower)
 		if currentSquadPower != *m.SquadPower {
-			db.Exec(`INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.SquadPower)
+			tx.Exec(`INSERT INTO squad_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.SquadPower)
 		}
 	}
 
 	// Handle Hero Power History
 	if m.HeroPower != nil && *m.HeroPower > 0 {
 		var currentHeroPower int64 = -1
-		_ = db.QueryRow(`SELECT power FROM hero_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentHeroPower)
+		_ = tx.QueryRow(`SELECT power FROM hero_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentHeroPower)
 		if currentHeroPower != *m.HeroPower {
-			db.Exec(`INSERT INTO hero_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.HeroPower)
+			tx.Exec(`INSERT INTO hero_power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.HeroPower)
 		}
 	}
 
 	// Handle Kill Count History
 	if m.CurrentKills != nil && *m.CurrentKills > 0 {
 		var currentKills int64 = -1
-		_ = db.QueryRow(`SELECT kills FROM kill_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentKills)
+		_ = tx.QueryRow(`SELECT kills FROM kill_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1`, id).Scan(&currentKills)
 		if currentKills != *m.CurrentKills {
-			db.Exec(`INSERT INTO kill_history (member_id, kills, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.CurrentKills)
+			tx.Exec(`INSERT INTO kill_history (member_id, kills, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.CurrentKills)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("updateMember: commit failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Activity log after commit (logActivity uses its own connection — calling it
+	// while the tx held the write lock would deadlock SQLite's single writer).
+	if len(changes) > 0 {
+		user := getAuthUser(r)
+		logActivity(user.ID, user.Username, "updated", "member", m.Name, false, strings.Join(changes, "; "))
 	}
 
 	m.ID = id

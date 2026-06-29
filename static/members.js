@@ -3,6 +3,7 @@
 const API_URL = '/api/members';
 
 let editingMemberId = null;
+let joinDateFP = null; // Flatpickr instance for the edit-modal join date
 let currentUsername = '';
 let canManageRanks = false;
 let isR5OrAdmin = false;
@@ -362,6 +363,11 @@ function setupModalListeners() {
     });
 
     if (memberForm) memberForm.addEventListener('submit', handleMemberFormSubmit);
+
+    const joinDateEl = document.getElementById('member-join-date');
+    if (joinDateEl && window.flatpickr) {
+        joinDateFP = flatpickr(joinDateEl, { dateFormat: 'Y-m-d', allowInput: true });
+    }
 }
 
 function openMemberModal(editing = false) {
@@ -441,6 +447,11 @@ function resetMemberForm() {
 
     // Reset skill checkboxes
     document.querySelectorAll('[data-skill-key]').forEach(cb => { cb.checked = false; });
+
+    // Join date is an edit-only field — hide and clear it on the (add) reset.
+    const joinDateSection = document.getElementById('modal-join-date-section');
+    if (joinDateSection) joinDateSection.style.display = 'none';
+    if (joinDateFP) joinDateFP.clear();
 
     document.getElementById('modal-form-title').textContent = 'Add New Member';
     document.getElementById('submit-btn').textContent = 'Add Member';
@@ -844,10 +855,12 @@ async function handleMemberFormSubmit(e) {
     try {
         let targetId;
         if (editingMemberId) {
+            const joinDateEl = document.getElementById('member-join-date');
+            const joined_at = joinDateEl ? joinDateEl.value.trim() : '';
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id, joined_at }),
             });
             if (!response.ok) throw new Error('Failed to update member');
             targetId = editingMemberId;
@@ -1016,6 +1029,14 @@ window.editMember = function (member) {
     document.querySelectorAll('[data-skill-key]').forEach(cb => {
         cb.checked = memberSkills.includes(cb.dataset.skillKey);
     });
+
+    // Join date: officer-only correction field, shown only when editing.
+    const joinDateSection = document.getElementById('modal-join-date-section');
+    if (joinDateSection) joinDateSection.style.display = 'block';
+    if (joinDateFP) {
+        if (member.joined_at) joinDateFP.setDate(member.joined_at, false);
+        else joinDateFP.clear();
+    }
 
     document.getElementById('modal-form-title').textContent = 'Edit Member';
     document.getElementById('submit-btn').textContent = 'Update Member';

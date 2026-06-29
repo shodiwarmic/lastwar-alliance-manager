@@ -1,6 +1,8 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="/members.css">
 <link rel="stylesheet" href="/lastrank.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {{end}}
 
 {{define "header_text"}}
@@ -279,6 +281,13 @@
                     <label for="member-lastrank-id">LastRank Player ID:</label>
                     <input type="text" id="member-lastrank-id" class="form-input" placeholder="Paste lastrank.fun URL or ID — leave blank to clear">
                     <span id="member-lastrank-link" class="help-text">Set automatically when synced. Edit or clear here to fix a mistaken pairing.</span>
+                </div>
+
+                <!-- Officer-only join-date correction. Shown only when editing an existing member. -->
+                <div id="modal-join-date-section" class="form-group" style="display: none;">
+                    <label for="member-join-date">Join Date:</label>
+                    <input type="text" id="member-join-date" class="form-input" placeholder="YYYY-MM-DD — leave blank to clear">
+                    <span class="help-text">When this member joined the alliance. Leave blank to clear an unknown date.</span>
                 </div>
 
                 {{if .SkillLabels}}
