@@ -23,7 +23,15 @@ let currentFilteredMembers = [];
 const SORT_DEFAULTS = {
     name: 'asc', rank: 'desc', power: 'desc',
     hq: 'desc', hero_power: 'desc', kills: 'desc', squad_power: 'desc',
+    joined: 'desc', // most days in alliance (oldest join date) first
 };
+
+// Sort key for join date: YYYYMMDD as a number (string order == chronological).
+// Unknown dates get a large key so they're treated as newest and sort to the
+// bottom of the default "most days first" view.
+function joinedSortKey(m) {
+    return m.joined_at ? Number(m.joined_at.replace(/-/g, '')) : 99999999;
+}
 
 const SKILL_ICON = { medical_aid: 'first-aid-kit' };
 
@@ -172,6 +180,7 @@ function updateDisplayedMembers() {
         else if (sortField === 'hero_power')  diff = (a.hero_power || 0) - (b.hero_power || 0);
         else if (sortField === 'kills')       diff = (a.current_kills || 0) - (b.current_kills || 0);
         else if (sortField === 'squad_power') diff = (a.squad_power || 0) - (b.squad_power || 0);
+        else if (sortField === 'joined')      diff = joinedSortKey(b) - joinedSortKey(a); // higher tenure = positive
         if (diff === 0) diff = a.name.localeCompare(b.name);
         return sortDir === 'asc' ? diff : -diff;
     });
@@ -1292,6 +1301,7 @@ function updateSortChips() {
     const SORT_LABELS = {
         name: 'Name', rank: 'Rank', power: 'Power',
         hq: 'HQ', hero_power: 'Hero Power', kills: 'Kills', squad_power: 'Squad Power',
+        joined: 'Joined',
     };
     document.querySelectorAll('.sort-chip').forEach(btn => {
         const field = btn.dataset.sort;
