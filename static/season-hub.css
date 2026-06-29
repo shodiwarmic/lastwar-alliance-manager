@@ -502,3 +502,47 @@
     padding: 4px 6px;
     font-size: 0.85rem;
 }
+
+/* ── Extracted page-layout styles (formerly inline) ───────────────────────── */
+
+/* Edit-season modal: narrow centred form column */
+.es-form-narrow {
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+#btn-es-add-trackable {
+    margin-top: 4px;
+}
+
+/* Edit-season events table horizontal scroll wrapper */
+.es-events-scroll {
+    overflow-x: auto;
+}
+
+/* Edit-season events action row (add/push buttons + status) */
+.es-event-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+/* OCR import: reserve a line so the status text doesn't shift layout */
+#contrib-import-status {
+    min-height: 1.2em;
+}
+
+/* OCR import: preview card + unresolved block spacing (visibility toggled by JS) */
+#contrib-preview-card {
+    margin-top: 8px;
+}
+
+#contrib-unresolved-wrap {
+    margin-top: 16px;
+}
+
+/* Post-mail modal: allow vertical resize only */
+#mail-content {
+    resize: vertical;
+}
