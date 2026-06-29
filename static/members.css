@@ -273,6 +273,12 @@
     flex-shrink: 0;
 }
 
+/* "Member Since" badge — neutral metadata chip on member cards */
+.badge-since {
+    background: var(--color-surface);
+    color: var(--color-text-mid);
+}
+
 /* ── Extracted page-layout styles (formerly inline) ───────────────────────── */
 
 /* "(optional)" hint inside a label */

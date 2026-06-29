@@ -546,6 +546,16 @@ window.addEventListener('resize', () => {
     }, 150);
 });
 
+// Format a YYYY-MM-DD date-only string as e.g. "Jun 14 2026". Built from the
+// date parts (not new Date(str)) so it isn't shifted a day by UTC parsing.
+function formatMemberSince(str) {
+    if (!str) return '';
+    const [y, mo, d] = str.split('-');
+    const dt = new Date(+y, +mo - 1, +d);
+    if (isNaN(dt)) return '';
+    return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function buildMemberCard(member) {
     const card = document.createElement('div');
     card.className = 'member-card';
@@ -721,6 +731,18 @@ function buildMemberCard(member) {
             span.addEventListener('click', () => toggleEligible(member.id, eligible, info, span));
         }
         info.appendChild(span);
+    }
+
+    // Member Since — neutral calendar badge, only when a join date is known.
+    if (member.joined_at) {
+        const since = formatMemberSince(member.joined_at);
+        if (since) {
+            const span = document.createElement('span');
+            span.className = 'member-info-badge badge-since';
+            span.title = `Member since ${since}`;
+            span.append(svgIcon('calendar', 13), document.createTextNode(' Since ' + since));
+            info.appendChild(span);
+        }
     }
 
     card.appendChild(info);

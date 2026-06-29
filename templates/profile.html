@@ -19,6 +19,12 @@
                     <input type="text" id="stat-name" required class="form-input" style="width: 100%;">
                 </div>
 
+                <!-- Read-only: members can't change their own join date (officers do, in the member modal). -->
+                <div class="form-group" id="stat-member-since-row" style="margin-bottom: 15px; display: none;">
+                    <label>Member Since:</label>
+                    <p id="stat-member-since" style="margin: 0;"></p>
+                </div>
+
                 <div style="display: flex; gap: 15px; margin-bottom: 15px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="stat-level">HQ Level:</label>

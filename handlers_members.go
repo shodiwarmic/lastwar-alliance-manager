@@ -908,6 +908,7 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow(`
 		SELECT
 			m.id, m.name, m.rank, m.eligible, m.level,
+			COALESCE(m.joined_at, '') as joined_at,
 			(SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as power,
 			COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as power_updated_at,
 			COALESCE(m.squad_type, ''),
@@ -924,7 +925,7 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 				FROM (SELECT skill_key FROM member_skills WHERE member_id = m.id ORDER BY skill_key)
 			), '') as skills
 		FROM members m WHERE m.id = ?`, memberID).
-		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.HeroPower, &m.HeroPowerUpdatedAt, &m.CurrentKills, &m.KillsUpdatedAt, &m.Skills)
+		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.JoinedAt, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.HeroPower, &m.HeroPowerUpdatedAt, &m.CurrentKills, &m.KillsUpdatedAt, &m.Skills)
 
 	if err != nil {
 		log.Printf("Profile Fetch Error: %v", err)
