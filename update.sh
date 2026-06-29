@@ -230,10 +230,9 @@ if [ -f .env ] && ! grep -q "^OCR_BACKEND_MODE=" .env; then
     if [[ "$ENABLE_LOCAL" =~ ^[Yy]$ ]]; then
         echo "OCR_BACKEND_MODE=local" >> .env
         echo "COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml" >> .env
-        sudo sqlite3 ./data/alliance.db \
-            "UPDATE settings SET ocr_backend_mode = 'local' WHERE id = 1;" 2>/dev/null || true
-        sudo sqlite3 ./data/alliance.db \
-            "UPDATE settings SET cv_worker_url = 'http://ocr-local:8080' WHERE id = 1 AND COALESCE(cv_worker_url, '') = '';" 2>/dev/null || true
+        # The app reconciles ocr_backend_mode + cv_worker_url from the env var on
+        # startup (reconcileOCRBackendFromEnv) — no host-side sqlite3 write, which
+        # raced the in-container migrations and left root-owned -wal/-shm files.
         echo -e "${GREEN}Local OCR sidecar enabled — sidecar image will pull on the next compose step.${NC}"
     else
         echo "OCR_BACKEND_MODE=cloud" >> .env

@@ -47,6 +47,35 @@ func LoadOCRBackendConfig() (mode OCRBackendMode, workerURL string, err error) {
 	return OCRBackendMode(rawMode), workerURL, nil
 }
 
+// reconcileOCRBackendFromEnv syncs the operator's OCR_BACKEND_MODE choice
+// (written to .env by install.sh / update.sh, injected into the container via
+// env_file) into the settings table after migrations run. This replaces the old
+// racy `sqlite3 UPDATE` those scripts used to run against the DB file from the
+// host — doing it in-process and post-migration avoids the WAL-lock race against
+// goose and the root-owned -wal/-shm files. Upsert because correctness must not
+// depend on the 054 seed migration having run first.
+func reconcileOCRBackendFromEnv() {
+	mode := os.Getenv("OCR_BACKEND_MODE")
+	if mode != string(OCRBackendLocal) && mode != string(OCRBackendCloud) {
+		return // unset/invalid → keep the migration default ('cloud')
+	}
+	if _, err := db.Exec(`
+		INSERT INTO settings (id, ocr_backend_mode) VALUES (1, ?)
+		ON CONFLICT(id) DO UPDATE SET ocr_backend_mode = excluded.ocr_backend_mode`,
+		mode); err != nil {
+		slog.Error("reconcileOCRBackendFromEnv: set mode failed", "error", err)
+		return
+	}
+	if mode == string(OCRBackendLocal) {
+		// Default the sidecar URL once, without clobbering an admin override.
+		if _, err := db.Exec(`UPDATE settings SET cv_worker_url = 'http://ocr-local:8080'
+			WHERE id = 1 AND COALESCE(cv_worker_url, '') = ''`); err != nil {
+			slog.Error("reconcileOCRBackendFromEnv: default cv_worker_url failed", "error", err)
+		}
+	}
+	slog.Info("OCR backend reconciled from env", "mode", mode)
+}
+
 // ProcessImages dispatches to the right OCR backend based on the operator's
 // settings. `category` is required for local mode and ignored for cloud
 // mode. Wraps both ProcessImagesViaWorker and ProcessImagesViaLocalWorker

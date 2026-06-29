@@ -132,6 +132,10 @@ func main() {
 	}
 	defer db.Close()
 
+	// Sync the operator's OCR_BACKEND_MODE env choice into settings (replaces the
+	// old racy sqlite3 write in install.sh / update.sh). Runs post-migration.
+	reconcileOCRBackendFromEnv()
+
 	// Start the local-archive retention janitor (no-op unless OCR_ARCHIVE_DIR set).
 	startLocalArchiveJanitor()
 
