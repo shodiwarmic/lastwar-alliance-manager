@@ -17,6 +17,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     const processImageBtn = document.getElementById('process-image-btn');
     const clearBtn = document.getElementById('clear-btn');
 
+    // Searchable, keyboard-navigable category dropdown. Choices keeps the
+    // underlying <select> in sync, so reading force-category.value still works.
+    // NOTE: clearing/resetting this field must go through the Choices API
+    // (categoryChoices.setChoiceByValue(...)) — never a native form.reset(),
+    // which would desync Choices from the underlying <select>.
+    const categorySelect = document.getElementById('force-category');
+    if (categorySelect && window.Choices) {
+        const categoryChoices = new Choices(categorySelect, {
+            searchEnabled: true,
+            itemSelectText: '',
+            shouldSort: false,
+        });
+        // Cloud mode defaults to Auto-Detect. Choices doesn't reliably inherit the
+        // native first-option selection across grouped options, so set it explicitly.
+        if (categorySelect.dataset.backend !== 'local') {
+            categoryChoices.setChoiceByValue('auto');
+        }
+        void categoryChoices;
+    }
+
     dropZone.addEventListener('click', (e) => {
         if (e.target === clearBtn || clearBtn.contains(e.target)) return;
         if (selectedFiles.length === 0) imageInput.click();

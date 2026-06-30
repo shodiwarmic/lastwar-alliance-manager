@@ -1,6 +1,6 @@
 {{define "header_text"}}
 <h1>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="14 9 9 4 4 9"/><path d="M20 20H4v-4a16 16 0 018-6 16 16 0 018 6v4z"/></svg>
+        <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trophy"/></svg>
         Season Hub
     </h1>
     <h2>Season tracking &amp; rewards</h2>
@@ -258,7 +258,7 @@
     <div class="modal-content modal-xl">
         <h3>Edit Season</h3>
         <form id="form-edit-season">
-            <div style="max-width:720px;margin:0 auto;">
+            <div class="es-form-narrow">
             <div class="form-row">
                 <div class="form-group">
                     <label for="es-name">Season Name</label>
@@ -323,12 +323,12 @@
                 <thead><tr><th>Key</th><th>Label</th><th></th></tr></thead>
                 <tbody id="es-trackables-tbody"></tbody>
             </table>
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-trackable" style="margin-top:4px;">+ Add Trackable</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-trackable">+ Add Trackable</button>
 
             </div>
             <h4 class="modal-subhead">Season Events</h4>
-            <div style="overflow-x:auto;">
-            <table class="data-table" id="es-events-table" style="font-size:0.8rem;white-space:nowrap;">
+            <div class="es-events-scroll">
+            <table class="data-table" id="es-events-table">
                 <thead>
                     <tr>
                         <th>Label</th>
@@ -347,7 +347,7 @@
                 <tbody id="es-events-tbody"></tbody>
             </table>
             </div>
-            <div style="display:flex;gap:8px;margin-top:4px;align-items:center;">
+            <div class="es-event-actions">
                 <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-event">+ Add Event</button>
                 <button type="button" class="btn btn-primary btn-sm" id="btn-es-push-schedule">Push to Schedule</button>
                 <span id="es-push-status" class="status-msg"></span>
@@ -420,8 +420,8 @@
                 <input type="file" id="contrib-images" class="form-input" accept="image/*" multiple>
             </div>
         </div>
-        <div id="contrib-import-status" class="status-msg" style="min-height:1.2em;"></div>
-        <div id="contrib-preview-card" style="display:none;margin-top:8px;">
+        <div id="contrib-import-status" class="status-msg"></div>
+        <div id="contrib-preview-card" style="display:none">
             <p id="contrib-preview-summary"></p>
             <table class="data-table">
                 <thead>
@@ -429,8 +429,8 @@
                 </thead>
                 <tbody id="contrib-preview-tbody"></tbody>
             </table>
-            <div id="contrib-unresolved-wrap" style="display:none;margin-top:16px;">
-                <p class="contrib-unresolved-title" style="font-weight:600;margin-bottom:6px;">Unresolved — map to a member or ignore:</p>
+            <div id="contrib-unresolved-wrap" style="display:none">
+                <p class="contrib-unresolved-title">Unresolved — map to a member or ignore:</p>
                 <table class="data-table">
                     <thead><tr><th>OCR Name</th><th>Points</th><th>Map to Member</th><th>Save Alias</th></tr></thead>
                     <tbody id="contrib-unresolved-list"></tbody>
@@ -456,7 +456,7 @@
             </div>
             <div class="form-group">
                 <label for="mail-content">Content</label>
-                <textarea id="mail-content" class="form-input" rows="8" style="resize:vertical;" placeholder="Paste the mail text here…"></textarea>
+                <textarea id="mail-content" class="form-input" rows="8" placeholder="Paste the mail text here…"></textarea>
             </div>
             <div id="mail-error" class="field-error" style="display:none"></div>
             <div class="modal-actions">

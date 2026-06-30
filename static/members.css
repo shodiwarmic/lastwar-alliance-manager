@@ -273,5 +273,70 @@
     flex-shrink: 0;
 }
 
+/* "Member Since" badge — neutral metadata chip on member cards */
+.badge-since {
+    background: var(--color-surface);
+    color: var(--color-text-mid);
+}
+
+/* CSV import preview: per-row join-date picker for new members */
+.csv-join-date {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 0.85em;
+}
+
+/* Linked "joined [N] days ago · [date]" entry (modal + import rows) */
+.join-date-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.join-date-row .join-days-input {
+    width: 4.5em;
+    text-align: center;
+}
+.join-date-row .join-date-input {
+    width: auto;
+    max-width: 150px;
+}
+
+/* Members toolbar: join-display (days/date) toggle + export bar grouping */
+.members-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.join-display-toggle {
+    white-space: nowrap;
+}
+
+/* ── Extracted page-layout styles (formerly inline) ───────────────────────── */
+
+/* "(optional)" hint inside a label */
+.label-optional {
+    color: var(--color-text-muted);
+    font-weight: normal;
+}
+
+/* Alias modal: new-nickname input grows to fill the add-alias form row */
+.alias-input-field {
+    flex: 1;
+}
+
+/* Alias modal: global-alias checkbox wrapper spacing (visibility toggled by JS) */
+#global-alias-checkbox-wrapper {
+    margin-top: 10px;
+}
+
+#new-alias-global {
+    width: 16px;
+    height: 16px;
+}
+
 
 

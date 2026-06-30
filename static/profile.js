@@ -93,6 +93,16 @@ function enforceTroopLevel() {
     }
 }
 
+// Format a YYYY-MM-DD date-only string as e.g. "Jun 14 2026". Built from the
+// date parts (not new Date(str)) so it isn't shifted a day by UTC parsing.
+function formatMemberSince(str) {
+    if (!str) return '';
+    const [y, mo, d] = str.split('-');
+    const dt = new Date(+y, +mo - 1, +d);
+    if (isNaN(dt)) return '';
+    return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 async function loadGameStats() {
     try {
         const response = await fetch(`${API_BASE}/profile/me`);
@@ -111,6 +121,16 @@ async function loadGameStats() {
             document.getElementById('stat-profession').value = data.profession || '';
             document.getElementById('stat-hero-power').value = data.hero_power || '';
             document.getElementById('stat-kill-count').value = data.current_kills || '';
+
+            // Member Since — read-only, shown only when a join date is known.
+            const sinceRow = document.getElementById('stat-member-since-row');
+            const since = formatMemberSince(data.joined_at);
+            if (since) {
+                document.getElementById('stat-member-since').textContent = since;
+                sinceRow.style.display = '';
+            } else {
+                sinceRow.style.display = 'none';
+            }
 
             const fmt = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' };
             function setTimestamp(id, raw) {

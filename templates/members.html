@@ -1,11 +1,13 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="/members.css">
 <link rel="stylesheet" href="/lastrank.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {{end}}
 
 {{define "header_text"}}
     <h1>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg>
         Members
     </h1>
     <h2>Alliance Member Manager</h2>
@@ -62,7 +64,10 @@
             <section class="members-section">
                 <div class="members-list-header">
                     <h3>Alliance Members</h3>
-                    <div id="members-export-bar" class="member-export-actions"></div>
+                    <div class="members-header-actions">
+                        <button type="button" id="join-display-toggle" class="btn btn-secondary btn-sm join-display-toggle" title="Toggle how join dates show on cards"></button>
+                        <div id="members-export-bar" class="member-export-actions"></div>
+                    </div>
                 </div>
 
                 <div class="filter-sort-controls">
@@ -93,6 +98,7 @@
                             <button class="filter-chip sort-chip" data-sort="hq">HQ</button>
                             <button class="filter-chip sort-chip" data-sort="hero_power">Hero Power</button>
                             <button class="filter-chip sort-chip" data-sort="kills">Kills</button>
+                            <button class="filter-chip sort-chip" data-sort="joined">Joined</button>
                             <button class="filter-chip sort-chip squad-sort-option" data-sort="squad_power" style="display:none">Squad Power</button>
                         </div>
 
@@ -281,6 +287,14 @@
                     <span id="member-lastrank-link" class="help-text">Set automatically when synced. Edit or clear here to fix a mistaken pairing.</span>
                 </div>
 
+                <!-- Officer-only join-date correction. Shown only when editing an existing member.
+                     The linked days-ago / date widget is injected into #member-join-date-host by JS. -->
+                <div id="modal-join-date-section" class="form-group" style="display: none;">
+                    <label>Join Date:</label>
+                    <div id="member-join-date-host"></div>
+                    <span class="help-text">Set either field — the game shows "joined N days ago". Leave blank to clear an unknown date.</span>
+                </div>
+
                 {{if .SkillLabels}}
                 <div class="form-group">
                     <label>Skills:</label>
@@ -326,7 +340,7 @@
         <div class="modal-content">
             <h2 id="archive-modal-title">Archive Member</h2>
             <div class="form-group">
-                <label for="archive-reason-input">Reason for leaving <span style="color:var(--color-text-muted);font-weight:normal;">(optional)</span></label>
+                <label for="archive-reason-input">Reason for leaving <span class="label-optional">(optional)</span></label>
                 <input type="text" id="archive-reason-input" class="form-input" placeholder="e.g. Moved to another alliance">
             </div>
             <div class="modal-actions">
@@ -343,16 +357,16 @@
             
             <div class="alias-add-card">
                 <form id="add-alias-form">
-                    <div style="flex: 1;">
+                    <div class="alias-input-field">
                         <label for="new-alias-input">New Nickname:</label>
                         <input type="text" id="new-alias-input" class="form-input" required placeholder="e.g. StarLord">
                     </div>
                     <button type="submit" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
                 </form>
                 <p id="alias-add-status" class="status-msg"></p>
-                <div id="global-alias-checkbox-wrapper" style="margin-top: 10px; display: none;">
+                <div id="global-alias-checkbox-wrapper" style="display: none;">
                     <label class="global-alias-label">
-                        <input type="checkbox" id="new-alias-global" style="width: 16px; height: 16px;">
+                        <input type="checkbox" id="new-alias-global">
                         Make this a Global Alias (Applies to all users)
                     </label>
                 </div>

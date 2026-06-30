@@ -3,6 +3,7 @@
 const API_URL = '/api/members';
 
 let editingMemberId = null;
+let joinDateWidget = null; // linked days-ago/date widget for the edit modal
 let currentUsername = '';
 let canManageRanks = false;
 let isR5OrAdmin = false;
@@ -22,7 +23,15 @@ let currentFilteredMembers = [];
 const SORT_DEFAULTS = {
     name: 'asc', rank: 'desc', power: 'desc',
     hq: 'desc', hero_power: 'desc', kills: 'desc', squad_power: 'desc',
+    joined: 'desc', // most days in alliance (oldest join date) first
 };
+
+// Sort key for join date: YYYYMMDD as a number (string order == chronological).
+// Unknown dates get a large key so they're treated as newest and sort to the
+// bottom of the default "most days first" view.
+function joinedSortKey(m) {
+    return m.joined_at ? Number(m.joined_at.replace(/-/g, '')) : 99999999;
+}
 
 const SKILL_ICON = { medical_aid: 'first-aid-kit' };
 
@@ -171,6 +180,7 @@ function updateDisplayedMembers() {
         else if (sortField === 'hero_power')  diff = (a.hero_power || 0) - (b.hero_power || 0);
         else if (sortField === 'kills')       diff = (a.current_kills || 0) - (b.current_kills || 0);
         else if (sortField === 'squad_power') diff = (a.squad_power || 0) - (b.squad_power || 0);
+        else if (sortField === 'joined')      diff = joinedSortKey(b) - joinedSortKey(a); // higher tenure = positive
         if (diff === 0) diff = a.name.localeCompare(b.name);
         return sortDir === 'asc' ? diff : -diff;
     });
@@ -362,6 +372,31 @@ function setupModalListeners() {
     });
 
     if (memberForm) memberForm.addEventListener('submit', handleMemberFormSubmit);
+
+    const joinHost = document.getElementById('member-join-date-host');
+    if (joinHost && window.buildJoinDateField) {
+        joinDateWidget = window.buildJoinDateField('');
+        joinHost.appendChild(joinDateWidget.row);
+    }
+
+    setupJoinDisplayToggle();
+}
+
+// Per-user toggle: member cards show either "N days in alliance" or the join date.
+function setupJoinDisplayToggle() {
+    const toggle = document.getElementById('join-display-toggle');
+    if (!toggle || !window.UserPrefs) return;
+    const renderLabel = () => {
+        const mode = window.UserPrefs.get('memberSinceDisplay');
+        toggle.textContent = mode === 'date' ? 'Joined: date' : 'Joined: days';
+    };
+    renderLabel();
+    toggle.addEventListener('click', () => {
+        const mode = window.UserPrefs.get('memberSinceDisplay');
+        window.UserPrefs.set('memberSinceDisplay', mode === 'date' ? 'days' : 'date');
+        renderLabel();
+        updateDisplayedMembers();
+    });
 }
 
 function openMemberModal(editing = false) {
@@ -441,6 +476,11 @@ function resetMemberForm() {
 
     // Reset skill checkboxes
     document.querySelectorAll('[data-skill-key]').forEach(cb => { cb.checked = false; });
+
+    // Join date is an edit-only field — hide and clear it on the (add) reset.
+    const joinDateSection = document.getElementById('modal-join-date-section');
+    if (joinDateSection) joinDateSection.style.display = 'none';
+    if (joinDateWidget) joinDateWidget.clear();
 
     document.getElementById('modal-form-title').textContent = 'Add New Member';
     document.getElementById('submit-btn').textContent = 'Add Member';
@@ -723,6 +763,28 @@ function buildMemberCard(member) {
         info.appendChild(span);
     }
 
+    // Join-date badge — "N days in alliance" or the join date, per the user's display
+    // preference (toggle in the toolbar). Shown only when a join date is known.
+    if (member.joined_at) {
+        const dateStr = window.formatJoinDate(member.joined_at);
+        if (dateStr) {
+            const days = window.gameISOToDaysAgo(member.joined_at);
+            const showDays = (window.UserPrefs ? window.UserPrefs.get('memberSinceDisplay') : 'days') !== 'date';
+            const span = document.createElement('span');
+            span.className = 'member-info-badge badge-since';
+            let label;
+            if (showDays && days != null && days >= 0) {
+                label = days + 'd';
+                span.title = `In alliance ${days} day${days === 1 ? '' : 's'} · joined ${dateStr}`;
+            } else {
+                label = 'Since ' + dateStr;
+                span.title = `Joined ${dateStr}`;
+            }
+            span.append(svgIcon('calendar', 13), document.createTextNode(' ' + label));
+            info.appendChild(span);
+        }
+    }
+
     card.appendChild(info);
 
     // ── actions column ───────────────────────────────────────────
@@ -822,10 +884,11 @@ async function handleMemberFormSubmit(e) {
     try {
         let targetId;
         if (editingMemberId) {
+            const joined_at = joinDateWidget ? joinDateWidget.getISO() : '';
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id, joined_at }),
             });
             if (!response.ok) throw new Error('Failed to update member');
             targetId = editingMemberId;
@@ -994,6 +1057,11 @@ window.editMember = function (member) {
     document.querySelectorAll('[data-skill-key]').forEach(cb => {
         cb.checked = memberSkills.includes(cb.dataset.skillKey);
     });
+
+    // Join date: officer-only correction field, shown only when editing.
+    const joinDateSection = document.getElementById('modal-join-date-section');
+    if (joinDateSection) joinDateSection.style.display = 'block';
+    if (joinDateWidget) joinDateWidget.setISO(member.joined_at || '');
 
     document.getElementById('modal-form-title').textContent = 'Edit Member';
     document.getElementById('submit-btn').textContent = 'Update Member';
@@ -1233,6 +1301,7 @@ function updateSortChips() {
     const SORT_LABELS = {
         name: 'Name', rank: 'Rank', power: 'Power',
         hq: 'HQ', hero_power: 'Hero Power', kills: 'Kills', squad_power: 'Squad Power',
+        joined: 'Joined',
     };
     document.querySelectorAll('.sort-chip').forEach(btn => {
         const field = btn.dataset.sort;
@@ -1513,6 +1582,18 @@ function showCSVPreview(result) {
 
             notice.append(icon, text, select);
             item.appendChild(notice);
+        }
+
+        // New members: optional per-row join date — linked days-ago/date widget,
+        // prefilled from a CSV column when present. Blank → today (server-side).
+        if (member.is_new) {
+            const jd = document.createElement('div');
+            jd.className = 'csv-join-date';
+            const lbl = document.createElement('label');
+            lbl.textContent = 'Join date:';
+            const widget = window.buildJoinDateField(member.joined_at || '', iso => { member.joined_at = iso; });
+            jd.append(lbl, widget.row);
+            item.appendChild(jd);
         }
 
         listDiv.appendChild(item);
