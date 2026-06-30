@@ -90,20 +90,20 @@ type ScoreLevel struct {
 }
 
 type SeasonMember struct {
-	MemberID           int               `json:"member_id"`
-	Name               string            `json:"name"`
-	Rank               string            `json:"rank"`
-	ParticipationPts   int               `json:"participation_pts"`
-	ParticipationPct   float64           `json:"participation_pct"`
-	ContributionTotal  int64             `json:"contribution_total"`
-	ContributionPct    float64           `json:"contribution_pct"`
-	KeyEventAttendance int               `json:"key_event_attendance"`
-	KeyEventEligible   bool              `json:"key_event_eligible"`
-	WeeklyScores       []string          `json:"weekly_scores"`
-	WeeklyKeyEvent     []int             `json:"weekly_key_event"`
-	RewardTier         string            `json:"reward_tier"`
-	ClassTag           string            `json:"class_tag"`
-	Records            map[string]int64  `json:"records"`
+	MemberID           int              `json:"member_id"`
+	Name               string           `json:"name"`
+	Rank               string           `json:"rank"`
+	ParticipationPts   int              `json:"participation_pts"`
+	ParticipationPct   float64          `json:"participation_pct"`
+	ContributionTotal  int64            `json:"contribution_total"`
+	ContributionPct    float64          `json:"contribution_pct"`
+	KeyEventAttendance int              `json:"key_event_attendance"`
+	KeyEventEligible   bool             `json:"key_event_eligible"`
+	WeeklyScores       []string         `json:"weekly_scores"`
+	WeeklyKeyEvent     []int            `json:"weekly_key_event"`
+	RewardTier         string           `json:"reward_tier"`
+	ClassTag           string           `json:"class_tag"`
+	Records            map[string]int64 `json:"records"`
 }
 
 type ParticipationEntry struct {
@@ -238,7 +238,6 @@ func loadSeasonByID(id int) (*Season, error) {
 	}
 	return &s, nil
 }
-
 
 // autoActivateUpcomingSeason checks whether any pending (inactive, non-archived) season
 // has reached its start date and, if so, archives the current active season and activates
@@ -527,7 +526,7 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	// and make this one active immediately.
 	// If the start date is in the future, the existing active season stays active;
 	// autoActivateUpcomingSeason will handle the transition when the date arrives.
-	today := time.Now().Format("2006-01-02")
+	today := gameDate()
 	isFuture := body.StartDate > today
 	if !isFuture {
 		if _, err := tx.Exec(`UPDATE seasons SET is_active = 0,
@@ -882,9 +881,9 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"message":           "Season deleted",
-		"purged_alliance":   purgedAlliance,
-		"purged_server":     purgedServer,
+		"message":         "Season deleted",
+		"purged_alliance": purgedAlliance,
+		"purged_server":   purgedServer,
 	})
 }
 
@@ -1120,12 +1119,12 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	members := make([]SeasonMember, 0, len(allMembers))
 	for _, m := range allMembers {
 		sm := SeasonMember{
-			MemberID:     m.id,
-			Name:         m.name,
-			Rank:         m.rank,
-			WeeklyScores: make([]string, season.WeekCount),
+			MemberID:       m.id,
+			Name:           m.name,
+			Rank:           m.rank,
+			WeeklyScores:   make([]string, season.WeekCount),
 			WeeklyKeyEvent: make([]int, season.WeekCount),
-			RewardTier:   rewardByMember[m.id],
+			RewardTier:     rewardByMember[m.id],
 		}
 
 		mp := partByMember[m.id]
@@ -1489,10 +1488,10 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		tx.Rollback()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"matched":    matched,
-			"unresolved": unresolved,
+			"matched":     matched,
+			"unresolved":  unresolved,
 			"week_number": weekNumber,
-			"category":   category,
+			"category":    category,
 		})
 		return
 	}
@@ -2574,7 +2573,6 @@ func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
-
 
 // ---------------------------------------------------------------------------
 // Season templates

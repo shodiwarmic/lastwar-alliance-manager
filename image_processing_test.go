@@ -8,22 +8,18 @@ import (
 
 func ocrTestStrPtr(s string) *string { return &s }
 
-// TestDecodeWorkerResponse_Legacy: the pre-envelope bare category map still
-// parses, with nil diagnostics (the temporary-shim backward-compat path).
-func TestDecodeWorkerResponse_Legacy(t *testing.T) {
+// TestDecodeWorkerResponse_BareMapRejected: the pre-envelope bare category map
+// is no longer supported — a response without a top-level "results" key is an
+// error (the backward-compat shim was removed once the OCR service shipped the
+// envelope everywhere).
+func TestDecodeWorkerResponse_BareMapRejected(t *testing.T) {
 	body := `{"power":[{"player_name":"Alice","score":5000}],"kills":[{"player_name":"Bob","score":12}]}`
-	res, diag, err := decodeWorkerResponse(strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, _, err := decodeWorkerResponse(strings.NewReader(body))
+	if err == nil {
+		t.Fatal("expected error for bare category map (no 'results' envelope), got nil")
 	}
-	if diag != nil {
-		t.Errorf("expected nil diagnostics on legacy response, got %s", diag)
-	}
-	if len(res["power"]) != 1 || res["power"][0].PlayerName != "Alice" || res["power"][0].Score != 5000 {
-		t.Errorf("power not parsed correctly: %+v", res["power"])
-	}
-	if len(res["kills"]) != 1 || res["kills"][0].PlayerName != "Bob" {
-		t.Errorf("kills not parsed correctly: %+v", res["kills"])
+	if !strings.Contains(err.Error(), "results") {
+		t.Errorf("expected a 'results envelope' error, got: %v", err)
 	}
 }
 

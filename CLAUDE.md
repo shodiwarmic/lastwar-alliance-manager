@@ -75,12 +75,9 @@ based on `LoadOCRBackendConfig()`. Don't hand-roll the dispatch in new
 handlers.
 
 These return `(CVWorkerResponse, *OCRDiagnostics, error)`. The worker
-response is read by `decodeWorkerResponse`, which is **tolerant of two
-shapes**: the legacy bare `{category: [...]}` map and the newer
-`{"results": {...}, "diagnostics": {...}}` envelope (discriminated by the
-top-level `results` key). The legacy branch is a **temporary** backward-compat
-shim so this repo and `lastwar-ocr-service` don't need a lock-step deploy —
-remove it once the envelope ships everywhere. The `diagnostics` block is
+response is read by `decodeWorkerResponse`, which expects the
+`{"results": {...}, "diagnostics": {...}}` envelope (a missing top-level
+`results` key is an error). The `diagnostics` block is
 persisted opaquely as `diagnostics.json` in the OCR archive (alongside
 `response.json`) and parsed into the lean `*OCRDiagnostics` only to build the
 one-line activity-log summary via `summarizeOCRDiagnostics` (`nil` /`""` when
@@ -147,6 +144,10 @@ This intentionally differs from the OCR-service path, which sends `candidates[]`
 ### Activity logging
 
 `mobileCommit` already calls `logActivity` for each VS / power / kill record write (`vs_points`, `power_records`, `kill_count` entity types — same as the web import path). New mobile endpoints that write data must do the same.
+
+### Week date normalization
+
+The server is authoritative on `week_date`. `mobileCommit` snaps every submitted value to the game-time VS-week Monday (UTC−2 fixed offset) via `normalizeToGameWeekMonday()` on ingest, overwriting whatever the client sent. Scanner clients need not compute the correct game-time Monday themselves — any Monday within ±3 days of the correct week is corrected server-side. (The `lastwar-android-scanner` repo should still compute it consistently so its local previews bucket the same way as the committed data.)
 
 ## LastRank integration (`/api/lastrank/*`)
 

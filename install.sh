@@ -288,20 +288,11 @@ echo -e "${GREEN}[6/6] Pulling and starting Docker containers...${NC}"
 sudo docker compose pull
 sudo docker compose up -d
 
-# Persist the operator's OCR-backend choice into the database so the
-# alliance-manager UI renders the correct upload page from the very first
-# request (templates query settings.ocr_backend_mode at render time).
-# Done after `up -d` so the migration that creates the column has run.
-echo "Setting OCR backend mode to '$OCR_BACKEND_MODE' in settings table..."
-sudo sqlite3 "$APP_DIR/data/alliance.db" "UPDATE settings SET ocr_backend_mode = '$OCR_BACKEND_MODE' WHERE id = 1;" || \
-    echo -e "${YELLOW}(warning) couldn't update ocr_backend_mode in settings — UI will still default to 'cloud' until an admin sets it.${NC}"
-
-if [ "$OCR_BACKEND_MODE" = "local" ]; then
-    # Default the local sidecar URL so the operator doesn't have to type it
-    # in the admin Security panel. Internal docker-network hostname.
-    sudo sqlite3 "$APP_DIR/data/alliance.db" \
-        "UPDATE settings SET cv_worker_url = 'http://ocr-local:8080' WHERE id = 1 AND COALESCE(cv_worker_url, '') = '';" || true
-fi
+# OCR backend mode (cloud/local) is reconciled from the OCR_BACKEND_MODE env var
+# (written to .env above) by the app itself on startup — see
+# reconcileOCRBackendFromEnv in image_processing.go. No direct DB write here:
+# writing to the SQLite file from the host raced the in-container goose migrations
+# and left root-owned -wal/-shm files.
 
 echo "Setting up daily backups..."
 sudo tee /usr/local/bin/backup-lastwar.sh > /dev/null <<EOF

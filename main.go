@@ -3,14 +3,18 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"html/template"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/mux"
@@ -128,6 +132,10 @@ func main() {
 	}
 	defer db.Close()
 
+	// Sync the operator's OCR_BACKEND_MODE env choice into settings (replaces the
+	// old racy sqlite3 write in install.sh / update.sh). Runs post-migration.
+	reconcileOCRBackendFromEnv()
+
 	// Start the local-archive retention janitor (no-op unless OCR_ARCHIVE_DIR set).
 	startLocalArchiveJanitor()
 
@@ -188,18 +196,18 @@ func main() {
 	router.HandleFunc("/api/comms/resources/{id:[0-9]+}", authMiddleware(requirePermission("manage_comms", handleCommsResourceUpdate))).Methods("PUT")
 	router.HandleFunc("/api/comms/resources/{id:[0-9]+}", authMiddleware(requirePermission("manage_comms", handleCommsResourceDelete))).Methods("DELETE")
 	// Poll templates
-	router.HandleFunc("/api/comms/poll-templates",             authMiddleware(requirePermission("view_polls",   handlePollTemplateList))).Methods("GET")
-	router.HandleFunc("/api/comms/poll-templates",             authMiddleware(requirePermission("manage_polls", handlePollTemplateCreate))).Methods("POST")
+	router.HandleFunc("/api/comms/poll-templates", authMiddleware(requirePermission("view_polls", handlePollTemplateList))).Methods("GET")
+	router.HandleFunc("/api/comms/poll-templates", authMiddleware(requirePermission("manage_polls", handlePollTemplateCreate))).Methods("POST")
 	router.HandleFunc("/api/comms/poll-templates/{id:[0-9]+}", authMiddleware(requirePermission("manage_polls", handlePollTemplateUpdate))).Methods("PUT")
 	router.HandleFunc("/api/comms/poll-templates/{id:[0-9]+}", authMiddleware(requirePermission("manage_polls", handlePollTemplateDelete))).Methods("DELETE")
 	// Poll instances
-	router.HandleFunc("/api/comms/poll-instances",                     authMiddleware(requirePermission("view_polls",   handlePollInstanceList))).Methods("GET")
-	router.HandleFunc("/api/comms/poll-instances",                     authMiddleware(requirePermission("manage_polls", handlePollInstanceCreate))).Methods("POST")
-	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}",         authMiddleware(requirePermission("manage_polls", handlePollInstanceUpdate))).Methods("PUT")
-	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}",         authMiddleware(requirePermission("manage_polls", handlePollInstanceDelete))).Methods("DELETE")
-	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/detail",  authMiddleware(requirePermission("view_polls",   handlePollInstanceDetail))).Methods("GET")
+	router.HandleFunc("/api/comms/poll-instances", authMiddleware(requirePermission("view_polls", handlePollInstanceList))).Methods("GET")
+	router.HandleFunc("/api/comms/poll-instances", authMiddleware(requirePermission("manage_polls", handlePollInstanceCreate))).Methods("POST")
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}", authMiddleware(requirePermission("manage_polls", handlePollInstanceUpdate))).Methods("PUT")
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}", authMiddleware(requirePermission("manage_polls", handlePollInstanceDelete))).Methods("DELETE")
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/detail", authMiddleware(requirePermission("view_polls", handlePollInstanceDetail))).Methods("GET")
 	// Poll responses
-	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/responses",                   authMiddleware(requirePermission("manage_polls", handlePollResponseSet))).Methods("POST")
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/responses", authMiddleware(requirePermission("manage_polls", handlePollResponseSet))).Methods("POST")
 	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/responses/{memberID:[0-9]+}", authMiddleware(requirePermission("manage_polls", handlePollResponseClear))).Methods("DELETE")
 	// Anonymous counts
 	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/anonymous-counts", authMiddleware(requirePermission("manage_polls", handlePollAnonCountsUpdate))).Methods("PUT")
@@ -483,17 +491,17 @@ func main() {
 
 	// 2. Updated Page Map (Removed Train, Awards, Recs)
 	pages := map[string]string{
-		"/members": "members",
-		"/dyno":    "dyno",
-		"/rankings": "rankings",
-		"/storm":    "storm",
-		"/vs":       "vs",
-		"/upload":   "upload",
-		"/settings": "settings",
-		"/admin":    "admin",
-		"/profile":  "profile",
-		"/files":       "files",
-		"/schedule":    "schedule",
+		"/members":         "members",
+		"/dyno":            "dyno",
+		"/rankings":        "rankings",
+		"/storm":           "storm",
+		"/vs":              "vs",
+		"/upload":          "upload",
+		"/settings":        "settings",
+		"/admin":           "admin",
+		"/profile":         "profile",
+		"/files":           "files",
+		"/schedule":        "schedule",
 		"/officer-command": "officer-command",
 		"/train":           "train",
 		"/recruiting":      "recruiting",
@@ -515,23 +523,23 @@ func main() {
 			}
 
 			pagePermissions := map[string]bool{
-				"dyno":     data.Permissions.ViewDyno,
-				"rankings": data.Permissions.ViewRankings,
-				"storm":    data.Permissions.ViewStorm,
-				"vs":       data.Permissions.ViewVSPoints,
-				"upload":   data.Permissions.ViewUpload,
-				"settings": data.Permissions.ManageSettings,
-				"admin":       data.IsAdmin,
-				"schedule":    data.Permissions.ViewSchedule,
+				"dyno":            data.Permissions.ViewDyno,
+				"rankings":        data.Permissions.ViewRankings,
+				"storm":           data.Permissions.ViewStorm,
+				"vs":              data.Permissions.ViewVSPoints,
+				"upload":          data.Permissions.ViewUpload,
+				"settings":        data.Permissions.ManageSettings,
+				"admin":           data.IsAdmin,
+				"schedule":        data.Permissions.ViewSchedule,
 				"officer-command": data.Permissions.ViewOfficerCommand,
 				"train":           data.Permissions.ViewTrain,
 				"recruiting":      data.Permissions.ViewRecruiting,
 				"allies":          data.Permissions.ViewAllies,
 				"activity":        data.Permissions.ViewActivity || data.IsAdmin,
-			"accountability":  data.Permissions.ViewAccountability,
-			"season-hub":      data.Permissions.ViewSeasonHub,
-			"files":           data.Permissions.ViewFiles,
-			"comms":           data.Permissions.ViewComms || data.Permissions.ViewPolls,
+				"accountability":  data.Permissions.ViewAccountability,
+				"season-hub":      data.Permissions.ViewSeasonHub,
+				"files":           data.Permissions.ViewFiles,
+				"comms":           data.Permissions.ViewComms || data.Permissions.ViewPolls,
 			}
 
 			// 3. Custom 403 Handler for Access Denied
@@ -632,6 +640,43 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	slog.Info("Server listening", "port", port)
-	log.Fatal(http.ListenAndServe(":"+port, appHandler)) // Use the new conditional appHandler
+
+	srv := &http.Server{Addr: ":" + port, Handler: appHandler}
+
+	go func() {
+		slog.Info("Server listening", "port", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("Server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	slog.Info("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+	}
+
+	// Drain in-flight OCR archive goroutines. archiveSem is acquire-by-send /
+	// release-by-receive (cap 4): sending cap times blocks until every active
+	// goroutine has released. BOUNDED — a hung cloud upload must not wedge exit.
+	drained := make(chan struct{})
+	go func() {
+		for i := 0; i < cap(archiveSem); i++ {
+			archiveSem <- struct{}{}
+		}
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		slog.Info("Archive goroutines drained")
+	case <-time.After(10 * time.Second):
+		slog.Warn("Archive drain timed out; exiting with in-flight archives")
+	}
+	slog.Info("Server stopped")
 }

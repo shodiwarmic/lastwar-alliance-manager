@@ -66,7 +66,7 @@ func getSystemBaseline(shortName string) (int, error) {
 	}
 	var baseline int
 	// #nosec G202 — col is only ever "mg_baseline" or "zs_baseline", not user input
-	err := db.QueryRow("SELECT "+col+" FROM settings WHERE id=1").Scan(&baseline)
+	err := db.QueryRow("SELECT " + col + " FROM settings WHERE id=1").Scan(&baseline)
 	return baseline, err
 }
 

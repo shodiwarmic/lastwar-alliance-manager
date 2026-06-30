@@ -65,24 +65,24 @@ type lastrankAllianceResp struct {
 }
 
 type lastrankPlayerResp struct {
-	PublicID     int     `json:"public_id"`
-	Name         string  `json:"name"`
-	Country      *string `json:"country"`
-	AllianceID   *string `json:"alliance_id"`
-	AllianceAbbr *string `json:"alliance_abbr"`
-	AllianceName *string `json:"alliance_name"`
-	AllianceRank *int    `json:"alliance_rank"`
-	HomeServerID int     `json:"home_server_id"`
-	SrcServerID  int     `json:"src_server_id"`
-	Power        int64   `json:"power"`
-	HeroPower    *int64  `json:"hero_power"`
-	ArmyKill     int64   `json:"army_kill"`
-	BaseLevel        *int   `json:"base_level"`
-	CareerLv         int    `json:"career_lv"`
-	LastSeenAt       string `json:"last_seen_at"`     // game-side "last active" (as-of date)
-	LastEnrichedAt   string `json:"last_enriched_at"` // when lastrank last re-pulled this record
-	PhotoURL         string `json:"photo_url"`
-	PhotoURLFailover string `json:"photo_url_failover"`
+	PublicID         int     `json:"public_id"`
+	Name             string  `json:"name"`
+	Country          *string `json:"country"`
+	AllianceID       *string `json:"alliance_id"`
+	AllianceAbbr     *string `json:"alliance_abbr"`
+	AllianceName     *string `json:"alliance_name"`
+	AllianceRank     *int    `json:"alliance_rank"`
+	HomeServerID     int     `json:"home_server_id"`
+	SrcServerID      int     `json:"src_server_id"`
+	Power            int64   `json:"power"`
+	HeroPower        *int64  `json:"hero_power"`
+	ArmyKill         int64   `json:"army_kill"`
+	BaseLevel        *int    `json:"base_level"`
+	CareerLv         int     `json:"career_lv"`
+	LastSeenAt       string  `json:"last_seen_at"`     // game-side "last active" (as-of date)
+	LastEnrichedAt   string  `json:"last_enriched_at"` // when lastrank last re-pulled this record
+	PhotoURL         string  `json:"photo_url"`
+	PhotoURLFailover string  `json:"photo_url_failover"`
 }
 
 // --- Fetch ---
