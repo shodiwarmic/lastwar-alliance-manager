@@ -56,15 +56,14 @@
                 <select id="force-category" class="form-input" style="width: 100%;" data-backend="{{.OCRBackendMode}}">
                     {{if ne .OCRBackendMode "local"}}
                     <optgroup label="Smart Sorting">
-                        <option value="auto" selected>Auto-Detect (Smart Sorting)</option>
-                        <option value="total">Force: Weekly Total (Auto-Calculates Sat)</option>
+                        <option value="auto" selected>Auto-Detect</option>
                     </optgroup>
                     {{end}}
                     <optgroup label="Strength">
                         <option value="power">Power Rankings</option>
-                        <option value="kills">Strength — Kills</option>
-                        <option value="donation_daily">Strength — Donation (Daily)</option>
-                        <option value="donation_weekly">Strength — Donation (Weekly)</option>
+                        <option value="kills">Kills</option>
+                        <option value="donation_daily">Donation (Daily)</option>
+                        <option value="donation_weekly">Donation (Weekly)</option>
                     </optgroup>
                     <optgroup label="Daily VS">
                         <option value="monday">Monday</option>
@@ -74,20 +73,6 @@
                         <option value="friday">Friday</option>
                         <option value="saturday">Saturday</option>
                         <option value="weekly">Weekly Rank Total</option>
-                    </optgroup>
-                    <optgroup label="Alliance Contribution">
-                        <option value="mutual_assistance_daily">Mutual Assistance — Daily</option>
-                        <option value="mutual_assistance_weekly">Mutual Assistance — Weekly</option>
-                        <option value="mutual_assistance_season">Mutual Assistance — Season Total</option>
-                        <option value="siege_daily">Siege — Daily</option>
-                        <option value="siege_weekly">Siege — Weekly</option>
-                        <option value="siege_season">Siege — Season Total</option>
-                        <option value="rare_soil_war_daily">Rare Soil War — Daily</option>
-                        <option value="rare_soil_war_weekly">Rare Soil War — Weekly</option>
-                        <option value="rare_soil_war_season">Rare Soil War — Season Total</option>
-                        <option value="defeat_daily">Defeat — Daily</option>
-                        <option value="defeat_weekly">Defeat — Weekly</option>
-                        <option value="defeat_season">Defeat — Season Total</option>
                     </optgroup>
                 </select>
                 <p class="help-text" style="margin-top: 8px; font-size: 0.85em;">{{if eq .OCRBackendMode "local"}}<b>Required.</b> Pick the exact screen + tab the screenshots show.{{else}}Bypass auto-detection for specific uploads.{{end}}</p>
