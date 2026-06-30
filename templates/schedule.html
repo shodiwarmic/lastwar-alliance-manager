@@ -1,6 +1,6 @@
 {{define "header_text"}}
     <h1>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg>
         Alliance Schedule
     </h1>
     <h2 id="season-subtitle"></h2>
@@ -67,7 +67,7 @@
         <!-- Canvas area (Week Image + Day Card) -->
         <div id="canvas-section" class="form-section hidden">
             <h3 id="canvas-section-title" class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-photo"/></svg> Week Image</h3>
-            <div style="overflow-x:auto;">
+            <div class="canvas-scroll">
                 <canvas id="schedule-canvas"></canvas>
             </div>
             <div class="modal-actions" style="margin-top:12px;">
@@ -112,14 +112,14 @@
 
         <div class="form-section">
             <h3>Schedule Defaults</h3>
-            <div class="form-row" style="flex-wrap:wrap;gap:16px;">
+            <div class="form-row schedule-defaults-row">
                 <div class="form-group">
                     <label for="set-mg-baseline">MG Baseline Level</label>
-                    <input type="number" id="set-mg-baseline" min="1" max="30" style="width:80px;">
+                    <input type="number" id="set-mg-baseline" min="1" max="30">
                 </div>
                 <div class="form-group">
                     <label for="set-zs-baseline">ZS Baseline Level</label>
-                    <input type="number" id="set-zs-baseline" min="1" max="30" style="width:80px;">
+                    <input type="number" id="set-zs-baseline" min="1" max="30">
                 </div>
                 <div class="form-group">
                     <label for="set-mg-time">MG Default Time (ST)</label>
@@ -137,7 +137,7 @@
             </div>
         </div>
 
-        <hr style="border-color:var(--color-border);margin:24px 0;">
+        <hr class="settings-divider">
 
         <div class="form-section">
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-bolt"/></svg> Generate Events</h3>
@@ -156,7 +156,7 @@
                 <h4>ZS Rules</h4>
                 <div class="form-group">
                     <label>Schedule Mode</label>
-                    <div style="display:flex;gap:16px;margin-top:4px;">
+                    <div class="zs-mode-options">
                         <label><input type="radio" name="zs-mode" value="weekdays" checked id="zs-mode-weekdays"> Fixed weekdays</label>
                         <label><input type="radio" name="zs-mode" value="asap" id="zs-mode-asap"> ASAP (71.5h chain)</label>
                     </div>
@@ -175,20 +175,20 @@
                     </div>
                 </div>
 
-                <div id="zs-asap-config" class="form-row" style="gap:16px;flex-wrap:wrap;display:none;">
+                <div id="zs-asap-config" class="form-row" style="display:none">
                     <div class="form-group">
                         <label for="gen-zs-anchor">Anchor Date</label>
                         <input type="date" id="gen-zs-anchor">
                     </div>
                     <div class="form-group">
                         <label for="gen-zs-anchor-time">Anchor Time (ST)</label>
-                        <input type="text" id="gen-zs-anchor-time" placeholder="HH:MM" style="width:90px;" maxlength="5">
+                        <input type="text" id="gen-zs-anchor-time" placeholder="HH:MM" maxlength="5">
                     </div>
                 </div>
             </div>
 
             <div class="generate-section">
-                <div class="form-row" style="gap:16px;flex-wrap:wrap;align-items:flex-end;">
+                <div class="form-row gen-range-row">
                     <div class="form-group">
                         <label for="gen-from">Generate From</label>
                         <input type="date" id="gen-from">
@@ -198,7 +198,7 @@
                         <input type="date" id="gen-to">
                     </div>
                 </div>
-                <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">
+                <div class="gen-toggle-row">
                     <label><input type="checkbox" id="gen-mg" checked> Generate MG</label>
                     <label><input type="checkbox" id="gen-zs" checked> Generate ZS</label>
                 </div>
@@ -256,7 +256,7 @@
                         All Day
                     </label>
                 </div>
-                <span id="event-time-hint" class="help-text" style="margin-top:4px;display:block;"></span>
+                <span id="event-time-hint" class="help-text"></span>
             </div>
 
             <!-- Level: shown for system types only -->
@@ -264,19 +264,19 @@
                 <label for="event-level-input">Level Override
                     <span class="help-text">(leave blank to use baseline)</span>
                 </label>
-                <input type="number" id="event-level-input" class="form-input" min="1" max="30" style="width:80px;">
+                <input type="number" id="event-level-input" class="form-input" min="1" max="30">
             </div>
 
             <div class="form-group">
                 <label for="event-notes-input">Notes <span class="help-text">(optional)</span></label>
-                <textarea id="event-notes-input" class="form-input" maxlength="500" rows="3" style="resize:vertical;width:100%;box-sizing:border-box;"></textarea>
+                <textarea id="event-notes-input" class="form-input" maxlength="500" rows="3"></textarea>
             </div>
 
             <div class="modal-actions">
                 <button type="submit" class="btn btn-primary">Save</button>
                 <button type="button" class="btn btn-secondary" id="btn-close-event-modal">Cancel</button>
             </div>
-            <p id="event-form-error" class="status-msg error-msg" style="margin-top:8px;"></p>
+            <p id="event-form-error" class="status-msg error-msg"></p>
         </form>
     </div>
 </div>
@@ -311,7 +311,7 @@
                 <button type="submit" class="btn btn-primary">Save</button>
                 <button type="button" class="btn btn-secondary" id="btn-close-event-type-modal">Cancel</button>
             </div>
-            <p id="event-type-form-error" class="status-msg error-msg" style="margin-top:8px;"></p>
+            <p id="event-type-form-error" class="status-msg error-msg"></p>
         </form>
     </div>
 </div>
@@ -323,7 +323,7 @@
         <form id="server-event-form">
             <input type="hidden" id="se-modal-id">
 
-            <div class="form-row" style="gap:12px;flex-wrap:wrap;">
+            <div class="form-row se-modal-row">
                 <div class="form-group" style="flex:1;min-width:160px;">
                     <label for="se-name">Name</label>
                     <input type="text" id="se-name" class="form-input" maxlength="60" required>
@@ -338,10 +338,10 @@
                 </div>
             </div>
 
-            <div class="form-row" style="gap:12px;flex-wrap:wrap;">
+            <div class="form-row se-modal-row">
                 <div class="form-group">
                     <label for="se-duration">Duration (days)</label>
-                    <input type="number" id="se-duration" class="form-input" min="1" max="30" value="1" style="width:70px;" required>
+                    <input type="number" id="se-duration" class="form-input" min="1" max="30" value="1" required>
                 </div>
                 <div class="form-group">
                     <label for="se-repeat">Repeat</label>
@@ -371,7 +371,7 @@
             <!-- Every N days -->
             <div class="form-group" id="se-interval-group" style="display:none;">
                 <label for="se-interval">Interval (days)</label>
-                <input type="number" id="se-interval" class="form-input" min="2" max="365" style="width:80px;">
+                <input type="number" id="se-interval" class="form-input" min="2" max="365">
             </div>
 
             <!-- Anchor/event date (always shown) -->
@@ -389,7 +389,7 @@
                 <button type="submit" class="btn btn-primary">Save</button>
                 <button type="button" class="btn btn-secondary" id="btn-close-server-event-modal">Cancel</button>
             </div>
-            <p id="server-event-form-error" class="status-msg error-msg" style="margin-top:8px;"></p>
+            <p id="server-event-form-error" class="status-msg error-msg"></p>
         </form>
     </div>
 </div>

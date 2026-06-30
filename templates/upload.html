@@ -1,10 +1,13 @@
 {{define "head_tags"}}
     <link rel="stylesheet" href="upload.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
+    <link rel="stylesheet" href="/choices-theme.css">
 {{end}}
 
 {{define "header_text"}}
     <h1>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-camera"/></svg>
         Upload
     </h1>
     <h2>Smart Screenshot Upload</h2>
@@ -52,34 +55,25 @@
                 <label for="force-category" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Image Category:</label>
                 <select id="force-category" class="form-input" style="width: 100%;" data-backend="{{.OCRBackendMode}}">
                     {{if ne .OCRBackendMode "local"}}
-                    <option value="auto">Auto-Detect (Smart Sorting)</option>
-                    <option value="total">Force: Weekly Total (Auto-Calculates Sat)</option>
+                    <optgroup label="Smart Sorting">
+                        <option value="auto" selected>Auto-Detect</option>
+                    </optgroup>
                     {{end}}
-                    <option value="power">Power Rankings</option>
-                    <option value="kills">Strength — Kills</option>
-                    <option value="donation_daily">Strength — Donation (Daily)</option>
-                    <option value="donation_weekly">Strength — Donation (Weekly)</option>
-                    <option disabled>───── Daily VS ─────</option>
-                    <option value="monday">Monday</option>
-                    <option value="tuesday">Tuesday</option>
-                    <option value="wednesday">Wednesday</option>
-                    <option value="thursday">Thursday</option>
-                    <option value="friday">Friday</option>
-                    <option value="saturday">Saturday</option>
-                    <option value="weekly">Weekly Rank Total</option>
-                    <option disabled>───── Alliance Contribution ─────</option>
-                    <option value="mutual_assistance_daily">Mutual Assistance — Daily</option>
-                    <option value="mutual_assistance_weekly">Mutual Assistance — Weekly</option>
-                    <option value="mutual_assistance_season">Mutual Assistance — Season Total</option>
-                    <option value="siege_daily">Siege — Daily</option>
-                    <option value="siege_weekly">Siege — Weekly</option>
-                    <option value="siege_season">Siege — Season Total</option>
-                    <option value="rare_soil_war_daily">Rare Soil War — Daily</option>
-                    <option value="rare_soil_war_weekly">Rare Soil War — Weekly</option>
-                    <option value="rare_soil_war_season">Rare Soil War — Season Total</option>
-                    <option value="defeat_daily">Defeat — Daily</option>
-                    <option value="defeat_weekly">Defeat — Weekly</option>
-                    <option value="defeat_season">Defeat — Season Total</option>
+                    <optgroup label="Strength">
+                        <option value="power">Power Rankings</option>
+                        <option value="kills">Kills</option>
+                        <option value="donation_daily">Donation (Daily)</option>
+                        <option value="donation_weekly">Donation (Weekly)</option>
+                    </optgroup>
+                    <optgroup label="Daily VS">
+                        <option value="monday">Monday</option>
+                        <option value="tuesday">Tuesday</option>
+                        <option value="wednesday">Wednesday</option>
+                        <option value="thursday">Thursday</option>
+                        <option value="friday">Friday</option>
+                        <option value="saturday">Saturday</option>
+                        <option value="weekly">Weekly Rank Total</option>
+                    </optgroup>
                 </select>
                 <p class="help-text" style="margin-top: 8px; font-size: 0.85em;">{{if eq .OCRBackendMode "local"}}<b>Required.</b> Pick the exact screen + tab the screenshots show.{{else}}Bypass auto-detection for specific uploads.{{end}}</p>
             </div>

@@ -333,3 +333,38 @@
     overflow-x: auto;
     white-space: pre-wrap;
 }
+
+/* ── Extracted page-layout styles (formerly inline) ───────────────────────── */
+
+/* Battle config: pseudo-label above the Task Force chip group */
+.storm-field-label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+/* Battle config: Task Force A/B chip row */
+.storm-tf-chips {
+    display: flex;
+    gap: 8px;
+}
+
+/* Planning tab: capacity bar sits flush under the tab bar */
+.storm-capacity-section {
+    margin-top: 0;
+    border-top: none;
+}
+
+/* My Registration: Save button row spacing */
+.storm-save-row {
+    margin-top: 12px;
+}
+
+/* Battle mail: output wrapper + copy button spacing (wrapper toggled via .hidden) */
+#mail-output {
+    margin-top: 12px;
+}
+
+#btn-copy-mail {
+    margin-bottom: 8px;
+}

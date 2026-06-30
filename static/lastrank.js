@@ -237,10 +237,18 @@
         applyLabel.style.display = 'none';
         u._applyStats = applyCb;
 
+        // Optional join date, shown only for "add" — linked days-ago/date widget.
+        // Blank → today's game date (server-side).
+        const joinWidget = window.buildJoinDateField('');
+        u._joinWidget = joinWidget;
+        const joinLabel = el('label', { className: 'lr-field' }, el('span', {}, 'Join date: '), joinWidget.row);
+        joinLabel.style.display = 'none';
+
         actionSel.addEventListener('change', () => {
             const a = actionSel.value;
             memberSel.style.display = (a === 'alias' || a === 'rename') ? '' : 'none';
             applyLabel.style.display = (a === 'ignore') ? 'none' : '';
+            joinLabel.style.display = (a === 'add') ? '' : 'none';
         });
         u._action = actionSel;
         u._member = memberSel;
@@ -248,7 +256,8 @@
             el('div', { className: 'lr-row-name', textContent: u.lastrank_name }),
             detail ? el('div', { className: 'lr-field lr-skip', textContent: detail }) : null,
             el('div', { className: 'lr-unmatched-controls' }, actionSel, memberSel),
-            applyLabel
+            applyLabel,
+            joinLabel
         );
     }
 
@@ -278,7 +287,10 @@
                 if (!mid) return; // skip incomplete selections
                 entry.member_id = mid;
             }
-            if (action === 'add') entry.new_rank = u.rank || '';
+            if (action === 'add') {
+                entry.new_rank = u.rank || '';
+                entry.joined_at = u._joinWidget ? u._joinWidget.getISO() : '';
+            }
             entry.apply_stats = u._applyStats ? u._applyStats.checked : false;
             if (entry.apply_stats) {
                 if (u.power != null) entry.power = u.power;

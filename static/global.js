@@ -17,6 +17,100 @@
     };
 })();
 
+// ---- Join-date helpers (anchored to today's GAME date) ----
+// Pure UTC date math so there's no local-timezone drift. "days ago" >= 0 = past.
+window.gameDaysAgoToISO = (n) => {
+    const d = new Date(window.gameDateStr() + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - n);
+    return d.toISOString().slice(0, 10);
+};
+window.gameISOToDaysAgo = (iso) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+    const then = new Date(iso + 'T00:00:00Z').getTime();
+    const today = new Date(window.gameDateStr() + 'T00:00:00Z').getTime();
+    return Math.round((today - then) / 86400000);
+};
+// Format a YYYY-MM-DD date-only string as e.g. "Jun 14 2026". Built from the parts
+// (not new Date(str)) so it isn't shifted a day by UTC parsing.
+window.formatJoinDate = (iso) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+    const [y, mo, d] = iso.split('-');
+    return new Date(+y, +mo - 1, +d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+// ---- Per-user UI preferences ----
+// Currently localStorage-backed (persists per browser). The storage layer is isolated
+// behind get/set so a future server-synced, per-account backend can replace it without
+// touching call sites. Register new prefs + their defaults in PREF_DEFAULTS.
+(function () {
+    const NS = 'amPref:';
+    const PREF_DEFAULTS = {
+        memberSinceDisplay: 'days', // 'days' (in-alliance days) | 'date' (join date)
+    };
+    const read = (key) => {
+        try {
+            const v = localStorage.getItem(NS + key);
+            return v === null ? PREF_DEFAULTS[key] : v;
+        } catch (_) { return PREF_DEFAULTS[key]; }
+    };
+    const write = (key, value) => {
+        try { localStorage.setItem(NS + key, value); } catch (_) { /* storage unavailable */ }
+    };
+    window.UserPrefs = { get: read, set: write, defaults: PREF_DEFAULTS };
+})();
+
+// ---- Linked "joined [N] days ago · [date]" entry widget ----
+// Two-way bound: editing the days count fills the date and vice-versa, anchored to
+// today's game date. Used by the member edit modal and the CSV / LastRank import rows.
+// Returns { row, getISO, setISO, clear }. onChange(iso) fires on any user change.
+window.buildJoinDateField = function (initialISO, onChange) {
+    const row = document.createElement('span');
+    row.className = 'join-date-row';
+    const daysInput = document.createElement('input');
+    daysInput.type = 'number';
+    daysInput.min = '0';
+    daysInput.className = 'form-input join-days-input';
+    daysInput.placeholder = 'days';
+    const dateInput = document.createElement('input');
+    dateInput.type = 'text';
+    dateInput.className = 'form-input join-date-input';
+    dateInput.placeholder = 'YYYY-MM-DD';
+    row.append(
+        document.createTextNode('Joined '), daysInput,
+        document.createTextNode(' days ago · '), dateInput
+    );
+
+    let fp = null;
+    const setDate = (iso) => { if (fp) fp.setDate(iso || null, false); else dateInput.value = iso || ''; };
+    const fire = () => { if (onChange) onChange((dateInput.value || '').trim()); };
+
+    // User edits the days count → recompute the date (programmatic .value set on the
+    // days input below never re-fires 'input', so there's no feedback loop).
+    const fromDays = () => {
+        const n = parseInt(daysInput.value, 10);
+        if (Number.isFinite(n) && n >= 0) setDate(window.gameDaysAgoToISO(n));
+        else if (daysInput.value === '') setDate('');
+        fire();
+    };
+    const fromDate = () => {
+        const iso = (dateInput.value || '').trim();
+        daysInput.value = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? window.gameISOToDaysAgo(iso) : '';
+        fire();
+    };
+
+    if (window.flatpickr) fp = flatpickr(dateInput, { dateFormat: 'Y-m-d', allowInput: true, onChange: fromDate });
+    else dateInput.addEventListener('change', fromDate);
+    daysInput.addEventListener('input', fromDays);
+
+    const setISO = (iso) => {
+        setDate(iso || '');
+        daysInput.value = (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) ? window.gameISOToDaysAgo(iso) : '';
+    };
+    if (initialISO) setISO(initialISO);
+
+    return { row, getISO: () => (dateInput.value || '').trim(), setISO, clear: () => setISO('') };
+};
+
 // ---- Table export (CSV + XLSX) ----
 
 function _extractTableData(tableEl) {

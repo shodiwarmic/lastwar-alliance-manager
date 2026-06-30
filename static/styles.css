@@ -2028,6 +2028,12 @@ button {
     gap: 6px;
 }
 
+/* Variant for multi-line notices: align the leading icon to the first text
+   line instead of the block's optical centre. */
+.icon-label-top {
+    align-items: flex-start;
+}
+
 .btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
