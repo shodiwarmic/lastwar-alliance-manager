@@ -29,6 +29,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             itemSelectText: '',
             shouldSort: false,
         });
+        // Cloud mode defaults to Auto-Detect. Choices doesn't reliably inherit the
+        // native first-option selection across grouped options, so set it explicitly.
+        if (categorySelect.dataset.backend !== 'local') {
+            categoryChoices.setChoiceByValue('auto');
+        }
         void categoryChoices;
     }
 

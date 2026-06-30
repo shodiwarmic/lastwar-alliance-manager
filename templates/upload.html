@@ -55,13 +55,17 @@
                 <label for="force-category" style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Image Category:</label>
                 <select id="force-category" class="form-input" style="width: 100%;" data-backend="{{.OCRBackendMode}}">
                     {{if ne .OCRBackendMode "local"}}
-                    <option value="auto">Auto-Detect (Smart Sorting)</option>
-                    <option value="total">Force: Weekly Total (Auto-Calculates Sat)</option>
+                    <optgroup label="Smart Sorting">
+                        <option value="auto" selected>Auto-Detect (Smart Sorting)</option>
+                        <option value="total">Force: Weekly Total (Auto-Calculates Sat)</option>
+                    </optgroup>
                     {{end}}
-                    <option value="power">Power Rankings</option>
-                    <option value="kills">Strength — Kills</option>
-                    <option value="donation_daily">Strength — Donation (Daily)</option>
-                    <option value="donation_weekly">Strength — Donation (Weekly)</option>
+                    <optgroup label="Strength">
+                        <option value="power">Power Rankings</option>
+                        <option value="kills">Strength — Kills</option>
+                        <option value="donation_daily">Strength — Donation (Daily)</option>
+                        <option value="donation_weekly">Strength — Donation (Weekly)</option>
+                    </optgroup>
                     <optgroup label="Daily VS">
                         <option value="monday">Monday</option>
                         <option value="tuesday">Tuesday</option>
