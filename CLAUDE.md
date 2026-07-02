@@ -457,12 +457,25 @@ For bad-request (400) errors from JSON decode failures, use `"Invalid request bo
 | `scripts` | JS includes + inline `window.*` config vars |
 | `modals` | Modal HTML — rendered outside the container div |
 
-## Permissions matrix
+## Adding a new permission
 
-When adding new permission columns, follow `008_schedules.sql` exactly:
-- `ALTER TABLE` to add column with a safe default
-- `UPDATE` using `WHERE rank IN (...)` — never `WHERE rank >= N`
-- Populate all ranks explicitly if the default isn't right for everyone
+Permissions are stored as a JSON blob in the `rank_permissions.permissions`
+column (one row per rank), serialized from the `RankPermissions` struct — **not**
+as one column per permission. Since Epic 30 there is no migration and no
+SELECT/Scan change; adding a permission is two edits in `models.go`:
+
+1. Add `FieldName bool \`json:"key_name"\`` to the `RankPermissions` struct.
+2. Add a `PermissionRow{Key: "key_name", Label: "Human Label"}` to the
+   appropriate `PermissionGroup` in `PermissionGroups` (or add a new group).
+
+No migration required — the new key round-trips through `json.Marshal` /
+`json.Unmarshal` automatically and appears in the Settings → Permissions Matrix
+UI. `allPermissionsTrue()` (admin shortcut) reflects it via struct reflection,
+so nothing else needs touching.
+
+> Note: legacy per-rank permission *columns* added by `008_schedules.sql` and
+> friends predate the JSON blob and are no longer the write path — do not add
+> new ones.
 
 ## Frontend JS hardening
 
