@@ -179,7 +179,7 @@ The application utilizes a multi-container **Docker Compose** stack powered by p
 We provide an automated script that installs Docker, generates secure secrets, configures the Caddy reverse proxy with SSL, and pulls the pre-built containers.
 
 ```bash
-git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git)
+git clone https://github.com/shodiwarmic/lastwar-alliance-manager.git
 cd lastwar-alliance-manager
 ./install.sh
 ```
