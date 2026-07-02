@@ -85,6 +85,19 @@ one-line activity-log summary via `summarizeOCRDiagnostics` (`nil` /`""` when
 the OCR service returns no diagnostics — always nil-check). It is treated as an
 opaque blob for storage, so OCR-side schema changes need no Go change.
 
+### OCR service deploy ordering
+
+The app requires `lastwar-ocr-service` to be running the response-envelope
+format (introduced alongside OCR diagnostics — `decodeWorkerResponse` treats a
+missing top-level `results` key as an error). Deploy accordingly:
+
+- `lastwar-ocr-service` must be deployed **before or simultaneously with** the
+  Alliance Manager app.
+- Rolling `lastwar-ocr-service` back to a pre-envelope version while the app is
+  on the current version will cause OCR imports to fail.
+- The backward-compat shim that tolerated the old flat response was
+  intentionally removed in Epic 42.
+
 `category` is required for local mode and ignored for cloud mode.
 Allowed values are the same as the OCR service's `VALID_CATEGORIES`
 list — `monday`–`saturday`, `weekly`, `power`, `kills`,
