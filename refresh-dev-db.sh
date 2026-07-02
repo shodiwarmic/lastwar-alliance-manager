@@ -85,7 +85,9 @@ log "Connecting to $PROD_SSH (you'll be prompted once for any password/passphras
 pull_from_prod() {
   "${SSH[@]}" "$PROD_SSH" "cd '$PROD_DIR' && docker run --rm -v \"\$PWD\":/proj:ro -v /tmp:/out '$IMG' sh -c '$1'"
   "${SCP[@]}" "$PROD_SSH:/tmp/$2" "$WORK/$2"
-  "${SSH[@]}" "$PROD_SSH" "rm -f /tmp/$2"
+  # The artifact is created root-owned by the container above; /tmp's sticky bit means the
+  # non-root SSH login user can't rm it. Delete it via a root container, same as it was made.
+  "${SSH[@]}" "$PROD_SSH" "docker run --rm -v /tmp:/out '$IMG' rm -f /out/$2"
 }
 
 # Wipe a dev dir and extract a $WORK tarball into it, as root, chowned to the app user.
