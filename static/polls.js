@@ -5,6 +5,21 @@ const CAN_MANAGE_POLLS = pollCfg.canManagePolls === 'true';
 
 const pollLoaded = {};
 
+// ── Poll detail modal state ─────────────────────────────────────────────────
+// The cached detail payload is the single source of truth; the "By option" view's
+// optimistic mutations edit it in place, and a JSON snapshot is used for rollback.
+let pollDetailView = 'member';       // 'member' | 'option'
+let pollDetailData = null;           // cached detail payload
+let pollDetailInstance = null;       // current poll instance
+let activeOptionPickers = [];        // member-pickers mounted in the by-option view
+let pollListDirty = false;           // refresh the instance-list card on close if true
+const pollToggleInFlight = new Set();// per-mutation guard keys (defeats rapid re-taps)
+
+function destroyOptionPickers() {
+    activeOptionPickers.forEach(p => p.destroy());
+    activeOptionPickers = [];
+}
+
 // ── Data loaders (exposed on window so comms.js switchTab can call them) ─────
 
 window.loadPollTemplates = async function () {
@@ -614,6 +629,8 @@ async function savePollInstance() {
 
 async function openPollDetailModal(pi) {
     const modal = document.getElementById('modal-poll-detail');
+    pollDetailView = 'member';   // each open starts on the member view
+    pollListDirty = false;
     document.getElementById('poll-detail-label').textContent = pi.label;
     document.getElementById('poll-detail-question').textContent = pi.question;
     document.getElementById('poll-detail-progress').textContent = '';
@@ -631,6 +648,13 @@ async function openPollDetailModal(pi) {
 }
 
 function renderPollDetail(pi, data) {
+    // Tear down any pickers from the previous render BEFORE the body is wiped —
+    // removing a focused input from the DOM does not fire blur, so cleanup must be
+    // explicit here (covers view switch, refresh, and rollback re-render).
+    destroyOptionPickers();
+    pollDetailInstance = pi;
+    pollDetailData = data;
+
     const progressEl = document.getElementById('poll-detail-progress');
     const bodyEl = document.getElementById('poll-detail-body');
 
@@ -693,6 +717,46 @@ function renderPollDetail(pi, data) {
     progressEl.textContent = responded.length + ' / ' + (pi.total_eligible || pending.length + responded.length) + ' responded';
 
     bodyEl.replaceChildren();
+    bodyEl.appendChild(renderPollViewToggle(pi));
+
+    if (pollDetailView === 'option') {
+        renderPollByOption(pi, data, bodyEl);
+    } else {
+        renderPollByMember(pi, data, bodyEl);
+    }
+}
+
+function renderPollViewToggle(pi) {
+    const bar = document.createElement('div');
+    bar.className = 'poll-view-toggle';
+    [['member', 'By member'], ['option', 'By option']].forEach(([val, label]) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'filter-chip' + (pollDetailView === val ? ' active' : '');
+        chip.textContent = label;
+        chip.addEventListener('click', () => {
+            if (pollDetailView === val) return;
+            pollDetailView = val;
+            renderPollDetail(pollDetailInstance, pollDetailData);
+        });
+        bar.appendChild(chip);
+    });
+    return bar;
+}
+
+function renderPollByMember(pi, data, bodyEl) {
+    const pending = data.pending || [];
+    const responded = data.responded || [];
+
+    // Member search — filters rows in place (no re-render) so focus is preserved.
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.className = 'form-input poll-member-search';
+    search.placeholder = 'Search member…';
+    search.autocomplete = 'off';
+    bodyEl.appendChild(search);
+
+    const sections = [];
 
     if (pending.length > 0) {
         const section = document.createElement('div');
@@ -706,6 +770,7 @@ function renderPollDetail(pi, data) {
         pending.forEach(m => list.appendChild(renderMemberRow(m, pi, false)));
         section.appendChild(list);
         bodyEl.appendChild(section);
+        sections.push(section);
     }
 
     if (responded.length > 0) {
@@ -720,19 +785,248 @@ function renderPollDetail(pi, data) {
         responded.forEach(m => list.appendChild(renderMemberRow(m, pi, true)));
         section.appendChild(list);
         bodyEl.appendChild(section);
+        sections.push(section);
     }
 
     if (pending.length === 0 && responded.length === 0) {
+        search.style.display = 'none';
         const p = document.createElement('p');
         p.className = 'comms-empty';
         p.textContent = 'No members in scope for this poll.';
         bodyEl.appendChild(p);
+        return;
     }
+
+    search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        sections.forEach(sec => {
+            let anyVisible = false;
+            sec.querySelectorAll('.poll-member-row').forEach(row => {
+                const show = !q || (row.dataset.name || '').includes(q);
+                row.style.display = show ? '' : 'none';
+                if (show) anyVisible = true;
+            });
+            sec.style.display = anyVisible ? '' : 'none';
+        });
+    });
+}
+
+// ── By-option view ───────────────────────────────────────────────────────────
+
+function renderPollByOption(pi, data, bodyEl) {
+    const byOption = data.by_option || [];
+    if (byOption.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'comms-empty';
+        p.textContent = 'This poll has no options.';
+        bodyEl.appendChild(p);
+        return;
+    }
+
+    // Candidate pool = every eligible member (pending ∪ responded), normalized to
+    // the picker's {id,name,rank} shape. No roster fetch needed.
+    const pool = [];
+    (data.pending || []).forEach(m => pool.push({ id: m.member_id, name: m.member_name, rank: m.rank }));
+    (data.responded || []).forEach(m => pool.push({ id: m.member_id, name: m.member_name, rank: m.rank }));
+
+    byOption.forEach(bucket => {
+        const option = bucket.option;
+        const section = document.createElement('div');
+        section.className = 'poll-option-section';
+
+        const heading = document.createElement('h3');
+        heading.className = 'poll-section-heading';
+        heading.appendChild(document.createTextNode(option + ' '));
+        const count = document.createElement('span');
+        count.className = 'poll-option-count';
+        count.textContent = '(' + bucket.members.length + ')';
+        heading.appendChild(count);
+        section.appendChild(heading);
+
+        const list = document.createElement('div');
+        list.className = 'poll-option-members';
+        bucket.members.forEach(m => list.appendChild(renderOptionChip(pi, option, m)));
+        if (bucket.members.length === 0) {
+            const empty = document.createElement('span');
+            empty.className = 'poll-option-empty';
+            empty.textContent = 'No one yet';
+            list.appendChild(empty);
+        }
+        section.appendChild(list);
+
+        if (CAN_MANAGE_POLLS) {
+            const picker = createMemberPicker({
+                placeholder: 'Add name…',
+                getCandidates: () => pool,
+                isExcluded: (cand) => memberInOption(pollDetailData, option, cand.id),
+                onPick: (cand) => addToOption(pi, option, cand),
+            });
+            activeOptionPickers.push(picker);
+            section.appendChild(picker.el);
+        }
+
+        bodyEl.appendChild(section);
+    });
+}
+
+function renderOptionChip(pi, option, m) {
+    const chip = document.createElement('span');
+    chip.className = 'poll-option-chip';
+    const rank = document.createElement('span');
+    rank.className = 'member-rank rank-' + m.rank;
+    rank.textContent = m.rank;
+    chip.append(rank, ' ' + m.member_name);
+    if (CAN_MANAGE_POLLS) {
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'poll-option-remove';
+        rm.textContent = '×';
+        rm.setAttribute('aria-label', 'Remove ' + m.member_name + ' from ' + option);
+        // option_key stays in this closure — never interpolated into a selector.
+        rm.addEventListener('click', () => removeFromOption(pi, option, m.member_id));
+        chip.appendChild(rm);
+    }
+    return chip;
+}
+
+function memberInOption(data, option, memberId) {
+    const bucket = (data.by_option || []).find(b => b.option === option);
+    return !!(bucket && bucket.members.some(m => m.member_id === memberId));
+}
+
+function pollGuardKey(pi, memberId, option) {
+    // Single-select adds delete the member's other option, so different-option taps
+    // for one member must serialize → guard on memberId alone. Multi-select options
+    // are independent → guard per (member, option).
+    return pi.multi_select ? memberId + ':' + option : String(memberId);
+}
+
+// Optimistically move a member INTO an option across all three payload arrays.
+function applyAddOptimistic(data, pi, option, cand) {
+    const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const bucket = (data.by_option || []).find(b => b.option === option);
+    if (bucket && !bucket.members.some(m => m.member_id === cand.id)) {
+        bucket.members.push({ member_id: cand.id, member_name: cand.name, rank: cand.rank, recorded_at: nowIso });
+    }
+    if (!pi.multi_select) {
+        (data.by_option || []).forEach(b => {
+            if (b.option !== option) b.members = b.members.filter(m => m.member_id !== cand.id);
+        });
+    }
+    let ms = (data.responded || []).find(m => m.member_id === cand.id);
+    if (!ms) {
+        const idx = (data.pending || []).findIndex(m => m.member_id === cand.id);
+        if (idx >= 0) {
+            ms = data.pending.splice(idx, 1)[0];
+        } else {
+            ms = { member_id: cand.id, member_name: cand.name, rank: cand.rank };
+        }
+        ms.responded = true;
+        ms.options = [];
+        ms.responded_at = nowIso;
+        (data.responded = data.responded || []).push(ms);
+    }
+    if (!pi.multi_select) ms.options = [option];
+    else if (!ms.options.includes(option)) ms.options.push(option);
+}
+
+// Optimistically remove a member FROM an option across all three payload arrays.
+function applyRemoveOptimistic(data, option, memberId) {
+    const bucket = (data.by_option || []).find(b => b.option === option);
+    if (bucket) bucket.members = bucket.members.filter(m => m.member_id !== memberId);
+    const ms = (data.responded || []).find(m => m.member_id === memberId);
+    if (ms) {
+        ms.options = (ms.options || []).filter(o => o !== option);
+        if (ms.options.length === 0) {
+            data.responded = data.responded.filter(m => m.member_id !== memberId);
+            ms.responded = false;
+            ms.responded_at = '';
+            (data.pending = data.pending || []).push(ms);
+        }
+    }
+}
+
+function addToOption(pi, option, cand) {
+    const key = pollGuardKey(pi, cand.id, option);
+    if (pollToggleInFlight.has(key)) return;
+    pollToggleInFlight.add(key);
+    const snapshot = JSON.parse(JSON.stringify(pollDetailData));
+    applyAddOptimistic(pollDetailData, pi, option, cand);
+    renderPollDetail(pi, pollDetailData);
+    sendToggle(pi, cand.id, option, true, key, snapshot);
+}
+
+function removeFromOption(pi, option, memberId) {
+    const key = pollGuardKey(pi, memberId, option);
+    if (pollToggleInFlight.has(key)) return;
+    pollToggleInFlight.add(key);
+    const snapshot = JSON.parse(JSON.stringify(pollDetailData));
+    applyRemoveOptimistic(pollDetailData, option, memberId);
+    renderPollDetail(pi, pollDetailData);
+    sendToggle(pi, memberId, option, false, key, snapshot);
+}
+
+async function sendToggle(pi, memberId, option, selected, key, snapshot) {
+    try {
+        const res = await fetch('/api/comms/poll-instances/' + pi.id + '/responses/' + memberId + '/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ option, selected }),
+        });
+        pollToggleInFlight.delete(key);
+        if (res.ok) {
+            pollListDirty = true;
+            return;
+        }
+        if (res.status === 400) {
+            // Options were likely edited by another officer — resync from the server
+            // rather than restoring an equally-stale snapshot.
+            showToast('Poll changed — refreshed.', 'info');
+            await reloadPollDetail(pi);
+            return;
+        }
+        pollDetailData = snapshot;
+        renderPollDetail(pi, snapshot);
+        showToast('Failed to save.', 'error');
+    } catch {
+        pollToggleInFlight.delete(key);
+        pollDetailData = snapshot;
+        renderPollDetail(pi, snapshot);
+        showToast('Failed to save.', 'error');
+    }
+}
+
+async function reloadPollDetail(pi) {
+    try {
+        const res = await fetch('/api/comms/poll-instances/' + pi.id + '/detail');
+        if (!res.ok) throw new Error('fetch failed');
+        const data = await res.json();
+        renderPollDetail(pi, data);
+    } catch {
+        showToast('Failed to refresh poll.', 'error');
+    }
+}
+
+function closePollDetailModal() {
+    // poll-detail-close-btn is the modal's ONLY close path (no backdrop/Esc). Both
+    // the picker teardown and the deferred instance-list refresh hang off it — if a
+    // backdrop/Esc close is added later, route it through here too.
+    destroyOptionPickers();
+    document.getElementById('modal-poll-detail').style.display = '';
+    if (pollListDirty) {
+        pollListDirty = false;
+        pollLoaded['polls'] = false;
+        _fetchPollInstances();
+    }
+    pollDetailData = null;
+    pollDetailInstance = null;
+    pollDetailView = 'member';
 }
 
 function renderMemberRow(m, pi, hasResponded) {
     const row = document.createElement('div');
-    row.className = 'poll-member-row';
+    row.className = 'poll-member-row' + (pi.multi_select ? ' poll-member-row--multi' : '');
+    row.dataset.name = (m.member_name || '').toLowerCase();
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'poll-member-name';
@@ -765,7 +1059,7 @@ function renderMemberRow(m, pi, hasResponded) {
                 cb.type = 'checkbox';
                 cb.value = opt;
                 cb.checked = currentSelections.has(opt);
-                lbl.append(cb, ' ', opt);
+                lbl.append(cb, opt);
                 return lbl;
             });
             checkboxes.forEach(lbl => actionsSpan.appendChild(lbl));
@@ -926,9 +1220,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Poll detail close
-    document.getElementById('poll-detail-close-btn')?.addEventListener('click', () => {
-        document.getElementById('modal-poll-detail').style.display = '';
-    });
+    document.getElementById('poll-detail-close-btn')?.addEventListener('click', closePollDetailModal);
 
     // Auto-load the active poll tab if it happens to be the initial tab
     const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;

@@ -228,41 +228,7 @@
 .reg-pill.s1 { background: var(--color-success); color: #fff; }
 .reg-pill.s2 { background: var(--color-warning); color: #fff; }
 
-/* ── Inline Member Search ─────────────────────────────────────────────────── */
-
-.inline-search { position: relative; margin-top: 4px; }
-.inline-search input { width: 100%; box-sizing: border-box; }
-.inline-search .inline-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: var(--color-bg);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    z-index: 200;
-    max-height: 280px;
-    overflow-y: auto;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-}
-/* Result rows mirror the pool cards (name / meta / registration). Scope padding
-   to the row itself (.inline-result), not every nested div, and divide rows. */
-.inline-search .inline-result {
-    padding: 6px 10px;
-    cursor: pointer;
-    color: var(--color-text);
-    border-bottom: 1px solid var(--color-border);
-}
-.inline-search .inline-result:last-child { border-bottom: none; }
-.inline-search .inline-result:hover {
-    background: var(--color-accent-bg);
-}
-.inline-search .inline-empty {
-    padding: 6px 10px;
-    color: var(--color-text-mid);
-    font-size: 0.85em;
-}
+/* Inline Member Search styles now live in member-picker.css (shared component). */
 
 /* ── TF skip chip ─────────────────────────────────────────────────────────── */
 .filter-chip.tf-skip {

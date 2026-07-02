@@ -703,8 +703,19 @@ func handlePollInstanceDetail(w http.ResponseWriter, r *http.Request) {
 		orderedIDs = append(orderedIDs, ms.MemberID)
 	}
 
+	// by_option buckets, seeded in snapshot order so empty options still appear.
+	// recorded_at is second-precision (datetime('now')); the id tiebreak keeps
+	// sign-up order deterministic within the same second.
+	snapshotOpts, _ := parsePollOptions(pi.Options)
+	byOption := make([]PollOptionBucket, len(snapshotOpts))
+	bucketIdx := map[string]int{}
+	for i, o := range snapshotOpts {
+		byOption[i] = PollOptionBucket{Option: o, Members: []PollOptionMember{}}
+		bucketIdx[o] = i
+	}
+
 	respRows, err := db.Query(
-		`SELECT member_id, option_key, recorded_at FROM poll_responses WHERE instance_id = ? ORDER BY recorded_at ASC`, id)
+		`SELECT member_id, option_key, recorded_at FROM poll_responses WHERE instance_id = ? ORDER BY recorded_at, id`, id)
 	if err != nil {
 		slog.Error("handlePollInstanceDetail: response query", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -715,12 +726,26 @@ func handlePollInstanceDetail(w http.ResponseWriter, r *http.Request) {
 		var mid int
 		var key, recordedAt string
 		respRows.Scan(&mid, &key, &recordedAt)
-		if ms, ok := statusMap[mid]; ok {
-			ms.Responded = true
-			ms.Options = append(ms.Options, key)
-			if ms.RespondedAt == "" {
-				ms.RespondedAt = recordedAt // rows ordered ascending — first seen is earliest
-			}
+		// Rides the statusMap guard: responses from members now out of scope
+		// (EX / filtered out) are skipped here, so by_option and the per-option
+		// count reflect *visible* members, not raw rows — consistent with the
+		// pending/responded lists below.
+		ms, ok := statusMap[mid]
+		if !ok {
+			continue
+		}
+		ms.Responded = true
+		ms.Options = append(ms.Options, key)
+		if ms.RespondedAt == "" {
+			ms.RespondedAt = recordedAt // rows ordered ascending — first seen is earliest
+		}
+		if bi, ok := bucketIdx[key]; ok {
+			byOption[bi].Members = append(byOption[bi].Members, PollOptionMember{
+				MemberID:   ms.MemberID,
+				MemberName: ms.MemberName,
+				Rank:       ms.Rank,
+				RecordedAt: recordedAt,
+			})
 		}
 	}
 
@@ -740,12 +765,25 @@ func handlePollInstanceDetail(w http.ResponseWriter, r *http.Request) {
 		"instance":  pi,
 		"pending":   pending,
 		"responded": responded,
+		"by_option": byOption,
 	})
 }
 
 // ---------------------------------------------------------------------------
 // Responses (named polls)
 // ---------------------------------------------------------------------------
+
+// validatePollOption reports whether option is one of the instance's snapshot
+// options. Shared by the set + toggle handlers.
+func validatePollOption(pi *PollInstance, option string) bool {
+	opts, _ := parsePollOptions(pi.Options)
+	for _, o := range opts {
+		if o == option {
+			return true
+		}
+	}
+	return false
+}
 
 func handlePollResponseSet(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
@@ -789,13 +827,8 @@ func handlePollResponseSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate options exist in snapshot
-	validOpts, _ := parsePollOptions(pi.Options)
-	optSet := map[string]bool{}
-	for _, o := range validOpts {
-		optSet[o] = true
-	}
 	for _, o := range body.Options {
-		if !optSet[o] {
+		if !validatePollOption(pi, o) {
 			http.Error(w, "invalid option: "+o, http.StatusBadRequest)
 			return
 		}
@@ -815,19 +848,50 @@ func handlePollResponseSet(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`DELETE FROM poll_responses WHERE instance_id = ? AND member_id = ?`, id, body.MemberID); err != nil {
-		slog.Error("handlePollResponseSet: delete old", "error", err)
+	// Delta diff instead of DELETE-all/INSERT-all: only added options get a new
+	// recorded_at, and unchanged options keep theirs — so a "By member" Save never
+	// reorders a member in the "By option" sign-up queues.
+	// NB: SetMaxOpenConns(1) — read on tx and Close the rows before the next
+	// statement, or the write below would deadlock on the single connection.
+	curRows, err := tx.Query(`SELECT option_key FROM poll_responses WHERE instance_id = ? AND member_id = ?`, id, body.MemberID)
+	if err != nil {
+		slog.Error("handlePollResponseSet: read current", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	current := map[string]bool{}
+	for curRows.Next() {
+		var opt string
+		if err := curRows.Scan(&opt); err == nil {
+			current[opt] = true
+		}
+	}
+	curRows.Close()
+
+	requested := map[string]bool{}
 	for _, opt := range body.Options {
-		if _, err := tx.Exec(
-			`INSERT INTO poll_responses (instance_id, member_id, option_key, recorded_by) VALUES (?, ?, ?, ?)`,
-			id, body.MemberID, opt, user.ID,
-		); err != nil {
-			slog.Error("handlePollResponseSet: insert", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
+		requested[opt] = true
+	}
+
+	for opt := range current {
+		if !requested[opt] {
+			if _, err := tx.Exec(`DELETE FROM poll_responses WHERE instance_id = ? AND member_id = ? AND option_key = ?`, id, body.MemberID, opt); err != nil {
+				slog.Error("handlePollResponseSet: delete removed", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+	for opt := range requested {
+		if !current[opt] {
+			if _, err := tx.Exec(
+				`INSERT INTO poll_responses (instance_id, member_id, option_key, recorded_by) VALUES (?, ?, ?, ?)`,
+				id, body.MemberID, opt, user.ID,
+			); err != nil {
+				slog.Error("handlePollResponseSet: insert added", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -875,6 +939,117 @@ func handlePollResponseClear(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Cleared"})
+}
+
+// handlePollResponseToggle adds or removes a single (member, option) response
+// without disturbing the member's other options — so sign-up order (recorded_at)
+// is preserved. Powers the "By option" view's per-option add/remove.
+func handlePollResponseToggle(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+	memberID, err := strconv.Atoi(mux.Vars(r)["memberID"])
+	if err != nil {
+		http.Error(w, "Invalid member ID", http.StatusBadRequest)
+		return
+	}
+
+	var body struct {
+		Option   string `json:"option"`
+		Selected bool   `json:"selected"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	pi, err := loadPollInstance(id)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		slog.Error("handlePollResponseToggle: load instance", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if pi.PollType != "named" {
+		http.Error(w, "cannot log named responses on an anonymous poll", http.StatusBadRequest)
+		return
+	}
+
+	// FKs are not enforced (no PRAGMA foreign_keys=ON), so validate the member is
+	// active here or an unknown member_id would insert a silent orphan row.
+	var memberExists int
+	db.QueryRow(`SELECT COUNT(*) FROM members WHERE id = ? AND rank != 'EX'`, memberID).Scan(&memberExists)
+	if memberExists == 0 {
+		http.Error(w, "Member not found or not active", http.StatusBadRequest)
+		return
+	}
+
+	if !validatePollOption(pi, body.Option) {
+		http.Error(w, "invalid option: "+body.Option, http.StatusBadRequest)
+		return
+	}
+
+	if !body.Selected {
+		// Remove the single (member, option) row — idempotent (0 rows = success).
+		if _, err := db.Exec(`DELETE FROM poll_responses WHERE instance_id = ? AND member_id = ? AND option_key = ?`, id, memberID, body.Option); err != nil {
+			slog.Error("handlePollResponseToggle: delete", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"message": "Recorded"})
+		return
+	}
+
+	if pi.MultiSelect {
+		// Insert this option only if absent — preserves other rows' recorded_at.
+		if _, err := db.Exec(
+			`INSERT INTO poll_responses (instance_id, member_id, option_key, recorded_by) VALUES (?, ?, ?, ?)
+			 ON CONFLICT(instance_id, member_id, option_key) DO NOTHING`,
+			id, memberID, body.Option, user.ID,
+		); err != nil {
+			slog.Error("handlePollResponseToggle: insert", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Single-select: adding moves the vote — wipe any prior option, then insert.
+		tx, err := db.Begin()
+		if err != nil {
+			slog.Error("handlePollResponseToggle: begin tx", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
+		if _, err := tx.Exec(`DELETE FROM poll_responses WHERE instance_id = ? AND member_id = ?`, id, memberID); err != nil {
+			slog.Error("handlePollResponseToggle: delete prior", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO poll_responses (instance_id, member_id, option_key, recorded_by) VALUES (?, ?, ?, ?)`,
+			id, memberID, body.Option, user.ID,
+		); err != nil {
+			slog.Error("handlePollResponseToggle: insert single", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			slog.Error("handlePollResponseToggle: commit", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Recorded"})
 }
 
 // ---------------------------------------------------------------------------

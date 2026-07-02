@@ -477,7 +477,8 @@
 }
 
 .poll-member-name {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     color: var(--color-text);
 }
 
@@ -495,15 +496,68 @@
     flex-wrap: wrap;
 }
 
+/* Multi-select rows stack the option chips beneath the name so a wide option set
+   wraps into a readable block instead of overflowing the row off-screen. */
+.poll-member-row--multi {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+}
+
+.poll-member-row--multi .poll-member-name {
+    flex: 0 0 auto;
+}
+
+.poll-member-row--multi .poll-member-actions {
+    width: 100%;
+}
+
+/* Push the Save button to the far end of the chip row. */
+.poll-member-row--multi .poll-member-actions .btn {
+    margin-left: auto;
+}
+
+/* Multi-select options render as compact toggle chips. The native checkbox is
+   visually hidden (and opts out of the global coarse-pointer 44px touch min-size
+   that would otherwise inflate it into a giant square on mobile); the label
+   itself is the tap target, and the checked state is driven via :has(). */
 .poll-multi-option {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
     font-size: 0.8rem;
-    font-weight: normal;
+    font-weight: 500;
     color: var(--color-text-mid);
     cursor: pointer;
     white-space: nowrap;
+    padding: 6px 12px;
+    min-height: 34px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-bg);
+    user-select: none;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.poll-multi-option:hover {
+    border-color: var(--color-primary);
+}
+
+.poll-multi-option input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    pointer-events: none;
+}
+
+.poll-multi-option:has(input:checked) {
+    background: var(--color-info-bg);
+    border-color: var(--color-primary);
+    color: var(--color-info);
 }
 
 .poll-anon-count-input {
@@ -515,4 +569,74 @@
 /* Anonymous count table spacing */
 #poll-detail-body .data-table td:last-child {
     width: 120px;
+}
+
+/* Member search on the by-member view */
+.poll-member-search {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 12px;
+}
+
+/* ── By-option view ─────────────────────────────────────────────────────── */
+.poll-view-toggle {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.poll-option-section {
+    margin-bottom: 18px;
+}
+
+.poll-option-count {
+    color: var(--color-text-muted);
+    font-weight: normal;
+}
+
+.poll-option-members {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.poll-option-empty {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+/* A chip carries a member in an option list; the × removes them from that option. */
+.poll-option-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px 4px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-bg);
+    font-size: 0.85rem;
+    color: var(--color-text);
+}
+
+.poll-option-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.poll-option-remove:hover {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
 }

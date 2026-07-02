@@ -1,0 +1,48 @@
+/* member-picker.css — shared inline member typeahead.
+   The dropdown is position:fixed (anchored to the input in JS) so it escapes
+   any overflow:auto/hidden clipping ancestor. Generalized from the old Storm
+   `.inline-search` rules, which now live here as the single definition. */
+
+.inline-search {
+    position: relative;
+}
+
+.inline-search .inline-search-input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.inline-dropdown {
+    position: fixed;
+    z-index: 1000;
+    max-height: 280px;
+    overflow-y: auto;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Scope padding to the row itself (not nested divs) and divide rows. */
+.inline-dropdown .inline-result {
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--color-text);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.inline-dropdown .inline-result:last-child {
+    border-bottom: none;
+}
+
+.inline-dropdown .inline-result:hover,
+.inline-dropdown .inline-result.active {
+    background: var(--color-accent-bg);
+}
+
+.inline-dropdown .inline-empty {
+    padding: 6px 10px;
+    color: var(--color-text-mid);
+    font-size: 0.85em;
+}

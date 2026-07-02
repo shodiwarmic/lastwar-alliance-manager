@@ -209,6 +209,7 @@ func main() {
 	// Poll responses
 	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/responses", authMiddleware(requirePermission("manage_polls", handlePollResponseSet))).Methods("POST")
 	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/responses/{memberID:[0-9]+}", authMiddleware(requirePermission("manage_polls", handlePollResponseClear))).Methods("DELETE")
+	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/responses/{memberID:[0-9]+}/toggle", authMiddleware(requirePermission("manage_polls", handlePollResponseToggle))).Methods("POST")
 	// Anonymous counts
 	router.HandleFunc("/api/comms/poll-instances/{id:[0-9]+}/anonymous-counts", authMiddleware(requirePermission("manage_polls", handlePollAnonCountsUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/trackables", authMiddleware(requirePermission("view_season_hub", handleSeasonTrackableList))).Methods("GET")

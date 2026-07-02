@@ -1,5 +1,6 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="/officer_command.css">
+<link rel="stylesheet" href="/member-picker.css">
 {{end}}
 
 {{define "header_text"}}
@@ -83,24 +84,10 @@
         </div>
     </div>
 </div>
-
-<!-- Assignee Picker Modal -->
-<div id="assignee-modal" class="modal">
-    <div class="modal-content">
-        <h2>Add Assignee</h2>
-        <div class="form-group">
-            <label>Search member</label>
-            <input type="text" id="assignee-search" class="form-input" placeholder="Type to filter…">
-        </div>
-        <div id="assignee-list" style="max-height:260px;overflow-y:auto;margin-top:0.5rem;"></div>
-        <div class="modal-actions">
-            <button class="btn btn-secondary" id="assignee-modal-cancel">Cancel</button>
-        </div>
-    </div>
-</div>
 {{end}}
 
 {{define "scripts"}}
 <div id="page-config" data-can-manage="{{if .Permissions.ManageOfficerCommand}}true{{else}}false{{end}}" hidden></div>
+<script src="/member-picker.js"></script>
 <script src="/officer_command.js"></script>
 {{end}}
