@@ -225,6 +225,25 @@ their true source; `provenanceSource()` normalizes a client-declared origin. The
 OCR-vs-CSV split is carried by a `source` field on the import commit payloads
 (`upload.js`='ocr', `vs.js`='csv', roster `confirmMemberUpdates`='csv').
 
+## History table source provenance
+
+The `source TEXT NOT NULL DEFAULT 'manual'` column (added in migration
+`050_lastrank.sql`) lives on exactly these four history tables:
+`power_history`, `hero_power_history`, `kill_history`, `squad_power_history`.
+It records how each row was created:
+
+| Value | Meaning |
+|---|---|
+| `manual` | Entered by an officer via the UI (also the default for pre-migration rows, which can't be reclassified) |
+| `lastrank` | Synced from the LastRank.fun per-player endpoint |
+| `ocr` | Extracted from an uploaded screenshot |
+| `csv` | Imported via CSV file |
+| `mobile` | Submitted by the Android scanner app |
+
+Every new write path must stamp its true source; `provenanceSource()`
+normalizes a client-declared origin. No other history/state tables carry a
+`source` column — don't assume one on tables outside this list.
+
 ## Known gotchas
 
 ### CSP — no inline scripts allowed (`script-src 'self'` only)
