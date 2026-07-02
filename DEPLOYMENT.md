@@ -19,7 +19,7 @@ Wait for DNS propagation (5-60 minutes) before proceeding to the reverse proxy s
 The easiest way to deploy the application on a fresh Debian or Ubuntu server is using the included installation script. It will automatically install Docker, securely generate your environment variables and encryption keys, download the pre-built containers from the registry, and set up Caddy or Nginx with automatic HTTPS.
 
 ```bash
-git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
+git clone https://github.com/shodiwarmic/lastwar-alliance-manager.git /opt/lastwar
 cd /opt/lastwar
 ./install.sh
 ```
@@ -37,7 +37,7 @@ Ensure Docker and Docker Compose are installed on your system.
 ### Step B: Prepare the Environment
 ```bash
 # Clone the repository
-git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
+git clone https://github.com/shodiwarmic/lastwar-alliance-manager.git /opt/lastwar
 cd /opt/lastwar
 
 # Create persistent storage directories
@@ -102,7 +102,7 @@ collabora.yourdomain.com {
     header {
         X-Content-Type-Options "nosniff"
         # Strict CSP to allow only your main app to iframe the document editor
-        Content-Security-Policy "frame-ancestors [https://app.yourdomain.com](https://app.yourdomain.com)"
+        Content-Security-Policy "frame-ancestors https://app.yourdomain.com"
         X-XSS-Protection "1; mode=block"
         Referrer-Policy "strict-origin-when-cross-origin"
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
@@ -153,7 +153,7 @@ server {
     # SSL config injected by certbot...
 
     # Strict CSP to allow only your main app to iframe the document editor
-    add_header Content-Security-Policy "frame-ancestors [https://app.yourdomain.com](https://app.yourdomain.com)" always;
+    add_header Content-Security-Policy "frame-ancestors https://app.yourdomain.com" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
     
