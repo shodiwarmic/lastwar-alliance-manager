@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -278,7 +277,7 @@ func getHeroPowerHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("Failed to query hero power history: %v", err)
+		slog.Error("Failed to query hero power history", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
@@ -288,7 +287,7 @@ func getHeroPowerHistory(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var h HeroPowerHistory
 		if err := rows.Scan(&h.ID, &h.MemberID, &h.Power, &h.RecordedAt); err != nil {
-			log.Printf("Failed to scan hero power history row: %v", err)
+			slog.Error("Failed to scan hero power history row", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
@@ -320,7 +319,7 @@ func addHeroPowerRecord(w http.ResponseWriter, r *http.Request) {
 	result, err := db.Exec("INSERT INTO hero_power_history (member_id, power) VALUES (?, ?)",
 		request.MemberID, request.Power)
 	if err != nil {
-		log.Printf("Failed to insert hero power record: %v", err)
+		slog.Error("Failed to insert hero power record", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}

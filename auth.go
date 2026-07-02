@@ -44,7 +44,7 @@ func initSessionStore() {
 			log.Fatal("Failed to generate random session key: ", err)
 		}
 		sessionKey = hex.EncodeToString(key)
-		log.Println("WARNING: No SESSION_KEY environment variable set. Using generated key (not persistent across restarts).")
+		slog.Warn("No SESSION_KEY environment variable set; using generated key (not persistent across restarts)")
 	}
 
 	key, err := hex.DecodeString(sessionKey)
@@ -137,7 +137,7 @@ func trackLogin(userID int, username string, r *http.Request, success bool) {
 		if _, err := db.ExecContext(context.Background(), `INSERT INTO login_sessions (user_id, username, ip_address, user_agent, country, city, isp, success)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			userID, username, ip, userAgent, country, city, isp, success); err != nil {
-			log.Printf("Failed to track login: %v", err)
+			slog.Error("Failed to track login", "error", err)
 		}
 	}()
 }

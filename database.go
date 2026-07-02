@@ -3,7 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/pressly/goose/v3"
@@ -29,7 +29,7 @@ func initDB() error {
 		return fmt.Errorf("failed to configure WAL mode: %w", err)
 	}
 	if journalMode != "wal" {
-		log.Printf("Warning: WAL mode not enabled (got %q); performance may be degraded", journalMode)
+		slog.Warn("WAL mode not enabled; performance may be degraded", "journal_mode", journalMode)
 	}
 	db.SetMaxOpenConns(1)
 

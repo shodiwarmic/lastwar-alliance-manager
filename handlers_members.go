@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
-	"log"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -238,7 +237,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		&old.Name, &old.Rank, &old.Level, &old.TroopLevel, &old.Profession, &old.SquadType, &old.Eligible, &old.LastRankPublicID, &old.JoinedAt,
 	)
 	if err != nil {
-		log.Printf("Error fetching current member name: %v", err)
+		slog.Error("Error fetching current member name", "error", err)
 		http.Error(w, "Member not found", http.StatusNotFound)
 		return
 	}
@@ -255,7 +254,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	if m.Name != "" && old.Name != m.Name {
 		_, aliasErr := tx.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", id, old.Name)
 		if aliasErr != nil {
-			log.Printf("Warning: Failed to auto-create global alias for name change (member %d): %v", id, aliasErr)
+			slog.Warn("Failed to auto-create global alias for name change", "member_id", id, "error", aliasErr)
 		}
 	}
 
@@ -318,7 +317,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		if currentPower != *m.Power {
 			_, insertErr := tx.Exec(`INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.Power)
 			if insertErr != nil {
-				log.Printf("Warning: Failed to log power history for member %d: %v", id, insertErr)
+				slog.Warn("Failed to log power history", "member_id", id, "error", insertErr)
 			}
 		}
 	}
@@ -987,7 +986,7 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.JoinedAt, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.HeroPower, &m.HeroPowerUpdatedAt, &m.CurrentKills, &m.KillsUpdatedAt, &m.Skills)
 
 	if err != nil {
-		log.Printf("Profile Fetch Error: %v", err)
+		slog.Error("Profile fetch error", "error", err)
 		http.Error(w, "Member not found", http.StatusNotFound)
 		return
 	}
@@ -1056,7 +1055,7 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		req.Name, req.Level, req.TroopLevel, req.SquadType, req.Profession, memberID)
 
 	if err != nil {
-		log.Printf("Profile Update Error: %v", err)
+		slog.Error("Profile update error", "error", err)
 		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
 		return
 	}

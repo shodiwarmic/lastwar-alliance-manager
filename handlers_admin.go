@@ -5,7 +5,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -879,7 +878,7 @@ func updateExternalCredentials(w http.ResponseWriter, r *http.Request) {
 	// Encrypt the secret (the helper automatically zeroes 'plaintext' upon return)
 	ciphertext, nonce, err := Encrypt(plaintext, hexKey)
 	if err != nil {
-		log.Printf("Encryption failed for service %s: %v", req.ServiceName, err)
+		slog.Error("Encryption failed", "service", req.ServiceName, "error", err)
 		http.Error(w, "Internal encryption error", http.StatusInternalServerError)
 		return
 	}
@@ -896,7 +895,7 @@ func updateExternalCredentials(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec(query, req.ServiceName, ciphertext, nonce)
 	if err != nil {
-		log.Printf("Database insertion failed for credential %s: %v", req.ServiceName, err)
+		slog.Error("Database insertion failed for credential", "service", req.ServiceName, "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}

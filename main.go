@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"html/template"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -115,7 +114,7 @@ func renderTemplate(w http.ResponseWriter, r *http.Request, tmplName string, dat
 func main() {
 	// 1. Load Environment Variables
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, relying on system environment variables")
+		slog.Info("No .env file found, relying on system environment variables")
 	}
 
 	// 2. Set up Structured JSON Logging
