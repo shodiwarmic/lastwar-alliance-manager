@@ -369,7 +369,17 @@ if (activeBtn) {
 
 `.tab-bar` / `.tab-btn` styles are defined in `styles.css` (globally available). No need to add them to page CSS — they work automatically on any page that uses `.tab-bar` / `.tab-btn` markup.
 
-### Choices.js + `form.reset()` wipes dynamically-loaded options
+### Inline `style="display:none"` in templates is intentional (Category B)
+
+Dozens of `style="display:none"` inline styles remain across `templates/`. These
+were triaged in Epic 43 and confirmed as **Category B**: elements that JS reveals
+later via `element.style.display = 'block'` (or `'flex'`). The inline style hides
+them on first paint, before the page script runs — removing it would flash the
+element visible on load.
+
+Do **not** bulk-remove these. Before deleting any one of them, find the matching
+JS toggle that shows it (`getElementById(...)...style.display = ...`) and confirm
+it isn't the initial-hidden state for that element.
 When a [Choices.js](https://cdn.jsdelivr.net/npm/choices.js@10.2) `<select>` lives inside a `<form>`, Choices attaches a `reset` listener to that form. On `form.reset()` it restores the dropdown to the state captured **at init** — i.e. only the `<option>`s present in the template HTML — silently discarding anything you added later via `setChoices()`.
 
 This bit `admin.js`: the roster is loaded once at page-load (`populateMemberDropdown` → `setChoices`), but `showCreateUserModal()` calls `user-form.reset()`, which emptied the member dropdown every time the New User modal opened.
