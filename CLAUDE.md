@@ -633,6 +633,19 @@ These names appear in older code but are NOT defined in `styles.css`. They silen
   - `.btn`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.btn-sm`
   - `.form-input` — input/select/textarea styling (alias for `.form-group input`)
 
+## Session Key Requirement
+
+`SESSION_KEY` must be set in production. If unset, the app generates an
+ephemeral key and logs a warning — this causes all users to be logged out
+on every restart. A key shorter than `MinSessionKeyLen` (32 chars) already
+refuses to boot (`os.Exit(1)`), but an **unset** key still boots with an
+ephemeral one even in production mode. A future improvement should make the
+app refuse to start in production (`PRODUCTION=true`) without a valid
+`SESSION_KEY`.
+
+**Operator action:** Confirm `SESSION_KEY` is set in all production deployments
+before enabling `PRODUCTION=true`.
+
 ## Documentation
 
 Keep `README.md` up to date whenever a user-facing feature is added, changed, or removed. Each feature should have an entry under the appropriate `###` section in the Features block, written in the same style as existing entries (bullet points, bolded lead phrase, plain-English description of what it does and its permission model). Do not document internal implementation details — README is for end users and operators.
