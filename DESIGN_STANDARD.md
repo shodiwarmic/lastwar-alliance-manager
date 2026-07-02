@@ -783,6 +783,15 @@ These map to specific in-game seat tier colours that must be constant across lig
 
 `--color-sidebar` is hardcoded to a near-black value in both themes (dark stays dark; light also uses a dark sidebar). This is intentional — the sidebar is always a dark panel regardless of page theme.
 
+### `.btn-warning` hover text colour
+
+`.btn-warning:hover` (`styles.css`) uses `color: #212529` — hardcoded dark text —
+on its amber (`--color-warning`) fill, regardless of theme. Warning-yellow
+backgrounds require dark text for WCAG contrast, and the semantic text tokens are
+too light against the amber fill. This one hover text colour is intentional and
+should not be swapped for a theme token. (The button's resting state already uses
+tokens — `--color-surface` background, `--color-warning` text/border.)
+
 ---
 
-*Last updated: May 2026. Amend this document whenever a new global pattern is introduced or an existing one is changed.*
+*Last updated: July 2026. Amend this document whenever a new global pattern is introduced or an existing one is changed.*
