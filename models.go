@@ -653,6 +653,21 @@ type PollAnonCount struct {
 	ResponseCount int    `json:"response_count"`
 }
 
+// PollOptionMember is a single member within a by-option bucket, in sign-up order.
+type PollOptionMember struct {
+	MemberID   int    `json:"member_id"`
+	MemberName string `json:"member_name"`
+	Rank       string `json:"rank"`
+	RecordedAt string `json:"recorded_at"`
+}
+
+// PollOptionBucket groups the members who selected one option (named polls),
+// ordered by recorded_at. Powers the "By option" detail view.
+type PollOptionBucket struct {
+	Option  string             `json:"option"`
+	Members []PollOptionMember `json:"members"`
+}
+
 type ActivityLog struct {
 	ID          int    `json:"id"`
 	UserID      *int   `json:"user_id"`

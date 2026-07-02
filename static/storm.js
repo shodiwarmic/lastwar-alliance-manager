@@ -107,6 +107,7 @@ let dragIsSub = false;
 let dragSourceGroupId = null;
 let dragSourceBuildingId = null;
 let dragSourceIsDirect = false;
+let slotPickers = [];   // inline member-pickers mounted in the current render
 
 // ── Error display ─────────────────────────────────────────────────
 function showError(msg) {
@@ -146,6 +147,11 @@ function allAssignedIds() {
 
 // ── Render all ────────────────────────────────────────────────────
 function renderAll() {
+    // Destroy the previous render's inline pickers before rebuilding — blur does
+    // not fire when a focused input is removed from the DOM, so a single ref would
+    // leak the other slots' listeners.
+    slotPickers.forEach(p => p.destroy());
+    slotPickers = [];
     renderPool();
     renderGroups();
     updateCapacityBar();
@@ -375,24 +381,41 @@ function buildMemberChip(m, gid, bid, isDirect) {
     return chip;
 }
 
+// Order candidates like the pool: available first, then sub-only, then the rest;
+// ties broken by power. Keeps the most relevant adds at the top.
+function stormPickerSort(a, b) {
+    const slotIdx = tfConfig[currentTF];
+    const regPriority = v => v === 1 ? 0 : v === 2 ? 1 : 2;
+    const ra = regPriority(getRegVal(a.id, slotIdx));
+    const rb = regPriority(getRegVal(b.id, slotIdx));
+    if (ra !== rb) return ra - rb;
+    return (b.power || 0) - (a.power || 0);
+}
+
 function renderInlineSearch(groupId, buildingId, isDirect) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'inline-search';
-    wrapper.style.marginTop = '4px';
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'form-input inline-search-input';
-    input.placeholder = 'Add member...';
-    input.dataset.groupId = groupId;
-    if (buildingId) input.dataset.buildingId = buildingId;
-    if (isDirect) input.dataset.direct = 'true';
-
-    const dropdown = document.createElement('div');
-    dropdown.className = 'inline-dropdown';
-
-    wrapper.append(input, dropdown);
-    return wrapper;
+    const picker = createMemberPicker({
+        placeholder: 'Add member...',
+        maxResults: 20,
+        getCandidates: () => allMembers,
+        isExcluded: (m) => allAssignedIds().has(m.id),
+        // Preserve Storm's richer search (name/rank/squad_type) and pool ordering.
+        matches: (m, q) =>
+            (m.name || '').toLowerCase().includes(q) ||
+            (m.rank || '').toLowerCase().includes(q) ||
+            (m.squad_type || '').toLowerCase().includes(q),
+        sort: stormPickerSort,
+        renderRow: (m) => {
+            const { nameDiv, metaDiv, regDiv } = memberInfoNodes(m);
+            const frag = document.createDocumentFragment();
+            frag.append(nameDiv, metaDiv, regDiv);
+            return frag;
+        },
+        // Add Sub-Only members as substitutes, matching drag-from-pool behaviour.
+        onPick: (m) => handleDrop(groupId, buildingId, isDirect, m.id, getRegVal(m.id, tfConfig[currentTF]) === 2),
+    });
+    picker.el.style.marginTop = '4px';
+    slotPickers.push(picker);
+    return picker.el;
 }
 
 function buildBuildingSlot(g, b) {
@@ -700,81 +723,6 @@ function renderGroups() {
         });
     });
 
-    // Wire inline search inputs
-    container.querySelectorAll('.inline-search-input').forEach(input => {
-        input.addEventListener('input', () => {
-            const dropdown = input.nextElementSibling;
-            const q = input.value.toLowerCase();
-            const gid = parseInt(input.dataset.groupId);
-            const bid = input.dataset.buildingId || null;
-            const isDirect = input.dataset.direct === 'true';
-            showInlineDropdown(dropdown, q, gid, bid, isDirect);
-        });
-        input.addEventListener('focus', () => {
-            const dropdown = input.nextElementSibling;
-            const gid = parseInt(input.dataset.groupId);
-            const bid = input.dataset.buildingId || null;
-            const isDirect = input.dataset.direct === 'true';
-            showInlineDropdown(dropdown, '', gid, bid, isDirect);
-        });
-        document.addEventListener('click', e => {
-            if (!input.parentElement.contains(e.target)) {
-                const dropdown = input.nextElementSibling;
-                if (dropdown) dropdown.replaceChildren();
-            }
-        });
-    });
-}
-
-function showInlineDropdown(dropdown, q, groupId, buildingId, isDirect) {
-    const assigned = allAssignedIds();
-    const activeSlotIdx = tfConfig[currentTF];
-    const filtered = allMembers.filter(m => {
-        if (assigned.has(m.id)) return false;
-        if (q && !m.name.toLowerCase().includes(q) &&
-            !m.rank.toLowerCase().includes(q) &&
-            !(m.squad_type || '').toLowerCase().includes(q)) return false;
-        return true;
-    });
-
-    // Same ordering as the pool: available first, then sub-only, then the rest;
-    // ties broken by power. Keeps the most relevant adds at the top.
-    const regPriority = v => v === 1 ? 0 : v === 2 ? 1 : 2;
-    filtered.sort((a, b) => {
-        const ra = regPriority(getRegVal(a.id, activeSlotIdx));
-        const rb = regPriority(getRegVal(b.id, activeSlotIdx));
-        if (ra !== rb) return ra - rb;
-        return (b.power || 0) - (a.power || 0);
-    });
-
-    const shown = filtered.slice(0, 20);
-
-    if (shown.length === 0) {
-        const div = document.createElement('div');
-        div.className = 'inline-empty';
-        div.textContent = 'No members available';
-        dropdown.replaceChildren(div);
-        return;
-    }
-
-    const items = shown.map(m => {
-        const { nameDiv, metaDiv, regDiv, regVal } = memberInfoNodes(m);
-        const item = document.createElement('div');
-        item.className = 'inline-result';
-        item.dataset.memberId = m.id;
-        item.append(nameDiv, metaDiv, regDiv);
-        item.addEventListener('click', () => {
-            // Add as a substitute when the member is registered Sub Only for the
-            // active slot — matching the drag-from-pool behaviour.
-            handleDrop(groupId, buildingId, isDirect, m.id, regVal === 2);
-            dropdown.replaceChildren();
-            const input = dropdown.previousElementSibling;
-            if (input) input.value = '';
-        });
-        return item;
-    });
-
-    dropdown.replaceChildren(...items);
 }
 
 function handleDrop(groupId, buildingId, isDirect, memberId, isSub) {

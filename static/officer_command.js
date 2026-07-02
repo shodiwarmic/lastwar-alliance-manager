@@ -15,8 +15,8 @@ let dragRespIdx = null;
 // ── modal state ──────────────────────────────────────────────────
 let respModalCatIdx = null;
 let respModalRespIdx = null;
-let assigneeModalCatIdx = null;
-let assigneeModalRespIdx = null;
+let activePicker = null;   // the single open inline member picker (if any)
+let activeAddBtn = null;   // the "+ Add" button hidden while activePicker is open
 
 // ── helpers ──────────────────────────────────────────────────────
 function showError(msg) {
@@ -58,6 +58,7 @@ async function loadData() {
 function buildLeaderFilter() {
     const seen = new Set();
     const sel = document.getElementById('filter-leader');
+    const prev = sel.value;   // preserve the active filter across the rebuild
 
     const defaultOpt = document.createElement('option');
     defaultOpt.value = '';
@@ -79,6 +80,7 @@ function buildLeaderFilter() {
     });
 
     sel.replaceChildren(...opts);
+    if (opts.some(o => o.value === prev)) sel.value = prev;
 }
 
 function getFilters() {
@@ -91,6 +93,9 @@ function getFilters() {
 
 // ── render ───────────────────────────────────────────────────────
 function render() {
+    // Blur does not fire when a focused input is removed from the DOM, so tear the
+    // open inline picker down explicitly before the grid is rebuilt.
+    closeActivePicker();
     const container = document.getElementById('oc-categories');
     const { leader, frequency } = getFilters();
 
@@ -281,29 +286,12 @@ function render() {
                 const assigneesTd = tr.insertCell();
                 const assigneesDiv = document.createElement('div');
                 assigneesDiv.className = 'oc-assignees';
-                (rp.assignees || []).forEach(a => {
-                    const chip = document.createElement('span');
-                    chip.className = 'oc-chip';
-                    chip.appendChild(document.createTextNode(a.name + ' '));
-                    const rankBadge = document.createElement('span');
-                    rankBadge.className = `member-rank rank-${a.rank}`;
-                    rankBadge.textContent = a.rank;
-                    chip.appendChild(rankBadge);
-                    if (canManage) {
-                        const removeBtn = document.createElement('button');
-                        removeBtn.className = 'oc-chip-remove';
-                        removeBtn.title = 'Remove';
-                        removeBtn.textContent = '×';
-                        removeBtn.addEventListener('click', () => removeAssignee(ci, ri, a.member_id));
-                        chip.appendChild(removeBtn);
-                    }
-                    assigneesDiv.appendChild(chip);
-                });
+                (rp.assignees || []).forEach(a => assigneesDiv.appendChild(buildAssigneeChip(ci, ri, a)));
                 if (canManage) {
                     const addAssigneeBtn = document.createElement('button');
                     addAssigneeBtn.className = 'oc-add-assignee-btn';
                     addAssigneeBtn.textContent = '+ Add';
-                    addAssigneeBtn.addEventListener('click', () => openAssigneeModal(ci, ri));
+                    addAssigneeBtn.addEventListener('click', () => openInlinePicker(ci, ri, addAssigneeBtn));
                     assigneesDiv.appendChild(addAssigneeBtn);
                 }
                 assigneesTd.appendChild(assigneesDiv);
@@ -590,84 +578,86 @@ async function saveRespOrder(ci) {
     }
 }
 
-// ── assignee modal ───────────────────────────────────────────────
-function openAssigneeModal(ci, ri) {
-    assigneeModalCatIdx = ci;
-    assigneeModalRespIdx = ri;
-    const rp = categories[ci].responsibilities[ri];
-    const assigned = new Set(rp.assignees.map(a => a.member_id));
-
-    renderAssigneeList('', assigned);
-    const assigneeModal = document.getElementById('assignee-modal');
-    assigneeModal.style.display = 'flex';
-    trapFocus(assigneeModal);
-}
-
-function closeAssigneeModal() {
-    const assigneeModal = document.getElementById('assignee-modal');
-    releaseFocus(assigneeModal);
-    assigneeModal.style.display = '';
-    assigneeModalCatIdx = null;
-    assigneeModalRespIdx = null;
-}
-
-function renderAssigneeList(filter, assigned) {
-    const container = document.getElementById('assignee-list');
-    const lower = filter.toLowerCase();
-    const members = allMembers.filter(m =>
-        !assigned.has(m.id) && m.name.toLowerCase().includes(lower)
-    );
-
-    if (!members.length) {
-        const p = document.createElement('p');
-        p.style.cssText = 'color:var(--color-text-mid);padding:0.5rem;font-size:0.9rem;';
-        p.textContent = 'No members to add.';
-        container.replaceChildren(p);
-        return;
+// ── inline member picker ─────────────────────────────────────────
+function buildAssigneeChip(ci, ri, a) {
+    const chip = document.createElement('span');
+    chip.className = 'oc-chip';
+    chip.appendChild(document.createTextNode(a.name + ' '));
+    const rankBadge = document.createElement('span');
+    rankBadge.className = `member-rank rank-${a.rank}`;
+    rankBadge.textContent = a.rank;
+    chip.appendChild(rankBadge);
+    if (canManage) {
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'oc-chip-remove';
+        removeBtn.title = 'Remove';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => removeAssignee(ci, ri, a.member_id));
+        chip.appendChild(removeBtn);
     }
-
-    const rows = members.map(m => {
-        const row = document.createElement('div');
-        row.className = 'assignee-row';
-
-        const nameSpan = document.createElement('span');
-        nameSpan.appendChild(document.createTextNode(m.name + ' '));
-        const rankChip = document.createElement('span');
-        rankChip.className = `member-rank rank-${m.rank}`;
-        rankChip.textContent = m.rank;
-        nameSpan.appendChild(rankChip);
-
-        const addBtn = document.createElement('button');
-        addBtn.className = 'btn btn-sm btn-primary';
-        addBtn.textContent = 'Add';
-        addBtn.addEventListener('click', () => pickAssignee(m.id));
-
-        row.appendChild(nameSpan);
-        row.appendChild(addBtn);
-        return row;
-    });
-
-    container.replaceChildren(...rows);
+    return chip;
 }
 
-async function pickAssignee(memberID) {
-    const ci = assigneeModalCatIdx;
-    const ri = assigneeModalRespIdx;
+// Only one inline picker is open at a time (singleton). Tearing the current one
+// down restores its "+ Add" button. Called on every new open and at render() top.
+function closeActivePicker() {
+    if (activePicker) {
+        activePicker.destroy();
+        activePicker = null;
+    }
+    if (activeAddBtn) {
+        activeAddBtn.style.display = '';
+        activeAddBtn = null;
+    }
+}
+
+function openInlinePicker(ci, ri, addBtn) {
+    closeActivePicker();
     const rp = categories[ci].responsibilities[ri];
+    addBtn.style.display = 'none';
+    const picker = createMemberPicker({
+        placeholder: 'Add member…',
+        keepOpenOnPick: true,   // rapid multi-add, like the old modal's Add/Add/Add
+        maxResults: 500,
+        getCandidates: () => allMembers,
+        isExcluded: (m) => (rp.assignees || []).some(a => a.member_id === m.id),
+        onPick: (m) => pickAssignee(ci, ri, m),
+    });
+    picker.el.style.minWidth = '160px';
+    activePicker = picker;
+    activeAddBtn = addBtn;
+    addBtn.parentElement.insertBefore(picker.el, addBtn);
+    picker.input.focus();
+}
+
+// Optimistic: push + chip BEFORE the POST (the candidate already carries
+// {id,name,rank}), so the member drops out of the still-open picker immediately
+// and a fast second tap can't double-add. Roll back on failure.
+async function pickAssignee(ci, ri, m) {
+    const rp = categories[ci].responsibilities[ri];
+    if (!rp.assignees) rp.assignees = [];
+    if (rp.assignees.some(a => a.member_id === m.id)) return;   // dedup
+
+    const assignee = { member_id: m.id, name: m.name, rank: m.rank };
+    rp.assignees.push(assignee);
+    buildLeaderFilter();
+
+    const chip = buildAssigneeChip(ci, ri, assignee);
+    if (activePicker && activePicker.el.parentElement) {
+        activePicker.el.parentElement.insertBefore(chip, activePicker.el);
+    }
 
     try {
         const res = await fetch(`${API}/responsibilities/${rp.id}/assignees`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ member_id: memberID }),
+            body: JSON.stringify({ member_id: m.id }),
         });
         if (!res.ok) throw new Error(await res.text());
-        const assignee = await res.json();
-        rp.assignees.push(assignee);
-        closeAssigneeModal();
-        buildLeaderFilter();
-        render();
     } catch (e) {
+        rp.assignees = rp.assignees.filter(a => a.member_id !== m.id);
+        buildLeaderFilter();
+        chip.remove();
         showError('Failed to add assignee: ' + e.message);
     }
 }
@@ -708,21 +698,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('resp-modal-cancel').addEventListener('click', closeRespModal);
     document.getElementById('resp-modal-save').addEventListener('click', saveRespModal);
 
-    // Assignee modal
-    document.getElementById('assignee-modal-cancel').addEventListener('click', closeAssigneeModal);
-    document.getElementById('assignee-search').addEventListener('input', e => {
-        if (assigneeModalCatIdx === null) return;
-        const rp = categories[assigneeModalCatIdx].responsibilities[assigneeModalRespIdx];
-        const assigned = new Set(rp.assignees.map(a => a.member_id));
-        renderAssigneeList(e.target.value, assigned);
-    });
-
-    // Close modals on backdrop click
+    // Close resp modal on backdrop click
     document.getElementById('resp-modal').addEventListener('click', e => {
         if (e.target.id === 'resp-modal') closeRespModal();
-    });
-    document.getElementById('assignee-modal').addEventListener('click', e => {
-        if (e.target.id === 'assignee-modal') closeAssigneeModal();
     });
 
     // Filters
