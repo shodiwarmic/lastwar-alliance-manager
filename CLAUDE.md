@@ -1,7 +1,8 @@
 # Alliance Manager — Claude Code Guide
 
 ## Stack
-- **Backend**: Go, gorilla/mux, gorilla/csrf, gorilla/sessions, SQLite (mattn/go-sqlite3)
+- **Backend**: Go, gorilla/mux, gorilla/csrf, gorilla/sessions, SQLite (`modernc.org/sqlite` — pure Go, no CGO)
+- **Build**: `CGO_ENABLED=0` (no C compiler required in the build environment; see `Dockerfile`)
 - **Migrations**: Goose (`-- +goose Up` / `-- +goose StatementBegin` headers required)
 - **Frontend**: Vanilla JS, no build step. CSS custom properties (`var(--name)`) throughout.
 - **Templates**: Go `html/template`, parsed as `layout.html` + page template pairs
