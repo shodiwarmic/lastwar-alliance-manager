@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"html/template"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -115,7 +114,7 @@ func renderTemplate(w http.ResponseWriter, r *http.Request, tmplName string, dat
 func main() {
 	// 1. Load Environment Variables
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, relying on system environment variables")
+		slog.Info("No .env file found, relying on system environment variables")
 	}
 
 	// 2. Set up Structured JSON Logging
@@ -588,6 +587,8 @@ func main() {
 	var csrfKey []byte
 	sessionKey := os.Getenv("SESSION_KEY")
 	if sessionKey == "" {
+		// TODO: refuse to start if PRODUCTION=true and SESSION_KEY is unset or < 32 bytes.
+		// Today an unset key boots with an ephemeral one (below), logging everyone out on restart.
 		// Dev mode: generate an ephemeral random key (sessions won't persist across restarts)
 		csrfKey = make([]byte, 32)
 		if _, err := rand.Read(csrfKey); err != nil {

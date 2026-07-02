@@ -12,6 +12,7 @@ let allVsData = [];
 let rawKillData = [];
 let currentVsWeek = null;
 
+// Colours read from CSS tokens at draw time; redraws on themechange (see handler below).
 function getChartPalette() {
     const cs = getComputedStyle(document.documentElement);
     const t = n => cs.getPropertyValue(n).trim();

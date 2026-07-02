@@ -16,6 +16,7 @@ let pointsChart = null;
 let membersChart = null;
 let timelineChart = null;
 
+// Colours read from CSS tokens at draw time; redraws on themechange (see handler below).
 function getDynoPalette() {
     const cs = getComputedStyle(document.documentElement);
     const t = n => cs.getPropertyValue(n).trim();

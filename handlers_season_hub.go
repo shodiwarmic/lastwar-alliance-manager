@@ -655,6 +655,9 @@ func handleSeasonArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO(game-time): uses UTC, not game-time (UTC-2). Left out of the
+	// game-time clock consolidation (season create at ~L529 uses gameDate()) —
+	// revisit in a future pass so an archived season's end_date matches game day.
 	today := time.Now().UTC().Format("2006-01-02")
 	if _, err := db.Exec(`UPDATE seasons SET is_active=0, archived_at=CURRENT_TIMESTAMP, end_date=? WHERE id=?`, today, id); err != nil {
 		slog.Error("handleSeasonArchive: update", "error", err)

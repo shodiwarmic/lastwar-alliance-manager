@@ -1,7 +1,8 @@
 # Alliance Manager — Claude Code Guide
 
 ## Stack
-- **Backend**: Go, gorilla/mux, gorilla/csrf, gorilla/sessions, SQLite (mattn/go-sqlite3)
+- **Backend**: Go, gorilla/mux, gorilla/csrf, gorilla/sessions, SQLite (`modernc.org/sqlite` — pure Go, no CGO)
+- **Build**: `CGO_ENABLED=0` (no C compiler required in the build environment; see `Dockerfile`)
 - **Migrations**: Goose (`-- +goose Up` / `-- +goose StatementBegin` headers required)
 - **Frontend**: Vanilla JS, no build step. CSS custom properties (`var(--name)`) throughout.
 - **Templates**: Go `html/template`, parsed as `layout.html` + page template pairs
@@ -83,6 +84,19 @@ persisted opaquely as `diagnostics.json` in the OCR archive (alongside
 one-line activity-log summary via `summarizeOCRDiagnostics` (`nil` /`""` when
 the OCR service returns no diagnostics — always nil-check). It is treated as an
 opaque blob for storage, so OCR-side schema changes need no Go change.
+
+### OCR service deploy ordering
+
+The app requires `lastwar-ocr-service` to be running the response-envelope
+format (introduced alongside OCR diagnostics — `decodeWorkerResponse` treats a
+missing top-level `results` key as an error). Deploy accordingly:
+
+- `lastwar-ocr-service` must be deployed **before or simultaneously with** the
+  Alliance Manager app.
+- Rolling `lastwar-ocr-service` back to a pre-envelope version while the app is
+  on the current version will cause OCR imports to fail.
+- The backward-compat shim that tolerated the old flat response was
+  intentionally removed in Epic 42.
 
 `category` is required for local mode and ignored for cloud mode.
 Allowed values are the same as the OCR service's `VALID_CATEGORIES`
@@ -211,6 +225,25 @@ their true source; `provenanceSource()` normalizes a client-declared origin. The
 OCR-vs-CSV split is carried by a `source` field on the import commit payloads
 (`upload.js`='ocr', `vs.js`='csv', roster `confirmMemberUpdates`='csv').
 
+## History table source provenance
+
+The `source TEXT NOT NULL DEFAULT 'manual'` column (added in migration
+`050_lastrank.sql`) lives on exactly these four history tables:
+`power_history`, `hero_power_history`, `kill_history`, `squad_power_history`.
+It records how each row was created:
+
+| Value | Meaning |
+|---|---|
+| `manual` | Entered by an officer via the UI (also the default for pre-migration rows, which can't be reclassified) |
+| `lastrank` | Synced from the LastRank.fun per-player endpoint |
+| `ocr` | Extracted from an uploaded screenshot |
+| `csv` | Imported via CSV file |
+| `mobile` | Submitted by the Android scanner app |
+
+Every new write path must stamp its true source; `provenanceSource()`
+normalizes a client-declared origin. No other history/state tables carry a
+`source` column — don't assume one on tables outside this list.
+
 ## Known gotchas
 
 ### CSP — no inline scripts allowed (`script-src 'self'` only)
@@ -336,7 +369,17 @@ if (activeBtn) {
 
 `.tab-bar` / `.tab-btn` styles are defined in `styles.css` (globally available). No need to add them to page CSS — they work automatically on any page that uses `.tab-bar` / `.tab-btn` markup.
 
-### Choices.js + `form.reset()` wipes dynamically-loaded options
+### Inline `style="display:none"` in templates is intentional (Category B)
+
+Dozens of `style="display:none"` inline styles remain across `templates/`. These
+were triaged in Epic 43 and confirmed as **Category B**: elements that JS reveals
+later via `element.style.display = 'block'` (or `'flex'`). The inline style hides
+them on first paint, before the page script runs — removing it would flash the
+element visible on load.
+
+Do **not** bulk-remove these. Before deleting any one of them, find the matching
+JS toggle that shows it (`getElementById(...)...style.display = ...`) and confirm
+it isn't the initial-hidden state for that element.
 When a [Choices.js](https://cdn.jsdelivr.net/npm/choices.js@10.2) `<select>` lives inside a `<form>`, Choices attaches a `reset` listener to that form. On `form.reset()` it restores the dropdown to the state captured **at init** — i.e. only the `<option>`s present in the template HTML — silently discarding anything you added later via `setChoices()`.
 
 This bit `admin.js`: the roster is loaded once at page-load (`populateMemberDropdown` → `setChoices`), but `showCreateUserModal()` calls `user-form.reset()`, which emptied the member dropdown every time the New User modal opened.
@@ -443,12 +486,25 @@ For bad-request (400) errors from JSON decode failures, use `"Invalid request bo
 | `scripts` | JS includes + inline `window.*` config vars |
 | `modals` | Modal HTML — rendered outside the container div |
 
-## Permissions matrix
+## Adding a new permission
 
-When adding new permission columns, follow `008_schedules.sql` exactly:
-- `ALTER TABLE` to add column with a safe default
-- `UPDATE` using `WHERE rank IN (...)` — never `WHERE rank >= N`
-- Populate all ranks explicitly if the default isn't right for everyone
+Permissions are stored as a JSON blob in the `rank_permissions.permissions`
+column (one row per rank), serialized from the `RankPermissions` struct — **not**
+as one column per permission. Since Epic 30 there is no migration and no
+SELECT/Scan change; adding a permission is two edits in `models.go`:
+
+1. Add `FieldName bool \`json:"key_name"\`` to the `RankPermissions` struct.
+2. Add a `PermissionRow{Key: "key_name", Label: "Human Label"}` to the
+   appropriate `PermissionGroup` in `PermissionGroups` (or add a new group).
+
+No migration required — the new key round-trips through `json.Marshal` /
+`json.Unmarshal` automatically and appears in the Settings → Permissions Matrix
+UI. `allPermissionsTrue()` (admin shortcut) reflects it via struct reflection,
+so nothing else needs touching.
+
+> Note: legacy per-rank permission *columns* added by `008_schedules.sql` and
+> friends predate the JSON blob and are no longer the write path — do not add
+> new ones.
 
 ## Frontend JS hardening
 
@@ -631,6 +687,26 @@ These names appear in older code but are NOT defined in `styles.css`. They silen
   - `.badge-hq` / `.badge-troop` / `.badge-profession` / `.badge-squad-type` — secondary member badges (used alongside `.member-rank`)
   - `.btn`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.btn-sm`
   - `.form-input` — input/select/textarea styling (alias for `.form-group input`)
+
+## Session Key Requirement
+
+`SESSION_KEY` must be set in production. If unset, the app generates an
+ephemeral key and logs a warning — this causes all users to be logged out
+on every restart. A key shorter than `MinSessionKeyLen` (32 chars) already
+refuses to boot (`os.Exit(1)`), but an **unset** key still boots with an
+ephemeral one even in production mode. A future improvement should make the
+app refuse to start in production (`PRODUCTION=true`) without a valid
+`SESSION_KEY`.
+
+**Operator action:** Confirm `SESSION_KEY` is set in all production deployments
+before enabling `PRODUCTION=true`.
+
+## Known technical debt
+
+- `handlers_season_hub.go` `handleSeasonArchive` derives the archived season's
+  `end_date` from `time.Now().UTC()`, not game-time (UTC−2). It was left out of
+  the game-time clock consolidation (season *create* uses `gameDate()`); revisit
+  in a future pass. Marked with a `TODO(game-time)` at the call site.
 
 ## Documentation
 

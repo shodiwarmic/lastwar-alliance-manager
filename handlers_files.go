@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -139,7 +139,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	outFile, err := os.Create(outPath)
 	if err != nil {
-		log.Printf("Save File Error: %v", err)
+		slog.Error("Save file error", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to save file: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -149,7 +149,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	_, err = db.Exec("INSERT INTO files (title, file_name, file_type, min_rank, min_edit_rank, owner_user_id) VALUES (?, ?, ?, ?, ?, ?)",
 		title, internalName, fileType, minRank, minEditRank, userID)
 	if err != nil {
-		log.Printf("Database Insert Error: %v", err)
+		slog.Error("Database insert error", "error", err)
 		http.Error(w, fmt.Sprintf("DB error: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -196,7 +196,7 @@ func updateFile(w http.ResponseWriter, r *http.Request) {
 	_, err = db.Exec("UPDATE files SET title = ?, min_rank = ?, min_edit_rank = ? WHERE id = ?",
 		req.Title, req.MinRank, req.MinEditRank, fileID)
 	if err != nil {
-		log.Printf("Database Update Error: %v", err)
+		slog.Error("Database update error", "error", err)
 		http.Error(w, "Failed to update database", http.StatusInternalServerError)
 		return
 	}
@@ -377,7 +377,7 @@ func wopiGetFile(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Verify the physical file hasn't been deleted from the hard drive
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		log.Printf("WOPI Error: Requested file does not exist on disk: %s", filePath)
+		slog.Error("WOPI error: requested file does not exist on disk", "path", filePath)
 		http.Error(w, "Document not found on disk", http.StatusNotFound)
 		return
 	}
@@ -406,7 +406,7 @@ func wopiPutFile(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Verify physical file exists before overwriting it
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		log.Printf("WOPI Put Error: Attempted to save to missing file: %s", filePath)
+		slog.Error("WOPI put error: attempted to save to missing file", "path", filePath)
 		http.Error(w, "Target document missing from disk", http.StatusNotFound)
 		return
 	}
