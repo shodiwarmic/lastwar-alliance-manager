@@ -80,10 +80,11 @@ func lastRankApplyPairedStats(tx *sql.Tx, memberID int, power, hero *int64, base
 		}
 	}
 	if baseLevel != nil && *baseLevel > 0 {
-		var curLevel int
-		tx.QueryRow("SELECT COALESCE(level, 0) FROM members WHERE id = ?", memberID).Scan(&curLevel)
-		if *baseLevel > curLevel {
-			if _, err := tx.Exec("UPDATE members SET level = ? WHERE id = ?", *baseLevel, memberID); err == nil {
+		// HQ level is history-only and never regresses: record only a higher value,
+		// stamped with the capture date + 'lastrank' source.
+		cur, _ := latestHistoryValue(tx, "hq_level_history", "hq_level", memberID)
+		if *baseLevel > cur {
+			if err := lastRankInsertHistory(tx, "hq_level_history", "hq_level", memberID, int64(*baseLevel), recordedAt); err == nil {
 				hq++
 			}
 		}
@@ -192,8 +193,7 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 			diff.HeroPower = lastRankStatDiff(tx, "hero_power_history", "power", member.ID, *lm.HeroPower, capture)
 		}
 		if lm.BaseLevel != nil && *lm.BaseLevel > 0 {
-			var curLevel int
-			tx.QueryRow("SELECT COALESCE(level, 0) FROM members WHERE id = ?", member.ID).Scan(&curLevel)
+			curLevel, _ := latestHistoryValue(tx, "hq_level_history", "hq_level", member.ID)
 			hq := &LastRankHQDiff{Current: curLevel, New: *lm.BaseLevel}
 			if *lm.BaseLevel > curLevel {
 				hq.Apply = true
@@ -300,7 +300,8 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if m.HQLevel != nil {
-			if _, err := tx.Exec("UPDATE members SET level = ? WHERE id = ?", *m.HQLevel, m.MemberID); err == nil {
+			// HQ level is history-only; stamp with the capture date + 'lastrank' source.
+			if err := lastRankInsertHistory(tx, "hq_level_history", "hq_level", m.MemberID, int64(*m.HQLevel), recordedAt); err == nil {
 				hqN++
 			}
 		}
@@ -368,7 +369,7 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 					joinDate = u.JoinedAt
 				}
 			}
-			res, err := tx.Exec("INSERT INTO members (name, rank, level, eligible, lastrank_public_id, joined_at) VALUES (?, ?, 0, 1, ?, ?)", u.LastRankName, rank, pubID, joinDate)
+			res, err := tx.Exec("INSERT INTO members (name, rank, eligible, lastrank_public_id, joined_at) VALUES (?, ?, 1, ?, ?)", u.LastRankName, rank, pubID, joinDate)
 			if err == nil {
 				addN++
 				if u.ApplyStats {
@@ -502,6 +503,29 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 	out.HeroApplied = hN > 0
 	out.HQApplied = hqN > 0
 
+	// Profession level (career_lv): history-only, per-metric staleness gate + dedup
+	// (same shape as the kill history above).
+	if player.CareerLv > 0 {
+		cur, at, ok := lastRankLatestHistory(tx, "profession_level_history", "profession_level", req.MemberID)
+		if lastRankCaptureNewer(player.LastSeenAt, at) && !(ok && cur == int64(player.CareerLv)) {
+			if err := lastRankInsertHistory(tx, "profession_level_history", "profession_level", req.MemberID, int64(player.CareerLv), recordedAt); err == nil {
+				out.ProfessionLevelApplied = true
+			}
+		}
+	}
+
+	// Career type → profession label. Only when the code is known and the mapped
+	// label differs; an unset/unknown code must never clobber an existing profession.
+	if label, ok := CareerTypeLabels[player.CareerType]; ok {
+		var curProf string
+		tx.QueryRow("SELECT COALESCE(profession, '') FROM members WHERE id = ?", req.MemberID).Scan(&curProf)
+		if label != curProf {
+			if _, err := tx.Exec("UPDATE members SET profession = ? WHERE id = ?", label, req.MemberID); err == nil {
+				out.ProfessionChanged = true
+			}
+		}
+	}
+
 	// Always advance synced_at so the oldest-first Phase-2 ordering progresses
 	// even when a member is skipped (keeps re-runs from re-fetching the same one).
 	// Avatar URLs are refreshed here too (hotlinked from the game CDN).
@@ -536,6 +560,7 @@ func lastRankFinish(w http.ResponseWriter, r *http.Request) {
 			details := "via LastRank — " + strconv.Itoa(req.MembersSynced) + " members synced; " +
 				strconv.Itoa(req.KillRecords) + " kills, " + strconv.Itoa(req.PowerRecords) + " power, " +
 				strconv.Itoa(req.HeroRecords) + " hero, " + strconv.Itoa(req.HQRecords) + " HQ, " +
+				strconv.Itoa(req.ProfessionRecords) + " profession-level, " + strconv.Itoa(req.ProfessionChanges) + " profession, " +
 				strconv.Itoa(req.PhotoRecords) + " photos updated"
 			logActivity(user.ID, user.Username, "imported", "lastrank_sync", "Extended sync", false, details)
 		}

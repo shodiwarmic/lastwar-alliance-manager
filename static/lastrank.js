@@ -360,7 +360,7 @@
             progressEl.appendChild(row);
         });
 
-        let synced = 0, killRecords = 0, powerRecords = 0, heroRecords = 0, hqRecords = 0, photoRecords = 0, i = 0;
+        let synced = 0, killRecords = 0, powerRecords = 0, heroRecords = 0, hqRecords = 0, professionRecords = 0, professionChanges = 0, photoRecords = 0, i = 0;
         for (const m of pool) {
             i++;
             setStatus(`Fetching ${i} of ${pool.length}…`);
@@ -379,13 +379,17 @@
                 if (data.power_applied) powerRecords++;
                 if (data.hero_applied) heroRecords++;
                 if (data.hq_applied) hqRecords++;
+                if (data.profession_level_applied) professionRecords++;
+                if (data.profession_changed) professionChanges++;
                 if (data.photo_updated) photoRecords++;
-                if (data.kills_applied || data.power_applied || data.hero_applied || data.hq_applied || data.photo_updated) {
+                if (data.kills_applied || data.power_applied || data.hero_applied || data.hq_applied || data.profession_level_applied || data.profession_changed || data.photo_updated) {
                     const parts = [];
                     if (data.kills_applied) parts.push('kills');
                     if (data.power_applied) parts.push('power');
                     if (data.hero_applied) parts.push('hero');
                     if (data.hq_applied) parts.push('HQ');
+                    if (data.profession_level_applied) parts.push('profession lv');
+                    if (data.profession_changed) parts.push('profession');
                     if (data.photo_updated) parts.push('photo');
                     row.className = 'lr-prog-row done';
                     status.textContent = '✓ ' + parts.join(' + ') + ' updated';
@@ -404,11 +408,11 @@
         try {
             await fetch('/api/lastrank/finish', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kind: 'extended', members_synced: synced, kill_records: killRecords, power_records: powerRecords, hero_records: heroRecords, hq_records: hqRecords, photo_records: photoRecords })
+                body: JSON.stringify({ kind: 'extended', members_synced: synced, kill_records: killRecords, power_records: powerRecords, hero_records: heroRecords, hq_records: hqRecords, profession_records: professionRecords, profession_changes: professionChanges, photo_records: photoRecords })
             });
         } catch (e) { /* logging only — ignore */ }
 
-        showToast(`Extended sync complete across ${synced} member(s) — ${killRecords} kills, ${powerRecords} power, ${heroRecords} hero, ${hqRecords} HQ, ${photoRecords} photos.`);
+        showToast(`Extended sync complete across ${synced} member(s) — ${killRecords} kills, ${powerRecords} power, ${heroRecords} hero, ${hqRecords} HQ, ${professionRecords} profession lv, ${photoRecords} photos.`);
         extendedBtn.disabled = false;
         fetchBtn.disabled = false;
         if (typeof loadMembers === 'function') loadMembers();

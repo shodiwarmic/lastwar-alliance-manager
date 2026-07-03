@@ -379,8 +379,8 @@ func convertProspectToMember(w http.ResponseWriter, r *http.Request) {
 
 	// Accepting a prospect = a genuine new join → stamp joined_at with today's game date.
 	result, err := tx.Exec(
-		"INSERT INTO members (name, rank, level, eligible, joined_at) VALUES (?, ?, ?, 1, ?)",
-		prospectName, req.Rank, req.Level, gameDate(),
+		"INSERT INTO members (name, rank, eligible, joined_at) VALUES (?, ?, 1, ?)",
+		prospectName, req.Rank, gameDate(),
 	)
 	if err != nil {
 		slog.Error("Failed to insert member from prospect", "error", err)
@@ -389,6 +389,11 @@ func convertProspectToMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	memberID, _ := result.LastInsertId()
+
+	// HQ level is history-only (no members.level column); seed it from the prospect.
+	if req.Level > 0 {
+		tx.Exec("INSERT INTO hq_level_history (member_id, hq_level, source) VALUES (?, ?, 'manual')", memberID, req.Level)
+	}
 
 	if req.Power != nil {
 		if _, err := tx.Exec(

@@ -37,6 +37,7 @@ type Member struct {
 	KillsUpdatedAt      string `json:"kills_updated_at"`
 	TroopLevel          int    `json:"troop_level"`
 	Profession          string `json:"profession"`
+	ProfessionLevel     *int   `json:"profession_level"` // history-only; latest profession_level_history row
 	GlobalAliases       string `json:"global_aliases"`
 	PersonalAliases     string `json:"personal_aliases"`
 	Notes               string `json:"notes"`
@@ -125,6 +126,30 @@ type KillCount struct {
 	KillsDelta7d   *int64 `json:"kills_delta_7d"`
 	KillsDelta30d  *int64 `json:"kills_delta_30d"`
 	LastRecordedAt string `json:"last_recorded_at"`
+}
+
+// HQLevelStat is a Tracking-page row: current HQ level + change over 7/30 days.
+// HQ changes slowly, so a nil delta (no baseline that far back) is common.
+type HQLevelStat struct {
+	MemberID       int    `json:"member_id"`
+	MemberName     string `json:"member_name"`
+	MemberRank     string `json:"member_rank"`
+	CurrentHQLevel int    `json:"current_hq_level"`
+	Delta7d        *int   `json:"delta_7d"`
+	Delta30d       *int   `json:"delta_30d"`
+	LastRecordedAt string `json:"last_recorded_at"`
+}
+
+// ProfessionLevelStat is a Tracking-page row for profession (career) level.
+type ProfessionLevelStat struct {
+	MemberID               int    `json:"member_id"`
+	MemberName             string `json:"member_name"`
+	MemberRank             string `json:"member_rank"`
+	Profession             string `json:"profession"`
+	CurrentProfessionLevel int    `json:"current_profession_level"`
+	Delta7d                *int   `json:"delta_7d"`
+	Delta30d               *int   `json:"delta_30d"`
+	LastRecordedAt         string `json:"last_recorded_at"`
 }
 
 type MemberStats struct {
@@ -1194,30 +1219,34 @@ type LastRankPlayerSyncRequest struct {
 
 // LastRankPlayerSyncResponse is one Phase-2 per-player result for the row UI.
 type LastRankPlayerSyncResponse struct {
-	MemberID     int    `json:"member_id"`
-	LastRankName string `json:"lastrank_name"`
-	Kills        *int64 `json:"kills"`
-	KillsApplied bool   `json:"kills_applied"`
-	PowerApplied bool   `json:"power_applied"`
-	HeroApplied  bool   `json:"hero_applied"`
-	HQApplied    bool   `json:"hq_applied"`
-	PhotoUpdated bool   `json:"photo_updated"`
-	SkipReason   string `json:"skip_reason,omitempty"` // "unchanged" | "stale" | "no_id"
-	CaptureDate  string `json:"capture_date"`
-	SyncedAt     string `json:"synced_at"`
+	MemberID               int    `json:"member_id"`
+	LastRankName           string `json:"lastrank_name"`
+	Kills                  *int64 `json:"kills"`
+	KillsApplied           bool   `json:"kills_applied"`
+	PowerApplied           bool   `json:"power_applied"`
+	HeroApplied            bool   `json:"hero_applied"`
+	HQApplied              bool   `json:"hq_applied"`
+	ProfessionLevelApplied bool   `json:"profession_level_applied"`
+	ProfessionChanged      bool   `json:"profession_changed"`
+	PhotoUpdated           bool   `json:"photo_updated"`
+	SkipReason             string `json:"skip_reason,omitempty"` // "unchanged" | "stale" | "no_id"
+	CaptureDate            string `json:"capture_date"`
+	SyncedAt               string `json:"synced_at"`
 }
 
 // LastRankFinishRequest logs one summary activity row at the end of a browser-
 // driven batch (Phase-2 extended sync, or a recruiting bulk refresh).
 type LastRankFinishRequest struct {
-	Kind            string `json:"kind"` // "extended" | "prospects"
-	MembersSynced   int    `json:"members_synced"`
-	KillRecords     int    `json:"kill_records"`
-	PowerRecords    int    `json:"power_records"`
-	HeroRecords     int    `json:"hero_records"`
-	HQRecords       int    `json:"hq_records"`
-	PhotoRecords    int    `json:"photo_records"`
-	ProspectsSynced int    `json:"prospects_synced"`
+	Kind              string `json:"kind"` // "extended" | "prospects"
+	MembersSynced     int    `json:"members_synced"`
+	KillRecords       int    `json:"kill_records"`
+	PowerRecords      int    `json:"power_records"`
+	HeroRecords       int    `json:"hero_records"`
+	HQRecords         int    `json:"hq_records"`
+	ProfessionRecords int    `json:"profession_records"` // profession-level history rows written
+	ProfessionChanges int    `json:"profession_changes"` // profession (career type) relabels
+	PhotoRecords      int    `json:"photo_records"`
+	ProspectsSynced   int    `json:"prospects_synced"`
 }
 
 // LastRankProspectLookupRequest fetches a prospect's player data on demand.

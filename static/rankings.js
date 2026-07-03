@@ -10,6 +10,8 @@ let charts = {
 let rawGrowthData = [];
 let allVsData = [];
 let rawKillData = [];
+let rawHQData = [];
+let rawProfessionData = [];
 let currentVsWeek = null;
 
 // Colours read from CSS tokens at draw time; redraws on themechange (see handler below).
@@ -149,6 +151,141 @@ function renderKillTable(data) {
         return;
     }
     tbody.replaceChildren(...data.map(buildKillRow));
+}
+
+// --- Shared cell builders for the HQ / Profession leaderboards ---
+function buildLastUpdatedCell(iso) {
+    const td = document.createElement('td');
+    td.style.color = 'var(--color-text-muted)';
+    td.style.fontSize = '0.9em';
+    if (iso) {
+        const d = new Date(iso.replace(' ', 'T') + 'Z');
+        td.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    } else {
+        td.textContent = '—';
+    }
+    return td;
+}
+
+function buildNameRankCells(name, rank) {
+    const tdName = document.createElement('td');
+    const strong = document.createElement('strong');
+    strong.textContent = name;
+    tdName.appendChild(strong);
+
+    const tdRank = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = `member-rank rank-${rank}`;
+    badge.textContent = rank;
+    tdRank.appendChild(badge);
+    return [tdName, tdRank];
+}
+
+// --- Tab: HQ Level ---
+async function loadHQData() {
+    try {
+        const response = await fetch(`${API_BASE}/hq-level-history`);
+        if (!response.ok) throw new Error('Failed to load HQ data');
+        rawHQData = await response.json() || [];
+        renderHQTable(rawHQData);
+    } catch (error) {
+        console.error('Error:', error);
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6;
+        td.className = 'error';
+        td.textContent = 'Failed to load data.';
+        tr.appendChild(td);
+        document.getElementById('hq-tbody').replaceChildren(tr);
+    }
+}
+
+function buildHQRow(s) {
+    const tr = document.createElement('tr');
+    const [tdName, tdRank] = buildNameRankCells(s.member_name, s.member_rank);
+
+    const tdLevel = document.createElement('td');
+    tdLevel.style.fontWeight = '600';
+    tdLevel.textContent = formatNumber(s.current_hq_level);
+
+    const td7d = document.createElement('td');
+    td7d.appendChild(formatKillDelta(s.delta_7d));
+    const td30d = document.createElement('td');
+    td30d.appendChild(formatKillDelta(s.delta_30d));
+
+    tr.append(tdName, tdRank, tdLevel, td7d, td30d, buildLastUpdatedCell(s.last_recorded_at));
+    return tr;
+}
+
+function renderHQTable(data) {
+    const tbody = document.getElementById('hq-tbody');
+    if (!data || data.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6;
+        td.className = 'empty-state';
+        td.style.cssText = 'text-align: center; padding: 20px;';
+        td.textContent = 'No HQ level data recorded yet.';
+        tr.appendChild(td);
+        tbody.replaceChildren(tr);
+        return;
+    }
+    tbody.replaceChildren(...data.map(buildHQRow));
+}
+
+// --- Tab: Profession Level ---
+async function loadProfessionData() {
+    try {
+        const response = await fetch(`${API_BASE}/profession-level-history`);
+        if (!response.ok) throw new Error('Failed to load profession data');
+        rawProfessionData = await response.json() || [];
+        renderProfessionTable(rawProfessionData);
+    } catch (error) {
+        console.error('Error:', error);
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 7;
+        td.className = 'error';
+        td.textContent = 'Failed to load data.';
+        tr.appendChild(td);
+        document.getElementById('profession-tbody').replaceChildren(tr);
+    }
+}
+
+function buildProfessionRow(s) {
+    const tr = document.createElement('tr');
+    const [tdName, tdRank] = buildNameRankCells(s.member_name, s.member_rank);
+
+    const tdProf = document.createElement('td');
+    tdProf.textContent = s.profession || '—';
+
+    const tdLevel = document.createElement('td');
+    tdLevel.style.fontWeight = '600';
+    tdLevel.textContent = formatNumber(s.current_profession_level);
+
+    const td7d = document.createElement('td');
+    td7d.appendChild(formatKillDelta(s.delta_7d));
+    const td30d = document.createElement('td');
+    td30d.appendChild(formatKillDelta(s.delta_30d));
+
+    tr.append(tdName, tdRank, tdProf, tdLevel, td7d, td30d, buildLastUpdatedCell(s.last_recorded_at));
+    return tr;
+}
+
+function renderProfessionTable(data) {
+    const tbody = document.getElementById('profession-tbody');
+    if (!data || data.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 7;
+        td.className = 'empty-state';
+        td.style.cssText = 'text-align: center; padding: 20px;';
+        td.textContent = 'No profession level data recorded yet.';
+        tr.appendChild(td);
+        tbody.replaceChildren(tr);
+        return;
+    }
+    tbody.replaceChildren(...data.map(buildProfessionRow));
 }
 
 // --- Utility Formatters ---
@@ -527,6 +664,16 @@ document.getElementById('kills-search')?.addEventListener('input', (e) => {
     renderKillTable(filtered);
 });
 
+document.getElementById('hq-search')?.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    renderHQTable(rawHQData.filter(s => s.member_name.toLowerCase().includes(term)));
+});
+
+document.getElementById('profession-search')?.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    renderProfessionTable(rawProfessionData.filter(s => s.member_name.toLowerCase().includes(term)));
+});
+
 // --- Theme adaptation ---
 window.addEventListener('themechange', () => {
     const p = getChartPalette();
@@ -542,8 +689,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('tab-btn-growth').addEventListener('click', () => switchTab('growth'));
         document.getElementById('tab-btn-vs').addEventListener('click', () => switchTab('vs'));
         document.getElementById('tab-btn-kills').addEventListener('click', () => switchTab('kills'));
+        document.getElementById('tab-btn-hq').addEventListener('click', () => switchTab('hq'));
+        document.getElementById('tab-btn-profession').addEventListener('click', () => switchTab('profession'));
         loadGrowthData();
         loadVSData();
         loadKillData();
+        loadHQData();
+        loadProfessionData();
     }
 });
