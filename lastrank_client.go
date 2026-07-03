@@ -79,6 +79,7 @@ type lastrankPlayerResp struct {
 	ArmyKill         int64   `json:"army_kill"`
 	BaseLevel        *int    `json:"base_level"`
 	CareerLv         int     `json:"career_lv"`
+	CareerType       int     `json:"career_type"`      // profession code; maps via CareerTypeLabels
 	LastSeenAt       string  `json:"last_seen_at"`     // game-side "last active" (as-of date)
 	LastEnrichedAt   string  `json:"last_enriched_at"` // when lastrank last re-pulled this record
 	PhotoURL         string  `json:"photo_url"`

@@ -437,6 +437,11 @@ func main() {
 	router.HandleFunc("/api/hero-power-history", authMiddleware(requirePermission("manage_members", addHeroPowerRecord))).Methods("POST")
 	router.HandleFunc("/api/kill-history", authMiddleware(getKillHistory)).Methods("GET")
 	router.HandleFunc("/api/kill-history", authMiddleware(requirePermission("manage_members", postKillHistory))).Methods("POST")
+	// HQ level + profession level are history-only, current derived from the latest
+	// row (like kills). Manual writes go through the member edit modal → updateMember,
+	// so these are read-only Tracking-page feeds; no POST endpoint.
+	router.HandleFunc("/api/hq-level-history", authMiddleware(getHQLevelHistory)).Methods("GET")
+	router.HandleFunc("/api/profession-level-history", authMiddleware(getProfessionLevelHistory)).Methods("GET")
 
 	router.HandleFunc("/api/smart-screenshot", authMiddleware(processSmartScreenshot)).Methods("POST")
 

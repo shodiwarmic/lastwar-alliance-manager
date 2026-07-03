@@ -35,6 +35,14 @@ function joinedSortKey(m) {
 
 const SKILL_ICON = { medical_aid: 'first-aid-kit' };
 
+// Profession → sprite icon. Rendered as an icon (+ level) badge instead of the
+// raw profession text. Unknown/unmapped professions fall back to a generic star.
+const PROFESSION_ICON = {
+    'Engineer': 'tool',    // single wrench (swords/VS collision avoided)
+    'War Leader': 'flag',  // command/rally (swords is the VS icon)
+    'Diplomat': 'scale',
+};
+
 // Define the HQ requirements for each Troop Tier
 const TROOP_HQ_REQ = { 1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35 };
 
@@ -439,6 +447,8 @@ function resetMemberForm() {
     if (levelInput) levelInput.value = '';
     const profInput = document.getElementById('member-profession');
     if (profInput) profInput.value = '';
+    const profLevelInput = document.getElementById('member-profession-level');
+    if (profLevelInput) profLevelInput.value = '';
     const troopInput = document.getElementById('member-troop-level');
     if (troopInput) troopInput.value = '';
 
@@ -687,11 +697,17 @@ function buildMemberCard(member) {
         info.appendChild(badge);
     }
 
-    // Profession badge
+    // Profession badge — profession icon plus level (if recorded). The full
+    // profession name + level live in the title for hover/accessibility.
     if (member.profession) {
         const badge = document.createElement('span');
         badge.className = 'member-info-badge badge-profession';
-        badge.textContent = member.profession;
+        badge.appendChild(svgIcon(PROFESSION_ICON[member.profession] || 'star', 13));
+        const hasLevel = member.profession_level != null && member.profession_level > 0;
+        if (hasLevel) {
+            badge.appendChild(document.createTextNode(' ' + member.profession_level));
+        }
+        badge.title = member.profession + (hasLevel ? ' · Level ' + member.profession_level : '');
         info.appendChild(badge);
     }
 
@@ -839,6 +855,8 @@ async function handleMemberFormSubmit(e) {
 
     const level = parseInt(document.getElementById('member-level').value, 10) || 0;
     const profession = document.getElementById('member-profession').value;
+    const profLevelInput = document.getElementById('member-profession-level');
+    const profession_level = (profLevelInput && profLevelInput.value !== '') ? parseInt(profLevelInput.value, 10) : null;
     const squad_type = document.getElementById('member-squad-type').value;
     const troop_level = parseInt(document.getElementById('member-troop-level').value, 10) || 0;
 
@@ -888,7 +906,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(`${API_URL}/${editingMemberId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id, joined_at }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, profession_level, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id, joined_at }),
             });
             if (!response.ok) throw new Error('Failed to update member');
             targetId = editingMemberId;
@@ -897,7 +915,7 @@ async function handleMemberFormSubmit(e) {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, rank, level, eligible, power, profession, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id }),
+                body: JSON.stringify({ name, rank, level, eligible, power, profession, profession_level, squad_type, troop_level, squad_power, hero_power, current_kills, notes, lastrank_public_id }),
             });
             if (!response.ok) {
                 if (response.status === 403) throw new Error('Permission denied');
@@ -981,6 +999,9 @@ window.editMember = function (member) {
 
     const profInput = document.getElementById('member-profession');
     if (profInput) profInput.value = profession;
+
+    const profLevelInput = document.getElementById('member-profession-level');
+    if (profLevelInput) profLevelInput.value = (member.profession_level != null && member.profession_level > 0) ? member.profession_level : '';
 
     const troopInput = document.getElementById('member-troop-level');
     if (troopInput) troopInput.value = (troopLevel > 0) ? troopLevel : '';

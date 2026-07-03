@@ -65,8 +65,11 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 			FROM (SELECT member_id, skill_key FROM member_skills ORDER BY skill_key)
 			GROUP BY member_id
 		)
-		SELECT m.id, m.name, m.rank, COALESCE(m.level, 0), COALESCE(m.eligible, 1),
+		SELECT m.id, m.name, m.rank,
+			   COALESCE((SELECT hq_level FROM hq_level_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as level,
+			   COALESCE(m.eligible, 1),
 			   COALESCE(m.squad_type, ''), COALESCE(m.troop_level, 0), COALESCE(m.profession, ''),
+			   (SELECT profession_level FROM profession_level_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as profession_level,
 			   COALESCE(lp.power, 0) as latest_power,
 			   COALESCE(lp.recorded_at, '') as latest_power_date,
 			   COALESCE(lsp.power, 0) as latest_squad_power,
@@ -108,7 +111,7 @@ func getMembers(w http.ResponseWriter, r *http.Request) {
 		var m Member
 		if err := rows.Scan(
 			&m.ID, &m.Name, &m.Rank, &m.Level, &m.Eligible, &m.SquadType, &m.TroopLevel,
-			&m.Profession, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt,
+			&m.Profession, &m.ProfessionLevel, &m.Power, &m.PowerUpdatedAt, &m.SquadPower, &m.SquadPowerUpdatedAt,
 			&m.HasUser, &m.GlobalAliases, &m.PersonalAliases, &m.Notes,
 			&m.HeroPower, &m.HeroPowerUpdatedAt,
 			&m.CurrentKills, &m.KillsUpdatedAt,
@@ -147,7 +150,8 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	// Manual add = a genuine new join → stamp joined_at with today's game date.
-	result, err := tx.Exec("INSERT INTO members (name, rank, level, eligible, squad_type, troop_level, profession, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, gameDate())
+	// HQ level is history-only (no members.level column); seed it below.
+	result, err := tx.Exec("INSERT INTO members (name, rank, eligible, squad_type, troop_level, profession, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?)", m.Name, m.Rank, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, gameDate())
 	if err != nil {
 		slog.Error("createMember: insert failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -156,6 +160,14 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 
 	id, _ := result.LastInsertId()
 	m.ID = int(id)
+
+	// Seed HQ level + profession level history (history-only fields).
+	if m.Level > 0 {
+		tx.Exec(`INSERT INTO hq_level_history (member_id, hq_level, source) VALUES (?, ?, 'manual')`, m.ID, m.Level)
+	}
+	if m.ProfessionLevel != nil && *m.ProfessionLevel > 0 {
+		tx.Exec(`INSERT INTO profession_level_history (member_id, profession_level, source) VALUES (?, ?, 'manual')`, m.ID, *m.ProfessionLevel)
+	}
 
 	if m.Power != nil {
 		if _, err := tx.Exec(`INSERT INTO power_history (member_id, power, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, m.ID, *m.Power); err != nil {
@@ -225,7 +237,6 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	var old struct {
 		Name             string
 		Rank             string
-		Level            int
 		TroopLevel       int
 		Profession       string
 		SquadType        string
@@ -233,8 +244,8 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		LastRankPublicID sql.NullInt64
 		JoinedAt         string
 	}
-	err = tx.QueryRow("SELECT name, rank, level, troop_level, profession, squad_type, eligible, lastrank_public_id, COALESCE(joined_at, '') FROM members WHERE id = ?", id).Scan(
-		&old.Name, &old.Rank, &old.Level, &old.TroopLevel, &old.Profession, &old.SquadType, &old.Eligible, &old.LastRankPublicID, &old.JoinedAt,
+	err = tx.QueryRow("SELECT name, rank, troop_level, profession, squad_type, eligible, lastrank_public_id, COALESCE(joined_at, '') FROM members WHERE id = ?", id).Scan(
+		&old.Name, &old.Rank, &old.TroopLevel, &old.Profession, &old.SquadType, &old.Eligible, &old.LastRankPublicID, &old.JoinedAt,
 	)
 	if err != nil {
 		slog.Error("Error fetching current member name", "error", err)
@@ -242,8 +253,13 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// HQ level + profession level are history-only (no members column); read the
+	// current (latest) values for diffing and change-detection.
+	oldHQ, _ := latestHistoryValue(tx, "hq_level_history", "hq_level", id)
+	oldProfLevel, hadProfLevel := latestHistoryValue(tx, "profession_level_history", "profession_level", id)
+
 	// 2. Perform the main UPDATE. joined_at = NULLIF(?, '') so a blank clears it.
-	_, err = tx.Exec("UPDATE members SET name = ?, rank = ?, level = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ?, notes = ?, lastrank_public_id = ?, joined_at = NULLIF(?, '') WHERE id = ?", m.Name, m.Rank, m.Level, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, m.Notes, m.LastRankPublicID, m.JoinedAt, id)
+	_, err = tx.Exec("UPDATE members SET name = ?, rank = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ?, notes = ?, lastrank_public_id = ?, joined_at = NULLIF(?, '') WHERE id = ?", m.Name, m.Rank, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, m.Notes, m.LastRankPublicID, m.JoinedAt, id)
 	if err != nil {
 		slog.Error("updateMember: exec failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -266,8 +282,15 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	if old.Rank != m.Rank {
 		changes = append(changes, "rank: "+old.Rank+" → "+m.Rank)
 	}
-	if old.Level != m.Level {
-		changes = append(changes, "level: "+strconv.Itoa(old.Level)+" → "+strconv.Itoa(m.Level))
+	if m.Level > 0 && oldHQ != m.Level {
+		changes = append(changes, "HQ level: "+strconv.Itoa(oldHQ)+" → "+strconv.Itoa(m.Level))
+	}
+	if m.ProfessionLevel != nil && *m.ProfessionLevel > 0 && (!hadProfLevel || oldProfLevel != *m.ProfessionLevel) {
+		prev := "—"
+		if hadProfLevel {
+			prev = strconv.Itoa(oldProfLevel)
+		}
+		changes = append(changes, "profession level: "+prev+" → "+strconv.Itoa(*m.ProfessionLevel))
 	}
 	if old.TroopLevel != m.TroopLevel {
 		changes = append(changes, "troop level: "+strconv.Itoa(old.TroopLevel)+" → "+strconv.Itoa(m.TroopLevel))
@@ -347,6 +370,14 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		if currentKills != *m.CurrentKills {
 			tx.Exec(`INSERT INTO kill_history (member_id, kills, recorded_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, *m.CurrentKills)
 		}
+	}
+
+	// HQ level + profession level history (history-only fields; dedup against latest).
+	if m.Level > 0 && m.Level != oldHQ {
+		tx.Exec(`INSERT INTO hq_level_history (member_id, hq_level, source) VALUES (?, ?, 'manual')`, id, m.Level)
+	}
+	if m.ProfessionLevel != nil && *m.ProfessionLevel > 0 && (!hadProfLevel || *m.ProfessionLevel != oldProfLevel) {
+		tx.Exec(`INSERT INTO profession_level_history (member_id, profession_level, source) VALUES (?, ?, 'manual')`, id, *m.ProfessionLevel)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -842,30 +873,25 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 					joinDate = member.JoinedAt
 				}
 			}
-			res, err := db.Exec("INSERT INTO members (name, rank, level, joined_at) VALUES (?, ?, ?, ?)", member.Name, member.Rank, member.Level, joinDate)
+			res, err := db.Exec("INSERT INTO members (name, rank, joined_at) VALUES (?, ?, ?)", member.Name, member.Rank, joinDate)
 			if err == nil {
 				id, _ := res.LastInsertId()
 				existingID = int(id)
 				result.Added++
 			}
 		} else if err == nil {
-			query := "UPDATE members SET rank = ?"
-			args := []interface{}{member.Rank}
-
-			if member.Level > 0 {
-				query += ", level = ?"
-				args = append(args, member.Level)
-			}
-			query += " WHERE id = ?"
-			args = append(args, existingID)
-
-			db.Exec(query, args...)
+			db.Exec("UPDATE members SET rank = ? WHERE id = ?", member.Rank, existingID)
 
 			if existingRank != member.Rank {
 				result.Updated++
 			} else {
 				result.Unchanged++
 			}
+		}
+
+		// HQ level is history-only; record it (deduped) with the import's provenance.
+		if member.Level > 0 && existingID > 0 {
+			recordHistoryIfChanged(db, "hq_level_history", "hq_level", existingID, member.Level, src)
 		}
 
 		if member.Power > 0 && existingID > 0 {
@@ -965,7 +991,8 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 	// Added m.eligible and updated to fetch the latest squad_power history
 	err := db.QueryRow(`
 		SELECT
-			m.id, m.name, m.rank, m.eligible, m.level,
+			m.id, m.name, m.rank, m.eligible,
+			COALESCE((SELECT hq_level FROM hq_level_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as level,
 			COALESCE(m.joined_at, '') as joined_at,
 			(SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as power,
 			COALESCE((SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as power_updated_at,
@@ -974,6 +1001,7 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 			COALESCE((SELECT recorded_at FROM squad_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as squad_power_updated_at,
 			COALESCE(m.troop_level, 0),
 			COALESCE(m.profession, ''),
+			(SELECT profession_level FROM profession_level_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as profession_level,
 			(SELECT power FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1) as hero_power,
 			COALESCE((SELECT recorded_at FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), '') as hero_power_updated_at,
 			COALESCE((SELECT kills FROM kill_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1), 0) as current_kills,
@@ -983,7 +1011,7 @@ func getMyProfile(w http.ResponseWriter, r *http.Request) {
 				FROM (SELECT skill_key FROM member_skills WHERE member_id = m.id ORDER BY skill_key)
 			), '') as skills
 		FROM members m WHERE m.id = ?`, memberID).
-		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.JoinedAt, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.HeroPower, &m.HeroPowerUpdatedAt, &m.CurrentKills, &m.KillsUpdatedAt, &m.Skills)
+		Scan(&m.ID, &m.Name, &m.Rank, &m.Eligible, &m.Level, &m.JoinedAt, &m.Power, &m.PowerUpdatedAt, &m.SquadType, &m.SquadPower, &m.SquadPowerUpdatedAt, &m.TroopLevel, &m.Profession, &m.ProfessionLevel, &m.HeroPower, &m.HeroPowerUpdatedAt, &m.CurrentKills, &m.KillsUpdatedAt, &m.Skills)
 
 	if err != nil {
 		slog.Error("Profile fetch error", "error", err)
@@ -1041,18 +1069,19 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 		req.TroopLevel = maxValid // Downgrade to the highest legal tier
 	}
 
-	// Fetch current values for diff
+	// Fetch current values for diff. HQ level is history-only (no members column).
 	var oldName, oldSquadType, oldProfession string
-	var oldLevel, oldTroopLevel int
-	db.QueryRow(`SELECT name, level, troop_level, COALESCE(squad_type,''), COALESCE(profession,'') FROM members WHERE id = ?`, memberID).
-		Scan(&oldName, &oldLevel, &oldTroopLevel, &oldSquadType, &oldProfession)
+	var oldTroopLevel int
+	db.QueryRow(`SELECT name, troop_level, COALESCE(squad_type,''), COALESCE(profession,'') FROM members WHERE id = ?`, memberID).
+		Scan(&oldName, &oldTroopLevel, &oldSquadType, &oldProfession)
+	oldLevel, _ := latestHistoryValue(db, "hq_level_history", "hq_level", memberID)
 
 	// Execute database updates...
 	_, err := db.Exec(`
 		UPDATE members
-		SET name = ?, level = ?, troop_level = ?, squad_type = ?, profession = ?
+		SET name = ?, troop_level = ?, squad_type = ?, profession = ?
 		WHERE id = ?`,
-		req.Name, req.Level, req.TroopLevel, req.SquadType, req.Profession, memberID)
+		req.Name, req.TroopLevel, req.SquadType, req.Profession, memberID)
 
 	if err != nil {
 		slog.Error("Profile update error", "error", err)
@@ -1072,13 +1101,17 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 	if req.CurrentKills > 0 {
 		db.Exec(`INSERT INTO kill_history (member_id, kills) VALUES (?, ?)`, memberID, req.CurrentKills)
 	}
+	// HQ level history (history-only field; dedup against the latest recorded value).
+	if req.Level > 0 && req.Level != oldLevel {
+		db.Exec(`INSERT INTO hq_level_history (member_id, hq_level, source) VALUES (?, ?, 'manual')`, memberID, req.Level)
+	}
 
 	var profileChanges []string
 	if oldName != req.Name && req.Name != "" {
 		profileChanges = append(profileChanges, "name: "+oldName+" → "+req.Name)
 	}
 	if oldLevel != req.Level {
-		profileChanges = append(profileChanges, "level: "+strconv.Itoa(oldLevel)+" → "+strconv.Itoa(req.Level))
+		profileChanges = append(profileChanges, "HQ level: "+strconv.Itoa(oldLevel)+" → "+strconv.Itoa(req.Level))
 	}
 	if oldTroopLevel != req.TroopLevel {
 		profileChanges = append(profileChanges, "troop level: "+strconv.Itoa(oldTroopLevel)+" → "+strconv.Itoa(req.TroopLevel))

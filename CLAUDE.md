@@ -217,8 +217,9 @@ back to initials.
    faithful and "stale never wins" falls out of the existing "latest by
    recorded_at" query for free.
 
-**Datapoint provenance** — the four history tables (`power_history`,
-`hero_power_history`, `kill_history`, `squad_power_history`) carry a
+**Datapoint provenance** — the history tables (`power_history`,
+`hero_power_history`, `kill_history`, `squad_power_history`, `hq_level_history`,
+`profession_level_history`) carry a
 `source` column: `lastrank` | `ocr` | `csv` | `mobile` | `manual` (default
 `manual`; pre-migration rows can't be reclassified). New write paths must stamp
 their true source; `provenanceSource()` normalizes a client-declared origin. The
@@ -227,10 +228,11 @@ OCR-vs-CSV split is carried by a `source` field on the import commit payloads
 
 ## History table source provenance
 
-The `source TEXT NOT NULL DEFAULT 'manual'` column (added in migration
-`050_lastrank.sql`) lives on exactly these four history tables:
-`power_history`, `hero_power_history`, `kill_history`, `squad_power_history`.
-It records how each row was created:
+The `source TEXT NOT NULL DEFAULT 'manual'` column lives on these six history
+tables — `power_history`, `hero_power_history`, `kill_history`,
+`squad_power_history` (source added in `050_lastrank.sql`), and
+`hq_level_history`, `profession_level_history` (created with the column in
+`055_career_hq_history.sql`). It records how each row was created:
 
 | Value | Meaning |
 |---|---|
@@ -243,6 +245,16 @@ It records how each row was created:
 Every new write path must stamp its true source; `provenanceSource()`
 normalizes a client-declared origin. No other history/state tables carry a
 `source` column — don't assume one on tables outside this list.
+
+> **HQ level & profession level are history-only.** There is no `members.level`
+> column (dropped in `055`; seeded into `hq_level_history` first) and no
+> `members.profession_level` column. "Current" HQ / profession level is the
+> latest row in `hq_level_history` / `profession_level_history`, derived via a
+> `ORDER BY recorded_at DESC LIMIT 1` subquery in the roster and profile queries
+> — same pattern as power/hero/kills. The `Member.Level` / `Member.ProfessionLevel`
+> JSON fields are populated from those subqueries. Manual edits (member modal,
+> My Profile, CSV import, prospect accept) and LastRank sync all append rows;
+> HQ never regresses (only a higher value is recorded).
 
 ## Known gotchas
 
