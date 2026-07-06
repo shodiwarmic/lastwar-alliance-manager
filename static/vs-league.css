@@ -1,0 +1,100 @@
+/* static/vs-league.css — VS Duel League tab. Page-specific layout only; reuses global
+   tokens + utilities (.card, .data-table, .filter-chip, .tab-bar/.tab-btn, .btn, .badge-*). */
+
+/* Toolbar: season selector + manage actions */
+.vsl-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+.vsl-toolbar .sep { flex: 1 1 auto; }
+.vsl-season-select { min-width: 180px; }
+.vsl-empty { color: var(--color-text-muted); padding: 28px 8px; text-align: center; }
+
+/* Sub-view tab strip inside the league tab */
+.vsl-subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.vsl-subtab {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px;
+    border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-mid);
+    cursor: pointer; font-size: 0.86rem; font-weight: 600;
+}
+.vsl-subtab.active { background: var(--color-accent-bg); border-color: var(--color-accent-border); color: var(--color-accent); }
+
+/* Metric tiles row */
+.vsl-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.vsl-tile { background: var(--color-card); border: 1px solid var(--color-border); border-radius: 10px; padding: 12px 14px; }
+.vsl-tile .lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); font-weight: 700; }
+.vsl-tile .val { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.vsl-tile .sub { font-size: 0.78rem; color: var(--color-text-mid); }
+
+/* Status pills */
+.vsl-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 800; padding: 2px 9px; border-radius: 20px; }
+.vsl-pill.win  { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-pill.loss { color: var(--color-danger);  background: var(--color-danger-bg); }
+.vsl-pill.tie  { color: var(--color-warning); background: var(--color-warning-bg); }
+.vsl-pill.live { color: var(--color-info);    background: var(--color-info-bg); }
+.vsl-pill.pending { color: var(--color-text-muted); background: var(--color-bg); border: 1px solid var(--color-border); }
+
+/* Strategy badges */
+.vsl-strat { font-size: 0.72rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; text-transform: capitalize; }
+.vsl-strat.push { color: var(--color-danger); background: var(--color-danger-bg); }
+.vsl-strat.save { color: var(--color-info); background: var(--color-info-bg); }
+.vsl-strat.normal { color: var(--color-text-mid); background: var(--color-bg); border: 1px solid var(--color-border); }
+.vsl-strat.test { color: var(--color-purple); background: var(--color-purple-bg); }
+.vsl-strat.recovery { color: var(--color-warning); background: var(--color-warning-bg); }
+.vsl-strat.worked { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-strat.failed { color: var(--color-danger); background: var(--color-danger-bg); }
+.vsl-strat.mixed  { color: var(--color-warning); background: var(--color-warning-bg); }
+
+/* Day theme tiles (current week) */
+.vsl-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 8px 0 4px; }
+.vsl-day { border: 1px solid var(--color-border); border-radius: 9px; padding: 9px 10px; background: var(--color-card); }
+.vsl-day .thm { font-size: 0.78rem; color: var(--color-text-mid); display: flex; align-items: center; gap: 5px; }
+.vsl-day .pts { font-size: 0.68rem; color: var(--color-text-muted); font-weight: 700; }
+.vsl-day .res { margin-top: 5px; font-weight: 800; font-size: 0.9rem; }
+.vsl-day.win  { border-color: var(--color-success); background: var(--color-success-bg); }
+.vsl-day.loss { border-color: var(--color-danger); }
+.vsl-day.tie  { border-color: var(--color-warning); }
+.vsl-day .raw { font-size: 0.72rem; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+
+/* Bracket — per-week columns of pairs (self-contained connector recipe from the mockup) */
+.vsl-bracket { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 8px; min-width: min-content; }
+.vsl-wkcol { flex: 0 0 250px; }
+.vsl-wkhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 2px solid var(--color-border); padding: 4px 2px 10px; margin-bottom: 12px; }
+.vsl-wkhead .wk { font-weight: 800; }
+.vsl-pair { display: flex; align-items: center; margin-bottom: 11px; }
+.vsl-teams { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
+.vsl-chip { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-card); font-size: 0.78rem; }
+.vsl-chip .rk { flex: 0 0 auto; font-size: 0.66rem; font-weight: 800; color: var(--color-text-muted); min-width: 22px; }
+.vsl-chip .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-mid); }
+.vsl-chip .s  { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--color-text-muted); font-weight: 700; }
+.vsl-chip.win { background: var(--color-success-bg); border-color: var(--color-success); }
+.vsl-chip.win .nm { font-weight: 800; color: var(--color-text); }
+.vsl-chip.win .s  { color: var(--color-success); font-weight: 800; }
+.vsl-chip.us  { box-shadow: inset 3px 0 0 var(--color-accent); }
+.vsl-chip.us .nm { color: var(--color-accent); }
+.vsl-elbow { flex: 0 0 12px; align-self: stretch; margin: 10px 0; border-right: 2px solid var(--color-border); border-top: 2px solid var(--color-border); border-bottom: 2px solid var(--color-border); border-radius: 0 6px 6px 0; }
+.vsl-wn { flex: 0 0 auto; margin-left: 7px; padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface); font-size: 0.72rem; font-weight: 800; white-space: nowrap; color: var(--color-text-mid); }
+
+/* Standings/ladder + generic table cells our-row highlight */
+.vsl-ourrow td { background: var(--color-success-bg); }
+.vsl-ourrow .vsl-al { color: var(--color-success); font-weight: 800; }
+.vsl-zone { font-size: 0.76rem; color: var(--color-text-muted); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 14px; }
+.vsl-zone b.promo { color: var(--color-success); }
+.vsl-zone b.demo  { color: var(--color-danger); }
+
+/* Day-of-week analysis bars */
+.vsl-analysis-row { display: grid; grid-template-columns: 130px 1fr 90px; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--color-border); }
+.vsl-wl { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--color-border); }
+.vsl-wl .w { background: var(--color-success); }
+.vsl-wl .l { background: var(--color-danger); }
+.vsl-wl .t { background: var(--color-warning); }
+
+/* Winnable banner */
+.vsl-banner { border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.vsl-banner.win  { background: var(--color-success-bg); color: var(--color-success); border: 1px solid var(--color-success); }
+.vsl-banner.loss { background: var(--color-danger-bg);  color: var(--color-danger);  border: 1px solid var(--color-danger); }
+.vsl-banner.live { background: var(--color-info-bg);    color: var(--color-info);    border: 1px solid var(--color-info); }
+.vsl-banner .score { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+
+/* Modal grids for forms */
+.vsl-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 14px 0; }
+.vsl-field label { display: block; font-size: 0.78rem; color: var(--color-text-mid); font-weight: 600; margin-bottom: 3px; }
+.vsl-day-entry { display: grid; grid-template-columns: 120px 1fr 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
+.vsl-help { font-size: 0.78rem; color: var(--color-text-muted); }

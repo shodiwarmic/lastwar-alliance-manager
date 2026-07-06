@@ -1,16 +1,30 @@
 {{define "header_text"}}
     <h1>
         <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-swords"/></svg>
-        VS Points
+        VS
     </h1>
-    <h2>VS Points Tracker</h2>
+    <h2>Member Points &amp; Duel League</h2>
 {{end}}
 
 {{define "head_tags"}}
     <link rel="stylesheet" href="vs.css">
+    <link rel="stylesheet" href="vs-league.css">
 {{end}}
 
 {{define "content"}}
+    <div class="tab-bar" id="vs-tab-bar">
+        <button class="tab-btn active" data-tab="points">
+            <svg width="15" height="15" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-bar"/></svg>
+            Member Points
+        </button>
+        <button class="tab-btn" data-tab="league">
+            <svg width="15" height="15" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trophy"/></svg>
+            Duel League
+        </button>
+    </div>
+
+    <!-- #tab-points is rendered `active` server-side so vs.js measures a visible container (F-R06) -->
+    <div id="tab-points" class="tab-content active">
     <section class="controls">
         <div class="week-selector">
             <button id="prev-week" class="btn btn-ghost">← Previous Week</button>
@@ -55,6 +69,11 @@
             </tbody>
         </table>
     </section>
+    </div><!-- #tab-points -->
+
+    <div id="tab-league" class="tab-content">
+        <div id="vs-league-root"><p class="status-msg">Loading Duel League…</p></div>
+    </div>
 {{end}}
 
 {{define "modals"}}
@@ -106,4 +125,5 @@
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <script src="vs.js"></script>
+<script src="vs-league.js"></script>
 {{end}}
