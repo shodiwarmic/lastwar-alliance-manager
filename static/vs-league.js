@@ -505,7 +505,14 @@
         lrInput.style.flex = '1'; lrInput.style.minWidth = '150px';
         const snapNote = el('span', { className: 'vsl-help' });
         let snap = null;
-        const searchBtn = el('a', { className: 'btn btn-secondary btn-sm', href: 'https://lastrank.fun/', target: '_blank', rel: 'noopener noreferrer' }, 'Search ↗');
+        // LastRank has a unified search (?q=); prefill it from the opponent tag + server.
+        const searchBtn = el('a', { className: 'btn btn-secondary btn-sm', target: '_blank', rel: 'noopener noreferrer' }, 'Search ↗');
+        const updateSearchHref = () => {
+            const q = [oppTag.value.trim() || oppName.value.trim(), oppServer.value.trim()].filter(Boolean).join(' ');
+            searchBtn.href = 'https://lastrank.fun/search' + (q ? '?q=' + encodeURIComponent(q) : '');
+        };
+        [oppTag, oppName, oppServer].forEach(f => f.addEventListener('input', updateSearchHref));
+        updateSearchHref();
         const lookupBtn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Look up');
         lookupBtn.addEventListener('click', async () => {
             snapNote.textContent = 'Looking up…';
