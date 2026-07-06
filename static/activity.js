@@ -50,6 +50,8 @@ const ENTITY_LABELS = {
     poll_template:         'Poll Template',
     poll_instance:         'Poll',
     lastrank_sync:         'LastRank Sync',
+    vs_league_season:      'Duel League season',
+    vs_league_week:        'Duel League week',
 };
 
 const ENTITY_LABELS_PLURAL = {
@@ -68,6 +70,8 @@ const ENTITY_LABELS_PLURAL = {
     file:             'files',
     storm_group:      'storm groups',
     vs_points:             'VS points',
+    vs_league_season:      'Duel League seasons',
+    vs_league_week:        'Duel League weeks',
     power_records:         'power records',
     accountability_strike: 'accountability strikes',
     season_contributions:  'season contributions',

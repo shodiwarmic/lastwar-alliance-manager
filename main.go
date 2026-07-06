@@ -348,12 +348,27 @@ func main() {
 	router.HandleFunc("/api/aliases/{id:[0-9]+}", authMiddleware(deleteMemberAlias)).Methods("DELETE")
 
 	// VS points
-	router.HandleFunc("/api/vs-points", authMiddleware(getVSPoints)).Methods("GET")
+	router.HandleFunc("/api/vs-points", authMiddleware(requirePermission("view_vs_points", getVSPoints))).Methods("GET")
 	router.HandleFunc("/api/vs-points", authMiddleware(requirePermission("manage_vs_points", saveVSPoints))).Methods("POST")
 	router.HandleFunc("/api/vs-points/{week}", authMiddleware(requirePermission("manage_vs_points", deleteWeekVSPoints))).Methods("DELETE")
 
 	router.HandleFunc("/api/vs-points/import/preview", authMiddleware(requirePermission("manage_members", previewCSVImport))).Methods("POST")
 	router.HandleFunc("/api/vs-points/import/commit", authMiddleware(requirePermission("manage_members", commitCSVImport))).Methods("POST")
+
+	// VS Duel League — read = view_vs_points, write = manage_vs_points
+	router.HandleFunc("/api/vs-league/current", authMiddleware(requirePermission("view_vs_points", getVSLeagueCurrent))).Methods("GET")
+	router.HandleFunc("/api/vs-league/seasons", authMiddleware(requirePermission("view_vs_points", getVSLeagueSeasons))).Methods("GET")
+	router.HandleFunc("/api/vs-league/seasons", authMiddleware(requirePermission("manage_vs_points", createVSLeagueSeason))).Methods("POST")
+	router.HandleFunc("/api/vs-league/seasons/{id:[0-9]+}", authMiddleware(requirePermission("manage_vs_points", updateVSLeagueSeason))).Methods("PUT")
+	router.HandleFunc("/api/vs-league/weeks", authMiddleware(requirePermission("view_vs_points", getVSLeagueWeeks))).Methods("GET")
+	router.HandleFunc("/api/vs-league/weeks", authMiddleware(requirePermission("manage_vs_points", createVSLeagueWeek))).Methods("POST")
+	router.HandleFunc("/api/vs-league/weeks/{id:[0-9]+}", authMiddleware(requirePermission("manage_vs_points", updateVSLeagueWeek))).Methods("PUT")
+	router.HandleFunc("/api/vs-league/weeks/{id:[0-9]+}", authMiddleware(requirePermission("manage_vs_points", deleteVSLeagueWeek))).Methods("DELETE")
+	router.HandleFunc("/api/vs-league/weeks/{id:[0-9]+}/days", authMiddleware(requirePermission("manage_vs_points", saveVSLeagueDays))).Methods("POST")
+	router.HandleFunc("/api/vs-league/weeks/{id:[0-9]+}/matchups", authMiddleware(requirePermission("view_vs_points", getVSLeagueMatchups))).Methods("GET")
+	router.HandleFunc("/api/vs-league/weeks/{id:[0-9]+}/matchups", authMiddleware(requirePermission("manage_vs_points", saveVSLeagueMatchups))).Methods("POST")
+	router.HandleFunc("/api/vs-league/participation", authMiddleware(requirePermission("view_vs_points", getVSLeagueParticipation))).Methods("GET")
+	router.HandleFunc("/api/vs-league/opponent-lookup", authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentLookup))).Methods("POST")
 
 	// LastRank.fun enrichment (manual trigger; client-side rate-limited globally)
 	router.HandleFunc("/api/lastrank/preview", authMiddleware(requirePermission("manage_members", lastRankPreview))).Methods("POST")
