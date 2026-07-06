@@ -79,7 +79,7 @@ func getVSLeagueSeasons(w http.ResponseWriter, r *http.Request) {
 		}
 		seasons = append(seasons, s)
 	}
-	json.NewEncoder(w).Encode(seasons)
+	writeJSON(w, seasons)
 }
 
 type vsLeagueSeasonPayload struct {
@@ -131,6 +131,7 @@ func createVSLeagueSeason(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 	logActivity(user.ID, user.Username, "created", entityVSLeagueSeason, "S"+strconv.Itoa(p.SeasonNumber), false)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{"id": id})
 }
@@ -332,7 +333,7 @@ func getVSLeagueWeeks(w http.ResponseWriter, r *http.Request) {
 	if sidParam == "active" {
 		id, ok := activeVSLeagueSeasonID()
 		if !ok {
-			json.NewEncoder(w).Encode([]VSLeagueWeek{})
+			writeJSON(w, []VSLeagueWeek{})
 			return
 		}
 		seasonID = id
@@ -349,7 +350,7 @@ func getVSLeagueWeeks(w http.ResponseWriter, r *http.Request) {
 		dbError(w, "getVSLeagueWeeks", err)
 		return
 	}
-	json.NewEncoder(w).Encode(weeks)
+	writeJSON(w, weeks)
 }
 
 // getVSLeagueCurrent returns the active season + its weeks in one call (avoids discover-then-fetch).
@@ -357,7 +358,7 @@ func getVSLeagueCurrent(w http.ResponseWriter, r *http.Request) {
 	canManage := userHasPermission(getAuthUser(r), "manage_vs_points")
 	sid, ok := activeVSLeagueSeasonID()
 	if !ok {
-		json.NewEncoder(w).Encode(map[string]any{"season": nil, "weeks": []VSLeagueWeek{}, "current_week_date": currentVSWeekMonday()})
+		writeJSON(w, map[string]any{"season": nil, "weeks": []VSLeagueWeek{}, "current_week_date": currentVSWeekMonday()})
 		return
 	}
 	season, err := scanVSLeagueSeason(db.QueryRow(`SELECT id, season_number, league_tier, start_date, end_date,
@@ -371,7 +372,7 @@ func getVSLeagueCurrent(w http.ResponseWriter, r *http.Request) {
 		dbError(w, "getVSLeagueCurrent weeks", err)
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, map[string]any{
 		"season":            season,
 		"weeks":             weeks,
 		"current_week_date": currentVSWeekMonday(),
@@ -505,7 +506,7 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 	logActivity(user.ID, user.Username, "updated", entityVSLeagueWeek, weekLabel(p.WeekNumber, weekDate), false)
-	json.NewEncoder(w).Encode(map[string]any{"id": id, "week_date": weekDate})
+	writeJSON(w, map[string]any{"id": id, "week_date": weekDate})
 }
 
 func weekLabel(num *int, weekDate string) string {
@@ -754,7 +755,7 @@ func saveVSLeagueDays(w http.ResponseWriter, r *http.Request) {
 	// Return the refreshed week so the client can re-render the standing.
 	canManage := userHasPermission(user, "manage_vs_points")
 	if wk, err := loadVSLeagueWeek(weekID, canManage); err == nil {
-		json.NewEncoder(w).Encode(wk)
+		writeJSON(w, wk)
 	} else {
 		w.WriteHeader(http.StatusOK)
 	}
@@ -786,7 +787,7 @@ func getVSLeagueMatchups(w http.ResponseWriter, r *http.Request) {
 		}
 		ms = append(ms, m)
 	}
-	json.NewEncoder(w).Encode(ms)
+	writeJSON(w, ms)
 }
 
 type vsLeagueMatchupPayload struct {
@@ -972,7 +973,7 @@ func getVSLeagueParticipation(w http.ResponseWriter, r *http.Request) {
 		}
 		out[i] = day
 	}
-	json.NewEncoder(w).Encode(out)
+	writeJSON(w, out)
 }
 
 // ── Opponent lookup (LastRank) ──────────────────────────────────────────────
@@ -1006,5 +1007,5 @@ func vsLeagueOpponentLookup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
 		return
 	}
-	json.NewEncoder(w).Encode(snap)
+	writeJSON(w, snap)
 }

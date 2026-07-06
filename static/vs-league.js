@@ -33,12 +33,10 @@
         const opt = { method, headers: {} };
         if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
         const res = await fetch(url, opt);
-        if (!res.ok) {
-            const msg = (await res.text()).trim() || (res.status + ' error');
-            throw new Error(msg);
-        }
-        const ct = res.headers.get('content-type') || '';
-        return ct.includes('application/json') ? res.json() : null;
+        const text = (await res.text()).trim();
+        if (!res.ok) throw new Error(text || (res.status + ' error'));
+        // Parse the body directly (don't rely on the server's content-type header).
+        return text ? JSON.parse(text) : null;
     }
 
     // ---- state ----
