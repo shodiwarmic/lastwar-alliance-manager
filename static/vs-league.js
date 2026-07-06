@@ -298,7 +298,7 @@
             tb.appendChild(row);
         });
         table.appendChild(tb);
-        card.appendChild(table);
+        card.appendChild(el('div', { className: 'table-scroll' }, table));
         view.appendChild(card);
     }
 
@@ -384,7 +384,7 @@
             el('td', { className: 'vsl-al', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || '—') }),
             el('td', { text: r.pts != null ? r.pts : '—' }))));
         table.appendChild(tb);
-        card.appendChild(table);
+        card.appendChild(el('div', { className: 'table-scroll' }, table));
         card.appendChild(el('div', { className: 'vsl-zone' },
             el('span', {}, el('b', { className: 'promo', text: '▲ Promotion' }), ' top 2'),
             el('span', {}, el('b', { className: 'demo', text: '▼ Demotion' }), ' bottom (12–16)')));
