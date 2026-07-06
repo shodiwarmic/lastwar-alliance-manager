@@ -568,6 +568,22 @@ type VSLeagueOpponentSnapshot struct {
 	LastSeenAt  string `json:"last_seen_at"`
 }
 
+// ExternalAlliance is a cached outside alliance seen via LastRank (populated on every lookup)
+// so it can be re-entered by tag without another lookup. Not VS-specific — allies/recruiting
+// can use it too. Tag is not unique (changeable).
+type ExternalAlliance struct {
+	ID          int     `json:"id"`
+	LastRankID  *string `json:"lastrank_id,omitempty"`
+	Tag         *string `json:"tag,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Server      *int    `json:"server,omitempty"`
+	Power       *int64  `json:"power,omitempty"`
+	Kills       *int64  `json:"kills,omitempty"`
+	MemberCount *int    `json:"member_count,omitempty"`
+	LastSeenAt  *string `json:"lastrank_seen_at,omitempty"`
+	UpdatedAt   string  `json:"updated_at"`
+}
+
 type RankPermissions struct {
 	Rank                 string `json:"rank"`
 	ViewTrain            bool   `json:"view_train"`

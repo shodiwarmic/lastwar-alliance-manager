@@ -518,6 +518,32 @@
         };
         [oppTag, oppName, oppServer].forEach(f => f.addEventListener('input', updateSearchHref));
         updateSearchHref();
+
+        // Prefill from the cached external alliances (populated by past LastRank lookups): the
+        // tag field gets a datalist of known tags, and picking/typing a known tag fills the rest.
+        const tagList = el('datalist', { id: 'vsl-tag-list' });
+        oppTag.setAttribute('list', 'vsl-tag-list');
+        let knownAlliances = [];
+        api('GET', '/api/external-alliances').then(list => {
+            knownAlliances = list || [];
+            const seen = new Set();
+            knownAlliances.forEach(a => {
+                if (a.tag && !seen.has(a.tag)) { seen.add(a.tag); tagList.appendChild(el('option', { value: a.tag })); }
+            });
+        }).catch(() => { });
+        const prefillFromCache = () => {
+            const match = knownAlliances.find(a => (a.tag || '') === oppTag.value.trim());
+            if (!match) return;
+            if (!oppName.value && match.name) oppName.value = match.name;
+            if (!oppServer.value && match.server != null) oppServer.value = match.server;
+            if (match.lastrank_id) {
+                snap = { alliance_id: match.lastrank_id, tag: match.tag, name: match.name, server_id: match.server, power: match.power, kills: match.kills, member_count: match.member_count, last_seen_at: match.lastrank_seen_at };
+                snapNote.textContent = 'From saved lookup · power ' + fmtBig(match.power || 0) + ' · kills ' + fmtBig(match.kills || 0) + ' · ' + (match.member_count != null ? match.member_count : '?') + '/100';
+            }
+            updateSearchHref();
+        };
+        oppTag.addEventListener('change', prefillFromCache);
+
         const lookupBtn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Look up');
         lookupBtn.addEventListener('click', async () => {
             snapNote.textContent = 'Looking up…';
@@ -532,6 +558,7 @@
             el('div', { className: 'vsl-form-grid' },
                 field('Week #', weekNo), field('Week date (Mon)', weekDate), field('Our rank', rank), field('Tier', tier)),
             el('div', { className: 'vsl-form-grid' }, field('Opp tag', oppTag), field('Opp name', oppName), field('Opp server', oppServer)),
+            tagList,
             field('Opponent LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, searchBtn, lrInput, lookupBtn)),
             el('span', { className: 'vsl-help', text: 'Search LastRank → open the opponent’s alliance → copy the /a/… link → paste → Look up.' }),
             snapNote,

@@ -990,7 +990,7 @@ func vsLeagueOpponentLookup(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "Paste the opponent's lastrank.fun link or alliance id")
 		return
 	}
-	// Single DB connection: hold NO DB handle across this call. This handler does no DB work.
+	// Single DB connection: hold NO DB handle across the network call (no DB work before/during).
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	snap, err := fetchLastRankOpponentSnapshot(ctx, body.URL)
@@ -1007,5 +1007,60 @@ func vsLeagueOpponentLookup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
 		return
 	}
+	// Now that the network call is done, persist to the opponent cache (best-effort).
+	cacheExternalAlliance(snap)
 	writeJSON(w, snap)
+}
+
+// cacheExternalAlliance upserts a looked-up alliance into the persistent cache, keyed on the
+// stable LastRank id so a re-lookup refreshes in place. Best-effort — never fails the response.
+func cacheExternalAlliance(snap VSLeagueOpponentSnapshot) {
+	if snap.AllianceID == "" {
+		return
+	}
+	res, err := db.Exec(`UPDATE external_alliances SET tag=?, name=?, server=?, power=?, kills=?,
+		member_count=?, lastrank_seen_at=?, updated_at=CURRENT_TIMESTAMP WHERE lastrank_id=?`,
+		snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, snap.LastSeenAt, snap.AllianceID)
+	if err != nil {
+		slog.Error("cacheExternalAlliance update", "error", err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		if _, err := db.Exec(`INSERT INTO external_alliances
+			(lastrank_id, tag, name, server, power, kills, member_count, lastrank_seen_at)
+			VALUES (?,?,?,?,?,?,?,?)`,
+			snap.AllianceID, snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, snap.LastSeenAt); err != nil {
+			slog.Error("cacheExternalAlliance insert", "error", err)
+		}
+	}
+}
+
+// getExternalAlliances returns the cached opposing alliances (optionally filtered by ?tag=),
+// most-recently-updated first — used to prefill the opponent fields by tag.
+func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
+	q := `SELECT id, lastrank_id, tag, name, server, power, kills, member_count, lastrank_seen_at, updated_at
+		FROM external_alliances`
+	var args []any
+	if tag := strings.TrimSpace(r.URL.Query().Get("tag")); tag != "" {
+		q += ` WHERE tag = ?`
+		args = append(args, tag)
+	}
+	q += ` ORDER BY updated_at DESC`
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		dbError(w, "getExternalAlliances", err)
+		return
+	}
+	defer rows.Close()
+	list := []ExternalAlliance{}
+	for rows.Next() {
+		var a ExternalAlliance
+		if err := rows.Scan(&a.ID, &a.LastRankID, &a.Tag, &a.Name, &a.Server, &a.Power,
+			&a.Kills, &a.MemberCount, &a.LastSeenAt, &a.UpdatedAt); err != nil {
+			dbError(w, "getExternalAlliances scan", err)
+			return
+		}
+		list = append(list, a)
+	}
+	writeJSON(w, list)
 }

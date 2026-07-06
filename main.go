@@ -369,6 +369,7 @@ func main() {
 	router.HandleFunc("/api/vs-league/weeks/{id:[0-9]+}/matchups", authMiddleware(requirePermission("manage_vs_points", saveVSLeagueMatchups))).Methods("POST")
 	router.HandleFunc("/api/vs-league/participation", authMiddleware(requirePermission("view_vs_points", getVSLeagueParticipation))).Methods("GET")
 	router.HandleFunc("/api/vs-league/opponent-lookup", authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentLookup))).Methods("POST")
+	router.HandleFunc("/api/external-alliances", authMiddleware(requirePermission("manage_vs_points", getExternalAlliances))).Methods("GET")
 
 	// LastRank.fun enrichment (manual trigger; client-side rate-limited globally)
 	router.HandleFunc("/api/lastrank/preview", authMiddleware(requirePermission("manage_members", lastRankPreview))).Methods("POST")
