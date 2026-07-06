@@ -508,7 +508,12 @@
         // LastRank has a unified search (?q=); prefill it from the opponent tag + server.
         const searchBtn = el('a', { className: 'btn btn-secondary btn-sm', target: '_blank', rel: 'noopener noreferrer' }, 'Search ↗');
         const updateSearchHref = () => {
-            const q = [oppTag.value.trim() || oppName.value.trim(), oppServer.value.trim()].filter(Boolean).join(' ');
+            // Match LastRank's alliance display format: "#1713 [cROw] Black Crow Legion".
+            const parts = [];
+            if (oppServer.value.trim()) parts.push('#' + oppServer.value.trim());
+            if (oppTag.value.trim()) parts.push('[' + oppTag.value.trim() + ']');
+            if (oppName.value.trim()) parts.push(oppName.value.trim());
+            const q = parts.join(' ');
             searchBtn.href = 'https://lastrank.fun/search' + (q ? '?q=' + encodeURIComponent(q) : '');
         };
         [oppTag, oppName, oppServer].forEach(f => f.addEventListener('input', updateSearchHref));
