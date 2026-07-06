@@ -57,9 +57,14 @@ func getVSAccountabilitySettings() (min, flagDays int) {
 // true when any member has a non-zero score for day i that week; importedCompleted is
 // how many completed days are imported; fallbackActive is true on the Monday fallback.
 // On query error it logs and returns safe defaults (nothing imported → callers flag nobody).
-func vsEvalContext() (weekDate string, completed int, dayImported [6]bool, importedCompleted int, fallbackActive bool) {
-	weekDate, completed = effectiveVSWeek()
-	fallbackActive = completedVSDays() == 0
+// vsDayImportMask returns, for an arbitrary week_date, which of its six days have been
+// imported (dayImported[i] true when any member has a non-zero score for day i that week).
+// An all-zero day reads as "not imported" — never happens for a real VS day. On query error
+// it logs and returns the zero mask (callers treat as nothing imported).
+// Parameterized so the VS League participation view can evaluate any historical week, not
+// just the current one (vsEvalContext, which is current-week-only, delegates here).
+func vsDayImportMask(weekDate string) [6]bool {
+	var dayImported [6]bool
 	var m [6]int
 	err := db.QueryRow(`SELECT
 		COALESCE(MAX(monday),0), COALESCE(MAX(tuesday),0), COALESCE(MAX(wednesday),0),
@@ -67,11 +72,20 @@ func vsEvalContext() (weekDate string, completed int, dayImported [6]bool, impor
 		FROM vs_points WHERE week_date = ?`, weekDate).
 		Scan(&m[0], &m[1], &m[2], &m[3], &m[4], &m[5])
 	if err != nil {
-		slog.Error("vsEvalContext: day-import query failed", "error", err, "week", weekDate)
-		return weekDate, completed, dayImported, 0, fallbackActive
+		slog.Error("vsDayImportMask: day-import query failed", "error", err, "week", weekDate)
+		return dayImported
 	}
 	for i := 0; i < 6; i++ {
-		dayImported[i] = m[i] > 0 // an all-zero day reads as "not imported" — never happens for a real VS day
+		dayImported[i] = m[i] > 0
+	}
+	return dayImported
+}
+
+func vsEvalContext() (weekDate string, completed int, dayImported [6]bool, importedCompleted int, fallbackActive bool) {
+	weekDate, completed = effectiveVSWeek()
+	fallbackActive = completedVSDays() == 0
+	dayImported = vsDayImportMask(weekDate)
+	for i := 0; i < 6; i++ {
 		if i < completed && dayImported[i] {
 			importedCompleted++
 		}

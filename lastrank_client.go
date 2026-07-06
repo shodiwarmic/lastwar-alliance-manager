@@ -14,6 +14,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -258,6 +259,60 @@ func parseLastRankAllianceID(input string) (string, bool) {
 	}
 	return "", false
 }
+
+// lastRankAllowedHosts are the only hosts a pasted opponent URL may come from (F-R05).
+var lastRankAllowedHosts = map[string]bool{"lastrank.fun": true, "www.lastrank.fun": true}
+var reLastRankStrictPath = regexp.MustCompile(`^/a/([0-9a-fA-F]{32})$`)
+
+// parseLastRankAllianceStrict is the STRICT variant used only by the VS League opponent
+// lookup: it accepts a bare 32-hex id, or a URL on an approved LastRank host whose path is
+// exactly /a/<hex>. The shared parseLastRankAllianceID stays lax for its existing callers;
+// this one avoids an officer pasting a URL from an unrelated site that merely contains /a/<hex>.
+func parseLastRankAllianceStrict(input string) (string, bool) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", false
+	}
+	if m := reLastRankBareHex.FindStringSubmatch(input); m != nil {
+		return strings.ToLower(m[1]), true
+	}
+	u, err := url.Parse(input)
+	if err != nil || !lastRankAllowedHosts[strings.ToLower(u.Hostname())] {
+		return "", false
+	}
+	if m := reLastRankStrictPath.FindStringSubmatch(u.Path); m != nil {
+		return strings.ToLower(m[1]), true
+	}
+	return "", false
+}
+
+// fetchLastRankOpponentSnapshot resolves a pasted URL/id to a point-in-time opponent
+// snapshot for the VS League matchup card. Surfaces power (fightpower) and kills (army_kill),
+// which the app-facing LastRankAllianceMeta drops. Uses the shared 1 req/sec limiter; the
+// caller is responsible for a bounded context (the app runs on a single DB connection, so
+// the handler must hold no DB handle across this call).
+func fetchLastRankOpponentSnapshot(ctx context.Context, idOrURL string) (VSLeagueOpponentSnapshot, error) {
+	id, ok := parseLastRankAllianceStrict(idOrURL)
+	if !ok {
+		return VSLeagueOpponentSnapshot{}, errLastRankBadInput
+	}
+	a, err := fetchLastRankAlliance(ctx, id)
+	if err != nil {
+		return VSLeagueOpponentSnapshot{}, err
+	}
+	return VSLeagueOpponentSnapshot{
+		AllianceID:  a.AllianceID,
+		Tag:         a.Abbr,
+		Name:        a.Name,
+		ServerID:    a.ServerID,
+		Power:       a.Fightpower,
+		Kills:       a.ArmyKill,
+		MemberCount: a.CurMember,
+		LastSeenAt:  a.LastSeenAt,
+	}, nil
+}
+
+var errLastRankBadInput = errors.New("could not parse a LastRank alliance id/URL")
 
 // --- Time / staleness ---
 
