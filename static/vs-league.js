@@ -502,8 +502,10 @@
         const notes = el('textarea', { className: 'form-input', rows: '2', placeholder: 'leadership context…' }); if (wk && wk.notes) notes.value = wk.notes;
         // opponent lookup
         const lrInput = inp('text', wk ? wk.opponent_lastrank_id : '', 'paste lastrank.fun/a/… link');
+        lrInput.style.flex = '1'; lrInput.style.minWidth = '150px';
         const snapNote = el('span', { className: 'vsl-help' });
         let snap = null;
+        const searchBtn = el('a', { className: 'btn btn-secondary btn-sm', href: 'https://lastrank.fun/', target: '_blank', rel: 'noopener noreferrer' }, 'Search ↗');
         const lookupBtn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Look up');
         lookupBtn.addEventListener('click', async () => {
             snapNote.textContent = 'Looking up…';
@@ -518,7 +520,9 @@
             el('div', { className: 'vsl-form-grid' },
                 field('Week #', weekNo), field('Week date (Mon)', weekDate), field('Our rank', rank), field('Tier', tier)),
             el('div', { className: 'vsl-form-grid' }, field('Opp tag', oppTag), field('Opp name', oppName), field('Opp server', oppServer)),
-            field('Opponent LastRank link', el('div', { style: 'display:flex;gap:8px;' }, lrInput, lookupBtn)), snapNote,
+            field('Opponent LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, searchBtn, lrInput, lookupBtn)),
+            el('span', { className: 'vsl-help', text: 'Search LastRank → open the opponent’s alliance → copy the /a/… link → paste → Look up.' }),
+            snapNote,
             el('div', { className: 'vsl-form-grid' }, field('Strategy', stratLabel), field('Result', stratResult)),
             field('Notes', notes)
         ], async () => {
