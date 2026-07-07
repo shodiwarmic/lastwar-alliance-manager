@@ -15,7 +15,9 @@
     <div class="tab-toolbar">
         <input type="text" id="ext-search" class="form-input" placeholder="Search tag or name…">
         <span class="status-msg" id="ext-count"></span>
+        <span id="ext-actions" style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;"></span>
     </div>
+    <p class="status-msg" id="ext-progress" hidden></p>
 
     <div class="card">
         <div class="table-scroll">
@@ -30,6 +32,7 @@
                         <th data-sort="members">Members</th>
                         <th>Relationship</th>
                         <th data-sort="updated">Last updated</th>
+                        {{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}<th></th>{{end}}
                     </tr>
                 </thead>
                 <tbody id="ext-tbody">
@@ -42,5 +45,6 @@
 {{end}}
 
 {{define "scripts"}}
+<div id="page-config" data-can-manage="{{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}true{{else}}false{{end}}" hidden></div>
 <script src="/external-alliances.js"></script>
 {{end}}

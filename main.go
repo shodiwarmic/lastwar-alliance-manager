@@ -370,6 +370,11 @@ func main() {
 	router.HandleFunc("/api/vs-league/participation", authMiddleware(requirePermission("view_vs_points", getVSLeagueParticipation))).Methods("GET")
 	router.HandleFunc("/api/vs-league/opponent-lookup", authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentLookup))).Methods("POST")
 	router.HandleFunc("/api/external-alliances", authMiddleware(getExternalAlliancesGated)).Methods("GET")
+	router.HandleFunc("/api/external-alliances", authMiddleware(requireManageExternalAlliances(createExternalAlliance))).Methods("POST")
+	router.HandleFunc("/api/external-alliances/{id:[0-9]+}", authMiddleware(requireManageExternalAlliances(updateExternalAlliance))).Methods("PUT")
+	router.HandleFunc("/api/external-alliances/{id:[0-9]+}", authMiddleware(requireManageExternalAlliances(deleteExternalAlliance))).Methods("DELETE")
+	router.HandleFunc("/api/external-alliances/{id:[0-9]+}/refresh", authMiddleware(requireManageExternalAlliances(refreshExternalAlliance))).Methods("POST")
+	router.HandleFunc("/api/external-alliances/lookup", authMiddleware(requireManageExternalAlliances(lookupExternalAlliance))).Methods("POST")
 
 	// LastRank.fun enrichment (manual trigger; client-side rate-limited globally)
 	router.HandleFunc("/api/lastrank/preview", authMiddleware(requirePermission("manage_members", lastRankPreview))).Methods("POST")

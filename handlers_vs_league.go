@@ -1055,10 +1055,7 @@ func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
 	q := `SELECT ea.id, ea.lastrank_id, ea.tag, ea.name, ea.server, ea.power, ea.kills,
 		ea.member_count, ea.lastrank_seen_at, ea.updated_at,
 		EXISTS(SELECT 1 FROM allies al WHERE al.external_alliance_id = ea.id) AS is_ally,
-		(SELECT COUNT(*) FROM prospects pr WHERE pr.source_alliance_id = ea.id) AS prospect_count,
-		EXISTS(SELECT 1 FROM vs_league_weeks w
-			WHERE (ea.tag IS NOT NULL AND w.opponent_tag = ea.tag COLLATE NOCASE)
-			   OR (ea.lastrank_id IS NOT NULL AND w.opponent_lastrank_id = ea.lastrank_id)) AS is_opponent
+		(SELECT COUNT(*) FROM prospects pr WHERE pr.source_alliance_id = ea.id) AS prospect_count
 		FROM external_alliances ea`
 	var args []any
 	if tag := strings.TrimSpace(r.URL.Query().Get("tag")); tag != "" {
@@ -1077,13 +1074,92 @@ func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
 		var a ExternalAlliance
 		if err := rows.Scan(&a.ID, &a.LastRankID, &a.Tag, &a.Name, &a.Server, &a.Power,
 			&a.Kills, &a.MemberCount, &a.LastSeenAt, &a.UpdatedAt,
-			&a.IsAlly, &a.ProspectCount, &a.IsOpponent); err != nil {
+			&a.IsAlly, &a.ProspectCount); err != nil {
 			dbError(w, "getExternalAlliances scan", err)
 			return
 		}
 		list = append(list, a)
 	}
+	rows.Close()
+	// Attach our VS League head-to-head record (outcome computed on read from day rows).
+	opWeeks := loadOpponentWeeks()
+	for i := range list {
+		for _, wk := range opWeeks {
+			if !opponentWeekMatches(list[i], wk) {
+				continue
+			}
+			list[i].IsOpponent = true
+			switch wk.outcome {
+			case "win":
+				list[i].VSWins++
+			case "loss":
+				list[i].VSLosses++
+			case "tie":
+				list[i].VSTies++
+			}
+		}
+	}
 	writeJSON(w, list)
+}
+
+type opponentWeek struct {
+	tag, lr, outcome string // outcome "" when undecided/pending
+}
+
+func opponentWeekMatches(a ExternalAlliance, wk opponentWeek) bool {
+	if a.LastRankID != nil && *a.LastRankID != "" && wk.lr == *a.LastRankID {
+		return true
+	}
+	return a.Tag != nil && *a.Tag != "" && wk.tag != "" && strings.EqualFold(wk.tag, *a.Tag)
+}
+
+// loadOpponentWeeks returns every one of our matchup weeks with the opponent identity and the
+// week's decided outcome (computed on read from day rows, or the stored summary outcome).
+func loadOpponentWeeks() []opponentWeek {
+	rows, err := db.Query(`SELECT id, COALESCE(opponent_tag,''), COALESCE(opponent_lastrank_id,''), outcome FROM vs_league_weeks`)
+	if err != nil {
+		slog.Error("loadOpponentWeeks", "error", err)
+		return nil
+	}
+	type raw struct {
+		id            int
+		tag, lr       string
+		storedOutcome *string
+	}
+	var rawWeeks []raw
+	for rows.Next() {
+		var x raw
+		if err := rows.Scan(&x.id, &x.tag, &x.lr, &x.storedOutcome); err != nil {
+			rows.Close()
+			return nil
+		}
+		rawWeeks = append(rawWeeks, x)
+	}
+	rows.Close()
+
+	out := make([]opponentWeek, 0, len(rawWeeks))
+	for _, x := range rawWeeks {
+		ow := opponentWeek{tag: x.tag, lr: x.lr}
+		days, _ := loadVSLeagueDays(x.id)
+		if len(days) > 0 {
+			var arr [6]string
+			for i := range arr {
+				arr[i] = "pending"
+			}
+			for _, d := range days {
+				if d.DayNumber >= 1 && d.DayNumber <= 6 {
+					arr[d.DayNumber-1] = d.Outcome
+				}
+			}
+			if st := computeWeekStanding(arr); st.Decided {
+				ow.outcome = st.Outcome
+			}
+		} else if x.storedOutcome != nil {
+			ow.outcome = *x.storedOutcome
+		}
+		out = append(out, ow)
+	}
+	return out
 }
 
 // canViewExternalAlliances gates the registry endpoint: any officer who deals with outside
@@ -1103,4 +1179,206 @@ func getExternalAlliancesGated(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	getExternalAlliances(w, r)
+}
+
+// canManageExternalAlliances gates registry writes to officers who manage allies or VS League.
+func canManageExternalAlliances(user *AuthUser) bool {
+	return userHasPermission(user, "manage_allies") || userHasPermission(user, "manage_vs_points")
+}
+
+func requireManageExternalAlliances(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !canManageExternalAlliances(getAuthUser(r)) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
+const entityExternalAlliance = "external_alliance"
+
+type externalAlliancePayload struct {
+	Tag         string  `json:"tag"`
+	Name        string  `json:"name"`
+	Server      *int    `json:"server"`
+	Power       *int64  `json:"power"`
+	Kills       *int64  `json:"kills"`
+	MemberCount *int    `json:"member_count"`
+	LastRankID  *string `json:"lastrank_id"`
+}
+
+func (p externalAlliancePayload) label() string {
+	if t := strings.TrimSpace(p.Tag); t != "" {
+		return "[" + t + "]"
+	}
+	return strings.TrimSpace(p.Name)
+}
+
+func createExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	var p externalAlliancePayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if strings.TrimSpace(p.Tag) == "" && strings.TrimSpace(p.Name) == "" {
+		badRequest(w, "tag or name is required")
+		return
+	}
+	res, err := db.Exec(`INSERT INTO external_alliances (tag, name, server, power, kills, member_count, lastrank_id)
+		VALUES (?,?,?,?,?,?,?)`,
+		nullStr(p.Tag), nullStr(p.Name), p.Server, p.Power, p.Kills, p.MemberCount, nullStrP(p.LastRankID))
+	if err != nil {
+		dbError(w, "createExternalAlliance", err)
+		return
+	}
+	id, _ := res.LastInsertId()
+	logActivity(user.ID, user.Username, "created", entityExternalAlliance, p.label(), false)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]any{"id": id})
+}
+
+func updateExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var p externalAlliancePayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if _, err := db.Exec(`UPDATE external_alliances SET tag=?, name=?, server=?, power=?, kills=?,
+		member_count=?, lastrank_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		nullStr(p.Tag), nullStr(p.Name), p.Server, p.Power, p.Kills, p.MemberCount, nullStrP(p.LastRankID), id); err != nil {
+		dbError(w, "updateExternalAlliance", err)
+		return
+	}
+	logActivity(user.ID, user.Username, "updated", entityExternalAlliance, p.label(), false)
+	w.WriteHeader(http.StatusOK)
+}
+
+func deleteExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var label string
+	if err := db.QueryRow(`SELECT COALESCE('['||tag||']', name, '?') FROM external_alliances WHERE id=?`, id).Scan(&label); err != nil {
+		http.Error(w, "Alliance not found", http.StatusNotFound)
+		return
+	}
+	var isAlly int
+	db.QueryRow(`SELECT EXISTS(SELECT 1 FROM allies WHERE external_alliance_id=?)`, id).Scan(&isAlly)
+	if isAlly == 1 {
+		http.Error(w, "This alliance is linked to an ally — remove it from Allies first", http.StatusConflict)
+		return
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "deleteExternalAlliance begin", err)
+		return
+	}
+	defer tx.Rollback()
+	// Clear the (now-dangling) prospect references, then delete.
+	if _, err := tx.Exec(`UPDATE prospects SET source_alliance_id=NULL WHERE source_alliance_id=?`, id); err != nil {
+		dbError(w, "deleteExternalAlliance clear prospects", err)
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM external_alliances WHERE id=?`, id); err != nil {
+		dbError(w, "deleteExternalAlliance", err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "deleteExternalAlliance commit", err)
+		return
+	}
+	logActivity(user.ID, user.Username, "deleted", entityExternalAlliance, label, false)
+	w.WriteHeader(http.StatusOK)
+}
+
+// refreshExternalAlliance re-pulls a single cached alliance's stats from LastRank by its stored
+// id. The frontend calls this in a paced loop for a bulk refresh; the shared 1 req/sec limiter
+// naturally throttles it, and no DB handle is held across the network call (single connection).
+func refreshExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var lrid *string
+	if err := db.QueryRow(`SELECT lastrank_id FROM external_alliances WHERE id=?`, id).Scan(&lrid); err != nil {
+		http.Error(w, "Alliance not found", http.StatusNotFound)
+		return
+	}
+	if lrid == nil || strings.TrimSpace(*lrid) == "" {
+		badRequest(w, "No LastRank id on this alliance — edit it and add a lastrank.fun link first")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	snap, err := fetchLastRankOpponentSnapshot(ctx, *lrid)
+	if err != nil {
+		slogLastRank("refreshExternalAlliance failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
+		return
+	}
+	if _, err := db.Exec(`UPDATE external_alliances SET tag=COALESCE(NULLIF(?,''),tag), name=COALESCE(NULLIF(?,''),name),
+		server=?, power=?, kills=?, member_count=?, lastrank_seen_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, snap.LastSeenAt, id); err != nil {
+		dbError(w, "refreshExternalAlliance update", err)
+		return
+	}
+	writeJSON(w, snap)
+}
+
+// lookupExternalAlliance resolves a pasted LastRank link/id to a snapshot WITHOUT caching, for
+// the registry add/edit form (which then persists via POST/PUT). Gated for manage-external users.
+func lookupExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if strings.TrimSpace(body.URL) == "" {
+		badRequest(w, "Paste the alliance's lastrank.fun link or id")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	snap, err := fetchLastRankOpponentSnapshot(ctx, body.URL)
+	if err != nil {
+		if errors.Is(err, errLastRankBadInput) {
+			badRequest(w, "That doesn't look like a lastrank.fun alliance link or id")
+			return
+		}
+		slogLastRank("lookupExternalAlliance failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, snap)
+}
+
+// nullStrP maps a *string to a NULL-able driver value.
+func nullStrP(s *string) any {
+	if s == nil || strings.TrimSpace(*s) == "" {
+		return nil
+	}
+	return strings.TrimSpace(*s)
 }

@@ -585,7 +585,10 @@ type ExternalAlliance struct {
 	// Relationship flags (computed for the External Alliances registry page).
 	IsAlly        bool `json:"is_ally"`
 	ProspectCount int  `json:"prospect_count"`
-	IsOpponent    bool `json:"is_opponent"`
+	IsOpponent    bool `json:"is_opponent"` // we've faced them in VS League (decided or pending)
+	VSWins        int  `json:"vs_wins"`
+	VSLosses      int  `json:"vs_losses"`
+	VSTies        int  `json:"vs_ties"`
 }
 
 type RankPermissions struct {

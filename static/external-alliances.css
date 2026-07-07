@@ -16,3 +16,8 @@
 .ext-lr  { color: var(--color-accent); text-decoration: none; margin-left: 6px; font-size: 0.85em; }
 .ext-num { font-variant-numeric: tabular-nums; }
 #ext-count { margin-left: 4px; }
+
+/* Add/edit modal form (this page doesn't load vs-league.css) */
+.vsl-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 12px 0; }
+.vsl-field label { display: block; font-size: 0.78rem; color: var(--color-text-mid); font-weight: 600; margin-bottom: 3px; }
+.vsl-help { font-size: 0.8rem; color: var(--color-text-muted); }
