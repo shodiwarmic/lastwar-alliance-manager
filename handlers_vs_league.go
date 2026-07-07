@@ -1230,9 +1230,14 @@ func createExternalAlliance(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "tag or name is required")
 		return
 	}
+	lrid, ok := sanitizeLastRankID(p.LastRankID)
+	if !ok {
+		badRequest(w, "The LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
+		return
+	}
 	res, err := db.Exec(`INSERT INTO external_alliances (tag, name, server, power, kills, member_count, lastrank_id)
 		VALUES (?,?,?,?,?,?,?)`,
-		nullStr(p.Tag), nullStr(p.Name), p.Server, p.Power, p.Kills, p.MemberCount, nullStrP(p.LastRankID))
+		nullStr(p.Tag), nullStr(p.Name), p.Server, p.Power, p.Kills, p.MemberCount, lrid)
 	if err != nil {
 		dbError(w, "createExternalAlliance", err)
 		return
@@ -1256,9 +1261,14 @@ func updateExternalAlliance(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "Invalid request body")
 		return
 	}
+	lrid, ok := sanitizeLastRankID(p.LastRankID)
+	if !ok {
+		badRequest(w, "The LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
+		return
+	}
 	if _, err := db.Exec(`UPDATE external_alliances SET tag=?, name=?, server=?, power=?, kills=?,
 		member_count=?, lastrank_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		nullStr(p.Tag), nullStr(p.Name), p.Server, p.Power, p.Kills, p.MemberCount, nullStrP(p.LastRankID), id); err != nil {
+		nullStr(p.Tag), nullStr(p.Name), p.Server, p.Power, p.Kills, p.MemberCount, lrid, id); err != nil {
 		dbError(w, "updateExternalAlliance", err)
 		return
 	}
@@ -1385,4 +1395,17 @@ func nullStrP(s *string) any {
 		return nil
 	}
 	return strings.TrimSpace(*s)
+}
+
+// sanitizeLastRankID extracts a clean 32-hex alliance id from a pasted lastrank.fun/a/<id> link
+// or a bare id (like the members page does for player ids), so we never store a raw URL. Returns
+// (NULL, true) for empty, (id, true) for a valid link/id, and (nil, false) when non-empty but unparseable.
+func sanitizeLastRankID(s *string) (any, bool) {
+	if s == nil || strings.TrimSpace(*s) == "" {
+		return nil, true
+	}
+	if id, ok := parseLastRankAllianceStrict(*s); ok {
+		return id, true
+	}
+	return nil, false
 }
