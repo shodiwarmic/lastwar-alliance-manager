@@ -1012,26 +1012,40 @@ func vsLeagueOpponentLookup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, snap)
 }
 
-// cacheExternalAlliance upserts a looked-up alliance into the persistent cache, keyed on the
-// stable LastRank id so a re-lookup refreshes in place. Best-effort — never fails the response.
+// cacheExternalAlliance upserts a looked-up alliance into the persistent cache. Identity is our
+// internal id; we dedup by tag (globally unique at a moment), else by name, so a manual entry and
+// a later LastRank lookup collapse into one row instead of duplicating — and lastrank_id is stored
+// only as a reference attribute. Best-effort — never fails the response.
 func cacheExternalAlliance(snap VSLeagueOpponentSnapshot) {
-	if snap.AllianceID == "" {
-		return
-	}
-	res, err := db.Exec(`UPDATE external_alliances SET tag=?, name=?, server=?, power=?, kills=?,
-		member_count=?, lastrank_seen_at=?, updated_at=CURRENT_TIMESTAMP WHERE lastrank_id=?`,
-		snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, snap.LastSeenAt, snap.AllianceID)
-	if err != nil {
-		slog.Error("cacheExternalAlliance update", "error", err)
-		return
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		if _, err := db.Exec(`INSERT INTO external_alliances
-			(lastrank_id, tag, name, server, power, kills, member_count, lastrank_seen_at)
-			VALUES (?,?,?,?,?,?,?,?)`,
-			snap.AllianceID, snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, snap.LastSeenAt); err != nil {
-			slog.Error("cacheExternalAlliance insert", "error", err)
+	var id int
+	found := false
+	if snap.Tag != "" {
+		if err := db.QueryRow(`SELECT id FROM external_alliances WHERE tag = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1`, snap.Tag).Scan(&id); err == nil {
+			found = true
 		}
+	}
+	if !found && snap.Name != "" {
+		if err := db.QueryRow(`SELECT id FROM external_alliances WHERE name = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1`, snap.Name).Scan(&id); err == nil {
+			found = true
+		}
+	}
+	var lrid any // nil → NULL; external id is a reference, not a key
+	if snap.AllianceID != "" {
+		lrid = snap.AllianceID
+	}
+	if found {
+		if _, err := db.Exec(`UPDATE external_alliances SET tag=?, name=?, server=?, power=?, kills=?,
+			member_count=?, lastrank_id=?, lastrank_seen_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+			snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, lrid, snap.LastSeenAt, id); err != nil {
+			slog.Error("cacheExternalAlliance update", "error", err)
+		}
+		return
+	}
+	if _, err := db.Exec(`INSERT INTO external_alliances
+		(tag, name, server, power, kills, member_count, lastrank_id, lastrank_seen_at)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, lrid, snap.LastSeenAt); err != nil {
+		slog.Error("cacheExternalAlliance insert", "error", err)
 	}
 }
 

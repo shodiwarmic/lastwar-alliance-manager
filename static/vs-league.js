@@ -519,21 +519,24 @@
         [oppTag, oppName, oppServer].forEach(f => f.addEventListener('input', updateSearchHref));
         updateSearchHref();
 
-        // Prefill from the cached external alliances (populated by past LastRank lookups): the
-        // tag field gets a datalist of known tags, and picking/typing a known tag fills the rest.
+        // Prefill from cached external alliances (populated by past lookups). Both the tag and name
+        // fields get a datalist of known values; picking/typing a known tag OR name fills the rest.
         const tagList = el('datalist', { id: 'vsl-tag-list' });
+        const nameList = el('datalist', { id: 'vsl-name-list' });
         oppTag.setAttribute('list', 'vsl-tag-list');
+        oppName.setAttribute('list', 'vsl-name-list');
         let knownAlliances = [];
         api('GET', '/api/external-alliances').then(list => {
             knownAlliances = list || [];
-            const seen = new Set();
+            const tags = new Set(), names = new Set();
             knownAlliances.forEach(a => {
-                if (a.tag && !seen.has(a.tag)) { seen.add(a.tag); tagList.appendChild(el('option', { value: a.tag })); }
+                if (a.tag && !tags.has(a.tag)) { tags.add(a.tag); tagList.appendChild(el('option', { value: a.tag })); }
+                if (a.name && !names.has(a.name)) { names.add(a.name); nameList.appendChild(el('option', { value: a.name })); }
             });
         }).catch(() => { });
-        const prefillFromCache = () => {
-            const match = knownAlliances.find(a => (a.tag || '') === oppTag.value.trim());
+        const applyMatch = (match) => {
             if (!match) return;
+            if (!oppTag.value && match.tag) oppTag.value = match.tag;
             if (!oppName.value && match.name) oppName.value = match.name;
             if (!oppServer.value && match.server != null) oppServer.value = match.server;
             if (match.lastrank_id) {
@@ -542,7 +545,8 @@
             }
             updateSearchHref();
         };
-        oppTag.addEventListener('change', prefillFromCache);
+        oppTag.addEventListener('change', () => applyMatch(knownAlliances.find(a => (a.tag || '') === oppTag.value.trim())));
+        oppName.addEventListener('change', () => applyMatch(knownAlliances.find(a => (a.name || '') === oppName.value.trim())));
 
         const lookupBtn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Look up');
         lookupBtn.addEventListener('click', async () => {
@@ -558,7 +562,7 @@
             el('div', { className: 'vsl-form-grid' },
                 field('Week #', weekNo), field('Week date (Mon)', weekDate), field('Our rank', rank), field('Tier', tier)),
             el('div', { className: 'vsl-form-grid' }, field('Opp tag', oppTag), field('Opp name', oppName), field('Opp server', oppServer)),
-            tagList,
+            tagList, nameList,
             field('Opponent LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, searchBtn, lrInput, lookupBtn)),
             el('span', { className: 'vsl-help', text: 'Search LastRank → open the opponent’s alliance → copy the /a/… link → paste → Look up.' }),
             snapNote,
