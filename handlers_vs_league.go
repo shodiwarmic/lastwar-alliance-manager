@@ -455,6 +455,12 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, msg)
 		return
 	}
+	lrid, ok := sanitizeLastRankIDPtr(p.OpponentLastRankID)
+	if !ok {
+		badRequest(w, "The opponent LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
+		return
+	}
+	p.OpponentLastRankID = lrid
 	weekDate, err := normalizeToGameWeekMonday(p.WeekDate)
 	if err != nil {
 		badRequest(w, "invalid week_date")
@@ -532,6 +538,12 @@ func updateVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, msg)
 		return
 	}
+	lrid, ok := sanitizeLastRankIDPtr(p.OpponentLastRankID)
+	if !ok {
+		badRequest(w, "The opponent LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
+		return
+	}
+	p.OpponentLastRankID = lrid
 
 	var weekNum *int
 	var weekDate string
@@ -1397,15 +1409,28 @@ func nullStrP(s *string) any {
 	return strings.TrimSpace(*s)
 }
 
-// sanitizeLastRankID extracts a clean 32-hex alliance id from a pasted lastrank.fun/a/<id> link
-// or a bare id (like the members page does for player ids), so we never store a raw URL. Returns
-// (NULL, true) for empty, (id, true) for a valid link/id, and (nil, false) when non-empty but unparseable.
-func sanitizeLastRankID(s *string) (any, bool) {
+// sanitizeLastRankIDPtr extracts a clean 32-hex alliance id from a pasted lastrank.fun/a/<id>
+// link or a bare id (like the members page does for player ids), so we never store a raw URL.
+// Returns (nil, true) for empty, (&id, true) for a valid link/id, and (nil, false) when
+// non-empty but unparseable. This is the canonical alliance-id sanitizer for every write path.
+func sanitizeLastRankIDPtr(s *string) (*string, bool) {
 	if s == nil || strings.TrimSpace(*s) == "" {
 		return nil, true
 	}
 	if id, ok := parseLastRankAllianceStrict(*s); ok {
-		return id, true
+		return &id, true
 	}
 	return nil, false
+}
+
+// sanitizeLastRankID is the driver-value form of sanitizeLastRankIDPtr for INSERT/UPDATE bindings.
+func sanitizeLastRankID(s *string) (any, bool) {
+	p, ok := sanitizeLastRankIDPtr(s)
+	if !ok {
+		return nil, false
+	}
+	if p == nil {
+		return nil, true
+	}
+	return *p, true
 }
