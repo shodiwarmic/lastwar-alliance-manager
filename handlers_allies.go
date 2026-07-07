@@ -3,6 +3,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,51 @@ import (
 
 	"github.com/gorilla/mux"
 )
+
+// findOrCreateExternalAllianceTx returns the external_alliances registry id for an alliance
+// identity, deduping by tag (globally unique at a moment) then name — creating a row if none
+// exists and refreshing name/server on an existing one. Server is parsed from text
+// (external_alliances.server is INTEGER). Used to link allies (and prospects) into the registry
+// so it stays the single identity source. Returns an invalid NullInt64 when there's no identity.
+func findOrCreateExternalAllianceTx(tx *sql.Tx, tag, name, serverStr string) (sql.NullInt64, error) {
+	tag, name = strings.TrimSpace(tag), strings.TrimSpace(name)
+	var server any // nil → NULL
+	if s := strings.TrimSpace(serverStr); s != "" {
+		if n, err := strconv.Atoi(s); err == nil {
+			server = n
+		}
+	}
+	var id int64
+	var err error
+	switch {
+	case tag != "":
+		err = tx.QueryRow(`SELECT id FROM external_alliances WHERE tag = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1`, tag).Scan(&id)
+	case name != "":
+		err = tx.QueryRow(`SELECT id FROM external_alliances WHERE name = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1`, name).Scan(&id)
+	default:
+		return sql.NullInt64{}, nil
+	}
+	if err == nil {
+		if _, uerr := tx.Exec(`UPDATE external_alliances SET name = COALESCE(NULLIF(?,''), name),
+			server = COALESCE(?, server), updated_at = CURRENT_TIMESTAMP WHERE id = ?`, name, server, id); uerr != nil {
+			return sql.NullInt64{}, uerr
+		}
+		return sql.NullInt64{Int64: id, Valid: true}, nil
+	}
+	res, ierr := tx.Exec(`INSERT INTO external_alliances (tag, name, server) VALUES (?,?,?)`, nullStr(tag), nullStr(name), server)
+	if ierr != nil {
+		return sql.NullInt64{}, ierr
+	}
+	nid, _ := res.LastInsertId()
+	return sql.NullInt64{Int64: nid, Valid: true}, nil
+}
+
+func nullStr(s string) any {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return s
+}
 
 // --- Agreement Types ---
 
@@ -249,8 +295,14 @@ func createAlly(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`INSERT INTO allies (server, tag, name, notes, contact) VALUES (?, ?, ?, ?, ?)`,
-		req.Server, req.Tag, req.Name, req.Notes, req.Contact)
+	eaID, err := findOrCreateExternalAllianceTx(tx, req.Tag, req.Name, req.Server)
+	if err != nil {
+		slog.Error("createAlly: registry link failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	res, err := tx.Exec(`INSERT INTO allies (server, tag, name, notes, contact, external_alliance_id) VALUES (?, ?, ?, ?, ?, ?)`,
+		req.Server, req.Tag, req.Name, req.Notes, req.Contact, eaID)
 	if err != nil {
 		slog.Error("createAlly: insert failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -337,8 +389,14 @@ func updateAlly(w http.ResponseWriter, r *http.Request) {
 	if *req.Active {
 		active = 1
 	}
-	if _, err := tx.Exec(`UPDATE allies SET server=?, tag=?, name=?, active=?, notes=?, contact=? WHERE id=?`,
-		req.Server, req.Tag, req.Name, active, req.Notes, req.Contact, id); err != nil {
+	eaID, err := findOrCreateExternalAllianceTx(tx, req.Tag, req.Name, req.Server)
+	if err != nil {
+		slog.Error("updateAlly: registry link failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec(`UPDATE allies SET server=?, tag=?, name=?, active=?, notes=?, contact=?, external_alliance_id=? WHERE id=?`,
+		req.Server, req.Tag, req.Name, active, req.Notes, req.Contact, eaID, id); err != nil {
 		slog.Error("updateAlly: update failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
