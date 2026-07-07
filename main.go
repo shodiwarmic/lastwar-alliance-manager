@@ -369,7 +369,7 @@ func main() {
 	router.HandleFunc("/api/vs-league/weeks/{id:[0-9]+}/matchups", authMiddleware(requirePermission("manage_vs_points", saveVSLeagueMatchups))).Methods("POST")
 	router.HandleFunc("/api/vs-league/participation", authMiddleware(requirePermission("view_vs_points", getVSLeagueParticipation))).Methods("GET")
 	router.HandleFunc("/api/vs-league/opponent-lookup", authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentLookup))).Methods("POST")
-	router.HandleFunc("/api/external-alliances", authMiddleware(requirePermission("manage_vs_points", getExternalAlliances))).Methods("GET")
+	router.HandleFunc("/api/external-alliances", authMiddleware(getExternalAlliancesGated)).Methods("GET")
 
 	// LastRank.fun enrichment (manual trigger; client-side rate-limited globally)
 	router.HandleFunc("/api/lastrank/preview", authMiddleware(requirePermission("manage_members", lastRankPreview))).Methods("POST")
@@ -527,6 +527,7 @@ func main() {
 		"/train":           "train",
 		"/recruiting":      "recruiting",
 		"/allies":          "allies",
+		"/external-alliances": "external-alliances",
 		"/activity":        "activity",
 		"/season-hub":      "season-hub",
 		"/comms":           "comms",
@@ -556,6 +557,7 @@ func main() {
 				"train":           data.Permissions.ViewTrain,
 				"recruiting":      data.Permissions.ViewRecruiting,
 				"allies":          data.Permissions.ViewAllies,
+				"external-alliances": data.Permissions.ViewAllies,
 				"activity":        data.Permissions.ViewActivity || data.IsAdmin,
 				"accountability":  data.Permissions.ViewAccountability,
 				"season-hub":      data.Permissions.ViewSeasonHub,

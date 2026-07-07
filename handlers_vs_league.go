@@ -1052,14 +1052,20 @@ func cacheExternalAlliance(snap VSLeagueOpponentSnapshot) {
 // getExternalAlliances returns the cached opposing alliances (optionally filtered by ?tag=),
 // most-recently-updated first — used to prefill the opponent fields by tag.
 func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
-	q := `SELECT id, lastrank_id, tag, name, server, power, kills, member_count, lastrank_seen_at, updated_at
-		FROM external_alliances`
+	q := `SELECT ea.id, ea.lastrank_id, ea.tag, ea.name, ea.server, ea.power, ea.kills,
+		ea.member_count, ea.lastrank_seen_at, ea.updated_at,
+		EXISTS(SELECT 1 FROM allies al WHERE al.external_alliance_id = ea.id) AS is_ally,
+		(SELECT COUNT(*) FROM prospects pr WHERE pr.source_alliance_id = ea.id) AS prospect_count,
+		EXISTS(SELECT 1 FROM vs_league_weeks w
+			WHERE (ea.tag IS NOT NULL AND w.opponent_tag = ea.tag COLLATE NOCASE)
+			   OR (ea.lastrank_id IS NOT NULL AND w.opponent_lastrank_id = ea.lastrank_id)) AS is_opponent
+		FROM external_alliances ea`
 	var args []any
 	if tag := strings.TrimSpace(r.URL.Query().Get("tag")); tag != "" {
-		q += ` WHERE tag = ?`
+		q += ` WHERE ea.tag = ?`
 		args = append(args, tag)
 	}
-	q += ` ORDER BY updated_at DESC`
+	q += ` ORDER BY ea.updated_at DESC`
 	rows, err := db.Query(q, args...)
 	if err != nil {
 		dbError(w, "getExternalAlliances", err)
@@ -1070,11 +1076,31 @@ func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var a ExternalAlliance
 		if err := rows.Scan(&a.ID, &a.LastRankID, &a.Tag, &a.Name, &a.Server, &a.Power,
-			&a.Kills, &a.MemberCount, &a.LastSeenAt, &a.UpdatedAt); err != nil {
+			&a.Kills, &a.MemberCount, &a.LastSeenAt, &a.UpdatedAt,
+			&a.IsAlly, &a.ProspectCount, &a.IsOpponent); err != nil {
 			dbError(w, "getExternalAlliances scan", err)
 			return
 		}
 		list = append(list, a)
 	}
 	writeJSON(w, list)
+}
+
+// canViewExternalAlliances gates the registry endpoint: any officer who deals with outside
+// alliances (allies / VS League / recruiting) may read it.
+func canViewExternalAlliances(user *AuthUser) bool {
+	for _, key := range []string{"view_allies", "view_vs_points", "manage_vs_points", "view_recruiting"} {
+		if userHasPermission(user, key) {
+			return true
+		}
+	}
+	return false
+}
+
+func getExternalAlliancesGated(w http.ResponseWriter, r *http.Request) {
+	if !canViewExternalAlliances(getAuthUser(r)) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	getExternalAlliances(w, r)
 }

@@ -1,0 +1,46 @@
+{{define "header_text"}}
+    <h1>
+        <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-world"/></svg>
+        External Alliances
+    </h1>
+    <h2>Known outside alliances &mdash; allies, VS opponents &amp; prospect sources</h2>
+{{end}}
+
+{{define "head_tags"}}
+    <link rel="stylesheet" href="/external-alliances.css">
+{{end}}
+
+{{define "content"}}
+<div id="ext-alliances-page">
+    <div class="tab-toolbar">
+        <input type="text" id="ext-search" class="form-input" placeholder="Search tag or name…">
+        <span class="status-msg" id="ext-count"></span>
+    </div>
+
+    <div class="card">
+        <div class="table-scroll">
+            <table class="data-table" id="ext-table" data-export-csv="external-alliances.csv">
+                <thead>
+                    <tr>
+                        <th data-sort="tag" class="sort-asc">Tag</th>
+                        <th data-sort="name">Name</th>
+                        <th data-sort="server">Server</th>
+                        <th data-sort="power">Power</th>
+                        <th data-sort="kills">Kills</th>
+                        <th data-sort="members">Members</th>
+                        <th>Relationship</th>
+                        <th data-sort="updated">Last updated</th>
+                    </tr>
+                </thead>
+                <tbody id="ext-tbody">
+                    <tr><td colspan="8" style="text-align:center;padding:20px;">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script src="/external-alliances.js"></script>
+{{end}}

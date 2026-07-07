@@ -582,6 +582,10 @@ type ExternalAlliance struct {
 	MemberCount *int    `json:"member_count,omitempty"`
 	LastSeenAt  *string `json:"lastrank_seen_at,omitempty"`
 	UpdatedAt   string  `json:"updated_at"`
+	// Relationship flags (computed for the External Alliances registry page).
+	IsAlly        bool `json:"is_ally"`
+	ProspectCount int  `json:"prospect_count"`
+	IsOpponent    bool `json:"is_opponent"`
 }
 
 type RankPermissions struct {
