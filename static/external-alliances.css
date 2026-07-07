@@ -8,6 +8,7 @@
     padding: 2px 8px; border-radius: 20px;
 }
 .ext-badge.ally     { color: var(--color-success); background: var(--color-success-bg); }
+.ext-badge.former   { color: var(--color-text-muted); background: var(--color-bg); border: 1px solid var(--color-border); }
 .ext-badge.opponent { color: var(--color-danger);  background: var(--color-danger-bg); }
 .ext-badge.prospect { color: var(--color-info);     background: var(--color-info-bg); }
 .ext-badge.none     { color: var(--color-text-muted); }

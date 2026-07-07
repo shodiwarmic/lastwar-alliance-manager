@@ -47,7 +47,8 @@
 
     function relBadges(a) {
         const wrap = el('span', { className: 'ext-rel' });
-        if (a.is_ally) wrap.appendChild(el('span', { className: 'ext-badge ally', text: 'Ally' }));
+        if (a.ally_status === 'active') wrap.appendChild(el('span', { className: 'ext-badge ally', text: 'Ally' }));
+        else if (a.ally_status === 'former') wrap.appendChild(el('span', { className: 'ext-badge former', text: 'Former ally' }));
         if (a.is_opponent) {
             const decided = a.vs_wins + a.vs_losses + a.vs_ties;
             const rec = decided ? ('VS ' + a.vs_wins + '–' + a.vs_losses + (a.vs_ties ? '–' + a.vs_ties : '')) : 'VS pending';

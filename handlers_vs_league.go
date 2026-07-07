@@ -1054,7 +1054,11 @@ func cacheExternalAlliance(snap VSLeagueOpponentSnapshot) {
 func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
 	q := `SELECT ea.id, ea.lastrank_id, ea.tag, ea.name, ea.server, ea.power, ea.kills,
 		ea.member_count, ea.lastrank_seen_at, ea.updated_at,
-		EXISTS(SELECT 1 FROM allies al WHERE al.external_alliance_id = ea.id) AS is_ally,
+		CASE
+			WHEN EXISTS(SELECT 1 FROM allies al WHERE al.external_alliance_id = ea.id AND al.active = 1) THEN 'active'
+			WHEN EXISTS(SELECT 1 FROM allies al WHERE al.external_alliance_id = ea.id) THEN 'former'
+			ELSE 'never'
+		END AS ally_status,
 		(SELECT COUNT(*) FROM prospects pr WHERE pr.source_alliance_id = ea.id) AS prospect_count
 		FROM external_alliances ea`
 	var args []any
@@ -1074,7 +1078,7 @@ func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
 		var a ExternalAlliance
 		if err := rows.Scan(&a.ID, &a.LastRankID, &a.Tag, &a.Name, &a.Server, &a.Power,
 			&a.Kills, &a.MemberCount, &a.LastSeenAt, &a.UpdatedAt,
-			&a.IsAlly, &a.ProspectCount); err != nil {
+			&a.AllyStatus, &a.ProspectCount); err != nil {
 			dbError(w, "getExternalAlliances scan", err)
 			return
 		}
