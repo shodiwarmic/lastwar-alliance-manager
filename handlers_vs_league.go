@@ -1024,6 +1024,33 @@ func vsLeagueOpponentLookup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, snap)
 }
 
+// vsLeagueOpponentRoster returns the opponent alliance's member names (+ power) from LastRank, for
+// the daily-MVP picker. One LastRank GET per call; the client caches the result for the modal.
+func vsLeagueOpponentRoster(w http.ResponseWriter, r *http.Request) {
+	idOrURL := strings.TrimSpace(r.URL.Query().Get("lastrank_id"))
+	if idOrURL == "" {
+		badRequest(w, "lastrank_id is required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	roster, err := fetchLastRankOpponentRoster(ctx, idOrURL)
+	if err != nil {
+		if errors.Is(err, errLastRankBadInput) {
+			badRequest(w, "That doesn't look like a lastrank.fun alliance id")
+			return
+		}
+		slogLastRank("vs-league opponent roster failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, roster)
+}
+
 // cacheExternalAlliance upserts a looked-up alliance into the persistent cache. Identity is our
 // internal id; we dedup by tag (globally unique at a moment), else by name, so a manual entry and
 // a later LastRank lookup collapse into one row instead of duplicating — and lastrank_id is stored

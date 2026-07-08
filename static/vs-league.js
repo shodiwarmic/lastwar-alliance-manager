@@ -652,6 +652,52 @@
         const byDay = {}; (wk.days || []).forEach(d => byDay[d.day_number] = d);
         const rows = [];
         const body = [el('p', { className: 'vsl-help', text: 'Enter both raw Alliance Duel Scores and the winner is set automatically; otherwise pick the winner manually. Empty days stay pending.' })];
+
+        // Daily MVP: search our roster + (if the opponent's LastRank alliance is known) their roster,
+        // or type any raw name. We store only the name; the side toggle just sets mvp_is_ours.
+        let ourRoster = [];
+        api('GET', '/api/members').then(list => { ourRoster = (list || []).filter(m => m.rank !== 'EX'); }).catch(() => { });
+        let oppRoster = null; // null = not fetched / unavailable; [] = fetched (possibly empty)
+        if (wk.opponent_lastrank_id) {
+            api('GET', '/api/vs-league/opponent-roster?lastrank_id=' + encodeURIComponent(wk.opponent_lastrank_id))
+                .then(list => { oppRoster = list || []; }).catch(() => { oppRoster = []; });
+        }
+        const oppLabel = (wk.opponent_tag ? '[' + wk.opponent_tag + '] ' : 'Opponent ') + 'roster';
+
+        function mvpField(d) {
+            const side = sel([['ours', 'Ours'], ['opp', 'Opp']], d.mvp_is_ours === false ? 'opp' : 'ours');
+            side.className = 'form-input vsl-mvp-side';
+            const input = inp('text', d.mvp_name || '', 'MVP name — search or type');
+            const dd = el('div', { className: 'vsl-find-dropdown vsl-mvp-dd', hidden: 'hidden' });
+            const wrap = el('div', { className: 'vsl-mvp-wrap' }, side, input, dd);
+            const onDocDown = e => { if (!wrap.contains(e.target)) close(); };
+            function open() { dd.hidden = false; document.addEventListener('mousedown', onDocDown); }
+            function close() { dd.hidden = true; document.removeEventListener('mousedown', onDocDown); }
+            const pick = (nm, isOurs) => { input.value = nm; side.value = isOurs ? 'ours' : 'opp'; close(); };
+            const item = (nm, meta, isOurs) => el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick(nm, isOurs) },
+                el('span', { className: 'vsl-find-name', text: nm }),
+                meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
+            function render() {
+                const q = input.value.trim().toLowerCase();
+                clear(dd);
+                if (!q) { close(); return; }
+                ourRoster.filter(m => (m.name || '').toLowerCase().includes(q)).slice(0, 6).forEach((m, i, arr) => {
+                    if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'Our roster' }));
+                    dd.appendChild(item(m.name, m.rank || '', true));
+                });
+                (oppRoster || []).filter(m => (m.name || '').toLowerCase().includes(q)).slice(0, 6).forEach((m, i) => {
+                    if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: oppLabel }));
+                    dd.appendChild(item(m.name, m.power != null ? fmtBig(m.power) + ' pw' : '', false));
+                });
+                if (!dd.childNodes.length) { close(); return; }
+                open();
+            }
+            input.addEventListener('input', render);
+            input.addEventListener('focus', render);
+            input.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+            return { wrap, input, side };
+        }
+
         // When both raw scores are present the outcome is determined — set it and lock the picker
         // (the server derives the same value on save). Manual selection stays for score-less days.
         const syncOutcome = r => {
@@ -671,21 +717,21 @@
             const oc = sel([['pending', '—'], ['win', 'Win'], ['loss', 'Loss'], ['tie', 'Tie']], d.outcome || 'pending');
             const our = inp('number', d.our_score != null ? d.our_score : '', 'our raw');
             const opp = inp('number', d.opponent_score != null ? d.opponent_score : '', 'opp raw');
-            const mvp = inp('text', d.mvp_name || '', 'MVP (ours)');
-            const r = { n, oc, our, opp, mvp };
+            const mvpF = mvpField(d);
+            const r = { n, oc, our, opp, mvpInput: mvpF.input, side: mvpF.side };
             rows.push(r);
             our.addEventListener('input', () => syncOutcome(r));
             opp.addEventListener('input', () => syncOutcome(r));
             syncOutcome(r);
             body.push(el('div', { className: 'vsl-day-entry' },
                 el('div', { text: n + '. ' + (theme ? theme.short : '') + ' (' + vsLeagueDayPts(n) + 'pt)' }), oc, our, opp));
-            body.push(el('div', { style: 'margin:-2px 0 8px 0;' }, field('MVP day ' + n, mvp)));
+            body.push(el('div', { style: 'margin:-2px 0 8px 0;' }, field('MVP day ' + n, mvpF.wrap)));
         }
         modal('Daily results — Week ' + (wk.week_number || ''), body, async () => {
             const days = rows.map(r => ({
                 day_number: r.n, outcome: r.oc.value,
                 our_score: numOrNull(r.our.value), opponent_score: numOrNull(r.opp.value),
-                mvp_name: strOrNull(r.mvp.value), mvp_is_ours: true
+                mvp_name: strOrNull(r.mvpInput.value), mvp_is_ours: r.side.value === 'ours'
             }));
             await api('POST', '/api/vs-league/weeks/' + wk.id + '/days', { days });
             await selectSeason(state.seasonId);

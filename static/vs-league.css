@@ -126,3 +126,9 @@
     cursor: pointer; text-align: left; color: var(--color-accent); font-weight: 600;
 }
 .vsl-find-action:hover { background: var(--bg-secondary); }
+
+/* Daily-MVP combobox (our roster + opponent LastRank roster + free text) */
+.vsl-mvp-wrap { position: relative; display: flex; gap: 6px; align-items: center; }
+.vsl-mvp-side { flex: 0 0 auto; width: auto; min-width: 74px; }
+.vsl-mvp-wrap input[type="text"] { flex: 1; min-width: 0; }
+.vsl-mvp-dd { top: calc(100% + 4px); left: 0; right: 0; }

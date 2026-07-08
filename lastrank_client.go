@@ -359,6 +359,26 @@ func fetchLastRankOpponentSnapshot(ctx context.Context, idOrURL string) (VSLeagu
 	}, nil
 }
 
+// fetchLastRankOpponentRoster resolves a pasted URL/id to the opponent alliance's member list
+// (names + power) for the daily-MVP picker. Same strict parse + shared limiter as the snapshot;
+// the caller owns a bounded context and holds no DB handle across the call.
+func fetchLastRankOpponentRoster(ctx context.Context, idOrURL string) ([]VSLeagueOpponentMember, error) {
+	id, ok := parseLastRankAllianceStrict(idOrURL)
+	if !ok {
+		return nil, errLastRankBadInput
+	}
+	a, err := fetchLastRankAlliance(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]VSLeagueOpponentMember, 0, len(a.Members))
+	for _, m := range a.Members {
+		pw := m.Power
+		out = append(out, VSLeagueOpponentMember{Name: m.Name, Power: &pw, AllianceRank: m.AllianceRank})
+	}
+	return out, nil
+}
+
 var errLastRankBadInput = errors.New("could not parse a LastRank alliance id/URL")
 
 // --- Time / staleness ---

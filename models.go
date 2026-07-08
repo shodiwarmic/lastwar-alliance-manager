@@ -580,6 +580,14 @@ type VSLeagueAllianceSearchResult struct {
 	Kills      *int64  `json:"kills"`
 }
 
+// VSLeagueOpponentMember is one member of the opponent alliance from LastRank, for the daily-MVP
+// picker. We persist only the name (as mvp_name); power/rank are display hints in the dropdown.
+type VSLeagueOpponentMember struct {
+	Name         string `json:"name"`
+	Power        *int64 `json:"power,omitempty"`
+	AllianceRank *int   `json:"alliance_rank,omitempty"`
+}
+
 // ExternalAlliance is a cached outside alliance seen via LastRank (populated on every lookup)
 // so it can be re-entered by tag without another lookup. Not VS-specific — allies/recruiting
 // can use it too. Tag is not unique (changeable).
