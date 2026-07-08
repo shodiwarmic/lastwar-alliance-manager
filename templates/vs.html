@@ -122,6 +122,8 @@
 {{define "scripts"}}
 <div id="page-config"
     data-can-manage="{{if .Permissions.ManageVSPoints}}true{{else}}false{{end}}"
+    data-alliance-tag="{{.AllianceTag}}"
+    data-alliance-name="{{.AllianceName}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <script src="vs.js"></script>

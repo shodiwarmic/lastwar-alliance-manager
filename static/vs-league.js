@@ -6,6 +6,8 @@
 (function () {
     const cfg = document.getElementById('page-config');
     const CAN_MANAGE = cfg && cfg.dataset.canManage === 'true';
+    const MY_TAG = (cfg && cfg.dataset.allianceTag || '').trim();
+    const MY_NAME = (cfg && cfg.dataset.allianceName || '').trim();
 
     // ---- tiny DOM builder (el() is not global; each hardened page carries its own — F-R10) ----
     function el(tag, props, ...children) {
@@ -738,23 +740,135 @@
         }, 'Save days');
     }
 
-    function openBracketModal(wk) {
-        const rows = [];
-        const body = [el('p', { className: 'vsl-help', text: 'Enter the weekly Match Record (up to 8 pairings). Check “ours” on your matchup.' })];
-        for (let i = 1; i <= 8; i++) {
-            const aR = inp('number', '', '#'); const aT = inp('text', '', 'tag'); const aP = inp('number', '', 'pts');
-            const bR = inp('number', '', '#'); const bT = inp('text', '', 'tag'); const bP = inp('number', '', 'pts');
-            const ours = el('input', { type: 'checkbox' });
-            rows.push({ i, aR, aT, aP, bR, bT, bP, ours });
-            body.push(el('div', { style: 'display:grid;grid-template-columns:20px repeat(6,1fr) 44px;gap:5px;align-items:center;margin-bottom:4px;' },
-                el('span', { className: 'vsl-help', text: i }), aR, aT, aP, bR, bT, bP,
-                el('label', { className: 'vsl-help', style: 'display:flex;gap:3px;align-items:center;' }, ours, 'ours')));
+    async function openBracketModal(wk) {
+        const MY_RANK = wk.league_rank != null ? Number(wk.league_rank) : null;
+
+        // The 16 alliances + their ranks are constant all season, so learn rank↔tag/name from any
+        // captured week (prior weeks, or this week if re-capturing) plus our own known alliance.
+        const rankInfo = new Map();  // rank → { tag, name }
+        const tagRank = new Map();   // tag(lowercase) → rank
+        const learn = (rk, tg, nm) => {
+            if (rk == null || !tg) return;
+            const r = Number(rk);
+            if (!rankInfo.has(r)) rankInfo.set(r, { tag: tg, name: nm || '' });
+            tagRank.set(String(tg).toLowerCase(), r);
+        };
+        if (MY_RANK != null && MY_TAG) learn(MY_RANK, MY_TAG, MY_NAME);
+
+        const priorWeeks = state.weeks
+            .filter(w => w.week_number != null && wk.week_number != null && w.week_number < wk.week_number)
+            .sort((a, b) => a.week_number - b.week_number);
+        const fetchMs = id => api('GET', '/api/vs-league/weeks/' + id + '/matchups').catch(() => []);
+        const [thisMs, ...priorMsArr] = await Promise.all([fetchMs(wk.id), ...priorWeeks.map(w => fetchMs(w.id))]);
+        const allPrior = priorMsArr.map(x => x || []);
+        allPrior.concat([thisMs || []]).forEach(list => list.forEach(m => { learn(m.a_rank, m.a_tag, m.a_name); learn(m.b_rank, m.b_tag, m.b_name); }));
+
+        const tagOf = rk => (rankInfo.get(Number(rk)) || {}).tag || '';
+        const nameOf = rk => (rankInfo.get(Number(rk)) || {}).name || '';
+        const pad = arr => { while (arr.length < 8) arr.push({}); return arr.slice(0, 8); };
+
+        // Predict this week's pairings from the immediately-prior week (winners vs winners, losers
+        // vs losers, paired adjacently). Only when every prior pairing is decided (both points, no tie).
+        function predict(prev) {
+            if (!prev || !prev.length) return null;
+            const winners = [], losers = [];
+            for (const m of prev) {
+                if (m.a_points == null || m.b_points == null || m.a_points === m.b_points) return null;
+                const A = { rank: m.a_rank, tag: m.a_tag, name: m.a_name }, B = { rank: m.b_rank, tag: m.b_tag, name: m.b_name };
+                const aWon = m.a_points > m.b_points;
+                winners.push(aWon ? A : B); losers.push(aWon ? B : A);
+            }
+            const out = [];
+            const pairUp = arr => { for (let i = 0; i + 1 < arr.length; i += 2) out.push({ aRank: arr[i].rank, aTag: arr[i].tag, aName: arr[i].name, bRank: arr[i + 1].rank, bTag: arr[i + 1].tag, bName: arr[i + 1].name }); };
+            pairUp(winners); pairUp(losers);
+            return out.length ? pad(out) : null;
         }
+
+        let pairs, note;
+        if (thisMs && thisMs.length) {
+            pairs = pad(thisMs.slice().sort((a, b) => (a.match_index || 0) - (b.match_index || 0)).map(m => ({
+                aRank: m.a_rank, aTag: m.a_tag, aName: m.a_name, aPts: m.a_points,
+                bRank: m.b_rank, bTag: m.b_tag, bName: m.b_name, bPts: m.b_points
+            })));
+            note = 'Editing this week’s captured bracket.';
+        } else {
+            const predicted = predict(allPrior.length ? allPrior[allPrior.length - 1] : null);
+            if (predicted) {
+                pairs = predicted;
+                note = 'Pairings predicted from Week ' + priorWeeks[priorWeeks.length - 1].week_number + ' (winners vs winners, losers vs losers) — verify against the game and adjust, then enter this week’s points.';
+            } else {
+                pairs = [];
+                for (let i = 0; i < 8; i++) { const ar = 2 * i + 1, br = 2 * i + 2; pairs.push({ aRank: ar, aTag: tagOf(ar), aName: nameOf(ar), bRank: br, bTag: tagOf(br), bName: nameOf(br) }); }
+                note = priorWeeks.length
+                    ? 'Last week’s results are incomplete, so pairings couldn’t be predicted — assign them manually (tags auto-fill from rank).'
+                    : 'Week-1 pairings are rank-adjacent (1v2, 3v4 … 15v16). Ranks are pre-set — fill each alliance’s tag and match points.';
+            }
+        }
+
+        const rows = [];
+        const grid = el('div', { className: 'vsl-bracket-grid' });
+        function markOurs() {
+            let assigned = false;
+            rows.forEach(r => {
+                const mine = !assigned && MY_RANK != null && (Number(r.aRank.value) === MY_RANK || Number(r.bRank.value) === MY_RANK);
+                if (mine) assigned = true;
+                r.card.classList.toggle('ours', mine);
+                r.badge.textContent = mine ? '★ ours' : '';
+            });
+        }
+        pairs.forEach((p, idx) => {
+            const aRank = inp('number', p.aRank != null ? p.aRank : '', '#'); aRank.className = 'form-input vsl-rk';
+            const bRank = inp('number', p.bRank != null ? p.bRank : '', '#'); bRank.className = 'form-input vsl-rk';
+            const aTag = inp('text', p.aTag || '', 'tag');
+            const bTag = inp('text', p.bTag || '', 'tag');
+            const aPts = inp('number', p.aPts != null ? p.aPts : '', 'pts'); aPts.className = 'form-input vsl-pts';
+            const bPts = inp('number', p.bPts != null ? p.bPts : '', 'pts'); bPts.className = 'form-input vsl-pts';
+            const badge = el('span', { className: 'vsl-pair-badge' });
+            const r = { aRank, aTag, aPts, bRank, bTag, bPts, aName: p.aName || '', bName: p.bName || '', badge };
+            rows.push(r);
+            const link = (rankEl, tagEl, which) => {
+                rankEl.addEventListener('input', () => {
+                    const info = rankInfo.get(Number(rankEl.value));
+                    if (info) { tagEl.value = info.tag; r[which + 'Name'] = info.name; }
+                    markOurs();
+                });
+                tagEl.addEventListener('input', () => {
+                    const rk = tagRank.get(tagEl.value.trim().toLowerCase());
+                    if (rk != null && !rankEl.value) rankEl.value = rk;
+                    r[which + 'Name'] = (rankInfo.get(Number(rankEl.value)) || {}).name || '';
+                    markOurs();
+                });
+            };
+            link(aRank, aTag, 'a'); link(bRank, bTag, 'b');
+            const side = (rankEl, tagEl, ptsEl) => el('div', { className: 'vsl-pair-side' },
+                el('span', { className: 'vsl-rkhash', text: '#' }), rankEl, tagEl, ptsEl);
+            const card = el('div', { className: 'vsl-pair-card' },
+                el('div', { className: 'vsl-pair-hd' }, el('span', { text: 'Pairing ' + (idx + 1) }), badge),
+                side(aRank, aTag, aPts),
+                el('div', { className: 'vsl-pair-vs', text: 'vs' }),
+                side(bRank, bTag, bPts));
+            r.card = card;
+            grid.appendChild(card);
+        });
+        markOurs();
+
+        const body = [el('p', { className: 'vsl-help', text: note }), grid];
         modal('Capture bracket — Week ' + (wk.week_number || ''), body, async () => {
-            const matchups = rows.filter(r => r.aT.value.trim() || r.bT.value.trim()).map(r => ({
-                match_index: r.i, a_rank: numOrNull(r.aR.value), a_tag: strOrNull(r.aT.value), a_points: numOrNull(r.aP.value),
-                b_rank: numOrNull(r.bR.value), b_tag: strOrNull(r.bT.value), b_points: numOrNull(r.bP.value), is_ours: r.ours.checked
-            }));
+            let oursAssigned = false;
+            const matchups = rows
+                .map((r, i) => ({ i, r }))
+                .filter(({ r }) => r.aTag.value.trim() || r.bTag.value.trim() || r.aRank.value || r.bRank.value)
+                .map(({ i, r }) => {
+                    const aRankN = numOrNull(r.aRank.value), bRankN = numOrNull(r.bRank.value);
+                    const mine = !oursAssigned && MY_RANK != null && (aRankN === MY_RANK || bRankN === MY_RANK);
+                    if (mine) oursAssigned = true;
+                    return {
+                        match_index: i + 1,
+                        a_rank: aRankN, a_tag: strOrNull(r.aTag.value), a_name: strOrNull(r.aName), a_points: numOrNull(r.aPts.value),
+                        b_rank: bRankN, b_tag: strOrNull(r.bTag.value), b_name: strOrNull(r.bName), b_points: numOrNull(r.bPts.value),
+                        is_ours: mine
+                    };
+                });
             await api('POST', '/api/vs-league/weeks/' + wk.id + '/matchups', { matchups });
             await selectSeason(state.seasonId);
         }, 'Save bracket');
