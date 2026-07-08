@@ -120,7 +120,8 @@
         bar.appendChild(el('span', { className: 'sep' }));
         if (CAN_MANAGE) {
             bar.appendChild(el('button', { className: 'btn btn-secondary btn-sm', onclick: openSeasonModal }, 'New Season'));
-            bar.appendChild(el('button', { className: 'btn btn-primary btn-sm', onclick: () => openWeekModal(null) }, '+ Week'));
+            // Seasons are always 4 weeks; hide "+ Week" once all four exist.
+            if (state.weeks.length < 4) bar.appendChild(el('button', { className: 'btn btn-primary btn-sm', onclick: () => openWeekModal(null) }, '+ Week'));
         }
         return bar;
     }
@@ -224,7 +225,9 @@
             let txt = st.outcome === 'win' ? 'Clinched the week' : st.outcome === 'loss' ? 'Eliminated' : 'Weekly tie';
             if (st.clinch_day) {
                 const theme = getVSTheme(dayDateStr(wk.week_date, st.clinch_day - 1));
-                txt += ' — ' + (st.clinch_day === 6 ? 'went to Day 6 (Enemy Buster)' : 'clinched Day ' + st.clinch_day + (theme ? ' (' + theme.short + ')' : ''));
+                // "clinched" only fits a win; use a neutral verb for a loss/tie decided early.
+                const verb = st.outcome === 'win' ? 'clinched' : 'decided';
+                txt += ' — ' + (st.clinch_day === 6 ? 'went to Day 6 (Enemy Buster)' : verb + ' on Day ' + st.clinch_day + (theme ? ' (' + theme.short + ')' : ''));
             }
             return el('span', { text: txt });
         }
@@ -492,10 +495,17 @@
     }
 
     function openWeekModal(wk) {
-        const weekNo = inp('number', wk ? wk.week_number : '', '1–4');
-        const weekDate = inp('date', wk ? wk.week_date : (state.currentWeekDate || todayISO()));
-        const rank = inp('number', wk ? wk.league_rank : '', '1–16');
-        const tier = inp('text', wk ? wk.league_tier : '', 'tier this week');
+        // Week number + date are derived (seasons are 4 consecutive game-time-Monday weeks); tier
+        // and our rank aren't asked for — tier is the season's, our rank is set from the bracket.
+        const derived = (() => {
+            if (wk) return { num: wk.week_number, date: wk.week_date };
+            const nums = state.weeks.map(w => w.week_number || 0);
+            const num = (nums.length ? Math.max(...nums) : 0) + 1;
+            const startISO = (state.season && state.season.start_date) || todayISO();
+            const d = new Date(startISO + 'T00:00:00Z');
+            if (!isNaN(d)) d.setUTCDate(d.getUTCDate() + (num - 1) * 7);
+            return { num, date: isNaN(d) ? startISO : d.toISOString().slice(0, 10) };
+        })();
         const stratLabel = sel([['', '—'], ['push', 'Push'], ['save', 'Save'], ['normal', 'Normal'], ['test', 'Test'], ['recovery', 'Recovery']], wk && wk.strategy_label || '');
         const stratResult = sel([['', '—'], ['worked', 'Worked'], ['failed', 'Failed'], ['mixed', 'Mixed']], wk && wk.strategy_result || '');
         const notes = el('textarea', { className: 'form-input', rows: '2', placeholder: 'leadership context…' }); if (wk && wk.notes) notes.value = wk.notes;
@@ -628,8 +638,7 @@
         });
 
         modal(wk ? 'Edit matchup' : 'New week', [
-            el('div', { className: 'vsl-form-grid' },
-                field('Week #', weekNo), field('Week date (Mon)', weekDate), field('Our rank', rank), field('Tier', tier)),
+            el('p', { className: 'vsl-help', text: 'Week ' + derived.num + ' · ' + derived.date + ' (Mon)' + ((state.season && state.season.league_tier) ? ' · ' + state.season.league_tier : '') }),
             oppGrid,
             el('span', { className: 'vsl-help', text: 'Type an opponent tag or name to search your registry; enter the server to look up on LastRank.' }),
             field('Opponent LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, lrInput, lookupBtn)),
@@ -638,8 +647,7 @@
             field('Notes', notes)
         ], async () => {
             const payload = {
-                season_id: state.seasonId, week_number: numOrNull(weekNo.value), week_date: weekDate.value,
-                league_rank: numOrNull(rank.value), league_tier: strOrNull(tier.value),
+                season_id: state.seasonId, week_number: derived.num, week_date: derived.date,
                 opponent_tag: strOrNull(oppTag.value), opponent_name: strOrNull(oppName.value), opponent_server: numOrNull(oppServer.value),
                 strategy_label: strOrNull(stratLabel.value), strategy_result: strOrNull(stratResult.value), notes: strOrNull(notes.value)
             };
@@ -945,6 +953,15 @@
                 });
             }
             await api('POST', '/api/vs-league/weeks/' + wk.id + '/matchups', { matchups });
+            // Derive our rank from the captured bracket (our slot's rank) and backfill the week.
+            const ourMatch = matchups.find(m => m.is_ours);
+            if (ourMatch) {
+                const myTagL = (MY_TAG || '').toLowerCase();
+                const myRank = (ourMatch.a_tag || '').toLowerCase() === myTagL ? ourMatch.a_rank
+                    : (ourMatch.b_tag || '').toLowerCase() === myTagL ? ourMatch.b_rank
+                        : ourMatch.a_rank === MY_RANK ? ourMatch.a_rank : ourMatch.b_rank;
+                if (myRank != null && myRank !== wk.league_rank) await api('PUT', '/api/vs-league/weeks/' + wk.id, { league_rank: myRank }).catch(() => { });
+            }
             await selectSeason(state.seasonId);
         }, 'Save bracket');
     }
