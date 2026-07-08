@@ -281,7 +281,7 @@
         const localMatches = q => (q && fuseInstance)
             ? fuseInstance.search(q).map(r => r.item).filter(x => x.id !== a.id).slice(0, 6) : [];
 
-        function renderResults(localList, lrList, msg) {
+        function renderResults(localList, lrList, msg, isError) {
             results.replaceChildren();
             if (localList && localList.length) {
                 results.appendChild(el('div', { className: 'ext-find-head', text: 'Already in your registry' }));
@@ -294,7 +294,7 @@
                         meta ? el('span', { className: 'ext-find-meta', text: meta }) : null));
                 });
             }
-            if (msg) results.appendChild(el('div', { className: 'ext-find-msg', text: msg }));
+            if (msg) results.appendChild(el('div', { className: isError ? 'ext-find-msg ext-find-err' : 'ext-find-msg', text: msg }));
             if (lrList && lrList.length) {
                 results.appendChild(el('div', { className: 'ext-find-head', text: 'From LastRank' }));
                 lrList.forEach(r => {
@@ -326,8 +326,8 @@
         lrSearchBtn.addEventListener('click', async () => {
             const q = tag.value.trim() || name.value.trim();
             const srv = server.value.trim();
-            if (!q) { note.textContent = 'Type a tag or name first.'; return; }
-            if (!srv) { note.textContent = "Enter the alliance's server # — LastRank search matches it strictly."; return; }
+            if (!q) { renderResults(null, null, 'Type a tag or name to search.', true); tag.focus(); return; }
+            if (!srv) { renderResults(null, null, "Enter the alliance's server number — LastRank search matches it strictly.", true); server.focus(); return; }
             lrSearchBtn.disabled = true;
             note.textContent = '';
             renderResults(localMatches(q).slice(0, 4), null, 'Searching LastRank…');
