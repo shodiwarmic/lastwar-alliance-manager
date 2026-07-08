@@ -743,132 +743,186 @@
     async function openBracketModal(wk) {
         const MY_RANK = wk.league_rank != null ? Number(wk.league_rank) : null;
 
-        // The 16 alliances + their ranks are constant all season, so learn rank↔tag/name from any
-        // captured week (prior weeks, or this week if re-capturing) plus our own known alliance.
-        const rankInfo = new Map();  // rank → { tag, name }
-        const tagRank = new Map();   // tag(lowercase) → rank
-        const learn = (rk, tg, nm) => {
-            if (rk == null || !tg) return;
-            const r = Number(rk);
-            if (!rankInfo.has(r)) rankInfo.set(r, { tag: tg, name: nm || '' });
-            tagRank.set(String(tg).toLowerCase(), r);
-        };
-        if (MY_RANK != null && MY_TAG) learn(MY_RANK, MY_TAG, MY_NAME);
-
+        const fetchMs = id => api('GET', '/api/vs-league/weeks/' + id + '/matchups').catch(() => []);
         const priorWeeks = state.weeks
             .filter(w => w.week_number != null && wk.week_number != null && w.week_number < wk.week_number)
             .sort((a, b) => a.week_number - b.week_number);
-        const fetchMs = id => api('GET', '/api/vs-league/weeks/' + id + '/matchups').catch(() => []);
-        const [thisMs, ...priorMsArr] = await Promise.all([fetchMs(wk.id), ...priorWeeks.map(w => fetchMs(w.id))]);
-        const allPrior = priorMsArr.map(x => x || []);
-        allPrior.concat([thisMs || []]).forEach(list => list.forEach(m => { learn(m.a_rank, m.a_tag, m.a_name); learn(m.b_rank, m.b_tag, m.b_name); }));
+        const [thisMs, priorMs, known] = await Promise.all([
+            fetchMs(wk.id),
+            Promise.all(priorWeeks.map(w => fetchMs(w.id))),
+            api('GET', '/api/external-alliances').catch(() => [])
+        ]);
+        const knownAlliances = known || [];
 
-        const tagOf = rk => (rankInfo.get(Number(rk)) || {}).tag || '';
-        const nameOf = rk => (rankInfo.get(Number(rk)) || {}).name || '';
-        const pad = arr => { while (arr.length < 8) arr.push({}); return arr.slice(0, 8); };
+        // Learn each alliance (by tag) → { name, server }, its week-1 starting rank, and its W/L per
+        // prior week. Ranking recomputes each week: most wins → earliest wins → starting rank; the
+        // matchups are then always rank-adjacent (1v2, 3v4 …).
+        const info = new Map();       // tagLower → { tag, name, server }
+        const startRank = new Map();  // tagLower → starting (week-1) rank
+        const weekRes = [];           // per prior week: Map(tagLower → 'W'|'L'|'T')
+        const remember = s => {
+            if (!s.tag) return null;
+            const k = s.tag.toLowerCase();
+            if (!info.has(k)) info.set(k, { tag: s.tag, name: s.name || '', server: s.server != null ? s.server : null });
+            const rec = info.get(k);
+            if (s.name) rec.name = s.name;
+            if (s.server != null) rec.server = s.server;
+            return k;
+        };
+        priorWeeks.forEach((w, wi) => {
+            const res = new Map();
+            (priorMs[wi] || []).forEach(m => {
+                const A = { tag: m.a_tag, name: m.a_name, server: m.a_server, rank: m.a_rank, pts: m.a_points };
+                const B = { tag: m.b_tag, name: m.b_name, server: m.b_server, rank: m.b_rank, pts: m.b_points };
+                const ka = remember(A), kb = remember(B);
+                if (w.week_number === 1) { if (ka && A.rank != null) startRank.set(ka, A.rank); if (kb && B.rank != null) startRank.set(kb, B.rank); }
+                if (A.pts != null && B.pts != null && ka && kb) { const d = A.pts - B.pts; res.set(ka, d > 0 ? 'W' : d < 0 ? 'L' : 'T'); res.set(kb, d < 0 ? 'W' : d > 0 ? 'L' : 'T'); }
+            });
+            weekRes.push(res);
+        });
+        if (MY_TAG) remember({ tag: MY_TAG, name: MY_NAME, server: null });
 
-        // Predict this week's pairings from the immediately-prior week (winners vs winners, losers
-        // vs losers, paired adjacently). Only when every prior pairing is decided (both points, no tie).
-        function predict(prev) {
-            if (!prev || !prev.length) return null;
-            const winners = [], losers = [];
-            for (const m of prev) {
-                if (m.a_points == null || m.b_points == null || m.a_points === m.b_points) return null;
-                const A = { rank: m.a_rank, tag: m.a_tag, name: m.a_name }, B = { rank: m.b_rank, tag: m.b_tag, name: m.b_name };
-                const aWon = m.a_points > m.b_points;
-                winners.push(aWon ? A : B); losers.push(aWon ? B : A);
-            }
-            const out = [];
-            const pairUp = arr => { for (let i = 0; i + 1 < arr.length; i += 2) out.push({ aRank: arr[i].rank, aTag: arr[i].tag, aName: arr[i].name, bRank: arr[i + 1].rank, bTag: arr[i + 1].tag, bName: arr[i + 1].name }); };
-            pairUp(winners); pairUp(losers);
-            return out.length ? pad(out) : null;
+        // Compute this week's rank order from prior results (only if week 1 is captured and every
+        // prior pairing is decided). Sort: wins desc, then earliest-win, then starting rank.
+        function computeRanks() {
+            const keys = [...startRank.keys()];
+            if (keys.length < 2) return null;
+            for (const res of weekRes) for (const k of keys) { const v = res.get(k); if (v == null || v === 'T') return null; }
+            const arr = keys.map(k => ({ k, timeline: weekRes.map(r => r.get(k)), start: startRank.get(k) }));
+            arr.forEach(a => a.wins = a.timeline.filter(x => x === 'W').length);
+            arr.sort((a, b) => {
+                if (b.wins !== a.wins) return b.wins - a.wins;
+                for (let i = 0; i < a.timeline.length; i++) if (a.timeline[i] !== b.timeline[i]) return a.timeline[i] === 'W' ? -1 : 1;
+                return a.start - b.start;
+            });
+            return arr.map((x, i) => Object.assign({ rank: i + 1 }, info.get(x.k)));
         }
 
-        let pairs, note;
+        // 16 rank slots (rank fixed = slot index + 1). Fill from this week's own capture (edit),
+        // else the computed order, else leave blank (week 1 / not computable) with our own prefilled.
+        const slots = Array.from({ length: 16 }, (_, i) => ({ rank: i + 1, tag: '', name: '', server: null, pts: null }));
+        let note;
         if (thisMs && thisMs.length) {
-            pairs = pad(thisMs.slice().sort((a, b) => (a.match_index || 0) - (b.match_index || 0)).map(m => ({
-                aRank: m.a_rank, aTag: m.a_tag, aName: m.a_name, aPts: m.a_points,
-                bRank: m.b_rank, bTag: m.b_tag, bName: m.b_name, bPts: m.b_points
-            })));
+            thisMs.forEach(m => {
+                if (m.a_rank >= 1 && m.a_rank <= 16) slots[m.a_rank - 1] = { rank: m.a_rank, tag: m.a_tag || '', name: m.a_name || '', server: m.a_server, pts: m.a_points };
+                if (m.b_rank >= 1 && m.b_rank <= 16) slots[m.b_rank - 1] = { rank: m.b_rank, tag: m.b_tag || '', name: m.b_name || '', server: m.b_server, pts: m.b_points };
+            });
             note = 'Editing this week’s captured bracket.';
         } else {
-            const predicted = predict(allPrior.length ? allPrior[allPrior.length - 1] : null);
-            if (predicted) {
-                pairs = predicted;
-                note = 'Pairings predicted from Week ' + priorWeeks[priorWeeks.length - 1].week_number + ' (winners vs winners, losers vs losers) — verify against the game and adjust, then enter this week’s points.';
+            const ranked = wk.week_number > 1 ? computeRanks() : null;
+            if (ranked) {
+                ranked.forEach(a => { slots[a.rank - 1] = { rank: a.rank, tag: a.tag, name: a.name, server: a.server, pts: null }; });
+                note = 'Ranks computed from prior results (most wins → earliest wins → starting rank). Matchups are 1v2, 3v4 … — just enter this week’s points.';
             } else {
-                pairs = [];
-                for (let i = 0; i < 8; i++) { const ar = 2 * i + 1, br = 2 * i + 2; pairs.push({ aRank: ar, aTag: tagOf(ar), aName: nameOf(ar), bRank: br, bTag: tagOf(br), bName: nameOf(br) }); }
-                note = priorWeeks.length
-                    ? 'Last week’s results are incomplete, so pairings couldn’t be predicted — assign them manually (tags auto-fill from rank).'
-                    : 'Week-1 pairings are rank-adjacent (1v2, 3v4 … 15v16). Ranks are pre-set — fill each alliance’s tag and match points.';
+                if (MY_RANK != null && MY_TAG) { const mi = info.get(MY_TAG.toLowerCase()) || { tag: MY_TAG, name: MY_NAME, server: null }; slots[MY_RANK - 1] = { rank: MY_RANK, tag: mi.tag, name: mi.name || MY_NAME, server: mi.server, pts: null }; }
+                note = wk.week_number > 1
+                    ? 'Prior weeks aren’t fully captured/scored yet, so ranks couldn’t be computed — fill each rank slot’s alliance and points.'
+                    : 'Week-1 ranks are the game’s random starting order. Fill each rank slot’s alliance (they play 1v2, 3v4 …) and this week’s points.';
             }
+        }
+
+        // Per-tag alliance finder: registry type-ahead + LastRank lookup (needs the row's server).
+        function attachFinder(tagInput, serverInput, row) {
+            const dd = el('div', { className: 'vsl-find-dropdown vsl-bracket-dd', hidden: 'hidden' });
+            const wrap = el('div', { className: 'vsl-tagwrap' }, tagInput, dd);
+            const onDoc = e => { if (!wrap.contains(e.target)) close(); };
+            function open() { dd.hidden = false; document.addEventListener('mousedown', onDoc); }
+            function close() { dd.hidden = true; document.removeEventListener('mousedown', onDoc); }
+            const pick = a => { tagInput.value = a.tag || ''; row.name = a.name || ''; if (a.server != null) serverInput.value = a.server; close(); };
+            const localItems = q => knownAlliances.filter(a => (a.tag || '').toLowerCase().includes(q) || (a.name || '').toLowerCase().includes(q)).slice(0, 6);
+            function render(locals, lrs, msg, isErr) {
+                clear(dd);
+                (locals || []).forEach((a, i) => {
+                    if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'Registry' }));
+                    dd.appendChild(el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick(a) },
+                        el('span', { className: 'vsl-find-name', text: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || '') }),
+                        a.server != null ? el('span', { className: 'vsl-find-meta', text: 'S' + a.server }) : null));
+                });
+                (lrs || []).forEach((a, i) => {
+                    if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'LastRank' }));
+                    dd.appendChild(el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick({ tag: a.tag, name: a.name, server: a.server }) },
+                        el('span', { className: 'vsl-find-name', text: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || '') }),
+                        el('span', { className: 'vsl-find-meta', text: [a.server != null ? 'S' + a.server : null, a.power != null ? fmtBig(a.power) + ' pw' : null].filter(Boolean).join(' · ') })));
+                });
+                if (msg) dd.appendChild(el('div', { className: isErr ? 'vsl-find-msg vsl-find-err' : 'vsl-find-msg', text: msg }));
+                if (tagInput.value.trim()) dd.appendChild(el('button', { className: 'vsl-find-action', type: 'button', onclick: lookupLR }, '🔎 Look up on LastRank'));
+                if (dd.childNodes.length) open(); else close();
+            }
+            async function lookupLR() {
+                const q = tagInput.value.trim(), srv = serverInput.value.trim();
+                if (!q) return;
+                if (!srv) { render(localItems(q.toLowerCase()), null, 'Enter this alliance’s server # to search LastRank.', true); serverInput.focus(); return; }
+                render(localItems(q.toLowerCase()), null, 'Searching LastRank…', false);
+                try {
+                    const list = await api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q) + '&server=' + encodeURIComponent(srv));
+                    render(localItems(q.toLowerCase()), list, (list && list.length) ? null : 'No matches on server ' + srv + '.', false);
+                } catch (e) { render(localItems(q.toLowerCase()), null, e.message, true); }
+            }
+            tagInput.addEventListener('input', () => {
+                const q = tagInput.value.trim().toLowerCase();
+                const exact = knownAlliances.find(a => (a.tag || '').toLowerCase() === q);
+                row.name = exact ? (exact.name || '') : '';
+                if (exact && exact.server != null && !serverInput.value) serverInput.value = exact.server;
+                if (!q) { close(); return; }
+                render(localItems(q), null, null, false);
+                markOurs();
+            });
+            tagInput.addEventListener('focus', () => { const q = tagInput.value.trim().toLowerCase(); if (q) render(localItems(q), null, null, false); });
+            tagInput.addEventListener('keydown', e => { if (e.key === 'Escape') close(); else if (e.key === 'Enter' && !dd.hidden) { e.preventDefault(); lookupLR(); } });
+            return wrap;
         }
 
         const rows = [];
         const grid = el('div', { className: 'vsl-bracket-grid' });
         function markOurs() {
             let assigned = false;
-            rows.forEach(r => {
-                const mine = !assigned && MY_RANK != null && (Number(r.aRank.value) === MY_RANK || Number(r.bRank.value) === MY_RANK);
+            for (let i = 0; i < 8; i++) {
+                const a = rows[2 * i], b = rows[2 * i + 1];
+                const at = (a.tagInput.value || '').trim().toLowerCase(), bt = (b.tagInput.value || '').trim().toLowerCase();
+                const mine = !assigned && ((MY_TAG && (at === MY_TAG.toLowerCase() || bt === MY_TAG.toLowerCase())) || (MY_RANK != null && (a.rank === MY_RANK || b.rank === MY_RANK)));
                 if (mine) assigned = true;
-                r.card.classList.toggle('ours', mine);
-                r.badge.textContent = mine ? '★ ours' : '';
-            });
+                a.card.classList.toggle('ours', mine);
+                a.badge.textContent = mine ? '★ ours' : '';
+            }
         }
-        pairs.forEach((p, idx) => {
-            const aRank = inp('number', p.aRank != null ? p.aRank : '', '#'); aRank.className = 'form-input vsl-rk';
-            const bRank = inp('number', p.bRank != null ? p.bRank : '', '#'); bRank.className = 'form-input vsl-rk';
-            const aTag = inp('text', p.aTag || '', 'tag');
-            const bTag = inp('text', p.bTag || '', 'tag');
-            const aPts = inp('number', p.aPts != null ? p.aPts : '', 'pts'); aPts.className = 'form-input vsl-pts';
-            const bPts = inp('number', p.bPts != null ? p.bPts : '', 'pts'); bPts.className = 'form-input vsl-pts';
+        const allianceRow = slot => {
+            const serverInput = inp('number', slot.server != null ? slot.server : '', 'srv'); serverInput.className = 'form-input vsl-srv';
+            const tagInput = inp('text', slot.tag || '', 'tag'); tagInput.className = 'form-input vsl-tag';
+            const ptsInput = inp('number', slot.pts != null ? slot.pts : '', 'pts'); ptsInput.className = 'form-input vsl-pts2';
+            const r = { rank: slot.rank, tagInput, serverInput, ptsInput, name: slot.name || '' };
+            const wrap = attachFinder(tagInput, serverInput, r);
+            return { r, node: el('div', { className: 'vsl-al-row' }, el('span', { className: 'vsl-rklbl', text: '#' + slot.rank }), serverInput, wrap, ptsInput) };
+        };
+        for (let i = 0; i < 8; i++) {
+            const A = allianceRow(slots[2 * i]), B = allianceRow(slots[2 * i + 1]);
             const badge = el('span', { className: 'vsl-pair-badge' });
-            const r = { aRank, aTag, aPts, bRank, bTag, bPts, aName: p.aName || '', bName: p.bName || '', badge };
-            rows.push(r);
-            const link = (rankEl, tagEl, which) => {
-                rankEl.addEventListener('input', () => {
-                    const info = rankInfo.get(Number(rankEl.value));
-                    if (info) { tagEl.value = info.tag; r[which + 'Name'] = info.name; }
-                    markOurs();
-                });
-                tagEl.addEventListener('input', () => {
-                    const rk = tagRank.get(tagEl.value.trim().toLowerCase());
-                    if (rk != null && !rankEl.value) rankEl.value = rk;
-                    r[which + 'Name'] = (rankInfo.get(Number(rankEl.value)) || {}).name || '';
-                    markOurs();
-                });
-            };
-            link(aRank, aTag, 'a'); link(bRank, bTag, 'b');
-            const side = (rankEl, tagEl, ptsEl) => el('div', { className: 'vsl-pair-side' },
-                el('span', { className: 'vsl-rkhash', text: '#' }), rankEl, tagEl, ptsEl);
             const card = el('div', { className: 'vsl-pair-card' },
-                el('div', { className: 'vsl-pair-hd' }, el('span', { text: 'Pairing ' + (idx + 1) }), badge),
-                side(aRank, aTag, aPts),
-                el('div', { className: 'vsl-pair-vs', text: 'vs' }),
-                side(bRank, bTag, bPts));
-            r.card = card;
+                el('div', { className: 'vsl-pair-hd' }, el('span', { text: 'Pairing ' + (i + 1) }), badge),
+                A.node, el('div', { className: 'vsl-pair-vs', text: 'vs' }), B.node);
+            A.r.card = card; A.r.badge = badge; B.r.card = card; B.r.badge = badge;
+            rows.push(A.r, B.r);
             grid.appendChild(card);
-        });
+        }
         markOurs();
 
         const body = [el('p', { className: 'vsl-help', text: note }), grid];
         modal('Capture bracket — Week ' + (wk.week_number || ''), body, async () => {
             let oursAssigned = false;
-            const matchups = rows
-                .map((r, i) => ({ i, r }))
-                .filter(({ r }) => r.aTag.value.trim() || r.bTag.value.trim() || r.aRank.value || r.bRank.value)
-                .map(({ i, r }) => {
-                    const aRankN = numOrNull(r.aRank.value), bRankN = numOrNull(r.bRank.value);
-                    const mine = !oursAssigned && MY_RANK != null && (aRankN === MY_RANK || bRankN === MY_RANK);
-                    if (mine) oursAssigned = true;
-                    return {
-                        match_index: i + 1,
-                        a_rank: aRankN, a_tag: strOrNull(r.aTag.value), a_name: strOrNull(r.aName), a_points: numOrNull(r.aPts.value),
-                        b_rank: bRankN, b_tag: strOrNull(r.bTag.value), b_name: strOrNull(r.bName), b_points: numOrNull(r.bPts.value),
-                        is_ours: mine
-                    };
+            const matchups = [];
+            for (let i = 0; i < 8; i++) {
+                const a = rows[2 * i], b = rows[2 * i + 1];
+                const aTag = strOrNull(a.tagInput.value), bTag = strOrNull(b.tagInput.value);
+                if (!aTag && !bTag && a.ptsInput.value === '' && b.ptsInput.value === '') continue;
+                const at = (a.tagInput.value || '').trim().toLowerCase(), bt = (b.tagInput.value || '').trim().toLowerCase();
+                const mine = !oursAssigned && ((MY_TAG && (at === MY_TAG.toLowerCase() || bt === MY_TAG.toLowerCase())) || (MY_RANK != null && (a.rank === MY_RANK || b.rank === MY_RANK)));
+                if (mine) oursAssigned = true;
+                matchups.push({
+                    match_index: i + 1,
+                    a_rank: a.rank, a_tag: aTag, a_name: strOrNull(a.name), a_server: numOrNull(a.serverInput.value), a_points: numOrNull(a.ptsInput.value),
+                    b_rank: b.rank, b_tag: bTag, b_name: strOrNull(b.name), b_server: numOrNull(b.serverInput.value), b_points: numOrNull(b.ptsInput.value),
+                    is_ours: mine
                 });
+            }
             await api('POST', '/api/vs-league/weeks/' + wk.id + '/matchups', { matchups });
             await selectSeason(state.seasonId);
         }, 'Save bracket');

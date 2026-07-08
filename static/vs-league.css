@@ -127,19 +127,22 @@
 }
 .vsl-find-action:hover { background: var(--bg-secondary); }
 
-/* Capture-bracket: grid of pairing cards (rank auto-fills the tag; our pairing is highlighted) */
-.vsl-bracket-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 10px; margin: 12px 0; }
+/* Capture-bracket: grid of pairing cards. Ranks are fixed labels (computed each week); each
+   alliance row is [#rank] [server] [tag combobox] [points]; our pairing is highlighted. */
+.vsl-bracket-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; margin: 12px 0; }
 .vsl-pair-card { border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; background: var(--color-surface); }
 .vsl-pair-card.ours { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent) inset; }
 .vsl-pair-hd { display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; font-weight: 700; color: var(--color-text-mid); margin-bottom: 5px; }
 .vsl-pair-badge { color: var(--color-accent); font-weight: 700; font-size: 0.72rem; }
-.vsl-pair-side { display: flex; align-items: center; gap: 5px; }
-.vsl-pair-side + .vsl-pair-side { margin-top: 4px; }
 .vsl-pair-vs { text-align: center; font-size: 0.68rem; color: var(--color-text-muted); margin: 3px 0; }
-.vsl-rkhash { color: var(--color-text-muted); font-size: 0.85rem; }
-.vsl-rk { width: 42px; flex: 0 0 auto; text-align: center; padding-left: 4px; padding-right: 4px; }
-.vsl-pts { width: 46px; flex: 0 0 auto; text-align: center; padding-left: 4px; padding-right: 4px; }
-.vsl-pair-side input[type="text"] { flex: 1; min-width: 0; }
+.vsl-al-row { display: flex; align-items: center; gap: 5px; }
+.vsl-al-row + .vsl-al-row { margin-top: 4px; }
+.vsl-rklbl { min-width: 30px; flex: 0 0 auto; font-weight: 700; color: var(--color-text-mid); font-size: 0.85rem; }
+.vsl-srv { width: 50px; flex: 0 0 auto; text-align: center; padding-left: 4px; padding-right: 4px; }
+.vsl-tagwrap { position: relative; flex: 1.5 1 0; min-width: 0; }
+.vsl-tag { width: 100%; }
+.vsl-pts2 { flex: 1 1 0; min-width: 46px; text-align: center; padding-left: 4px; padding-right: 4px; }
+.vsl-bracket-dd { top: calc(100% + 4px); left: 0; right: 0; }
 
 /* Daily-MVP combobox (our roster + opponent LastRank roster + free text) */
 .vsl-mvp-wrap { position: relative; display: flex; gap: 6px; align-items: center; }
