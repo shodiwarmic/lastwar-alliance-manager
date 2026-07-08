@@ -651,7 +651,20 @@
     function openDaysModal(wk) {
         const byDay = {}; (wk.days || []).forEach(d => byDay[d.day_number] = d);
         const rows = [];
-        const body = [el('p', { className: 'vsl-help', text: 'Enter who won each day (and optional raw Alliance Duel Scores). Empty days are left pending.' })];
+        const body = [el('p', { className: 'vsl-help', text: 'Enter both raw Alliance Duel Scores and the winner is set automatically; otherwise pick the winner manually. Empty days stay pending.' })];
+        // When both raw scores are present the outcome is determined — set it and lock the picker
+        // (the server derives the same value on save). Manual selection stays for score-less days.
+        const syncOutcome = r => {
+            const a = r.our.value.trim(), b = r.opp.value.trim();
+            if (a !== '' && b !== '') {
+                r.oc.value = Number(a) > Number(b) ? 'win' : Number(a) < Number(b) ? 'loss' : 'tie';
+                r.oc.disabled = true;
+                r.oc.title = 'Set automatically from the scores';
+            } else {
+                r.oc.disabled = false;
+                r.oc.title = '';
+            }
+        };
         for (let n = 1; n <= 6; n++) {
             const theme = getVSTheme(dayDateStr(wk.week_date, n - 1));
             const d = byDay[n] || {};
@@ -659,7 +672,11 @@
             const our = inp('number', d.our_score != null ? d.our_score : '', 'our raw');
             const opp = inp('number', d.opponent_score != null ? d.opponent_score : '', 'opp raw');
             const mvp = inp('text', d.mvp_name || '', 'MVP (ours)');
-            rows.push({ n, oc, our, opp, mvp });
+            const r = { n, oc, our, opp, mvp };
+            rows.push(r);
+            our.addEventListener('input', () => syncOutcome(r));
+            opp.addEventListener('input', () => syncOutcome(r));
+            syncOutcome(r);
             body.push(el('div', { className: 'vsl-day-entry' },
                 el('div', { text: n + '. ' + (theme ? theme.short : '') + ' (' + vsLeagueDayPts(n) + 'pt)' }), oc, our, opp));
             body.push(el('div', { style: 'margin:-2px 0 8px 0;' }, field('MVP day ' + n, mvp)));
