@@ -571,8 +571,20 @@ func updateVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		snapshotAt = &now
 	}
 
+	// Allow correcting the week date (snapped to the game-time Monday); empty = leave unchanged.
+	var newWeekDate *string
+	if strings.TrimSpace(p.WeekDate) != "" {
+		nd, nerr := normalizeToGameWeekMonday(p.WeekDate)
+		if nerr != nil {
+			badRequest(w, "invalid week_date")
+			return
+		}
+		newWeekDate = &nd
+	}
+
 	_, err = db.Exec(`UPDATE vs_league_weeks SET
 		week_number = COALESCE(?, week_number),
+		week_date = COALESCE(?, week_date),
 		league_tier = COALESCE(?, league_tier),
 		league_rank = COALESCE(?, league_rank),
 		opponent_tag = COALESCE(?, opponent_tag),
@@ -592,13 +604,13 @@ func updateVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		notes = COALESCE(?, notes),
 		updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`,
-		p.WeekNumber, p.LeagueTier, p.LeagueRank, p.OpponentTag, p.OpponentName, p.OpponentServer,
+		p.WeekNumber, newWeekDate, p.LeagueTier, p.LeagueRank, p.OpponentTag, p.OpponentName, p.OpponentServer,
 		p.OpponentLastRankID, p.OpponentPower, p.OpponentKills, p.OpponentMemberCount,
 		snapshotAt, p.OpponentLastRankSeenAt,
 		p.OurPoints, p.OpponentPoints, p.Outcome, p.StrategyLabel, p.StrategyResult, p.Notes, id)
 	if err != nil {
 		if isUniqueConflict(err) {
-			http.Error(w, "That week number is already used in this season", http.StatusConflict)
+			http.Error(w, "That week number or date is already used in this season", http.StatusConflict)
 			return
 		}
 		dbError(w, "updateVSLeagueWeek", err)

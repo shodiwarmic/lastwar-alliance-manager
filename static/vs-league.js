@@ -120,6 +120,7 @@
         bar.appendChild(el('span', { className: 'sep' }));
         if (CAN_MANAGE) {
             bar.appendChild(el('button', { className: 'btn btn-secondary btn-sm', onclick: openSeasonModal }, 'New Season'));
+            if (state.season) bar.appendChild(el('button', { className: 'btn btn-secondary btn-sm', onclick: openSeasonEditModal }, 'Season settings'));
             // Seasons are always 4 weeks; hide "+ Week" once all four exist.
             if (state.weeks.length < 4) bar.appendChild(el('button', { className: 'btn btn-primary btn-sm', onclick: () => openWeekModal(null) }, '+ Week'));
         }
@@ -492,6 +493,34 @@
             await api('POST', '/api/vs-league/seasons', { season_number: n, league_tier: strOrNull(tier.value), start_date: strOrNull(start.value) });
             state.currentWeekDate = state.currentWeekDate; state.loaded = false; await initLeague();
         }, 'Create season');
+    }
+
+    function openSeasonEditModal() {
+        const s = state.season;
+        if (!s) return;
+        const tier = inp('text', s.league_tier || '', 'e.g. Gold Tier 29-2');
+        const start = inp('date', s.start_date || todayISO());
+        modal('Season ' + s.season_number + ' settings', [
+            el('div', { className: 'vsl-form-grid' }, field('Tier (display)', tier), field('Start Monday', start)),
+            el('p', { className: 'vsl-help', text: 'Changing the start date re-aligns every week to consecutive game-time Mondays.' })
+        ], async () => {
+            const newStart = start.value;
+            if (!newStart) throw new Error('Start date is required');
+            await api('PUT', '/api/vs-league/seasons/' + s.id, { league_tier: strOrNull(tier.value), start_date: newStart });
+            // Re-align weeks: week n → start + (n-1)*7 (backend snaps to the game Monday). Order the
+            // updates to avoid a transient UNIQUE(season_id, week_date) collision during the shift.
+            const oldStart = s.start_date || newStart;
+            const weeks = state.weeks.slice().sort((a, b) => (a.week_number || 0) - (b.week_number || 0));
+            const forward = new Date(newStart) > new Date(oldStart);
+            const ordered = forward ? weeks.slice().reverse() : weeks;
+            for (const wkk of ordered) {
+                const n = wkk.week_number || (weeks.indexOf(wkk) + 1);
+                const d = new Date(newStart + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + (n - 1) * 7);
+                const nd = d.toISOString().slice(0, 10);
+                if (nd !== wkk.week_date) await api('PUT', '/api/vs-league/weeks/' + wkk.id, { week_date: nd });
+            }
+            state.currentWeekDate = null; state.loaded = false; await initLeague();
+        }, 'Save');
     }
 
     function openWeekModal(wk) {
