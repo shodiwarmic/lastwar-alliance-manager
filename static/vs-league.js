@@ -814,10 +814,22 @@
                 ranked.forEach(a => { slots[a.rank - 1] = { rank: a.rank, tag: a.tag, name: a.name, server: a.server, pts: null }; });
                 note = 'Ranks computed from prior results (most wins → earliest wins → starting rank). Matchups are 1v2, 3v4 … — just enter this week’s points.';
             } else {
-                if (MY_RANK != null && MY_TAG) { const mi = info.get(MY_TAG.toLowerCase()) || { tag: MY_TAG, name: MY_NAME, server: null }; slots[MY_RANK - 1] = { rank: MY_RANK, tag: mi.tag, name: mi.name || MY_NAME, server: mi.server, pts: null }; }
                 note = wk.week_number > 1
                     ? 'Prior weeks aren’t fully captured/scored yet, so ranks couldn’t be computed — fill each rank slot’s alliance and points.'
                     : 'Week-1 ranks are the game’s random starting order. Fill each rank slot’s alliance (they play 1v2, 3v4 …) and this week’s points.';
+            }
+        }
+
+        // We already know our own alliance (rank + tag from settings) and this week's opponent, so
+        // lock both of those slots — only their points stay editable — to prevent accidental edits.
+        if (MY_RANK != null && MY_RANK >= 1 && MY_RANK <= 16 && MY_TAG) {
+            const us = slots[MY_RANK - 1];
+            const myServer = (info.get(MY_TAG.toLowerCase()) || {}).server;
+            slots[MY_RANK - 1] = { rank: MY_RANK, tag: MY_TAG, name: MY_NAME, server: us.server != null ? us.server : (myServer != null ? myServer : null), pts: us.pts, locked: true };
+            const oppRank = MY_RANK % 2 === 1 ? MY_RANK + 1 : MY_RANK - 1;
+            if (oppRank >= 1 && oppRank <= 16 && wk.opponent_tag) {
+                const op = slots[oppRank - 1];
+                slots[oppRank - 1] = { rank: oppRank, tag: wk.opponent_tag, name: wk.opponent_name || op.name || '', server: wk.opponent_server != null ? wk.opponent_server : op.server, pts: op.pts, locked: true };
             }
         }
 
@@ -890,8 +902,17 @@
             const tagInput = inp('text', slot.tag || '', 'tag'); tagInput.className = 'form-input vsl-tag';
             const ptsInput = inp('number', slot.pts != null ? slot.pts : '', 'pts'); ptsInput.className = 'form-input vsl-pts2';
             const r = { rank: slot.rank, tagInput, serverInput, ptsInput, name: slot.name || '' };
-            const wrap = attachFinder(tagInput, serverInput, r);
-            return { r, node: el('div', { className: 'vsl-al-row' }, el('span', { className: 'vsl-rklbl', text: '#' + slot.rank }), serverInput, wrap, ptsInput) };
+            let tagNode;
+            if (slot.locked) {
+                // Known alliance (us / this week's opponent) — lock identity, leave points editable.
+                tagInput.readOnly = true; tagInput.classList.add('vsl-locked');
+                tagInput.title = slot.rank === MY_RANK ? 'Your alliance (locked)' : 'Your opponent this week (locked)';
+                if (slot.server != null) { serverInput.readOnly = true; serverInput.classList.add('vsl-locked'); }
+                tagNode = el('div', { className: 'vsl-tagwrap' }, tagInput);
+            } else {
+                tagNode = attachFinder(tagInput, serverInput, r);
+            }
+            return { r, node: el('div', { className: 'vsl-al-row' }, el('span', { className: 'vsl-rklbl', text: '#' + slot.rank }), serverInput, tagNode, ptsInput) };
         };
         for (let i = 0; i < 8; i++) {
             const A = allianceRow(slots[2 * i]), B = allianceRow(slots[2 * i + 1]);
