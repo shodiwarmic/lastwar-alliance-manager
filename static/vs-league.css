@@ -98,3 +98,31 @@
 .vsl-field label { display: block; font-size: 0.78rem; color: var(--color-text-mid); font-weight: 600; margin-bottom: 3px; }
 .vsl-day-entry { display: grid; grid-template-columns: 120px 1fr 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
 .vsl-help { font-size: 0.78rem; color: var(--color-text-muted); }
+
+/* ── Opponent finder combobox on the Opp tag / Opp name fields (mirrors External Alliances) ──
+   The dropdown is a child of the opponent grid (position: relative) and is anchored under the
+   focused field via inline left/top/min-width/max-width set in JS (positionDropdown). */
+.vsl-opp-grid { position: relative; }
+.vsl-find-dropdown {
+    position: absolute; z-index: 30;
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;
+    max-height: 280px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.vsl-find-head { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); padding: 8px 12px 4px; }
+.vsl-find-msg { font-size: 0.82rem; color: var(--color-text-muted); padding: 8px 12px; }
+.vsl-find-err { color: var(--color-danger); font-weight: 600; }
+.vsl-find-item {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+    padding: 8px 12px; background: none; border: none; border-top: 1px solid var(--color-border);
+    cursor: pointer; text-align: left; color: var(--color-text);
+}
+.vsl-find-item:hover { background: var(--bg-secondary); }
+.vsl-find-head + .vsl-find-item { border-top: none; }
+.vsl-find-name { font-weight: 600; }
+.vsl-find-meta { font-size: 0.8rem; color: var(--color-text-muted); }
+.vsl-find-action {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    padding: 9px 12px; background: none; border: none; border-top: 1px solid var(--color-border);
+    cursor: pointer; text-align: left; color: var(--color-accent); font-weight: 600;
+}
+.vsl-find-action:hover { background: var(--bg-secondary); }

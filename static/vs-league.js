@@ -494,59 +494,126 @@
         const weekDate = inp('date', wk ? wk.week_date : (state.currentWeekDate || todayISO()));
         const rank = inp('number', wk ? wk.league_rank : '', '1–16');
         const tier = inp('text', wk ? wk.league_tier : '', 'tier this week');
-        const oppTag = inp('text', wk ? wk.opponent_tag : '', 'PoWr');
-        const oppName = inp('text', wk ? wk.opponent_name : '', 'Pantheon of Wrath');
-        const oppServer = inp('number', wk ? wk.opponent_server : '', 'server #');
         const stratLabel = sel([['', '—'], ['push', 'Push'], ['save', 'Save'], ['normal', 'Normal'], ['test', 'Test'], ['recovery', 'Recovery']], wk && wk.strategy_label || '');
         const stratResult = sel([['', '—'], ['worked', 'Worked'], ['failed', 'Failed'], ['mixed', 'Mixed']], wk && wk.strategy_result || '');
         const notes = el('textarea', { className: 'form-input', rows: '2', placeholder: 'leadership context…' }); if (wk && wk.notes) notes.value = wk.notes;
-        // opponent lookup
+
+        // ---- opponent identity + finder (server → tag → name, matching the in-game display) ----
+        const oppServer = inp('number', wk ? wk.opponent_server : '', 'server #');
+        const oppTag = inp('text', wk ? wk.opponent_tag : '', 'cROw');
+        const oppName = inp('text', wk ? wk.opponent_name : '', 'Black Crow Legion');
         const lrInput = inp('text', wk ? wk.opponent_lastrank_id : '', 'paste lastrank.fun/a/… link');
         lrInput.style.flex = '1'; lrInput.style.minWidth = '150px';
         const snapNote = el('span', { className: 'vsl-help' });
         let snap = null;
-        // LastRank has a unified search (?q=); prefill it from the opponent tag + server.
-        const searchBtn = el('a', { className: 'btn btn-secondary btn-sm', target: '_blank', rel: 'noopener noreferrer' }, 'Search ↗');
-        const updateSearchHref = () => {
-            // Match LastRank's alliance display format: "#1713 [cROw] Black Crow Legion".
-            const parts = [];
-            if (oppServer.value.trim()) parts.push('#' + oppServer.value.trim());
-            if (oppTag.value.trim()) parts.push('[' + oppTag.value.trim() + ']');
-            if (oppName.value.trim()) parts.push(oppName.value.trim());
-            const q = parts.join(' ');
-            searchBtn.href = 'https://lastrank.fun/search' + (q ? '?q=' + encodeURIComponent(q) : '');
-        };
-        [oppTag, oppName, oppServer].forEach(f => f.addEventListener('input', updateSearchHref));
-        updateSearchHref();
 
-        // Prefill from cached external alliances (populated by past lookups). Both the tag and name
-        // fields get a datalist of known values; picking/typing a known tag OR name fills the rest.
-        const tagList = el('datalist', { id: 'vsl-tag-list' });
-        const nameList = el('datalist', { id: 'vsl-name-list' });
-        oppTag.setAttribute('list', 'vsl-tag-list');
-        oppName.setAttribute('list', 'vsl-name-list');
+        // Local source: the external-alliances registry (populated by past lookups/allies/prospects).
         let knownAlliances = [];
-        api('GET', '/api/external-alliances').then(list => {
-            knownAlliances = list || [];
-            const tags = new Set(), names = new Set();
-            knownAlliances.forEach(a => {
-                if (a.tag && !tags.has(a.tag)) { tags.add(a.tag); tagList.appendChild(el('option', { value: a.tag })); }
-                if (a.name && !names.has(a.name)) { names.add(a.name); nameList.appendChild(el('option', { value: a.name })); }
-            });
-        }).catch(() => { });
-        const applyMatch = (match) => {
-            if (!match) return;
-            if (!oppTag.value && match.tag) oppTag.value = match.tag;
-            if (!oppName.value && match.name) oppName.value = match.name;
-            if (!oppServer.value && match.server != null) oppServer.value = match.server;
-            if (match.lastrank_id) {
-                snap = { alliance_id: match.lastrank_id, tag: match.tag, name: match.name, server_id: match.server, power: match.power, kills: match.kills, member_count: match.member_count, last_seen_at: match.lastrank_seen_at };
-                snapNote.textContent = 'From saved lookup · power ' + fmtBig(match.power || 0) + ' · kills ' + fmtBig(match.kills || 0) + ' · ' + (match.member_count != null ? match.member_count : '?') + '/100';
-            }
-            updateSearchHref();
+        api('GET', '/api/external-alliances').then(list => { knownAlliances = list || []; }).catch(() => { });
+        const localMatches = q => {
+            q = q.trim().toLowerCase();
+            if (!q) return [];
+            return knownAlliances.filter(a =>
+                (a.tag || '').toLowerCase().includes(q) || (a.name || '').toLowerCase().includes(q)).slice(0, 6);
         };
-        oppTag.addEventListener('change', () => applyMatch(knownAlliances.find(a => (a.tag || '') === oppTag.value.trim())));
-        oppName.addEventListener('change', () => applyMatch(knownAlliances.find(a => (a.name || '') === oppName.value.trim())));
+        function setSnapFromMatch(m) {
+            oppTag.value = m.tag || ''; oppName.value = m.name || ''; if (m.server != null) oppServer.value = m.server;
+            if (m.lastrank_id) {
+                lrInput.value = m.lastrank_id;
+                snap = { alliance_id: m.lastrank_id, tag: m.tag, name: m.name, server_id: m.server, power: m.power, kills: m.kills, member_count: m.member_count, last_seen_at: m.lastrank_seen_at };
+                snapNote.textContent = 'From saved lookup · power ' + fmtBig(m.power || 0) + ' · kills ' + fmtBig(m.kills || 0) + ' · ' + (m.member_count != null ? m.member_count : '?') + '/100';
+            } else {
+                snap = null;
+                snapNote.textContent = 'From your registry — no LastRank snapshot saved yet; use Look up to capture one.';
+            }
+        }
+
+        // Shared dropdown anchored under whichever of Opp tag / Opp name has focus.
+        const dropdown = el('div', { className: 'vsl-find-dropdown', hidden: 'hidden' });
+        const oppGrid = el('div', { className: 'vsl-form-grid vsl-opp-grid' },
+            field('Opp server', oppServer), field('Opp tag', oppTag), field('Opp name', oppName), dropdown);
+        let activeField = null;
+        const queryVal = () => (activeField ? activeField.value : '').trim();
+
+        function positionDropdown() {
+            if (!activeField) return;
+            const cell = activeField.closest('.vsl-field') || activeField;
+            dropdown.style.left = cell.offsetLeft + 'px';
+            dropdown.style.top = (cell.offsetTop + cell.offsetHeight + 4) + 'px';
+            dropdown.style.minWidth = cell.offsetWidth + 'px';
+            dropdown.style.maxWidth = (oppGrid.clientWidth - cell.offsetLeft) + 'px';
+        }
+        const onDocDown = e => {
+            if (dropdown.contains(e.target)) return;
+            if (activeField && (activeField.closest('.vsl-field') || activeField).contains(e.target)) return;
+            closeDropdown();
+        };
+        function openDropdown() { positionDropdown(); dropdown.hidden = false; document.addEventListener('mousedown', onDocDown); }
+        function closeDropdown() { dropdown.hidden = true; document.removeEventListener('mousedown', onDocDown); }
+
+        function localItem(m) {
+            const meta = [m.server != null ? 'S' + m.server : null, m.lastrank_id ? 'saved snapshot' : null].filter(Boolean).join(' · ');
+            return el('button', { className: 'vsl-find-item', type: 'button', onclick: () => { closeDropdown(); setSnapFromMatch(m); } },
+                el('span', { className: 'vsl-find-name', text: (m.tag ? '[' + m.tag + '] ' : '') + (m.name || '') }),
+                meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
+        }
+        function lrItem(r) {
+            const meta = [r.server != null ? 'S' + r.server : null, r.power != null ? fmtBig(r.power) + ' pw' : null,
+                r.kills != null ? fmtBig(r.kills) + ' k' : null].filter(Boolean).join(' · ');
+            return el('button', { className: 'vsl-find-item', type: 'button', onclick: async () => {
+                oppTag.value = r.tag || ''; oppName.value = r.name || ''; if (r.server != null) oppServer.value = r.server;
+                lrInput.value = r.lastrank_id;
+                closeDropdown();
+                snapNote.textContent = 'Confirming…';
+                try {
+                    snap = await api('POST', '/api/vs-league/opponent-lookup', { url: r.lastrank_id });
+                    snapNote.textContent = 'Power ' + fmtBig(snap.power) + ' · kills ' + fmtBig(snap.kills) + ' · ' + snap.member_count + '/100';
+                } catch (e) {
+                    snap = { alliance_id: r.lastrank_id, tag: r.tag, name: r.name, server_id: r.server, power: r.power, kills: r.kills, member_count: null, last_seen_at: null };
+                    snapNote.textContent = 'Selected — power ' + fmtBig(r.power) + ' · kills ' + fmtBig(r.kills);
+                }
+            } },
+                el('span', { className: 'vsl-find-name', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
+                meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
+        }
+        function renderDropdown(localList, lrList, msg, isError, showAction) {
+            clear(dropdown);
+            if (localList && localList.length) {
+                dropdown.appendChild(el('div', { className: 'vsl-find-head', text: 'In your registry' }));
+                localList.forEach(m => dropdown.appendChild(localItem(m)));
+            }
+            if (lrList && lrList.length) {
+                dropdown.appendChild(el('div', { className: 'vsl-find-head', text: 'From LastRank' }));
+                lrList.forEach(r => dropdown.appendChild(lrItem(r)));
+            }
+            if (msg) dropdown.appendChild(el('div', { className: isError ? 'vsl-find-msg vsl-find-err' : 'vsl-find-msg', text: msg }));
+            if (showAction) dropdown.appendChild(el('button', { className: 'vsl-find-action', type: 'button', onclick: runLastRankSearch }, '🔎 Look up “' + queryVal() + '” on LastRank'));
+            if (dropdown.childNodes.length) openDropdown(); else closeDropdown();
+        }
+        async function runLastRankSearch() {
+            const q = queryVal();
+            const srv = oppServer.value.trim();
+            if (!q) return;
+            if (!srv) { renderDropdown(localMatches(q), null, 'Enter the opponent server number — LastRank search matches it strictly.', true, false); oppServer.focus(); return; }
+            renderDropdown(localMatches(q), null, 'Searching LastRank…', false, false);
+            try {
+                const list = await api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q) + '&server=' + encodeURIComponent(srv));
+                renderDropdown(localMatches(q), list, (list && list.length) ? null : 'No LastRank matches on server ' + srv + '.', false, false);
+            } catch (e) { renderDropdown(localMatches(q), null, e.message, true, false); }
+        }
+        function refreshFind() {
+            const q = queryVal();
+            if (!q) { closeDropdown(); return; }
+            renderDropdown(localMatches(q), null, null, false, true);
+        }
+        [oppTag, oppName].forEach(f => {
+            f.addEventListener('focus', () => { activeField = f; });
+            f.addEventListener('input', () => { activeField = f; refreshFind(); });
+            f.addEventListener('keydown', e => {
+                if (e.key === 'Escape') closeDropdown();
+                else if (e.key === 'Enter' && !dropdown.hidden) { e.preventDefault(); runLastRankSearch(); }
+            });
+        });
 
         const lookupBtn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Look up');
         lookupBtn.addEventListener('click', async () => {
@@ -561,10 +628,9 @@
         modal(wk ? 'Edit matchup' : 'New week', [
             el('div', { className: 'vsl-form-grid' },
                 field('Week #', weekNo), field('Week date (Mon)', weekDate), field('Our rank', rank), field('Tier', tier)),
-            el('div', { className: 'vsl-form-grid' }, field('Opp tag', oppTag), field('Opp name', oppName), field('Opp server', oppServer)),
-            tagList, nameList,
-            field('Opponent LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, searchBtn, lrInput, lookupBtn)),
-            el('span', { className: 'vsl-help', text: 'Search LastRank → open the opponent’s alliance → copy the /a/… link → paste → Look up.' }),
+            oppGrid,
+            el('span', { className: 'vsl-help', text: 'Type an opponent tag or name to search your registry; enter the server to look up on LastRank.' }),
+            field('Opponent LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, lrInput, lookupBtn)),
             snapNote,
             el('div', { className: 'vsl-form-grid' }, field('Strategy', stratLabel), field('Result', stratResult)),
             field('Notes', notes)
