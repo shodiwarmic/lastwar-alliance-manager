@@ -275,16 +275,33 @@
             catch (e) { note.textContent = e.message; }
         });
 
-        // --- Find combobox: registry type-ahead (instant) + manual LastRank lookup pinned below ---
+        // --- Find: registry type-ahead + LastRank lookup, attached to the Tag & Name fields.
+        // The identity row is the positioning context; the single shared dropdown anchors under
+        // whichever of Tag / Name has focus and extends to the row's right edge for room. ---
         const localMatches = q => (q && fuseInstance)
             ? fuseInstance.search(q).map(r => r.item).filter(x => x.id !== a.id).slice(0, 6) : [];
 
-        const findInput = inp('text', '', 'Type a tag or name…');
         const dropdown = el('div', { className: 'ext-find-dropdown', hidden: 'hidden' });
-        const findWrap = el('div', { className: 'ext-find-wrap' }, findInput, dropdown);
+        const idGrid = el('div', { className: 'vsl-form-grid ext-id-grid' },
+            field('Server', server), field('Tag', tag), field('Name', name), dropdown);
+        let activeField = null;
+        const queryVal = () => (activeField ? activeField.value : '').trim();
 
-        const onDocDown = e => { if (!findWrap.contains(e.target)) closeDropdown(); };
-        function openDropdown() { dropdown.hidden = false; document.addEventListener('mousedown', onDocDown); }
+        function positionDropdown() {
+            if (!activeField) return;
+            const cell = activeField.closest('.vsl-field') || activeField;
+            dropdown.style.left = cell.offsetLeft + 'px';
+            dropdown.style.top = (cell.offsetTop + cell.offsetHeight + 4) + 'px';
+            dropdown.style.minWidth = cell.offsetWidth + 'px';
+            dropdown.style.maxWidth = (idGrid.clientWidth - cell.offsetLeft) + 'px';
+        }
+
+        const onDocDown = e => {
+            if (dropdown.contains(e.target)) return;
+            if (activeField && (activeField.closest('.vsl-field') || activeField).contains(e.target)) return;
+            closeDropdown();
+        };
+        function openDropdown() { positionDropdown(); dropdown.hidden = false; document.addEventListener('mousedown', onDocDown); }
         function closeDropdown() { dropdown.hidden = true; document.removeEventListener('mousedown', onDocDown); }
 
         function localItem(x) {
@@ -306,7 +323,6 @@
                 if (r.power != null) power.value = r.power;
                 if (r.kills != null) kills.value = r.kills;
                 lastrankId = r.lastrank_id; lr.value = r.lastrank_id;
-                findInput.value = (r.tag ? '[' + r.tag + '] ' : '') + (r.name || '');
                 closeDropdown();
                 note.textContent = 'Confirming…';
                 try { applySnapshot(await api('POST', '/api/external-alliances/lookup', { url: r.lastrank_id })); }
@@ -329,16 +345,16 @@
             if (msg) dropdown.appendChild(el('div', { className: isError ? 'ext-find-msg ext-find-err' : 'ext-find-msg', text: msg }));
             if (showAction) {
                 dropdown.appendChild(el('button', { className: 'ext-find-action', type: 'button', onclick: runLastRankSearch },
-                    '🔎 Look up “' + findInput.value.trim() + '” on LastRank'));
+                    '🔎 Look up “' + queryVal() + '” on LastRank'));
             }
             if (dropdown.childNodes.length) openDropdown(); else closeDropdown();
         }
 
         async function runLastRankSearch() {
-            const q = findInput.value.trim();
+            const q = queryVal();
             const srv = server.value.trim();
             if (!q) return;
-            if (!srv) { renderDropdown(localMatches(q), null, 'Enter the server number above — LastRank search matches it strictly.', true, false); server.focus(); return; }
+            if (!srv) { renderDropdown(localMatches(q), null, 'Enter the server number — LastRank search matches it strictly.', true, false); server.focus(); return; }
             renderDropdown(localMatches(q), null, 'Searching LastRank…', false, false);
             try {
                 const list = await api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q) + '&server=' + encodeURIComponent(srv));
@@ -347,20 +363,22 @@
         }
 
         function refreshFind() {
-            const q = findInput.value.trim();
+            const q = queryVal();
             if (!q) { closeDropdown(); return; }
             renderDropdown(localMatches(q), null, null, false, true);
         }
-        findInput.addEventListener('input', refreshFind);
-        findInput.addEventListener('focus', refreshFind);
-        findInput.addEventListener('keydown', e => {
-            if (e.key === 'Escape') { closeDropdown(); }
-            else if (e.key === 'Enter') { e.preventDefault(); runLastRankSearch(); }
+        [tag, name].forEach(f => {
+            f.addEventListener('focus', () => { activeField = f; });
+            f.addEventListener('input', () => { activeField = f; refreshFind(); });
+            f.addEventListener('keydown', e => {
+                if (e.key === 'Escape') closeDropdown();
+                else if (e.key === 'Enter' && !dropdown.hidden) { e.preventDefault(); runLastRankSearch(); }
+            });
         });
 
         modalApi.close = modal(editing ? 'Edit alliance' : 'Add alliance', [
-            field('Find alliance', findWrap),
-            el('div', { className: 'vsl-form-grid' }, field('Server', server), field('Tag', tag), field('Name', name)),
+            idGrid,
+            el('div', { className: 'vsl-help', text: 'Type a tag or name to search your registry; enter the server to look up on LastRank.' }),
             el('div', { className: 'vsl-form-grid' }, field('Power', power), field('Kills', kills), field('Members', members)),
             field('LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, lr, lookupBtn)), note,
         ], async () => {

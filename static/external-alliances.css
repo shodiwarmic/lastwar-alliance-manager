@@ -74,11 +74,12 @@
 .ext-prog-row.done .ext-prog-status { color: var(--color-success); }
 .ext-prog-row.err .ext-prog-status { color: var(--color-danger); }
 
-/* ── Add/edit modal: find-alliance combobox (registry type-ahead + LastRank lookup) ── */
-.ext-find-wrap { position: relative; }
-.ext-find-wrap .form-input { width: 100%; }
+/* ── Add/edit modal: find-alliance combobox on the Tag & Name fields ──
+   The dropdown is a child of the identity grid (position: relative) and is anchored under the
+   focused field via inline left/top/min-width/max-width set in JS (positionDropdown). */
+.ext-id-grid { position: relative; }
 .ext-find-dropdown {
-    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+    position: absolute; z-index: 30;
     background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;
     max-height: 280px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
@@ -95,11 +96,11 @@
 .ext-find-msg { font-size: 0.82rem; color: var(--color-text-muted); padding: 8px 12px; }
 .ext-find-err { color: var(--color-danger); font-weight: 600; }
 .ext-find-item {
-    display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
     padding: 8px 12px; background: none; border: none; border-top: 1px solid var(--color-border);
     cursor: pointer; text-align: left; color: var(--color-text);
 }
 .ext-find-item:hover { background: var(--bg-secondary); }
 .ext-find-head + .ext-find-item { border-top: none; }
 .ext-find-name { font-weight: 600; }
-.ext-find-meta { font-size: 0.8rem; color: var(--color-text-muted); white-space: nowrap; }
+.ext-find-meta { font-size: 0.8rem; color: var(--color-text-muted); }
