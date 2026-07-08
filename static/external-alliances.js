@@ -256,8 +256,6 @@
         const lr = inp('text', a.lastrank_id, 'paste lastrank.fun/a/… link');
         lr.style.flex = '1'; lr.style.minWidth = '150px';
         const note = el('span', { className: 'vsl-help' });
-        const results = el('div', { className: 'ext-find-results', hidden: 'hidden' });
-
         // Prefill the form from a chosen LastRank snapshot (by-id lookup or search-then-lookup).
         function applySnapshot(snap) {
             lastrankId = snap.alliance_id;
@@ -277,71 +275,92 @@
             catch (e) { note.textContent = e.message; }
         });
 
-        // --- Find: local registry typeahead (instant) + manual LastRank search (on click) ---
+        // --- Find combobox: registry type-ahead (instant) + manual LastRank lookup pinned below ---
         const localMatches = q => (q && fuseInstance)
             ? fuseInstance.search(q).map(r => r.item).filter(x => x.id !== a.id).slice(0, 6) : [];
 
-        function renderResults(localList, lrList, msg, isError) {
-            results.replaceChildren();
-            if (localList && localList.length) {
-                results.appendChild(el('div', { className: 'ext-find-head', text: 'Already in your registry' }));
-                localList.forEach(x => {
-                    const badge = x.ally_status === 'active' ? 'Ally' : x.ally_status === 'former' ? 'Former ally'
-                        : x.is_opponent ? 'VS opponent' : x.prospect_count > 0 ? 'Prospect source' : '';
-                    const meta = [x.server != null ? 'S' + x.server : null, badge || null].filter(Boolean).join(' · ');
-                    results.appendChild(el('button', { className: 'ext-find-item', type: 'button', onclick: () => { if (modalApi.close) modalApi.close(); openModal(x); } },
-                        el('span', { className: 'ext-find-name', text: (x.tag ? '[' + x.tag + '] ' : '') + (x.name || '') }),
-                        meta ? el('span', { className: 'ext-find-meta', text: meta }) : null));
-                });
-            }
-            if (msg) results.appendChild(el('div', { className: isError ? 'ext-find-msg ext-find-err' : 'ext-find-msg', text: msg }));
-            if (lrList && lrList.length) {
-                results.appendChild(el('div', { className: 'ext-find-head', text: 'From LastRank' }));
-                lrList.forEach(r => {
-                    const meta = [r.server != null ? 'S' + r.server : null, r.power != null ? fmtBig(r.power) + ' pw' : null,
-                        r.kills != null ? fmtBig(r.kills) + ' k' : null].filter(Boolean).join(' · ');
-                    results.appendChild(el('button', { className: 'ext-find-item', type: 'button', onclick: async () => {
-                        if (r.tag) tag.value = r.tag;
-                        if (r.name) name.value = r.name;
-                        if (r.server != null) server.value = r.server;
-                        if (r.power != null) power.value = r.power;
-                        if (r.kills != null) kills.value = r.kills;
-                        lastrankId = r.lastrank_id; lr.value = r.lastrank_id;
-                        results.hidden = true;
-                        note.textContent = 'Confirming…';
-                        try { applySnapshot(await api('POST', '/api/external-alliances/lookup', { url: r.lastrank_id })); }
-                        catch (e) { note.textContent = 'Selected — power ' + fmtBig(r.power) + ' · kills ' + fmtBig(r.kills); }
-                    } },
-                        el('span', { className: 'ext-find-name', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
-                        meta ? el('span', { className: 'ext-find-meta', text: meta }) : null));
-                });
-            }
-            results.hidden = !results.childNodes.length;
+        const findInput = inp('text', '', 'Type a tag or name…');
+        const dropdown = el('div', { className: 'ext-find-dropdown', hidden: 'hidden' });
+        const findWrap = el('div', { className: 'ext-find-wrap' }, findInput, dropdown);
+
+        const onDocDown = e => { if (!findWrap.contains(e.target)) closeDropdown(); };
+        function openDropdown() { dropdown.hidden = false; document.addEventListener('mousedown', onDocDown); }
+        function closeDropdown() { dropdown.hidden = true; document.removeEventListener('mousedown', onDocDown); }
+
+        function localItem(x) {
+            const badge = x.ally_status === 'active' ? 'Ally' : x.ally_status === 'former' ? 'Former ally'
+                : x.is_opponent ? 'VS opponent' : x.prospect_count > 0 ? 'Prospect source' : '';
+            const meta = [x.server != null ? 'S' + x.server : null, badge || null].filter(Boolean).join(' · ');
+            return el('button', { className: 'ext-find-item', type: 'button', onclick: () => { closeDropdown(); if (modalApi.close) modalApi.close(); openModal(x); } },
+                el('span', { className: 'ext-find-name', text: (x.tag ? '[' + x.tag + '] ' : '') + (x.name || '') }),
+                meta ? el('span', { className: 'ext-find-meta', text: meta }) : null);
         }
 
-        const refreshLocal = () => renderResults(localMatches(tag.value.trim() || name.value.trim()), null, null);
-        [tag, name].forEach(f => f.addEventListener('input', refreshLocal));
+        function lrItem(r) {
+            const meta = [r.server != null ? 'S' + r.server : null, r.power != null ? fmtBig(r.power) + ' pw' : null,
+                r.kills != null ? fmtBig(r.kills) + ' k' : null].filter(Boolean).join(' · ');
+            return el('button', { className: 'ext-find-item', type: 'button', onclick: async () => {
+                if (r.tag) tag.value = r.tag;
+                if (r.name) name.value = r.name;
+                if (r.server != null) server.value = r.server;
+                if (r.power != null) power.value = r.power;
+                if (r.kills != null) kills.value = r.kills;
+                lastrankId = r.lastrank_id; lr.value = r.lastrank_id;
+                findInput.value = (r.tag ? '[' + r.tag + '] ' : '') + (r.name || '');
+                closeDropdown();
+                note.textContent = 'Confirming…';
+                try { applySnapshot(await api('POST', '/api/external-alliances/lookup', { url: r.lastrank_id })); }
+                catch (e) { note.textContent = 'Selected — power ' + fmtBig(r.power) + ' · kills ' + fmtBig(r.kills); }
+            } },
+                el('span', { className: 'ext-find-name', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
+                meta ? el('span', { className: 'ext-find-meta', text: meta }) : null);
+        }
 
-        const lrSearchBtn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, '🔎 Look up on LastRank');
-        lrSearchBtn.addEventListener('click', async () => {
-            const q = tag.value.trim() || name.value.trim();
+        function renderDropdown(localList, lrList, msg, isError, showAction) {
+            dropdown.replaceChildren();
+            if (localList && localList.length) {
+                dropdown.appendChild(el('div', { className: 'ext-find-head', text: 'In your registry' }));
+                localList.forEach(x => dropdown.appendChild(localItem(x)));
+            }
+            if (lrList && lrList.length) {
+                dropdown.appendChild(el('div', { className: 'ext-find-head', text: 'From LastRank' }));
+                lrList.forEach(r => dropdown.appendChild(lrItem(r)));
+            }
+            if (msg) dropdown.appendChild(el('div', { className: isError ? 'ext-find-msg ext-find-err' : 'ext-find-msg', text: msg }));
+            if (showAction) {
+                dropdown.appendChild(el('button', { className: 'ext-find-action', type: 'button', onclick: runLastRankSearch },
+                    '🔎 Look up “' + findInput.value.trim() + '” on LastRank'));
+            }
+            if (dropdown.childNodes.length) openDropdown(); else closeDropdown();
+        }
+
+        async function runLastRankSearch() {
+            const q = findInput.value.trim();
             const srv = server.value.trim();
-            if (!q) { renderResults(null, null, 'Type a tag or name to search.', true); tag.focus(); return; }
-            if (!srv) { renderResults(null, null, "Enter the alliance's server number — LastRank search matches it strictly.", true); server.focus(); return; }
-            lrSearchBtn.disabled = true;
-            note.textContent = '';
-            renderResults(localMatches(q).slice(0, 4), null, 'Searching LastRank…');
+            if (!q) return;
+            if (!srv) { renderDropdown(localMatches(q), null, 'Enter the server number above — LastRank search matches it strictly.', true, false); server.focus(); return; }
+            renderDropdown(localMatches(q), null, 'Searching LastRank…', false, false);
             try {
                 const list = await api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q) + '&server=' + encodeURIComponent(srv));
-                renderResults(localMatches(q).slice(0, 4), list, (list && list.length) ? null : 'No LastRank matches on server ' + srv + '.');
-            } catch (e) { renderResults(localMatches(q).slice(0, 4), null, e.message); }
-            finally { lrSearchBtn.disabled = false; }
+                renderDropdown(localMatches(q), list, (list && list.length) ? null : 'No LastRank matches on server ' + srv + '.', false, false);
+            } catch (e) { renderDropdown(localMatches(q), null, e.message, true, false); }
+        }
+
+        function refreshFind() {
+            const q = findInput.value.trim();
+            if (!q) { closeDropdown(); return; }
+            renderDropdown(localMatches(q), null, null, false, true);
+        }
+        findInput.addEventListener('input', refreshFind);
+        findInput.addEventListener('focus', refreshFind);
+        findInput.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { closeDropdown(); }
+            else if (e.key === 'Enter') { e.preventDefault(); runLastRankSearch(); }
         });
 
         modalApi.close = modal(editing ? 'Edit alliance' : 'Add alliance', [
-            el('div', { className: 'ext-find-bar' }, lrSearchBtn, el('span', { className: 'vsl-help', text: 'Filters your registry as you type; searches LastRank on click.' })),
-            results,
-            el('div', { className: 'vsl-form-grid' }, field('Tag', tag), field('Name', name), field('Server', server)),
+            field('Find alliance', findWrap),
+            el('div', { className: 'vsl-form-grid' }, field('Server', server), field('Tag', tag), field('Name', name)),
             el('div', { className: 'vsl-form-grid' }, field('Power', power), field('Kills', kills), field('Members', members)),
             field('LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, lr, lookupBtn)), note,
         ], async () => {
