@@ -568,6 +568,18 @@ type VSLeagueOpponentSnapshot struct {
 	LastSeenAt  string `json:"last_seen_at"`
 }
 
+// VSLeagueAllianceSearchResult is one hit from the LastRank alliance search (fuzzy tag/name,
+// optional strict server filter). Lean by design — member_count isn't on the search row, so a
+// picked result funnels through the by-id lookup to fill it. Nullable fields are pointers.
+type VSLeagueAllianceSearchResult struct {
+	LastRankID string  `json:"lastrank_id"`
+	Tag        *string `json:"tag"`
+	Name       *string `json:"name"`
+	Server     *int    `json:"server"`
+	Power      *int64  `json:"power"`
+	Kills      *int64  `json:"kills"`
+}
+
 // ExternalAlliance is a cached outside alliance seen via LastRank (populated on every lookup)
 // so it can be re-entered by tag without another lookup. Not VS-specific — allies/recruiting
 // can use it too. Tag is not unique (changeable).

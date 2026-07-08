@@ -134,6 +134,53 @@ func fetchLastRankAlliance(ctx context.Context, allianceID string) (*lastrankAll
 	return &a, nil
 }
 
+// --- Alliance search wire structs (never leave this file) ---
+
+// lastrankAllianceRow is one row of /v1/global/alliances (the search/list endpoint). It carries
+// power/kills directly (unlike a /v1/search hit), so a picker can show them without a second call.
+type lastrankAllianceRow struct {
+	AllianceID string  `json:"alliance_id"`
+	Abbr       *string `json:"abbr"`
+	Name       *string `json:"name"`
+	ServerID   *int    `json:"server_id"`
+	Power      *int64  `json:"power"`
+	Kills      *int64  `json:"kills"`
+}
+
+type lastrankAlliancePage struct {
+	Rows []lastrankAllianceRow `json:"rows"`
+}
+
+// searchLastRankAlliances finds alliances by fuzzy tag/name via /v1/global/alliances, optionally
+// restricted to a single server (strict) — matching the picker's "strict server + fuzzy name"
+// rule. Uses the shared 1 req/sec limiter; the caller owns a bounded context.
+func searchLastRankAlliances(ctx context.Context, query string, server *int) ([]VSLeagueAllianceSearchResult, error) {
+	q := url.Values{}
+	q.Set("search", query)
+	q.Set("sort_by", "power")
+	q.Set("sort_dir", "desc")
+	q.Set("limit", "20")
+	if server != nil {
+		q.Set("server_id", strconv.Itoa(*server))
+	}
+	var page lastrankAlliancePage
+	if err := lastRankDo(ctx, http.MethodGet, "/v1/global/alliances?"+q.Encode(), &page); err != nil {
+		return nil, err
+	}
+	out := make([]VSLeagueAllianceSearchResult, 0, len(page.Rows))
+	for _, row := range page.Rows {
+		out = append(out, VSLeagueAllianceSearchResult{
+			LastRankID: row.AllianceID,
+			Tag:        row.Abbr,
+			Name:       row.Name,
+			Server:     row.ServerID,
+			Power:      row.Power,
+			Kills:      row.Kills,
+		})
+	}
+	return out, nil
+}
+
 // getLastRankPlayer reads the cached player record (fast). Used by the bulk
 // extended sync — enriching the whole roster would mean ~100 live game pulls,
 // which is slow and abusive to the volunteer service.

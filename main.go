@@ -375,6 +375,7 @@ func main() {
 	router.HandleFunc("/api/external-alliances/{id:[0-9]+}", authMiddleware(requireManageExternalAlliances(deleteExternalAlliance))).Methods("DELETE")
 	router.HandleFunc("/api/external-alliances/{id:[0-9]+}/refresh", authMiddleware(requireManageExternalAlliances(refreshExternalAlliance))).Methods("POST")
 	router.HandleFunc("/api/external-alliances/lookup", authMiddleware(requireManageExternalAlliances(lookupExternalAlliance))).Methods("POST")
+	router.HandleFunc("/api/external-alliances/search", authMiddleware(requireManageExternalAlliances(searchExternalAlliancesLastRank))).Methods("GET")
 
 	// LastRank.fun enrichment (manual trigger; client-side rate-limited globally)
 	router.HandleFunc("/api/lastrank/preview", authMiddleware(requirePermission("manage_members", lastRankPreview))).Methods("POST")

@@ -1401,6 +1401,39 @@ func lookupExternalAlliance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, snap)
 }
 
+// searchExternalAlliancesLastRank finds alliances on LastRank by fuzzy tag/name (q), optionally
+// restricted to a strict server number, for the registry add/opponent picker. Manage-gated (it
+// hits the volunteer service); returns lean results the officer picks from, then confirms by id.
+func searchExternalAlliancesLastRank(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		badRequest(w, "Enter a tag or name to search")
+		return
+	}
+	var server *int
+	if s := strings.TrimSpace(r.URL.Query().Get("server")); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			badRequest(w, "server must be a number")
+			return
+		}
+		server = &n
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	results, err := searchLastRankAlliances(ctx, q, server)
+	if err != nil {
+		slogLastRank("searchExternalAlliancesLastRank failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that search", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, results)
+}
+
 // nullStrP maps a *string to a NULL-able driver value.
 func nullStrP(s *string) any {
 	if s == nil || strings.TrimSpace(*s) == "" {
