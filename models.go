@@ -588,6 +588,61 @@ type VSLeagueOpponentMember struct {
 	AllianceRank *int   `json:"alliance_rank,omitempty"`
 }
 
+// VSLeagueAnalytics is the cross-season roll-up (a season is only 4 weeks, so trends are only
+// meaningful across seasons). Computed on read from weeks/days; nothing is persisted.
+type VSLeagueAnalytics struct {
+	Seasons    []VSLASeason   `json:"seasons"`
+	Totals     VSLATotals     `json:"totals"`
+	ByDay      []VSLADay      `json:"by_day"`
+	ByStrategy []VSLAStrategy `json:"by_strategy"`
+	Opponents  []VSLAOpponent `json:"opponents"`
+}
+
+type VSLASeason struct {
+	SeasonNumber int    `json:"season_number"`
+	Tier         string `json:"tier"`
+	FinalRank    *int   `json:"final_rank"`
+	Wins         int    `json:"wins"`
+	Losses       int    `json:"losses"`
+	Ties         int    `json:"ties"`
+	Weeks        int    `json:"weeks"`
+}
+
+type VSLATotals struct {
+	Seasons       int      `json:"seasons"`
+	Wins          int      `json:"wins"`
+	Losses        int      `json:"losses"`
+	Ties          int      `json:"ties"`
+	WinRate       *float64 `json:"win_rate"` // over decided weeks; null if none decided
+	BestFinalRank *int     `json:"best_final_rank"`
+}
+
+type VSLADay struct {
+	DayNumber int      `json:"day_number"`
+	Wins      int      `json:"wins"`
+	Losses    int      `json:"losses"`
+	Ties      int      `json:"ties"`
+	MarginAvg *float64 `json:"margin_avg"` // avg (our-opp) raw score over days with both scores
+	MarginN   int      `json:"margin_n"`
+}
+
+type VSLAStrategy struct {
+	Label  string `json:"label"`
+	Worked int    `json:"worked"`
+	Failed int    `json:"failed"`
+	Mixed  int    `json:"mixed"`
+	Total  int    `json:"total"`
+}
+
+type VSLAOpponent struct {
+	Tag      string `json:"tag"`
+	Name     string `json:"name"`
+	Wins     int    `json:"wins"`
+	Losses   int    `json:"losses"`
+	Ties     int    `json:"ties"`
+	Meetings int    `json:"meetings"`
+}
+
 // ExternalAlliance is a cached outside alliance seen via LastRank (populated on every lookup)
 // so it can be re-entered by tag without another lookup. Not VS-specific — allies/recruiting
 // can use it too. Tag is not unique (changeable).

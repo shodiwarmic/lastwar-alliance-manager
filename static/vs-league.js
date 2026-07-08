@@ -129,7 +129,7 @@
 
     function renderSubtabs() {
         const wrap = el('div', { className: 'vsl-subtabs' });
-        [['current', 'Current Week'], ['history', 'Season History'], ['bracket', 'Bracket'], ['analysis', 'Day Analysis']]
+        [['current', 'Current Week'], ['history', 'Season History'], ['bracket', 'Bracket'], ['analysis', 'Day Analysis'], ['alltime', 'All-Time']]
             .forEach(([k, label]) => {
                 wrap.appendChild(el('button', {
                     className: 'vsl-subtab' + (state.view === k ? ' active' : ''),
@@ -148,6 +148,7 @@
         if (state.view === 'history') return renderHistory(view);
         if (state.view === 'bracket') return renderBracket(view);
         if (state.view === 'analysis') return renderAnalysis(view);
+        if (state.view === 'alltime') return renderAllTime(view);
     }
 
     // ---------- Current Week ----------
@@ -433,6 +434,87 @@
     }
 
     // ===================== helpers =====================
+    // ---------- All-Time (cross-season) ----------
+    async function renderAllTime(view) {
+        const holder = el('div');
+        view.appendChild(holder);
+        holder.appendChild(el('p', { className: 'vsl-help', text: 'Loading…' }));
+        let a;
+        try { a = await api('GET', '/api/vs-league/analytics'); }
+        catch (e) { holder.replaceChildren(el('p', { className: 'vsl-empty', text: e.message })); return; }
+        clear(holder);
+        if (!a || !a.totals || !a.totals.seasons) {
+            holder.appendChild(el('p', { className: 'vsl-empty', text: 'No seasons recorded yet. Cross-season trends appear here once you have played weeks across one or more seasons.' }));
+            return;
+        }
+        const rec = (w, l, t) => w + '–' + l + (t ? '–' + t : '');
+        const cardWith = (title, ...nodes) => {
+            const c = el('div', { className: 'card' });
+            c.appendChild(el('div', { className: 'card-header' }, el('div', {}, el('h2', { text: title }))));
+            nodes.forEach(n => c.appendChild(n));
+            return c;
+        };
+        const table = (heads, rowsArr) => {
+            const tbl = el('table', { className: 'data-table' });
+            tbl.appendChild(el('thead', {}, el('tr', {}, ...heads.map(h => el('th', { text: h })))));
+            const tb = el('tbody');
+            rowsArr.forEach(cells => tb.appendChild(el('tr', {}, ...cells.map(c => el('td', { text: c })))));
+            tbl.appendChild(tb);
+            return el('div', { className: 'table-scroll' }, tbl);
+        };
+
+        // Totals
+        const t = a.totals;
+        const tiles = el('div', { className: 'vsl-tiles' });
+        tiles.appendChild(tile('Seasons', String(t.seasons), ''));
+        tiles.appendChild(tile('All-time record', rec(t.wins, t.losses, t.ties), 'decided weeks'));
+        tiles.appendChild(tile('Win rate', t.win_rate != null ? Math.round(t.win_rate * 100) + '%' : '—', 'of decided weeks'));
+        tiles.appendChild(tile('Best finish', t.best_final_rank != null ? '#' + t.best_final_rank : '—', 'final rank'));
+        holder.appendChild(tiles);
+
+        // Seasons
+        holder.appendChild(cardWith('Seasons', table(
+            ['Season', 'Tier', 'Record', 'Final', 'Weeks'],
+            a.seasons.map(s => ['S' + s.season_number, s.tier || '—', rec(s.wins, s.losses, s.ties), s.final_rank != null ? '#' + s.final_rank : '—', String(s.weeks)]))));
+
+        // Theme-day performance (all seasons)
+        const dcard = cardWith('Theme-day performance (all seasons)');
+        let anyDay = false;
+        (a.by_day || []).forEach(d => {
+            const total = d.wins + d.losses + d.ties;
+            if (total > 0) anyDay = true;
+            const theme = (typeof VS_THEMES !== 'undefined') ? VS_THEMES[d.day_number - 1] : null;
+            const bar = el('div', { className: 'vsl-wl' });
+            if (total > 0) {
+                bar.appendChild(el('span', { className: 'w', style: 'flex:' + d.wins }));
+                bar.appendChild(el('span', { className: 'l', style: 'flex:' + d.losses }));
+                bar.appendChild(el('span', { className: 't', style: 'flex:' + d.ties }));
+            }
+            const margin = d.margin_n ? ((d.margin_avg >= 0 ? '+' : '') + Math.round(d.margin_avg / 1000) + 'k avg') : '';
+            dcard.appendChild(el('div', { className: 'vsl-analysis-row' },
+                el('div', { text: theme ? theme.icon + ' ' + theme.short : 'Day ' + d.day_number }),
+                bar,
+                el('div', { className: 'vsl-help', text: total ? (rec(d.wins, d.losses, d.ties) + (margin ? ' · ' + margin : '')) : 'no data' })));
+        });
+        if (!anyDay) dcard.appendChild(el('p', { className: 'vsl-empty', text: 'Enter daily results across seasons to compare theme days.' }));
+        holder.appendChild(dcard);
+
+        // Strategy outcomes
+        if (a.by_strategy && a.by_strategy.length) {
+            const LBL = { push: 'Push', save: 'Save', normal: 'Normal', test: 'Test', recovery: 'Recovery' };
+            holder.appendChild(cardWith('Strategy outcomes', table(
+                ['Strategy', 'Worked', 'Failed', 'Mixed', 'Weeks'],
+                a.by_strategy.map(s => [LBL[s.label] || s.label, String(s.worked), String(s.failed), String(s.mixed), String(s.total)]))));
+        }
+
+        // Opponents faced
+        if (a.opponents && a.opponents.length) {
+            holder.appendChild(cardWith('Opponents faced', table(
+                ['Alliance', 'Record', 'Meetings'],
+                a.opponents.map(o => [(o.tag ? '[' + o.tag + '] ' : '') + (o.name || '—'), rec(o.wins, o.losses, o.ties), String(o.meetings)]))));
+        }
+    }
+
     function tile(lbl, val, sub) {
         return el('div', { className: 'vsl-tile' }, el('div', { className: 'lbl', text: lbl }),
             el('div', { className: 'val', text: val }), sub ? el('div', { className: 'sub', text: sub }) : null);

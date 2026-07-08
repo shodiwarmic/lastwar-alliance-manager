@@ -279,6 +279,197 @@ func scanVSLeagueWeek(row interface{ Scan(...any) error }, canManage bool) (*VSL
 	return &wk, nil
 }
 
+// getVSLeagueAnalytics rolls up every season's weeks/days into cross-season stats (a single 4-week
+// season is too small to analyze alone). All derived on read — nothing stored. Gated view_vs_points.
+func getVSLeagueAnalytics(w http.ResponseWriter, r *http.Request) {
+	type seasonAgg struct {
+		stat  *VSLASeason
+		order int
+	}
+	seasonByID := map[int]*seasonAgg{}
+	var out VSLeagueAnalytics
+
+	srows, err := db.Query(`SELECT id, season_number, COALESCE(league_tier,''), final_rank FROM vs_league_seasons ORDER BY season_number`)
+	if err != nil {
+		dbError(w, "getVSLeagueAnalytics seasons", err)
+		return
+	}
+	i := 0
+	for srows.Next() {
+		var id int
+		s := &VSLASeason{}
+		if err := srows.Scan(&id, &s.SeasonNumber, &s.Tier, &s.FinalRank); err != nil {
+			srows.Close()
+			dbError(w, "getVSLeagueAnalytics season scan", err)
+			return
+		}
+		seasonByID[id] = &seasonAgg{stat: s, order: i}
+		i++
+	}
+	srows.Close()
+
+	// Aggregators.
+	dayAgg := [6]VSLADay{}
+	for d := 0; d < 6; d++ {
+		dayAgg[d].DayNumber = d + 1
+	}
+	dayMargin := [6]int64{}
+	stratAgg := map[string]*VSLAStrategy{}
+	oppAgg := map[string]*VSLAOpponent{}
+
+	wrows, err := db.Query(`SELECT id, season_id, COALESCE(opponent_tag,''), COALESCE(opponent_name,''),
+		COALESCE(strategy_label,''), COALESCE(strategy_result,''), outcome
+		FROM vs_league_weeks`)
+	if err != nil {
+		dbError(w, "getVSLeagueAnalytics weeks", err)
+		return
+	}
+	type weekRow struct {
+		id, seasonID          int
+		oppTag, oppName       string
+		stratLabel, stratRes  string
+		storedOutcome         *string
+	}
+	var weeks []weekRow
+	for wrows.Next() {
+		var wr weekRow
+		if err := wrows.Scan(&wr.id, &wr.seasonID, &wr.oppTag, &wr.oppName, &wr.stratLabel, &wr.stratRes, &wr.storedOutcome); err != nil {
+			wrows.Close()
+			dbError(w, "getVSLeagueAnalytics week scan", err)
+			return
+		}
+		weeks = append(weeks, wr)
+	}
+	wrows.Close()
+
+	for _, wr := range weeks {
+		if sa := seasonByID[wr.seasonID]; sa != nil {
+			sa.stat.Weeks++
+		}
+		// Per-day aggregation + weekly outcome (computed from days, else the stored summary).
+		days, _ := loadVSLeagueDays(wr.id)
+		var arr [6]string
+		for d := range arr {
+			arr[d] = "pending"
+		}
+		for _, d := range days {
+			if d.DayNumber < 1 || d.DayNumber > 6 {
+				continue
+			}
+			idx := d.DayNumber - 1
+			switch d.Outcome {
+			case "win":
+				dayAgg[idx].Wins++
+			case "loss":
+				dayAgg[idx].Losses++
+			case "tie":
+				dayAgg[idx].Ties++
+			}
+			arr[idx] = d.Outcome
+			if d.OurScore != nil && d.OpponentScore != nil {
+				dayMargin[idx] += *d.OurScore - *d.OpponentScore
+				dayAgg[idx].MarginN++
+			}
+		}
+
+		outcome := ""
+		if len(days) > 0 {
+			if st := computeWeekStanding(arr); st.Decided {
+				outcome = st.Outcome
+			}
+		} else if wr.storedOutcome != nil {
+			outcome = *wr.storedOutcome
+		}
+		if outcome == "" || outcome == "pending" {
+			continue // undecided weeks don't count toward records
+		}
+
+		if sa := seasonByID[wr.seasonID]; sa != nil {
+			bumpWLT(&sa.stat.Wins, &sa.stat.Losses, &sa.stat.Ties, outcome)
+		}
+		if wr.stratLabel != "" {
+			s := stratAgg[wr.stratLabel]
+			if s == nil {
+				s = &VSLAStrategy{Label: wr.stratLabel}
+				stratAgg[wr.stratLabel] = s
+			}
+			s.Total++
+			switch wr.stratRes {
+			case "worked":
+				s.Worked++
+			case "failed":
+				s.Failed++
+			case "mixed":
+				s.Mixed++
+			}
+		}
+		if wr.oppTag != "" || wr.oppName != "" {
+			key := strings.ToLower(wr.oppTag)
+			if key == "" {
+				key = strings.ToLower(wr.oppName)
+			}
+			o := oppAgg[key]
+			if o == nil {
+				o = &VSLAOpponent{Tag: wr.oppTag, Name: wr.oppName}
+				oppAgg[key] = o
+			}
+			if o.Name == "" {
+				o.Name = wr.oppName
+			}
+			o.Meetings++
+			bumpWLT(&o.Wins, &o.Losses, &o.Ties, outcome)
+		}
+	}
+
+	// Assemble, preserving season order and computing derived fields.
+	out.Seasons = make([]VSLASeason, len(seasonByID))
+	for _, sa := range seasonByID {
+		out.Seasons[sa.order] = *sa.stat
+		out.Totals.Wins += sa.stat.Wins
+		out.Totals.Losses += sa.stat.Losses
+		out.Totals.Ties += sa.stat.Ties
+		if sa.stat.FinalRank != nil && (out.Totals.BestFinalRank == nil || *sa.stat.FinalRank < *out.Totals.BestFinalRank) {
+			out.Totals.BestFinalRank = sa.stat.FinalRank
+		}
+	}
+	out.Totals.Seasons = len(seasonByID)
+	if decided := out.Totals.Wins + out.Totals.Losses + out.Totals.Ties; decided > 0 {
+		wr := float64(out.Totals.Wins) / float64(decided)
+		out.Totals.WinRate = &wr
+	}
+
+	for d := 0; d < 6; d++ {
+		da := dayAgg[d]
+		if da.MarginN > 0 {
+			avg := float64(dayMargin[d]) / float64(da.MarginN)
+			da.MarginAvg = &avg
+		}
+		out.ByDay = append(out.ByDay, da)
+	}
+	for _, s := range stratAgg {
+		out.ByStrategy = append(out.ByStrategy, *s)
+	}
+	sort.Slice(out.ByStrategy, func(a, b int) bool { return out.ByStrategy[a].Total > out.ByStrategy[b].Total })
+	for _, o := range oppAgg {
+		out.Opponents = append(out.Opponents, *o)
+	}
+	sort.Slice(out.Opponents, func(a, b int) bool { return out.Opponents[a].Meetings > out.Opponents[b].Meetings })
+
+	writeJSON(w, out)
+}
+
+// bumpWLT increments the win/loss/tie counter matching outcome.
+func bumpWLT(wins, losses, ties *int, outcome string) {
+	switch outcome {
+	case "win":
+		*wins++
+	case "loss":
+		*losses++
+	case "tie":
+		*ties++
+	}
+}
+
 func loadVSLeagueDays(weekID int) ([]VSLeagueDay, error) {
 	rows, err := db.Query(`SELECT id, week_id, day_number, our_score, opponent_score, outcome,
 		mvp_is_ours, mvp_member_id, mvp_name
