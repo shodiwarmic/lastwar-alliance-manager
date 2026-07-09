@@ -245,7 +245,8 @@
         const tiles = el('div', { className: 'vsl-tiles' });
         tiles.appendChild(tile('Weekly Match Score', st.our_points + ' – ' + st.opponent_points, 'first to 7 of 13'));
         tiles.appendChild(tile('Bracket Rank', wk.league_rank != null ? '#' + wk.league_rank : '—', wk.league_tier || (state.season && state.season.league_tier) || ''));
-        if (wk.our_power != null) tiles.appendChild(tile('Our Power', fmtBig(wk.our_power), 'kills ' + (wk.our_kills != null ? fmtBig(wk.our_kills) : '—') + (wk.our_member_count != null ? ' · ' + wk.our_member_count + ' mbrs' : '')));
+        if (wk.our_power != null) tiles.appendChild(tile('Our Power', fmtBig(wk.our_power), 'kills ' + (wk.our_kills != null ? fmtBig(wk.our_kills) : '—')));
+        if (wk.our_member_count != null) tiles.appendChild(tile('Our Members', wk.our_member_count + ' / 100', ''));
         if (wk.opponent_power != null) tiles.appendChild(tile('Opp Power', fmtBig(wk.opponent_power), 'kills ' + (wk.opponent_kills != null ? fmtBig(wk.opponent_kills) : '—')));
         if (wk.opponent_member_count != null) tiles.appendChild(tile('Opp Members', wk.opponent_member_count + ' / 100', wk.opponent_server ? 'server ' + wk.opponent_server : ''));
         head.appendChild(tiles);
