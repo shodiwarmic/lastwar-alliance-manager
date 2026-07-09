@@ -54,7 +54,7 @@
 .vsl-day .raw { font-size: 0.72rem; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
 
 /* Bracket — per-week columns of pairs (self-contained connector recipe from the mockup) */
-.vsl-bracket { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 8px; min-width: min-content; }
+.vsl-bracket { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 8px; max-width: 100%; }
 .vsl-wkcol { flex: 0 0 250px; }
 .vsl-wkhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 2px solid var(--color-border); padding: 4px 2px 10px; margin-bottom: 12px; }
 .vsl-wkhead .wk { font-weight: 800; }
@@ -162,7 +162,9 @@
 .vsl-stbl .vsl-rk.rk3 { color: #cd7f32; }
 .vsl-stbl .vsl-al { font-weight: 700; white-space: nowrap; }
 .vsl-stbl .vsl-wc { text-align: center; width: 56px; }
-.vsl-stbl tbody tr.us td { background: var(--color-success-bg); }
+/* Opaque green (page bg + translucent success overlay) so the sticky first column occludes the
+   scrolling alliance cell on narrow screens — the raw --color-success-bg is translucent. */
+.vsl-stbl tbody tr.us td { background-color: var(--color-bg); background-image: linear-gradient(var(--color-success-bg), var(--color-success-bg)); }
 .vsl-stbl tbody tr.us .vsl-al { color: var(--color-success); }
 .vsl-scell { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; padding: 2px 7px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; }
 .vsl-scell.w { color: var(--color-success); background: var(--color-success-bg); }
