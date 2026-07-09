@@ -538,6 +538,7 @@ type VSLeagueWeek struct {
 	OurPower       *int64  `json:"our_power,omitempty"`
 	OurKills       *int64  `json:"our_kills,omitempty"`
 	OurMemberCount *int    `json:"our_member_count,omitempty"`
+	OurServer      *int    `json:"our_server,omitempty"`
 	OurSnapshotAt  *string `json:"our_snapshot_at,omitempty"`
 	// Leadership context — only populated in responses for manage_vs_points users (F-R09/F-013).
 	StrategyLabel  *string `json:"strategy_label,omitempty"`

@@ -246,7 +246,7 @@
         tiles.appendChild(tile('Weekly Match Score', st.our_points + ' – ' + st.opponent_points, 'first to 7 of 13'));
         tiles.appendChild(tile('Bracket Rank', wk.league_rank != null ? '#' + wk.league_rank : '—', wk.league_tier || (state.season && state.season.league_tier) || ''));
         if (wk.our_power != null) tiles.appendChild(tile('Our Power', fmtBig(wk.our_power), 'kills ' + (wk.our_kills != null ? fmtBig(wk.our_kills) : '—')));
-        if (wk.our_member_count != null) tiles.appendChild(tile('Our Members', wk.our_member_count + ' / 100', ''));
+        if (wk.our_member_count != null) tiles.appendChild(tile('Our Members', wk.our_member_count + ' / 100', wk.our_server ? 'server ' + wk.our_server : ''));
         if (wk.opponent_power != null) tiles.appendChild(tile('Opp Power', fmtBig(wk.opponent_power), 'kills ' + (wk.opponent_kills != null ? fmtBig(wk.opponent_kills) : '—')));
         if (wk.opponent_member_count != null) tiles.appendChild(tile('Opp Members', wk.opponent_member_count + ' / 100', wk.opponent_server ? 'server ' + wk.opponent_server : ''));
         head.appendChild(tiles);
@@ -798,6 +798,7 @@
         const oppMembers = inp('number', wk && wk.opponent_member_count != null ? wk.opponent_member_count : '', 'members');
         const ourSnapNote = el('span', { className: 'vsl-help' });
         const initOur = { p: wk && wk.our_power != null ? wk.our_power : null, k: wk && wk.our_kills != null ? wk.our_kills : null, m: wk && wk.our_member_count != null ? wk.our_member_count : null };
+        let ourServerVal = wk && wk.our_server != null ? wk.our_server : null; // constant; captured from our LastRank alliance
         const initOpp = { p: wk && wk.opponent_power != null ? wk.opponent_power : null, k: wk && wk.opponent_kills != null ? wk.opponent_kills : null, m: wk && wk.opponent_member_count != null ? wk.opponent_member_count : null };
         const setLock = (inputs, locked) => inputs.forEach(i => { i.readOnly = locked; i.classList.toggle('vsl-locked', locked); });
         // Fill opponent snapshot fields from a LastRank result and lock them (LastRank = source of truth).
@@ -816,6 +817,7 @@
                 if (initOur.p == null && s.power != null) ourPower.value = s.power;
                 if (initOur.k == null && s.kills != null) ourKills.value = s.kills;
                 if (initOur.m == null && s.member_count != null) ourMembers.value = s.member_count;
+                if (s.server != null) ourServerVal = s.server;
                 setLock([ourPower, ourKills, ourMembers], true);
                 ourSnapNote.textContent = 'Our numbers from our LastRank alliance (locked).';
             } else {
@@ -970,7 +972,7 @@
                 season_id: state.seasonId, week_number: derived.num, week_date: derived.date,
                 opponent_tag: strOrNull(oppTag.value), opponent_name: strOrNull(oppName.value), opponent_server: numOrNull(oppServer.value),
                 opponent_power: numOrNull(oppPower.value), opponent_kills: numOrNull(oppKills.value), opponent_member_count: numOrNull(oppMembers.value),
-                our_power: numOrNull(ourPower.value), our_kills: numOrNull(ourKills.value), our_member_count: numOrNull(ourMembers.value),
+                our_power: numOrNull(ourPower.value), our_kills: numOrNull(ourKills.value), our_member_count: numOrNull(ourMembers.value), our_server: ourServerVal,
                 strategy_label: strOrNull(stratLabel.value), strategy_result: strOrNull(stratResult.value), notes: strOrNull(notes.value)
             };
             if (snap) { payload.opponent_lastrank_id = snap.alliance_id; payload.opponent_lastrank_seen_at = snap.last_seen_at; }
