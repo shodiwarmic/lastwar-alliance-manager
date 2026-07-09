@@ -522,6 +522,34 @@
     function fmtBig(n) { n = Number(n); if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B'; if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K'; return '' + n; }
     function vsLeagueDayPts(n) { return [1, 2, 2, 2, 2, 4][n - 1] || 0; }
     function todayISO() { return (window.gameDateStr ? window.gameDateStr() : new Date().toISOString().slice(0, 10)); }
+
+    // Snap an ISO date to the Monday of its week (local, matching flatpickr's disable check).
+    function weekMonday(iso) {
+        const d = new Date((iso || todayISO()) + 'T00:00:00');
+        if (isNaN(d)) return iso || '';
+        const back = d.getDay() === 0 ? 6 : d.getDay() - 1; // days since Monday
+        d.setDate(d.getDate() - back);
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    // A date field locked to Mondays via flatpickr (season weeks are always Mondays). Falls back to
+    // a native date input if flatpickr didn't load.
+    function mondayPicker(value) {
+        const start = weekMonday(value);
+        const input = inp('text', start, 'Monday (YYYY-MM-DD)');
+        if (window.flatpickr) {
+            window.flatpickr(input, {
+                dateFormat: 'Y-m-d',
+                allowInput: false,
+                defaultDate: start || undefined,
+                locale: { firstDayOfWeek: 1 },
+                disable: [d => d.getDay() !== 1], // Mondays only
+            });
+        } else {
+            input.type = 'date';
+        }
+        return input;
+    }
     function dayDateStr(weekMonday, addDays) {
         const d = new Date(weekMonday + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + addDays); return d.toISOString().slice(0, 10);
     }
@@ -565,7 +593,7 @@
     function openSeasonModal() {
         const num = inp('number', '', 'e.g. 34');
         const tier = inp('text', '', 'e.g. Gold Tier 29-2');
-        const start = inp('date', todayISO());
+        const start = mondayPicker(state.currentWeekDate || todayISO());
         modal('New Duel League Season', [
             el('div', { className: 'vsl-form-grid' }, field('Season number', num), field('Tier (display)', tier), field('Start date', start)),
             el('p', { className: 'vsl-help', text: 'This becomes the active season; the previous active one is archived.' })
@@ -581,7 +609,7 @@
         const s = state.season;
         if (!s) return;
         const tier = inp('text', s.league_tier || '', 'e.g. Gold Tier 29-2');
-        const start = inp('date', s.start_date || todayISO());
+        const start = mondayPicker(s.start_date || todayISO());
         modal('Season ' + s.season_number + ' settings', [
             el('div', { className: 'vsl-form-grid' }, field('Tier (display)', tier), field('Start Monday', start)),
             el('p', { className: 'vsl-help', text: 'Changing the start date re-aligns every week to consecutive game-time Mondays.' })
