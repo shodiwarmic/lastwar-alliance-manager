@@ -151,7 +151,7 @@
 
     function renderSubtabs() {
         const wrap = el('div', { className: 'vsl-subtabs' });
-        const onWeek = state.view !== 'summary' && state.view !== 'bracket';
+        const onWeek = state.view !== 'summary';
         const sel = viewedWeek();
         // Each week is its own sub-tab (past + current selectable; future disabled), then the rollups.
         state.weeks.slice().sort((a, b) => (a.week_number || 0) - (b.week_number || 0)).forEach(wk => {
@@ -167,7 +167,7 @@
             });
             wrap.appendChild(btn);
         });
-        [['summary', 'Season Summary'], ['bracket', 'Bracket']].forEach(([k, label]) => {
+        [['summary', 'Season Summary']].forEach(([k, label]) => {
             wrap.appendChild(el('button', {
                 className: 'vsl-subtab' + (state.view === k ? ' active' : ''),
                 onclick: () => { state.view = k; render(); }
@@ -197,7 +197,6 @@
     }
     function renderView(view) {
         if (state.view === 'summary') return renderSummary(view);
-        if (state.view === 'bracket') return renderBracket(view);
         return renderCurrentWeek(view);
     }
 
@@ -336,31 +335,23 @@
     function renderSummary(view) {
         if (!state.weeks.length) { view.appendChild(el('p', { className: 'vsl-empty', text: 'No weeks yet.' })); return; }
         const weeks = state.weeks.slice().sort((a, b) => (a.week_number || 0) - (b.week_number || 0));
+        view.appendChild(headerWeeksCard(weeks));
+        const holder = el('div');
+        view.appendChild(holder);
+        holder.appendChild(el('p', { className: 'vsl-help', text: 'Loading standings & bracket…' }));
+        renderStandingsAndBracket(weeks, holder);
+    }
 
-        // Season header: tier, progress, our record so far.
+    // Top card: season header (record + week-of-4) merged with the week-by-week "our weeks" table.
+    function headerWeeksCard(weeks) {
         let ourW = 0, ourL = 0, ourT = 0;
         weeks.forEach(w => { const st = w.standing; if (st && st.decided) { if (st.outcome === 'win') ourW++; else if (st.outcome === 'loss') ourL++; else if (st.outcome === 'tie') ourT++; } });
         const played = weeks.filter(w => weekStatusOf(w) !== 'future').length;
         const tier = (state.season && state.season.league_tier) || '';
-        const head = el('div', { className: 'card' });
-        head.appendChild(el('div', { className: 'card-header' }, el('div', {},
+        const card = el('div', { className: 'card' });
+        card.appendChild(el('div', { className: 'card-header' }, el('div', {},
             el('h2', { text: (state.season ? 'S' + state.season.season_number : 'Season') + (tier ? ' · ' + tier : '') }),
             el('div', { className: 'vsl-help', text: 'Week ' + Math.min(Math.max(played, 1), 4) + ' of 4 · our record ' + ourW + '–' + ourL + (ourT ? '–' + ourT : '') }))));
-        view.appendChild(head);
-
-        // Standings grid (all alliances × weeks) — async; populates its own holder.
-        const stHolder = el('div');
-        view.appendChild(stHolder);
-        stHolder.appendChild(el('p', { className: 'vsl-help', text: 'Loading standings…' }));
-        renderStandings(weeks, stHolder);
-
-        // Our week-by-week table.
-        view.appendChild(renderWeekTable(weeks));
-    }
-
-    function renderWeekTable(weeks) {
-        const card = el('div', { className: 'card' });
-        card.appendChild(el('div', { className: 'card-header' }, el('div', {}, el('h2', { text: 'Our weeks' }))));
         const table = el('table', { className: 'data-table' });
         table.appendChild(el('thead', {}, el('tr', {},
             el('th', { text: 'Week' }), el('th', { text: 'Opponent' }), el('th', { text: 'Match Score' }),
@@ -390,46 +381,53 @@
         return el('span', { className: 'vsl-scell ' + cls, text: txt });
     }
 
-    // Standings: all alliances in rank order (latest week with data), a result cell per week. Uses
-    // saved brackets, computing uncaptured weeks the same way the bracket view does.
-    async function renderStandings(weeks, holder) {
+    // Fetch every week's bracket (saved or computed) once, then render the standings grid + the
+    // per-week bracket columns from it.
+    async function renderStandingsAndBracket(weeks, holder) {
         const saved = await Promise.all(weeks.map(w => api('GET', '/api/vs-league/weeks/' + w.id + '/matchups').catch(() => [])));
-        const perWeek = [];
+        const per = [];
         for (let i = 0; i < weeks.length; i++) {
             const wk = weeks[i], ms = saved[i] || [], status = weekStatusOf(wk);
             const byTag = new Map();
+            const pairs = [];
             if (ms.length) {
-                const setSide = (tag, name, rank, pts, oppPts) => {
-                    if (!tag) return;
-                    const decided = pts != null && oppPts != null;
-                    const result = decided ? (pts > oppPts ? 'W' : pts < oppPts ? 'L' : 'T') : (status === 'future' ? 'upcoming' : 'live');
-                    byTag.set(tag.toLowerCase(), { tag, name, rank, result });
-                };
-                ms.forEach(m => { setSide(m.a_tag, m.a_name, m.a_rank, m.a_points, m.b_points); setSide(m.b_tag, m.b_name, m.b_rank, m.b_points, m.a_points); });
+                ms.slice().sort((x, y) => Math.min(x.a_rank || 99, x.b_rank || 99) - Math.min(y.a_rank || 99, y.b_rank || 99)).forEach(m => {
+                    const A = { rank: m.a_rank, tag: m.a_tag, name: m.a_name, pts: m.a_points };
+                    const B = { rank: m.b_rank, tag: m.b_tag, name: m.b_name, pts: m.b_points };
+                    const decided = A.pts != null && B.pts != null;
+                    pairs.push({ A, B, decided });
+                    const setSide = (s, opp) => { if (s.tag) byTag.set(s.tag.toLowerCase(), { tag: s.tag, name: s.name, rank: s.rank, result: decided ? (s.pts > opp.pts ? 'W' : s.pts < opp.pts ? 'L' : 'T') : (status === 'future' ? 'upcoming' : 'live') }); };
+                    setSide(A, B); setSide(B, A);
+                });
             } else {
                 const ranked = await inferRankedForWeek(wk);
-                if (ranked) ranked.forEach(r => byTag.set(r.tag.toLowerCase(), { tag: r.tag, name: r.name, rank: r.rank, result: status === 'future' ? 'upcoming' : status === 'current' ? 'live' : 'pending' }));
+                if (ranked) {
+                    for (let p = 0; p < 8; p++) { const a = ranked[2 * p], b = ranked[2 * p + 1]; if (!a && !b) continue; pairs.push({ A: a ? { rank: a.rank, tag: a.tag, name: a.name, pts: null } : null, B: b ? { rank: b.rank, tag: b.tag, name: b.name, pts: null } : null, decided: false }); }
+                    ranked.forEach(r => byTag.set(r.tag.toLowerCase(), { tag: r.tag, name: r.name, rank: r.rank, result: status === 'future' ? 'upcoming' : status === 'current' ? 'live' : 'pending' }));
+                }
             }
-            perWeek.push({ wk, byTag, status });
+            per.push({ wk, status, byTag, pairs });
         }
-
-        let orderWeek = null;
-        for (let i = perWeek.length - 1; i >= 0; i--) { if (perWeek[i].byTag.size) { orderWeek = perWeek[i]; break; } }
         clear(holder);
-        if (!orderWeek) { holder.appendChild(el('p', { className: 'vsl-empty', text: 'Capture a bracket (or complete week 1) to see standings.' })); return; }
+        holder.appendChild(standingsCard(per));
+        holder.appendChild(bracketCard(per));
+    }
 
+    function standingsCard(per) {
+        let orderWeek = null;
+        for (let i = per.length - 1; i >= 0; i--) { if (per[i].byTag.size) { orderWeek = per[i]; break; } }
+        if (!orderWeek) return el('div', { className: 'card' }, el('div', { style: 'padding:14px;' }, el('p', { className: 'vsl-empty', text: 'Capture a bracket (or complete week 1) to see standings.' })));
         const allTags = new Map();
-        perWeek.forEach(pw => pw.byTag.forEach((v, k) => { if (!allTags.has(k)) allTags.set(k, { tag: v.tag, name: v.name }); else if (v.name && !allTags.get(k).name) allTags.get(k).name = v.name; }));
+        per.forEach(pw => pw.byTag.forEach((v, k) => { if (!allTags.has(k)) allTags.set(k, { tag: v.tag, name: v.name }); else if (v.name && !allTags.get(k).name) allTags.get(k).name = v.name; }));
         const rows = [...allTags.entries()].map(([k, a]) => ({ k, tag: a.tag, name: a.name, rank: (orderWeek.byTag.get(k) || {}).rank || 99 }));
         rows.sort((a, b) => a.rank - b.rank);
-
         const card = el('div', { className: 'card' });
         card.appendChild(el('div', { className: 'card-header' }, el('div', {},
             el('h2', { text: 'Standings' }),
             el('div', { className: 'vsl-help', text: 'The 16 alliances in current rank order · W/L per week, ⚔ live, 💤 upcoming.' }))));
         const tbl = el('table', { className: 'data-table vsl-stbl' });
         const heads = [el('th', { text: '#' }), el('th', { text: 'Alliance' })];
-        perWeek.forEach(pw => heads.push(el('th', { className: 'vsl-wc', text: 'Wk ' + (pw.wk.week_number || '') })));
+        per.forEach(pw => heads.push(el('th', { className: 'vsl-wc', text: 'Wk ' + (pw.wk.week_number || '') })));
         tbl.appendChild(el('thead', {}, el('tr', {}, ...heads)));
         const tb = el('tbody');
         rows.forEach(r => {
@@ -438,12 +436,55 @@
                 el('td', { className: 'vsl-rk' + (r.rank <= 3 ? ' rk' + r.rank : ''), text: r.rank <= 16 ? String(r.rank) : '—' }),
                 el('td', { className: 'vsl-al', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || '') + (isUs ? ' · us' : '') }),
             ];
-            perWeek.forEach(pw => cells.push(el('td', { className: 'vsl-wc' }, summaryResultCell(pw.byTag.get(r.k), pw.status))));
+            per.forEach(pw => cells.push(el('td', { className: 'vsl-wc' }, summaryResultCell(pw.byTag.get(r.k), pw.status))));
             tb.appendChild(el('tr', { className: isUs ? 'us' : null }, ...cells));
         });
         tbl.appendChild(tb);
         card.appendChild(el('div', { className: 'table-scroll' }, tbl));
-        holder.appendChild(card);
+        return card;
+    }
+
+    // Bracket: every week as a column (mockup style) — the Match Record. Uncaptured weeks show
+    // computed ranks with blank points.
+    function bracketCard(per) {
+        const card = el('div', { className: 'card' });
+        card.appendChild(el('div', { className: 'card-header' }, el('div', {},
+            el('h2', { text: 'Bracket' }),
+            el('div', { className: 'vsl-help', text: 'Match Record per week — always 1v2, 3v4 …. Uncaptured weeks show computed ranks; points fill in when captured.' }))));
+        const grid = el('div', { className: 'vsl-bracket' });
+        per.forEach(pw => {
+            const col = el('div', { className: 'vsl-wkcol' });
+            const complete = pw.pairs.length > 0 && pw.pairs.every(p => p.decided);
+            const badge = pw.status === 'future' ? ['up', '💤 Upcoming'] : pw.status === 'current' ? ['live', '⚔ Live'] : complete ? ['done', '✓ Complete'] : ['up', 'In progress'];
+            col.appendChild(el('div', { className: 'vsl-wkhead' }, el('span', { className: 'wk', text: 'Week ' + (pw.wk.week_number || '') }), el('span', { className: 'vsl-wkstate ' + badge[0], text: badge[1] })));
+            if (!pw.pairs.length) col.appendChild(el('div', { className: 'vsl-pending' }, el('span', { className: 'big', text: '💤' }), 'Not available yet'));
+            else pw.pairs.forEach(p => col.appendChild(renderPairV2(p)));
+            grid.appendChild(col);
+        });
+        card.appendChild(grid);
+        return card;
+    }
+
+    function renderPairV2(p) {
+        let top = p.A, bot = p.B;
+        if (top && bot && (top.rank || 99) > (bot.rank || 99)) { const t = top; top = bot; bot = t; }
+        const decided = p.decided && top && bot && top.pts != null && bot.pts != null;
+        const topWon = decided && top.pts > bot.pts, botWon = decided && bot.pts > top.pts;
+        const chip = (side, won, lost) => {
+            if (!side) return el('div', { className: 'vsl-chip pred' }, el('span', { className: 'nm', text: '—' }));
+            const isUs = !!(MY_TAG && (side.tag || '').toLowerCase() === MY_TAG.toLowerCase());
+            const c = el('div', { className: 'vsl-chip' + (won ? ' won' : '') + (lost ? ' out' : '') + (isUs ? ' us' : '') });
+            if (side.rank != null) c.appendChild(el('span', { className: 'rk', text: '#' + side.rank }));
+            c.appendChild(el('span', { className: 'nm', text: (isUs ? '★ ' : '') + (side.tag ? '[' + side.tag + '] ' : '') + (side.name || '') }));
+            if (side.pts != null) c.appendChild(el('span', { className: 's', text: side.pts }));
+            return c;
+        };
+        const winnerTag = topWon ? top.tag : botWon ? bot.tag : null;
+        const ourPair = !!(MY_TAG && ((top && (top.tag || '').toLowerCase() === MY_TAG.toLowerCase()) || (bot && (bot.tag || '').toLowerCase() === MY_TAG.toLowerCase())));
+        return el('div', { className: 'vsl-pair' },
+            el('div', { className: 'vsl-teams' }, chip(top, topWon, botWon), chip(bot, botWon, topWon)),
+            el('div', { className: 'vsl-elbow' }),
+            el('div', { className: 'vsl-wn' + (winnerTag ? ' won' : ' dim') + (ourPair ? ' us' : '') }, winnerTag ? '[' + winnerTag + ']' : '?'));
     }
 
     async function deleteWeek(wk) {
@@ -502,109 +543,6 @@
         return arr.map((x, i) => Object.assign({ rank: i + 1 }, info.get(x.k)));
     }
 
-    function renderBracket(view) {
-        if (!state.weeks.length) { view.appendChild(el('p', { className: 'vsl-empty', text: 'No weeks yet.' })); return; }
-        const bar = el('div', { className: 'vsl-toolbar' });
-        const sel = el('select', { className: 'form-input', style: 'min-width:160px', onchange: e => loadBracket(parseInt(e.target.value, 10), holder) });
-        state.weeks.forEach(wk => sel.appendChild(el('option', { value: wk.id, text: 'Week ' + (wk.week_number != null ? wk.week_number : wk.week_date) })));
-        bar.appendChild(sel);
-        view.appendChild(bar);
-        const holder = el('div');
-        view.appendChild(holder);
-        const first = currentWeek() || state.weeks[state.weeks.length - 1];
-        sel.value = first.id;
-        loadBracket(first.id, holder);
-    }
-
-    async function loadBracket(weekId, holder) {
-        clear(holder);
-        holder.appendChild(el('p', { className: 'vsl-help', text: 'Loading…' }));
-        let ms;
-        try { ms = await api('GET', '/api/vs-league/weeks/' + weekId + '/matchups'); }
-        catch (e) { holder.replaceChildren(el('p', { className: 'vsl-empty', text: e.message })); return; }
-        clear(holder);
-        let banner = null;
-        if (!ms.length) {
-            // Not captured yet — but the ranks/pairings are DETERMINISTIC from prior results (the game
-            // re-ranks by wins → earliest wins → starting rank), so render the computed bracket.
-            const wk = state.weeks.find(w => w.id === weekId);
-            const ranked = wk ? await inferRankedForWeek(wk) : null;
-            clear(holder);
-            if (!ranked) {
-                holder.appendChild(el('p', { className: 'vsl-empty', text: 'No bracket captured for this week.' + (CAN_MANAGE ? ' Use “Capture bracket” on the Current Week tab.' : '') }));
-                return;
-            }
-            ms = [];
-            for (let i = 0; i < 8; i++) {
-                const a = ranked[2 * i], b = ranked[2 * i + 1];
-                if (!a && !b) continue;
-                ms.push({
-                    a_rank: a ? a.rank : null, a_tag: a ? a.tag : null, a_name: a ? a.name : null, a_server: a ? a.server : null, a_points: null,
-                    b_rank: b ? b.rank : null, b_tag: b ? b.tag : null, b_name: b ? b.name : null, b_server: b ? b.server : null, b_points: null,
-                    is_ours: !!(MY_TAG && ((a && (a.tag || '').toLowerCase() === MY_TAG.toLowerCase()) || (b && (b.tag || '').toLowerCase() === MY_TAG.toLowerCase())))
-                });
-            }
-            banner = el('p', { className: 'vsl-help', text: 'Computed from prior results — matchups are always 1v2, 3v4 …. ' + (CAN_MANAGE ? 'Enter this week’s points via “Capture bracket”.' : 'Points appear once captured.') });
-        }
-        if (banner) holder.appendChild(banner);
-        const col = el('div', { className: 'vsl-wkcol', style: 'flex-basis:340px;' });
-        // order pairs by best (lowest) rank in each pair
-        ms.sort((x, y) => Math.min(x.a_rank || 99, x.b_rank || 99) - Math.min(y.a_rank || 99, y.b_rank || 99));
-        ms.forEach(m => col.appendChild(renderPair(m)));
-        const wrap = el('div', { className: 'vsl-bracket' }, col);
-        holder.appendChild(wrap);
-        // derived ladder
-        holder.appendChild(renderLadder(ms));
-    }
-
-    function renderPair(m) {
-        // within-pair order by rank (lower # on top); winner = higher points
-        let top = { rank: m.a_rank, tag: m.a_tag, name: m.a_name, pts: m.a_points };
-        let bot = { rank: m.b_rank, tag: m.b_tag, name: m.b_name, pts: m.b_points };
-        if ((top.rank || 99) > (bot.rank || 99)) { const t = top; top = bot; bot = t; }
-        const bothScored = top.pts != null && bot.pts != null;
-        const topWin = bothScored && top.pts > bot.pts;
-        const botWin = bothScored && bot.pts > top.pts;
-        const chip = (side, isWin) => {
-            const c = el('div', { className: 'vsl-chip' + (isWin ? ' win' : '') });
-            if (side.rank != null) c.appendChild(el('span', { className: 'rk', text: '#' + side.rank }));
-            c.appendChild(el('span', { className: 'nm', text: (side.tag ? '[' + side.tag + '] ' : '') + (side.name || '—') }));
-            if (side.pts != null) c.appendChild(el('span', { className: 's', text: side.pts }));
-            return c;
-        };
-        const winnerTag = topWin ? top.tag : botWin ? bot.tag : null;
-        return el('div', { className: 'vsl-pair' },
-            el('div', { className: 'vsl-teams' }, chip(top, topWin), chip(bot, botWin)),
-            el('div', { className: 'vsl-elbow' }),
-            el('div', { className: 'vsl-wn' + (m.is_ours ? ' us' : '') }, m.is_ours ? 'ours' : (winnerTag ? '[' + winnerTag + ']' : '?')));
-    }
-
-    function renderLadder(ms) {
-        // Build per-alliance rows from both sides, rank-sorted.
-        const rows = [];
-        ms.forEach(m => {
-            if (m.a_tag || m.a_rank != null) rows.push({ rank: m.a_rank, tag: m.a_tag, name: m.a_name, pts: m.a_points });
-            if (m.b_tag || m.b_rank != null) rows.push({ rank: m.b_rank, tag: m.b_tag, name: m.b_name, pts: m.b_points });
-        });
-        rows.sort((a, b) => (a.rank || 99) - (b.rank || 99));
-        const card = el('div', { className: 'card', style: 'margin-top:16px;' });
-        card.appendChild(el('div', { className: 'card-header' }, el('div', {}, el('h2', { text: 'Standings' }))));
-        const table = el('table', { className: 'data-table' });
-        table.appendChild(el('thead', {}, el('tr', {}, el('th', { text: '#' }), el('th', { text: 'Alliance' }), el('th', { text: 'Match Pts' }))));
-        const tb = el('tbody');
-        rows.forEach(r => tb.appendChild(el('tr', {},
-            el('td', { text: r.rank != null ? r.rank : '' }),
-            el('td', { className: 'vsl-al', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || '—') }),
-            el('td', { text: r.pts != null ? r.pts : '—' }))));
-        table.appendChild(tb);
-        card.appendChild(el('div', { className: 'table-scroll' }, table));
-        card.appendChild(el('div', { className: 'vsl-zone' },
-            el('span', {}, el('b', { className: 'promo', text: '▲ Promotion' }), ' top 2'),
-            el('span', {}, el('b', { className: 'demo', text: '▼ Demotion' }), ' bottom (12–16)')));
-        return card;
-    }
-
-    // ---------- Day Analysis ----------
     // ===================== helpers =====================
     // ---------- All-Time (cross-season, top-level tab) ----------
     async function renderAllTime() {
