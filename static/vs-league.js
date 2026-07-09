@@ -153,27 +153,27 @@
         const wrap = el('div', { className: 'vsl-subtabs' });
         const onWeek = state.view !== 'summary';
         const sel = viewedWeek();
-        // Each week is its own sub-tab (past + current selectable; future disabled), then the rollups.
+        // Season Summary is leftmost; then a sub-tab per week (past + current selectable, future
+        // disabled). The current week tab is the default active one on load (state.view = 'week').
+        wrap.appendChild(el('button', {
+            className: 'vsl-subtab' + (state.view === 'summary' ? ' active' : ''),
+            onclick: () => { state.view = 'summary'; render(); }
+        }, 'Season Summary'));
         state.weeks.slice().sort((a, b) => (a.week_number || 0) - (b.week_number || 0)).forEach(wk => {
             const status = weekStatusOf(wk);
             const active = onWeek && sel && sel.id === wk.id;
-            const btn = el('button', {
-                className: 'vsl-subtab' + (active ? ' active' : '') + (status === 'future' ? ' future' : ''),
-                text: 'Week ' + (wk.week_number != null ? wk.week_number : wk.week_date) + (status === 'current' ? ' •' : '')
-            });
-            btn.addEventListener('click', () => {
-                if (weekStatusOf(wk) === 'future') { showToast('Week ' + (wk.week_number || '') + ' hasn’t started yet.', 'info'); return; }
-                state.view = 'week'; state.viewWeekId = wk.id; render();
-            });
-            wrap.appendChild(btn);
-        });
-        [['summary', 'Season Summary']].forEach(([k, label]) => {
             wrap.appendChild(el('button', {
-                className: 'vsl-subtab' + (state.view === k ? ' active' : ''),
-                onclick: () => { state.view = k; render(); }
-            }, label));
+                className: 'vsl-subtab' + (active ? ' active' : '') + (status === 'future' ? ' future' : ''),
+                text: 'Week ' + (wk.week_number != null ? wk.week_number : wk.week_date) + (status === 'current' ? ' •' : ''),
+                onclick: () => gotoWeek(wk)
+            }));
         });
         return wrap;
+    }
+
+    function gotoWeek(wk) {
+        if (weekStatusOf(wk) === 'future') { showToast('Week ' + (wk.week_number || '') + ' hasn’t started yet.', 'info'); return; }
+        state.view = 'week'; state.viewWeekId = wk.id; render();
     }
 
     function currentWeek() {
@@ -355,19 +355,22 @@
         const table = el('table', { className: 'data-table' });
         table.appendChild(el('thead', {}, el('tr', {},
             el('th', { text: 'Week' }), el('th', { text: 'Opponent' }), el('th', { text: 'Match Score' }),
-            el('th', { text: 'Result' }), el('th', { text: 'Strategy' }), CAN_MANAGE ? el('th', { text: '' }) : null)));
+            el('th', { text: 'Result' }), el('th', { text: 'Strategy' }), el('th', { text: '' }))));
         const tb = el('tbody');
         weeks.forEach(wk => {
             const st = wk.standing;
             const opp = (wk.opponent_tag ? '[' + wk.opponent_tag + '] ' : '') + (wk.opponent_name || '—');
+            // Weeks are fixed (always 4) — no edit/delete here; jump to the week's tab for detail/edit.
+            const detail = weekStatusOf(wk) === 'future'
+                ? el('span', { className: 'vsl-help', text: '—' })
+                : el('button', { className: 'btn btn-secondary btn-sm', onclick: () => gotoWeek(wk) }, 'Details');
             tb.appendChild(el('tr', {},
                 el('td', { text: 'Week ' + (wk.week_number != null ? wk.week_number : '') }),
                 el('td', { text: opp }),
                 el('td', { text: st.our_points + ' – ' + st.opponent_points }),
                 el('td', {}, pillFor(st)),
                 el('td', {}, wk.strategy_label ? el('span', { className: 'vsl-strat ' + wk.strategy_label, text: wk.strategy_label }) : el('span', { className: 'vsl-help', text: '—' })),
-                CAN_MANAGE ? el('td', {}, el('button', { className: 'btn btn-secondary btn-sm', onclick: () => openWeekModal(wk) }, 'Edit'),
-                    el('button', { className: 'btn btn-danger btn-sm', onclick: () => deleteWeek(wk), style: 'margin-left:6px;' }, 'Del')) : null));
+                el('td', {}, detail)));
         });
         table.appendChild(tb);
         card.appendChild(el('div', { className: 'table-scroll' }, table));
@@ -485,12 +488,6 @@
             el('div', { className: 'vsl-teams' }, chip(top, topWon, botWon), chip(bot, botWon, topWon)),
             el('div', { className: 'vsl-elbow' }),
             el('div', { className: 'vsl-wn' + (winnerTag ? ' won' : ' dim') + (ourPair ? ' us' : '') }, winnerTag ? '[' + winnerTag + ']' : '?'));
-    }
-
-    async function deleteWeek(wk) {
-        if (!await showConfirm('Delete Week ' + (wk.week_number || '') + ' and all its data?', 'Delete')) return;
-        try { await api('DELETE', '/api/vs-league/weeks/' + wk.id); showToast('Week deleted.'); await selectSeason(state.seasonId); }
-        catch (e) { showToast(e.message, 'error'); }
     }
 
     // ---------- Bracket ----------
