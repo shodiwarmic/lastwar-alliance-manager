@@ -316,6 +316,55 @@
     }
 
     // ---------- Bracket ----------
+    // inferRankedForWeek returns this week's rank order [{rank,tag,name,server}] computed from prior
+    // captured weeks (most wins → earliest wins → starting rank), or null if not computable. Same
+    // rule as the capture modal's computeRanks (kept in sync — see openBracketModal).
+    async function inferRankedForWeek(wk) {
+        const fetchMs = id => api('GET', '/api/vs-league/weeks/' + id + '/matchups').catch(() => []);
+        const priorWeeks = state.weeks
+            .filter(w => w.week_number != null && wk.week_number != null && w.week_number < wk.week_number)
+            .sort((a, b) => a.week_number - b.week_number);
+        if (!priorWeeks.length) return null;
+        const [priorMs, known] = await Promise.all([
+            Promise.all(priorWeeks.map(w => fetchMs(w.id))),
+            api('GET', '/api/external-alliances').catch(() => [])
+        ]);
+        const byTag = new Map(); (known || []).forEach(a => { if (a.tag) byTag.set(a.tag.toLowerCase(), a); });
+        const info = new Map(), startRank = new Map(), weekRes = [];
+        const remember = s => {
+            if (!s.tag) return null;
+            const k = s.tag.toLowerCase();
+            if (!info.has(k)) info.set(k, { tag: s.tag, name: s.name || '', server: s.server != null ? s.server : null });
+            const rec = info.get(k);
+            if (s.name) rec.name = s.name;
+            if (s.server != null) rec.server = s.server;
+            return k;
+        };
+        priorWeeks.forEach((w, wi) => {
+            const res = new Map();
+            (priorMs[wi] || []).forEach(m => {
+                const A = { tag: m.a_tag, name: m.a_name, server: m.a_server, rank: m.a_rank, pts: m.a_points };
+                const B = { tag: m.b_tag, name: m.b_name, server: m.b_server, rank: m.b_rank, pts: m.b_points };
+                const ka = remember(A), kb = remember(B);
+                if (w.week_number === 1) { if (ka && A.rank != null) startRank.set(ka, A.rank); if (kb && B.rank != null) startRank.set(kb, B.rank); }
+                if (A.pts != null && B.pts != null && ka && kb) { const d = A.pts - B.pts; res.set(ka, d > 0 ? 'W' : d < 0 ? 'L' : 'T'); res.set(kb, d < 0 ? 'W' : d > 0 ? 'L' : 'T'); }
+            });
+            weekRes.push(res);
+        });
+        for (const [k, rec] of info) { if (rec.server == null && byTag.get(k) && byTag.get(k).server != null) rec.server = byTag.get(k).server; }
+        const keys = [...startRank.keys()];
+        if (keys.length < 2) return null;
+        for (const res of weekRes) for (const k of keys) { const v = res.get(k); if (v == null || v === 'T') return null; }
+        const arr = keys.map(k => ({ k, timeline: weekRes.map(r => r.get(k)), start: startRank.get(k) }));
+        arr.forEach(a => a.wins = a.timeline.filter(x => x === 'W').length);
+        arr.sort((a, b) => {
+            if (b.wins !== a.wins) return b.wins - a.wins;
+            for (let i = 0; i < a.timeline.length; i++) if (a.timeline[i] !== b.timeline[i]) return a.timeline[i] === 'W' ? -1 : 1;
+            return a.start - b.start;
+        });
+        return arr.map((x, i) => Object.assign({ rank: i + 1 }, info.get(x.k)));
+    }
+
     function renderBracket(view) {
         if (!state.weeks.length) { view.appendChild(el('p', { className: 'vsl-empty', text: 'No weeks yet.' })); return; }
         const bar = el('div', { className: 'vsl-toolbar' });
@@ -337,10 +386,30 @@
         try { ms = await api('GET', '/api/vs-league/weeks/' + weekId + '/matchups'); }
         catch (e) { holder.replaceChildren(el('p', { className: 'vsl-empty', text: e.message })); return; }
         clear(holder);
+        let banner = null;
         if (!ms.length) {
-            holder.appendChild(el('p', { className: 'vsl-empty', text: 'No bracket captured for this week.' + (CAN_MANAGE ? ' Use “Capture bracket” on the Current Week tab.' : '') }));
-            return;
+            // Not captured yet — but the ranks/pairings are DETERMINISTIC from prior results (the game
+            // re-ranks by wins → earliest wins → starting rank), so render the computed bracket.
+            const wk = state.weeks.find(w => w.id === weekId);
+            const ranked = wk ? await inferRankedForWeek(wk) : null;
+            clear(holder);
+            if (!ranked) {
+                holder.appendChild(el('p', { className: 'vsl-empty', text: 'No bracket captured for this week.' + (CAN_MANAGE ? ' Use “Capture bracket” on the Current Week tab.' : '') }));
+                return;
+            }
+            ms = [];
+            for (let i = 0; i < 8; i++) {
+                const a = ranked[2 * i], b = ranked[2 * i + 1];
+                if (!a && !b) continue;
+                ms.push({
+                    a_rank: a ? a.rank : null, a_tag: a ? a.tag : null, a_name: a ? a.name : null, a_server: a ? a.server : null, a_points: null,
+                    b_rank: b ? b.rank : null, b_tag: b ? b.tag : null, b_name: b ? b.name : null, b_server: b ? b.server : null, b_points: null,
+                    is_ours: !!(MY_TAG && ((a && (a.tag || '').toLowerCase() === MY_TAG.toLowerCase()) || (b && (b.tag || '').toLowerCase() === MY_TAG.toLowerCase())))
+                });
+            }
+            banner = el('p', { className: 'vsl-help', text: 'Computed from prior results — matchups are always 1v2, 3v4 …. ' + (CAN_MANAGE ? 'Enter this week’s points via “Capture bracket”.' : 'Points appear once captured.') });
         }
+        if (banner) holder.appendChild(banner);
         const col = el('div', { className: 'vsl-wkcol', style: 'flex-basis:340px;' });
         // order pairs by best (lowest) rank in each pair
         ms.sort((x, y) => Math.min(x.a_rank || 99, x.b_rank || 99) - Math.min(y.a_rank || 99, y.b_rank || 99));
@@ -928,6 +997,12 @@
             weekRes.push(res);
         });
         if (MY_TAG) remember({ tag: MY_TAG, name: MY_NAME, server: null });
+        // Prior weeks may not have captured server numbers; backfill them from the registry by tag.
+        {
+            const byTag = new Map();
+            knownAlliances.forEach(a => { if (a.tag) byTag.set(a.tag.toLowerCase(), a); });
+            for (const [k, rec] of info) { if (rec.server == null && byTag.get(k) && byTag.get(k).server != null) rec.server = byTag.get(k).server; }
+        }
 
         // Compute this week's rank order from prior results (only if week 1 is captured and every
         // prior pairing is decided). Sort: wins desc, then earliest-win, then starting rank.
