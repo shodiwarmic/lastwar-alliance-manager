@@ -125,11 +125,27 @@ func createVSLeagueSeason(w http.ResponseWriter, r *http.Request) {
 		dbError(w, "createVSLeagueSeason insert", err)
 		return
 	}
+	id, _ := res.LastInsertId()
+
+	// A Duel League season is always 4 weeks of consecutive game-time Mondays — create them up front
+	// (from the season start) so there's no manual "add week" step; officers just fill each in.
+	if p.StartDate != nil && strings.TrimSpace(*p.StartDate) != "" {
+		if startMon, nerr := normalizeToGameWeekMonday(*p.StartDate); nerr == nil {
+			if base, perr := parseDate(startMon); perr == nil {
+				for n := 1; n <= 4; n++ {
+					wd := formatDateString(base.AddDate(0, 0, 7*(n-1)))
+					if _, err := tx.Exec(`INSERT INTO vs_league_weeks (season_id, week_number, week_date) VALUES (?, ?, ?)`, id, n, wd); err != nil {
+						dbError(w, "createVSLeagueSeason weeks", err)
+						return
+					}
+				}
+			}
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		dbError(w, "createVSLeagueSeason commit", err)
 		return
 	}
-	id, _ := res.LastInsertId()
 	logActivity(user.ID, user.Username, "created", entityVSLeagueSeason, "S"+strconv.Itoa(p.SeasonNumber), false)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -454,6 +470,41 @@ func getVSLeagueAnalytics(w http.ResponseWriter, r *http.Request) {
 		out.Opponents = append(out.Opponents, *o)
 	}
 	sort.Slice(out.Opponents, func(a, b int) bool { return out.Opponents[a].Meetings > out.Opponents[b].Meetings })
+
+	// Theme-day averages from member VS points across EVERY week (season or not), excluding
+	// zero/not-imported days — the large-sample "which days do we score most" view.
+	var daySum [6]float64
+	var dayN [6]int
+	prows, perr := db.Query(`SELECT COALESCE(SUM(monday),0), COALESCE(SUM(tuesday),0), COALESCE(SUM(wednesday),0),
+		COALESCE(SUM(thursday),0), COALESCE(SUM(friday),0), COALESCE(SUM(saturday),0)
+		FROM vs_points GROUP BY week_date`)
+	if perr != nil {
+		dbError(w, "getVSLeagueAnalytics day averages", perr)
+		return
+	}
+	for prows.Next() {
+		var d [6]int64
+		if err := prows.Scan(&d[0], &d[1], &d[2], &d[3], &d[4], &d[5]); err != nil {
+			prows.Close()
+			dbError(w, "getVSLeagueAnalytics day scan", err)
+			return
+		}
+		for i := 0; i < 6; i++ {
+			if d[i] > 0 {
+				daySum[i] += float64(d[i])
+				dayN[i]++
+			}
+		}
+	}
+	prows.Close()
+	for i := 0; i < 6; i++ {
+		da := VSLADayAvg{DayNumber: i + 1, WeeksN: dayN[i]}
+		if dayN[i] > 0 {
+			avg := daySum[i] / float64(dayN[i])
+			da.AvgPoints = &avg
+		}
+		out.DayAverages = append(out.DayAverages, da)
+	}
 
 	writeJSON(w, out)
 }

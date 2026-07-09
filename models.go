@@ -591,11 +591,20 @@ type VSLeagueOpponentMember struct {
 // VSLeagueAnalytics is the cross-season roll-up (a season is only 4 weeks, so trends are only
 // meaningful across seasons). Computed on read from weeks/days; nothing is persisted.
 type VSLeagueAnalytics struct {
-	Seasons    []VSLASeason   `json:"seasons"`
-	Totals     VSLATotals     `json:"totals"`
-	ByDay      []VSLADay      `json:"by_day"`
-	ByStrategy []VSLAStrategy `json:"by_strategy"`
-	Opponents  []VSLAOpponent `json:"opponents"`
+	Seasons     []VSLASeason   `json:"seasons"`
+	Totals      VSLATotals     `json:"totals"`
+	ByDay       []VSLADay      `json:"by_day"`
+	DayAverages []VSLADayAvg   `json:"day_averages"`
+	ByStrategy  []VSLAStrategy `json:"by_strategy"`
+	Opponents   []VSLAOpponent `json:"opponents"`
+}
+
+// VSLADayAvg is the average alliance VS-points total on a theme day, over ALL weeks in vs_points
+// (season or not), excluding zero/not-imported days — a far larger sample than duel-season days.
+type VSLADayAvg struct {
+	DayNumber int      `json:"day_number"`
+	AvgPoints *float64 `json:"avg_points"`
+	WeeksN    int      `json:"weeks_n"`
 }
 
 type VSLASeason struct {
