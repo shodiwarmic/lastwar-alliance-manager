@@ -602,9 +602,10 @@ type VSLeagueAnalytics struct {
 // VSLADayAvg is the average alliance VS-points total on a theme day, over ALL weeks in vs_points
 // (season or not), excluding zero/not-imported days — a far larger sample than duel-season days.
 type VSLADayAvg struct {
-	DayNumber int      `json:"day_number"`
-	AvgPoints *float64 `json:"avg_points"`
-	WeeksN    int      `json:"weeks_n"`
+	DayNumber    int      `json:"day_number"`
+	AvgPoints    *float64 `json:"avg_points"`     // avg alliance total for the day (over weeks)
+	AvgPerPlayer *float64 `json:"avg_per_player"` // avg non-zero member score for the day
+	WeeksN       int      `json:"weeks_n"`
 }
 
 type VSLASeason struct {

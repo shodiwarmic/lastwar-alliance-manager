@@ -505,6 +505,19 @@ func getVSLeagueAnalytics(w http.ResponseWriter, r *http.Request) {
 		}
 		out.DayAverages = append(out.DayAverages, da)
 	}
+	// Per-player average per day = average non-zero member score (NULLIF drops 0s; -1 = no data).
+	var pv [6]float64
+	if err := db.QueryRow(`SELECT COALESCE(AVG(NULLIF(monday,0)),-1), COALESCE(AVG(NULLIF(tuesday,0)),-1),
+		COALESCE(AVG(NULLIF(wednesday,0)),-1), COALESCE(AVG(NULLIF(thursday,0)),-1),
+		COALESCE(AVG(NULLIF(friday,0)),-1), COALESCE(AVG(NULLIF(saturday,0)),-1) FROM vs_points`).
+		Scan(&pv[0], &pv[1], &pv[2], &pv[3], &pv[4], &pv[5]); err == nil {
+		for i := 0; i < 6; i++ {
+			if pv[i] >= 0 {
+				v := pv[i]
+				out.DayAverages[i].AvgPerPlayer = &v
+			}
+		}
+	}
 
 	writeJSON(w, out)
 }

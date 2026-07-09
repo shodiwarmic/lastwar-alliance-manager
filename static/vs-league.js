@@ -43,6 +43,7 @@
 
     // ---- state ----
     let state = { seasons: [], seasonId: null, season: null, weeks: [], currentWeekDate: null, view: 'week' };
+    let allTimeFilter = 'newest'; // All-Time seasons list sort (newest/oldest/best/worst)
     const root = document.getElementById('vs-league-root');
 
     // ===================== tab switching (points ↔ league) =====================
@@ -625,7 +626,7 @@
         const cardWith = (title, ...nodes) => {
             const c = el('div', { className: 'card' });
             c.appendChild(el('div', { className: 'card-header' }, el('div', {}, el('h2', { text: title }))));
-            nodes.forEach(n => c.appendChild(n));
+            nodes.forEach(n => { if (n) c.appendChild(n); });
             return c;
         };
         const table = (heads, rowsArr) => {
@@ -645,26 +646,51 @@
             tiles.appendChild(tile('Win rate', t.win_rate != null ? Math.round(t.win_rate * 100) + '%' : '—', 'of decided weeks'));
             tiles.appendChild(tile('Best finish', t.best_final_rank != null ? '#' + t.best_final_rank : '—', 'final rank'));
             holder.appendChild(tiles);
-            holder.appendChild(cardWith('Seasons', table(
-                ['Season', 'Tier', 'Record', 'Final', 'Weeks'],
-                a.seasons.map(s => ['S' + s.season_number, s.tier || '—', rec(s.wins, s.losses, s.ties), s.final_rank != null ? '#' + s.final_rank : '—', String(s.weeks)]))));
+            // Seasons — limited to 5 with a sort filter (list can get long over time).
+            const seasonsWrap = el('div');
+            holder.appendChild(seasonsWrap);
+            const dfp = s => s.wins - s.losses;
+            const seasonCmp = f =>
+                f === 'oldest' ? (x, y) => x.season_number - y.season_number
+                    : f === 'best' ? (x, y) => y.wins - x.wins || dfp(y) - dfp(x) || y.season_number - x.season_number
+                        : f === 'worst' ? (x, y) => x.wins - y.wins || dfp(x) - dfp(y) || x.season_number - y.season_number
+                            : (x, y) => y.season_number - x.season_number;
+            const FILTERS = [['newest', 'Newest'], ['oldest', 'Oldest'], ['best', 'Best'], ['worst', 'Worst']];
+            const renderSeasons = () => {
+                clear(seasonsWrap);
+                const many = a.seasons.length > 5;
+                let chips = null;
+                if (many) {
+                    chips = el('div', { className: 'vsl-toolbar', style: 'gap:6px;margin-bottom:10px;flex-wrap:wrap;' });
+                    FILTERS.forEach(([k, label]) => chips.appendChild(el('button', { className: 'filter-chip' + (allTimeFilter === k ? ' active' : ''), text: label, onclick: () => { allTimeFilter = k; renderSeasons(); } })));
+                }
+                const shown = a.seasons.slice().sort(seasonCmp(allTimeFilter)).slice(0, 5);
+                seasonsWrap.appendChild(cardWith('Seasons' + (many ? ' · top 5' : ''), chips, table(
+                    ['Season', 'Tier', 'Record', 'Final', 'Weeks'],
+                    shown.map(s => ['S' + s.season_number, s.tier || '—', rec(s.wins, s.losses, s.ties), s.final_rank != null ? '#' + s.final_rank : '—', String(s.weeks)]))));
+            };
+            renderSeasons();
         }
 
-        // Average points by theme day — from member VS points across EVERY imported week (large
-        // sample, zero/not-imported days excluded). Bar length is relative to the strongest day.
-        const dcard = cardWith('Average points by day (all imported weeks)');
-        const maxAvg = Math.max(1, ...(a.day_averages || []).map(d => d.avg_points || 0));
+        // Average points by theme day from member VS points across EVERY imported week (large sample,
+        // zeros excluded): two bars per day — alliance total (accent) + per-player (info), each
+        // scaled to its own max.
+        const dcard = cardWith('Average points by day (all imported weeks)',
+            el('div', { className: 'vsl-help', style: 'margin-bottom:8px;' },
+                el('span', { className: 'vsl-legend-sw a' }), ' alliance total    ',
+                el('span', { className: 'vsl-legend-sw p' }), ' per player'));
+        const maxA = Math.max(1, ...(a.day_averages || []).map(d => d.avg_points || 0));
+        const maxP = Math.max(1, ...(a.day_averages || []).map(d => d.avg_per_player || 0));
         let anyDay = false;
+        const mkBar = (val, max, cls) => { const b = el('div', { className: 'vsl-wl' }); if (val != null) b.appendChild(el('span', { className: cls, style: 'flex:0 0 ' + Math.round((val / max) * 100) + '%' })); return b; };
         (a.day_averages || []).forEach(d => {
             if (d.weeks_n > 0) anyDay = true;
             const theme = (typeof VS_THEMES !== 'undefined') ? VS_THEMES[d.day_number - 1] : null;
-            const pct = d.avg_points != null ? Math.round((d.avg_points / maxAvg) * 100) : 0;
-            const bar = el('div', { className: 'vsl-wl' });
-            if (d.avg_points != null) bar.appendChild(el('span', { className: 'w', style: 'flex:0 0 ' + pct + '%' }));
+            const bars = el('div', { style: 'flex:1;display:flex;flex-direction:column;gap:3px;min-width:0;' }, mkBar(d.avg_points, maxA, 'a'), mkBar(d.avg_per_player, maxP, 'p'));
             dcard.appendChild(el('div', { className: 'vsl-analysis-row' },
                 el('div', { text: theme ? theme.icon + ' ' + theme.short : 'Day ' + d.day_number }),
-                bar,
-                el('div', { className: 'vsl-help', text: d.avg_points != null ? (fmtBig(Math.round(d.avg_points)) + ' avg · ' + d.weeks_n + ' wk' + (d.weeks_n === 1 ? '' : 's')) : 'no data' })));
+                bars,
+                el('div', { className: 'vsl-help', text: (d.avg_points != null ? fmtBig(Math.round(d.avg_points)) : '—') + ' · ' + (d.avg_per_player != null ? fmtBig(Math.round(d.avg_per_player)) + '/plyr' : '—') })));
         });
         if (!anyDay) dcard.appendChild(el('p', { className: 'vsl-empty', text: 'Import member VS points to see average points by theme day.' }));
         holder.appendChild(dcard);

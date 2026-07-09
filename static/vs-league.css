@@ -85,6 +85,11 @@
 .vsl-wl .w { background: var(--color-success); }
 .vsl-wl .l { background: var(--color-danger); }
 .vsl-wl .t { background: var(--color-warning); }
+.vsl-wl .a { background: var(--color-accent); }
+.vsl-wl .p { background: var(--color-info); }
+.vsl-legend-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
+.vsl-legend-sw.a { background: var(--color-accent); }
+.vsl-legend-sw.p { background: var(--color-info); }
 
 /* Winnable banner */
 .vsl-banner { border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
