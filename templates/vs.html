@@ -22,6 +22,10 @@
             <svg width="15" height="15" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trophy"/></svg>
             Duel League
         </button>
+        <button class="tab-btn" data-tab="alltime">
+            <svg width="15" height="15" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg>
+            All-Time
+        </button>
     </div>
 
     <!-- #tab-points is rendered `active` server-side so vs.js measures a visible container (F-R06) -->
@@ -74,6 +78,10 @@
 
     <div id="tab-league" class="tab-content">
         <div id="vs-league-root"><p class="status-msg">Loading Duel League…</p></div>
+    </div>
+
+    <div id="tab-alltime" class="tab-content">
+        <div id="vsl-alltime-root"><p class="status-msg">Loading…</p></div>
     </div>
 {{end}}
 
