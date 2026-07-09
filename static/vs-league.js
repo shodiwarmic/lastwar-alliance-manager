@@ -42,7 +42,7 @@
     }
 
     // ---- state ----
-    let state = { seasons: [], seasonId: null, season: null, weeks: [], currentWeekDate: null, view: 'current' };
+    let state = { seasons: [], seasonId: null, season: null, weeks: [], currentWeekDate: null, view: 'week' };
     const root = document.getElementById('vs-league-root');
 
     // ===================== tab switching (points ↔ league) =====================
@@ -150,13 +150,28 @@
 
     function renderSubtabs() {
         const wrap = el('div', { className: 'vsl-subtabs' });
-        [['current', 'Weeks'], ['history', 'Season History'], ['bracket', 'Bracket']]
-            .forEach(([k, label]) => {
-                wrap.appendChild(el('button', {
-                    className: 'vsl-subtab' + (state.view === k ? ' active' : ''),
-                    onclick: () => { state.view = k; render(); }
-                }, label));
+        const onWeek = state.view !== 'history' && state.view !== 'bracket';
+        const sel = viewedWeek();
+        // Each week is its own sub-tab (past + current selectable; future disabled), then the rollups.
+        state.weeks.slice().sort((a, b) => (a.week_number || 0) - (b.week_number || 0)).forEach(wk => {
+            const status = weekStatusOf(wk);
+            const active = onWeek && sel && sel.id === wk.id;
+            const btn = el('button', {
+                className: 'vsl-subtab' + (active ? ' active' : '') + (status === 'future' ? ' future' : ''),
+                text: 'Week ' + (wk.week_number != null ? wk.week_number : wk.week_date) + (status === 'current' ? ' •' : '')
             });
+            btn.addEventListener('click', () => {
+                if (weekStatusOf(wk) === 'future') { showToast('Week ' + (wk.week_number || '') + ' hasn’t started yet.', 'info'); return; }
+                state.view = 'week'; state.viewWeekId = wk.id; render();
+            });
+            wrap.appendChild(btn);
+        });
+        [['history', 'Season History'], ['bracket', 'Bracket']].forEach(([k, label]) => {
+            wrap.appendChild(el('button', {
+                className: 'vsl-subtab' + (state.view === k ? ' active' : ''),
+                onclick: () => { state.view = k; render(); }
+            }, label));
+        });
         return wrap;
     }
 
@@ -179,23 +194,6 @@
         }
         return currentWeek();
     }
-    function weekTabs(selectedId) {
-        const row = el('div', { className: 'vsl-week-tabs' });
-        state.weeks.slice().sort((a, b) => (a.week_number || 0) - (b.week_number || 0)).forEach(wk => {
-            const status = weekStatusOf(wk);
-            const btn = el('button', {
-                className: 'vsl-week-tab' + (wk.id === selectedId ? ' active' : '') + (status === 'future' ? ' future' : ''),
-                text: 'Week ' + (wk.week_number != null ? wk.week_number : wk.week_date) + (status === 'current' ? ' •' : '')
-            });
-            btn.addEventListener('click', () => {
-                if (weekStatusOf(wk) === 'future') { showToast('Week ' + (wk.week_number || '') + ' hasn’t started yet.', 'info'); return; }
-                state.viewWeekId = wk.id; render();
-            });
-            row.appendChild(btn);
-        });
-        return row;
-    }
-
     function renderView(view) {
         if (state.view === 'history') return renderHistory(view);
         if (state.view === 'bracket') return renderBracket(view);
@@ -218,7 +216,6 @@
         }
         const wk = viewedWeek();
         if (!wk) { view.appendChild(el('p', { className: 'vsl-empty', text: 'No week to show yet.' })); return; }
-        view.appendChild(weekTabs(wk.id));
         const st = wk.standing;
         const oppLabel = (wk.opponent_tag ? '[' + wk.opponent_tag + '] ' : '') + (wk.opponent_name || 'Opponent');
 

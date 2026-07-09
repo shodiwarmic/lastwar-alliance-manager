@@ -127,14 +127,8 @@
 }
 .vsl-find-action:hover { background: var(--bg-secondary); }
 
-/* Week selector on the Weeks tab: past + current selectable, future weeks disabled */
-.vsl-week-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-.vsl-week-tab {
-    padding: 6px 14px; border: 1px solid var(--color-border); border-radius: 6px;
-    background: var(--color-surface); color: var(--color-text-mid); font-weight: 600; cursor: pointer;
-}
-.vsl-week-tab.active { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
-.vsl-week-tab.future { opacity: 0.45; cursor: not-allowed; }
+/* Week sub-tabs: future weeks (not started) are disabled */
+.vsl-subtab.future { opacity: 0.45; cursor: not-allowed; }
 
 /* Capture-bracket: grid of pairing cards. Ranks are fixed labels (computed each week); each
    alliance row is [#rank] [server] [tag combobox] [points]; our pairing is highlighted. */
