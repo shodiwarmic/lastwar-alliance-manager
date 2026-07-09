@@ -60,7 +60,9 @@
 .vsl-wkhead .wk { font-weight: 800; }
 .vsl-pair { display: flex; align-items: center; margin-bottom: 11px; }
 .vsl-teams { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
-.vsl-chip { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-card); font-size: 0.78rem; min-height: 30px; box-sizing: border-box; }
+/* Fixed height (not min-height) so winner chips (bold + ✓) and plain chips are identical, keeping
+   pairs aligned row-by-row across week columns. */
+.vsl-chip { display: flex; align-items: center; gap: 7px; padding: 0 8px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-card); font-size: 0.78rem; height: 34px; box-sizing: border-box; }
 .vsl-chip .rk { flex: 0 0 auto; font-size: 0.66rem; font-weight: 800; color: var(--color-text-muted); min-width: 22px; }
 .vsl-chip .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-mid); }
 .vsl-chip .s  { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--color-text-muted); font-weight: 700; }
