@@ -239,6 +239,7 @@ func loadVSLeagueWeek(id int, canManage bool) (*VSLeagueWeek, error) {
 	row := db.QueryRow(`SELECT id, season_id, week_number, week_date, league_tier, league_rank,
 		opponent_tag, opponent_name, opponent_server, opponent_lastrank_id,
 		opponent_power, opponent_kills, opponent_member_count, opponent_snapshot_at, opponent_lastrank_seen_at,
+		our_power, our_kills, our_member_count, our_snapshot_at,
 		our_points, opponent_points, outcome, strategy_label, strategy_result, notes, created_at, updated_at
 		FROM vs_league_weeks WHERE id = ?`, id)
 	return scanVSLeagueWeek(row, canManage)
@@ -251,6 +252,7 @@ func scanVSLeagueWeek(row interface{ Scan(...any) error }, canManage bool) (*VSL
 	err := row.Scan(&wk.ID, &wk.SeasonID, &wk.WeekNumber, &wk.WeekDate, &wk.LeagueTier, &wk.LeagueRank,
 		&wk.OpponentTag, &wk.OpponentName, &wk.OpponentServer, &wk.OpponentLastRankID,
 		&wk.OpponentPower, &wk.OpponentKills, &wk.OpponentMemberCount, &wk.OpponentSnapshotAt, &wk.OpponentLastRankSeenAt,
+		&wk.OurPower, &wk.OurKills, &wk.OurMemberCount, &wk.OurSnapshotAt,
 		&storedOur, &storedOpp, &storedOutcome, &strategyLabel, &strategyResult, &notes, &wk.CreatedAt, &wk.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -650,6 +652,11 @@ type vsLeagueWeekPayload struct {
 	OpponentMemberCount    *int    `json:"opponent_member_count"`
 	OpponentLastRankSeenAt *string `json:"opponent_lastrank_seen_at"`
 	SnapshotNow            bool    `json:"snapshot_now"` // stamp opponent_snapshot_at = now
+	// Our own snapshot for the week (LastRank-sourced or summed roster).
+	OurPower        *int64 `json:"our_power"`
+	OurKills        *int64 `json:"our_kills"`
+	OurMemberCount  *int   `json:"our_member_count"`
+	OurSnapshotNow  bool   `json:"our_snapshot_now"` // stamp our_snapshot_at = now
 	// Summary-only weekly result (allowed ONLY when the week has no day rows).
 	OurPoints      *int    `json:"our_points"`
 	OpponentPoints *int    `json:"opponent_points"`
@@ -727,14 +734,20 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC().Format("2006-01-02 15:04:05")
 		snapshotAt = &now
 	}
+	var ourSnapshotAt *string
+	if p.OurSnapshotNow {
+		now := time.Now().UTC().Format("2006-01-02 15:04:05")
+		ourSnapshotAt = &now
+	}
 
 	res, err := db.Exec(`INSERT INTO vs_league_weeks
 		(season_id, week_number, week_date, league_tier, league_rank,
 		 opponent_tag, opponent_name, opponent_server,
 		 opponent_lastrank_id, opponent_power, opponent_kills, opponent_member_count,
 		 opponent_snapshot_at, opponent_lastrank_seen_at,
+		 our_power, our_kills, our_member_count, our_snapshot_at,
 		 our_points, opponent_points, outcome, strategy_label, strategy_result, notes)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(season_id, week_date) DO UPDATE SET
 		 week_number = COALESCE(excluded.week_number, week_number),
 		 league_tier = COALESCE(excluded.league_tier, league_tier),
@@ -748,6 +761,10 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		 opponent_member_count = COALESCE(excluded.opponent_member_count, opponent_member_count),
 		 opponent_snapshot_at = COALESCE(excluded.opponent_snapshot_at, opponent_snapshot_at),
 		 opponent_lastrank_seen_at = COALESCE(excluded.opponent_lastrank_seen_at, opponent_lastrank_seen_at),
+		 our_power = COALESCE(excluded.our_power, our_power),
+		 our_kills = COALESCE(excluded.our_kills, our_kills),
+		 our_member_count = COALESCE(excluded.our_member_count, our_member_count),
+		 our_snapshot_at = COALESCE(excluded.our_snapshot_at, our_snapshot_at),
 		 strategy_label = COALESCE(excluded.strategy_label, strategy_label),
 		 strategy_result = COALESCE(excluded.strategy_result, strategy_result),
 		 notes = COALESCE(excluded.notes, notes),
@@ -756,6 +773,7 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		p.OpponentTag, p.OpponentName, p.OpponentServer,
 		p.OpponentLastRankID, p.OpponentPower, p.OpponentKills, p.OpponentMemberCount,
 		snapshotAt, p.OpponentLastRankSeenAt,
+		p.OurPower, p.OurKills, p.OurMemberCount, ourSnapshotAt,
 		p.OurPoints, p.OpponentPoints, p.Outcome, p.StrategyLabel, p.StrategyResult, p.Notes)
 	if err != nil {
 		if isUniqueConflict(err) {
@@ -825,6 +843,11 @@ func updateVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC().Format("2006-01-02 15:04:05")
 		snapshotAt = &now
 	}
+	var ourSnapshotAt *string
+	if p.OurSnapshotNow {
+		now := time.Now().UTC().Format("2006-01-02 15:04:05")
+		ourSnapshotAt = &now
+	}
 
 	// Allow correcting the week date (snapped to the game-time Monday); empty = leave unchanged.
 	var newWeekDate *string
@@ -851,6 +874,10 @@ func updateVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		opponent_member_count = COALESCE(?, opponent_member_count),
 		opponent_snapshot_at = COALESCE(?, opponent_snapshot_at),
 		opponent_lastrank_seen_at = COALESCE(?, opponent_lastrank_seen_at),
+		our_power = COALESCE(?, our_power),
+		our_kills = COALESCE(?, our_kills),
+		our_member_count = COALESCE(?, our_member_count),
+		our_snapshot_at = COALESCE(?, our_snapshot_at),
 		our_points = COALESCE(?, our_points),
 		opponent_points = COALESCE(?, opponent_points),
 		outcome = COALESCE(?, outcome),
@@ -862,6 +889,7 @@ func updateVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		p.WeekNumber, newWeekDate, p.LeagueTier, p.LeagueRank, p.OpponentTag, p.OpponentName, p.OpponentServer,
 		p.OpponentLastRankID, p.OpponentPower, p.OpponentKills, p.OpponentMemberCount,
 		snapshotAt, p.OpponentLastRankSeenAt,
+		p.OurPower, p.OurKills, p.OurMemberCount, ourSnapshotAt,
 		p.OurPoints, p.OpponentPoints, p.Outcome, p.StrategyLabel, p.StrategyResult, p.Notes, id)
 	if err != nil {
 		if isUniqueConflict(err) {
@@ -1316,6 +1344,33 @@ func vsLeagueOpponentRoster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, roster)
+}
+
+// vsLeagueOurSnapshot returns OUR alliance's power/kills/members from LastRank (settings
+// lastrank_alliance_id) so a week can freeze an authoritative "us" snapshot. When no id is
+// configured — or the fetch fails — from_lastrank=false and the client uses the summed-roster
+// fallback (hand-editable). LastRank-sourced values are the source of truth (client locks them).
+func vsLeagueOurSnapshot(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(lastRankAllianceID())
+	if id == "" {
+		writeJSON(w, map[string]any{"from_lastrank": false})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	snap, err := fetchLastRankOpponentSnapshot(ctx, id)
+	if err != nil {
+		slogLastRank("vs-league our snapshot failed", err)
+		writeJSON(w, map[string]any{"from_lastrank": false})
+		return
+	}
+	writeJSON(w, map[string]any{
+		"from_lastrank": true,
+		"power":         snap.Power,
+		"kills":         snap.Kills,
+		"member_count":  snap.MemberCount,
+		"last_seen_at":  snap.LastSeenAt,
+	})
 }
 
 // cacheExternalAlliance upserts a looked-up alliance into the persistent cache. Identity is our

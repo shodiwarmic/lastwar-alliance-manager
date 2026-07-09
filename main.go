@@ -371,6 +371,7 @@ func main() {
 	router.HandleFunc("/api/vs-league/analytics", authMiddleware(requirePermission("view_vs_points", getVSLeagueAnalytics))).Methods("GET")
 	router.HandleFunc("/api/vs-league/opponent-lookup", authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentLookup))).Methods("POST")
 	router.HandleFunc("/api/vs-league/opponent-roster", authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentRoster))).Methods("GET")
+	router.HandleFunc("/api/vs-league/our-snapshot", authMiddleware(requirePermission("manage_vs_points", vsLeagueOurSnapshot))).Methods("GET")
 	router.HandleFunc("/api/external-alliances", authMiddleware(getExternalAlliancesGated)).Methods("GET")
 	router.HandleFunc("/api/external-alliances", authMiddleware(requireManageExternalAlliances(createExternalAlliance))).Methods("POST")
 	router.HandleFunc("/api/external-alliances/{id:[0-9]+}", authMiddleware(requireManageExternalAlliances(updateExternalAlliance))).Methods("PUT")

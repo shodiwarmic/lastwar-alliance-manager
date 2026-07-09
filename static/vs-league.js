@@ -245,6 +245,7 @@
         const tiles = el('div', { className: 'vsl-tiles' });
         tiles.appendChild(tile('Weekly Match Score', st.our_points + ' – ' + st.opponent_points, 'first to 7 of 13'));
         tiles.appendChild(tile('Bracket Rank', wk.league_rank != null ? '#' + wk.league_rank : '—', wk.league_tier || (state.season && state.season.league_tier) || ''));
+        if (wk.our_power != null) tiles.appendChild(tile('Our Power', fmtBig(wk.our_power), 'kills ' + (wk.our_kills != null ? fmtBig(wk.our_kills) : '—') + (wk.our_member_count != null ? ' · ' + wk.our_member_count + ' mbrs' : '')));
         if (wk.opponent_power != null) tiles.appendChild(tile('Opp Power', fmtBig(wk.opponent_power), 'kills ' + (wk.opponent_kills != null ? fmtBig(wk.opponent_kills) : '—')));
         if (wk.opponent_member_count != null) tiles.appendChild(tile('Opp Members', wk.opponent_member_count + ' / 100', wk.opponent_server ? 'server ' + wk.opponent_server : ''));
         head.appendChild(tiles);
@@ -786,6 +787,49 @@
         const snapNote = el('span', { className: 'vsl-help' });
         let snap = null;
 
+        // ---- per-week power/kills/members snapshots (frozen). Our = LastRank (locked) or summed
+        // roster (editable); opponent = LastRank lookup (locked) or manual. ----
+        const ourPower = inp('number', wk && wk.our_power != null ? wk.our_power : '', 'power');
+        const ourKills = inp('number', wk && wk.our_kills != null ? wk.our_kills : '', 'kills');
+        const ourMembers = inp('number', wk && wk.our_member_count != null ? wk.our_member_count : '', 'members');
+        const oppPower = inp('number', wk && wk.opponent_power != null ? wk.opponent_power : '', 'power');
+        const oppKills = inp('number', wk && wk.opponent_kills != null ? wk.opponent_kills : '', 'kills');
+        const oppMembers = inp('number', wk && wk.opponent_member_count != null ? wk.opponent_member_count : '', 'members');
+        const ourSnapNote = el('span', { className: 'vsl-help' });
+        const initOur = { p: wk && wk.our_power != null ? wk.our_power : null, k: wk && wk.our_kills != null ? wk.our_kills : null, m: wk && wk.our_member_count != null ? wk.our_member_count : null };
+        const initOpp = { p: wk && wk.opponent_power != null ? wk.opponent_power : null, k: wk && wk.opponent_kills != null ? wk.opponent_kills : null, m: wk && wk.opponent_member_count != null ? wk.opponent_member_count : null };
+        const setLock = (inputs, locked) => inputs.forEach(i => { i.readOnly = locked; i.classList.toggle('vsl-locked', locked); });
+        // Fill opponent snapshot fields from a LastRank result and lock them (LastRank = source of truth).
+        const fillOppSnapshot = (power, kills, members) => {
+            if (power != null) oppPower.value = power;
+            if (kills != null) oppKills.value = kills;
+            if (members != null) oppMembers.value = members;
+            setLock([oppPower, oppKills, oppMembers], true);
+        };
+        // Start locked only if this week already carries a LastRank-sourced opponent.
+        setLock([oppPower, oppKills, oppMembers], !!(wk && wk.opponent_lastrank_id));
+
+        // Our snapshot: LastRank when our alliance id is configured (locked), else summed roster (editable).
+        api('GET', '/api/vs-league/our-snapshot').then(async s => {
+            if (s && s.from_lastrank) {
+                if (initOur.p == null && s.power != null) ourPower.value = s.power;
+                if (initOur.k == null && s.kills != null) ourKills.value = s.kills;
+                if (initOur.m == null && s.member_count != null) ourMembers.value = s.member_count;
+                setLock([ourPower, ourKills, ourMembers], true);
+                ourSnapNote.textContent = 'Our numbers from our LastRank alliance (locked).';
+            } else {
+                try {
+                    const members = await api('GET', '/api/members');
+                    const active = (members || []).filter(m => m.rank !== 'EX');
+                    const sum = f => active.reduce((t, m) => t + (Number(m[f]) || 0), 0);
+                    if (initOur.p == null) ourPower.value = sum('power');
+                    if (initOur.k == null) ourKills.value = sum('current_kills');
+                    if (initOur.m == null) ourMembers.value = active.length;
+                    ourSnapNote.textContent = 'Our numbers summed from the roster — editable (set a LastRank alliance id in Settings for exact values).';
+                } catch (e) { ourSnapNote.textContent = 'Enter our power / kills / members.'; }
+            }
+        }).catch(() => { });
+
         // Local source: the external-alliances registry (populated by past lookups/allies/prospects).
         let knownAlliances = [];
         api('GET', '/api/external-alliances').then(list => { knownAlliances = list || []; }).catch(() => { });
@@ -801,8 +845,10 @@
                 lrInput.value = m.lastrank_id;
                 snap = { alliance_id: m.lastrank_id, tag: m.tag, name: m.name, server_id: m.server, power: m.power, kills: m.kills, member_count: m.member_count, last_seen_at: m.lastrank_seen_at };
                 snapNote.textContent = 'From saved lookup · power ' + fmtBig(m.power || 0) + ' · kills ' + fmtBig(m.kills || 0) + ' · ' + (m.member_count != null ? m.member_count : '?') + '/100';
+                fillOppSnapshot(m.power, m.kills, m.member_count);
             } else {
                 snap = null;
+                setLock([oppPower, oppKills, oppMembers], false); // manual registry entry — editable
                 snapNote.textContent = 'From your registry — no LastRank snapshot saved yet; use Look up to capture one.';
             }
         }
@@ -851,6 +897,7 @@
                     snap = { alliance_id: r.lastrank_id, tag: r.tag, name: r.name, server_id: r.server, power: r.power, kills: r.kills, member_count: null, last_seen_at: null };
                     snapNote.textContent = 'Selected — power ' + fmtBig(r.power) + ' · kills ' + fmtBig(r.kills);
                 }
+                fillOppSnapshot(snap.power, snap.kills, snap.member_count);
             } },
                 el('span', { className: 'vsl-find-name', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
                 meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
@@ -900,6 +947,7 @@
             try {
                 snap = await api('POST', '/api/vs-league/opponent-lookup', { url: lrInput.value });
                 if (!oppTag.value) oppTag.value = snap.tag; if (!oppName.value) oppName.value = snap.name; if (!oppServer.value) oppServer.value = snap.server_id;
+                fillOppSnapshot(snap.power, snap.kills, snap.member_count);
                 snapNote.textContent = 'Power ' + fmtBig(snap.power) + ' · kills ' + fmtBig(snap.kills) + ' · ' + snap.member_count + '/100';
             } catch (e) { snapNote.textContent = e.message; }
         });
@@ -910,15 +958,24 @@
             el('span', { className: 'vsl-help', text: 'Type an opponent tag or name to search your registry; enter the server to look up on LastRank.' }),
             field('Opponent LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, lrInput, lookupBtn)),
             snapNote,
+            el('p', { className: 'vsl-help', style: 'margin-top:6px;font-weight:700;', text: 'Power snapshot (frozen for this week)' }),
+            el('div', { className: 'vsl-form-grid' }, field('Our power', ourPower), field('Our kills', ourKills), field('Our members', ourMembers)),
+            ourSnapNote,
+            el('div', { className: 'vsl-form-grid' }, field('Opp power', oppPower), field('Opp kills', oppKills), field('Opp members', oppMembers)),
             el('div', { className: 'vsl-form-grid' }, field('Strategy', stratLabel), field('Result', stratResult)),
             field('Notes', notes)
         ], async () => {
             const payload = {
                 season_id: state.seasonId, week_number: derived.num, week_date: derived.date,
                 opponent_tag: strOrNull(oppTag.value), opponent_name: strOrNull(oppName.value), opponent_server: numOrNull(oppServer.value),
+                opponent_power: numOrNull(oppPower.value), opponent_kills: numOrNull(oppKills.value), opponent_member_count: numOrNull(oppMembers.value),
+                our_power: numOrNull(ourPower.value), our_kills: numOrNull(ourKills.value), our_member_count: numOrNull(ourMembers.value),
                 strategy_label: strOrNull(stratLabel.value), strategy_result: strOrNull(stratResult.value), notes: strOrNull(notes.value)
             };
-            if (snap) { payload.opponent_lastrank_id = snap.alliance_id; payload.opponent_power = snap.power; payload.opponent_kills = snap.kills; payload.opponent_member_count = snap.member_count; payload.opponent_lastrank_seen_at = snap.last_seen_at; payload.snapshot_now = true; }
+            if (snap) { payload.opponent_lastrank_id = snap.alliance_id; payload.opponent_lastrank_seen_at = snap.last_seen_at; }
+            // Stamp snapshot times only when the numbers are newly captured or changed.
+            if (payload.opponent_power != null && (payload.opponent_power !== initOpp.p || payload.opponent_kills !== initOpp.k || payload.opponent_member_count !== initOpp.m)) payload.snapshot_now = true;
+            if (payload.our_power != null && (payload.our_power !== initOur.p || payload.our_kills !== initOur.k || payload.our_member_count !== initOur.m)) payload.our_snapshot_now = true;
             if (wk) await api('PUT', '/api/vs-league/weeks/' + wk.id, payload);
             else await api('POST', '/api/vs-league/weeks', payload);
             await selectSeason(state.seasonId);

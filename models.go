@@ -534,6 +534,11 @@ type VSLeagueWeek struct {
 	OpponentMemberCount    *int    `json:"opponent_member_count,omitempty"`
 	OpponentSnapshotAt     *string `json:"opponent_snapshot_at,omitempty"`
 	OpponentLastRankSeenAt *string `json:"opponent_lastrank_seen_at,omitempty"`
+	// Our own alliance snapshot for the week (LastRank when configured, else summed roster).
+	OurPower       *int64  `json:"our_power,omitempty"`
+	OurKills       *int64  `json:"our_kills,omitempty"`
+	OurMemberCount *int    `json:"our_member_count,omitempty"`
+	OurSnapshotAt  *string `json:"our_snapshot_at,omitempty"`
 	// Leadership context — only populated in responses for manage_vs_points users (F-R09/F-013).
 	StrategyLabel  *string `json:"strategy_label,omitempty"`
 	StrategyResult *string `json:"strategy_result,omitempty"`
