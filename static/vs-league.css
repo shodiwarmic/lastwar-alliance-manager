@@ -130,6 +130,23 @@
 /* Week sub-tabs: future weeks (not started) are disabled */
 .vsl-subtab.future { opacity: 0.45; cursor: not-allowed; }
 
+/* Season Summary standings grid (all alliances × weeks) */
+.vsl-stbl { min-width: 440px; }
+.vsl-stbl .vsl-rk { text-align: center; font-weight: 800; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 40px; }
+.vsl-stbl .vsl-rk.rk1 { color: #d4af37; }
+.vsl-stbl .vsl-rk.rk2 { color: #9aa9bd; }
+.vsl-stbl .vsl-rk.rk3 { color: #cd7f32; }
+.vsl-stbl .vsl-al { font-weight: 700; white-space: nowrap; }
+.vsl-stbl .vsl-wc { text-align: center; width: 56px; }
+.vsl-stbl tbody tr.us td { background: var(--color-success-bg); }
+.vsl-stbl tbody tr.us .vsl-al { color: var(--color-success); }
+.vsl-scell { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; padding: 2px 7px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; }
+.vsl-scell.w { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-scell.l { color: var(--color-danger); background: var(--color-danger-bg); }
+.vsl-scell.t { color: var(--color-text-mid); background: var(--color-bg); border: 1px solid var(--color-border); }
+.vsl-scell.live { color: var(--color-info); background: var(--color-info-bg); }
+.vsl-scell.up, .vsl-scell.none { color: var(--color-text-muted); }
+
 /* Capture-bracket: grid of pairing cards. Ranks are fixed labels (computed each week); each
    alliance row is [#rank] [server] [tag combobox] [points]; our pairing is highlighted. */
 .vsl-bracket-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; margin: 12px 0; }
