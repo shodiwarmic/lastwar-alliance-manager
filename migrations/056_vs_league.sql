@@ -40,6 +40,11 @@ CREATE TABLE vs_league_weeks (
     opponent_member_count INTEGER,          -- snapshot: cur_member (cap is the gamewide 100)
     opponent_snapshot_at      DATETIME,     -- when the OFFICER captured/saved the snapshot (app time)
     opponent_lastrank_seen_at DATETIME,     -- upstream LastRank last_seen_at, to flag stale pasted data
+    our_server            INTEGER,          -- our own server (mirrors opponent_server; effectively constant, stored per-week for symmetry)
+    our_power             INTEGER,          -- snapshot: our fightpower (from our LastRank alliance when configured, else summed roster)
+    our_kills             INTEGER,          -- snapshot: our army_kill
+    our_member_count      INTEGER,          -- snapshot: our current member count (cap is the gamewide 100)
+    our_snapshot_at       DATETIME,         -- when the OFFICER captured/saved our snapshot; frozen so it doesn't drift with live power
     our_points            INTEGER CHECK (our_points BETWEEN 0 AND 13),       -- STORED only for summary-only weeks; day-backed weeks compute on read
     opponent_points       INTEGER CHECK (opponent_points BETWEEN 0 AND 13),  -- summary-only fallback; else computed on read
     outcome               TEXT CHECK (outcome IN ('win','loss','tie')),  -- summary-only fallback; NULL = not-yet-entered. 'pending' is computed, never stored at week level
