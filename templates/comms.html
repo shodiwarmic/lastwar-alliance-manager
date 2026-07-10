@@ -9,6 +9,9 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
+<link rel="stylesheet" href="/choices-theme.css">
+<script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="/comms.css">
 <link rel="stylesheet" href="/member-picker.css">
 <link rel="stylesheet" href="/assignment.css">
@@ -114,7 +117,7 @@
         <div class="form-group">
             <label for="template-content-input">Content</label>
             <textarea id="template-content-input" class="form-input" rows="10" placeholder="Write your template here…" style="resize:vertical;font-family:monospace;"></textarea>
-            <p class="comms-hint">Use <code>{variable_name}</code> for fill-in fields — prompted at copy time. Add a type prefix for specific inputs: <code>{time:var}</code>, <code>{date:var}</code>, <code>{dayofweek:var}</code>, <code>{number:var}</code>, <code>{multiline:var}</code>, <code>{assignment:skill_key}</code> (e.g. <code>{assignment:medical_aid}</code> — opens an assignment builder at copy time). No prefix = plain text. Use <code>{{"{{"}}</code> and <code>{{"}}"}}</code> for literal braces.</p>
+            <p class="comms-hint">Use <code>{variable_name}</code> for fill-in fields — prompted at copy time. Add a type prefix for specific inputs: <code>{time:var}</code>, <code>{date:var}</code>, <code>{dayofweek:var}</code>, <code>{number:var}</code>, <code>{multiline:var}</code>, <code>{member:var}</code> (single member picker), <code>{members:var}</code> (multi-member picker — comma-separated output), <code>{assignment:skill_key}</code> (e.g. <code>{assignment:medical_aid}</code> — opens an assignment builder at copy time). No prefix = plain text. Use <code>{{"{{"}}</code> and <code>{{"}}"}}</code> for literal braces.</p>
             <div id="template-vars-preview" class="comms-vars-preview" style="display:none;">
                 <span class="comms-vars-label">Variables detected:</span>
                 <span id="template-vars-chips"></span>

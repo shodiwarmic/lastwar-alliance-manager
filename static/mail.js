@@ -13,6 +13,27 @@ let _allOthers = [];
 const _assignmentDrafts = {};
 let _skillRegistryCache = null;
 
+// Cached active roster (name + rank) for {member:} / {members:} variables.
+// Lazily fetched the first time such a variable is filled in.
+let _rosterCache = null;
+
+// Fetches the active roster once and caches it. /api/members already excludes
+// EX (former) members and sorts by name; we filter/sort defensively anyway so
+// the behaviour is explicit and independent of the endpoint.
+async function fetchRoster() {
+    if (_rosterCache) return _rosterCache;
+    try {
+        const res = await fetch('/api/members');
+        const list = res.ok ? await res.json() : [];
+        _rosterCache = list
+            .filter(m => m.rank !== 'EX')
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    } catch {
+        _rosterCache = [];
+    }
+    return _rosterCache;
+}
+
 // Returns unique variable names found in content, skipping {{escaped}} blocks.
 // Strips optional type prefix so {time:battle_time} → 'battle_time'.
 function extractVariables(content) {
@@ -246,6 +267,33 @@ function buildVarInput(name, type) {
         wrapper.append(ta, buildBtn);
         return wrapper;
     }
+    if (type === 'member' || type === 'members') {
+        // Roster is populated by fetchRoster() before the modal is built.
+        const roster = _rosterCache || [];
+        const sel = document.createElement('select');
+        sel.className = 'form-input member-var-select';
+        sel.dataset.varName = name;
+        sel.style.marginTop = '4px';
+        if (type === 'members') {
+            sel.multiple = true;
+            // Native fallback (no Choices.js) needs a visible size; Choices ignores it.
+            if (typeof Choices === 'undefined') {
+                sel.size = Math.min(8, Math.max(2, roster.length));
+            }
+        } else {
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '— Select a member —';
+            sel.appendChild(placeholder);
+        }
+        roster.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.name;
+            opt.textContent = `${m.name} (${m.rank})`;
+            sel.appendChild(opt);
+        });
+        return sel;
+    }
     const inputTypeMap = { number: 'number', date: 'date' };
     const input = document.createElement('input');
     input.type = inputTypeMap[type] || 'text';
@@ -292,6 +340,11 @@ async function copyWithVariables(content, prefilledValues) {
         return;
     }
 
+    // Member selects need the roster loaded before the fields are built.
+    if (userSpecs.some(s => s.type === 'member' || s.type === 'members')) {
+        await fetchRoster();
+    }
+
     const form = document.getElementById('vars-form');
     const modal = document.getElementById('vars-modal');
     form.replaceChildren();
@@ -312,13 +365,28 @@ async function copyWithVariables(content, prefilledValues) {
         });
     }
 
+    // Upgrade member selects to a searchable Choices.js control where available
+    // (comms.html, season-hub.html); native <select> is the fallback elsewhere.
+    if (typeof Choices !== 'undefined') {
+        form.querySelectorAll('select.member-var-select').forEach(el => {
+            new Choices(el, {
+                removeItemButton: el.multiple,
+                shouldSort: false,
+                itemSelectText: '',
+                searchPlaceholderValue: 'Search members…',
+            });
+        });
+    }
+
     const firstEl = form.querySelector('input,select,textarea');
     if (firstEl) firstEl.focus();
 
     document.getElementById('vars-copy-btn').onclick = async () => {
         const values = Object.assign({}, prefilled);
         form.querySelectorAll('[data-var-name]').forEach(el => {
-            values[el.dataset.varName] = el.value;
+            values[el.dataset.varName] = el.multiple
+                ? Array.from(el.selectedOptions).map(o => o.value).join(', ')
+                : el.value;
         });
         try {
             await writeToClipboard(applyTemplate(content, values));
