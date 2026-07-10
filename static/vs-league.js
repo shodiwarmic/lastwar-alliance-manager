@@ -395,23 +395,34 @@
             const wk = weeks[i], ms = saved[i] || [], status = weekStatusOf(wk);
             const byTag = new Map();
             const pairs = [];
+            let predicted = false;
             if (ms.length) {
                 ms.slice().sort((x, y) => Math.min(x.a_rank || 99, x.b_rank || 99) - Math.min(y.a_rank || 99, y.b_rank || 99)).forEach(m => {
                     const A = { rank: m.a_rank, tag: m.a_tag, name: m.a_name, pts: m.a_points };
                     const B = { rank: m.b_rank, tag: m.b_tag, name: m.b_name, pts: m.b_points };
-                    const decided = A.pts != null && B.pts != null;
-                    pairs.push({ A, B, decided });
-                    const setSide = (s, opp) => { if (s.tag) byTag.set(s.tag.toLowerCase(), { tag: s.tag, name: s.name, rank: s.rank, result: decided ? (s.pts > opp.pts ? 'W' : s.pts < opp.pts ? 'L' : 'T') : (status === 'future' ? 'upcoming' : 'live') }); };
+                    // Only a CLINCHED pairing shows W/L; a scored-but-open one (e.g. 4–3) is still "live".
+                    const st = pairSettled(A.pts, B.pts);
+                    pairs.push({ A, B });
+                    const setSide = (s, opp) => { if (s.tag) byTag.set(s.tag.toLowerCase(), { tag: s.tag, name: s.name, rank: s.rank, result: st.settled ? (s.pts > opp.pts ? 'W' : s.pts < opp.pts ? 'L' : 'T') : (status === 'future' ? 'upcoming' : 'live') }); };
                     setSide(A, B); setSide(B, A);
                 });
             } else {
                 const ranked = await inferRankedForWeek(wk);
                 if (ranked) {
-                    for (let p = 0; p < 8; p++) { const a = ranked[2 * p], b = ranked[2 * p + 1]; if (!a && !b) continue; pairs.push({ A: a ? { rank: a.rank, tag: a.tag, name: a.name, pts: null } : null, B: b ? { rank: b.rank, tag: b.tag, name: b.name, pts: null } : null, decided: false }); }
+                    for (let p = 0; p < 8; p++) { const a = ranked[2 * p], b = ranked[2 * p + 1]; if (!a && !b) continue; pairs.push({ A: a ? { rank: a.rank, tag: a.tag, name: a.name, pts: null } : null, B: b ? { rank: b.rank, tag: b.tag, name: b.name, pts: null } : null }); }
                     ranked.forEach(r => byTag.set(r.tag.toLowerCase(), { tag: r.tag, name: r.name, rank: r.rank, result: status === 'future' ? 'upcoming' : status === 'current' ? 'live' : 'pending' }));
+                } else if (i >= 1 && (saved[i - 1] || []).length
+                    && per.slice(0, i - 1).every(pw => weekFullySettled(pw.pairs))
+                    && per[i - 1].pairs.some(p => p.A && p.B && p.A.pts != null && p.B.pts != null)) {
+                    // The immediate week after the current (partially-settled) week, with every week
+                    // BEFORE it fully settled. Exact ranks aren't computable (some source pairings are
+                    // still in play), so predict the recursive winners/losers re-seed with "W/L of
+                    // [A]/[B]" placeholders for the undecided source pairings. One week ahead only.
+                    predictNextWeekPairs(per[i - 1].pairs, weeks[i - 1].week_number).forEach(p => pairs.push(p));
+                    predicted = pairs.length > 0;
                 }
             }
-            per.push({ wk, status, byTag, pairs });
+            per.push({ wk, status, byTag, pairs, predicted });
         }
         clear(holder);
         holder.appendChild(standingsCard(per));
@@ -455,12 +466,12 @@
         const card = el('div', { className: 'card' });
         card.appendChild(el('div', { className: 'card-header' }, el('div', {},
             el('h2', { text: 'Bracket' }),
-            el('div', { className: 'vsl-help', text: 'Match Record per week — always 1v2, 3v4 …. Uncaptured weeks show computed ranks; points fill in when captured.' }))));
+            el('div', { className: 'vsl-help', text: 'Match Record per week — always 1v2, 3v4 …. Uncaptured weeks show computed ranks, or a 🔮 prediction (W/L of [A]/[B]) for the week after a live one; points fill in when captured.' }))));
         const grid = el('div', { className: 'vsl-bracket' });
         per.forEach(pw => {
             const col = el('div', { className: 'vsl-wkcol' });
-            const complete = pw.pairs.length > 0 && pw.pairs.every(p => p.decided);
-            const badge = pw.status === 'future' ? ['up', '💤 Upcoming'] : pw.status === 'current' ? ['live', '⚔ Live'] : complete ? ['done', '✓ Complete'] : ['up', 'In progress'];
+            const complete = pw.pairs.length > 0 && pw.pairs.every(p => p.A && p.B && pairSettled(p.A.pts, p.B.pts).settled);
+            const badge = pw.predicted ? ['pred', '🔮 Predicted'] : pw.status === 'future' ? ['up', '💤 Upcoming'] : pw.status === 'current' ? ['live', '⚔ Live'] : complete ? ['done', '✓ Complete'] : ['up', 'In progress'];
             col.appendChild(el('div', { className: 'vsl-wkhead' }, el('span', { className: 'wk', text: 'Week ' + (pw.wk.week_number || '') }), el('span', { className: 'vsl-wkstate ' + badge[0], text: badge[1] })));
             if (!pw.pairs.length) col.appendChild(el('div', { className: 'vsl-pending' }, el('span', { className: 'big', text: '💤' }), 'Not available yet'));
             else pw.pairs.forEach(p => col.appendChild(renderPairV2(p)));
@@ -470,26 +481,104 @@
         return card;
     }
 
+    // A pairing is SETTLED only when the leader is mathematically uncatchable: their lead exceeds the
+    // match points still in play (pool = 13). So 4–3 (6 left, lead 1) is undecided → "leading", not
+    // "won"; a scored-but-open pairing renders the leader blue, no dimmed loser, no green ✓.
+    function pairSettled(aPts, bPts) {
+        if (aPts == null || bPts == null) return { scored: false, settled: false, aAhead: false, bAhead: false };
+        return { scored: true, settled: Math.abs(aPts - bPts) > 13 - (aPts + bPts), aAhead: aPts > bPts, bAhead: bPts > aPts };
+    }
+    // A week is fully settled once it has captured pairings and every one of them is clinched.
+    function weekFullySettled(pairs) {
+        return pairs.length > 0 && pairs.every(p => p.A && p.B && p.A.pts != null && p.B.pts != null && pairSettled(p.A.pts, p.B.pts).settled);
+    }
+    // # of W's in a W/L timeline string, and the game's rank comparator over timelines: most wins
+    // desc, then earliest win (compare position by position, W ranks before L).
+    function tlWins(s) { let n = 0; for (const c of s) if (c === 'W') n++; return n; }
+    function tlCmp(x, y) {
+        const wx = tlWins(x), wy = tlWins(y);
+        if (wx !== wy) return wy - wx;
+        for (let k = 0; k < x.length && k < y.length; k++) if (x[k] !== y[k]) return x[k] === 'W' ? -1 : 1;
+        return 0;
+    }
+    // All length-n W/L timelines in rank order — the record buckets going into a week (n = weekNo-1):
+    // [] for wk1, [W,L] for wk2, [WW,WL,LW,LL] for wk3, …
+    function bucketTimelines(n) {
+        let out = [''];
+        for (let i = 0; i < n; i++) { const nx = []; out.forEach(s => { nx.push(s + 'W'); nx.push(s + 'L'); }); out = nx; }
+        return out.sort(tlCmp);
+    }
+    // Predict the NEXT week's Match Record from a captured, rank-ordered source week's pairings.
+    // The game re-seeds by "most wins → earliest win → start rank, then pair rank-adjacent", which is
+    // a recursive winners/losers bracket: each week splits every record bucket into pair-winners and
+    // pair-losers. So numGroups = 2^(sourceWeekNo-1) buckets going in (1 for wk1, 2 for wk2, 4 for
+    // wk3); within a bucket, winners re-pair with winners and losers with losers. A SETTLED source
+    // pairing → concrete slot; an in-play (or unscored) one → a "W/L of [A]/[B]" placeholder. Rows are
+    // then ordered by each pair's projected timeline so higher-bucket losers interleave with
+    // lower-bucket winners exactly as the game ranks them (matters from wk4 on). Requires every week
+    // BEFORE the source to be fully settled (so bucket boundaries are exact); the caller enforces it.
+    function predictNextWeekPairs(srcPairs, sourceWeekNumber) {
+        const splitPair = p => {
+            const a = p.A, b = p.B;
+            if (!a || !b) return [null, null];
+            const st = pairSettled(a.pts, b.pts);
+            if (st.settled) {
+                const win = a.pts > b.pts ? a : b, lose = a.pts > b.pts ? b : a;
+                return [{ tag: win.tag, name: win.name }, { tag: lose.tag, name: lose.name }];
+            }
+            // undecided → placeholder; list the current leader first (else lower rank #), same for W/L
+            let t1 = a, t2 = b;
+            if (st.scored ? b.pts > a.pts : (a.rank || 99) > (b.rank || 99)) { t1 = b; t2 = a; }
+            const tags = [t1.tag, t2.tag];
+            return [{ predWL: 'W', predTags: tags }, { predWL: 'L', predTags: tags }];
+        };
+        const wk = Math.max(1, sourceWeekNumber || 1);
+        let numGroups = Math.pow(2, wk - 1);
+        if (!srcPairs.length || srcPairs.length % numGroups !== 0) numGroups = 1;
+        const perGroup = srcPairs.length / numGroups;
+        const prefixes = bucketTimelines(wk - 1);   // one per bucket/group, in rank order
+        const entries = [];                          // { A, B, tl } — tl is the projected length-wk timeline
+        for (let g = 0; g < numGroups; g++) {
+            const group = srcPairs.slice(g * perGroup, (g + 1) * perGroup);
+            const winners = [], losers = [];
+            group.forEach(p => { const [w, l] = splitPair(p); winners.push(w); losers.push(l); });
+            const prefix = prefixes[g] || '';
+            const emit = (arr, ch) => { for (let k = 0; k < arr.length; k += 2) entries.push({ A: arr[k], B: arr[k + 1] || null, tl: prefix + ch }); };
+            emit(winners, 'W'); emit(losers, 'L');
+        }
+        entries.forEach((e, i) => { e.i = i; });     // stable order within a shared timeline (bucket order)
+        entries.sort((x, y) => tlCmp(x.tl, y.tl) || (x.i - y.i));
+        return entries.map(e => ({ A: e.A, B: e.B }));
+    }
     function renderPairV2(p) {
         let top = p.A, bot = p.B;
         if (top && bot && (top.rank || 99) > (bot.rank || 99)) { const t = top; top = bot; bot = t; }
-        const decided = p.decided && top && bot && top.pts != null && bot.pts != null;
-        const topWon = decided && top.pts > bot.pts, botWon = decided && bot.pts > top.pts;
-        const chip = (side, won, lost) => {
+        const st = (top && bot) ? pairSettled(top.pts, bot.pts) : { scored: false, settled: false, aAhead: false, bAhead: false };
+        const settled = st.settled, topAhead = st.aAhead, botAhead = st.bAhead;
+        const chip = (side, ahead, behind) => {
             if (!side) return el('div', { className: 'vsl-chip pred' }, el('span', { className: 'nm', text: '—' }));
+            if (side.predWL) return el('div', { className: 'vsl-chip pred' },
+                el('span', { className: 'wl ' + (side.predWL === 'W' ? 'w' : 'l'), text: side.predWL }),
+                el('span', { className: 'nm', text: (side.predTags || []).map(t => '[' + t + ']').join(' / ') }));
             const isUs = !!(MY_TAG && (side.tag || '').toLowerCase() === MY_TAG.toLowerCase());
-            const c = el('div', { className: 'vsl-chip' + (won ? ' won' : '') + (lost ? ' out' : '') + (isUs ? ' us' : '') });
+            const cls = 'vsl-chip'
+                + (settled && ahead ? ' won' : '')
+                + (settled && behind ? ' out' : '')
+                + (!settled && ahead ? ' lead' : '')
+                + (isUs ? ' us' : '');
+            const c = el('div', { className: cls });
             if (side.rank != null) c.appendChild(el('span', { className: 'rk', text: '#' + side.rank }));
             c.appendChild(el('span', { className: 'nm', text: (isUs ? '★ ' : '') + (side.tag ? '[' + side.tag + '] ' : '') + (side.name || '') }));
             if (side.pts != null) c.appendChild(el('span', { className: 's', text: side.pts }));
             return c;
         };
-        const winnerTag = topWon ? top.tag : botWon ? bot.tag : null;
+        const leaderTag = topAhead ? (top && top.tag) : botAhead ? (bot && bot.tag) : null;
         const ourPair = !!(MY_TAG && ((top && (top.tag || '').toLowerCase() === MY_TAG.toLowerCase()) || (bot && (bot.tag || '').toLowerCase() === MY_TAG.toLowerCase())));
+        const wnText = settled ? '[' + leaderTag + ']' : (leaderTag ? '[' + leaderTag + '] ▲' : '?');
         return el('div', { className: 'vsl-pair' },
-            el('div', { className: 'vsl-teams' }, chip(top, topWon, botWon), chip(bot, botWon, topWon)),
+            el('div', { className: 'vsl-teams' }, chip(top, topAhead, botAhead), chip(bot, botAhead, topAhead)),
             el('div', { className: 'vsl-elbow' }),
-            el('div', { className: 'vsl-wn' + (winnerTag ? ' won' : ' dim') + (ourPair ? ' us' : '') }, winnerTag ? '[' + winnerTag + ']' : '?'));
+            el('div', { className: 'vsl-wn' + (settled ? ' won' : ' dim') + (ourPair ? ' us' : '') }, wnText));
     }
 
     // ---------- Bracket ----------
@@ -524,7 +613,11 @@
                 const B = { tag: m.b_tag, name: m.b_name, server: m.b_server, rank: m.b_rank, pts: m.b_points };
                 const ka = remember(A), kb = remember(B);
                 if (w.week_number === 1) { if (ka && A.rank != null) startRank.set(ka, A.rank); if (kb && B.rank != null) startRank.set(kb, B.rank); }
-                if (A.pts != null && B.pts != null && ka && kb) { const d = A.pts - B.pts; res.set(ka, d > 0 ? 'W' : d < 0 ? 'L' : 'T'); res.set(kb, d < 0 ? 'W' : d > 0 ? 'L' : 'T'); }
+                // Only a CLINCHED pairing awards W/L. An in-play one (e.g. 4–3) leaves both alliances
+                // without a result, so the guard below sees the week as not-fully-settled and refuses to
+                // rank off it — a week never moves anyone's rank until every pairing is decided.
+                const st = pairSettled(A.pts, B.pts);
+                if (st.settled && ka && kb) { res.set(ka, st.aAhead ? 'W' : 'L'); res.set(kb, st.bAhead ? 'W' : 'L'); }
             });
             weekRes.push(res);
         });
@@ -775,6 +868,9 @@
             if (!isNaN(d)) d.setUTCDate(d.getUTCDate() + (num - 1) * 7);
             return { num, date: isNaN(d) ? startISO : d.toISOString().slice(0, 10) };
         })();
+        const isWk1 = derived.num === 1;
+        const rankInput = inp('number', wk && wk.league_rank != null ? String(wk.league_rank) : '', '1–16');
+        rankInput.className = 'form-input'; rankInput.min = '1'; rankInput.max = '16';
         const stratLabel = sel([['', '—'], ['push', 'Push'], ['save', 'Save'], ['normal', 'Normal'], ['test', 'Test'], ['recovery', 'Recovery']], wk && wk.strategy_label || '');
         const stratResult = sel([['', '—'], ['worked', 'Worked'], ['failed', 'Failed'], ['mixed', 'Mixed']], wk && wk.strategy_result || '');
         const notes = el('textarea', { className: 'form-input', rows: '2', placeholder: 'leadership context…' }); if (wk && wk.notes) notes.value = wk.notes;
@@ -957,6 +1053,10 @@
 
         modal(wk ? 'Edit matchup' : 'New week', [
             el('p', { className: 'vsl-help', text: 'Week ' + derived.num + ' · ' + derived.date + ' (Mon)' + ((state.season && state.season.league_tier) ? ' · ' + state.season.league_tier : '') }),
+            field(isWk1 ? 'Our starting rank (#1–16)' : 'Our rank (#1–16)', rankInput),
+            el('span', { className: 'vsl-help', text: isWk1
+                ? 'The game’s random week-1 seed. Locks our slot (and our opponent) when you capture the bracket.'
+                : 'Auto-computed from prior results when the bracket is captured — set here only to override.' }),
             oppGrid,
             el('span', { className: 'vsl-help', text: 'Type an opponent tag or name to search your registry; enter the server to look up on LastRank.' }),
             field('Opponent LastRank link', el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' }, lrInput, lookupBtn)),
@@ -968,8 +1068,10 @@
             el('div', { className: 'vsl-form-grid' }, field('Strategy', stratLabel), field('Result', stratResult)),
             field('Notes', notes)
         ], async () => {
+            const ourRank = numOrNull(rankInput.value);
+            if (ourRank != null && (ourRank < 1 || ourRank > 16)) throw new Error('Our rank must be between 1 and 16');
             const payload = {
-                season_id: state.seasonId, week_number: derived.num, week_date: derived.date,
+                season_id: state.seasonId, week_number: derived.num, week_date: derived.date, league_rank: ourRank,
                 opponent_tag: strOrNull(oppTag.value), opponent_name: strOrNull(oppName.value), opponent_server: numOrNull(oppServer.value),
                 opponent_power: numOrNull(oppPower.value), opponent_kills: numOrNull(oppKills.value), opponent_member_count: numOrNull(oppMembers.value),
                 our_power: numOrNull(ourPower.value), our_kills: numOrNull(ourKills.value), our_member_count: numOrNull(ourMembers.value), our_server: ourServerVal,
@@ -1111,7 +1213,11 @@
                 const B = { tag: m.b_tag, name: m.b_name, server: m.b_server, rank: m.b_rank, pts: m.b_points };
                 const ka = remember(A), kb = remember(B);
                 if (w.week_number === 1) { if (ka && A.rank != null) startRank.set(ka, A.rank); if (kb && B.rank != null) startRank.set(kb, B.rank); }
-                if (A.pts != null && B.pts != null && ka && kb) { const d = A.pts - B.pts; res.set(ka, d > 0 ? 'W' : d < 0 ? 'L' : 'T'); res.set(kb, d < 0 ? 'W' : d > 0 ? 'L' : 'T'); }
+                // Only a CLINCHED pairing awards W/L. An in-play one (e.g. 4–3) leaves both alliances
+                // without a result, so the guard below sees the week as not-fully-settled and refuses to
+                // rank off it — a week never moves anyone's rank until every pairing is decided.
+                const st = pairSettled(A.pts, B.pts);
+                if (st.settled && ka && kb) { res.set(ka, st.aAhead ? 'W' : 'L'); res.set(kb, st.bAhead ? 'W' : 'L'); }
             });
             weekRes.push(res);
         });

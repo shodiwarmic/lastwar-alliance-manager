@@ -66,9 +66,6 @@
 .vsl-chip .rk { flex: 0 0 auto; font-size: 0.66rem; font-weight: 800; color: var(--color-text-muted); min-width: 22px; }
 .vsl-chip .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-mid); }
 .vsl-chip .s  { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--color-text-muted); font-weight: 700; }
-.vsl-chip.win { background: var(--color-success-bg); border-color: var(--color-success); }
-.vsl-chip.win .nm { font-weight: 800; color: var(--color-text); }
-.vsl-chip.win .s  { color: var(--color-success); font-weight: 800; }
 .vsl-chip.us  { box-shadow: inset 3px 0 0 var(--color-accent); }
 .vsl-chip.us .nm { color: var(--color-accent); }
 .vsl-elbow { flex: 0 0 12px; align-self: stretch; margin: 10px 0; border-right: 2px solid var(--color-border); border-top: 2px solid var(--color-border); border-bottom: 2px solid var(--color-border); border-radius: 0 6px 6px 0; }
@@ -78,9 +75,16 @@
 .vsl-chip.won .nm { font-weight: 800; color: var(--color-text); }
 .vsl-chip.won .nm::after { content: ' ✓'; color: var(--color-success); font-weight: 800; }
 .vsl-chip.won .s { color: var(--color-success); font-weight: 800; }
+.vsl-chip.lead { background: var(--color-info-bg); border-color: var(--color-info); }
+.vsl-chip.lead .nm { font-weight: 800; color: var(--color-text); }
+.vsl-chip.lead .s  { color: var(--color-info); font-weight: 800; }
 .vsl-chip.out .nm, .vsl-chip.out .s { opacity: 0.5; }
 .vsl-chip.pred { background: var(--color-bg); border-style: dashed; }
 .vsl-chip.pred .nm { color: var(--color-text-muted); font-weight: 600; }
+/* "W/L of [A]/[B]" placeholder badge inside a predicted chip (distinct from the .vsl-wl day-avg bar) */
+.vsl-chip .wl { flex: 0 0 auto; font-size: 0.6rem; font-weight: 800; padding: 1px 5px; border-radius: 4px; letter-spacing: 0.03em; }
+.vsl-chip .wl.w { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-chip .wl.l { color: var(--color-danger); background: var(--color-danger-bg); }
 .vsl-wn.won { color: var(--color-success); border-color: var(--color-success); }
 .vsl-wn.dim { color: var(--color-text-muted); font-weight: 600; }
 .vsl-wn.us { color: var(--color-accent); border-color: var(--color-accent); }
@@ -90,6 +94,7 @@
 .vsl-wkstate.live { color: var(--color-info); background: var(--color-info-bg); }
 .vsl-wkstate.up { color: var(--color-text-muted); background: var(--color-bg); border: 1px solid var(--color-border); }
 .vsl-wkstate.done { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-wkstate.pred { color: var(--color-purple); background: var(--color-purple-bg); }
 .vsl-pending { border: 1.5px dashed var(--color-border); border-radius: 8px; padding: 22px 10px; text-align: center; color: var(--color-text-muted); font-size: 0.82rem; }
 .vsl-pending .big { font-size: 1.3rem; display: block; margin-bottom: 4px; }
 
@@ -177,7 +182,7 @@
 
 /* Capture-bracket: grid of pairing cards. Ranks are fixed labels (computed each week); each
    alliance row is [#rank] [server] [tag combobox] [points]; our pairing is highlighted. */
-.vsl-bracket-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; margin: 12px 0; }
+.vsl-bracket-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 320px)); justify-content: center; gap: 10px; margin: 12px 0; }
 .vsl-pair-card { border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; background: var(--color-surface); }
 .vsl-pair-card.ours { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent) inset; }
 .vsl-pair-hd { display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; font-weight: 700; color: var(--color-text-mid); margin-bottom: 5px; }
@@ -187,10 +192,12 @@
 .vsl-al-row + .vsl-al-row { margin-top: 4px; }
 .vsl-rklbl { min-width: 30px; flex: 0 0 auto; font-weight: 700; color: var(--color-text-mid); font-size: 0.85rem; }
 .vsl-srv { width: 66px; flex: 0 0 auto; text-align: center; padding-left: 5px; padding-right: 5px; }
-.vsl-tagwrap { position: relative; flex: 1 1 0; min-width: 62px; }
+.vsl-tagwrap { position: relative; flex: 1 1 0; min-width: 62px; max-width: 130px; }
 .vsl-tag { width: 100%; }
-.vsl-pts2 { width: 44px; flex: 0 0 auto; text-align: center; padding-left: 4px; padding-right: 4px; }
-.vsl-bracket-dd { top: calc(100% + 4px); left: 0; right: 0; }
+.vsl-pts2 { width: 62px; flex: 0 0 auto; text-align: center; padding-left: 4px; padding-right: 4px; }
+/* Tag input is narrow, but the search results need room — let the dropdown be a bit wider than its
+   field (kept within the smallest card's right edge so it never clips on a single-column modal). */
+.vsl-bracket-dd { top: calc(100% + 4px); left: 0; right: auto; min-width: 150px; }
 .vsl-locked { background: var(--bg-secondary); color: var(--color-text-mid); cursor: default; font-weight: 600; }
 
 /* Daily-MVP combobox (our roster + opponent LastRank roster + free text) */
