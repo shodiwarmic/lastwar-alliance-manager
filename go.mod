@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/storage v1.62.3
 	github.com/gorilla/csrf v1.7.3
 	github.com/gorilla/mux v1.8.1
-	github.com/gorilla/sessions v1.2.2
+	github.com/gorilla/sessions v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/pressly/goose/v3 v3.27.0
