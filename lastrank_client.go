@@ -14,6 +14,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -131,6 +132,53 @@ func fetchLastRankAlliance(ctx context.Context, allianceID string) (*lastrankAll
 		return nil, err
 	}
 	return &a, nil
+}
+
+// --- Alliance search wire structs (never leave this file) ---
+
+// lastrankAllianceRow is one row of /v1/global/alliances (the search/list endpoint). It carries
+// power/kills directly (unlike a /v1/search hit), so a picker can show them without a second call.
+type lastrankAllianceRow struct {
+	AllianceID string  `json:"alliance_id"`
+	Abbr       *string `json:"abbr"`
+	Name       *string `json:"name"`
+	ServerID   *int    `json:"server_id"`
+	Power      *int64  `json:"power"`
+	Kills      *int64  `json:"kills"`
+}
+
+type lastrankAlliancePage struct {
+	Rows []lastrankAllianceRow `json:"rows"`
+}
+
+// searchLastRankAlliances finds alliances by fuzzy tag/name via /v1/global/alliances, optionally
+// restricted to a single server (strict) — matching the picker's "strict server + fuzzy name"
+// rule. Uses the shared 1 req/sec limiter; the caller owns a bounded context.
+func searchLastRankAlliances(ctx context.Context, query string, server *int) ([]VSLeagueAllianceSearchResult, error) {
+	q := url.Values{}
+	q.Set("search", query)
+	q.Set("sort_by", "power")
+	q.Set("sort_dir", "desc")
+	q.Set("limit", "20")
+	if server != nil {
+		q.Set("server_id", strconv.Itoa(*server))
+	}
+	var page lastrankAlliancePage
+	if err := lastRankDo(ctx, http.MethodGet, "/v1/global/alliances?"+q.Encode(), &page); err != nil {
+		return nil, err
+	}
+	out := make([]VSLeagueAllianceSearchResult, 0, len(page.Rows))
+	for _, row := range page.Rows {
+		out = append(out, VSLeagueAllianceSearchResult{
+			LastRankID: row.AllianceID,
+			Tag:        row.Abbr,
+			Name:       row.Name,
+			Server:     row.ServerID,
+			Power:      row.Power,
+			Kills:      row.Kills,
+		})
+	}
+	return out, nil
 }
 
 // getLastRankPlayer reads the cached player record (fast). Used by the bulk
@@ -258,6 +306,80 @@ func parseLastRankAllianceID(input string) (string, bool) {
 	}
 	return "", false
 }
+
+// lastRankAllowedHosts are the only hosts a pasted opponent URL may come from (F-R05).
+var lastRankAllowedHosts = map[string]bool{"lastrank.fun": true, "www.lastrank.fun": true}
+var reLastRankStrictPath = regexp.MustCompile(`^/a/([0-9a-fA-F]{32})$`)
+
+// parseLastRankAllianceStrict is the STRICT variant used only by the VS League opponent
+// lookup: it accepts a bare 32-hex id, or a URL on an approved LastRank host whose path is
+// exactly /a/<hex>. The shared parseLastRankAllianceID stays lax for its existing callers;
+// this one avoids an officer pasting a URL from an unrelated site that merely contains /a/<hex>.
+func parseLastRankAllianceStrict(input string) (string, bool) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", false
+	}
+	if m := reLastRankBareHex.FindStringSubmatch(input); m != nil {
+		return strings.ToLower(m[1]), true
+	}
+	u, err := url.Parse(input)
+	if err != nil || !lastRankAllowedHosts[strings.ToLower(u.Hostname())] {
+		return "", false
+	}
+	if m := reLastRankStrictPath.FindStringSubmatch(u.Path); m != nil {
+		return strings.ToLower(m[1]), true
+	}
+	return "", false
+}
+
+// fetchLastRankOpponentSnapshot resolves a pasted URL/id to a point-in-time opponent
+// snapshot for the VS League matchup card. Surfaces power (fightpower) and kills (army_kill),
+// which the app-facing LastRankAllianceMeta drops. Uses the shared 1 req/sec limiter; the
+// caller is responsible for a bounded context (the app runs on a single DB connection, so
+// the handler must hold no DB handle across this call).
+func fetchLastRankOpponentSnapshot(ctx context.Context, idOrURL string) (VSLeagueOpponentSnapshot, error) {
+	id, ok := parseLastRankAllianceStrict(idOrURL)
+	if !ok {
+		return VSLeagueOpponentSnapshot{}, errLastRankBadInput
+	}
+	a, err := fetchLastRankAlliance(ctx, id)
+	if err != nil {
+		return VSLeagueOpponentSnapshot{}, err
+	}
+	return VSLeagueOpponentSnapshot{
+		AllianceID:  a.AllianceID,
+		Tag:         a.Abbr,
+		Name:        a.Name,
+		ServerID:    a.ServerID,
+		Power:       a.Fightpower,
+		Kills:       a.ArmyKill,
+		MemberCount: a.CurMember,
+		LastSeenAt:  a.LastSeenAt,
+	}, nil
+}
+
+// fetchLastRankOpponentRoster resolves a pasted URL/id to the opponent alliance's member list
+// (names + power) for the daily-MVP picker. Same strict parse + shared limiter as the snapshot;
+// the caller owns a bounded context and holds no DB handle across the call.
+func fetchLastRankOpponentRoster(ctx context.Context, idOrURL string) ([]VSLeagueOpponentMember, error) {
+	id, ok := parseLastRankAllianceStrict(idOrURL)
+	if !ok {
+		return nil, errLastRankBadInput
+	}
+	a, err := fetchLastRankAlliance(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]VSLeagueOpponentMember, 0, len(a.Members))
+	for _, m := range a.Members {
+		pw := m.Power
+		out = append(out, VSLeagueOpponentMember{Name: m.Name, Power: &pw, AllianceRank: m.AllianceRank})
+	}
+	return out, nil
+}
+
+var errLastRankBadInput = errors.New("could not parse a LastRank alliance id/URL")
 
 // --- Time / staleness ---
 

@@ -65,6 +65,20 @@ func getProspects(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(prospects)
 }
 
+// linkProspectSourceAlliance best-effort links a prospect's free-text source_alliance to an
+// EXISTING external_alliances row (exact tag or name). It never creates a registry row — a
+// prospect's source is often just a note — and sets NULL when there's no match. Best-effort.
+func linkProspectSourceAlliance(prospectID int, sourceAlliance string) {
+	s := strings.TrimSpace(sourceAlliance)
+	if s == "" {
+		db.Exec(`UPDATE prospects SET source_alliance_id = NULL WHERE id = ?`, prospectID)
+		return
+	}
+	db.Exec(`UPDATE prospects SET source_alliance_id = (
+		SELECT id FROM external_alliances WHERE tag = ? COLLATE NOCASE OR name = ? COLLATE NOCASE
+		ORDER BY updated_at DESC LIMIT 1) WHERE id = ?`, s, s, prospectID)
+}
+
 func createProspect(w http.ResponseWriter, r *http.Request) {
 	var p Prospect
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
@@ -116,6 +130,7 @@ func createProspect(w http.ResponseWriter, r *http.Request) {
 
 	id, _ := result.LastInsertId()
 	p.ID = int(id)
+	linkProspectSourceAlliance(p.ID, p.SourceAlliance)
 
 	if p.RecruiterID != nil {
 		db.QueryRow("SELECT name FROM members WHERE id = ?", *p.RecruiterID).Scan(&p.RecruiterName)
@@ -209,6 +224,9 @@ func updateProspect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, _ := result.RowsAffected()
+	if rows > 0 {
+		linkProspectSourceAlliance(id, p.SourceAlliance)
+	}
 	if rows == 0 {
 		http.Error(w, "Prospect not found", http.StatusNotFound)
 		return

@@ -1,0 +1,106 @@
+/* static/external-alliances.css — External Alliances registry page. Reuses global utilities
+   (.card, .data-table, .table-scroll, .tab-toolbar, .form-input, .status-msg); page-specific
+   relationship badges below use tokens only. */
+
+.ext-rel { display: inline-flex; flex-wrap: wrap; gap: 5px; }
+.ext-badge {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-weight: 700;
+    padding: 2px 8px; border-radius: 20px;
+}
+.ext-badge.ally     { color: var(--color-success); background: var(--color-success-bg); }
+.ext-badge.former   { color: var(--color-text-muted); background: var(--color-bg); border: 1px solid var(--color-border); }
+.ext-badge.opponent { color: var(--color-danger);  background: var(--color-danger-bg); }
+.ext-badge.prospect { color: var(--color-info);     background: var(--color-info-bg); }
+.ext-badge.none     { color: var(--color-text-muted); }
+
+.ext-tag { font-weight: 700; }
+.ext-lr  { color: var(--color-accent); text-decoration: none; margin-left: 6px; font-size: 0.85em; }
+.ext-num { font-variant-numeric: tabular-nums; }
+#ext-count { margin-left: 4px; }
+
+/* Add/edit modal form (this page doesn't load vs-league.css) */
+.vsl-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 12px 0; }
+.vsl-field label { display: block; font-size: 0.78rem; color: var(--color-text-mid); font-weight: 600; margin-bottom: 3px; }
+.vsl-help { font-size: 0.8rem; color: var(--color-text-muted); }
+
+/* ── Search + collapsible sort/filter controls (mirrors the Members page) ── */
+.ext-filter-controls {
+    display: flex; flex-direction: column; gap: 16px;
+    margin-bottom: 20px; padding: 16px;
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;
+}
+.ext-filter-top { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.ext-search-wrap { flex: 1; min-width: 220px; position: relative; }
+.ext-search-wrap .form-input { padding: 10px 34px 10px 15px; border-radius: 20px; }
+#ext-clear-search {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; background: none; border: none; cursor: pointer; color: var(--color-text-mid);
+}
+.ext-filter-toggle { flex-shrink: 0; white-space: nowrap; }
+.ext-filter-toggle .chevron { transition: transform 0.2s; }
+.ext-filter-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+.ext-filter-badge {
+    background: var(--color-accent); color: #fff; border-radius: 999px;
+    padding: 0 6px; font-size: 0.75em; font-weight: 600; min-width: 1.4em; text-align: center;
+}
+.ext-filter-collapse { display: none; flex-direction: column; gap: 14px; }
+.ext-filter-collapse.open { display: flex; }
+.ext-filter-divider { border: 0; border-top: 1px solid var(--color-border); margin: 0; }
+.ext-filter-grid { display: flex; flex-direction: column; gap: 14px; }
+.ext-filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ── Extended gather (per-alliance LastRank refresh) — mirrors Members sync ── */
+.ext-gather-section { margin-bottom: 20px; }
+.ext-gather-card {
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: 8px; padding: 16px;
+}
+.ext-gather-help { color: var(--color-text-muted); font-size: 0.88rem; margin: 6px 0 12px; }
+.ext-gather-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.ext-prog-list {
+    margin-top: 14px; max-height: 320px; overflow-y: auto;
+    border: 1px solid var(--color-border); border-radius: 6px;
+}
+.ext-prog-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 7px 12px; border-bottom: 1px solid var(--color-border);
+}
+.ext-prog-row:last-child { border-bottom: none; }
+.ext-prog-name { color: var(--color-text); }
+.ext-prog-status { color: var(--color-text-muted); font-size: 0.82rem; white-space: nowrap; }
+.ext-prog-row.active { background: var(--bg-secondary); }
+.ext-prog-row.active .ext-prog-status { color: var(--color-primary); }
+.ext-prog-row.done .ext-prog-status { color: var(--color-success); }
+.ext-prog-row.err .ext-prog-status { color: var(--color-danger); }
+
+/* ── Add/edit modal: find-alliance combobox on the Tag & Name fields ──
+   The dropdown is a child of the identity grid (position: relative) and is anchored under the
+   focused field via inline left/top/min-width/max-width set in JS (positionDropdown). */
+.ext-id-grid { position: relative; }
+.ext-find-dropdown {
+    position: absolute; z-index: 30;
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;
+    max-height: 280px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.ext-find-action {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    padding: 9px 12px; background: none; border: none; border-top: 1px solid var(--color-border);
+    cursor: pointer; text-align: left; color: var(--color-accent); font-weight: 600;
+}
+.ext-find-action:hover { background: var(--bg-secondary); }
+.ext-find-head {
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--color-text-muted); padding: 8px 12px 4px;
+}
+.ext-find-msg { font-size: 0.82rem; color: var(--color-text-muted); padding: 8px 12px; }
+.ext-find-err { color: var(--color-danger); font-weight: 600; }
+.ext-find-item {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+    padding: 8px 12px; background: none; border: none; border-top: 1px solid var(--color-border);
+    cursor: pointer; text-align: left; color: var(--color-text);
+}
+.ext-find-item:hover { background: var(--bg-secondary); }
+.ext-find-head + .ext-find-item { border-top: none; }
+.ext-find-name { font-weight: 600; }
+.ext-find-meta { font-size: 0.8rem; color: var(--color-text-muted); }

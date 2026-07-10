@@ -465,6 +465,223 @@ type VSPointsWithMember struct {
 	MemberRank string `json:"member_rank"`
 }
 
+// ── VS Duel League ──────────────────────────────────────────────────────────
+// Nullable columns use pointer fields so JSON serializes missing values as null
+// (not zero/""), and so a view-only caller's strategy/notes fields can be omitted.
+// VSLeagueWeekStanding (the computed rollup) lives in vs_league_scoring.go.
+
+// VSLeagueSeason is one Alliance Duel League cycle — its own numbering (e.g. S34),
+// independent of the game's named seasons and the app's Season Hub.
+type VSLeagueSeason struct {
+	ID           int     `json:"id"`
+	SeasonNumber int     `json:"season_number"`
+	LeagueTier   *string `json:"league_tier,omitempty"`
+	StartDate    *string `json:"start_date,omitempty"`
+	EndDate      *string `json:"end_date,omitempty"`
+	FinalRank    *int    `json:"final_rank,omitempty"`
+	IsActive     bool    `json:"is_active"`
+	ArchivedAt   *string `json:"archived_at,omitempty"`
+	Notes        *string `json:"notes,omitempty"`
+	CreatedAt    string  `json:"created_at"`
+}
+
+// VSLeagueDay is one day (1-6) of our matchup. Match points/theme are derived, not stored.
+type VSLeagueDay struct {
+	ID            int     `json:"id"`
+	WeekID        int     `json:"week_id"`
+	DayNumber     int     `json:"day_number"`
+	OurScore      *int64  `json:"our_score,omitempty"`
+	OpponentScore *int64  `json:"opponent_score,omitempty"`
+	Outcome       string  `json:"outcome"` // win|loss|tie|pending
+	MVPIsOurs     bool    `json:"mvp_is_ours"`
+	MVPMemberID   *int    `json:"mvp_member_id,omitempty"`
+	MVPName       *string `json:"mvp_name,omitempty"`
+	Points        int     `json:"points"` // vsDayMatchPoints(day_number) — derived
+}
+
+// VSLeagueMatchup is one bracket pairing (a "Match Record" row). All-of-bracket, weekly.
+type VSLeagueMatchup struct {
+	ID         int     `json:"id"`
+	WeekID     int     `json:"week_id"`
+	MatchIndex *int    `json:"match_index,omitempty"`
+	ARank      *int    `json:"a_rank,omitempty"`
+	AServer    *int    `json:"a_server,omitempty"`
+	ATag       *string `json:"a_tag,omitempty"`
+	AName      *string `json:"a_name,omitempty"`
+	APoints    *int    `json:"a_points,omitempty"`
+	BRank      *int    `json:"b_rank,omitempty"`
+	BServer    *int    `json:"b_server,omitempty"`
+	BTag       *string `json:"b_tag,omitempty"`
+	BName      *string `json:"b_name,omitempty"`
+	BPoints    *int    `json:"b_points,omitempty"`
+	IsOurs     bool    `json:"is_ours"`
+}
+
+// VSLeagueWeek is our matchup for a week, its days, and the computed standing.
+type VSLeagueWeek struct {
+	ID                     int     `json:"id"`
+	SeasonID               int     `json:"season_id"`
+	WeekNumber             *int    `json:"week_number,omitempty"`
+	WeekDate               string  `json:"week_date"`
+	LeagueTier             *string `json:"league_tier,omitempty"`
+	LeagueRank             *int    `json:"league_rank,omitempty"`
+	OpponentTag            *string `json:"opponent_tag,omitempty"`
+	OpponentName           *string `json:"opponent_name,omitempty"`
+	OpponentServer         *int    `json:"opponent_server,omitempty"`
+	OpponentLastRankID     *string `json:"opponent_lastrank_id,omitempty"`
+	OpponentPower          *int64  `json:"opponent_power,omitempty"`
+	OpponentKills          *int64  `json:"opponent_kills,omitempty"`
+	OpponentMemberCount    *int    `json:"opponent_member_count,omitempty"`
+	OpponentSnapshotAt     *string `json:"opponent_snapshot_at,omitempty"`
+	OpponentLastRankSeenAt *string `json:"opponent_lastrank_seen_at,omitempty"`
+	// Our own alliance snapshot for the week (LastRank when configured, else summed roster).
+	OurPower       *int64  `json:"our_power,omitempty"`
+	OurKills       *int64  `json:"our_kills,omitempty"`
+	OurMemberCount *int    `json:"our_member_count,omitempty"`
+	OurServer      *int    `json:"our_server,omitempty"`
+	OurSnapshotAt  *string `json:"our_snapshot_at,omitempty"`
+	// Leadership context — only populated in responses for manage_vs_points users (F-R09/F-013).
+	StrategyLabel  *string `json:"strategy_label,omitempty"`
+	StrategyResult *string `json:"strategy_result,omitempty"`
+	Notes          *string `json:"notes,omitempty"`
+	// Derived + children.
+	Standing    VSLeagueWeekStanding `json:"standing"`      // computed from days (or summary fields when no day rows)
+	SummaryOnly bool                 `json:"summary_only"`  // true = no day rows; our_points/opponent_points are stored inputs
+	Days        []VSLeagueDay        `json:"days"`
+	CreatedAt   string               `json:"created_at"`
+	UpdatedAt   string               `json:"updated_at"`
+}
+
+// VSLeagueParticipationDay is live per-day participation health, derived from member vs_points.
+type VSLeagueParticipationDay struct {
+	DayNumber     int     `json:"day_number"`
+	Imported      bool    `json:"imported"`
+	ActiveScorers int     `json:"active_scorers"`
+	ZeroScore     int     `json:"zero_score"`
+	AvgPerActive  float64 `json:"avg_per_active"`
+	Top10Pct      float64 `json:"top10_pct"`
+}
+
+// VSLeagueOpponentSnapshot is a point-in-time LastRank alliance lookup (opponent scouting).
+type VSLeagueOpponentSnapshot struct {
+	AllianceID  string `json:"alliance_id"`
+	Tag         string `json:"tag"`
+	Name        string `json:"name"`
+	ServerID    int    `json:"server_id"`
+	Power       int64  `json:"power"`
+	Kills       int64  `json:"kills"`
+	MemberCount int    `json:"member_count"`
+	LastSeenAt  string `json:"last_seen_at"`
+}
+
+// VSLeagueAllianceSearchResult is one hit from the LastRank alliance search (fuzzy tag/name,
+// optional strict server filter). Lean by design — member_count isn't on the search row, so a
+// picked result funnels through the by-id lookup to fill it. Nullable fields are pointers.
+type VSLeagueAllianceSearchResult struct {
+	LastRankID string  `json:"lastrank_id"`
+	Tag        *string `json:"tag"`
+	Name       *string `json:"name"`
+	Server     *int    `json:"server"`
+	Power      *int64  `json:"power"`
+	Kills      *int64  `json:"kills"`
+}
+
+// VSLeagueOpponentMember is one member of the opponent alliance from LastRank, for the daily-MVP
+// picker. We persist only the name (as mvp_name); power/rank are display hints in the dropdown.
+type VSLeagueOpponentMember struct {
+	Name         string `json:"name"`
+	Power        *int64 `json:"power,omitempty"`
+	AllianceRank *int   `json:"alliance_rank,omitempty"`
+}
+
+// VSLeagueAnalytics is the cross-season roll-up (a season is only 4 weeks, so trends are only
+// meaningful across seasons). Computed on read from weeks/days; nothing is persisted.
+type VSLeagueAnalytics struct {
+	Seasons     []VSLASeason   `json:"seasons"`
+	Totals      VSLATotals     `json:"totals"`
+	ByDay       []VSLADay      `json:"by_day"`
+	DayAverages []VSLADayAvg   `json:"day_averages"`
+	ByStrategy  []VSLAStrategy `json:"by_strategy"`
+	Opponents   []VSLAOpponent `json:"opponents"`
+}
+
+// VSLADayAvg is the average alliance VS-points total on a theme day, over ALL weeks in vs_points
+// (season or not), excluding zero/not-imported days — a far larger sample than duel-season days.
+type VSLADayAvg struct {
+	DayNumber    int      `json:"day_number"`
+	AvgPoints    *float64 `json:"avg_points"`     // avg alliance total for the day (over weeks)
+	AvgPerPlayer *float64 `json:"avg_per_player"` // avg non-zero member score for the day
+	WeeksN       int      `json:"weeks_n"`
+}
+
+type VSLASeason struct {
+	SeasonNumber int    `json:"season_number"`
+	Tier         string `json:"tier"`
+	FinalRank    *int   `json:"final_rank"`
+	Wins         int    `json:"wins"`
+	Losses       int    `json:"losses"`
+	Ties         int    `json:"ties"`
+	Weeks        int    `json:"weeks"`
+}
+
+type VSLATotals struct {
+	Seasons       int      `json:"seasons"`
+	Wins          int      `json:"wins"`
+	Losses        int      `json:"losses"`
+	Ties          int      `json:"ties"`
+	WinRate       *float64 `json:"win_rate"` // over decided weeks; null if none decided
+	BestFinalRank *int     `json:"best_final_rank"`
+}
+
+type VSLADay struct {
+	DayNumber int      `json:"day_number"`
+	Wins      int      `json:"wins"`
+	Losses    int      `json:"losses"`
+	Ties      int      `json:"ties"`
+	MarginAvg *float64 `json:"margin_avg"` // avg (our-opp) raw score over days with both scores
+	MarginN   int      `json:"margin_n"`
+}
+
+type VSLAStrategy struct {
+	Label  string `json:"label"`
+	Worked int    `json:"worked"`
+	Failed int    `json:"failed"`
+	Mixed  int    `json:"mixed"`
+	Total  int    `json:"total"`
+}
+
+type VSLAOpponent struct {
+	Tag      string `json:"tag"`
+	Name     string `json:"name"`
+	Wins     int    `json:"wins"`
+	Losses   int    `json:"losses"`
+	Ties     int    `json:"ties"`
+	Meetings int    `json:"meetings"`
+}
+
+// ExternalAlliance is a cached outside alliance seen via LastRank (populated on every lookup)
+// so it can be re-entered by tag without another lookup. Not VS-specific — allies/recruiting
+// can use it too. Tag is not unique (changeable).
+type ExternalAlliance struct {
+	ID          int     `json:"id"`
+	LastRankID  *string `json:"lastrank_id,omitempty"`
+	Tag         *string `json:"tag,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Server      *int    `json:"server,omitempty"`
+	Power       *int64  `json:"power,omitempty"`
+	Kills       *int64  `json:"kills,omitempty"`
+	MemberCount *int    `json:"member_count,omitempty"`
+	LastSeenAt  *string `json:"lastrank_seen_at,omitempty"`
+	UpdatedAt   string  `json:"updated_at"`
+	// Relationship flags (computed for the External Alliances registry page).
+	AllyStatus    string `json:"ally_status"` // "active" | "former" | "never"
+	ProspectCount int    `json:"prospect_count"`
+	IsOpponent    bool `json:"is_opponent"` // we've faced them in VS League (decided or pending)
+	VSWins        int  `json:"vs_wins"`
+	VSLosses      int  `json:"vs_losses"`
+	VSTies        int  `json:"vs_ties"`
+}
+
 type RankPermissions struct {
 	Rank                 string `json:"rank"`
 	ViewTrain            bool   `json:"view_train"`
@@ -549,7 +766,7 @@ var PermissionGroups = []PermissionGroup{
 		{Key: "view_storm", Label: "View"},
 		{Key: "manage_storm", Label: "Manage"},
 	}},
-	{Feature: "VS Points", Rows: []PermissionRow{
+	{Feature: "VS & Duel League", Rows: []PermissionRow{
 		{Key: "view_vs_points", Label: "View"},
 		{Key: "manage_vs_points", Label: "Manage"},
 	}},

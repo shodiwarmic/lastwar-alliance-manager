@@ -1,0 +1,1822 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gorilla/mux"
+)
+
+// handlers_vs_league.go — VS Duel League tracker.
+//
+// Design invariants (see the plan):
+//   - FKs are NOT enforced in this app, so deletions cascade EXPLICITLY in handlers and MVP
+//     display LEFT JOINs members with an mvp_name fallback.
+//   - Weekly Match Points / outcome / clinch are COMPUTED ON READ from day rows
+//     (computeWeekStanding); our_points/opponent_points/outcome are stored only for
+//     summary-only weeks (no day rows).
+//   - The app runs on a single DB connection; the opponent-lookup handler holds NO DB handle
+//     across the LastRank call.
+//   - Leadership fields (strategy_label/strategy_result/notes) are omitted for view-only users.
+
+const (
+	entityVSLeagueSeason = "vs_league_season"
+	entityVSLeagueWeek   = "vs_league_week"
+)
+
+// isUniqueConflict reports whether an error is a SQLite UNIQUE-constraint violation
+// (mapped to 409, matching handlers_schedule.go).
+func isUniqueConflict(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint")
+}
+
+func badRequest(w http.ResponseWriter, msg string) { http.Error(w, msg, http.StatusBadRequest) }
+
+func dbError(w http.ResponseWriter, where string, err error) {
+	slog.Error(where, "error", err)
+	http.Error(w, "Database error", http.StatusInternalServerError)
+}
+
+// ── Seasons ─────────────────────────────────────────────────────────────────
+
+func activeVSLeagueSeasonID() (int, bool) {
+	var id int
+	if err := db.QueryRow(`SELECT id FROM vs_league_seasons WHERE is_active = 1 LIMIT 1`).Scan(&id); err != nil {
+		return 0, false
+	}
+	return id, true
+}
+
+func scanVSLeagueSeason(s interface{ Scan(...any) error }) (VSLeagueSeason, error) {
+	var v VSLeagueSeason
+	err := s.Scan(&v.ID, &v.SeasonNumber, &v.LeagueTier, &v.StartDate, &v.EndDate,
+		&v.FinalRank, &v.IsActive, &v.ArchivedAt, &v.Notes, &v.CreatedAt)
+	return v, err
+}
+
+func getVSLeagueSeasons(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query(`SELECT id, season_number, league_tier, start_date, end_date,
+		final_rank, is_active, archived_at, notes, created_at
+		FROM vs_league_seasons ORDER BY is_active DESC, season_number DESC`)
+	if err != nil {
+		dbError(w, "getVSLeagueSeasons query", err)
+		return
+	}
+	defer rows.Close()
+	seasons := []VSLeagueSeason{}
+	for rows.Next() {
+		s, err := scanVSLeagueSeason(rows)
+		if err != nil {
+			dbError(w, "getVSLeagueSeasons scan", err)
+			return
+		}
+		seasons = append(seasons, s)
+	}
+	writeJSON(w, seasons)
+}
+
+type vsLeagueSeasonPayload struct {
+	SeasonNumber int     `json:"season_number"`
+	LeagueTier   *string `json:"league_tier"`
+	StartDate    *string `json:"start_date"`
+	Notes        *string `json:"notes"`
+}
+
+func createVSLeagueSeason(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	var p vsLeagueSeasonPayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if p.SeasonNumber <= 0 {
+		badRequest(w, "season_number is required")
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "createVSLeagueSeason begin", err)
+		return
+	}
+	defer tx.Rollback()
+
+	// Archive the prior active season and insert the new active one atomically so there is
+	// never zero or two active seasons (also backstopped by the partial unique index).
+	if _, err := tx.Exec(`UPDATE vs_league_seasons SET is_active = 0,
+		archived_at = CURRENT_TIMESTAMP, end_date = COALESCE(end_date, ?) WHERE is_active = 1`, gameDate()); err != nil {
+		dbError(w, "createVSLeagueSeason archive", err)
+		return
+	}
+	res, err := tx.Exec(`INSERT INTO vs_league_seasons (season_number, league_tier, start_date, notes, is_active)
+		VALUES (?, ?, ?, ?, 1)`, p.SeasonNumber, p.LeagueTier, p.StartDate, p.Notes)
+	if err != nil {
+		if isUniqueConflict(err) {
+			http.Error(w, "A League season with that number already exists", http.StatusConflict)
+			return
+		}
+		dbError(w, "createVSLeagueSeason insert", err)
+		return
+	}
+	id, _ := res.LastInsertId()
+
+	// A Duel League season is always 4 weeks of consecutive game-time Mondays — create them up front
+	// (from the season start) so there's no manual "add week" step; officers just fill each in.
+	if p.StartDate != nil && strings.TrimSpace(*p.StartDate) != "" {
+		if startMon, nerr := normalizeToGameWeekMonday(*p.StartDate); nerr == nil {
+			if base, perr := parseDate(startMon); perr == nil {
+				for n := 1; n <= 4; n++ {
+					wd := formatDateString(base.AddDate(0, 0, 7*(n-1)))
+					if _, err := tx.Exec(`INSERT INTO vs_league_weeks (season_id, week_number, week_date) VALUES (?, ?, ?)`, id, n, wd); err != nil {
+						dbError(w, "createVSLeagueSeason weeks", err)
+						return
+					}
+				}
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "createVSLeagueSeason commit", err)
+		return
+	}
+	logActivity(user.ID, user.Username, "created", entityVSLeagueSeason, "S"+strconv.Itoa(p.SeasonNumber), false)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]any{"id": id})
+}
+
+type vsLeagueSeasonUpdate struct {
+	LeagueTier *string `json:"league_tier"`
+	StartDate  *string `json:"start_date"`
+	EndDate    *string `json:"end_date"`
+	FinalRank  *int    `json:"final_rank"`
+	Notes      *string `json:"notes"`
+	Archive    bool    `json:"archive"`
+	Activate   bool    `json:"activate"`
+}
+
+func updateVSLeagueSeason(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var p vsLeagueSeasonUpdate
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if p.FinalRank != nil && (*p.FinalRank < 1 || *p.FinalRank > 16) {
+		badRequest(w, "final_rank must be 1-16")
+		return
+	}
+
+	var num int
+	if err := db.QueryRow(`SELECT season_number FROM vs_league_seasons WHERE id = ?`, id).Scan(&num); err != nil {
+		http.Error(w, "Season not found", http.StatusNotFound)
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "updateVSLeagueSeason begin", err)
+		return
+	}
+	defer tx.Rollback()
+
+	if p.Activate {
+		if _, err := tx.Exec(`UPDATE vs_league_seasons SET is_active = 0,
+			archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP), end_date = COALESCE(end_date, ?)
+			WHERE is_active = 1 AND id != ?`, gameDate(), id); err != nil {
+			dbError(w, "updateVSLeagueSeason deactivate others", err)
+			return
+		}
+	}
+	_, err = tx.Exec(`UPDATE vs_league_seasons SET
+		league_tier = COALESCE(?, league_tier),
+		start_date  = COALESCE(?, start_date),
+		end_date    = COALESCE(?, end_date),
+		final_rank  = COALESCE(?, final_rank),
+		notes       = COALESCE(?, notes),
+		is_active   = CASE WHEN ? THEN 0 WHEN ? THEN 1 ELSE is_active END,
+		archived_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE archived_at END
+		WHERE id = ?`,
+		p.LeagueTier, p.StartDate, p.EndDate, p.FinalRank, p.Notes,
+		p.Archive, p.Activate, p.Archive, id)
+	if err != nil {
+		if isUniqueConflict(err) {
+			http.Error(w, "Another season is already active", http.StatusConflict)
+			return
+		}
+		dbError(w, "updateVSLeagueSeason update", err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "updateVSLeagueSeason commit", err)
+		return
+	}
+	action := "updated"
+	if p.Archive {
+		action = "archived"
+	}
+	logActivity(user.ID, user.Username, action, entityVSLeagueSeason, "S"+strconv.Itoa(num), false)
+	w.WriteHeader(http.StatusOK)
+}
+
+// ── Weeks (+ days computed standing) ────────────────────────────────────────
+
+// loadVSLeagueWeek loads one week with its days and computed standing. canManage controls
+// whether the leadership fields (strategy/notes) are populated in the response.
+func loadVSLeagueWeek(id int, canManage bool) (*VSLeagueWeek, error) {
+	row := db.QueryRow(`SELECT id, season_id, week_number, week_date, league_tier, league_rank,
+		opponent_tag, opponent_name, opponent_server, opponent_lastrank_id,
+		opponent_power, opponent_kills, opponent_member_count, opponent_snapshot_at, opponent_lastrank_seen_at,
+		our_power, our_kills, our_member_count, our_server, our_snapshot_at,
+		our_points, opponent_points, outcome, strategy_label, strategy_result, notes, created_at, updated_at
+		FROM vs_league_weeks WHERE id = ?`, id)
+	return scanVSLeagueWeek(row, canManage)
+}
+
+func scanVSLeagueWeek(row interface{ Scan(...any) error }, canManage bool) (*VSLeagueWeek, error) {
+	var wk VSLeagueWeek
+	var storedOur, storedOpp *int
+	var storedOutcome, strategyLabel, strategyResult, notes *string
+	err := row.Scan(&wk.ID, &wk.SeasonID, &wk.WeekNumber, &wk.WeekDate, &wk.LeagueTier, &wk.LeagueRank,
+		&wk.OpponentTag, &wk.OpponentName, &wk.OpponentServer, &wk.OpponentLastRankID,
+		&wk.OpponentPower, &wk.OpponentKills, &wk.OpponentMemberCount, &wk.OpponentSnapshotAt, &wk.OpponentLastRankSeenAt,
+		&wk.OurPower, &wk.OurKills, &wk.OurMemberCount, &wk.OurServer, &wk.OurSnapshotAt,
+		&storedOur, &storedOpp, &storedOutcome, &strategyLabel, &strategyResult, &notes, &wk.CreatedAt, &wk.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	// Leadership fields only for manage users (F-R09/F-013).
+	if canManage {
+		wk.StrategyLabel, wk.StrategyResult, wk.Notes = strategyLabel, strategyResult, notes
+	}
+	days, err := loadVSLeagueDays(wk.ID)
+	if err != nil {
+		return nil, err
+	}
+	wk.Days = days
+	if len(days) > 0 {
+		var arr [6]string
+		for i := range arr {
+			arr[i] = "pending"
+		}
+		for _, d := range days {
+			if d.DayNumber >= 1 && d.DayNumber <= 6 {
+				arr[d.DayNumber-1] = d.Outcome
+			}
+		}
+		wk.Standing = computeWeekStanding(arr)
+		wk.SummaryOnly = false
+	} else {
+		// Summary-only: use the stored weekly values (no day detail to derive from).
+		wk.SummaryOnly = true
+		st := VSLeagueWeekStanding{Outcome: "pending"}
+		if storedOur != nil {
+			st.OurPoints = *storedOur
+		}
+		if storedOpp != nil {
+			st.OpponentPoints = *storedOpp
+		}
+		if storedOutcome != nil {
+			st.Outcome = *storedOutcome
+			st.Decided = true
+		}
+		wk.Standing = st
+	}
+	return &wk, nil
+}
+
+// getVSLeagueAnalytics rolls up every season's weeks/days into cross-season stats (a single 4-week
+// season is too small to analyze alone). All derived on read — nothing stored. Gated view_vs_points.
+func getVSLeagueAnalytics(w http.ResponseWriter, r *http.Request) {
+	type seasonAgg struct {
+		stat  *VSLASeason
+		order int
+	}
+	seasonByID := map[int]*seasonAgg{}
+	var out VSLeagueAnalytics
+
+	srows, err := db.Query(`SELECT id, season_number, COALESCE(league_tier,''), final_rank FROM vs_league_seasons ORDER BY season_number`)
+	if err != nil {
+		dbError(w, "getVSLeagueAnalytics seasons", err)
+		return
+	}
+	i := 0
+	for srows.Next() {
+		var id int
+		s := &VSLASeason{}
+		if err := srows.Scan(&id, &s.SeasonNumber, &s.Tier, &s.FinalRank); err != nil {
+			srows.Close()
+			dbError(w, "getVSLeagueAnalytics season scan", err)
+			return
+		}
+		seasonByID[id] = &seasonAgg{stat: s, order: i}
+		i++
+	}
+	srows.Close()
+
+	// Aggregators.
+	dayAgg := [6]VSLADay{}
+	for d := 0; d < 6; d++ {
+		dayAgg[d].DayNumber = d + 1
+	}
+	dayMargin := [6]int64{}
+	stratAgg := map[string]*VSLAStrategy{}
+	oppAgg := map[string]*VSLAOpponent{}
+
+	wrows, err := db.Query(`SELECT id, season_id, COALESCE(opponent_tag,''), COALESCE(opponent_name,''),
+		COALESCE(strategy_label,''), COALESCE(strategy_result,''), outcome
+		FROM vs_league_weeks`)
+	if err != nil {
+		dbError(w, "getVSLeagueAnalytics weeks", err)
+		return
+	}
+	type weekRow struct {
+		id, seasonID          int
+		oppTag, oppName       string
+		stratLabel, stratRes  string
+		storedOutcome         *string
+	}
+	var weeks []weekRow
+	for wrows.Next() {
+		var wr weekRow
+		if err := wrows.Scan(&wr.id, &wr.seasonID, &wr.oppTag, &wr.oppName, &wr.stratLabel, &wr.stratRes, &wr.storedOutcome); err != nil {
+			wrows.Close()
+			dbError(w, "getVSLeagueAnalytics week scan", err)
+			return
+		}
+		weeks = append(weeks, wr)
+	}
+	wrows.Close()
+
+	for _, wr := range weeks {
+		if sa := seasonByID[wr.seasonID]; sa != nil {
+			sa.stat.Weeks++
+		}
+		// Per-day aggregation + weekly outcome (computed from days, else the stored summary).
+		days, _ := loadVSLeagueDays(wr.id)
+		var arr [6]string
+		for d := range arr {
+			arr[d] = "pending"
+		}
+		for _, d := range days {
+			if d.DayNumber < 1 || d.DayNumber > 6 {
+				continue
+			}
+			idx := d.DayNumber - 1
+			switch d.Outcome {
+			case "win":
+				dayAgg[idx].Wins++
+			case "loss":
+				dayAgg[idx].Losses++
+			case "tie":
+				dayAgg[idx].Ties++
+			}
+			arr[idx] = d.Outcome
+			if d.OurScore != nil && d.OpponentScore != nil {
+				dayMargin[idx] += *d.OurScore - *d.OpponentScore
+				dayAgg[idx].MarginN++
+			}
+		}
+
+		outcome := ""
+		if len(days) > 0 {
+			if st := computeWeekStanding(arr); st.Decided {
+				outcome = st.Outcome
+			}
+		} else if wr.storedOutcome != nil {
+			outcome = *wr.storedOutcome
+		}
+		if outcome == "" || outcome == "pending" {
+			continue // undecided weeks don't count toward records
+		}
+
+		if sa := seasonByID[wr.seasonID]; sa != nil {
+			bumpWLT(&sa.stat.Wins, &sa.stat.Losses, &sa.stat.Ties, outcome)
+		}
+		if wr.stratLabel != "" {
+			s := stratAgg[wr.stratLabel]
+			if s == nil {
+				s = &VSLAStrategy{Label: wr.stratLabel}
+				stratAgg[wr.stratLabel] = s
+			}
+			s.Total++
+			switch wr.stratRes {
+			case "worked":
+				s.Worked++
+			case "failed":
+				s.Failed++
+			case "mixed":
+				s.Mixed++
+			}
+		}
+		if wr.oppTag != "" || wr.oppName != "" {
+			key := strings.ToLower(wr.oppTag)
+			if key == "" {
+				key = strings.ToLower(wr.oppName)
+			}
+			o := oppAgg[key]
+			if o == nil {
+				o = &VSLAOpponent{Tag: wr.oppTag, Name: wr.oppName}
+				oppAgg[key] = o
+			}
+			if o.Name == "" {
+				o.Name = wr.oppName
+			}
+			o.Meetings++
+			bumpWLT(&o.Wins, &o.Losses, &o.Ties, outcome)
+		}
+	}
+
+	// Assemble, preserving season order and computing derived fields.
+	out.Seasons = make([]VSLASeason, len(seasonByID))
+	for _, sa := range seasonByID {
+		out.Seasons[sa.order] = *sa.stat
+		out.Totals.Wins += sa.stat.Wins
+		out.Totals.Losses += sa.stat.Losses
+		out.Totals.Ties += sa.stat.Ties
+		if sa.stat.FinalRank != nil && (out.Totals.BestFinalRank == nil || *sa.stat.FinalRank < *out.Totals.BestFinalRank) {
+			out.Totals.BestFinalRank = sa.stat.FinalRank
+		}
+	}
+	out.Totals.Seasons = len(seasonByID)
+	if decided := out.Totals.Wins + out.Totals.Losses + out.Totals.Ties; decided > 0 {
+		wr := float64(out.Totals.Wins) / float64(decided)
+		out.Totals.WinRate = &wr
+	}
+
+	for d := 0; d < 6; d++ {
+		da := dayAgg[d]
+		if da.MarginN > 0 {
+			avg := float64(dayMargin[d]) / float64(da.MarginN)
+			da.MarginAvg = &avg
+		}
+		out.ByDay = append(out.ByDay, da)
+	}
+	for _, s := range stratAgg {
+		out.ByStrategy = append(out.ByStrategy, *s)
+	}
+	sort.Slice(out.ByStrategy, func(a, b int) bool { return out.ByStrategy[a].Total > out.ByStrategy[b].Total })
+	for _, o := range oppAgg {
+		out.Opponents = append(out.Opponents, *o)
+	}
+	sort.Slice(out.Opponents, func(a, b int) bool { return out.Opponents[a].Meetings > out.Opponents[b].Meetings })
+
+	// Theme-day averages from member VS points across EVERY week (season or not), excluding
+	// zero/not-imported days — the large-sample "which days do we score most" view.
+	var daySum [6]float64
+	var dayN [6]int
+	prows, perr := db.Query(`SELECT COALESCE(SUM(monday),0), COALESCE(SUM(tuesday),0), COALESCE(SUM(wednesday),0),
+		COALESCE(SUM(thursday),0), COALESCE(SUM(friday),0), COALESCE(SUM(saturday),0)
+		FROM vs_points GROUP BY week_date`)
+	if perr != nil {
+		dbError(w, "getVSLeagueAnalytics day averages", perr)
+		return
+	}
+	for prows.Next() {
+		var d [6]int64
+		if err := prows.Scan(&d[0], &d[1], &d[2], &d[3], &d[4], &d[5]); err != nil {
+			prows.Close()
+			dbError(w, "getVSLeagueAnalytics day scan", err)
+			return
+		}
+		for i := 0; i < 6; i++ {
+			if d[i] > 0 {
+				daySum[i] += float64(d[i])
+				dayN[i]++
+			}
+		}
+	}
+	prows.Close()
+	for i := 0; i < 6; i++ {
+		da := VSLADayAvg{DayNumber: i + 1, WeeksN: dayN[i]}
+		if dayN[i] > 0 {
+			avg := daySum[i] / float64(dayN[i])
+			da.AvgPoints = &avg
+		}
+		out.DayAverages = append(out.DayAverages, da)
+	}
+	// Per-player average per day = average non-zero member score (NULLIF drops 0s; -1 = no data).
+	var pv [6]float64
+	if err := db.QueryRow(`SELECT COALESCE(AVG(NULLIF(monday,0)),-1), COALESCE(AVG(NULLIF(tuesday,0)),-1),
+		COALESCE(AVG(NULLIF(wednesday,0)),-1), COALESCE(AVG(NULLIF(thursday,0)),-1),
+		COALESCE(AVG(NULLIF(friday,0)),-1), COALESCE(AVG(NULLIF(saturday,0)),-1) FROM vs_points`).
+		Scan(&pv[0], &pv[1], &pv[2], &pv[3], &pv[4], &pv[5]); err == nil {
+		for i := 0; i < 6; i++ {
+			if pv[i] >= 0 {
+				v := pv[i]
+				out.DayAverages[i].AvgPerPlayer = &v
+			}
+		}
+	}
+
+	writeJSON(w, out)
+}
+
+// bumpWLT increments the win/loss/tie counter matching outcome.
+func bumpWLT(wins, losses, ties *int, outcome string) {
+	switch outcome {
+	case "win":
+		*wins++
+	case "loss":
+		*losses++
+	case "tie":
+		*ties++
+	}
+}
+
+func loadVSLeagueDays(weekID int) ([]VSLeagueDay, error) {
+	rows, err := db.Query(`SELECT id, week_id, day_number, our_score, opponent_score, outcome,
+		mvp_is_ours, mvp_member_id, mvp_name
+		FROM vs_league_days WHERE week_id = ? ORDER BY day_number`, weekID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	days := []VSLeagueDay{}
+	for rows.Next() {
+		var d VSLeagueDay
+		if err := rows.Scan(&d.ID, &d.WeekID, &d.DayNumber, &d.OurScore, &d.OpponentScore,
+			&d.Outcome, &d.MVPIsOurs, &d.MVPMemberID, &d.MVPName); err != nil {
+			return nil, err
+		}
+		d.Points = vsDayMatchPoints(d.DayNumber)
+		days = append(days, d)
+	}
+	return days, nil
+}
+
+func loadWeeksForSeason(seasonID int, canManage bool) ([]VSLeagueWeek, error) {
+	rows, err := db.Query(`SELECT id FROM vs_league_weeks WHERE season_id = ? ORDER BY week_number, week_date`, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	weeks := []VSLeagueWeek{}
+	for _, id := range ids {
+		wk, err := loadVSLeagueWeek(id, canManage)
+		if err != nil {
+			return nil, err
+		}
+		weeks = append(weeks, *wk)
+	}
+	return weeks, nil
+}
+
+func getVSLeagueWeeks(w http.ResponseWriter, r *http.Request) {
+	canManage := userHasPermission(getAuthUser(r), "manage_vs_points")
+	sidParam := r.URL.Query().Get("season_id")
+	var seasonID int
+	if sidParam == "active" {
+		id, ok := activeVSLeagueSeasonID()
+		if !ok {
+			writeJSON(w, []VSLeagueWeek{})
+			return
+		}
+		seasonID = id
+	} else {
+		id, err := strconv.Atoi(sidParam)
+		if err != nil {
+			badRequest(w, "season_id is required")
+			return
+		}
+		seasonID = id
+	}
+	weeks, err := loadWeeksForSeason(seasonID, canManage)
+	if err != nil {
+		dbError(w, "getVSLeagueWeeks", err)
+		return
+	}
+	writeJSON(w, weeks)
+}
+
+// getVSLeagueCurrent returns the active season + its weeks in one call (avoids discover-then-fetch).
+func getVSLeagueCurrent(w http.ResponseWriter, r *http.Request) {
+	canManage := userHasPermission(getAuthUser(r), "manage_vs_points")
+	sid, ok := activeVSLeagueSeasonID()
+	if !ok {
+		writeJSON(w, map[string]any{"season": nil, "weeks": []VSLeagueWeek{}, "current_week_date": currentVSWeekMonday()})
+		return
+	}
+	season, err := scanVSLeagueSeason(db.QueryRow(`SELECT id, season_number, league_tier, start_date, end_date,
+		final_rank, is_active, archived_at, notes, created_at FROM vs_league_seasons WHERE id = ?`, sid))
+	if err != nil {
+		dbError(w, "getVSLeagueCurrent season", err)
+		return
+	}
+	weeks, err := loadWeeksForSeason(sid, canManage)
+	if err != nil {
+		dbError(w, "getVSLeagueCurrent weeks", err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"season":            season,
+		"weeks":             weeks,
+		"current_week_date": currentVSWeekMonday(),
+	})
+}
+
+type vsLeagueWeekPayload struct {
+	SeasonID       int     `json:"season_id"`
+	WeekNumber     *int    `json:"week_number"`
+	WeekDate       string  `json:"week_date"`
+	LeagueTier     *string `json:"league_tier"`
+	LeagueRank     *int    `json:"league_rank"`
+	OpponentTag    *string `json:"opponent_tag"`
+	OpponentName   *string `json:"opponent_name"`
+	OpponentServer *int    `json:"opponent_server"`
+	// Opponent snapshot (confirmed from an opponent-lookup).
+	OpponentLastRankID     *string `json:"opponent_lastrank_id"`
+	OpponentPower          *int64  `json:"opponent_power"`
+	OpponentKills          *int64  `json:"opponent_kills"`
+	OpponentMemberCount    *int    `json:"opponent_member_count"`
+	OpponentLastRankSeenAt *string `json:"opponent_lastrank_seen_at"`
+	SnapshotNow            bool    `json:"snapshot_now"` // stamp opponent_snapshot_at = now
+	// Our own snapshot for the week (LastRank-sourced or summed roster).
+	OurPower        *int64 `json:"our_power"`
+	OurKills        *int64 `json:"our_kills"`
+	OurMemberCount  *int   `json:"our_member_count"`
+	OurServer       *int   `json:"our_server"`
+	OurSnapshotNow  bool   `json:"our_snapshot_now"` // stamp our_snapshot_at = now
+	// Summary-only weekly result (allowed ONLY when the week has no day rows).
+	OurPoints      *int    `json:"our_points"`
+	OpponentPoints *int    `json:"opponent_points"`
+	Outcome        *string `json:"outcome"`
+	// Strategy context.
+	StrategyLabel  *string `json:"strategy_label"`
+	StrategyResult *string `json:"strategy_result"`
+	Notes          *string `json:"notes"`
+}
+
+var validStrategyLabel = map[string]bool{"push": true, "save": true, "normal": true, "test": true, "recovery": true}
+var validStrategyResult = map[string]bool{"worked": true, "failed": true, "mixed": true}
+
+func (p *vsLeagueWeekPayload) validate() string {
+	if p.StrategyLabel != nil && *p.StrategyLabel != "" && !validStrategyLabel[*p.StrategyLabel] {
+		return "strategy_label must be one of push/save/normal/test/recovery"
+	}
+	if p.StrategyResult != nil && *p.StrategyResult != "" && !validStrategyResult[*p.StrategyResult] {
+		return "strategy_result must be one of worked/failed/mixed"
+	}
+	if p.Outcome != nil {
+		switch *p.Outcome {
+		case "win", "loss", "tie":
+		case "pending", "":
+			return "week outcome is win/loss/tie; leave it empty for pending"
+		default:
+			return "week outcome must be win/loss/tie"
+		}
+	}
+	if p.OurPoints != nil && (*p.OurPoints < 0 || *p.OurPoints > 13) {
+		return "our_points must be 0-13"
+	}
+	if p.OpponentPoints != nil && (*p.OpponentPoints < 0 || *p.OpponentPoints > 13) {
+		return "opponent_points must be 0-13"
+	}
+	return ""
+}
+
+func weekHasDayRows(weekID int) (bool, error) {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM vs_league_days WHERE week_id = ?`, weekID).Scan(&n)
+	return n > 0, err
+}
+
+// createVSLeagueWeek upserts a week matchup (unique on season_id + normalized week_date).
+func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	var p vsLeagueWeekPayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if p.SeasonID <= 0 || p.WeekDate == "" {
+		badRequest(w, "season_id and week_date are required")
+		return
+	}
+	if msg := p.validate(); msg != "" {
+		badRequest(w, msg)
+		return
+	}
+	lrid, ok := sanitizeLastRankIDPtr(p.OpponentLastRankID)
+	if !ok {
+		badRequest(w, "The opponent LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
+		return
+	}
+	p.OpponentLastRankID = lrid
+	weekDate, err := normalizeToGameWeekMonday(p.WeekDate)
+	if err != nil {
+		badRequest(w, "invalid week_date")
+		return
+	}
+
+	var snapshotAt *string
+	if p.SnapshotNow {
+		now := time.Now().UTC().Format("2006-01-02 15:04:05")
+		snapshotAt = &now
+	}
+	var ourSnapshotAt *string
+	if p.OurSnapshotNow {
+		now := time.Now().UTC().Format("2006-01-02 15:04:05")
+		ourSnapshotAt = &now
+	}
+
+	res, err := db.Exec(`INSERT INTO vs_league_weeks
+		(season_id, week_number, week_date, league_tier, league_rank,
+		 opponent_tag, opponent_name, opponent_server,
+		 opponent_lastrank_id, opponent_power, opponent_kills, opponent_member_count,
+		 opponent_snapshot_at, opponent_lastrank_seen_at,
+		 our_power, our_kills, our_member_count, our_server, our_snapshot_at,
+		 our_points, opponent_points, outcome, strategy_label, strategy_result, notes)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(season_id, week_date) DO UPDATE SET
+		 week_number = COALESCE(excluded.week_number, week_number),
+		 league_tier = COALESCE(excluded.league_tier, league_tier),
+		 league_rank = COALESCE(excluded.league_rank, league_rank),
+		 opponent_tag = COALESCE(excluded.opponent_tag, opponent_tag),
+		 opponent_name = COALESCE(excluded.opponent_name, opponent_name),
+		 opponent_server = COALESCE(excluded.opponent_server, opponent_server),
+		 opponent_lastrank_id = COALESCE(excluded.opponent_lastrank_id, opponent_lastrank_id),
+		 opponent_power = COALESCE(excluded.opponent_power, opponent_power),
+		 opponent_kills = COALESCE(excluded.opponent_kills, opponent_kills),
+		 opponent_member_count = COALESCE(excluded.opponent_member_count, opponent_member_count),
+		 opponent_snapshot_at = COALESCE(excluded.opponent_snapshot_at, opponent_snapshot_at),
+		 opponent_lastrank_seen_at = COALESCE(excluded.opponent_lastrank_seen_at, opponent_lastrank_seen_at),
+		 our_power = COALESCE(excluded.our_power, our_power),
+		 our_kills = COALESCE(excluded.our_kills, our_kills),
+		 our_member_count = COALESCE(excluded.our_member_count, our_member_count),
+		 our_server = COALESCE(excluded.our_server, our_server),
+		 our_snapshot_at = COALESCE(excluded.our_snapshot_at, our_snapshot_at),
+		 strategy_label = COALESCE(excluded.strategy_label, strategy_label),
+		 strategy_result = COALESCE(excluded.strategy_result, strategy_result),
+		 notes = COALESCE(excluded.notes, notes),
+		 updated_at = CURRENT_TIMESTAMP`,
+		p.SeasonID, p.WeekNumber, weekDate, p.LeagueTier, p.LeagueRank,
+		p.OpponentTag, p.OpponentName, p.OpponentServer,
+		p.OpponentLastRankID, p.OpponentPower, p.OpponentKills, p.OpponentMemberCount,
+		snapshotAt, p.OpponentLastRankSeenAt,
+		p.OurPower, p.OurKills, p.OurMemberCount, p.OurServer, ourSnapshotAt,
+		p.OurPoints, p.OpponentPoints, p.Outcome, p.StrategyLabel, p.StrategyResult, p.Notes)
+	if err != nil {
+		if isUniqueConflict(err) {
+			http.Error(w, "That week number is already used in this season", http.StatusConflict)
+			return
+		}
+		dbError(w, "createVSLeagueWeek upsert", err)
+		return
+	}
+	id, _ := res.LastInsertId()
+	logActivity(user.ID, user.Username, "updated", entityVSLeagueWeek, weekLabel(p.WeekNumber, weekDate), false)
+	writeJSON(w, map[string]any{"id": id, "week_date": weekDate})
+}
+
+func weekLabel(num *int, weekDate string) string {
+	if num != nil {
+		return "Week " + strconv.Itoa(*num)
+	}
+	return "Week of " + weekDate
+}
+
+func updateVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var p vsLeagueWeekPayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if msg := p.validate(); msg != "" {
+		badRequest(w, msg)
+		return
+	}
+	lrid, ok := sanitizeLastRankIDPtr(p.OpponentLastRankID)
+	if !ok {
+		badRequest(w, "The opponent LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
+		return
+	}
+	p.OpponentLastRankID = lrid
+
+	var weekNum *int
+	var weekDate string
+	if err := db.QueryRow(`SELECT week_number, week_date FROM vs_league_weeks WHERE id = ?`, id).Scan(&weekNum, &weekDate); err != nil {
+		http.Error(w, "Week not found", http.StatusNotFound)
+		return
+	}
+
+	// Manual weekly points are only allowed on summary-only weeks (F-R07/derive-and-lock).
+	if p.OurPoints != nil || p.OpponentPoints != nil || p.Outcome != nil {
+		hasDays, err := weekHasDayRows(id)
+		if err != nil {
+			dbError(w, "updateVSLeagueWeek hasDays", err)
+			return
+		}
+		if hasDays {
+			badRequest(w, "weekly points/outcome are derived from day data; clear the days to enter a summary result")
+			return
+		}
+	}
+
+	var snapshotAt *string
+	if p.SnapshotNow {
+		now := time.Now().UTC().Format("2006-01-02 15:04:05")
+		snapshotAt = &now
+	}
+	var ourSnapshotAt *string
+	if p.OurSnapshotNow {
+		now := time.Now().UTC().Format("2006-01-02 15:04:05")
+		ourSnapshotAt = &now
+	}
+
+	// Allow correcting the week date (snapped to the game-time Monday); empty = leave unchanged.
+	var newWeekDate *string
+	if strings.TrimSpace(p.WeekDate) != "" {
+		nd, nerr := normalizeToGameWeekMonday(p.WeekDate)
+		if nerr != nil {
+			badRequest(w, "invalid week_date")
+			return
+		}
+		newWeekDate = &nd
+	}
+
+	_, err = db.Exec(`UPDATE vs_league_weeks SET
+		week_number = COALESCE(?, week_number),
+		week_date = COALESCE(?, week_date),
+		league_tier = COALESCE(?, league_tier),
+		league_rank = COALESCE(?, league_rank),
+		opponent_tag = COALESCE(?, opponent_tag),
+		opponent_name = COALESCE(?, opponent_name),
+		opponent_server = COALESCE(?, opponent_server),
+		opponent_lastrank_id = COALESCE(?, opponent_lastrank_id),
+		opponent_power = COALESCE(?, opponent_power),
+		opponent_kills = COALESCE(?, opponent_kills),
+		opponent_member_count = COALESCE(?, opponent_member_count),
+		opponent_snapshot_at = COALESCE(?, opponent_snapshot_at),
+		opponent_lastrank_seen_at = COALESCE(?, opponent_lastrank_seen_at),
+		our_power = COALESCE(?, our_power),
+		our_kills = COALESCE(?, our_kills),
+		our_member_count = COALESCE(?, our_member_count),
+		our_server = COALESCE(?, our_server),
+		our_snapshot_at = COALESCE(?, our_snapshot_at),
+		our_points = COALESCE(?, our_points),
+		opponent_points = COALESCE(?, opponent_points),
+		outcome = COALESCE(?, outcome),
+		strategy_label = COALESCE(?, strategy_label),
+		strategy_result = COALESCE(?, strategy_result),
+		notes = COALESCE(?, notes),
+		updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?`,
+		p.WeekNumber, newWeekDate, p.LeagueTier, p.LeagueRank, p.OpponentTag, p.OpponentName, p.OpponentServer,
+		p.OpponentLastRankID, p.OpponentPower, p.OpponentKills, p.OpponentMemberCount,
+		snapshotAt, p.OpponentLastRankSeenAt,
+		p.OurPower, p.OurKills, p.OurMemberCount, p.OurServer, ourSnapshotAt,
+		p.OurPoints, p.OpponentPoints, p.Outcome, p.StrategyLabel, p.StrategyResult, p.Notes, id)
+	if err != nil {
+		if isUniqueConflict(err) {
+			http.Error(w, "That week number or date is already used in this season", http.StatusConflict)
+			return
+		}
+		dbError(w, "updateVSLeagueWeek", err)
+		return
+	}
+	logActivity(user.ID, user.Username, "updated", entityVSLeagueWeek, weekLabel(weekNum, weekDate), false)
+	w.WriteHeader(http.StatusOK)
+}
+
+// deleteVSLeagueWeek deletes a week and its children EXPLICITLY (FKs are inert).
+func deleteVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var weekNum *int
+	var weekDate string
+	if err := db.QueryRow(`SELECT week_number, week_date FROM vs_league_weeks WHERE id = ?`, id).Scan(&weekNum, &weekDate); err != nil {
+		http.Error(w, "Week not found", http.StatusNotFound)
+		return
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "deleteVSLeagueWeek begin", err)
+		return
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`DELETE FROM vs_league_matchups WHERE week_id = ?`,
+		`DELETE FROM vs_league_days WHERE week_id = ?`,
+		`DELETE FROM vs_league_weeks WHERE id = ?`,
+	} {
+		if _, err := tx.Exec(q, id); err != nil {
+			dbError(w, "deleteVSLeagueWeek exec", err)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "deleteVSLeagueWeek commit", err)
+		return
+	}
+	logActivity(user.ID, user.Username, "deleted", entityVSLeagueWeek, weekLabel(weekNum, weekDate), false)
+	w.WriteHeader(http.StatusOK)
+}
+
+// ── Day batch ───────────────────────────────────────────────────────────────
+
+type vsLeagueDayPayload struct {
+	DayNumber     int     `json:"day_number"`
+	OurScore      *int64  `json:"our_score"`
+	OpponentScore *int64  `json:"opponent_score"`
+	Outcome       string  `json:"outcome"`
+	MVPIsOurs     *bool   `json:"mvp_is_ours"`
+	MVPName       *string `json:"mvp_name"`
+}
+
+// dayCarriesInfo reports whether a day row is worth persisting. An all-pending, empty row is
+// dropped so it can't silently flip a summary-only week to day-backed (F-R16).
+func (d vsLeagueDayPayload) carriesInfo() bool {
+	o := normalizeDayOutcome(d.Outcome)
+	return o != "pending" || d.OurScore != nil || d.OpponentScore != nil ||
+		(d.MVPName != nil && strings.TrimSpace(*d.MVPName) != "")
+}
+
+func saveVSLeagueDays(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	weekID, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var weekNum *int
+	var weekDate string
+	if err := db.QueryRow(`SELECT week_number, week_date FROM vs_league_weeks WHERE id = ?`, weekID).Scan(&weekNum, &weekDate); err != nil {
+		http.Error(w, "Week not found", http.StatusNotFound)
+		return
+	}
+	var payload struct {
+		Days []vsLeagueDayPayload `json:"days"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	for _, d := range payload.Days {
+		if d.DayNumber < 1 || d.DayNumber > 6 {
+			badRequest(w, "day_number must be 1-6")
+			return
+		}
+		switch normalizeDayOutcome(d.Outcome) {
+		case "win", "loss", "tie", "pending":
+		default:
+			badRequest(w, "outcome must be win/loss/tie/pending")
+			return
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "saveVSLeagueDays begin", err)
+		return
+	}
+	defer tx.Rollback()
+
+	for _, d := range payload.Days {
+		// Normalize outcome from raw scores when both are present (F-R07).
+		outcome := normalizeDayOutcome(d.Outcome)
+		if d.OurScore != nil && d.OpponentScore != nil {
+			derived := deriveDayOutcome(int(*d.OurScore), int(*d.OpponentScore))
+			if outcome != "pending" && outcome != derived {
+				badRequest(w, "day "+strconv.Itoa(d.DayNumber)+": outcome contradicts the entered scores")
+				return
+			}
+			outcome = derived
+		}
+
+		if !d.carriesInfo() {
+			// Drop an empty/pure-pending day so "has day rows" stays meaningful (F-R16).
+			if _, err := tx.Exec(`DELETE FROM vs_league_days WHERE week_id = ? AND day_number = ?`, weekID, d.DayNumber); err != nil {
+				dbError(w, "saveVSLeagueDays delete", err)
+				return
+			}
+			continue
+		}
+
+		mvpIsOurs := true
+		if d.MVPIsOurs != nil {
+			mvpIsOurs = *d.MVPIsOurs
+		}
+		var mvpMemberID *int
+		var mvpName *string
+		if d.MVPName != nil && strings.TrimSpace(*d.MVPName) != "" {
+			name := strings.TrimSpace(*d.MVPName)
+			mvpName = &name
+			if mvpIsOurs {
+				if m, _, aerr := resolveMemberAlias(tx, name, user.ID); aerr == nil && m != nil {
+					id := m.ID
+					mvpMemberID = &id
+				}
+			}
+		}
+
+		if _, err := tx.Exec(`INSERT INTO vs_league_days
+			(week_id, day_number, our_score, opponent_score, outcome, mvp_is_ours, mvp_member_id, mvp_name, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+			ON CONFLICT(week_id, day_number) DO UPDATE SET
+			 our_score = excluded.our_score,
+			 opponent_score = excluded.opponent_score,
+			 outcome = excluded.outcome,
+			 mvp_is_ours = excluded.mvp_is_ours,
+			 mvp_member_id = excluded.mvp_member_id,
+			 mvp_name = excluded.mvp_name,
+			 updated_at = CURRENT_TIMESTAMP`,
+			weekID, d.DayNumber, d.OurScore, d.OpponentScore, outcome, boolToInt(mvpIsOurs), mvpMemberID, mvpName); err != nil {
+			dbError(w, "saveVSLeagueDays upsert", err)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "saveVSLeagueDays commit", err)
+		return
+	}
+	logActivity(user.ID, user.Username, "updated", entityVSLeagueWeek, weekLabel(weekNum, weekDate), false, "daily results")
+	// Return the refreshed week so the client can re-render the standing.
+	canManage := userHasPermission(user, "manage_vs_points")
+	if wk, err := loadVSLeagueWeek(weekID, canManage); err == nil {
+		writeJSON(w, wk)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// ── Matchups (bracket) ──────────────────────────────────────────────────────
+
+func getVSLeagueMatchups(w http.ResponseWriter, r *http.Request) {
+	weekID, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	rows, err := db.Query(`SELECT id, week_id, match_index, a_rank, a_server, a_tag, a_name, a_points,
+		b_rank, b_server, b_tag, b_name, b_points, is_ours
+		FROM vs_league_matchups WHERE week_id = ? ORDER BY match_index`, weekID)
+	if err != nil {
+		dbError(w, "getVSLeagueMatchups", err)
+		return
+	}
+	defer rows.Close()
+	ms := []VSLeagueMatchup{}
+	for rows.Next() {
+		var m VSLeagueMatchup
+		if err := rows.Scan(&m.ID, &m.WeekID, &m.MatchIndex, &m.ARank, &m.AServer, &m.ATag, &m.AName, &m.APoints,
+			&m.BRank, &m.BServer, &m.BTag, &m.BName, &m.BPoints, &m.IsOurs); err != nil {
+			dbError(w, "getVSLeagueMatchups scan", err)
+			return
+		}
+		ms = append(ms, m)
+	}
+	writeJSON(w, ms)
+}
+
+type vsLeagueMatchupPayload struct {
+	MatchIndex *int    `json:"match_index"`
+	ARank      *int    `json:"a_rank"`
+	AServer    *int    `json:"a_server"`
+	ATag       *string `json:"a_tag"`
+	AName      *string `json:"a_name"`
+	APoints    *int    `json:"a_points"`
+	BRank      *int    `json:"b_rank"`
+	BServer    *int    `json:"b_server"`
+	BTag       *string `json:"b_tag"`
+	BName      *string `json:"b_name"`
+	BPoints    *int    `json:"b_points"`
+	IsOurs     bool    `json:"is_ours"`
+}
+
+// saveVSLeagueMatchups batch-replaces a week's bracket. Validation runs BEFORE the tx; the tx
+// only DELETEs then INSERTs (no I/O), keeping the single write lock brief.
+func saveVSLeagueMatchups(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	weekID, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var weekNum *int
+	var weekDate string
+	if err := db.QueryRow(`SELECT week_number, week_date FROM vs_league_weeks WHERE id = ?`, weekID).Scan(&weekNum, &weekDate); err != nil {
+		http.Error(w, "Week not found", http.StatusNotFound)
+		return
+	}
+	var payload struct {
+		Matchups []vsLeagueMatchupPayload `json:"matchups"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if len(payload.Matchups) > 8 {
+		badRequest(w, "at most 8 pairings per week")
+		return
+	}
+	seenIdx := map[int]bool{}
+	oursCount := 0
+	inRange := func(p *int, lo, hi int) bool { return p == nil || (*p >= lo && *p <= hi) }
+	for i, m := range payload.Matchups {
+		idx := i + 1
+		if m.MatchIndex != nil {
+			idx = *m.MatchIndex
+		}
+		if idx < 1 || idx > 8 || seenIdx[idx] {
+			badRequest(w, "match_index values must be unique and 1-8")
+			return
+		}
+		seenIdx[idx] = true
+		if !inRange(m.ARank, 1, 16) || !inRange(m.BRank, 1, 16) {
+			badRequest(w, "ranks must be 1-16")
+			return
+		}
+		if !inRange(m.APoints, 0, 13) || !inRange(m.BPoints, 0, 13) {
+			badRequest(w, "points must be 0-13")
+			return
+		}
+		if m.APoints != nil && m.BPoints != nil && *m.APoints+*m.BPoints > 13 {
+			badRequest(w, "a matchup's points can't sum to more than 13")
+			return
+		}
+		if m.IsOurs {
+			oursCount++
+		}
+	}
+	if oursCount > 1 {
+		badRequest(w, "only one pairing can be marked as ours")
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "saveVSLeagueMatchups begin", err)
+		return
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM vs_league_matchups WHERE week_id = ?`, weekID); err != nil {
+		dbError(w, "saveVSLeagueMatchups delete", err)
+		return
+	}
+	for i, m := range payload.Matchups {
+		idx := i + 1
+		if m.MatchIndex != nil {
+			idx = *m.MatchIndex
+		}
+		if _, err := tx.Exec(`INSERT INTO vs_league_matchups
+			(week_id, match_index, a_rank, a_server, a_tag, a_name, a_points,
+			 b_rank, b_server, b_tag, b_name, b_points, is_ours)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			weekID, idx, m.ARank, m.AServer, m.ATag, m.AName, m.APoints,
+			m.BRank, m.BServer, m.BTag, m.BName, m.BPoints, boolToInt(m.IsOurs)); err != nil {
+			dbError(w, "saveVSLeagueMatchups insert", err)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "saveVSLeagueMatchups commit", err)
+		return
+	}
+	logActivity(user.ID, user.Username, "updated", entityVSLeagueWeek, weekLabel(weekNum, weekDate), false, "bracket match record")
+	w.WriteHeader(http.StatusOK)
+}
+
+// ── Participation (live, from vs_points) ────────────────────────────────────
+
+func getVSLeagueParticipation(w http.ResponseWriter, r *http.Request) {
+	weekDateParam := r.URL.Query().Get("week_date")
+	if weekDateParam == "" {
+		badRequest(w, "week_date is required")
+		return
+	}
+	weekDate, err := normalizeToGameWeekMonday(weekDateParam)
+	if err != nil {
+		badRequest(w, "invalid week_date")
+		return
+	}
+	imported := vsDayImportMask(weekDate)
+	// completedVSDays only bounds the CURRENT week; past weeks are fully bounded by their data.
+	rows, err := db.Query(`SELECT COALESCE(m.joined_at, ''),
+		COALESCE(vp.monday,0), COALESCE(vp.tuesday,0), COALESCE(vp.wednesday,0),
+		COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0)
+		FROM members m
+		LEFT JOIN vs_points vp ON vp.member_id = m.id AND vp.week_date = ?
+		WHERE m.rank != 'EX'`, weekDate)
+	if err != nil {
+		dbError(w, "getVSLeagueParticipation", err)
+		return
+	}
+	defer rows.Close()
+
+	type memberRow struct {
+		joinedAt string
+		scores   [6]int
+	}
+	var members []memberRow
+	for rows.Next() {
+		var mr memberRow
+		if err := rows.Scan(&mr.joinedAt, &mr.scores[0], &mr.scores[1], &mr.scores[2],
+			&mr.scores[3], &mr.scores[4], &mr.scores[5]); err != nil {
+			dbError(w, "getVSLeagueParticipation scan", err)
+			return
+		}
+		members = append(members, mr)
+	}
+
+	out := make([]VSLeagueParticipationDay, 6)
+	for i := 0; i < 6; i++ {
+		day := VSLeagueParticipationDay{DayNumber: i + 1, Imported: imported[i]}
+		if !imported[i] {
+			out[i] = day
+			continue
+		}
+		dDate := dayDate(weekDate, i)
+		var active []int
+		sum := 0
+		for _, mr := range members {
+			joinedBy := mr.joinedAt == "" || mr.joinedAt <= dDate
+			if mr.scores[i] > 0 {
+				active = append(active, mr.scores[i])
+				sum += mr.scores[i]
+			} else if joinedBy {
+				day.ZeroScore++
+			}
+		}
+		day.ActiveScorers = len(active)
+		if len(active) > 0 {
+			day.AvgPerActive = float64(sum) / float64(len(active))
+			sort.Sort(sort.Reverse(sort.IntSlice(active)))
+			top := 0
+			for k := 0; k < len(active) && k < 10; k++ {
+				top += active[k]
+			}
+			if sum > 0 {
+				day.Top10Pct = float64(top) / float64(sum) * 100
+			}
+		}
+		out[i] = day
+	}
+	writeJSON(w, out)
+}
+
+// ── Opponent lookup (LastRank) ──────────────────────────────────────────────
+
+func vsLeagueOpponentLookup(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if strings.TrimSpace(body.URL) == "" {
+		badRequest(w, "Paste the opponent's lastrank.fun link or alliance id")
+		return
+	}
+	// Single DB connection: hold NO DB handle across the network call (no DB work before/during).
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	snap, err := fetchLastRankOpponentSnapshot(ctx, body.URL)
+	if err != nil {
+		if errors.Is(err, errLastRankBadInput) {
+			badRequest(w, "That doesn't look like a lastrank.fun alliance link or id")
+			return
+		}
+		slogLastRank("vs-league opponent lookup failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
+		return
+	}
+	// Now that the network call is done, persist to the opponent cache (best-effort).
+	cacheExternalAlliance(snap)
+	writeJSON(w, snap)
+}
+
+// vsLeagueOpponentRoster returns the opponent alliance's member names (+ power) from LastRank, for
+// the daily-MVP picker. One LastRank GET per call; the client caches the result for the modal.
+func vsLeagueOpponentRoster(w http.ResponseWriter, r *http.Request) {
+	idOrURL := strings.TrimSpace(r.URL.Query().Get("lastrank_id"))
+	if idOrURL == "" {
+		badRequest(w, "lastrank_id is required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	roster, err := fetchLastRankOpponentRoster(ctx, idOrURL)
+	if err != nil {
+		if errors.Is(err, errLastRankBadInput) {
+			badRequest(w, "That doesn't look like a lastrank.fun alliance id")
+			return
+		}
+		slogLastRank("vs-league opponent roster failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, roster)
+}
+
+// vsLeagueOurSnapshot returns OUR alliance's power/kills/members from LastRank (settings
+// lastrank_alliance_id) so a week can freeze an authoritative "us" snapshot. When no id is
+// configured — or the fetch fails — from_lastrank=false and the client uses the summed-roster
+// fallback (hand-editable). LastRank-sourced values are the source of truth (client locks them).
+func vsLeagueOurSnapshot(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(lastRankAllianceID())
+	if id == "" {
+		writeJSON(w, map[string]any{"from_lastrank": false})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	snap, err := fetchLastRankOpponentSnapshot(ctx, id)
+	if err != nil {
+		slogLastRank("vs-league our snapshot failed", err)
+		writeJSON(w, map[string]any{"from_lastrank": false})
+		return
+	}
+	writeJSON(w, map[string]any{
+		"from_lastrank": true,
+		"power":         snap.Power,
+		"kills":         snap.Kills,
+		"member_count":  snap.MemberCount,
+		"server":        snap.ServerID,
+		"last_seen_at":  snap.LastSeenAt,
+	})
+}
+
+// cacheExternalAlliance upserts a looked-up alliance into the persistent cache. Identity is our
+// internal id; we dedup by tag (globally unique at a moment), else by name, so a manual entry and
+// a later LastRank lookup collapse into one row instead of duplicating — and lastrank_id is stored
+// only as a reference attribute. Best-effort — never fails the response.
+func cacheExternalAlliance(snap VSLeagueOpponentSnapshot) {
+	var id int
+	found := false
+	if snap.Tag != "" {
+		if err := db.QueryRow(`SELECT id FROM external_alliances WHERE tag = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1`, snap.Tag).Scan(&id); err == nil {
+			found = true
+		}
+	}
+	if !found && snap.Name != "" {
+		if err := db.QueryRow(`SELECT id FROM external_alliances WHERE name = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1`, snap.Name).Scan(&id); err == nil {
+			found = true
+		}
+	}
+	var lrid any // nil → NULL; external id is a reference, not a key
+	if snap.AllianceID != "" {
+		lrid = snap.AllianceID
+	}
+	if found {
+		if _, err := db.Exec(`UPDATE external_alliances SET tag=?, name=?, server=?, power=?, kills=?,
+			member_count=?, lastrank_id=?, lastrank_seen_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+			snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, lrid, snap.LastSeenAt, id); err != nil {
+			slog.Error("cacheExternalAlliance update", "error", err)
+		}
+		return
+	}
+	if _, err := db.Exec(`INSERT INTO external_alliances
+		(tag, name, server, power, kills, member_count, lastrank_id, lastrank_seen_at)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, lrid, snap.LastSeenAt); err != nil {
+		slog.Error("cacheExternalAlliance insert", "error", err)
+	}
+}
+
+// getExternalAlliances returns the cached opposing alliances (optionally filtered by ?tag=),
+// most-recently-updated first — used to prefill the opponent fields by tag.
+func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
+	q := `SELECT ea.id, ea.lastrank_id, ea.tag, ea.name, ea.server, ea.power, ea.kills,
+		ea.member_count, ea.lastrank_seen_at, ea.updated_at,
+		CASE
+			WHEN EXISTS(SELECT 1 FROM allies al WHERE al.external_alliance_id = ea.id AND al.active = 1) THEN 'active'
+			WHEN EXISTS(SELECT 1 FROM allies al WHERE al.external_alliance_id = ea.id) THEN 'former'
+			ELSE 'never'
+		END AS ally_status,
+		(SELECT COUNT(*) FROM prospects pr WHERE pr.source_alliance_id = ea.id) AS prospect_count
+		FROM external_alliances ea`
+	var args []any
+	if tag := strings.TrimSpace(r.URL.Query().Get("tag")); tag != "" {
+		q += ` WHERE ea.tag = ?`
+		args = append(args, tag)
+	}
+	q += ` ORDER BY ea.updated_at DESC`
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		dbError(w, "getExternalAlliances", err)
+		return
+	}
+	defer rows.Close()
+	list := []ExternalAlliance{}
+	for rows.Next() {
+		var a ExternalAlliance
+		if err := rows.Scan(&a.ID, &a.LastRankID, &a.Tag, &a.Name, &a.Server, &a.Power,
+			&a.Kills, &a.MemberCount, &a.LastSeenAt, &a.UpdatedAt,
+			&a.AllyStatus, &a.ProspectCount); err != nil {
+			dbError(w, "getExternalAlliances scan", err)
+			return
+		}
+		list = append(list, a)
+	}
+	rows.Close()
+	// Attach our VS League head-to-head record (outcome computed on read from day rows).
+	opWeeks := loadOpponentWeeks()
+	for i := range list {
+		for _, wk := range opWeeks {
+			if !opponentWeekMatches(list[i], wk) {
+				continue
+			}
+			list[i].IsOpponent = true
+			switch wk.outcome {
+			case "win":
+				list[i].VSWins++
+			case "loss":
+				list[i].VSLosses++
+			case "tie":
+				list[i].VSTies++
+			}
+		}
+	}
+	writeJSON(w, list)
+}
+
+type opponentWeek struct {
+	tag, lr, outcome string // outcome "" when undecided/pending
+}
+
+func opponentWeekMatches(a ExternalAlliance, wk opponentWeek) bool {
+	if a.LastRankID != nil && *a.LastRankID != "" && wk.lr == *a.LastRankID {
+		return true
+	}
+	return a.Tag != nil && *a.Tag != "" && wk.tag != "" && strings.EqualFold(wk.tag, *a.Tag)
+}
+
+// loadOpponentWeeks returns every one of our matchup weeks with the opponent identity and the
+// week's decided outcome (computed on read from day rows, or the stored summary outcome).
+func loadOpponentWeeks() []opponentWeek {
+	rows, err := db.Query(`SELECT id, COALESCE(opponent_tag,''), COALESCE(opponent_lastrank_id,''), outcome FROM vs_league_weeks`)
+	if err != nil {
+		slog.Error("loadOpponentWeeks", "error", err)
+		return nil
+	}
+	type raw struct {
+		id            int
+		tag, lr       string
+		storedOutcome *string
+	}
+	var rawWeeks []raw
+	for rows.Next() {
+		var x raw
+		if err := rows.Scan(&x.id, &x.tag, &x.lr, &x.storedOutcome); err != nil {
+			rows.Close()
+			return nil
+		}
+		rawWeeks = append(rawWeeks, x)
+	}
+	rows.Close()
+
+	out := make([]opponentWeek, 0, len(rawWeeks))
+	for _, x := range rawWeeks {
+		ow := opponentWeek{tag: x.tag, lr: x.lr}
+		days, _ := loadVSLeagueDays(x.id)
+		if len(days) > 0 {
+			var arr [6]string
+			for i := range arr {
+				arr[i] = "pending"
+			}
+			for _, d := range days {
+				if d.DayNumber >= 1 && d.DayNumber <= 6 {
+					arr[d.DayNumber-1] = d.Outcome
+				}
+			}
+			if st := computeWeekStanding(arr); st.Decided {
+				ow.outcome = st.Outcome
+			}
+		} else if x.storedOutcome != nil {
+			ow.outcome = *x.storedOutcome
+		}
+		out = append(out, ow)
+	}
+	return out
+}
+
+// canViewExternalAlliances gates the registry endpoint: any officer who deals with outside
+// alliances (allies / VS League / recruiting) may read it.
+func canViewExternalAlliances(user *AuthUser) bool {
+	for _, key := range []string{"view_allies", "view_vs_points", "manage_vs_points", "view_recruiting"} {
+		if userHasPermission(user, key) {
+			return true
+		}
+	}
+	return false
+}
+
+func getExternalAlliancesGated(w http.ResponseWriter, r *http.Request) {
+	if !canViewExternalAlliances(getAuthUser(r)) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	getExternalAlliances(w, r)
+}
+
+// canManageExternalAlliances gates registry writes to officers who manage allies or VS League.
+func canManageExternalAlliances(user *AuthUser) bool {
+	return userHasPermission(user, "manage_allies") || userHasPermission(user, "manage_vs_points")
+}
+
+func requireManageExternalAlliances(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !canManageExternalAlliances(getAuthUser(r)) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
+const entityExternalAlliance = "external_alliance"
+
+type externalAlliancePayload struct {
+	Tag         string  `json:"tag"`
+	Name        string  `json:"name"`
+	Server      *int    `json:"server"`
+	Power       *int64  `json:"power"`
+	Kills       *int64  `json:"kills"`
+	MemberCount *int    `json:"member_count"`
+	LastRankID  *string `json:"lastrank_id"`
+}
+
+func (p externalAlliancePayload) label() string {
+	if t := strings.TrimSpace(p.Tag); t != "" {
+		return "[" + t + "]"
+	}
+	return strings.TrimSpace(p.Name)
+}
+
+func createExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	var p externalAlliancePayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if strings.TrimSpace(p.Tag) == "" && strings.TrimSpace(p.Name) == "" {
+		badRequest(w, "tag or name is required")
+		return
+	}
+	lrid, ok := sanitizeLastRankID(p.LastRankID)
+	if !ok {
+		badRequest(w, "The LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
+		return
+	}
+	res, err := db.Exec(`INSERT INTO external_alliances (tag, name, server, power, kills, member_count, lastrank_id)
+		VALUES (?,?,?,?,?,?,?)`,
+		nullStr(p.Tag), nullStr(p.Name), p.Server, p.Power, p.Kills, p.MemberCount, lrid)
+	if err != nil {
+		dbError(w, "createExternalAlliance", err)
+		return
+	}
+	id, _ := res.LastInsertId()
+	logActivity(user.ID, user.Username, "created", entityExternalAlliance, p.label(), false)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]any{"id": id})
+}
+
+func updateExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var p externalAlliancePayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	lrid, ok := sanitizeLastRankID(p.LastRankID)
+	if !ok {
+		badRequest(w, "The LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
+		return
+	}
+	if _, err := db.Exec(`UPDATE external_alliances SET tag=?, name=?, server=?, power=?, kills=?,
+		member_count=?, lastrank_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		nullStr(p.Tag), nullStr(p.Name), p.Server, p.Power, p.Kills, p.MemberCount, lrid, id); err != nil {
+		dbError(w, "updateExternalAlliance", err)
+		return
+	}
+	logActivity(user.ID, user.Username, "updated", entityExternalAlliance, p.label(), false)
+	w.WriteHeader(http.StatusOK)
+}
+
+func deleteExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var label string
+	if err := db.QueryRow(`SELECT COALESCE('['||tag||']', name, '?') FROM external_alliances WHERE id=?`, id).Scan(&label); err != nil {
+		http.Error(w, "Alliance not found", http.StatusNotFound)
+		return
+	}
+	var isAlly int
+	db.QueryRow(`SELECT EXISTS(SELECT 1 FROM allies WHERE external_alliance_id=?)`, id).Scan(&isAlly)
+	if isAlly == 1 {
+		http.Error(w, "This alliance is linked to an ally — remove it from Allies first", http.StatusConflict)
+		return
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "deleteExternalAlliance begin", err)
+		return
+	}
+	defer tx.Rollback()
+	// Clear the (now-dangling) prospect references, then delete.
+	if _, err := tx.Exec(`UPDATE prospects SET source_alliance_id=NULL WHERE source_alliance_id=?`, id); err != nil {
+		dbError(w, "deleteExternalAlliance clear prospects", err)
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM external_alliances WHERE id=?`, id); err != nil {
+		dbError(w, "deleteExternalAlliance", err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "deleteExternalAlliance commit", err)
+		return
+	}
+	logActivity(user.ID, user.Username, "deleted", entityExternalAlliance, label, false)
+	w.WriteHeader(http.StatusOK)
+}
+
+// refreshExternalAlliance re-pulls a single cached alliance's stats from LastRank by its stored
+// id. The frontend calls this in a paced loop for a bulk refresh; the shared 1 req/sec limiter
+// naturally throttles it, and no DB handle is held across the network call (single connection).
+func refreshExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		badRequest(w, "Invalid id")
+		return
+	}
+	var lrid *string
+	if err := db.QueryRow(`SELECT lastrank_id FROM external_alliances WHERE id=?`, id).Scan(&lrid); err != nil {
+		http.Error(w, "Alliance not found", http.StatusNotFound)
+		return
+	}
+	if lrid == nil || strings.TrimSpace(*lrid) == "" {
+		badRequest(w, "No LastRank id on this alliance — edit it and add a lastrank.fun link first")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	snap, err := fetchLastRankOpponentSnapshot(ctx, *lrid)
+	if err != nil {
+		slogLastRank("refreshExternalAlliance failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
+		return
+	}
+	if _, err := db.Exec(`UPDATE external_alliances SET tag=COALESCE(NULLIF(?,''),tag), name=COALESCE(NULLIF(?,''),name),
+		server=?, power=?, kills=?, member_count=?, lastrank_seen_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, snap.LastSeenAt, id); err != nil {
+		dbError(w, "refreshExternalAlliance update", err)
+		return
+	}
+	writeJSON(w, snap)
+}
+
+// lookupExternalAlliance resolves a pasted LastRank link/id to a snapshot WITHOUT caching, for
+// the registry add/edit form (which then persists via POST/PUT). Gated for manage-external users.
+func lookupExternalAlliance(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if strings.TrimSpace(body.URL) == "" {
+		badRequest(w, "Paste the alliance's lastrank.fun link or id")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	snap, err := fetchLastRankOpponentSnapshot(ctx, body.URL)
+	if err != nil {
+		if errors.Is(err, errLastRankBadInput) {
+			badRequest(w, "That doesn't look like a lastrank.fun alliance link or id")
+			return
+		}
+		slogLastRank("lookupExternalAlliance failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, snap)
+}
+
+// searchExternalAlliancesLastRank finds alliances on LastRank by fuzzy tag/name (q), optionally
+// restricted to a strict server number, for the registry add/opponent picker. Manage-gated (it
+// hits the volunteer service); returns lean results the officer picks from, then confirms by id.
+func searchExternalAlliancesLastRank(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		badRequest(w, "Enter a tag or name to search")
+		return
+	}
+	var server *int
+	if s := strings.TrimSpace(r.URL.Query().Get("server")); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			badRequest(w, "server must be a number")
+			return
+		}
+		server = &n
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	results, err := searchLastRankAlliances(ctx, q, server)
+	if err != nil {
+		slogLastRank("searchExternalAlliancesLastRank failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that search", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, results)
+}
+
+// nullStrP maps a *string to a NULL-able driver value.
+func nullStrP(s *string) any {
+	if s == nil || strings.TrimSpace(*s) == "" {
+		return nil
+	}
+	return strings.TrimSpace(*s)
+}
+
+// sanitizeLastRankIDPtr extracts a clean 32-hex alliance id from a pasted lastrank.fun/a/<id>
+// link or a bare id (like the members page does for player ids), so we never store a raw URL.
+// Returns (nil, true) for empty, (&id, true) for a valid link/id, and (nil, false) when
+// non-empty but unparseable. This is the canonical alliance-id sanitizer for every write path.
+func sanitizeLastRankIDPtr(s *string) (*string, bool) {
+	if s == nil || strings.TrimSpace(*s) == "" {
+		return nil, true
+	}
+	if id, ok := parseLastRankAllianceStrict(*s); ok {
+		return &id, true
+	}
+	return nil, false
+}
+
+// sanitizeLastRankID is the driver-value form of sanitizeLastRankIDPtr for INSERT/UPDATE bindings.
+func sanitizeLastRankID(s *string) (any, bool) {
+	p, ok := sanitizeLastRankIDPtr(s)
+	if !ok {
+		return nil, false
+	}
+	if p == nil {
+		return nil, true
+	}
+	return *p, true
+}

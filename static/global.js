@@ -17,6 +17,28 @@
     };
 })();
 
+// ---- VS Themes (single source of truth) ----
+// Mon=0 … Sun=6, game-fixed for all servers. MUST keep all SEVEN entries: the schedule page
+// renders a full 7-day week and calls getVSTheme on Sunday (index 6). `points` is the VS Duel
+// League match-point weight for winning that day (Sunday has no duel → 0); the league only
+// ever indexes day_number 1-6 (indices 0-5).
+const VS_THEMES = [
+    { label: 'Radar Training',     short: 'Radar',     icon: '📡', points: 1 },
+    { label: 'Base Expansion',     short: 'Expand',    icon: '🏗️', points: 2 },
+    { label: 'Age of Science',     short: 'Science',   icon: '🔬', points: 2 },
+    { label: 'Train Heroes',       short: 'Heroes',    icon: '🦸', points: 2 },
+    { label: 'Total Mobilization', short: 'Mobilize',  icon: '📦', points: 2 },
+    { label: 'Enemy Buster',       short: 'Enemy',     icon: '💥', points: 4 },
+    { label: 'Alliance Star',      short: 'Celebrate', icon: '⭐', points: 0 },
+];
+
+function getVSTheme(dateStr) {
+    // Game time = UTC-2; VS resets on Monday game time.
+    // Adding 2h to UTC gives game time; (UTCDay+6)%7 → Mon=0…Sun=6
+    const d = new Date(dateStr + 'T02:00:00Z');
+    return VS_THEMES[(d.getUTCDay() + 6) % 7];
+}
+
 // ---- Join-date helpers (anchored to today's GAME date) ----
 // Pure UTC date math so there's no local-timezone drift. "days ago" >= 0 = past.
 window.gameDaysAgoToISO = (n) => {

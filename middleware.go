@@ -79,6 +79,27 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // authMiddleware — no session reads.
 // Uses json_extract with a bound parameter — safer than the former fmt.Sprintf column approach.
 // COALESCE handles missing keys (new permissions on old rows) as 0 → false.
+// userHasPermission reports whether the user holds a given permission key. Admins always
+// pass; a nil/rank-less user never does; otherwise it reads the rank_permissions JSON blob.
+// Extracted from requirePermission so handlers can do per-field gating (e.g. omitting
+// leadership-only fields from a response) without duplicating the query or the admin/nil rules.
+func userHasPermission(user *AuthUser, permKey string) bool {
+	if user == nil {
+		return false
+	}
+	if user.IsAdmin {
+		return true
+	}
+	if user.MemberID != nil && user.Rank != "" {
+		var val int64
+		query := `SELECT COALESCE(json_extract(permissions, '$.' || ?), 0) FROM rank_permissions WHERE rank = ?`
+		if err := db.QueryRow(query, permKey, user.Rank).Scan(&val); err == nil && val != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func requirePermission(permKey string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := getAuthUser(r)
@@ -86,21 +107,10 @@ func requirePermission(permKey string, next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-
-		if user.IsAdmin {
+		if userHasPermission(user, permKey) {
 			next(w, r)
 			return
 		}
-
-		if user.MemberID != nil && user.Rank != "" {
-			var val int64
-			query := `SELECT COALESCE(json_extract(permissions, '$.' || ?), 0) FROM rank_permissions WHERE rank = ?`
-			if err := db.QueryRow(query, permKey, user.Rank).Scan(&val); err == nil && val != 0 {
-				next(w, r)
-				return
-			}
-		}
-
 		http.Error(w, "Forbidden: You do not have permission to access this feature.", http.StatusForbidden)
 	}
 }

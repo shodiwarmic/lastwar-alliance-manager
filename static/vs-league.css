@@ -1,0 +1,207 @@
+/* static/vs-league.css — VS Duel League tab. Page-specific layout only; reuses global
+   tokens + utilities (.card, .data-table, .filter-chip, .tab-bar/.tab-btn, .btn, .badge-*). */
+
+/* Toolbar: season selector + manage actions */
+.vsl-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+.vsl-toolbar .sep { flex: 1 1 auto; }
+.vsl-season-select { min-width: 180px; }
+.vsl-empty { color: var(--color-text-muted); padding: 28px 8px; text-align: center; }
+
+/* Sub-view tab strip inside the league tab */
+.vsl-subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.vsl-subtab {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px;
+    border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-mid);
+    cursor: pointer; font-size: 0.86rem; font-weight: 600;
+}
+.vsl-subtab.active { background: var(--color-accent-bg); border-color: var(--color-accent-border); color: var(--color-accent); }
+
+/* Metric tiles row */
+.vsl-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.vsl-tile { background: var(--color-card); border: 1px solid var(--color-border); border-radius: 10px; padding: 12px 14px; }
+.vsl-tile .lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); font-weight: 700; }
+.vsl-tile .val { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.vsl-tile .sub { font-size: 0.78rem; color: var(--color-text-mid); }
+
+/* Status pills */
+.vsl-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 800; padding: 2px 9px; border-radius: 20px; }
+.vsl-pill.win  { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-pill.loss { color: var(--color-danger);  background: var(--color-danger-bg); }
+.vsl-pill.tie  { color: var(--color-warning); background: var(--color-warning-bg); }
+.vsl-pill.live { color: var(--color-info);    background: var(--color-info-bg); }
+.vsl-pill.pending { color: var(--color-text-muted); background: var(--color-bg); border: 1px solid var(--color-border); }
+
+/* Strategy badges */
+.vsl-strat { font-size: 0.72rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; text-transform: capitalize; }
+.vsl-strat.push { color: var(--color-danger); background: var(--color-danger-bg); }
+.vsl-strat.save { color: var(--color-info); background: var(--color-info-bg); }
+.vsl-strat.normal { color: var(--color-text-mid); background: var(--color-bg); border: 1px solid var(--color-border); }
+.vsl-strat.test { color: var(--color-purple); background: var(--color-purple-bg); }
+.vsl-strat.recovery { color: var(--color-warning); background: var(--color-warning-bg); }
+.vsl-strat.worked { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-strat.failed { color: var(--color-danger); background: var(--color-danger-bg); }
+.vsl-strat.mixed  { color: var(--color-warning); background: var(--color-warning-bg); }
+
+/* Day theme tiles (current week) */
+.vsl-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 8px 0 4px; }
+.vsl-day { border: 1px solid var(--color-border); border-radius: 9px; padding: 9px 10px; background: var(--color-card); }
+.vsl-day .thm { font-size: 0.78rem; color: var(--color-text-mid); display: flex; align-items: center; gap: 5px; }
+.vsl-day .pts { font-size: 0.68rem; color: var(--color-text-muted); font-weight: 700; }
+.vsl-day .res { margin-top: 5px; font-weight: 800; font-size: 0.9rem; }
+.vsl-day.win  { border-color: var(--color-success); background: var(--color-success-bg); }
+.vsl-day.loss { border-color: var(--color-danger); }
+.vsl-day.tie  { border-color: var(--color-warning); }
+.vsl-day .raw { font-size: 0.72rem; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+
+/* Bracket — per-week columns of pairs (self-contained connector recipe from the mockup) */
+.vsl-bracket { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 8px; max-width: 100%; }
+.vsl-wkcol { flex: 0 0 250px; }
+.vsl-wkhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 2px solid var(--color-border); padding: 4px 2px 10px; margin-bottom: 12px; }
+.vsl-wkhead .wk { font-weight: 800; }
+.vsl-pair { display: flex; align-items: center; margin-bottom: 11px; }
+.vsl-teams { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
+/* Fixed height (not min-height) so winner chips (bold + ✓) and plain chips are identical, keeping
+   pairs aligned row-by-row across week columns. */
+.vsl-chip { display: flex; align-items: center; gap: 7px; padding: 0 8px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-card); font-size: 0.78rem; height: 34px; box-sizing: border-box; }
+.vsl-chip .rk { flex: 0 0 auto; font-size: 0.66rem; font-weight: 800; color: var(--color-text-muted); min-width: 22px; }
+.vsl-chip .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-mid); }
+.vsl-chip .s  { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--color-text-muted); font-weight: 700; }
+.vsl-chip.us  { box-shadow: inset 3px 0 0 var(--color-accent); }
+.vsl-chip.us .nm { color: var(--color-accent); }
+.vsl-elbow { flex: 0 0 12px; align-self: stretch; margin: 10px 0; border-right: 2px solid var(--color-border); border-top: 2px solid var(--color-border); border-bottom: 2px solid var(--color-border); border-radius: 0 6px 6px 0; }
+.vsl-wn { flex: 0 0 auto; margin-left: 7px; padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface); font-size: 0.72rem; font-weight: 800; white-space: nowrap; color: var(--color-text-mid); }
+/* Bracket chip/winner states + week-column headers (mockup-aligned) */
+.vsl-chip.won { background: var(--color-success-bg); border-color: var(--color-success); }
+.vsl-chip.won .nm { font-weight: 800; color: var(--color-text); }
+.vsl-chip.won .nm::after { content: ' ✓'; color: var(--color-success); font-weight: 800; }
+.vsl-chip.won .s { color: var(--color-success); font-weight: 800; }
+.vsl-chip.lead { background: var(--color-info-bg); border-color: var(--color-info); }
+.vsl-chip.lead .nm { font-weight: 800; color: var(--color-text); }
+.vsl-chip.lead .s  { color: var(--color-info); font-weight: 800; }
+.vsl-chip.out .nm, .vsl-chip.out .s { opacity: 0.5; }
+.vsl-chip.pred { background: var(--color-bg); border-style: dashed; }
+.vsl-chip.pred .nm { color: var(--color-text-muted); font-weight: 600; }
+/* "W/L of [A]/[B]" placeholder badge inside a predicted chip (distinct from the .vsl-wl day-avg bar) */
+.vsl-chip .wl { flex: 0 0 auto; font-size: 0.6rem; font-weight: 800; padding: 1px 5px; border-radius: 4px; letter-spacing: 0.03em; }
+.vsl-chip .wl.w { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-chip .wl.l { color: var(--color-danger); background: var(--color-danger-bg); }
+.vsl-wn.won { color: var(--color-success); border-color: var(--color-success); }
+.vsl-wn.dim { color: var(--color-text-muted); font-weight: 600; }
+.vsl-wn.us { color: var(--color-accent); border-color: var(--color-accent); }
+.vsl-wkhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 2px solid var(--color-border); padding: 2px 2px 10px; margin-bottom: 12px; }
+.vsl-wkhead .wk { font-weight: 800; font-size: 0.95rem; }
+.vsl-wkstate { font-size: 0.66rem; font-weight: 800; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+.vsl-wkstate.live { color: var(--color-info); background: var(--color-info-bg); }
+.vsl-wkstate.up { color: var(--color-text-muted); background: var(--color-bg); border: 1px solid var(--color-border); }
+.vsl-wkstate.done { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-wkstate.pred { color: var(--color-purple); background: var(--color-purple-bg); }
+.vsl-pending { border: 1.5px dashed var(--color-border); border-radius: 8px; padding: 22px 10px; text-align: center; color: var(--color-text-muted); font-size: 0.82rem; }
+.vsl-pending .big { font-size: 1.3rem; display: block; margin-bottom: 4px; }
+
+/* Standings/ladder + generic table cells our-row highlight */
+.vsl-ourrow td { background: var(--color-success-bg); }
+.vsl-ourrow .vsl-al { color: var(--color-success); font-weight: 800; }
+.vsl-zone { font-size: 0.76rem; color: var(--color-text-muted); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 14px; }
+.vsl-zone b.promo { color: var(--color-success); }
+.vsl-zone b.demo  { color: var(--color-danger); }
+
+/* Day-of-week analysis bars */
+.vsl-analysis-row { display: grid; grid-template-columns: 130px 1fr 90px; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--color-border); }
+.vsl-wl { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--color-border); }
+.vsl-wl .w { background: var(--color-success); }
+.vsl-wl .l { background: var(--color-danger); }
+.vsl-wl .t { background: var(--color-warning); }
+.vsl-wl .a { background: var(--color-accent); }
+.vsl-wl .p { background: var(--color-info); }
+.vsl-legend-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
+.vsl-legend-sw.a { background: var(--color-accent); }
+.vsl-legend-sw.p { background: var(--color-info); }
+
+/* Winnable banner */
+.vsl-banner { border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.vsl-banner.win  { background: var(--color-success-bg); color: var(--color-success); border: 1px solid var(--color-success); }
+.vsl-banner.loss { background: var(--color-danger-bg);  color: var(--color-danger);  border: 1px solid var(--color-danger); }
+.vsl-banner.live { background: var(--color-info-bg);    color: var(--color-info);    border: 1px solid var(--color-info); }
+.vsl-banner .score { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+
+/* Modal grids for forms */
+.vsl-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 14px 0; }
+.vsl-field label { display: block; font-size: 0.78rem; color: var(--color-text-mid); font-weight: 600; margin-bottom: 3px; }
+.vsl-day-entry { display: grid; grid-template-columns: 120px 1fr 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
+.vsl-help { font-size: 0.78rem; color: var(--color-text-muted); }
+
+/* ── Opponent finder combobox on the Opp tag / Opp name fields (mirrors External Alliances) ──
+   The dropdown is a child of the opponent grid (position: relative) and is anchored under the
+   focused field via inline left/top/min-width/max-width set in JS (positionDropdown). */
+.vsl-opp-grid { position: relative; }
+.vsl-find-dropdown {
+    position: absolute; z-index: 30;
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;
+    max-height: 280px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.vsl-find-head { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); padding: 8px 12px 4px; }
+.vsl-find-msg { font-size: 0.82rem; color: var(--color-text-muted); padding: 8px 12px; }
+.vsl-find-err { color: var(--color-danger); font-weight: 600; }
+.vsl-find-item {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+    padding: 8px 12px; background: none; border: none; border-top: 1px solid var(--color-border);
+    cursor: pointer; text-align: left; color: var(--color-text);
+}
+.vsl-find-item:hover { background: var(--bg-secondary); }
+.vsl-find-head + .vsl-find-item { border-top: none; }
+.vsl-find-name { font-weight: 600; }
+.vsl-find-meta { font-size: 0.8rem; color: var(--color-text-muted); }
+.vsl-find-action {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    padding: 9px 12px; background: none; border: none; border-top: 1px solid var(--color-border);
+    cursor: pointer; text-align: left; color: var(--color-accent); font-weight: 600;
+}
+.vsl-find-action:hover { background: var(--bg-secondary); }
+
+/* Week sub-tabs: future weeks (not started) are disabled */
+.vsl-subtab.future { opacity: 0.45; cursor: not-allowed; }
+
+/* Season Summary standings grid (all alliances × weeks) */
+.vsl-stbl { min-width: 440px; }
+.vsl-stbl .vsl-rk { text-align: center; font-weight: 800; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 40px; }
+.vsl-stbl .vsl-rk.rk1 { color: #d4af37; }
+.vsl-stbl .vsl-rk.rk2 { color: #9aa9bd; }
+.vsl-stbl .vsl-rk.rk3 { color: #cd7f32; }
+.vsl-stbl .vsl-al { font-weight: 700; white-space: nowrap; }
+.vsl-stbl .vsl-wc { text-align: center; width: 56px; }
+/* Opaque green (page bg + translucent success overlay) so the sticky first column occludes the
+   scrolling alliance cell on narrow screens — the raw --color-success-bg is translucent. */
+.vsl-stbl tbody tr.us td { background-color: var(--color-bg); background-image: linear-gradient(var(--color-success-bg), var(--color-success-bg)); }
+.vsl-stbl tbody tr.us .vsl-al { color: var(--color-success); }
+.vsl-scell { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; padding: 2px 7px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; }
+.vsl-scell.w { color: var(--color-success); background: var(--color-success-bg); }
+.vsl-scell.l { color: var(--color-danger); background: var(--color-danger-bg); }
+.vsl-scell.t { color: var(--color-text-mid); background: var(--color-bg); border: 1px solid var(--color-border); }
+.vsl-scell.live { color: var(--color-info); background: var(--color-info-bg); }
+.vsl-scell.up, .vsl-scell.none { color: var(--color-text-muted); }
+
+/* Capture-bracket: grid of pairing cards. Ranks are fixed labels (computed each week); each
+   alliance row is [#rank] [server] [tag combobox] [points]; our pairing is highlighted. */
+.vsl-bracket-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 320px)); justify-content: center; gap: 10px; margin: 12px 0; }
+.vsl-pair-card { border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; background: var(--color-surface); }
+.vsl-pair-card.ours { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent) inset; }
+.vsl-pair-hd { display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; font-weight: 700; color: var(--color-text-mid); margin-bottom: 5px; }
+.vsl-pair-badge { color: var(--color-accent); font-weight: 700; font-size: 0.72rem; }
+.vsl-pair-vs { text-align: center; font-size: 0.68rem; color: var(--color-text-muted); margin: 3px 0; }
+.vsl-al-row { display: flex; align-items: center; gap: 5px; }
+.vsl-al-row + .vsl-al-row { margin-top: 4px; }
+.vsl-rklbl { min-width: 30px; flex: 0 0 auto; font-weight: 700; color: var(--color-text-mid); font-size: 0.85rem; }
+.vsl-srv { width: 66px; flex: 0 0 auto; text-align: center; padding-left: 5px; padding-right: 5px; }
+.vsl-tagwrap { position: relative; flex: 1 1 0; min-width: 62px; max-width: 130px; }
+.vsl-tag { width: 100%; }
+.vsl-pts2 { width: 62px; flex: 0 0 auto; text-align: center; padding-left: 4px; padding-right: 4px; }
+/* Tag input is narrow, but the search results need room — let the dropdown be a bit wider than its
+   field (kept within the smallest card's right edge so it never clips on a single-column modal). */
+.vsl-bracket-dd { top: calc(100% + 4px); left: 0; right: auto; min-width: 150px; }
+.vsl-locked { background: var(--bg-secondary); color: var(--color-text-mid); cursor: default; font-weight: 600; }
+
+/* Daily-MVP combobox (our roster + opponent LastRank roster + free text) */
+.vsl-mvp-wrap { position: relative; display: flex; gap: 6px; align-items: center; }
+.vsl-mvp-side { flex: 0 0 auto; width: auto; min-width: 74px; }
+.vsl-mvp-wrap input[type="text"] { flex: 1; min-width: 0; }
+.vsl-mvp-dd { top: calc(100% + 4px); left: 0; right: 0; }

@@ -1,0 +1,122 @@
+{{define "header_text"}}
+    <h1>
+        <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-world"/></svg>
+        External Alliances
+    </h1>
+    <h2>Known outside alliances &mdash; allies, VS opponents &amp; prospect sources</h2>
+{{end}}
+
+{{define "head_tags"}}
+    <link rel="stylesheet" href="/external-alliances.css">
+{{end}}
+
+{{define "content"}}
+<div id="ext-alliances-page">
+    {{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}
+    <div class="action-bar">
+        <button type="button" id="ext-add-btn" class="btn btn-primary">
+            <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add Alliance
+        </button>
+        <button type="button" id="ext-refresh-trigger-btn" class="btn btn-secondary">
+            <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Refresh from LastRank
+        </button>
+    </div>
+
+    <section class="ext-gather-section" id="ext-gather-section" style="display:none;">
+        <div class="ext-gather-card">
+            <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Refresh from LastRank</h4>
+            <p class="ext-gather-help">
+                Re-pull power, kills and member count for every alliance that has a
+                <a href="https://lastrank.fun" target="_blank" rel="noopener noreferrer">lastrank.fun</a> link.
+                Each alliance is fetched individually and paced at ~1/second — least-recently-updated first, so an
+                interrupted run resumes where it left off.
+            </p>
+            <div class="ext-gather-actions">
+                <button type="button" id="ext-gather-btn" class="btn btn-primary">
+                    <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-crosshair"/></svg> Gather Latest Stats
+                </button>
+                <span id="ext-gather-status" class="status-msg"></span>
+            </div>
+            <div id="ext-gather-progress" class="ext-prog-list" style="display:none;"></div>
+        </div>
+    </section>
+    {{end}}
+
+    <div class="ext-filter-controls">
+        <div class="ext-filter-top">
+            <div class="ext-search-wrap">
+                <input type="text" id="ext-search" class="form-input" placeholder="Search tag or name…">
+                <button id="ext-clear-search" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
+            <button type="button" id="ext-toggle-filters" class="btn btn-secondary btn-sm ext-filter-toggle" aria-expanded="false" aria-controls="ext-filter-collapse">
+                <svg width="14" height="14" aria-hidden="true" class="svg-icon chevron"><use href="/icons.svg#icon-chevron-down"/></svg>
+                Sort &amp; Filter
+                <span id="ext-filter-count" class="ext-filter-badge" hidden></span>
+            </button>
+            <button type="button" id="ext-clear-filters" class="btn btn-ghost btn-sm" disabled>Clear</button>
+            <span class="status-msg" id="ext-count" style="margin-left:auto;"></span>
+        </div>
+
+        <div id="ext-filter-collapse" class="ext-filter-collapse">
+            <hr class="ext-filter-divider">
+            <div class="ext-filter-grid">
+                <div class="ext-filter-row">
+                    <span class="filter-chip-label">Sort:</span>
+                    <button class="filter-chip ext-sort-chip active" data-sort="updated">Updated ↓</button>
+                    <button class="filter-chip ext-sort-chip" data-sort="tag">Tag</button>
+                    <button class="filter-chip ext-sort-chip" data-sort="name">Name</button>
+                    <button class="filter-chip ext-sort-chip" data-sort="server">Server</button>
+                    <button class="filter-chip ext-sort-chip" data-sort="power">Power</button>
+                    <button class="filter-chip ext-sort-chip" data-sort="kills">Kills</button>
+                    <button class="filter-chip ext-sort-chip" data-sort="members">Members</button>
+                    <button class="filter-chip ext-sort-chip" data-sort="vs">VS record</button>
+                </div>
+                <div class="ext-filter-row">
+                    <span class="filter-chip-label">Relationship:</span>
+                    <button class="filter-chip ext-rel-chip active" data-rel="all">All</button>
+                    <button class="filter-chip ext-rel-chip" data-rel="ally">Ally</button>
+                    <button class="filter-chip ext-rel-chip" data-rel="former">Former ally</button>
+                    <button class="filter-chip ext-rel-chip" data-rel="opponent">VS opponent</button>
+                    <button class="filter-chip ext-rel-chip" data-rel="prospect">Prospect source</button>
+                    <button class="filter-chip ext-rel-chip" data-rel="unlinked">No relationship</button>
+                </div>
+                <div class="ext-filter-row">
+                    <span class="filter-chip-label">LastRank:</span>
+                    <button class="filter-chip ext-lr-chip active" data-lr="all">All</button>
+                    <button class="filter-chip ext-lr-chip" data-lr="linked">Linked</button>
+                    <button class="filter-chip ext-lr-chip" data-lr="none">No link</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-scroll">
+            <table class="data-table" id="ext-table" data-export-csv="external-alliances.csv">
+                <thead>
+                    <tr>
+                        <th data-sort="tag" class="sort-asc">Tag</th>
+                        <th data-sort="name">Name</th>
+                        <th data-sort="server">Server</th>
+                        <th data-sort="power">Power</th>
+                        <th data-sort="kills">Kills</th>
+                        <th data-sort="members">Members</th>
+                        <th>Relationship</th>
+                        <th data-sort="updated">Last updated</th>
+                        {{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}<th></th>{{end}}
+                    </tr>
+                </thead>
+                <tbody id="ext-tbody">
+                    <tr><td colspan="8" style="text-align:center;padding:20px;">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<div id="page-config" data-can-manage="{{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}true{{else}}false{{end}}" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+<script src="/external-alliances.js"></script>
+{{end}}

@@ -2,23 +2,8 @@
 
 'use strict';
 
-// ── VS Themes (Mon=0 … Sun=6, game-fixed for all servers) ────────────────────
-const VS_THEMES = [
-    { label: 'Radar Training',     short: 'Radar',     icon: '📡' },
-    { label: 'Base Expansion',     short: 'Expand',    icon: '🏗️' },
-    { label: 'Age of Science',     short: 'Science',   icon: '🔬' },
-    { label: 'Train Heroes',       short: 'Heroes',    icon: '🦸' },
-    { label: 'Total Mobilization', short: 'Mobilize',  icon: '📦' },
-    { label: 'Enemy Buster',       short: 'Enemy',     icon: '💥' },
-    { label: 'Alliance Star',      short: 'Celebrate', icon: '⭐' },
-];
-
-function getVSTheme(dateStr) {
-    // Game time = UTC-2; VS resets on Monday game time.
-    // Adding 2h to UTC gives game time; UTCDay+6)%7 → Mon=0…Sun=6
-    const d = new Date(dateStr + 'T02:00:00Z');
-    return VS_THEMES[(d.getUTCDay() + 6) % 7];
-}
+// VS_THEMES + getVSTheme moved to static/global.js (single source of truth, shared with
+// the VS Duel League page). global.js loads before this script, so both are in scope here.
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const cfg = document.getElementById('page-config') ? document.getElementById('page-config').dataset : {};
