@@ -1105,7 +1105,7 @@ function drawWeekImage() {
     const padX  = 14;
     const hdrH  = 62;
     const rowH  = 24;
-    const banH  = 22;   // server-event banner strip
+    const banLineH = 14;   // one line per server event in the banner strip
     const gap   = 8;
     const rowGap = 14;
     const font  = 'Segoe UI, Tahoma, Verdana, sans-serif';
@@ -1118,6 +1118,17 @@ function drawWeekImage() {
         if (dow === 4) n += 2;
         if (n > maxEvts) maxEvts = n;
     });
+
+    // Server-event strip is uniform across the week so cards in a row align;
+    // size it to the busiest day (one line per server event). With banLineH=14
+    // a 0-or-1-event day keeps the original 22px strip.
+    let maxSeLines = 0;
+    dates.forEach(d => {
+        const n = serverEvents.filter(e => getServerEventOccurrencesInWeek(e, dates).has(d)).length;
+        if (n > maxSeLines) maxSeLines = n;
+    });
+    const banH = Math.max(1, maxSeLines) * banLineH + 8;
+
     const colH   = banH + gap + hdrH + gap + Math.max(maxEvts, 1) * rowH + gap * 2;
     const totalW = numCols * colW + (numCols + 1) * gap;
     const totalH = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + gap;
@@ -1168,9 +1179,17 @@ function drawWeekImage() {
             ctx.fillStyle = C.bannerText;
             ctx.font = '600 11px ' + font;
             ctx.textAlign = 'center';
-            const bFull  = seBanners.map(e => e.icon + ' ' + e.name).join('  ');
-            const bShort = seBanners.map(e => e.icon + ' ' + e.short_name).join('  ');
-            ctx.fillText(fitText(bFull, bShort, colW - 10), x + colW / 2, y + banH - 5, colW - 10);
+            // One server event per line — full name, dropping to the short name
+            // only when that single event overflows the column. The block is
+            // vertically centred within the uniform strip.
+            const bAvailW = colW - 10;
+            const blockH  = seBanners.length * banLineH;
+            let by = y + (banH - blockH) / 2 + banLineH - 4;
+            seBanners.forEach(e => {
+                ctx.fillText(fitText(e.icon + ' ' + e.name, e.icon + ' ' + e.short_name, bAvailW),
+                    x + colW / 2, by, bAvailW);
+                by += banLineH;
+            });
         }
 
         // Header — accent gradient
@@ -1292,7 +1311,9 @@ function drawDayCard(dateStr) {
 
     // ── Dynamic height ─────────────────────────────────────────────────────
     const hdrH    = 80;
-    const banH    = seBanners.length ? 28 : 0;
+    const banLineH = 18;   // one line per server event in the banner
+    const banRectH = seBanners.length * banLineH + 8;
+    const banH    = seBanners.length ? banRectH + 6 : 0;
     const evtRowH = 28;
     const noteLineH = 15;
     const W = 600;
@@ -1434,15 +1455,21 @@ function drawDayCard(dateStr) {
     // ── Server event banner (bottom) ───────────────────────────────────────
     if (seBanners.length) {
         ctx.fillStyle = C.bannerBg;
-        roundRect(ctx, pad, y, W - pad * 2, 22, 5);
+        roundRect(ctx, pad, y, W - pad * 2, banRectH, 5);
         ctx.fill();
         ctx.fillStyle = C.bannerText;
         ctx.font = '600 12px ' + font;
         ctx.textAlign = 'center';
+        // One server event per line — full name, dropping to the short name
+        // only when that single event overflows the line width.
         const bAvailW = W - pad * 2 - 10;
-        const bFull   = seBanners.map(e => e.icon + ' ' + e.name).join('  ');
-        const bShort  = seBanners.map(e => e.icon + ' ' + e.short_name).join('  ');
-        ctx.fillText(ctx.measureText(bFull).width <= bAvailW ? bFull : bShort, W / 2, y + 15);
+        let by = y + 13;
+        seBanners.forEach(e => {
+            const full  = e.icon + ' ' + e.name;
+            const short = e.icon + ' ' + e.short_name;
+            ctx.fillText(ctx.measureText(full).width <= bAvailW ? full : short, W / 2, by, bAvailW);
+            by += banLineH;
+        });
     }
 }
 
