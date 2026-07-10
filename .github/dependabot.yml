@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # Go modules — weekly security + version alerts
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    ignore:
+      # Ignore major version bumps — review manually for breaking changes
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Docker base image — weekly digest/version alerts
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    labels:
+      - dependencies
+
+  # GitHub Actions — keep workflow actions current
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    labels:
+      - dependencies
