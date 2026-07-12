@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -345,16 +346,32 @@ func refreshNAP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Member counts are NOT on the ladder endpoint — only on the per-alliance detail record. So
-	// enriching them costs one extra upstream request per imported alliance, serialized by the
-	// shared 1 req/sec limiter. That is why the import limit matters: it is the bound on this.
-	// Still done BEFORE db.Begin() — the connection must not be held across the network.
-	members := fetchNAPMemberCounts(r.Context(), rowsIn)
+	// ---- Everything above can still fail with a normal HTTP status. Below here we stream. ----
+	//
+	// Member enrichment takes roughly one second per alliance (the shared 1 req/sec limiter), so a
+	// default import runs ~15s. A silent 15-second wait is indistinguishable from a hang, so report
+	// real progress as it happens rather than leaving the client guessing — the server knows exactly
+	// how many alliances there are and which one it is on.
+	//
+	// NDJSON over the existing POST: one JSON object per line, flushed as it is written. No job
+	// table, no polling endpoint, and it works with POST (EventSource would not).
+	//
+	// The cost of streaming is that the status code is committed before the DB write happens, so a
+	// write failure has to be reported in-band as a final {"stage":"error"} line. That is the only
+	// error that can occur past this point — every other failure path already returned above.
+	emit := newNDJSONEmitter(w)
+	emit(map[string]any{"stage": "ladder", "total": len(rowsIn)})
+
+	members := fetchNAPMemberCounts(r.Context(), rowsIn, func(done, total int, tag string) {
+		emit(map[string]any{"stage": "members", "done": done, "total": total, "tag": tag})
+	})
+
+	emit(map[string]any{"stage": "saving"})
 
 	recorded, scrubbed, err := applyNAPLadder(cfg, rowsIn, capturedAt, ourID, ourTag, members)
 	if err != nil {
 		slog.Error("refreshNAP: write failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		emit(map[string]any{"stage": "error", "message": "Database error"})
 		return
 	}
 
@@ -366,11 +383,35 @@ func refreshNAP(w http.ResponseWriter, r *http.Request) {
 	logActivity(actor.ID, actor.Username, "imported", "alliance_stats", fmt.Sprintf("server %d ladder", cfg.server), false,
 		fmt.Sprintf("%d alliances; %d new datapoints; captured %s", len(rowsIn), recorded, capturedAt))
 
-	writeJSON(w, map[string]any{
+	emit(map[string]any{
+		"stage":       "done",
 		"alliances":   len(rowsIn),
 		"recorded":    recorded,
 		"captured_at": capturedAt,
 	})
+}
+
+// newNDJSONEmitter returns a function that writes one JSON object per line and flushes it
+// immediately, so the client sees progress as it happens instead of in one lump at the end.
+//
+// X-Accel-Buffering: no stops a reverse proxy from buffering the whole response and defeating the
+// point (the production deployment sits behind Caddy).
+func newNDJSONEmitter(w http.ResponseWriter) func(any) {
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	enc := json.NewEncoder(w) // Encode() already terminates each value with a newline
+	flusher, canFlush := w.(http.Flusher)
+	return func(v any) {
+		if err := enc.Encode(v); err != nil {
+			return // client hung up; the work still completes and commits
+		}
+		if canFlush {
+			flusher.Flush()
+		}
+	}
 }
 
 // fetchNAPMemberCounts enriches each ladder row with its member count, keyed by lastrank id.
@@ -383,28 +424,32 @@ func refreshNAP(w http.ResponseWriter, r *http.Request) {
 // Best-effort by design: a failed lookup yields no entry, the upsert's COALESCE leaves whatever
 // member count we already had, and the tab shows an em dash. A member count is a nice-to-have —
 // it must never sink an otherwise good ladder refresh.
-func fetchNAPMemberCounts(ctx context.Context, rows []VSLeagueAllianceSearchResult) map[string]int {
+// onProgress is called after each alliance is attempted, so the caller can report real progress
+// rather than a guess. It fires whether the lookup succeeded or failed — it tracks how far through
+// the queue we are, not how many counts we got.
+func fetchNAPMemberCounts(ctx context.Context, rows []VSLeagueAllianceSearchResult, onProgress func(done, total int, tag string)) map[string]int {
 	// Budget the whole enrichment pass rather than each call: the limiter, not the network, is the
 	// slow part, and one stalled alliance shouldn't consume the allowance of the rest.
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(len(rows)+15)*time.Second)
 	defer cancel()
 
 	out := make(map[string]int, len(rows))
-	for _, row := range rows {
-		if row.LastRankID == "" {
-			continue
-		}
+	for i, row := range rows {
 		if ctx.Err() != nil {
 			slogLastRank("refreshNAP: member enrichment cut short", ctx.Err())
 			break
 		}
-		a, err := fetchLastRankAlliance(ctx, row.LastRankID)
-		if err != nil {
-			slogLastRank("refreshNAP: member count lookup failed", err)
-			continue
+		if row.LastRankID != "" {
+			a, err := fetchLastRankAlliance(ctx, row.LastRankID)
+			switch {
+			case err != nil:
+				slogLastRank("refreshNAP: member count lookup failed", err)
+			case a.CurMember > 0:
+				out[strings.ToLower(row.LastRankID)] = a.CurMember
+			}
 		}
-		if a.CurMember > 0 {
-			out[strings.ToLower(row.LastRankID)] = a.CurMember
+		if onProgress != nil {
+			onProgress(i+1, len(rows), deref(row.Tag))
 		}
 	}
 	return out

@@ -44,7 +44,10 @@
                 <span id="nap-captured" class="nap-captured"></span>
             </div>
             {{if .Permissions.ManageAllies}}
-            <button type="button" id="nap-refresh-btn" class="btn btn-secondary btn-sm">Refresh from LastRank</button>
+            <div class="nap-refresh-group">
+                <button type="button" id="nap-refresh-btn" class="btn btn-secondary btn-sm">Refresh from LastRank</button>
+                <span id="nap-refresh-status" class="nap-refresh-status" aria-live="polite"></span>
+            </div>
             {{end}}
         </div>
         <div id="nap-list"></div>

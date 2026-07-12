@@ -673,20 +673,54 @@ function formatCompact(n) {
 }
 
 async function refreshNap(btn) {
+    // Re-entry guard. A disabled button won't dispatch a click in a browser, but if this were ever
+    // invoked twice the second call would capture "Refreshing…" as the original label and never
+    // restore it — and it would fire a second upstream run against the rate limiter.
+    if (btn.disabled) return;
+
     const original = btn.textContent;
+    const status = document.getElementById('nap-refresh-status');
     btn.disabled = true;
     btn.textContent = 'Refreshing…';
+    setNapProgress(status, 'Contacting LastRank…', 0, 0);
+
     try {
         const res = await fetch('/api/allies/nap/refresh', { method: 'POST' });
-        const body = await res.json().catch(() => ({}));
+
+        // Failures that happen before the work starts (not configured, LastRank unreachable, empty
+        // ladder) still come back as a normal error status with a plain-text body.
         if (!res.ok) {
-            showToast(body.error || 'Could not refresh from LastRank.', 'error');
+            const msg = (await res.text().catch(() => '')).trim();
+            showToast(msg || 'Could not refresh from LastRank.', 'error');
             return;
         }
+
+        // Past that point the server streams NDJSON progress, because enriching member counts costs
+        // ~1s per alliance and a silent 15-second wait is indistinguishable from a hang.
+        let done = null;
+        let failed = null;
+        await readNDJSON(res, ev => {
+            if (ev.stage === 'ladder') {
+                setNapProgress(status, `Reading member counts for ${ev.total} alliances…`, 0, ev.total);
+            } else if (ev.stage === 'members') {
+                const who = ev.tag ? ` (${ev.tag})` : '';
+                setNapProgress(status, `Reading member counts… ${ev.done} of ${ev.total}${who}`, ev.done, ev.total);
+            } else if (ev.stage === 'saving') {
+                setNapProgress(status, 'Saving…', 1, 1);
+            } else if (ev.stage === 'done') {
+                done = ev;
+            } else if (ev.stage === 'error') {
+                failed = ev.message || 'Refresh failed.';
+            }
+        });
+
+        if (failed) { showToast(failed, 'error'); return; }
+        if (!done) { showToast('The refresh was interrupted before it finished.', 'error'); return; }
+
         // Distinguish "we fetched and nothing had changed" from "we updated things" — reporting an
         // update that didn't happen is worse than saying nothing.
-        showToast(body.recorded > 0
-            ? `Updated ${body.alliances} alliances (${body.recorded} new datapoints).`
+        showToast(done.recorded > 0
+            ? `Updated ${done.alliances} alliances (${done.recorded} new datapoints).`
             : 'Already up to date.');
         await loadNap();
     } catch {
@@ -694,5 +728,46 @@ async function refreshNap(btn) {
     } finally {
         btn.disabled = false;
         btn.textContent = original;
+        setNapProgress(status, '', 0, 0);
     }
+}
+
+// Read a newline-delimited JSON stream, dispatching each complete line as it arrives. Buffers the
+// tail because a chunk boundary can land mid-line.
+async function readNDJSON(res, onEvent) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();                     // keep the partial line for the next chunk
+        for (const line of lines) {
+            const t = line.trim();
+            if (!t) continue;
+            try { onEvent(JSON.parse(t)); } catch { /* ignore a malformed line */ }
+        }
+    }
+    const t = buf.trim();
+    if (t) { try { onEvent(JSON.parse(t)); } catch { /* ignore */ } }
+}
+
+// Progress is real, not a guess: the server reports which alliance it is on out of how many.
+function setNapProgress(el, text, done, total) {
+    if (!el) return;
+    if (!text) { el.replaceChildren(); return; }
+
+    const label = document.createElement('span');
+    label.textContent = text;
+
+    const bar = document.createElement('span');
+    bar.className = 'nap-progress';
+    const fill = document.createElement('span');
+    fill.className = 'nap-progress-fill';
+    fill.style.width = total > 0 ? Math.round((done / total) * 100) + '%' : '0%';
+    bar.appendChild(fill);
+
+    el.replaceChildren(label, bar);
 }

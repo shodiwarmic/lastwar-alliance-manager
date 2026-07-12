@@ -256,3 +256,41 @@
     background: var(--color-success-bg);
     color: var(--color-success);
 }
+
+/* Refresh progress. The member-count pass costs ~1s per alliance (the shared LastRank rate limit),
+   so a refresh takes ~15s at the default import limit — long enough that silence reads as a hang.
+   The bar is driven by real server-reported counts, never an estimate. */
+.nap-refresh-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.nap-refresh-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--color-text-mid);
+}
+
+.nap-refresh-status:empty {
+    display: none;
+}
+
+.nap-progress {
+    display: block;
+    width: 110px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-border);
+    overflow: hidden;
+}
+
+.nap-progress-fill {
+    display: block;
+    height: 100%;
+    background: var(--color-accent);
+    transition: width 0.25s ease;
+}
