@@ -31,6 +31,11 @@
                             <span class="help-text">Short tag shown beside the app subtitle (e.g. [WARMC] · Alliance Manager). Leave blank to hide.</span>
                         </div>
                         <div class="form-group">
+                            <label for="our-server-id">Our Server Number:</label>
+                            <input type="number" id="our-server-id" class="form-input" min="1" placeholder="e.g. 1712">
+                            <span class="help-text">The game server your alliance plays on. Powers the NAP tab on the Allies page, and defaults the server filter when searching for external alliances.</span>
+                        </div>
+                        <div class="form-group">
                             <label for="lastrank-alliance-id">LastRank Alliance ID:</label>
                             <input type="text" id="lastrank-alliance-id" class="form-input" placeholder="7dd57e38b63d4a3989a0f603156398b3">
                             <span id="lastrank-alliance-view" class="help-text" style="display:block;"></span>
@@ -48,6 +53,20 @@
                                     </ol>
                                 </details>
                             </span>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-handshake"/></svg> Non-Aggression Pact</h4>
+                        <div class="form-group">
+                            <label for="nap-size">NAP Size (top alliances):</label>
+                            <input type="number" id="nap-size" class="form-input" min="1" max="50">
+                            <span class="help-text">How many of the top alliances on your server the pact covers, <strong>including your own</strong>. A size of 10 means you plus nine partners.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="nap-import-limit">Alliances to Import:</label>
+                            <input type="number" id="nap-import-limit" class="form-input" min="1" max="50">
+                            <span class="help-text">How many alliances to pull from LastRank, starting from the top. Set this a little above the NAP size to see who is sitting just below the line. Servers have 50+ alliances — importing them all adds clutter with no benefit.</span>
                         </div>
                     </div>
 

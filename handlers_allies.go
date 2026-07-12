@@ -76,6 +76,85 @@ func isOwnAlliance(lastrankID, tag string) bool {
 	return false
 }
 
+// scrubOwnAllianceFromRegistryTx removes any external_alliances row that is actually US, and
+// returns how many were deleted. Migration 058 purges the pre-existing row, but an officer can
+// re-add us at any time (createExternalAlliance / lookupExternalAlliance), so the invariant has to
+// be re-assertable rather than enforced once.
+//
+// Matches on lastrank_id OR tag: a manually-created row has a NULL lastrank_id, so an id-only
+// scrub would miss it. When server > 0 the tag half is scoped to that server (or an unknown one) —
+// tags are reusable over time (migration 057), so an unscoped tag match could delete a legitimately
+// cached cross-server VS opponent that happens to hold a tag we once used.
+//
+// References are detached before the delete because FKs are not enforced app-wide: a bare DELETE
+// would leave dangling ids behind. Note this deliberately differs from deleteExternalAlliance,
+// which REFUSES with 409 when an ally references the row — blocking here would strand the invariant.
+func scrubOwnAllianceFromRegistryTx(tx *sql.Tx, lastrankID, tag string, server int) (int, error) {
+	lastrankID, tag = strings.TrimSpace(lastrankID), strings.TrimSpace(tag)
+	if lastrankID == "" && tag == "" {
+		return 0, nil
+	}
+
+	// Resolve the victim ids first, so the detach and the delete agree on exactly one set.
+	var ids []int64
+	rows, err := tx.Query(`SELECT id FROM external_alliances
+		WHERE (? != '' AND lastrank_id IS NOT NULL AND lastrank_id = ? COLLATE NOCASE)
+		   OR (? != '' AND TRIM(COALESCE(tag, '')) != '' AND tag = ? COLLATE NOCASE
+		       AND (? = 0 OR server IS NULL OR server = ?))`,
+		lastrankID, lastrankID, tag, tag, server, server)
+	if err != nil {
+		return 0, err
+	}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	// Close before the writes below: SetMaxOpenConns(1) means an open rows cursor deadlocks the
+	// next statement on this transaction.
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	for _, id := range ids {
+		if _, err := tx.Exec(`UPDATE prospects SET source_alliance_id = NULL WHERE source_alliance_id = ?`, id); err != nil {
+			return 0, err
+		}
+		if _, err := tx.Exec(`UPDATE allies SET external_alliance_id = NULL WHERE external_alliance_id = ?`, id); err != nil {
+			return 0, err
+		}
+		if _, err := tx.Exec(`DELETE FROM external_alliances WHERE id = ?`, id); err != nil {
+			return 0, err
+		}
+	}
+	return len(ids), nil
+}
+
+// scrubOwnAllianceFromRegistry is scrubOwnAllianceFromRegistryTx in its own transaction, for
+// callers that aren't already inside one.
+func scrubOwnAllianceFromRegistry(lastrankID, tag string, server int) (int, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	n, err := scrubOwnAllianceFromRegistryTx(tx, lastrankID, tag, server)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // findOrCreateExternalAllianceTx returns the external_alliances registry id for an alliance
 // identity, deduping by tag (globally unique at a moment) then name — creating a row if none
 // exists and refreshing name/server on an existing one. Server is parsed from text

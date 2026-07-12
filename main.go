@@ -62,13 +62,17 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCP)
 	data.HasGCPCredentials = hasGCP
 
-	// Load alliance identity for the sidebar brand
+	// Load alliance identity for the sidebar brand, plus our server number (used by the NAP tab and
+	// to default the external-alliance search filter). Extends this existing query rather than
+	// adding another settings round-trip.
 	var allianceName, allianceTag string
+	var ourServerID int
 	db.QueryRow(
-		"SELECT COALESCE(alliance_name, ''), COALESCE(alliance_tag, '') FROM settings WHERE id = 1",
-	).Scan(&allianceName, &allianceTag)
+		"SELECT COALESCE(alliance_name, ''), COALESCE(alliance_tag, ''), COALESCE(our_server_id, 0) FROM settings WHERE id = 1",
+	).Scan(&allianceName, &allianceTag, &ourServerID)
 	data.AllianceName = allianceName
 	data.AllianceTag = allianceTag
+	data.OurServerID = ourServerID
 
 	// NEW: Check if the CV Worker URL is configured + which OCR backend is active
 	var cvWorkerURL, ocrMode string

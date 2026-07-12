@@ -350,6 +350,14 @@ type Settings struct {
 	// LastRankAllianceID is the 32-char hex id for the alliance on lastrank.fun,
 	// used by the Phase-1 sync. Empty by default (operator pastes it in Settings).
 	LastRankAllianceID string `json:"lastrank_alliance_id"`
+	// OurServerID is the game server we play on. 0 = not configured.
+	OurServerID int `json:"our_server_id"`
+	// NAPSize is how many top alliances on our server the Non-Aggression Pact covers,
+	// INCLUDING us — a size of 10 means us plus nine partners.
+	NAPSize int `json:"nap_size"`
+	// NAPImportLimit is how many alliances to fetch and cache from the LastRank ladder,
+	// starting from the top. >= NAPSize, so the NAP tab can show who sits just below the line.
+	NAPImportLimit int `json:"nap_import_limit"`
 }
 
 type StormAssignment struct {
@@ -1128,6 +1136,8 @@ type PageData struct {
 	OCRBackendMode string
 	AllianceName   string
 	AllianceTag    string
+	// OurServerID is the game server we play on (0 = not configured). Available on every page.
+	OurServerID int
 	SkillLabels    map[string]string
 	// LastRank avatar for the logged-in user's linked member, shown in the
 	// sidebar user tile (falls back to initials when empty or blocked).

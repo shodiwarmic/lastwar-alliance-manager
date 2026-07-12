@@ -228,16 +228,18 @@ OCR-vs-CSV split is carried by a `source` field on the import commit payloads
 
 ## History table source provenance
 
-The `source TEXT NOT NULL DEFAULT 'manual'` column lives on these six history
-tables — `power_history`, `hero_power_history`, `kill_history`,
-`squad_power_history` (source added in `050_lastrank.sql`), and
+The `source TEXT NOT NULL DEFAULT 'manual'` column lives on these seven history
+tables. Six are **member-level** — `power_history`, `hero_power_history`,
+`kill_history`, `squad_power_history` (source added in `050_lastrank.sql`), and
 `hq_level_history`, `profession_level_history` (created with the column in
-`055_career_hq_history.sql`). It records how each row was created:
+`055_career_hq_history.sql`). One is **alliance-level** —
+`alliance_stats_history` (`058_our_server_and_nap.sql`). It records how each row
+was created:
 
 | Value | Meaning |
 |---|---|
 | `manual` | Entered by an officer via the UI (also the default for pre-migration rows, which can't be reclassified) |
-| `lastrank` | Synced from the LastRank.fun per-player endpoint |
+| `lastrank` | Synced from LastRank.fun (the per-player endpoint, or the per-server alliance ladder) |
 | `ocr` | Extracted from an uploaded screenshot |
 | `csv` | Imported via CSV file |
 | `mobile` | Submitted by the Android scanner app |
@@ -245,6 +247,47 @@ tables — `power_history`, `hero_power_history`, `kill_history`,
 Every new write path must stamp its true source; `provenanceSource()`
 normalizes a client-declared origin. No other history/state tables carry a
 `source` column — don't assume one on tables outside this list.
+
+> **`alliance_stats_history` is keyed on `external_alliance_id`, not
+> `lastrank_id`.** LastRank is *a source, not a required service*: a datapoint may
+> equally come from OCR, CSV, mobile, or an officer typing it in, and none of those
+> have a `lastrank_id` — keying on it would make those rows unstorable and
+> contradict the `source` column. `lastrank_id` is a nullable reference attribute,
+> exactly as migration `057` specifies for the registry itself. Every ingest path
+> must therefore resolve its alliance into `external_alliances` first (via
+> `findOrCreateExternalAllianceTx`), which mints the subject key.
+>
+> **Our own alliance is the one subject with no registry row** — see the Rule 2 note
+> below — so its series is identified by `is_own = 1` with a NULL
+> `external_alliance_id`, enforced by a `CHECK`. Beware: `INSERT OR IGNORE` (used for
+> capture idempotency) silently swallows `CHECK` violations too, so assert the
+> registry id is valid *before* inserting rather than letting `OR IGNORE` mask a bug.
+
+## Our own alliance must never be in `external_alliances` (Rule 2)
+
+`external_alliances` is a registry of **external** alliances. It feeds the VS League
+opponent picker, the prospect source-alliance field, and ally prefill — so a row for
+our own alliance would let an officer pick their own alliance as a VS opponent.
+
+This is an invariant to **enforce**, not merely maintain: "stop inserting" is not the
+same as "not present". It is upheld at four points:
+
+1. `findOrCreateExternalAllianceTx` refuses to mint a row whose tag is ours (an ally or
+   prospect carrying our tag still saves — it just gets no registry link).
+2. `cacheExternalAlliance` refuses to cache us (reachable by pasting our own LastRank
+   URL into the VS opponent field).
+3. `updateSettings` scrubs the registry when the LastRank alliance **id** changes — the
+   new identity may already be cached from when it was somebody else. Deliberately
+   id-only: scrubbing by tag on a settings save would let a tag typo delete an innocent
+   alliance's row.
+4. The NAP refresh re-asserts the scrub as a backstop.
+
+Use `isOwnAlliance(lastrankID, tag)` for the test and `scrubOwnAllianceFromRegistry` for
+the removal. Both sides of any comparison must be non-empty — an empty configured tag
+matching a blank upstream `abbr` would brand a *foreign* alliance as us. Note the scrub
+**detaches** ally/prospect references before deleting, unlike `deleteExternalAlliance`,
+which refuses with 409 when an ally references the row (blocking would strand the
+invariant).
 
 > **HQ level & profession level are history-only.** There is no `members.level`
 > column (dropped in `055`; seeded into `hq_level_history` first) and no
