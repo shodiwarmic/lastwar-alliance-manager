@@ -178,6 +178,10 @@
 }
 
 /* ── NAP tab ───────────────────────────────────────────────────────────────── */
+/* The ladder uses the global .data-table — no bespoke table styling. In particular nothing here
+   may set `display` on a <td>: a table cell with display:flex stops being a table-cell and drops
+   out of the column layout algorithm, so the columns silently stop lining up. Spacing inside a
+   cell is done with an inline-flex wrapper element, the same way .row-actions does it. */
 
 .nap-bar {
     align-items: flex-start;
@@ -189,45 +193,36 @@
     flex-direction: column;
     gap: 2px;
     font-size: 0.9rem;
-    color: var(--text-secondary);
+    color: var(--color-text-mid);
 }
 
 .nap-captured {
     font-size: 0.8rem;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
 }
 
-.nap-table .nap-rank {
-    width: 3.5rem;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    color: var(--text-secondary);
-}
-
+/* Numeric columns: right-aligned with tabular figures so the digits stack. */
 .nap-table .nap-num {
     text-align: right;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
 
-/* The card layout gets its spacing from .ally-header-row's flex gap; a table cell has none, so
-   the tag would butt straight up against the name (and the ally badge against its pills). */
-.nap-table .nap-alliance,
-.nap-table .nap-status {
-    display: flex;
+/* Inline-flex WRAPPER inside the cell — never on the cell itself. */
+.nap-cell {
+    display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 6px;
 }
 
-/* Our own alliance. It is spliced in from the stats history, not the registry — it must never be
-   a registry row (see Rule 2) — but it still belongs in the ladder for context. */
+/* Our own alliance: spliced in from the stats history (it must never be a registry row), but it
+   still belongs in the ladder for context. */
 .nap-table tr.nap-us {
-    background: var(--color-info-bg);
+    background: var(--color-accent-bg);
 }
 
-/* Below the NAP line: still useful context (who is about to climb into the pact), but not part of
-   the pact itself. */
+/* Below the NAP line: useful context (who is climbing toward the pact), but not in it. */
 .nap-table tr.nap-below-line td {
     opacity: 0.6;
 }
@@ -235,14 +230,12 @@
 .nap-table tr.nap-divider td {
     padding: 4px 12px;
     text-align: center;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--color-primary);
-    background: var(--bg-secondary);
-    border-top: 2px dashed var(--color-primary);
-    border-bottom: 2px dashed var(--color-primary);
+    color: var(--color-accent);
+    background: var(--color-accent-bg);
 }
 
 .nap-badge {
@@ -255,8 +248,8 @@
 }
 
 .nap-badge-us {
-    background: var(--color-info-bg);
-    color: var(--color-info);
+    background: var(--color-accent-bg);
+    color: var(--color-accent);
 }
 
 .nap-badge-ally {

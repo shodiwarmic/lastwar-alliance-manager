@@ -523,7 +523,7 @@ function renderNap(data) {
 
     const thead = document.createElement('thead');
     const hrow = document.createElement('tr');
-    ['#', 'Alliance', 'Power', 'Kills', 'Status'].forEach(h => {
+    ['#', 'Alliance', 'Power', 'Kills', 'Members', 'Status'].forEach(h => {
         const th = document.createElement('th');
         th.textContent = h;
         hrow.appendChild(th);
@@ -557,22 +557,26 @@ function renderNapRow(a) {
     if (!a.in_nap) tr.classList.add('nap-below-line');
 
     const rank = document.createElement('td');
-    rank.className = 'nap-rank';
-    rank.textContent = a.rank == null ? '—' : String(a.rank);
+    rank.className = 'nap-num';
+    rank.textContent = a.rank == null ? '\u2014' : String(a.rank);
     tr.appendChild(rank);
 
+    // An inline-flex wrapper INSIDE the cell. Setting display on the <td> itself would take it out
+    // of the table layout and the columns would stop lining up.
     const alliance = document.createElement('td');
-    alliance.className = 'nap-alliance';
+    const wrap = document.createElement('span');
+    wrap.className = 'nap-cell';
     if (a.tag) {
         const tag = document.createElement('span');
         tag.className = 'ally-tag';
         tag.textContent = `[${a.tag}]`;
-        alliance.appendChild(tag);
+        wrap.appendChild(tag);
     }
     const name = document.createElement('span');
     name.className = 'ally-name';
     name.textContent = a.name || '(unnamed)';
-    alliance.appendChild(name);
+    wrap.appendChild(name);
+    alliance.appendChild(wrap);
     tr.appendChild(alliance);
 
     const power = document.createElement('td');
@@ -585,19 +589,28 @@ function renderNapRow(a) {
     kills.textContent = formatCompact(a.kills);
     tr.appendChild(kills);
 
+    // Members is not on the ladder endpoint — it comes from the per-alliance detail call the
+    // refresh makes. An alliance we have never enriched shows an em dash rather than a fake 0.
+    const members = document.createElement('td');
+    members.className = 'nap-num';
+    members.textContent = a.member_count == null ? '\u2014' : String(a.member_count);
+    tr.appendChild(members);
+
     tr.appendChild(renderNapStatus(a));
     return tr;
 }
 
 function renderNapStatus(a) {
     const td = document.createElement('td');
-    td.className = 'nap-status';
+    const wrap = document.createElement('span');
+    wrap.className = 'nap-cell';
+    td.appendChild(wrap);
 
     if (a.is_us) {
         const badge = document.createElement('span');
         badge.className = 'nap-badge nap-badge-us';
         badge.textContent = 'Us';
-        td.appendChild(badge);
+        wrap.appendChild(badge);
         return td;
     }
 
@@ -605,7 +618,7 @@ function renderNapStatus(a) {
         const badge = document.createElement('span');
         badge.className = 'nap-badge nap-badge-ally';
         badge.textContent = a.ally_active ? '✓ Ally' : 'Former ally';
-        td.appendChild(badge);
+        wrap.appendChild(badge);
 
         (a.agreement_type_ids || []).forEach(id => {
             const type = allTypes.find(t => t.id === id);
@@ -613,7 +626,7 @@ function renderNapStatus(a) {
             const pill = document.createElement('span');
             pill.className = 'agreement-pill';
             pill.textContent = type.name;
-            td.appendChild(pill);
+            wrap.appendChild(pill);
         });
         return td;
     }
@@ -629,7 +642,7 @@ function renderNapStatus(a) {
             name: a.name || '',
             server: OUR_SERVER_ID || '',
         }));
-        td.appendChild(btn);
+        wrap.appendChild(btn);
     }
     return td;
 }
@@ -638,7 +651,7 @@ function napDividerRow(napSize) {
     const tr = document.createElement('tr');
     tr.className = 'nap-divider';
     const td = document.createElement('td');
-    td.colSpan = 5;
+    td.colSpan = 6;
     td.textContent = `NAP line — top ${napSize}`;
     tr.appendChild(td);
     return tr;

@@ -7,6 +7,9 @@
     display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-weight: 700;
     padding: 2px 8px; border-radius: 20px;
 }
+/* NAP: on our own server and inside the pact. Uses the accent so it reads as "ours", distinct from
+   the relationship badges beside it. */
+.ext-badge.nap      { color: var(--color-accent);  background: var(--color-accent-bg); }
 .ext-badge.ally     { color: var(--color-success); background: var(--color-success-bg); }
 .ext-badge.former   { color: var(--color-text-muted); background: var(--color-bg); border: 1px solid var(--color-border); }
 .ext-badge.opponent { color: var(--color-danger);  background: var(--color-danger-bg); }

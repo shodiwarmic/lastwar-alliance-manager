@@ -553,8 +553,8 @@ type VSLeagueWeek struct {
 	StrategyResult *string `json:"strategy_result,omitempty"`
 	Notes          *string `json:"notes,omitempty"`
 	// Derived + children.
-	Standing    VSLeagueWeekStanding `json:"standing"`      // computed from days (or summary fields when no day rows)
-	SummaryOnly bool                 `json:"summary_only"`  // true = no day rows; our_points/opponent_points are stored inputs
+	Standing    VSLeagueWeekStanding `json:"standing"`     // computed from days (or summary fields when no day rows)
+	SummaryOnly bool                 `json:"summary_only"` // true = no day rows; our_points/opponent_points are stored inputs
 	Days        []VSLeagueDay        `json:"days"`
 	CreatedAt   string               `json:"created_at"`
 	UpdatedAt   string               `json:"updated_at"`
@@ -690,10 +690,16 @@ type ExternalAlliance struct {
 	// Relationship flags (computed for the External Alliances registry page).
 	AllyStatus    string `json:"ally_status"` // "active" | "former" | "never"
 	ProspectCount int    `json:"prospect_count"`
-	IsOpponent    bool `json:"is_opponent"` // we've faced them in VS League (decided or pending)
-	VSWins        int  `json:"vs_wins"`
-	VSLosses      int  `json:"vs_losses"`
-	VSTies        int  `json:"vs_ties"`
+	IsOpponent    bool   `json:"is_opponent"` // we've faced them in VS League (decided or pending)
+	VSWins        int    `json:"vs_wins"`
+	VSLosses      int    `json:"vs_losses"`
+	VSTies        int    `json:"vs_ties"`
+	// InNAP: this alliance is on our server and ranks inside the Non-Aggression Pact. Derived from
+	// our_server_id + nap_size + its ladder rank, so it is computed server-side — the client has no
+	// business re-deriving a rule that lives in Settings.
+	InNAP    bool `json:"in_nap"`
+	NAPRank  *int `json:"nap_rank,omitempty"` // ladder position on our server, when known
+	SameServ bool `json:"same_server"`        // on our server, whether or not inside the pact
 }
 
 type RankPermissions struct {
@@ -1144,7 +1150,7 @@ type PageData struct {
 	AllianceTag    string
 	// OurServerID is the game server we play on (0 = not configured). Available on every page.
 	OurServerID int
-	SkillLabels    map[string]string
+	SkillLabels map[string]string
 	// LastRank avatar for the logged-in user's linked member, shown in the
 	// sidebar user tile (falls back to initials when empty or blocked).
 	UserPhotoURL      string

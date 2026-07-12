@@ -56,6 +56,15 @@
 
     function relBadges(a) {
         const wrap = el('span', { className: 'ext-rel' });
+        // NAP first: it says this alliance sits inside our own server's pact, which frames every
+        // other relationship on the row.
+        if (a.in_nap) {
+            wrap.appendChild(el('span', {
+                className: 'ext-badge nap',
+                text: a.nap_rank ? 'NAP #' + a.nap_rank : 'NAP',
+                title: 'On our server and inside the Non-Aggression Pact',
+            }));
+        }
         if (a.ally_status === 'active') wrap.appendChild(el('span', { className: 'ext-badge ally', text: 'Ally' }));
         else if (a.ally_status === 'former') wrap.appendChild(el('span', { className: 'ext-badge former', text: 'Former ally' }));
         if (a.is_opponent) {
@@ -108,6 +117,8 @@
     function matchesRel(a, rels) {
         if (!rels.length || rels.includes('all')) return true;
         return rels.some(r =>
+            (r === 'nap' && a.in_nap) ||
+            (r === 'same-server' && a.same_server) ||
             (r === 'ally' && a.ally_status === 'active') ||
             (r === 'former' && a.ally_status === 'former') ||
             (r === 'opponent' && a.is_opponent) ||

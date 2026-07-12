@@ -39,7 +39,8 @@ type NAPAlliance struct {
 	Name             *string `json:"name"`
 	Power            *int64  `json:"power"`
 	Kills            *int64  `json:"kills"`
-	AllyID           *int    `json:"ally_id"` // non-nil → already an ally
+	MemberCount      *int    `json:"member_count"` // nil → never enriched; render as an em dash, not 0
+	AllyID           *int    `json:"ally_id"`      // non-nil → already an ally
 	AllyActive       bool    `json:"ally_active"`
 	AgreementTypeIDs []int   `json:"agreement_type_ids"`
 
@@ -127,7 +128,7 @@ func getNAP(w http.ResponseWriter, r *http.Request) {
 
 // loadRegistryLadder reads the cached ladder for our server, most-highly-ranked first.
 func loadRegistryLadder(cfg napConfig) ([]NAPAlliance, error) {
-	rows, err := db.Query(`SELECT id, COALESCE(power_rank, ?) AS rank, lastrank_id, tag, name, power, kills
+	rows, err := db.Query(`SELECT id, COALESCE(power_rank, ?) AS rank, lastrank_id, tag, name, power, kills, member_count
 		FROM external_alliances
 		WHERE server = ?
 		ORDER BY rank, power DESC
@@ -140,7 +141,7 @@ func loadRegistryLadder(cfg napConfig) ([]NAPAlliance, error) {
 	out := []NAPAlliance{}
 	for rows.Next() {
 		var a NAPAlliance
-		if err := rows.Scan(&a.ExternalID, &a.rank, &a.LastRankID, &a.Tag, &a.Name, &a.Power, &a.Kills); err != nil {
+		if err := rows.Scan(&a.ExternalID, &a.rank, &a.LastRankID, &a.Tag, &a.Name, &a.Power, &a.Kills, &a.MemberCount); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -155,11 +156,11 @@ func loadOwnLadderRow(server int) (NAPAlliance, bool) {
 	var a NAPAlliance
 	var rank sql.NullInt64
 	var recordedAt string
-	err := db.QueryRow(`SELECT tag, name, power, kills, power_rank, recorded_at
+	err := db.QueryRow(`SELECT tag, name, power, kills, power_rank, member_count, recorded_at
 		FROM alliance_stats_history
 		WHERE is_own = 1 AND server = ?
 		ORDER BY recorded_at DESC LIMIT 1`, server).
-		Scan(&a.Tag, &a.Name, &a.Power, &a.Kills, &rank, &recordedAt)
+		Scan(&a.Tag, &a.Name, &a.Power, &a.Kills, &rank, &a.MemberCount, &recordedAt)
 	if err != nil {
 		return a, false // never synced, or we sit below the import window — either way, not in the pact
 	}
@@ -344,7 +345,13 @@ func refreshNAP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recorded, scrubbed, err := applyNAPLadder(cfg, rowsIn, capturedAt, ourID, ourTag)
+	// Member counts are NOT on the ladder endpoint — only on the per-alliance detail record. So
+	// enriching them costs one extra upstream request per imported alliance, serialized by the
+	// shared 1 req/sec limiter. That is why the import limit matters: it is the bound on this.
+	// Still done BEFORE db.Begin() — the connection must not be held across the network.
+	members := fetchNAPMemberCounts(r.Context(), rowsIn)
+
+	recorded, scrubbed, err := applyNAPLadder(cfg, rowsIn, capturedAt, ourID, ourTag, members)
 	if err != nil {
 		slog.Error("refreshNAP: write failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -366,10 +373,47 @@ func refreshNAP(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// fetchNAPMemberCounts enriches each ladder row with its member count, keyed by lastrank id.
+//
+// The ladder endpoint doesn't carry member counts, so this is one GET per alliance — the shared
+// 1 req/sec limiter serializes them, which is precisely why nap_import_limit exists to bound it.
+// A refresh therefore costs 1 + nap_import_limit upstream requests and takes roughly that many
+// seconds.
+//
+// Best-effort by design: a failed lookup yields no entry, the upsert's COALESCE leaves whatever
+// member count we already had, and the tab shows an em dash. A member count is a nice-to-have —
+// it must never sink an otherwise good ladder refresh.
+func fetchNAPMemberCounts(ctx context.Context, rows []VSLeagueAllianceSearchResult) map[string]int {
+	// Budget the whole enrichment pass rather than each call: the limiter, not the network, is the
+	// slow part, and one stalled alliance shouldn't consume the allowance of the rest.
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(len(rows)+15)*time.Second)
+	defer cancel()
+
+	out := make(map[string]int, len(rows))
+	for _, row := range rows {
+		if row.LastRankID == "" {
+			continue
+		}
+		if ctx.Err() != nil {
+			slogLastRank("refreshNAP: member enrichment cut short", ctx.Err())
+			break
+		}
+		a, err := fetchLastRankAlliance(ctx, row.LastRankID)
+		if err != nil {
+			slogLastRank("refreshNAP: member count lookup failed", err)
+			continue
+		}
+		if a.CurMember > 0 {
+			out[strings.ToLower(row.LastRankID)] = a.CurMember
+		}
+	}
+	return out
+}
+
 // applyNAPLadder writes one ladder capture. Shaped as read-all-then-write-all: the capture guard
 // needs each row's existing lastrank_captured_at, and interleaving per-row reads with writes is
 // exactly the single-connection deadlock noted above.
-func applyNAPLadder(cfg napConfig, rowsIn []VSLeagueAllianceSearchResult, capturedAt, ourID, ourTag string) (recorded, scrubbed int, err error) {
+func applyNAPLadder(cfg napConfig, rowsIn []VSLeagueAllianceSearchResult, capturedAt, ourID, ourTag string, members map[string]int) (recorded, scrubbed int, err error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, 0, err
@@ -407,11 +451,18 @@ func applyNAPLadder(cfg napConfig, rowsIn []VSLeagueAllianceSearchResult, captur
 	for _, row := range rowsIn {
 		tag, name := deref(row.Tag), deref(row.Name)
 
+		// nil when the enrichment call failed or was cut short — COALESCE then preserves whatever
+		// member count we already had rather than blanking it.
+		var memberCount *int
+		if n, ok := members[strings.ToLower(row.LastRankID)]; ok {
+			memberCount = &n
+		}
+
 		if isOwnLadderRow(row, ourID, ourTag) {
 			// We are in the ladder but must not be in the registry. Record the datapoint, then make
 			// sure no registry row for us survives — migration 058 purged the pre-existing one, but
 			// an officer can re-add us at any time, so the invariant is re-asserted on every sync.
-			n, ierr := insertOwnStats(tx, cfg.server, row, capturedAt)
+			n, ierr := insertOwnStats(tx, cfg.server, row, capturedAt, memberCount)
 			if ierr != nil {
 				return 0, 0, ierr
 			}
@@ -428,7 +479,7 @@ func applyNAPLadder(cfg napConfig, rowsIn []VSLeagueAllianceSearchResult, captur
 
 		// Never let a stale capture walk back a current value. A brand-new row, or one with no
 		// recorded capture date, always applies.
-		stats := &externalAllianceStats{LastRankID: &row.LastRankID, CapturedAt: &capturedAt}
+		stats := &externalAllianceStats{LastRankID: &row.LastRankID, CapturedAt: &capturedAt, MemberCount: memberCount}
 		if p, ok := prior[strings.ToLower(row.LastRankID)]; !ok || lastRankCaptureNewer(capturedAt, p.capturedAt) {
 			stats.Power, stats.Kills = row.Power, row.Kills
 			stats.PowerRank, stats.KillsRank = row.PowerRank, row.KillsRank
@@ -452,7 +503,7 @@ func applyNAPLadder(cfg napConfig, rowsIn []VSLeagueAllianceSearchResult, captur
 			return 0, 0, fmt.Errorf("registry upsert returned no id for alliance %q", row.LastRankID)
 		}
 
-		n, ierr := insertLadderStats(tx, eaID.Int64, cfg.server, row, capturedAt)
+		n, ierr := insertLadderStats(tx, eaID.Int64, cfg.server, row, capturedAt, memberCount)
 		if ierr != nil {
 			return 0, 0, ierr
 		}
@@ -501,32 +552,64 @@ func isOwnLadderRow(row VSLeagueAllianceSearchResult, ourID, ourTag string) bool
 // RowsAffected rather than assuming 1 is load-bearing: a re-run of the same capture is ignored by
 // the partial unique index, and counting it anyway would make the UI claim an update that never
 // happened.
-func insertOwnStats(tx *sql.Tx, server int, row VSLeagueAllianceSearchResult, capturedAt string) (int, error) {
+func insertOwnStats(tx *sql.Tx, server int, row VSLeagueAllianceSearchResult, capturedAt string, memberCount *int) (int, error) {
 	// Carry the full snapshot: the read splices our row with `is_own = 1 AND server = ?`, so a
 	// minimal insert without the server would silently break it.
 	res, err := tx.Exec(`INSERT OR IGNORE INTO alliance_stats_history
-		(external_alliance_id, is_own, lastrank_id, server, tag, name, power, kills, power_rank, kills_rank, recorded_at, source)
-		VALUES (NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(external_alliance_id, is_own, lastrank_id, server, tag, name, power, kills, power_rank, kills_rank, member_count, recorded_at, source)
+		VALUES (NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		nullStr(row.LastRankID), server, row.Tag, row.Name,
-		row.Power, row.Kills, row.PowerRank, row.KillsRank, capturedAt, provenanceSource("lastrank"))
+		row.Power, row.Kills, row.PowerRank, row.KillsRank, memberCount, capturedAt, provenanceSource("lastrank"))
 	if err != nil {
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
+
+	// Backfill a member count that arrived late. INSERT OR IGNORE leaves an existing row untouched,
+	// and our own row has no registry entry to fall back on (Rule 2) — so without this, a member
+	// count fetched after the capture was first recorded could never land, and a failed enrichment
+	// would be stuck NULL forever. Only fills a hole; never overwrites a recorded value.
+	if err := backfillMemberCount(tx, `is_own = 1 AND recorded_at = ? AND source = ?`,
+		memberCount, capturedAt, provenanceSource("lastrank")); err != nil {
+		return 0, err
+	}
 	return int(n), nil
 }
 
-func insertLadderStats(tx *sql.Tx, eaID int64, server int, row VSLeagueAllianceSearchResult, capturedAt string) (int, error) {
-	// member_count is deliberately absent: the ladder endpoint doesn't return it.
+// backfillMemberCount fills member_count on an already-recorded history row, and only when it is
+// still NULL — a datapoint we already have is never rewritten.
+func backfillMemberCount(tx *sql.Tx, where string, memberCount *int, args ...any) error {
+	if memberCount == nil {
+		return nil
+	}
+	q := `UPDATE alliance_stats_history SET member_count = ? WHERE member_count IS NULL AND ` + where
+	return execIgnoreResult(tx, q, append([]any{*memberCount}, args...)...)
+}
+
+func execIgnoreResult(tx *sql.Tx, q string, args ...any) error {
+	_, err := tx.Exec(q, args...)
+	return err
+}
+
+func insertLadderStats(tx *sql.Tx, eaID int64, server int, row VSLeagueAllianceSearchResult, capturedAt string, memberCount *int) (int, error) {
+	// member_count comes from the per-alliance detail call, not the ladder — nil when that lookup
+	// failed, which the history row records honestly as NULL.
 	res, err := tx.Exec(`INSERT OR IGNORE INTO alliance_stats_history
-		(external_alliance_id, is_own, lastrank_id, server, tag, name, power, kills, power_rank, kills_rank, recorded_at, source)
-		VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(external_alliance_id, is_own, lastrank_id, server, tag, name, power, kills, power_rank, kills_rank, member_count, recorded_at, source)
+		VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		eaID, nullStr(row.LastRankID), server, row.Tag, row.Name,
-		row.Power, row.Kills, row.PowerRank, row.KillsRank, capturedAt, provenanceSource("lastrank"))
+		row.Power, row.Kills, row.PowerRank, row.KillsRank, memberCount, capturedAt, provenanceSource("lastrank"))
 	if err != nil {
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
+
+	// Same late-arrival backfill as our own row: an enrichment that failed on one refresh should
+	// heal on the next, rather than leaving a permanent hole in the series for that capture.
+	if err := backfillMemberCount(tx, `external_alliance_id = ? AND recorded_at = ? AND source = ?`,
+		memberCount, eaID, capturedAt, provenanceSource("lastrank")); err != nil {
+		return 0, err
+	}
 	return int(n), nil
 }
 
