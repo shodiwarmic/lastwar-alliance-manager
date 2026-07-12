@@ -15,6 +15,7 @@
 
     <div class="tab-bar">
         <button class="tab-btn active" data-tab="allies">Allies</button>
+        <button class="tab-btn" data-tab="nap">NAP</button>
         {{if .Permissions.ManageAllies}}
         <button class="tab-btn" data-tab="types">Agreement Types</button>
         {{end}}
@@ -34,6 +35,21 @@
         <div id="allies-list"></div>
     </div>
 
+    <!-- NAP Tab — a derived view of the server ladder. Read-only: alliances are managed from the
+         Allies tab, and the ladder itself comes from LastRank. -->
+    <div id="tab-nap" class="tab-content">
+        <div class="action-bar nap-bar">
+            <div class="nap-intro">
+                <span id="nap-summary"></span>
+                <span id="nap-captured" class="nap-captured"></span>
+            </div>
+            {{if .Permissions.ManageAllies}}
+            <button type="button" id="nap-refresh-btn" class="btn btn-secondary btn-sm">Refresh from LastRank</button>
+            {{end}}
+        </div>
+        <div id="nap-list"></div>
+    </div>
+
     {{if .Permissions.ManageAllies}}
     <!-- Agreement Types Tab -->
     <div id="tab-types" class="tab-content">
@@ -48,7 +64,9 @@
 {{end}}
 
 {{define "scripts"}}
-<div id="page-config" data-can-manage="{{if .Permissions.ManageAllies}}true{{else}}false{{end}}" hidden></div>
+<div id="page-config"
+     data-can-manage="{{if .Permissions.ManageAllies}}true{{else}}false{{end}}"
+     data-our-server-id="{{.OurServerID}}" hidden></div>
 <script src="/allies.js"></script>
 {{end}}
 

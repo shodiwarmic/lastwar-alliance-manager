@@ -176,3 +176,90 @@
     font-size: 0.9rem;
     cursor: pointer;
 }
+
+/* ── NAP tab ───────────────────────────────────────────────────────────────── */
+
+.nap-bar {
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.nap-intro {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.nap-captured {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.nap-table .nap-rank {
+    width: 3.5rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+}
+
+.nap-table .nap-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* The card layout gets its spacing from .ally-header-row's flex gap; a table cell has none, so
+   the tag would butt straight up against the name (and the ally badge against its pills). */
+.nap-table .nap-alliance,
+.nap-table .nap-status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Our own alliance. It is spliced in from the stats history, not the registry — it must never be
+   a registry row (see Rule 2) — but it still belongs in the ladder for context. */
+.nap-table tr.nap-us {
+    background: var(--color-info-bg);
+}
+
+/* Below the NAP line: still useful context (who is about to climb into the pact), but not part of
+   the pact itself. */
+.nap-table tr.nap-below-line td {
+    opacity: 0.6;
+}
+
+.nap-table tr.nap-divider td {
+    padding: 4px 12px;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-primary);
+    background: var(--bg-secondary);
+    border-top: 2px dashed var(--color-primary);
+    border-bottom: 2px dashed var(--color-primary);
+}
+
+.nap-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.nap-badge-us {
+    background: var(--color-info-bg);
+    color: var(--color-info);
+}
+
+.nap-badge-ally {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}

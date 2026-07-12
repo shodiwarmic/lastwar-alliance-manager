@@ -27,8 +27,17 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.add('active');
             const target = document.getElementById('tab-' + btn.dataset.tab);
             if (target) target.style.display = 'block';
+
+            // Load the NAP the first time it's opened, not on every page load.
+            if (btn.dataset.tab === 'nap' && !napLoaded) {
+                napLoaded = true;
+                loadNap();
+            }
         });
     });
+
+    const napRefreshBtn = document.getElementById('nap-refresh-btn');
+    if (napRefreshBtn) napRefreshBtn.addEventListener('click', () => refreshNap(napRefreshBtn));
 
     // Show inactive toggle
     const toggle = document.getElementById('show-inactive-toggle');
@@ -261,12 +270,18 @@ function renderTypeRow(t) {
 
 // ── Ally Modal ────────────────────────────────────────────────────────────────
 
-function openAllyModal(ally) {
+// openAllyModal(null) creates, openAllyModal(ally) edits.
+//
+// `prefill` seeds the create form without entering edit mode — used by "Add as ally" on the NAP
+// tab. Passing a bare {tag, name, server} object as `ally` instead would half-enter edit mode and
+// throw, since edit mode dereferences ally.id and ally.agreement_type_ids.
+function openAllyModal(ally, prefill) {
+    const seed = ally || prefill || null;
     editingAllyId = ally ? ally.id : null;
     document.getElementById('ally-modal-title').textContent = ally ? 'Edit Ally' : 'Add Ally';
-    document.getElementById('ally-server').value = ally ? ally.server : '';
-    document.getElementById('ally-tag').value = ally ? ally.tag : '';
-    document.getElementById('ally-name').value = ally ? ally.name : '';
+    document.getElementById('ally-server').value = seed && seed.server != null ? seed.server : '';
+    document.getElementById('ally-tag').value = seed && seed.tag ? seed.tag : '';
+    document.getElementById('ally-name').value = seed && seed.name ? seed.name : '';
     document.getElementById('ally-contact').value = ally ? ally.contact : '';
     document.getElementById('ally-notes').value = ally ? ally.notes : '';
     document.getElementById('ally-modal-status').textContent = '';
@@ -343,12 +358,19 @@ async function saveAlly() {
     closeAllyModal();
     await loadAgreementTypes();
     await loadAllies();
+    await refreshNapIfLoaded();  // an added/edited ally changes the NAP tab's ✓ Ally flags
 }
 
 async function doDeleteAlly(id) {
     const res = await fetch('/api/allies/' + id, { method: 'DELETE' });
     if (!res.ok) return;
     await loadAllies();
+    await refreshNapIfLoaded();
+}
+
+// Re-render the NAP from cache after an ally changes. Cheap and local — it never calls LastRank.
+async function refreshNapIfLoaded() {
+    if (napLoaded) await loadNap();
 }
 
 // ── Type Modal ────────────────────────────────────────────────────────────────
@@ -444,4 +466,220 @@ async function doDeleteType(id) {
     await loadAgreementTypes();
     await loadAllies();
     renderTypesTab();
+}
+
+// ── NAP tab ──────────────────────────────────────────────────────────────────
+//
+// The NAP is the top-N alliances on our server, and we are one of them. Everything here renders
+// from cached data served by GET /api/allies/nap — the tab never calls LastRank itself, so it keeps
+// working when the volunteer service is down. Refreshing is a deliberate, manage-only action.
+
+const OUR_SERVER_ID = parseInt(cfg.ourServerId, 10) || 0;
+let napLoaded = false;
+
+async function loadNap() {
+    const container = document.getElementById('nap-list');
+    const res = await fetch('/api/allies/nap');
+    if (!res.ok) {
+        container.replaceChildren(napEmptyState('Could not load the NAP.'));
+        return;
+    }
+    renderNap(await res.json());
+}
+
+function renderNap(data) {
+    const container = document.getElementById('nap-list');
+    const summary = document.getElementById('nap-summary');
+    const captured = document.getElementById('nap-captured');
+    const refreshBtn = document.getElementById('nap-refresh-btn');
+
+    captured.textContent = '';
+
+    if (!data.server_configured) {
+        summary.textContent = '';
+        if (refreshBtn) refreshBtn.style.display = 'none';
+        container.replaceChildren(napEmptyState(
+            'No server number configured. Set your server number in Settings to see the alliances on your server.'
+        ));
+        return;
+    }
+
+    if (refreshBtn) refreshBtn.style.display = '';
+    summary.textContent = `Top ${data.nap_size} alliances on server ${data.server}, including us. Manage agreements from the Allies tab.`;
+
+    if (!data.alliances.length) {
+        container.replaceChildren(napEmptyState(
+            `No alliances cached yet. Refresh from LastRank to load the top alliances on server ${data.server}.`
+        ));
+        return;
+    }
+
+    if (data.captured_at) {
+        captured.textContent = `Data captured ${data.captured_at} UTC`;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'data-table nap-table';
+
+    const thead = document.createElement('thead');
+    const hrow = document.createElement('tr');
+    ['#', 'Alliance', 'Power', 'Kills', 'Status'].forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        hrow.appendChild(th);
+    });
+    thead.appendChild(hrow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    let dividerDrawn = false;
+    data.alliances.forEach((a, i) => {
+        // The NAP line: everything above it is the pact, everything below is context. Having two
+        // separate numbers (size and import limit) is pointless if the cut isn't legible.
+        const next = data.alliances[i + 1];
+        tbody.appendChild(renderNapRow(a));
+        if (!dividerDrawn && a.in_nap && (!next || !next.in_nap)) {
+            tbody.appendChild(napDividerRow(data.nap_size));
+            dividerDrawn = true;
+        }
+    });
+    table.appendChild(tbody);
+
+    const scroll = document.createElement('div');
+    scroll.className = 'table-scroll';
+    scroll.appendChild(table);
+    container.replaceChildren(scroll);
+}
+
+function renderNapRow(a) {
+    const tr = document.createElement('tr');
+    if (a.is_us) tr.classList.add('nap-us');
+    if (!a.in_nap) tr.classList.add('nap-below-line');
+
+    const rank = document.createElement('td');
+    rank.className = 'nap-rank';
+    rank.textContent = a.rank == null ? '—' : String(a.rank);
+    tr.appendChild(rank);
+
+    const alliance = document.createElement('td');
+    alliance.className = 'nap-alliance';
+    if (a.tag) {
+        const tag = document.createElement('span');
+        tag.className = 'ally-tag';
+        tag.textContent = `[${a.tag}]`;
+        alliance.appendChild(tag);
+    }
+    const name = document.createElement('span');
+    name.className = 'ally-name';
+    name.textContent = a.name || '(unnamed)';
+    alliance.appendChild(name);
+    tr.appendChild(alliance);
+
+    const power = document.createElement('td');
+    power.className = 'nap-num';
+    power.textContent = formatCompact(a.power);
+    tr.appendChild(power);
+
+    const kills = document.createElement('td');
+    kills.className = 'nap-num';
+    kills.textContent = formatCompact(a.kills);
+    tr.appendChild(kills);
+
+    tr.appendChild(renderNapStatus(a));
+    return tr;
+}
+
+function renderNapStatus(a) {
+    const td = document.createElement('td');
+    td.className = 'nap-status';
+
+    if (a.is_us) {
+        const badge = document.createElement('span');
+        badge.className = 'nap-badge nap-badge-us';
+        badge.textContent = 'Us';
+        td.appendChild(badge);
+        return td;
+    }
+
+    if (a.ally_id) {
+        const badge = document.createElement('span');
+        badge.className = 'nap-badge nap-badge-ally';
+        badge.textContent = a.ally_active ? '✓ Ally' : 'Former ally';
+        td.appendChild(badge);
+
+        (a.agreement_type_ids || []).forEach(id => {
+            const type = allTypes.find(t => t.id === id);
+            if (!type) return;
+            const pill = document.createElement('span');
+            pill.className = 'agreement-pill';
+            pill.textContent = type.name;
+            td.appendChild(pill);
+        });
+        return td;
+    }
+
+    if (CAN_MANAGE) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-secondary btn-sm';
+        btn.textContent = '+ Add as ally';
+        // Reuse the existing create flow, seeded — never a duplicate implementation.
+        btn.addEventListener('click', () => openAllyModal(null, {
+            tag: a.tag || '',
+            name: a.name || '',
+            server: OUR_SERVER_ID || '',
+        }));
+        td.appendChild(btn);
+    }
+    return td;
+}
+
+function napDividerRow(napSize) {
+    const tr = document.createElement('tr');
+    tr.className = 'nap-divider';
+    const td = document.createElement('td');
+    td.colSpan = 5;
+    td.textContent = `NAP line — top ${napSize}`;
+    tr.appendChild(td);
+    return tr;
+}
+
+function napEmptyState(message) {
+    const p = document.createElement('p');
+    p.className = 'empty-state';
+    p.textContent = message;
+    return p;
+}
+
+function formatCompact(n) {
+    if (n == null) return '—';
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return String(n);
+}
+
+async function refreshNap(btn) {
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Refreshing…';
+    try {
+        const res = await fetch('/api/allies/nap/refresh', { method: 'POST' });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            showToast(body.error || 'Could not refresh from LastRank.', 'error');
+            return;
+        }
+        // Distinguish "we fetched and nothing had changed" from "we updated things" — reporting an
+        // update that didn't happen is worse than saying nothing.
+        showToast(body.recorded > 0
+            ? `Updated ${body.alliances} alliances (${body.recorded} new datapoints).`
+            : 'Already up to date.');
+        await loadNap();
+    } catch {
+        showToast('Could not refresh from LastRank.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
 }

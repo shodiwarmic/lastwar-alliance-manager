@@ -592,6 +592,12 @@ type VSLeagueAllianceSearchResult struct {
 	Server     *int    `json:"server"`
 	Power      *int64  `json:"power"`
 	Kills      *int64  `json:"kills"`
+	// PowerRank/KillsRank are the alliance's true ladder position on its server, and CapturedAt is
+	// when upstream snapshotted that ladder. Populated by the alliance-list endpoint; the opponent
+	// picker ignores them, but the NAP sync needs all three.
+	PowerRank  *int    `json:"power_rank"`
+	KillsRank  *int    `json:"kills_rank"`
+	CapturedAt *string `json:"captured_at"`
 }
 
 // VSLeagueOpponentMember is one member of the opponent alliance from LastRank, for the daily-MVP

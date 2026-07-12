@@ -155,22 +155,43 @@ func scrubOwnAllianceFromRegistry(lastrankID, tag string, server int) (int, erro
 	return n, nil
 }
 
-// findOrCreateExternalAllianceTx returns the external_alliances registry id for an alliance
-// identity, deduping by tag (globally unique at a moment) then name — creating a row if none
-// exists and refreshing name/server on an existing one. Server is parsed from text
-// (external_alliances.server is INTEGER). Used to link allies (and prospects) into the registry
-// so it stays the single identity source. Returns an invalid NullInt64 when there's no identity.
+// externalAllianceStats carries the optional ladder snapshot an upsert may bring with it. Every
+// field is nilable and every nil means "don't touch": the registry row keeps whatever it already
+// had, so a caller that knows nothing about (say) member_count can never wipe it.
+type externalAllianceStats struct {
+	LastRankID  *string
+	Power       *int64
+	Kills       *int64
+	PowerRank   *int
+	KillsRank   *int
+	MemberCount *int
+	// CapturedAt is when the ladder was snapshotted upstream, in SQLite format. Stored on the row
+	// so the next sync can tell whether it is carrying newer data than what's already there.
+	CapturedAt *string
+}
+
+// upsertExternalAllianceTx resolves an alliance identity to its external_alliances row — creating
+// it if absent — and returns the registry id. This is the single registry write path: it is
+// tx-scoped, keyed on lastrank_id then tag then name, id-returning (callers need the id as the
+// subject key for alliance_stats_history), and it can carry a stats snapshot.
 //
-// Our own alliance is never registered: external_alliances is a registry of EXTERNAL alliances
-// and feeds the VS League opponent picker and the prospect source-alliance field, so a row for us
-// would let an officer pick their own alliance as an opponent.
-func findOrCreateExternalAllianceTx(tx *sql.Tx, tag, name, serverStr string) (sql.NullInt64, error) {
+// Our own alliance is never registered: external_alliances is a registry of EXTERNAL alliances and
+// feeds the VS League opponent picker and the prospect source-alliance field, so a row for us would
+// let an officer pick their own alliance as an opponent. Returns an invalid NullInt64 for us, and
+// for an identity with nothing to key on.
+func upsertExternalAllianceTx(tx *sql.Tx, tag, name, serverStr string, st *externalAllianceStats) (sql.NullInt64, error) {
 	tag, name = strings.TrimSpace(tag), strings.TrimSpace(name)
 
+	var lastrankID string
+	if st != nil && st.LastRankID != nil {
+		lastrankID = strings.TrimSpace(*st.LastRankID)
+	}
+
 	// Never mint a registry row for our own alliance. An invalid NullInt64 leaves the caller's
-	// ally/prospect row intact — it simply carries no registry link. Safe against collisions: a
-	// tag is globally unique in-game at any one moment (see migration 057).
-	if ourTag := ourAllianceTagTx(tx); ourTag != "" && strings.EqualFold(tag, ourTag) {
+	// ally/prospect row intact — it simply carries no registry link. Safe against collisions: a tag
+	// is globally unique in-game at any one moment (see migration 057).
+	ourTag := ourAllianceTagTx(tx)
+	if ourTag != "" && tag != "" && strings.EqualFold(tag, ourTag) {
 		return sql.NullInt64{}, nil
 	}
 
@@ -178,9 +199,16 @@ func findOrCreateExternalAllianceTx(tx *sql.Tx, tag, name, serverStr string) (sq
 	if n, ok := parseServerNumber(serverStr); ok {
 		server = n
 	}
+
+	// Resolve by the stable in-game id first, then tag, then name.
 	var id int64
 	var err error
 	switch {
+	case lastrankID != "":
+		err = tx.QueryRow(`SELECT id FROM external_alliances WHERE lastrank_id = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1`, lastrankID).Scan(&id)
+		if err != nil && tag != "" {
+			err = tx.QueryRow(`SELECT id FROM external_alliances WHERE tag = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1`, tag).Scan(&id)
+		}
 	case tag != "":
 		err = tx.QueryRow(`SELECT id FROM external_alliances WHERE tag = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1`, tag).Scan(&id)
 	case name != "":
@@ -188,19 +216,51 @@ func findOrCreateExternalAllianceTx(tx *sql.Tx, tag, name, serverStr string) (sq
 	default:
 		return sql.NullInt64{}, nil
 	}
+
+	var s externalAllianceStats
+	if st != nil {
+		s = *st
+	}
+
 	if err == nil {
-		if _, uerr := tx.Exec(`UPDATE external_alliances SET name = COALESCE(NULLIF(?,''), name),
-			server = COALESCE(?, server), updated_at = CURRENT_TIMESTAMP WHERE id = ?`, name, server, id); uerr != nil {
+		// COALESCE(?, col) throughout: a nil field leaves the stored value alone. lastrank_id is
+		// backfilled rather than overwritten, so a row first created from a tag converges onto the
+		// id key once we learn it — which is what lets the stale-rank sweep find it later.
+		if _, uerr := tx.Exec(`UPDATE external_alliances SET
+			name = COALESCE(NULLIF(?,''), name),
+			server = COALESCE(?, server),
+			lastrank_id = COALESCE(lastrank_id, ?),
+			power = COALESCE(?, power),
+			kills = COALESCE(?, kills),
+			power_rank = COALESCE(?, power_rank),
+			kills_rank = COALESCE(?, kills_rank),
+			member_count = COALESCE(?, member_count),
+			lastrank_captured_at = COALESCE(?, lastrank_captured_at),
+			updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?`,
+			name, server, nullStr(lastrankID),
+			s.Power, s.Kills, s.PowerRank, s.KillsRank, s.MemberCount, s.CapturedAt, id); uerr != nil {
 			return sql.NullInt64{}, uerr
 		}
 		return sql.NullInt64{Int64: id, Valid: true}, nil
 	}
-	res, ierr := tx.Exec(`INSERT INTO external_alliances (tag, name, server) VALUES (?,?,?)`, nullStr(tag), nullStr(name), server)
+
+	res, ierr := tx.Exec(`INSERT INTO external_alliances
+		(tag, name, server, lastrank_id, power, kills, power_rank, kills_rank, member_count, lastrank_captured_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		nullStr(tag), nullStr(name), server, nullStr(lastrankID),
+		s.Power, s.Kills, s.PowerRank, s.KillsRank, s.MemberCount, s.CapturedAt)
 	if ierr != nil {
 		return sql.NullInt64{}, ierr
 	}
 	nid, _ := res.LastInsertId()
 	return sql.NullInt64{Int64: nid, Valid: true}, nil
+}
+
+// findOrCreateExternalAllianceTx links an ally or prospect to its registry row. Thin wrapper over
+// upsertExternalAllianceTx for callers that carry no stats.
+func findOrCreateExternalAllianceTx(tx *sql.Tx, tag, name, serverStr string) (sql.NullInt64, error) {
+	return upsertExternalAllianceTx(tx, tag, name, serverStr, nil)
 }
 
 func nullStr(s string) any {

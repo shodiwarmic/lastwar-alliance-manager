@@ -1781,7 +1781,7 @@ func searchExternalAlliancesLastRank(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	results, err := searchLastRankAlliances(ctx, q, server)
+	results, err := searchLastRankAlliances(ctx, q, server, 20)
 	if err != nil {
 		slogLastRank("searchExternalAlliancesLastRank failed", err)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
