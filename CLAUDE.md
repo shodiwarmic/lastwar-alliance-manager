@@ -301,6 +301,34 @@ invariant).
 
 ## Known gotchas
 
+### One DB connection — a query issued while a cursor is open DEADLOCKS
+
+`database.go` sets `db.SetMaxOpenConns(1)`. `db.Query` holds that single connection until
+`rows.Close()`, so **any** `db.Query` / `db.QueryRow` / `db.Exec` issued while a rows cursor is
+still open waits forever for a connection that will never be free. This hangs the whole process,
+not just the request — and it is silent: no error, no log, no panic.
+
+```go
+// WRONG — deadlocks the server
+rows, _ := db.Query(`SELECT ... FROM external_alliances`)
+defer rows.Close()
+cfg := loadSomeConfig()          // <-- db.QueryRow while rows is open. Hangs forever.
+for rows.Next() { ... }
+
+// CORRECT — read everything you need BEFORE opening the cursor
+cfg := loadSomeConfig()
+rows, _ := db.Query(`SELECT ... FROM external_alliances`)
+defer rows.Close()
+for rows.Next() { ... }
+```
+
+The same applies inside a transaction: read on `tx` (never `db`), and `rows.Close()` before the
+next statement on that `tx`. When a handler needs both a network call and a transaction, do the
+**entire** network call before `db.Begin()` — never hold the connection across the wire.
+
+Shape any read-then-write handler as **read-all-into-memory → close cursor → write-all**. See
+`refreshNAP`/`applyNAPLadder` in `handlers_nap.go` and the note at `handlers_polls.go:854`.
+
 ### CSP — no inline scripts allowed (`script-src 'self'` only)
 `install.sh` sets `script-src 'self' https://cdn.jsdelivr.net` — **`'unsafe-inline'` is not in `script-src`**. Any inline `<script>` block in a template will be silently blocked in production (and on Android, this is immediately visible as a broken feature).
 
