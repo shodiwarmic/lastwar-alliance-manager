@@ -116,7 +116,9 @@
 {{end}}
 
 {{define "scripts"}}
-<div id="page-config" data-can-manage="{{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}true{{else}}false{{end}}" hidden></div>
+<div id="page-config"
+     data-can-manage="{{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}true{{else}}false{{end}}"
+     data-our-server-id="{{.OurServerID}}" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 <script src="/external-alliances.js"></script>
 {{end}}

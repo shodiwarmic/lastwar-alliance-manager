@@ -7,6 +7,9 @@
 (function () {
     const cfg = document.getElementById('page-config');
     const CAN_MANAGE = cfg && cfg.dataset.canManage === 'true';
+    // Our own server. Officers search their own server far more often than any other, and the
+    // LastRank search matches it strictly — so retyping it every time is pure friction.
+    const OUR_SERVER_ID = (cfg && parseInt(cfg.dataset.ourServerId, 10)) || 0;
     let all = [];
     let fuseInstance = null;
     let sortField = 'updated';
@@ -248,7 +251,9 @@
         const modalApi = {};
         const tag = inp('text', a.tag, 'cROw');
         const name = inp('text', a.name, 'Black Crow Legion');
-        const server = inp('number', a.server, 'server #');
+        // Default to our own server, but ONLY when the alliance has none of its own — an
+        // unconditional default would overwrite the row's real server when editing.
+        const server = inp('number', a.server != null ? a.server : (OUR_SERVER_ID || undefined), 'server #');
         const power = inp('number', a.power, 'power');
         const kills = inp('number', a.kills, 'kills');
         const members = inp('number', a.member_count, 'members');
