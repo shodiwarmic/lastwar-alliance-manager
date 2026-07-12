@@ -13,18 +13,91 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// parseServerNumber extracts a server number from officer-entered free text:
+// "1712", "S1712", "#1712", " s1712 ", "Server 1712" all → 1712. ok=false when there are no
+// digits. This is the canonical text → INTEGER conversion for every server field.
+//
+// It takes the FIRST contiguous run of digits, not every digit: stripping all non-digits would
+// silently fuse a multi-server entry like "1712 / 1713" into 17121713 — a corrupt server number
+// that matches nothing and looks plausible in the DB.
+func parseServerNumber(s string) (int, bool) {
+	// IndexAny over ASCII digits, not strings.IndexFunc(s, unicode.IsDigit): IsDigit also matches
+	// non-ASCII numerals, which the ASCII loop below would reject at the first byte — silently
+	// returning ok=false past perfectly good ASCII digits later in the string.
+	start := strings.IndexAny(s, "0123456789")
+	if start < 0 {
+		return 0, false
+	}
+	end := start
+	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+		end++
+	}
+	n, err := strconv.Atoi(s[start:end])
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// ourAllianceTagTx reads our own alliance tag inside a transaction. Must read on tx, not db:
+// SetMaxOpenConns(1) means a db query while a tx is open deadlocks.
+func ourAllianceTagTx(tx *sql.Tx) string {
+	var tag string
+	tx.QueryRow(`SELECT COALESCE(alliance_tag, '') FROM settings WHERE id = 1`).Scan(&tag)
+	return strings.TrimSpace(tag)
+}
+
+// ourAllianceIdentity returns our configured LastRank alliance id (normalized) and tag. The id is
+// run through parseLastRankAllianceID because updateSettings stores the raw string when it doesn't
+// parse; an unparseable id is reported as empty so callers fall back to the tag.
+func ourAllianceIdentity() (lastrankID, tag string) {
+	var rawID, rawTag string
+	db.QueryRow(`SELECT COALESCE(lastrank_alliance_id, ''), COALESCE(alliance_tag, '') FROM settings WHERE id = 1`).
+		Scan(&rawID, &rawTag)
+	if parsed, ok := parseLastRankAllianceID(strings.TrimSpace(rawID)); ok {
+		lastrankID = parsed
+	}
+	return lastrankID, strings.TrimSpace(rawTag)
+}
+
+// isOwnAlliance reports whether a (lastrank id, tag) pair identifies OUR alliance — the Rule 2
+// test, shared by every path that could otherwise write us into external_alliances.
+//
+// Both sides of a comparison must be non-empty: an empty configured tag matching a blank upstream
+// abbr would brand a *foreign* alliance as us, which is worse than failing to recognise ourselves.
+func isOwnAlliance(lastrankID, tag string) bool {
+	ourID, ourTag := ourAllianceIdentity()
+	if ourID != "" && lastrankID != "" && strings.EqualFold(strings.TrimSpace(lastrankID), ourID) {
+		return true
+	}
+	if ourTag != "" && tag != "" && strings.EqualFold(strings.TrimSpace(tag), ourTag) {
+		return true
+	}
+	return false
+}
+
 // findOrCreateExternalAllianceTx returns the external_alliances registry id for an alliance
 // identity, deduping by tag (globally unique at a moment) then name — creating a row if none
 // exists and refreshing name/server on an existing one. Server is parsed from text
 // (external_alliances.server is INTEGER). Used to link allies (and prospects) into the registry
 // so it stays the single identity source. Returns an invalid NullInt64 when there's no identity.
+//
+// Our own alliance is never registered: external_alliances is a registry of EXTERNAL alliances
+// and feeds the VS League opponent picker and the prospect source-alliance field, so a row for us
+// would let an officer pick their own alliance as an opponent.
 func findOrCreateExternalAllianceTx(tx *sql.Tx, tag, name, serverStr string) (sql.NullInt64, error) {
 	tag, name = strings.TrimSpace(tag), strings.TrimSpace(name)
+
+	// Never mint a registry row for our own alliance. An invalid NullInt64 leaves the caller's
+	// ally/prospect row intact — it simply carries no registry link. Safe against collisions: a
+	// tag is globally unique in-game at any one moment (see migration 057).
+	if ourTag := ourAllianceTagTx(tx); ourTag != "" && strings.EqualFold(tag, ourTag) {
+		return sql.NullInt64{}, nil
+	}
+
 	var server any // nil → NULL
-	if s := strings.TrimSpace(serverStr); s != "" {
-		if n, err := strconv.Atoi(s); err == nil {
-			server = n
-		}
+	if n, ok := parseServerNumber(serverStr); ok {
+		server = n
 	}
 	var id int64
 	var err error
@@ -286,6 +359,11 @@ func createAlly(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Server, tag, and name are required", http.StatusBadRequest)
 		return
 	}
+	// Normalize on write, not just on the registry link: the browser sends a numeric input, but
+	// the mobile API could still post "S1712".
+	if n, ok := parseServerNumber(req.Server); ok {
+		req.Server = strconv.Itoa(n)
+	}
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -370,6 +448,10 @@ func updateAlly(w http.ResponseWriter, r *http.Request) {
 	if req.Active == nil {
 		t := true
 		req.Active = &t
+	}
+	// Normalize on write (see createAlly).
+	if n, ok := parseServerNumber(req.Server); ok {
+		req.Server = strconv.Itoa(n)
 	}
 
 	// Fetch current values for diff

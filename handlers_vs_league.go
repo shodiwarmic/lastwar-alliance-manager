@@ -1382,6 +1382,13 @@ func vsLeagueOurSnapshot(w http.ResponseWriter, r *http.Request) {
 // a later LastRank lookup collapse into one row instead of duplicating — and lastrank_id is stored
 // only as a reference attribute. Best-effort — never fails the response.
 func cacheExternalAlliance(snap VSLeagueOpponentSnapshot) {
+	// Never cache our own alliance: external_alliances feeds the opponent picker, so a row for us
+	// would make our own alliance selectable as a VS opponent. Reachable when an officer pastes
+	// their own LastRank alliance URL into the opponent field.
+	if isOwnAlliance(snap.AllianceID, snap.Tag) {
+		return
+	}
+
 	var id int
 	found := false
 	if snap.Tag != "" {
@@ -1765,8 +1772,8 @@ func searchExternalAlliancesLastRank(w http.ResponseWriter, r *http.Request) {
 	}
 	var server *int
 	if s := strings.TrimSpace(r.URL.Query().Get("server")); s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil {
+		n, ok := parseServerNumber(s)
+		if !ok {
 			badRequest(w, "server must be a number")
 			return
 		}
