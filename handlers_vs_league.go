@@ -343,10 +343,10 @@ func getVSLeagueAnalytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type weekRow struct {
-		id, seasonID          int
-		oppTag, oppName       string
-		stratLabel, stratRes  string
-		storedOutcome         *string
+		id, seasonID         int
+		oppTag, oppName      string
+		stratLabel, stratRes string
+		storedOutcome        *string
 	}
 	var weeks []weekRow
 	for wrows.Next() {
@@ -653,11 +653,11 @@ type vsLeagueWeekPayload struct {
 	OpponentLastRankSeenAt *string `json:"opponent_lastrank_seen_at"`
 	SnapshotNow            bool    `json:"snapshot_now"` // stamp opponent_snapshot_at = now
 	// Our own snapshot for the week (LastRank-sourced or summed roster).
-	OurPower        *int64 `json:"our_power"`
-	OurKills        *int64 `json:"our_kills"`
-	OurMemberCount  *int   `json:"our_member_count"`
-	OurServer       *int   `json:"our_server"`
-	OurSnapshotNow  bool   `json:"our_snapshot_now"` // stamp our_snapshot_at = now
+	OurPower       *int64 `json:"our_power"`
+	OurKills       *int64 `json:"our_kills"`
+	OurMemberCount *int   `json:"our_member_count"`
+	OurServer      *int   `json:"our_server"`
+	OurSnapshotNow bool   `json:"our_snapshot_now"` // stamp our_snapshot_at = now
 	// Summary-only weekly result (allowed ONLY when the week has no day rows).
 	OurPoints      *int    `json:"our_points"`
 	OpponentPoints *int    `json:"opponent_points"`
@@ -1382,6 +1382,13 @@ func vsLeagueOurSnapshot(w http.ResponseWriter, r *http.Request) {
 // a later LastRank lookup collapse into one row instead of duplicating — and lastrank_id is stored
 // only as a reference attribute. Best-effort — never fails the response.
 func cacheExternalAlliance(snap VSLeagueOpponentSnapshot) {
+	// Never cache our own alliance: external_alliances feeds the opponent picker, so a row for us
+	// would make our own alliance selectable as a VS opponent. Reachable when an officer pastes
+	// their own LastRank alliance URL into the opponent field.
+	if isOwnAlliance(snap.AllianceID, snap.Tag) {
+		return
+	}
+
 	var id int
 	found := false
 	if snap.Tag != "" {
@@ -1424,7 +1431,8 @@ func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
 			WHEN EXISTS(SELECT 1 FROM allies al WHERE al.external_alliance_id = ea.id) THEN 'former'
 			ELSE 'never'
 		END AS ally_status,
-		(SELECT COUNT(*) FROM prospects pr WHERE pr.source_alliance_id = ea.id) AS prospect_count
+		(SELECT COUNT(*) FROM prospects pr WHERE pr.source_alliance_id = ea.id) AS prospect_count,
+		ea.power_rank
 		FROM external_alliances ea`
 	var args []any
 	if tag := strings.TrimSpace(r.URL.Query().Get("tag")); tag != "" {
@@ -1432,20 +1440,35 @@ func getExternalAlliances(w http.ResponseWriter, r *http.Request) {
 		args = append(args, tag)
 	}
 	q += ` ORDER BY ea.updated_at DESC`
+
+	// NAP membership is a function of our server number and the configured pact size, both of which
+	// live in Settings — so it is derived here rather than left to the client to re-implement.
+	//
+	// Read it BEFORE opening the rows cursor below. SetMaxOpenConns(1) means db.Query holds the one
+	// connection until rows.Close(), so any db read issued while it is open deadlocks the process.
+	nap := loadNAPConfig()
+
 	rows, err := db.Query(q, args...)
 	if err != nil {
 		dbError(w, "getExternalAlliances", err)
 		return
 	}
 	defer rows.Close()
+
 	list := []ExternalAlliance{}
 	for rows.Next() {
 		var a ExternalAlliance
 		if err := rows.Scan(&a.ID, &a.LastRankID, &a.Tag, &a.Name, &a.Server, &a.Power,
 			&a.Kills, &a.MemberCount, &a.LastSeenAt, &a.UpdatedAt,
-			&a.AllyStatus, &a.ProspectCount); err != nil {
+			&a.AllyStatus, &a.ProspectCount, &a.NAPRank); err != nil {
 			dbError(w, "getExternalAlliances scan", err)
 			return
+		}
+		if nap.server > 0 && a.Server != nil && *a.Server == nap.server {
+			a.SameServ = true
+			// An unranked alliance on our server is NOT in the pact — a nil rank means we have never
+			// seen it on the ladder, not that it ranks zeroth.
+			a.InNAP = a.NAPRank != nil && *a.NAPRank > 0 && *a.NAPRank <= nap.size
 		}
 		list = append(list, a)
 	}
@@ -1765,8 +1788,8 @@ func searchExternalAlliancesLastRank(w http.ResponseWriter, r *http.Request) {
 	}
 	var server *int
 	if s := strings.TrimSpace(r.URL.Query().Get("server")); s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil {
+		n, ok := parseServerNumber(s)
+		if !ok {
 			badRequest(w, "server must be a number")
 			return
 		}
@@ -1774,7 +1797,7 @@ func searchExternalAlliancesLastRank(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	results, err := searchLastRankAlliances(ctx, q, server)
+	results, err := searchLastRankAlliances(ctx, q, server, 20)
 	if err != nil {
 		slogLastRank("searchExternalAlliancesLastRank failed", err)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

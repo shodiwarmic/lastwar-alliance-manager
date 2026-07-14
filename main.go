@@ -62,13 +62,17 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCP)
 	data.HasGCPCredentials = hasGCP
 
-	// Load alliance identity for the sidebar brand
+	// Load alliance identity for the sidebar brand, plus our server number (used by the NAP tab and
+	// to default the external-alliance search filter). Extends this existing query rather than
+	// adding another settings round-trip.
 	var allianceName, allianceTag string
+	var ourServerID int
 	db.QueryRow(
-		"SELECT COALESCE(alliance_name, ''), COALESCE(alliance_tag, '') FROM settings WHERE id = 1",
-	).Scan(&allianceName, &allianceTag)
+		"SELECT COALESCE(alliance_name, ''), COALESCE(alliance_tag, ''), COALESCE(our_server_id, 0) FROM settings WHERE id = 1",
+	).Scan(&allianceName, &allianceTag, &ourServerID)
 	data.AllianceName = allianceName
 	data.AllianceTag = allianceTag
+	data.OurServerID = ourServerID
 
 	// NEW: Check if the CV Worker URL is configured + which OCR backend is active
 	var cvWorkerURL, ocrMode string
@@ -335,6 +339,14 @@ func main() {
 	router.HandleFunc("/api/ally-agreement-types", authMiddleware(requirePermission("manage_allies", createAllyAgreementType))).Methods("POST")
 	router.HandleFunc("/api/ally-agreement-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", updateAllyAgreementType))).Methods("PUT")
 	router.HandleFunc("/api/ally-agreement-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", deleteAllyAgreementType))).Methods("DELETE")
+	// NAP tab. The GET is view-gated (matching the page gate and getExternalAlliancesGated); the
+	// refresh is manage-gated because it hits the volunteer-run LastRank service.
+	router.HandleFunc("/api/allies/nap", authMiddleware(requirePermission("view_allies", getNAP))).Methods("GET")
+	// Refresh is a three-phase, browser-driven flow (ladder → member count per alliance → finish),
+	// mirroring the LastRank member sync. See handlers_nap.go.
+	router.HandleFunc("/api/allies/nap/refresh", authMiddleware(requirePermission("manage_allies", refreshNAP))).Methods("POST")
+	router.HandleFunc("/api/allies/nap/member", authMiddleware(requirePermission("manage_allies", napMemberCount))).Methods("POST")
+	router.HandleFunc("/api/allies/nap/finish", authMiddleware(requirePermission("manage_allies", napFinish))).Methods("POST")
 	router.HandleFunc("/api/allies", authMiddleware(getAllies)).Methods("GET")
 	router.HandleFunc("/api/allies", authMiddleware(requirePermission("manage_allies", createAlly))).Methods("POST")
 	router.HandleFunc("/api/allies/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", updateAlly))).Methods("PUT")

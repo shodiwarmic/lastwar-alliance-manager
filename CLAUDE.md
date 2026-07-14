@@ -187,6 +187,15 @@ Two phases, both manual-trigger only:
   writes are deferred-logged — `/finish` writes the single `lastrank_sync`
   activity row. Prospect lookups (`/prospect`, `/prospect/finish`) mirror this.
 
+**NAP ladder sync** (`/api/allies/nap/*`) follows the same three-phase shape:
+`/refresh` (one ladder call, writes the registry + history) → `/member` per alliance (browser-driven
+loop; member counts are NOT on the ladder endpoint, only on the per-alliance detail record, so each
+costs its own upstream call at ~1/sec) → `/finish` (one activity row). Phase-2 writes are
+deferred-logged. Same reason as the member sync: it gives per-item progress, an interrupted run
+keeps what it wrote, and it never blocks one request for ~15s. The UI is the same two-level display
+as the Members sync and the External Alliances gather — a status line plus a per-item row list
+(`.nap-prog-*`, mirroring `.lr-prog-*` / `.ext-prog-*`). Don't invent a fourth progress mechanism.
+
 **Fetch strategy** (`lastrank_client.go`): `GET /v1/players/{id}` is the cheap
 cached read; `POST /v1/players/{id}/enrich` forces a slow live game re-pull
 (separate 25s-timeout client). Bulk paths use `lastRankPlayerBulk` (GET, upgrade
@@ -228,16 +237,18 @@ OCR-vs-CSV split is carried by a `source` field on the import commit payloads
 
 ## History table source provenance
 
-The `source TEXT NOT NULL DEFAULT 'manual'` column lives on these six history
-tables — `power_history`, `hero_power_history`, `kill_history`,
-`squad_power_history` (source added in `050_lastrank.sql`), and
+The `source TEXT NOT NULL DEFAULT 'manual'` column lives on these seven history
+tables. Six are **member-level** — `power_history`, `hero_power_history`,
+`kill_history`, `squad_power_history` (source added in `050_lastrank.sql`), and
 `hq_level_history`, `profession_level_history` (created with the column in
-`055_career_hq_history.sql`). It records how each row was created:
+`055_career_hq_history.sql`). One is **alliance-level** —
+`alliance_stats_history` (`058_our_server_and_nap.sql`). It records how each row
+was created:
 
 | Value | Meaning |
 |---|---|
 | `manual` | Entered by an officer via the UI (also the default for pre-migration rows, which can't be reclassified) |
-| `lastrank` | Synced from the LastRank.fun per-player endpoint |
+| `lastrank` | Synced from LastRank.fun (the per-player endpoint, or the per-server alliance ladder) |
 | `ocr` | Extracted from an uploaded screenshot |
 | `csv` | Imported via CSV file |
 | `mobile` | Submitted by the Android scanner app |
@@ -245,6 +256,47 @@ tables — `power_history`, `hero_power_history`, `kill_history`,
 Every new write path must stamp its true source; `provenanceSource()`
 normalizes a client-declared origin. No other history/state tables carry a
 `source` column — don't assume one on tables outside this list.
+
+> **`alliance_stats_history` is keyed on `external_alliance_id`, not
+> `lastrank_id`.** LastRank is *a source, not a required service*: a datapoint may
+> equally come from OCR, CSV, mobile, or an officer typing it in, and none of those
+> have a `lastrank_id` — keying on it would make those rows unstorable and
+> contradict the `source` column. `lastrank_id` is a nullable reference attribute,
+> exactly as migration `057` specifies for the registry itself. Every ingest path
+> must therefore resolve its alliance into `external_alliances` first (via
+> `findOrCreateExternalAllianceTx`), which mints the subject key.
+>
+> **Our own alliance is the one subject with no registry row** — see the Rule 2 note
+> below — so its series is identified by `is_own = 1` with a NULL
+> `external_alliance_id`, enforced by a `CHECK`. Beware: `INSERT OR IGNORE` (used for
+> capture idempotency) silently swallows `CHECK` violations too, so assert the
+> registry id is valid *before* inserting rather than letting `OR IGNORE` mask a bug.
+
+## Our own alliance must never be in `external_alliances` (Rule 2)
+
+`external_alliances` is a registry of **external** alliances. It feeds the VS League
+opponent picker, the prospect source-alliance field, and ally prefill — so a row for
+our own alliance would let an officer pick their own alliance as a VS opponent.
+
+This is an invariant to **enforce**, not merely maintain: "stop inserting" is not the
+same as "not present". It is upheld at four points:
+
+1. `findOrCreateExternalAllianceTx` refuses to mint a row whose tag is ours (an ally or
+   prospect carrying our tag still saves — it just gets no registry link).
+2. `cacheExternalAlliance` refuses to cache us (reachable by pasting our own LastRank
+   URL into the VS opponent field).
+3. `updateSettings` scrubs the registry when the LastRank alliance **id** changes — the
+   new identity may already be cached from when it was somebody else. Deliberately
+   id-only: scrubbing by tag on a settings save would let a tag typo delete an innocent
+   alliance's row.
+4. The NAP refresh re-asserts the scrub as a backstop.
+
+Use `isOwnAlliance(lastrankID, tag)` for the test and `scrubOwnAllianceFromRegistry` for
+the removal. Both sides of any comparison must be non-empty — an empty configured tag
+matching a blank upstream `abbr` would brand a *foreign* alliance as us. Note the scrub
+**detaches** ally/prospect references before deleting, unlike `deleteExternalAlliance`,
+which refuses with 409 when an ally references the row (blocking would strand the
+invariant).
 
 > **HQ level & profession level are history-only.** There is no `members.level`
 > column (dropped in `055`; seeded into `hq_level_history` first) and no
@@ -257,6 +309,34 @@ normalizes a client-declared origin. No other history/state tables carry a
 > HQ never regresses (only a higher value is recorded).
 
 ## Known gotchas
+
+### One DB connection — a query issued while a cursor is open DEADLOCKS
+
+`database.go` sets `db.SetMaxOpenConns(1)`. `db.Query` holds that single connection until
+`rows.Close()`, so **any** `db.Query` / `db.QueryRow` / `db.Exec` issued while a rows cursor is
+still open waits forever for a connection that will never be free. This hangs the whole process,
+not just the request — and it is silent: no error, no log, no panic.
+
+```go
+// WRONG — deadlocks the server
+rows, _ := db.Query(`SELECT ... FROM external_alliances`)
+defer rows.Close()
+cfg := loadSomeConfig()          // <-- db.QueryRow while rows is open. Hangs forever.
+for rows.Next() { ... }
+
+// CORRECT — read everything you need BEFORE opening the cursor
+cfg := loadSomeConfig()
+rows, _ := db.Query(`SELECT ... FROM external_alliances`)
+defer rows.Close()
+for rows.Next() { ... }
+```
+
+The same applies inside a transaction: read on `tx` (never `db`), and `rows.Close()` before the
+next statement on that `tx`. When a handler needs both a network call and a transaction, do the
+**entire** network call before `db.Begin()` — never hold the connection across the wire.
+
+Shape any read-then-write handler as **read-all-into-memory → close cursor → write-all**. See
+`refreshNAP`/`applyNAPLadder` in `handlers_nap.go` and the note at `handlers_polls.go:854`.
 
 ### CSP — no inline scripts allowed (`script-src 'self'` only)
 `install.sh` sets `script-src 'self' https://cdn.jsdelivr.net` — **`'unsafe-inline'` is not in `script-src`**. Any inline `<script>` block in a template will be silently blocked in production (and on Android, this is immediately visible as a broken feature).

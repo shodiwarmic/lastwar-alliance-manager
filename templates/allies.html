@@ -15,6 +15,7 @@
 
     <div class="tab-bar">
         <button class="tab-btn active" data-tab="allies">Allies</button>
+        <button class="tab-btn" data-tab="nap">NAP</button>
         {{if .Permissions.ManageAllies}}
         <button class="tab-btn" data-tab="types">Agreement Types</button>
         {{end}}
@@ -34,6 +35,47 @@
         <div id="allies-list"></div>
     </div>
 
+    <!-- NAP Tab — a derived view of the server ladder. Read-only: alliances are managed from the
+         Allies tab, and the ladder itself comes from LastRank. -->
+    <div id="tab-nap" class="tab-content">
+        {{if .Permissions.ManageAllies}}
+        <!-- Sync card: same shape as the Members "Sync from LastRank" panel and the External
+             Alliances gather. A fast primary action, a slow per-item secondary one, a shared status
+             line, and the per-alliance progress list underneath. -->
+        <section class="nap-sync-section">
+            <div class="nap-sync-card">
+                <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Sync from LastRank</h4>
+                <p class="nap-sync-help">
+                    Pull your server's alliance ladder from
+                    <a href="https://lastrank.fun" target="_blank" rel="noopener noreferrer">lastrank.fun</a> —
+                    power, kills and rank for the top alliances, in a single call.
+                    Member counts are not on the ladder, so they are gathered per alliance and paced at
+                    ~1/second; that pass is slower, and alliances missing a count are done first so an
+                    interrupted run resumes where it left off.
+                </p>
+                <div class="nap-sync-actions">
+                    <button type="button" id="nap-refresh-btn" class="btn btn-primary">
+                        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Refresh Ladder
+                    </button>
+                    <button type="button" id="nap-members-btn" class="btn btn-secondary">
+                        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-crosshair"/></svg> Gather Member Counts
+                    </button>
+                    <span id="nap-status" class="status-msg"></span>
+                </div>
+                <div id="nap-progress" class="nap-progress-list" style="display:none;"></div>
+            </div>
+        </section>
+        {{end}}
+
+        <div class="action-bar nap-bar">
+            <div class="nap-intro">
+                <span id="nap-summary"></span>
+                <span id="nap-captured" class="nap-captured"></span>
+            </div>
+        </div>
+        <div id="nap-list"></div>
+    </div>
+
     {{if .Permissions.ManageAllies}}
     <!-- Agreement Types Tab -->
     <div id="tab-types" class="tab-content">
@@ -48,7 +90,9 @@
 {{end}}
 
 {{define "scripts"}}
-<div id="page-config" data-can-manage="{{if .Permissions.ManageAllies}}true{{else}}false{{end}}" hidden></div>
+<div id="page-config"
+     data-can-manage="{{if .Permissions.ManageAllies}}true{{else}}false{{end}}"
+     data-our-server-id="{{.OurServerID}}" hidden></div>
 <script src="/allies.js"></script>
 {{end}}
 
@@ -59,7 +103,7 @@
         <form id="ally-form">
             <div class="form-group">
                 <label for="ally-server">Server</label>
-                <input type="text" id="ally-server" class="form-input" placeholder="e.g. S123" required>
+                <input type="number" id="ally-server" class="form-input" min="1" placeholder="e.g. 1712" required>
             </div>
             <div class="form-group">
                 <label for="ally-tag">Tag</label>

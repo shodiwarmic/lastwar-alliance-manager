@@ -350,6 +350,14 @@ type Settings struct {
 	// LastRankAllianceID is the 32-char hex id for the alliance on lastrank.fun,
 	// used by the Phase-1 sync. Empty by default (operator pastes it in Settings).
 	LastRankAllianceID string `json:"lastrank_alliance_id"`
+	// OurServerID is the game server we play on. 0 = not configured.
+	OurServerID int `json:"our_server_id"`
+	// NAPSize is how many top alliances on our server the Non-Aggression Pact covers,
+	// INCLUDING us — a size of 10 means us plus nine partners.
+	NAPSize int `json:"nap_size"`
+	// NAPImportLimit is how many alliances to fetch and cache from the LastRank ladder,
+	// starting from the top. >= NAPSize, so the NAP tab can show who sits just below the line.
+	NAPImportLimit int `json:"nap_import_limit"`
 }
 
 type StormAssignment struct {
@@ -545,8 +553,8 @@ type VSLeagueWeek struct {
 	StrategyResult *string `json:"strategy_result,omitempty"`
 	Notes          *string `json:"notes,omitempty"`
 	// Derived + children.
-	Standing    VSLeagueWeekStanding `json:"standing"`      // computed from days (or summary fields when no day rows)
-	SummaryOnly bool                 `json:"summary_only"`  // true = no day rows; our_points/opponent_points are stored inputs
+	Standing    VSLeagueWeekStanding `json:"standing"`     // computed from days (or summary fields when no day rows)
+	SummaryOnly bool                 `json:"summary_only"` // true = no day rows; our_points/opponent_points are stored inputs
 	Days        []VSLeagueDay        `json:"days"`
 	CreatedAt   string               `json:"created_at"`
 	UpdatedAt   string               `json:"updated_at"`
@@ -584,6 +592,12 @@ type VSLeagueAllianceSearchResult struct {
 	Server     *int    `json:"server"`
 	Power      *int64  `json:"power"`
 	Kills      *int64  `json:"kills"`
+	// PowerRank/KillsRank are the alliance's true ladder position on its server, and CapturedAt is
+	// when upstream snapshotted that ladder. Populated by the alliance-list endpoint; the opponent
+	// picker ignores them, but the NAP sync needs all three.
+	PowerRank  *int    `json:"power_rank"`
+	KillsRank  *int    `json:"kills_rank"`
+	CapturedAt *string `json:"captured_at"`
 }
 
 // VSLeagueOpponentMember is one member of the opponent alliance from LastRank, for the daily-MVP
@@ -676,10 +690,16 @@ type ExternalAlliance struct {
 	// Relationship flags (computed for the External Alliances registry page).
 	AllyStatus    string `json:"ally_status"` // "active" | "former" | "never"
 	ProspectCount int    `json:"prospect_count"`
-	IsOpponent    bool `json:"is_opponent"` // we've faced them in VS League (decided or pending)
-	VSWins        int  `json:"vs_wins"`
-	VSLosses      int  `json:"vs_losses"`
-	VSTies        int  `json:"vs_ties"`
+	IsOpponent    bool   `json:"is_opponent"` // we've faced them in VS League (decided or pending)
+	VSWins        int    `json:"vs_wins"`
+	VSLosses      int    `json:"vs_losses"`
+	VSTies        int    `json:"vs_ties"`
+	// InNAP: this alliance is on our server and ranks inside the Non-Aggression Pact. Derived from
+	// our_server_id + nap_size + its ladder rank, so it is computed server-side — the client has no
+	// business re-deriving a rule that lives in Settings.
+	InNAP    bool `json:"in_nap"`
+	NAPRank  *int `json:"nap_rank,omitempty"` // ladder position on our server, when known
+	SameServ bool `json:"same_server"`        // on our server, whether or not inside the pact
 }
 
 type RankPermissions struct {
@@ -1128,7 +1148,9 @@ type PageData struct {
 	OCRBackendMode string
 	AllianceName   string
 	AllianceTag    string
-	SkillLabels    map[string]string
+	// OurServerID is the game server we play on (0 = not configured). Available on every page.
+	OurServerID int
+	SkillLabels map[string]string
 	// LastRank avatar for the logged-in user's linked member, shown in the
 	// sidebar user tile (falls back to initials when empty or blocked).
 	UserPhotoURL      string

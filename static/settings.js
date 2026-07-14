@@ -18,6 +18,11 @@ async function loadSettings() {
         document.getElementById('alliance-name').value = settings.alliance_name ?? '';
         document.getElementById('alliance-tag').value = settings.alliance_tag ?? '';
         document.getElementById('lastrank-alliance-id').value = settings.lastrank_alliance_id ?? '';
+        // 0 means "not configured" — show it as blank, not as a literal 0.
+        document.getElementById('our-server-id').value = settings.our_server_id || '';
+        document.getElementById('nap-size').value = settings.nap_size ?? 10;
+        document.getElementById('nap-import-limit').value = settings.nap_import_limit ?? 15;
+        syncNapImportMin();
         document.getElementById('max-hq-level').value = settings.max_hq_level || 35;
         document.getElementById('settings-login-message').value = settings.login_message || '';
         document.getElementById('train-free-limit').value = settings.train_free_daily_limit ?? 1;
@@ -160,6 +165,40 @@ function showSettingsStatus(message, success) {
     _settingsStatusTimer = setTimeout(() => { el.textContent = ''; }, 4000);
 }
 
+// The import limit can never be below the NAP size — otherwise the tab silently can't show the
+// whole pact. Keep the input's own min in step with the size so the browser hints at it too.
+function syncNapImportMin() {
+    const size = document.getElementById('nap-size');
+    const limit = document.getElementById('nap-import-limit');
+    if (!size || !limit) return;
+    limit.min = String(parseInt(size.value, 10) || 1);
+}
+
+// Mirror of the backend rule, so the user sees which field is wrong instead of a bare 400.
+function validateNapSizes() {
+    const size = document.getElementById('nap-size');
+    const limit = document.getElementById('nap-import-limit');
+    if (!size || !limit) return true;
+    clearFieldError(size);
+    clearFieldError(limit);
+
+    const s = parseInt(size.value, 10) || 10;
+    const l = parseInt(limit.value, 10) || 15;
+    if (s < 1 || s > 50) {
+        setFieldError(size, 'NAP size must be between 1 and 50.');
+        return false;
+    }
+    if (l < 1 || l > 50) {
+        setFieldError(limit, 'Import limit must be between 1 and 50.');
+        return false;
+    }
+    if (l < s) {
+        setFieldError(limit, `Must be at least the NAP size (${s}).`);
+        return false;
+    }
+    return true;
+}
+
 // Show a "View alliance on LastRank" link once the field holds a valid id/URL.
 function updateLastRankAllianceLink() {
     const input = document.getElementById('lastrank-alliance-id');
@@ -189,6 +228,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateLastRankAllianceLink();
         document.getElementById('lastrank-alliance-id')?.addEventListener('input', updateLastRankAllianceLink);
 
+        document.getElementById('nap-size')?.addEventListener('input', syncNapImportMin);
+
         settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -196,6 +237,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showSettingsStatus('You do not have permission to modify settings.', false);
                 return;
             }
+
+            // The server rejects this too, but on its own that surfaces as a bare 400 with no
+            // indication of which field is wrong.
+            if (!validateNapSizes()) return;
 
             // Fetch current settings first so fields not owned by this form
             // (e.g. schedule defaults) are preserved and not zeroed out.
@@ -212,6 +257,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alliance_name: document.getElementById('alliance-name').value.trim(),
                 alliance_tag: document.getElementById('alliance-tag').value.trim(),
                 lastrank_alliance_id: document.getElementById('lastrank-alliance-id').value.trim(),
+                // A blank server number sends 0, which the backend stores as NULL (unconfigured).
+                our_server_id: parseInt(document.getElementById('our-server-id').value, 10) || 0,
+                nap_size: parseInt(document.getElementById('nap-size').value, 10) || 10,
+                nap_import_limit: parseInt(document.getElementById('nap-import-limit').value, 10) || 15,
                 login_message: document.getElementById('settings-login-message').value,
                 max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
