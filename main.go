@@ -342,7 +342,11 @@ func main() {
 	// NAP tab. The GET is view-gated (matching the page gate and getExternalAlliancesGated); the
 	// refresh is manage-gated because it hits the volunteer-run LastRank service.
 	router.HandleFunc("/api/allies/nap", authMiddleware(requirePermission("view_allies", getNAP))).Methods("GET")
+	// Refresh is a three-phase, browser-driven flow (ladder → member count per alliance → finish),
+	// mirroring the LastRank member sync. See handlers_nap.go.
 	router.HandleFunc("/api/allies/nap/refresh", authMiddleware(requirePermission("manage_allies", refreshNAP))).Methods("POST")
+	router.HandleFunc("/api/allies/nap/member", authMiddleware(requirePermission("manage_allies", napMemberCount))).Methods("POST")
+	router.HandleFunc("/api/allies/nap/finish", authMiddleware(requirePermission("manage_allies", napFinish))).Methods("POST")
 	router.HandleFunc("/api/allies", authMiddleware(getAllies)).Methods("GET")
 	router.HandleFunc("/api/allies", authMiddleware(requirePermission("manage_allies", createAlly))).Methods("POST")
 	router.HandleFunc("/api/allies/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", updateAlly))).Methods("PUT")

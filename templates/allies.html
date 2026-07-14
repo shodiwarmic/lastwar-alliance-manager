@@ -50,6 +50,11 @@
             </div>
             {{end}}
         </div>
+        {{if .Permissions.ManageAllies}}
+        <!-- Per-alliance progress for the member-count pass, same shape as the Members LastRank
+             sync and the External Alliances gather. -->
+        <div id="nap-progress" class="nap-progress-list" style="display:none;"></div>
+        {{end}}
         <div id="nap-list"></div>
     </div>
 

@@ -672,102 +672,139 @@ function formatCompact(n) {
     return String(n);
 }
 
+// The refresh is a browser-driven loop, the same shape as the Members LastRank sync and the
+// External Alliances gather: phase 1 pulls the ladder in one call, then we walk the returned queue
+// one alliance at a time, then phase 3 logs the run.
+//
+// It is a loop rather than one long request because member counts are not on the ladder endpoint —
+// each costs its own upstream call at ~1/sec. Doing it this way gives per-alliance progress, and an
+// interrupted run keeps whatever it already wrote.
 async function refreshNap(btn) {
-    // Re-entry guard. A disabled button won't dispatch a click in a browser, but if this were ever
-    // invoked twice the second call would capture "Refreshing…" as the original label and never
-    // restore it — and it would fire a second upstream run against the rate limiter.
+    // A disabled button won't dispatch a click, but a stray second invocation would capture
+    // "Refreshing…" as the original label and never restore it — and re-run the whole pass.
     if (btn.disabled) return;
 
     const original = btn.textContent;
-    const status = document.getElementById('nap-refresh-status');
+    const statusEl = document.getElementById('nap-refresh-status');
+    const progressEl = document.getElementById('nap-progress');
+    const setStatus = m => { if (statusEl) statusEl.textContent = m || ''; };
+
     btn.disabled = true;
     btn.textContent = 'Refreshing…';
-    setNapProgress(status, 'Contacting LastRank…', 0, 0);
+    setStatus('Fetching the server ladder…');
+    if (progressEl) {
+        progressEl.style.display = 'none';
+        progressEl.replaceChildren();
+    }
 
+    let ladder;
     try {
         const res = await fetch('/api/allies/nap/refresh', { method: 'POST' });
-
-        // Failures that happen before the work starts (not configured, LastRank unreachable, empty
-        // ladder) still come back as a normal error status with a plain-text body.
         if (!res.ok) {
             const msg = (await res.text().catch(() => '')).trim();
             showToast(msg || 'Could not refresh from LastRank.', 'error');
             return;
         }
-
-        // Past that point the server streams NDJSON progress, because enriching member counts costs
-        // ~1s per alliance and a silent 15-second wait is indistinguishable from a hang.
-        let done = null;
-        let failed = null;
-        await readNDJSON(res, ev => {
-            if (ev.stage === 'ladder') {
-                setNapProgress(status, `Reading member counts for ${ev.total} alliances…`, 0, ev.total);
-            } else if (ev.stage === 'members') {
-                const who = ev.tag ? ` (${ev.tag})` : '';
-                setNapProgress(status, `Reading member counts… ${ev.done} of ${ev.total}${who}`, ev.done, ev.total);
-            } else if (ev.stage === 'saving') {
-                setNapProgress(status, 'Saving…', 1, 1);
-            } else if (ev.stage === 'done') {
-                done = ev;
-            } else if (ev.stage === 'error') {
-                failed = ev.message || 'Refresh failed.';
-            }
-        });
-
-        if (failed) { showToast(failed, 'error'); return; }
-        if (!done) { showToast('The refresh was interrupted before it finished.', 'error'); return; }
-
-        // Distinguish "we fetched and nothing had changed" from "we updated things" — reporting an
-        // update that didn't happen is worse than saying nothing.
-        showToast(done.recorded > 0
-            ? `Updated ${done.alliances} alliances (${done.recorded} new datapoints).`
-            : 'Already up to date.');
-        await loadNap();
+        ladder = await res.json();
     } catch {
-        showToast('Could not refresh from LastRank.', 'error');
+        showToast('Could not reach the server.', 'error');
+        return;
     } finally {
-        btn.disabled = false;
-        btn.textContent = original;
-        setNapProgress(status, '', 0, 0);
-    }
-}
-
-// Read a newline-delimited JSON stream, dispatching each complete line as it arrives. Buffers the
-// tail because a chunk boundary can land mid-line.
-async function readNDJSON(res, onEvent) {
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop();                     // keep the partial line for the next chunk
-        for (const line of lines) {
-            const t = line.trim();
-            if (!t) continue;
-            try { onEvent(JSON.parse(t)); } catch { /* ignore a malformed line */ }
+        if (!ladder) {
+            btn.disabled = false;
+            btn.textContent = original;
+            setStatus('');
         }
     }
-    const t = buf.trim();
-    if (t) { try { onEvent(JSON.parse(t)); } catch { /* ignore */ } }
-}
 
-// Progress is real, not a guess: the server reports which alliance it is on out of how many.
-function setNapProgress(el, text, done, total) {
-    if (!el) return;
-    if (!text) { el.replaceChildren(); return; }
+    const queue = ladder.alliances || [];
 
-    const label = document.createElement('span');
-    label.textContent = text;
+    // Phase 2: one row per alliance, seeded as "queued", then walked. This is the second half of
+    // the double progress — the status line says how far through we are, the list says what each
+    // alliance actually did.
+    const rowEls = new Map();
+    if (progressEl) {
+        progressEl.style.display = 'block';
+        queue.forEach(a => {
+            const status = document.createElement('span');
+            status.className = 'nap-prog-status';
+            status.textContent = 'queued';
 
-    const bar = document.createElement('span');
-    bar.className = 'nap-progress';
-    const fill = document.createElement('span');
-    fill.className = 'nap-progress-fill';
-    fill.style.width = total > 0 ? Math.round((done / total) * 100) + '%' : '0%';
-    bar.appendChild(fill);
+            const name = document.createElement('span');
+            name.className = 'nap-prog-name';
+            const label = a.tag ? `[${a.tag}]${a.name ? ' ' + a.name : ''}` : (a.name || '?');
+            name.textContent = a.is_us ? label + ' — us' : label;
 
-    el.replaceChildren(label, bar);
+            const row = document.createElement('div');
+            row.className = 'nap-prog-row';
+            row.append(name, status);
+            rowEls.set(a.lastrank_id, { row, status });
+            progressEl.appendChild(row);
+        });
+    }
+
+    let membersSynced = 0;
+    let i = 0;
+    for (const a of queue) {
+        i++;
+        setStatus(`Reading member counts — ${i} of ${queue.length}…`);
+        const entry = rowEls.get(a.lastrank_id);
+        if (entry) {
+            entry.row.className = 'nap-prog-row active';
+            entry.status.textContent = 'fetching…';
+        }
+        try {
+            const r = await fetch('/api/allies/nap/member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lastrank_id: a.lastrank_id, captured_at: ladder.captured_at }),
+            });
+            if (!r.ok) throw new Error(await r.text());
+            const data = await r.json();
+            if (data.applied) {
+                membersSynced++;
+                if (entry) {
+                    entry.row.className = 'nap-prog-row done';
+                    entry.status.textContent = `✓ ${data.member_count}/${data.max_member || 100} members`;
+                }
+            } else if (entry) {
+                entry.row.className = 'nap-prog-row skip';
+                entry.status.textContent = 'no member count';
+            }
+        } catch {
+            // One alliance failing must not sink the run — the ladder is already saved, and the
+            // next refresh backfills whatever is still missing.
+            if (entry) {
+                entry.row.className = 'nap-prog-row err';
+                entry.status.textContent = 'error — skipped';
+            }
+        }
+    }
+
+    setStatus('');
+
+    // Phase 3: a single activity row for the whole run.
+    try {
+        await fetch('/api/allies/nap/finish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                server: ladder.server,
+                alliances: queue.length,
+                recorded: ladder.recorded,
+                members_synced: membersSynced,
+                captured_at: ladder.captured_at,
+            }),
+        });
+    } catch { /* logging only — never fail the run over it */ }
+
+    // Distinguish "we fetched and nothing had changed" from "we updated things" — reporting an
+    // update that didn't happen is worse than saying nothing.
+    showToast(ladder.recorded > 0
+        ? `Updated ${queue.length} alliances (${ladder.recorded} new datapoints, ${membersSynced} member counts).`
+        : `Already up to date (${membersSynced} member counts refreshed).`);
+
+    await loadNap();
+    btn.disabled = false;
+    btn.textContent = original;
 }

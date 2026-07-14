@@ -257,9 +257,11 @@
     color: var(--color-success);
 }
 
-/* Refresh progress. The member-count pass costs ~1s per alliance (the shared LastRank rate limit),
-   so a refresh takes ~15s at the default import limit — long enough that silence reads as a hang.
-   The bar is driven by real server-reported counts, never an estimate. */
+/* Refresh progress — the same two-level display the Members LastRank sync and the External
+   Alliances gather use: a status line saying how far through we are, plus a per-alliance list
+   saying what each one actually did. Member counts cost one upstream call each at ~1/sec, so a
+   refresh takes ~15s and silence would read as a hang. Class names and colours mirror
+   .lr-prog-* / .ext-prog-* deliberately — this is one pattern, not three. */
 .nap-refresh-group {
     display: flex;
     align-items: center;
@@ -268,29 +270,33 @@
 }
 
 .nap-refresh-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     font-size: 0.82rem;
-    color: var(--color-text-mid);
+    color: var(--color-primary);
 }
 
-.nap-refresh-status:empty {
-    display: none;
+.nap-progress-list {
+    margin-top: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    max-height: 320px;
+    overflow-y: auto;
 }
 
-.nap-progress {
-    display: block;
-    width: 110px;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--color-border);
-    overflow: hidden;
+.nap-prog-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.88rem;
 }
 
-.nap-progress-fill {
-    display: block;
-    height: 100%;
-    background: var(--color-accent);
-    transition: width 0.25s ease;
-}
+.nap-prog-row:last-child { border-bottom: none; }
+.nap-prog-name { color: var(--text-primary); }
+.nap-prog-status { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
+.nap-prog-row.active { background: var(--bg-secondary); }
+.nap-prog-row.active .nap-prog-status { color: var(--color-primary); }
+.nap-prog-row.done .nap-prog-status { color: var(--color-success); }
+.nap-prog-row.skip .nap-prog-status { color: var(--text-muted); }
+.nap-prog-row.err .nap-prog-status { color: var(--color-danger); }

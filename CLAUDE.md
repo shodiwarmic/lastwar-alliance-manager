@@ -187,6 +187,15 @@ Two phases, both manual-trigger only:
   writes are deferred-logged — `/finish` writes the single `lastrank_sync`
   activity row. Prospect lookups (`/prospect`, `/prospect/finish`) mirror this.
 
+**NAP ladder sync** (`/api/allies/nap/*`) follows the same three-phase shape:
+`/refresh` (one ladder call, writes the registry + history) → `/member` per alliance (browser-driven
+loop; member counts are NOT on the ladder endpoint, only on the per-alliance detail record, so each
+costs its own upstream call at ~1/sec) → `/finish` (one activity row). Phase-2 writes are
+deferred-logged. Same reason as the member sync: it gives per-item progress, an interrupted run
+keeps what it wrote, and it never blocks one request for ~15s. The UI is the same two-level display
+as the Members sync and the External Alliances gather — a status line plus a per-item row list
+(`.nap-prog-*`, mirroring `.lr-prog-*` / `.ext-prog-*`). Don't invent a fourth progress mechanism.
+
 **Fetch strategy** (`lastrank_client.go`): `GET /v1/players/{id}` is the cheap
 cached read; `POST /v1/players/{id}/enrich` forces a slow live game re-pull
 (separate 25s-timeout client). Bulk paths use `lastRankPlayerBulk` (GET, upgrade

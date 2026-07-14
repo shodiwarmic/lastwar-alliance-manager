@@ -286,8 +286,29 @@ func attachAllyLinks(alliances []NAPAlliance) error {
 	return arows.Err()
 }
 
-// refreshNAP pulls the ladder from LastRank once and writes it into the registry (current values)
-// and alliance_stats_history (the time series).
+// --- Refresh is a three-phase, browser-driven flow, mirroring the LastRank member sync ---
+//
+//	POST /api/allies/nap/refresh        -> one ladder call; writes the registry + history rows
+//	POST /api/allies/nap/member (xN)    -> one alliance's member count, called in a loop by the client
+//	POST /api/allies/nap/finish         -> writes the single activity row for the whole run
+//
+// Why not do it all in one request: member counts are NOT on the ladder endpoint, only on the
+// per-alliance detail record, so enriching them costs one upstream call each. At the shared
+// 1 req/sec limit a default import would block a single request for ~15s with nothing to show.
+// Driving the loop from the browser gives per-alliance progress, lets an interrupted run resume
+// (the counts already written stay written), and is the pattern the Members LastRank sync and the
+// External Alliances gather already use. Phase-2 writes are deferred-logged; /finish logs once.
+
+// NAPRefreshAlliance is one row of the queue the client then walks through in phase 2.
+type NAPRefreshAlliance struct {
+	ExternalID int     `json:"external_id"` // 0 for our own alliance — it has no registry row
+	LastRankID string  `json:"lastrank_id"`
+	Tag        *string `json:"tag"`
+	Name       *string `json:"name"`
+	IsUs       bool    `json:"is_us"`
+}
+
+// refreshNAP is phase 1: pull the server ladder in a single upstream call and write it. Fast.
 func refreshNAP(w http.ResponseWriter, r *http.Request) {
 	cfg := loadNAPConfig()
 	if cfg.server == 0 {
@@ -321,7 +342,7 @@ func refreshNAP(w http.ResponseWriter, r *http.Request) {
 	if len(rowsIn) == 0 {
 		// Bail before the transaction. An empty ladder has no captured_at to stamp history with,
 		// and — because SQLite accepts an empty `NOT IN ()` and evaluates it TRUE — the stale-rank
-		// sweep below would wipe every rank on the server while reporting success.
+		// sweep would wipe every rank on the server while reporting success.
 		slog.Error("refreshNAP: empty ladder from LastRank", "server", cfg.server)
 		http.Error(w, "LastRank returned no alliances for this server", http.StatusBadGateway)
 		return
@@ -346,113 +367,158 @@ func refreshNAP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ---- Everything above can still fail with a normal HTTP status. Below here we stream. ----
-	//
-	// Member enrichment takes roughly one second per alliance (the shared 1 req/sec limiter), so a
-	// default import runs ~15s. A silent 15-second wait is indistinguishable from a hang, so report
-	// real progress as it happens rather than leaving the client guessing — the server knows exactly
-	// how many alliances there are and which one it is on.
-	//
-	// NDJSON over the existing POST: one JSON object per line, flushed as it is written. No job
-	// table, no polling endpoint, and it works with POST (EventSource would not).
-	//
-	// The cost of streaming is that the status code is committed before the DB write happens, so a
-	// write failure has to be reported in-band as a final {"stage":"error"} line. That is the only
-	// error that can occur past this point — every other failure path already returned above.
-	emit := newNDJSONEmitter(w)
-	emit(map[string]any{"stage": "ladder", "total": len(rowsIn)})
-
-	members := fetchNAPMemberCounts(r.Context(), rowsIn, func(done, total int, tag string) {
-		emit(map[string]any{"stage": "members", "done": done, "total": total, "tag": tag})
-	})
-
-	emit(map[string]any{"stage": "saving"})
-
-	recorded, scrubbed, err := applyNAPLadder(cfg, rowsIn, capturedAt, ourID, ourTag, members)
+	// Member counts come later, one alliance at a time (phase 2) — nil for now.
+	recorded, scrubbed, err := applyNAPLadder(cfg, rowsIn, capturedAt, ourID, ourTag, nil)
 	if err != nil {
 		slog.Error("refreshNAP: write failed", "error", err)
-		emit(map[string]any{"stage": "error", "message": "Database error"})
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
-	actor := getAuthUser(r)
+	// A scrub is a real deletion, so it is logged now rather than deferred to /finish.
 	if scrubbed > 0 {
+		actor := getAuthUser(r)
 		logActivity(actor.ID, actor.Username, "deleted", "external_alliance", "our own alliance", false,
 			"removed from the external alliance registry (an alliance registry must not contain us)")
 	}
-	logActivity(actor.ID, actor.Username, "imported", "alliance_stats", fmt.Sprintf("server %d ladder", cfg.server), false,
-		fmt.Sprintf("%d alliances; %d new datapoints; captured %s", len(rowsIn), recorded, capturedAt))
 
-	emit(map[string]any{
-		"stage":       "done",
-		"alliances":   len(rowsIn),
-		"recorded":    recorded,
+	// Hand the client the queue to walk. Registry ids are resolved here so phase 2 never has to
+	// re-derive identity.
+	queue := make([]NAPRefreshAlliance, 0, len(rowsIn))
+	byLRID := loadRegistryIDsByLastRankID(cfg.server)
+	for _, row := range rowsIn {
+		item := NAPRefreshAlliance{LastRankID: row.LastRankID, Tag: row.Tag, Name: row.Name}
+		if isOwnLadderRow(row, ourID, ourTag) {
+			item.IsUs = true
+		} else {
+			item.ExternalID = byLRID[strings.ToLower(row.LastRankID)]
+		}
+		queue = append(queue, item)
+	}
+
+	writeJSON(w, map[string]any{
+		"server":      cfg.server,
 		"captured_at": capturedAt,
+		"recorded":    recorded,
+		"alliances":   queue,
 	})
 }
 
-// newNDJSONEmitter returns a function that writes one JSON object per line and flushes it
-// immediately, so the client sees progress as it happens instead of in one lump at the end.
-//
-// X-Accel-Buffering: no stops a reverse proxy from buffering the whole response and defeating the
-// point (the production deployment sits behind Caddy).
-func newNDJSONEmitter(w http.ResponseWriter) func(any) {
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-
-	enc := json.NewEncoder(w) // Encode() already terminates each value with a newline
-	flusher, canFlush := w.(http.Flusher)
-	return func(v any) {
-		if err := enc.Encode(v); err != nil {
-			return // client hung up; the work still completes and commits
-		}
-		if canFlush {
-			flusher.Flush()
-		}
+func loadRegistryIDsByLastRankID(server int) map[string]int {
+	out := map[string]int{}
+	rows, err := db.Query(`SELECT id, COALESCE(lastrank_id, '') FROM external_alliances WHERE server = ?`, server)
+	if err != nil {
+		return out
 	}
-}
-
-// fetchNAPMemberCounts enriches each ladder row with its member count, keyed by lastrank id.
-//
-// The ladder endpoint doesn't carry member counts, so this is one GET per alliance — the shared
-// 1 req/sec limiter serializes them, which is precisely why nap_import_limit exists to bound it.
-// A refresh therefore costs 1 + nap_import_limit upstream requests and takes roughly that many
-// seconds.
-//
-// Best-effort by design: a failed lookup yields no entry, the upsert's COALESCE leaves whatever
-// member count we already had, and the tab shows an em dash. A member count is a nice-to-have —
-// it must never sink an otherwise good ladder refresh.
-// onProgress is called after each alliance is attempted, so the caller can report real progress
-// rather than a guess. It fires whether the lookup succeeded or failed — it tracks how far through
-// the queue we are, not how many counts we got.
-func fetchNAPMemberCounts(ctx context.Context, rows []VSLeagueAllianceSearchResult, onProgress func(done, total int, tag string)) map[string]int {
-	// Budget the whole enrichment pass rather than each call: the limiter, not the network, is the
-	// slow part, and one stalled alliance shouldn't consume the allowance of the rest.
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(len(rows)+15)*time.Second)
-	defer cancel()
-
-	out := make(map[string]int, len(rows))
-	for i, row := range rows {
-		if ctx.Err() != nil {
-			slogLastRank("refreshNAP: member enrichment cut short", ctx.Err())
-			break
-		}
-		if row.LastRankID != "" {
-			a, err := fetchLastRankAlliance(ctx, row.LastRankID)
-			switch {
-			case err != nil:
-				slogLastRank("refreshNAP: member count lookup failed", err)
-			case a.CurMember > 0:
-				out[strings.ToLower(row.LastRankID)] = a.CurMember
-			}
-		}
-		if onProgress != nil {
-			onProgress(i+1, len(rows), deref(row.Tag))
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		var lrid string
+		if rows.Scan(&id, &lrid) == nil && lrid != "" {
+			out[strings.ToLower(lrid)] = id
 		}
 	}
 	return out
+}
+
+// napMemberCount is phase 2: fetch ONE alliance's member count and store it. The client calls this
+// once per alliance in the queue, which is what makes per-alliance progress possible.
+//
+// Deferred-logged: a hundred activity rows for one refresh would be noise. /finish logs once.
+func napMemberCount(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		LastRankID string `json:"lastrank_id"`
+		CapturedAt string `json:"captured_at"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	req.LastRankID = strings.TrimSpace(req.LastRankID)
+	if req.LastRankID == "" {
+		badRequest(w, "lastrank_id is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	a, err := fetchLastRankAlliance(ctx, req.LastRankID)
+	if err != nil {
+		slogLastRank("napMemberCount: lookup failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for this alliance", http.StatusBadGateway)
+		return
+	}
+	if a.CurMember <= 0 {
+		writeJSON(w, map[string]any{"applied": false, "skip_reason": "no_member_count"})
+		return
+	}
+
+	if err := storeNAPMemberCount(req.LastRankID, req.CapturedAt, a.CurMember, a.MaxMember); err != nil {
+		slog.Error("napMemberCount: write failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"applied":      true,
+		"member_count": a.CurMember,
+		"max_member":   a.MaxMember,
+	})
+}
+
+// storeNAPMemberCount writes a member count to the registry row (current) and backfills it onto the
+// history row for this capture (the series).
+//
+// Our own alliance has NO registry row (Rule 2), so its only home is the is_own history row — which
+// is exactly why the history backfill exists rather than relying on the registry.
+func storeNAPMemberCount(lastrankID, capturedAt string, cur, max int) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`UPDATE external_alliances SET member_count = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE lastrank_id = ? COLLATE NOCASE`, cur, lastrankID); err != nil {
+		return err
+	}
+
+	// Only fills a hole; never rewrites a datapoint we already recorded.
+	if capturedAt != "" {
+		if _, err := tx.Exec(`UPDATE alliance_stats_history SET member_count = ?
+			WHERE member_count IS NULL AND recorded_at = ? AND source = ?
+			  AND lastrank_id = ? COLLATE NOCASE`,
+			cur, capturedAt, provenanceSource("lastrank"), lastrankID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// napFinish is phase 3: one activity row for the whole run, matching how the LastRank member sync
+// defers its logging to /finish rather than logging every per-item write.
+func napFinish(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Alliances  int    `json:"alliances"`
+		Recorded   int    `json:"recorded"`
+		Members    int    `json:"members_synced"`
+		CapturedAt string `json:"captured_at"`
+		Server     int    `json:"server"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "imported", "alliance_stats",
+		fmt.Sprintf("server %d ladder", req.Server), false,
+		fmt.Sprintf("%d alliances; %d new datapoints; %d member counts; captured %s",
+			req.Alliances, req.Recorded, req.Members, req.CapturedAt))
+	writeJSON(w, map[string]string{"message": "ok"})
 }
 
 // applyNAPLadder writes one ladder capture. Shaped as read-all-then-write-all: the capture guard
