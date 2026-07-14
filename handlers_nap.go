@@ -157,11 +157,13 @@ func loadOwnLadderRow(server int) (NAPAlliance, bool) {
 	var a NAPAlliance
 	var rank sql.NullInt64
 	var recordedAt string
-	err := db.QueryRow(`SELECT tag, name, power, kills, power_rank, member_count, recorded_at
+	// lastrank_id is selected so the member-count gather can include us — we have no registry row to
+	// look it up from (Rule 2), so this row is the only place it lives.
+	err := db.QueryRow(`SELECT tag, name, power, kills, power_rank, member_count, lastrank_id, recorded_at
 		FROM alliance_stats_history
 		WHERE is_own = 1 AND server = ?
 		ORDER BY recorded_at DESC LIMIT 1`, server).
-		Scan(&a.Tag, &a.Name, &a.Power, &a.Kills, &rank, &a.MemberCount, &recordedAt)
+		Scan(&a.Tag, &a.Name, &a.Power, &a.Kills, &rank, &a.MemberCount, &a.LastRankID, &recordedAt)
 	if err != nil {
 		return a, false // never synced, or we sit below the import window — either way, not in the pact
 	}

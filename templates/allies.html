@@ -38,23 +38,41 @@
     <!-- NAP Tab — a derived view of the server ladder. Read-only: alliances are managed from the
          Allies tab, and the ladder itself comes from LastRank. -->
     <div id="tab-nap" class="tab-content">
+        {{if .Permissions.ManageAllies}}
+        <!-- Sync card: same shape as the Members "Sync from LastRank" panel and the External
+             Alliances gather. A fast primary action, a slow per-item secondary one, a shared status
+             line, and the per-alliance progress list underneath. -->
+        <section class="nap-sync-section">
+            <div class="nap-sync-card">
+                <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Sync from LastRank</h4>
+                <p class="nap-sync-help">
+                    Pull your server's alliance ladder from
+                    <a href="https://lastrank.fun" target="_blank" rel="noopener noreferrer">lastrank.fun</a> —
+                    power, kills and rank for the top alliances, in a single call.
+                    Member counts are not on the ladder, so they are gathered per alliance and paced at
+                    ~1/second; that pass is slower, and alliances missing a count are done first so an
+                    interrupted run resumes where it left off.
+                </p>
+                <div class="nap-sync-actions">
+                    <button type="button" id="nap-refresh-btn" class="btn btn-primary">
+                        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Refresh Ladder
+                    </button>
+                    <button type="button" id="nap-members-btn" class="btn btn-secondary">
+                        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-crosshair"/></svg> Gather Member Counts
+                    </button>
+                    <span id="nap-status" class="status-msg"></span>
+                </div>
+                <div id="nap-progress" class="nap-progress-list" style="display:none;"></div>
+            </div>
+        </section>
+        {{end}}
+
         <div class="action-bar nap-bar">
             <div class="nap-intro">
                 <span id="nap-summary"></span>
                 <span id="nap-captured" class="nap-captured"></span>
             </div>
-            {{if .Permissions.ManageAllies}}
-            <div class="nap-refresh-group">
-                <button type="button" id="nap-refresh-btn" class="btn btn-secondary btn-sm">Refresh from LastRank</button>
-                <span id="nap-refresh-status" class="nap-refresh-status" aria-live="polite"></span>
-            </div>
-            {{end}}
         </div>
-        {{if .Permissions.ManageAllies}}
-        <!-- Per-alliance progress for the member-count pass, same shape as the Members LastRank
-             sync and the External Alliances gather. -->
-        <div id="nap-progress" class="nap-progress-list" style="display:none;"></div>
-        {{end}}
         <div id="nap-list"></div>
     </div>
 

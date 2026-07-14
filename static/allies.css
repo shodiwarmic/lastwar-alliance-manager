@@ -257,22 +257,38 @@
     color: var(--color-success);
 }
 
-/* Refresh progress — the same two-level display the Members LastRank sync and the External
-   Alliances gather use: a status line saying how far through we are, plus a per-alliance list
-   saying what each one actually did. Member counts cost one upstream call each at ~1/sec, so a
-   refresh takes ~15s and silence would read as a hang. Class names and colours mirror
-   .lr-prog-* / .ext-prog-* deliberately — this is one pattern, not three. */
-.nap-refresh-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+/* ── Sync from LastRank card ────────────────────────────────────────────────
+   Same component as the Members "Sync from LastRank" panel and the External Alliances gather:
+   an icon heading, help text, a fast primary action + a slow per-item secondary one sharing a
+   status line, and a per-alliance progress list beneath. Class names mirror .lastrank-* /
+   .ext-gather-* / .lr-prog-* deliberately — this is one pattern, not three. */
+
+.nap-sync-section {
+    margin-bottom: 20px;
 }
 
-.nap-refresh-status {
-    font-size: 0.82rem;
-    color: var(--color-primary);
+.nap-sync-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: clamp(14px, 2.5vw, 22px);
 }
+
+.nap-sync-help {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 8px 0 14px;
+    max-width: 70ch;
+}
+
+.nap-sync-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Per-alliance progress for the member-count pass */
 
 .nap-progress-list {
     margin-top: 14px;
