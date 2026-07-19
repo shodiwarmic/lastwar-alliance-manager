@@ -1,0 +1,395 @@
+/* files.css — Files page: grid, filter panel chrome, tag badges/chips, manage-tags UI */
+
+/* File cards sit directly on the page background (like the Members list) — no
+   wrapping card/header. Two-up only when the content area is genuinely wide.
+   The single width breakpoint below forces one column inside the mobile shell:
+   without it, the 230px sidebar disappearing at 768px suddenly widens the content
+   area and pops the grid 1→2→1 as you cross the boundary. Keying to 768px (the app's
+   one structural breakpoint) keeps the transition monotonic. */
+.files-grid {
+    display: grid;
+    /* A touch wider than a bare document card so the right-bound action buttons
+       have room to show labels before the container query collapses them. */
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 15px;
+}
+
+@media (max-width: 768px) {
+    .files-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Loading / empty / error states span the full grid, not a single narrow cell. */
+.files-grid > .loading-msg,
+.files-grid > .empty-state,
+.files-grid > .error-message {
+    grid-column: 1 / -1;
+}
+
+/* ── File card: info + actions on a top row, tags full-width beneath ──────────
+   The card is a column: the top row holds the info (left) and the action buttons
+   (right); the tag row is a sibling below it, so tags flow under the buttons
+   instead of being trapped in the narrow info column. Each card is its own query
+   container so the button labels collapse to icons based on the CARD's width, not
+   the viewport — a narrow 2-up card shows icons while a wide card shows labels. */
+.file-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 15px;
+    margin-bottom: 0;
+    container-type: inline-size;
+}
+
+.file-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+/* The title fills the top row so the actions sit hard right; min-width:0 lets a
+   long title wrap/shrink instead of shoving the buttons off. align-items:start so
+   the file-type icon lines up with the first line of a wrapped title. */
+.file-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 1.1em;
+    color: var(--color-text);
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+/* Optically centre the file-type icon on the first line of the (possibly wrapped) title. */
+.file-title .svg-icon {
+    margin-top: 3px;
+}
+
+/* Metadata badge row (Members-card style): a full-width, wrapping row of icon+value
+   pills that flows beneath the title+buttons. */
+.file-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Compact icon+value pills. Scoped to .file-meta so the primary rank badge used
+   elsewhere keeps its own sizing. Owner/updated use .badge-hq (muted); view/edit
+   carry their per-rank color from .rank-*. */
+.file-meta .member-rank {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    font-size: 0.8em;
+    cursor: help; /* each badge carries a hover title with expanded info */
+}
+
+/* Muted badges (owner / updated) — a visible light-gray pill, matching the mockup.
+   (Not .badge-hq, whose --color-surface reads darker than the card and vanishes.) */
+.file-meta .file-meta-muted {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.file-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* Collapse the button labels to icons (title/aria-label keep them discoverable)
+   when there's no room for three labelled buttons — ~260px — beside a readable
+   title. Two triggers:
+   1. The mobile shell (≤768px), same as the Members card, so mobile matches.
+   2. Any narrow card in the desktop grid — a 2-up card is far narrower than the
+      viewport, so this is keyed to the CARD's width via a container query. */
+@media (max-width: 768px) {
+    .file-action-label {
+        display: none;
+    }
+}
+
+@container (max-width: 520px) {
+    .file-action-label {
+        display: none;
+    }
+}
+
+/* ── Filter/sort panel chrome ─────────────────────────────────────────────
+   NOTE: these rules are copied from members.css. members.css isn't loaded on
+   the Files page, and this chrome is shared by the filter-panel.js component.
+   The filter-panel dedup follow-up hoists this to a shared stylesheet and
+   removes both copies. Selectors match members.css so that merge is trivial. */
+.filter-sort-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-bottom: 25px;
+    background: var(--color-surface);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+}
+
+.filter-sort-top {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.filter-sort-divider {
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    margin: 0;
+}
+
+.filter-sort-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 20px;
+}
+
+.filter-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.filter-row-full {
+    grid-column: 1 / -1;
+}
+
+.member-search-wrap {
+    flex: 1;
+    min-width: 250px;
+    position: relative;
+}
+
+.member-search-wrap .form-input {
+    padding: 10px 35px 10px 15px;
+    border-radius: 20px;
+}
+
+.member-search-wrap button {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-mid);
+}
+
+.filter-collapse {
+    display: none;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.filter-collapse.open {
+    display: flex;
+}
+
+.filter-toggle {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.filter-toggle .chevron {
+    transition: transform 0.2s;
+}
+
+.filter-toggle[aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+}
+
+.filter-count-badge {
+    background: var(--color-accent);
+    color: #fff;
+    border-radius: 999px;
+    padding: 0 6px;
+    font-size: 0.75em;
+    font-weight: 600;
+    min-width: 1.4em;
+    text-align: center;
+}
+
+/* ── Tag badges (on file cards + in the manage list) ──────────────────────
+   Color is driven by class, never inline — so badges adapt to light/dark. */
+.file-tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    /* spacing from the top row comes from .file-card's `gap` — no margin here */
+}
+
+.file-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75em;
+    font-weight: 600;
+    line-height: 1.5;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.file-tag--info    { background: var(--color-info-bg);    color: var(--color-info); }
+.file-tag--success { background: var(--color-success-bg); color: var(--color-success); }
+.file-tag--warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.file-tag--danger  { background: var(--color-danger-bg);  color: var(--color-danger); }
+.file-tag--purple  { background: var(--color-purple-bg);  color: var(--color-purple); }
+/* neutral falls through to the base .file-tag colors */
+
+/* ── Tag filter chips: a small colored dot before the label ───────────────
+   The chip itself keeps the global .filter-chip styling; the dot signals its
+   color without overpowering the active/inactive states. */
+.tag-chip[class*="tag-chip--"]::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    background: var(--color-text-mid); /* neutral default */
+}
+
+/* Per-color dots. The .tag-chip prefix matches the shape rule's specificity (0,0,2,1)
+   so these win by source order — without it, the generic gray default outranks them
+   and every dot renders gray. */
+.tag-chip.tag-chip--info::before    { background: var(--color-info); }
+.tag-chip.tag-chip--success::before { background: var(--color-success); }
+.tag-chip.tag-chip--warning::before { background: var(--color-warning); }
+.tag-chip.tag-chip--danger::before  { background: var(--color-danger); }
+.tag-chip.tag-chip--purple::before  { background: var(--color-purple); }
+
+/* The New Tag modal opens ON TOP of the Create/Edit file modals (both z-index 1000),
+   so it needs to stack above them. */
+#new-tag-modal {
+    z-index: 1100;
+}
+
+/* Tags field: label on the left, "+ New tag" button on the right. */
+.tag-field-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 5px;
+}
+.tag-field-head label {
+    margin: 0;
+}
+
+/* ── Tag multiselect: pills & options in each tag's color ─────────────────
+   files.js adds tag-pill--{color} to each .choices__item by looking up its data-value
+   (the tag id) in allTagsData. 3-class selectors so they beat base Choices +
+   choices-theme without !important. Selected pills get full color (matching the card
+   badges); dropdown options get a colored dot (less busy in a long list). */
+.choices__list--multiple .choices__item.tag-pill--neutral { background: var(--bg-tertiary);    color: var(--text-secondary); }
+.choices__list--multiple .choices__item.tag-pill--info     { background: var(--color-info-bg);    color: var(--color-info); }
+.choices__list--multiple .choices__item.tag-pill--success  { background: var(--color-success-bg); color: var(--color-success); }
+.choices__list--multiple .choices__item.tag-pill--warning  { background: var(--color-warning-bg); color: var(--color-warning); }
+.choices__list--multiple .choices__item.tag-pill--danger   { background: var(--color-danger-bg);  color: var(--color-danger); }
+.choices__list--multiple .choices__item.tag-pill--purple   { background: var(--color-purple-bg);  color: var(--color-purple); }
+
+.choices__list--dropdown .choices__item[class*="tag-pill--"]::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+    background: var(--color-text-mid); /* neutral */
+}
+.choices__list--dropdown .choices__item.tag-pill--info::before    { background: var(--color-info); }
+.choices__list--dropdown .choices__item.tag-pill--success::before { background: var(--color-success); }
+.choices__list--dropdown .choices__item.tag-pill--warning::before { background: var(--color-warning); }
+.choices__list--dropdown .choices__item.tag-pill--danger::before  { background: var(--color-danger); }
+.choices__list--dropdown .choices__item.tag-pill--purple::before  { background: var(--color-purple); }
+
+/* On highlight, choices-theme paints the whole row --color-accent, which buries the
+   tag color. Keep the highlighted row in the tag's own color instead (4-class selector
+   beats the theme's 3-class highlight rule). */
+.choices__list--dropdown .choices__item--selectable.is-highlighted.tag-pill--neutral { background: var(--bg-tertiary);    color: var(--text-secondary); }
+.choices__list--dropdown .choices__item--selectable.is-highlighted.tag-pill--info     { background: var(--color-info-bg);    color: var(--color-info); }
+.choices__list--dropdown .choices__item--selectable.is-highlighted.tag-pill--success  { background: var(--color-success-bg); color: var(--color-success); }
+.choices__list--dropdown .choices__item--selectable.is-highlighted.tag-pill--warning  { background: var(--color-warning-bg); color: var(--color-warning); }
+.choices__list--dropdown .choices__item--selectable.is-highlighted.tag-pill--danger   { background: var(--color-danger-bg);  color: var(--color-danger); }
+.choices__list--dropdown .choices__item--selectable.is-highlighted.tag-pill--purple   { background: var(--color-purple-bg);  color: var(--color-purple); }
+
+/* ── Color dropdown swatches ──────────────────────────────────────────────
+   The tag color <select>s are upgraded to Choices and tagged .color-choices, so
+   each option (and the selected value) shows a colored dot. Keyed on the option
+   value that Choices copies onto data-value. Scoped to .color-choices so it never
+   touches the tag pickers (whose item values are numeric ids). */
+.color-choices .choices__item[data-value]::before {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+    background: var(--color-text-mid); /* neutral */
+}
+.color-choices .choices__item[data-value="info"]::before    { background: var(--color-info); }
+.color-choices .choices__item[data-value="success"]::before { background: var(--color-success); }
+.color-choices .choices__item[data-value="warning"]::before { background: var(--color-warning); }
+.color-choices .choices__item[data-value="danger"]::before  { background: var(--color-danger); }
+.color-choices .choices__item[data-value="purple"]::before  { background: var(--color-purple); }
+
+/* ── Manage Tags modal ────────────────────────────────────────────────────*/
+.tag-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+.tag-modal-head h2 {
+    margin: 0;
+}
+
+.tag-manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 15px;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.tag-manage-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+}
+
+.tag-manage-meta {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+
+.tag-manage-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+}

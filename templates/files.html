@@ -1,3 +1,10 @@
+{{define "head_tags"}}
+<link rel="stylesheet" href="/files.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
+<link rel="stylesheet" href="/choices-theme.css">
+<script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
+{{end}}
+
 {{define "header_text"}}
     <h1>
         <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-folder"/></svg>
@@ -9,17 +16,56 @@
 {{define "content"}}
     <div class="action-bar">
         {{if .Permissions.UploadFiles}}
-        <button id="upload-file-btn" class="btn btn-primary">Upload File</button>
+        <button id="upload-file-btn" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-upload"/></svg> Upload File</button>
+        <button id="create-file-btn" class="btn btn-secondary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-plus"/></svg> Create New</button>
+        {{end}}
+        {{if .Permissions.ManageFiles}}
+        <button id="manage-tags-btn" class="btn btn-secondary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tag"/></svg> Manage Tags</button>
         {{end}}
     </div>
 
-    <div class="card">
-        <div class="card-header">
-            <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-folder"/></svg> Alliance Documents</h2>
+    <div class="filter-sort-controls card">
+        <div class="filter-sort-top">
+            <div class="member-search-wrap">
+                <input type="text" id="file-search" class="form-input" placeholder="Search files...">
+                <button id="clear-file-search" style="display: none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
+            <button type="button" id="toggle-filters" class="btn btn-secondary btn-sm filter-toggle" aria-expanded="false" aria-controls="filter-collapse">
+                <svg width="14" height="14" aria-hidden="true" class="svg-icon chevron"><use href="/icons.svg#icon-chevron-down"/></svg>
+                Sort &amp; Filter
+                <span id="active-filter-count" class="filter-count-badge" hidden></span>
+            </button>
+            <button type="button" id="clear-filters" class="btn btn-ghost btn-sm" disabled>Clear</button>
         </div>
-        <div id="files-grid" class="members-grid" style="display: grid; gap: 15px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
-            <div class="loading-msg">Loading files...</div>
+
+        <div id="filter-collapse" class="filter-collapse">
+            <hr class="filter-sort-divider">
+            <div class="filter-sort-grid">
+                <div class="filter-row filter-row-full" id="sort-chips-row">
+                    <span class="filter-chip-label">Sort:</span>
+                    <button class="filter-chip sort-chip active" data-sort="name">Name ↑</button>
+                    <button class="filter-chip sort-chip" data-sort="updated">Updated</button>
+                    <button class="filter-chip sort-chip" data-sort="uploaded">Uploaded</button>
+                    <button class="filter-chip sort-chip" data-sort="owner">Owner</button>
+                    <button class="filter-chip sort-chip" data-sort="type">Type</button>
+                </div>
+                <div class="filter-row filter-row-full" id="type-chips-row">
+                    <span class="filter-chip-label">Type:</span>
+                    <button class="filter-chip type-chip active" data-type="all">All</button>
+                    <button class="filter-chip type-chip" data-type="document"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Document</button>
+                    <button class="filter-chip type-chip" data-type="spreadsheet"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Spreadsheet</button>
+                    <button class="filter-chip type-chip" data-type="image"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-photo"/></svg> Image</button>
+                </div>
+                <div class="filter-row filter-row-full" id="tag-chips-row">
+                    <span class="filter-chip-label">Tags:</span>
+                    <!-- All / per-tag / Untagged chips injected by files.js (rank-filtered) -->
+                </div>
+            </div>
         </div>
+    </div>
+
+    <div id="files-grid" class="files-grid">
+        <div class="loading-msg">Loading files...</div>
     </div>
 {{end}}
 
@@ -31,6 +77,13 @@
                 <div class="form-group">
                     <label>Document Title:</label>
                     <input type="text" id="edit-file-title" required class="form-input">
+                </div>
+                <div class="form-group">
+                    <div class="tag-field-head">
+                        <label>Tags:</label>
+                        {{if .Permissions.ManageFiles}}<button type="button" class="btn btn-sm btn-secondary new-tag-btn" data-target="edit-file-tags">+ New tag</button>{{end}}
+                    </div>
+                    <select id="edit-file-tags" multiple class="form-input"></select>
                 </div>
                 <div class="form-group">
                     <label>Minimum Rank Required to View:</label>
@@ -73,6 +126,13 @@
                     <input type="file" id="file-input" required class="form-input" style="padding: 10px;">
                 </div>
                 <div class="form-group">
+                    <div class="tag-field-head">
+                        <label>Tags:</label>
+                        {{if .Permissions.ManageFiles}}<button type="button" class="btn btn-sm btn-secondary new-tag-btn" data-target="file-tags">+ New tag</button>{{end}}
+                    </div>
+                    <select id="file-tags" multiple class="form-input"></select>
+                </div>
+                <div class="form-group">
                     <label>Minimum Rank Required to View:</label>
                     <select id="file-min-rank" class="form-input">
                         <option value="R1">R1 (Everyone)</option>
@@ -100,6 +160,113 @@
         </div>
     </div>
 
+    <div id="create-modal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Document</h2>
+            <form id="create-form">
+                <div class="form-group">
+                    <label>Document Title:</label>
+                    <input type="text" id="create-file-title" required class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Type:</label>
+                    <select id="create-file-kind" class="form-input">
+                        <option value="document">Document (.docx)</option>
+                        <option value="spreadsheet">Spreadsheet (.xlsx)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="tag-field-head">
+                        <label>Tags:</label>
+                        {{if .Permissions.ManageFiles}}<button type="button" class="btn btn-sm btn-secondary new-tag-btn" data-target="create-file-tags">+ New tag</button>{{end}}
+                    </div>
+                    <select id="create-file-tags" multiple class="form-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>Minimum Rank Required to View:</label>
+                    <select id="create-file-min-rank" class="form-input">
+                        <option value="R1">R1 (Everyone)</option>
+                        <option value="R2">R2</option>
+                        <option value="R3">R3</option>
+                        <option value="R4">R4 & R5 Only</option>
+                        <option value="R5">R5 Only</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Minimum Rank Required to Edit:</label>
+                    <select id="create-file-min-edit-rank" class="form-input">
+                        <option value="R1">R1 (Everyone)</option>
+                        <option value="R2">R2</option>
+                        <option value="R3">R3</option>
+                        <option value="R4" selected>R4 & R5 Only</option>
+                        <option value="R5">R5 Only</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary" id="create-submit-btn">Create &amp; Open</button>
+                    <button type="button" class="btn btn-secondary" id="create-cancel-btn">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="new-tag-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="new-tag-title">New Tag</h2>
+            <form id="new-tag-form">
+                <input type="hidden" id="new-tag-edit-id">
+                <div class="form-group">
+                    <label>Tag Name:</label>
+                    <input type="text" id="new-tag-name" required class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Minimum Rank to See This Tag:</label>
+                    <select id="new-tag-min-rank" class="form-input">
+                        <option value="R1">R1 (Everyone)</option>
+                        <option value="R2">R2</option>
+                        <option value="R3">R3</option>
+                        <option value="R4">R4 & R5 Only</option>
+                        <option value="R5">R5 Only</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Color:</label>
+                    <select id="new-tag-color" class="form-input">
+                        <option value="neutral">Neutral</option>
+                        <option value="info">Blue</option>
+                        <option value="success">Green</option>
+                        <option value="warning">Amber</option>
+                        <option value="danger">Red</option>
+                        <option value="purple">Purple</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Sort Order:</label>
+                    <input type="number" id="new-tag-sort-order" class="form-input" value="0">
+                    <span id="new-tag-sort-hint" class="help-text"></span>
+                </div>
+                <p id="new-tag-status" class="status-msg"></p>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary" id="new-tag-submit-btn">Create Tag</button>
+                    <button type="button" class="btn btn-secondary" id="new-tag-cancel-btn">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="tag-modal" class="modal">
+        <div class="modal-content">
+            <div class="tag-modal-head">
+                <h2>Manage Tags</h2>
+                <button type="button" class="btn btn-sm btn-primary" id="tag-add-btn">+ Add Tag</button>
+            </div>
+            <div id="tag-list" class="tag-manage-list"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="tag-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
     <div id="image-modal" class="modal">
         <div class="modal-content modal-lg" style="text-align: center;">
             <h2 id="image-modal-title"></h2>
@@ -119,6 +286,8 @@
 <div id="page-config"
     data-can-manage="{{if .Permissions.ManageFiles}}true{{else}}false{{end}}"
     data-can-upload="{{if .Permissions.UploadFiles}}true{{else}}false{{end}}"
+    data-user-rank="{{.Rank}}"
     hidden></div>
+<script src="/filter-panel.js"></script>
 <script src="/files.js"></script>
 {{end}}
