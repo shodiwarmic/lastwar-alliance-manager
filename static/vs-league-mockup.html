@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VS Duel League S34 — Bracket Mockup</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/theme.js"></script>
+  <style>
+    body{background:var(--color-bg);color:var(--color-text);font-family:'Plus Jakarta Sans',system-ui,sans-serif;min-height:100vh}
+    .wrap{max-width:1180px;margin:0 auto;padding:clamp(16px,4vw,34px)}
+    h1{font-size:1.55rem;margin-bottom:4px}.lead{color:var(--color-text-mid);max-width:84ch;margin-bottom:14px}
+    .live-banner{display:inline-flex;align-items:center;gap:8px;font-size:.82rem;font-weight:700;color:var(--color-info);background:var(--color-info-bg);border:1px solid var(--color-info);border-radius:20px;padding:5px 14px;margin-bottom:18px}
+    .tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:20px}.tb .hint{font-size:.8rem;color:var(--color-text-muted)}.tb .sep{flex:1}
+    .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--color-text-mid)}.legend span{display:inline-flex;align-items:center;gap:6px}.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+    .card-header h2{font-size:1.15rem}.card-header .sub{font-size:.82rem;color:var(--color-text-muted);font-weight:500}
+    .opt{display:inline-block;font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--color-accent);background:var(--color-accent-bg);border:1px solid var(--color-accent-border);padding:3px 10px;border-radius:20px;margin-bottom:2px}
+    .tbl-scroll{overflow-x:auto}
+    .stbl{width:100%;border-collapse:collapse;font-size:.85rem;min-width:520px}
+    .stbl th{text-align:left;padding:8px 10px;color:var(--color-text-muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid var(--color-border)}
+    .stbl th.wc{text-align:center;width:60px}
+    .stbl td{padding:6px 10px;border-bottom:1px solid var(--color-border)}
+    .stbl td.rk{font-weight:800;color:var(--color-text-muted);text-align:center;width:38px;font-variant-numeric:tabular-nums}
+    .stbl td.wc{text-align:center}
+    .stbl tr.us td{background:var(--color-success-bg)}
+    .stbl tr.us .al b{color:var(--color-success)}
+    .al b{font-weight:800}.al small{color:var(--color-text-muted);font-size:.76rem;font-weight:600}
+    .rk1{color:#d4af37!important}.rk2{color:#9aa9bd!important}.rk3{color:#cd7f32!important}
+    .cell{display:inline-flex;align-items:center;justify-content:center;min-width:40px;padding:2px 8px;border-radius:20px;font-size:.72rem;font-weight:800}
+    .cell.live{color:var(--color-info);background:var(--color-info-bg)}
+    .cell.up{color:var(--color-text-muted);background:var(--color-bg);border:1px solid var(--color-border)}
+    .zone{font-size:.76rem;color:var(--color-text-muted);margin-top:10px;display:flex;flex-wrap:wrap;gap:14px}
+    .zone b.promo{color:var(--color-success)}.zone b.demo{color:var(--color-danger)}
+    .grid{display:flex;gap:20px;overflow-x:auto;padding-bottom:8px;min-width:min-content}
+    .wkcol{flex:0 0 252px}
+    .wkhead{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:2px solid var(--color-border);padding:4px 2px 10px;margin-bottom:14px}
+    .wkhead .wk{font-weight:800;font-size:.95rem}
+    .state{font-size:.68rem;font-weight:800;padding:2px 9px;border-radius:20px;white-space:nowrap}
+    .state.live{color:var(--color-info);background:var(--color-info-bg)}
+    .state.up{color:var(--color-text-muted);background:var(--color-bg);border:1px solid var(--color-border)}
+    .state.pred{color:var(--color-purple);background:var(--color-purple-bg)}
+    .subhead{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin:6px 0 8px}
+    .subhead.up{color:var(--color-success)}.subhead.dn{color:var(--color-danger)}
+    .pair{display:flex;align-items:center;margin-bottom:11px}
+    .teams{display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
+    .chip{display:flex;align-items:center;gap:7px;padding:4px 8px;border:1px solid var(--color-border);border-radius:7px;background:var(--color-card);font-size:.78rem}
+    .chip .rk{flex:0 0 auto;font-size:.66rem;font-weight:800;color:var(--color-text-muted);min-width:22px}
+    .chip .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-text-mid)}
+    .chip .s{flex:0 0 auto;font-variant-numeric:tabular-nums;color:var(--color-text-muted);font-weight:700}
+    .chip.lead{background:var(--color-info-bg);border-color:var(--color-info)}
+    .chip.lead .nm{font-weight:800;color:var(--color-text)}.chip.lead .s{color:var(--color-info)}
+    .chip.won{background:var(--color-success-bg);border-color:var(--color-success)}
+    .chip.won .nm{font-weight:800;color:var(--color-text)}.chip.won .s{color:var(--color-success)}
+    .chip.won .nm::after{content:' ✓';color:var(--color-success);font-weight:800}
+    .chip.out .nm,.chip.out .s{opacity:.5}
+    .chip.us{box-shadow:inset 3px 0 0 var(--color-accent)}.chip.us .nm{color:var(--color-accent)!important}
+    .chip.pred{background:var(--color-bg);border-style:dashed}
+    .chip.pred .nm{color:var(--color-text-muted);font-weight:600}
+    .wl{flex:0 0 auto;font-size:.6rem;font-weight:800;padding:1px 5px;border-radius:4px;letter-spacing:.03em}
+    .wl.w{color:var(--color-success);background:var(--color-success-bg)}
+    .wl.l{color:var(--color-danger);background:var(--color-danger-bg)}
+    .elbow{flex:0 0 12px;align-self:stretch;margin:10px 0;border-right:2px solid var(--color-border);border-top:2px solid var(--color-border);border-bottom:2px solid var(--color-border);border-radius:0 6px 6px 0}
+    .wn{flex:0 0 auto;margin-left:7px;padding:4px 8px;border:1px solid var(--color-border);border-radius:7px;background:var(--color-surface);font-size:.72rem;font-weight:800;white-space:nowrap;color:var(--color-text-mid)}
+    .wn.won{color:var(--color-success);border-color:var(--color-success)}
+    .wn.dim{color:var(--color-text-muted);font-weight:600}
+    .pending{border:1.5px dashed var(--color-border);border-radius:8px;padding:22px 10px;text-align:center;color:var(--color-text-muted);font-size:.82rem}
+    .pending .big{font-size:1.3rem;display:block;margin-bottom:4px}
+    .grid-note{font-size:.78rem;color:var(--color-text-muted);margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <h1>Alliance Duel League — S34 (live data)</h1>
+    <p class="lead">Real S34 data in the game's <strong>exact ranking order</strong>. S34 is <strong>mid-Week 1</strong>,
+       so it shows an <strong>incomplete season</strong>: some Week-1 outcomes are already <strong>settled</strong>
+       (a 7:0 mid-week is clinched — only 6 pts remain), and <strong>Week 2 is predicted</strong> (winners→winners,
+       losers→losers) from tags alone. Disposable file.</p>
+
+    <div class="live-banner">🔴 LIVE · Season 34 · Gold Tier 29–2 · mid-Week 1 · 22d left</div>
+
+    <div class="tb">
+      <span class="hint">Theme:</span>
+      <a href="#" class="filter-chip theme-option" data-theme="light">Light</a>
+      <a href="#" class="filter-chip theme-option" data-theme="dark">Dark</a>
+      <a href="#" class="filter-chip theme-option" data-theme="auto">Auto</a>
+      <span class="sep"></span>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--color-success)"></span> settled ✓</span>
+        <span><span class="sw" style="background:var(--color-info)"></span> leading (in play)</span>
+        <span><span class="sw" style="background:var(--color-accent)"></span> us</span>
+      </div>
+    </div>
+
+    <!-- STANDINGS -->
+    <div class="card">
+      <div class="card-header"><div>
+        <span class="opt">Standings</span>
+        <h2>Ranking — exact game order</h2>
+        <div class="sub">Same 16 alliances, same order as the in-game Ranking tab. ⚔ = week live, zzZ = not played yet.</div>
+      </div></div>
+      <div class="tbl-scroll">
+        <table class="stbl">
+          <thead><tr><th>#</th><th>Alliance</th><th class="wc">Wk 1</th><th class="wc">Wk 2</th><th class="wc">Wk 3</th><th class="wc">Wk 4</th></tr></thead>
+          <tbody>
+            <tr><td class="rk rk1">1</td><td class="al"><b>[ASi1] TürKiYe</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk rk2">2</td><td class="al"><b>[SSUK] Delete X right away</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk rk3">3</td><td class="al"><b>[LwT] Loyal Warriors</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">4</td><td class="al"><b>[BLBH] Bastion Libre</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">5</td><td class="al"><b>[SRIA] Schickeria</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">6</td><td class="al"><b>[dt2] Dream team2050</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">7</td><td class="al"><b>[EvOL] EvOlution</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">8</td><td class="al"><b>[MRKo] Mon Royaume Koalas</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">9</td><td class="al"><b>[4404] Error</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">10</td><td class="al"><b>[Vicc] VN Victory</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr class="us"><td class="rk">11</td><td class="al"><b>[PoWr] Pantheon of Wrath</b> <small>· us</small></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">12</td><td class="al"><b>[cROw] Black Crow Legion</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">13</td><td class="al"><b>[Q8M] Arab Storm</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">14</td><td class="al"><b>[SLU9] SLU雙龍聯</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">15</td><td class="al"><b>[Ac32] 樂天派</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+            <tr><td class="rk">16</td><td class="al"><b>[Hxll] Hellhounds</b></td><td class="wc"><span class="cell live">⚔</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td><td class="wc"><span class="cell up">zzZ</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="zone"><span><b class="promo">▲ Promotion</b> top</span><span><b class="demo">▼ Demotion</b> bottom</span><span>(game is "calculating promoted/demoted" counts)</span></div>
+    </div>
+
+    <!-- WEEKLY BRACKET -->
+    <div class="card">
+      <div class="card-header"><div>
+        <span class="opt">Weekly bracket</span>
+        <h2>Match Record + next-week prediction</h2>
+        <div class="sub">Week 1 live (settled ✓ vs still in play). Week 2 predicted from Week-1 winners/losers using tags. Weeks 3–4 not predictable yet.</div>
+      </div></div>
+
+      <div class="grid">
+
+        <div class="wkcol">
+          <div class="wkhead"><span class="wk">Week 1</span><span class="state live">⚔ Live · 6/8 settled</span></div>
+          <div class="pair"><div class="teams"><div class="chip out"><span class="rk">#1</span><span class="nm">[ASi1] TürKiYe</span><span class="s">0</span></div><div class="chip won"><span class="rk">#2</span><span class="nm">[SSUK] Delete X</span><span class="s">7</span></div></div><div class="elbow"></div><div class="wn won">[SSUK]</div></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="rk">#3</span><span class="nm">[LwT] Loyal Warriors</span><span class="s">2</span></div><div class="chip lead"><span class="rk">#4</span><span class="nm">[BLBH] Bastion Libre</span><span class="s">5</span></div></div><div class="elbow"></div><div class="wn dim">[BLBH] ▲</div></div>
+          <div class="pair"><div class="teams"><div class="chip out"><span class="rk">#5</span><span class="nm">[SRIA] Schickeria</span><span class="s">0</span></div><div class="chip won"><span class="rk">#6</span><span class="nm">[dt2] Dream team</span><span class="s">7</span></div></div><div class="elbow"></div><div class="wn won">[dt2]</div></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="rk">#7</span><span class="nm">[EvOL] EvOlution</span><span class="s">1</span></div><div class="chip lead"><span class="rk">#8</span><span class="nm">[MRKo] Mon Royaume</span><span class="s">6</span></div></div><div class="elbow"></div><div class="wn dim">[MRKo] ▲</div></div>
+          <div class="pair"><div class="teams"><div class="chip out"><span class="rk">#9</span><span class="nm">[4404] Error</span><span class="s">0</span></div><div class="chip won"><span class="rk">#10</span><span class="nm">[Vicc] VN Victory</span><span class="s">7</span></div></div><div class="elbow"></div><div class="wn won">[Vicc]</div></div>
+          <div class="pair"><div class="teams"><div class="chip out us"><span class="rk">#11</span><span class="nm">★ [PoWr] Pantheon</span><span class="s">0</span></div><div class="chip won"><span class="rk">#12</span><span class="nm">[cROw] Black Crow</span><span class="s">7</span></div></div><div class="elbow"></div><div class="wn won">[cROw]</div></div>
+          <div class="pair"><div class="teams"><div class="chip out"><span class="rk">#13</span><span class="nm">[Q8M] Arab Storm</span><span class="s">0</span></div><div class="chip won"><span class="rk">#14</span><span class="nm">[SLU9] SLU雙龍聯</span><span class="s">7</span></div></div><div class="elbow"></div><div class="wn won">[SLU9]</div></div>
+          <div class="pair"><div class="teams"><div class="chip won"><span class="rk">#15</span><span class="nm">[Ac32] 樂天派</span><span class="s">7</span></div><div class="chip out"><span class="rk">#16</span><span class="nm">[Hxll] Hellhounds</span><span class="s">0</span></div></div><div class="elbow"></div><div class="wn won">[Ac32]</div></div>
+        </div>
+
+        <div class="wkcol">
+          <div class="wkhead"><span class="wk">Week 2</span><span class="state pred">🔮 Predicted</span></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="nm">[SSUK] Delete X</span></div><div class="chip pred"><span class="wl w">W</span><span class="nm">[BLBH] / [LwT]</span></div></div><div class="elbow"></div><div class="wn dim">?</div></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="nm">[dt2] Dream team</span></div><div class="chip pred"><span class="wl w">W</span><span class="nm">[MRKo] / [EvOL]</span></div></div><div class="elbow"></div><div class="wn dim">?</div></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="nm">[Vicc] VN Victory</span></div><div class="chip"><span class="nm">[cROw] Black Crow</span></div></div><div class="elbow"></div><div class="wn dim">?</div></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="nm">[SLU9] SLU雙龍聯</span></div><div class="chip"><span class="nm">[Ac32] 樂天派</span></div></div><div class="elbow"></div><div class="wn dim">?</div></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="nm">[ASi1] TürKiYe</span></div><div class="chip pred"><span class="wl l">L</span><span class="nm">[BLBH] / [LwT]</span></div></div><div class="elbow"></div><div class="wn dim">?</div></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="nm">[SRIA] Schickeria</span></div><div class="chip pred"><span class="wl l">L</span><span class="nm">[MRKo] / [EvOL]</span></div></div><div class="elbow"></div><div class="wn dim">?</div></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="nm">[4404] Error</span></div><div class="chip us"><span class="nm">★ [PoWr] Pantheon</span></div></div><div class="elbow"></div><div class="wn dim">?</div></div>
+          <div class="pair"><div class="teams"><div class="chip"><span class="nm">[Q8M] Arab Storm</span></div><div class="chip"><span class="nm">[Hxll] Hellhounds</span></div></div><div class="elbow"></div><div class="wn dim">?</div></div>
+        </div>
+
+        <div class="wkcol">
+          <div class="wkhead"><span class="wk">Week 3</span><span class="state up">zzZ Upcoming</span></div>
+          <div class="pending"><span class="big">💤</span>Not predictable yet<br><small>depends on Week 2</small></div>
+        </div>
+
+        <div class="wkcol">
+          <div class="wkhead"><span class="wk">Week 4</span><span class="state up">zzZ Upcoming</span></div>
+          <div class="pending"><span class="big">💤</span>Not predictable yet</div>
+        </div>
+
+      </div>
+      <div class="grid-note">Week 1: ✓ = clinched (leader's margin &gt; the 6 pts left). Week 2 prediction: our 0–7 loss is settled, so we're locked into the losers bracket — predicted next match <strong>★ [PoWr] vs [4404]</strong>. Undetermined slots show "W/L of [A]/[B]" by tag; full detail is one column left.</div>
+    </div>
+
+    <p style="color:var(--color-text-muted);font-size:.85rem;text-align:center;margin-top:8px;">
+      Mockup only · reuses <code>/styles.css</code> · safe to delete
+    </p>
+
+  </div>
+</body>
+</html>

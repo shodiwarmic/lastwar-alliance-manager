@@ -176,3 +176,143 @@
     font-size: 0.9rem;
     cursor: pointer;
 }
+
+/* ── NAP tab ───────────────────────────────────────────────────────────────── */
+/* The ladder uses the global .data-table — no bespoke table styling. In particular nothing here
+   may set `display` on a <td>: a table cell with display:flex stops being a table-cell and drops
+   out of the column layout algorithm, so the columns silently stop lining up. Spacing inside a
+   cell is done with an inline-flex wrapper element, the same way .row-actions does it. */
+
+.nap-bar {
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.nap-intro {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.9rem;
+    color: var(--color-text-mid);
+}
+
+.nap-captured {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+/* Numeric columns: right-aligned with tabular figures so the digits stack. */
+.nap-table .nap-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Inline-flex WRAPPER inside the cell — never on the cell itself. */
+.nap-cell {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Our own alliance: spliced in from the stats history (it must never be a registry row), but it
+   still belongs in the ladder for context. */
+.nap-table tr.nap-us {
+    background: var(--color-accent-bg);
+}
+
+/* Below the NAP line: useful context (who is climbing toward the pact), but not in it. */
+.nap-table tr.nap-below-line td {
+    opacity: 0.6;
+}
+
+.nap-table tr.nap-divider td {
+    padding: 4px 12px;
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+    background: var(--color-accent-bg);
+}
+
+.nap-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.nap-badge-us {
+    background: var(--color-accent-bg);
+    color: var(--color-accent);
+}
+
+.nap-badge-ally {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+/* ── Sync from LastRank card ────────────────────────────────────────────────
+   Same component as the Members "Sync from LastRank" panel and the External Alliances gather:
+   an icon heading, help text, a fast primary action + a slow per-item secondary one sharing a
+   status line, and a per-alliance progress list beneath. Class names mirror .lastrank-* /
+   .ext-gather-* / .lr-prog-* deliberately — this is one pattern, not three. */
+
+.nap-sync-section {
+    margin-bottom: 20px;
+}
+
+.nap-sync-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: clamp(14px, 2.5vw, 22px);
+}
+
+.nap-sync-help {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 8px 0 14px;
+    max-width: 70ch;
+}
+
+.nap-sync-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Per-alliance progress for the member-count pass */
+
+.nap-progress-list {
+    margin-top: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.nap-prog-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.88rem;
+}
+
+.nap-prog-row:last-child { border-bottom: none; }
+.nap-prog-name { color: var(--text-primary); }
+.nap-prog-status { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
+.nap-prog-row.active { background: var(--bg-secondary); }
+.nap-prog-row.active .nap-prog-status { color: var(--color-primary); }
+.nap-prog-row.done .nap-prog-status { color: var(--color-success); }
+.nap-prog-row.skip .nap-prog-status { color: var(--text-muted); }
+.nap-prog-row.err .nap-prog-status { color: var(--color-danger); }

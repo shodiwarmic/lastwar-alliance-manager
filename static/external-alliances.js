@@ -7,6 +7,9 @@
 (function () {
     const cfg = document.getElementById('page-config');
     const CAN_MANAGE = cfg && cfg.dataset.canManage === 'true';
+    // Our own server. Officers search their own server far more often than any other, and the
+    // LastRank search matches it strictly — so retyping it every time is pure friction.
+    const OUR_SERVER_ID = (cfg && parseInt(cfg.dataset.ourServerId, 10)) || 0;
     let all = [];
     let fuseInstance = null;
     let sortField = 'updated';
@@ -53,6 +56,15 @@
 
     function relBadges(a) {
         const wrap = el('span', { className: 'ext-rel' });
+        // NAP first: it says this alliance sits inside our own server's pact, which frames every
+        // other relationship on the row.
+        if (a.in_nap) {
+            wrap.appendChild(el('span', {
+                className: 'ext-badge nap',
+                text: a.nap_rank ? 'NAP #' + a.nap_rank : 'NAP',
+                title: 'On our server and inside the Non-Aggression Pact',
+            }));
+        }
         if (a.ally_status === 'active') wrap.appendChild(el('span', { className: 'ext-badge ally', text: 'Ally' }));
         else if (a.ally_status === 'former') wrap.appendChild(el('span', { className: 'ext-badge former', text: 'Former ally' }));
         if (a.is_opponent) {
@@ -105,6 +117,8 @@
     function matchesRel(a, rels) {
         if (!rels.length || rels.includes('all')) return true;
         return rels.some(r =>
+            (r === 'nap' && a.in_nap) ||
+            (r === 'same-server' && a.same_server) ||
             (r === 'ally' && a.ally_status === 'active') ||
             (r === 'former' && a.ally_status === 'former') ||
             (r === 'opponent' && a.is_opponent) ||
@@ -248,7 +262,9 @@
         const modalApi = {};
         const tag = inp('text', a.tag, 'cROw');
         const name = inp('text', a.name, 'Black Crow Legion');
-        const server = inp('number', a.server, 'server #');
+        // Default to our own server, but ONLY when the alliance has none of its own — an
+        // unconditional default would overwrite the row's real server when editing.
+        const server = inp('number', a.server != null ? a.server : (OUR_SERVER_ID || undefined), 'server #');
         const power = inp('number', a.power, 'power');
         const kills = inp('number', a.kills, 'kills');
         const members = inp('number', a.member_count, 'members');

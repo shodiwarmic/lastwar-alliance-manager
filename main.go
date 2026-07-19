@@ -62,13 +62,17 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCP)
 	data.HasGCPCredentials = hasGCP
 
-	// Load alliance identity for the sidebar brand
+	// Load alliance identity for the sidebar brand, plus our server number (used by the NAP tab and
+	// to default the external-alliance search filter). Extends this existing query rather than
+	// adding another settings round-trip.
 	var allianceName, allianceTag string
+	var ourServerID int
 	db.QueryRow(
-		"SELECT COALESCE(alliance_name, ''), COALESCE(alliance_tag, '') FROM settings WHERE id = 1",
-	).Scan(&allianceName, &allianceTag)
+		"SELECT COALESCE(alliance_name, ''), COALESCE(alliance_tag, ''), COALESCE(our_server_id, 0) FROM settings WHERE id = 1",
+	).Scan(&allianceName, &allianceTag, &ourServerID)
 	data.AllianceName = allianceName
 	data.AllianceTag = allianceTag
+	data.OurServerID = ourServerID
 
 	// NEW: Check if the CV Worker URL is configured + which OCR backend is active
 	var cvWorkerURL, ocrMode string
@@ -249,10 +253,17 @@ func main() {
 	// Files Implementation API
 	router.HandleFunc("/api/files", authMiddleware(requirePermission("view_files", getFilesList))).Methods("GET")
 	router.HandleFunc("/api/files/upload", authMiddleware(requirePermission("upload_files", uploadFile))).Methods("POST")
+	router.HandleFunc("/api/files/create", authMiddleware(requirePermission("upload_files", createBlankFile))).Methods("POST")
 	router.HandleFunc("/api/files/{id}", authMiddleware(updateFile)).Methods("PUT")
 	router.HandleFunc("/api/files/{id}", authMiddleware(deleteFile)).Methods("DELETE")
 	router.HandleFunc("/api/files/download/{id}", authMiddleware(downloadFile)).Methods("GET")
 	router.HandleFunc("/api/files/{id}/wopi-token", authMiddleware(generateWOPIToken)).Methods("GET")
+
+	// File tags (labels on files). GET open to any file viewer; writes gated on manage_files.
+	router.HandleFunc("/api/file-tags", authMiddleware(requirePermission("view_files", getFileTags))).Methods("GET")
+	router.HandleFunc("/api/file-tags", authMiddleware(requirePermission("manage_files", createFileTag))).Methods("POST")
+	router.HandleFunc("/api/file-tags/{id}", authMiddleware(requirePermission("manage_files", updateFileTag))).Methods("PUT")
+	router.HandleFunc("/api/file-tags/{id}", authMiddleware(requirePermission("manage_files", deleteFileTag))).Methods("DELETE")
 
 	// WOPI Collabora API
 	wopiRouter := router.PathPrefix("/wopi").Subrouter()
@@ -335,6 +346,14 @@ func main() {
 	router.HandleFunc("/api/ally-agreement-types", authMiddleware(requirePermission("manage_allies", createAllyAgreementType))).Methods("POST")
 	router.HandleFunc("/api/ally-agreement-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", updateAllyAgreementType))).Methods("PUT")
 	router.HandleFunc("/api/ally-agreement-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", deleteAllyAgreementType))).Methods("DELETE")
+	// NAP tab. The GET is view-gated (matching the page gate and getExternalAlliancesGated); the
+	// refresh is manage-gated because it hits the volunteer-run LastRank service.
+	router.HandleFunc("/api/allies/nap", authMiddleware(requirePermission("view_allies", getNAP))).Methods("GET")
+	// Refresh is a three-phase, browser-driven flow (ladder → member count per alliance → finish),
+	// mirroring the LastRank member sync. See handlers_nap.go.
+	router.HandleFunc("/api/allies/nap/refresh", authMiddleware(requirePermission("manage_allies", refreshNAP))).Methods("POST")
+	router.HandleFunc("/api/allies/nap/member", authMiddleware(requirePermission("manage_allies", napMemberCount))).Methods("POST")
+	router.HandleFunc("/api/allies/nap/finish", authMiddleware(requirePermission("manage_allies", napFinish))).Methods("POST")
 	router.HandleFunc("/api/allies", authMiddleware(getAllies)).Methods("GET")
 	router.HandleFunc("/api/allies", authMiddleware(requirePermission("manage_allies", createAlly))).Methods("POST")
 	router.HandleFunc("/api/allies/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", updateAlly))).Methods("PUT")

@@ -138,6 +138,12 @@ func fetchLastRankAlliance(ctx context.Context, allianceID string) (*lastrankAll
 
 // lastrankAllianceRow is one row of /v1/global/alliances (the search/list endpoint). It carries
 // power/kills directly (unlike a /v1/search hit), so a picker can show them without a second call.
+//
+// PowerRank/KillsRank are the alliance's true position on its server's ladder. CapturedAt is when
+// upstream snapshotted that ladder — every row in one response carries the same value, because a
+// response IS one server-wide capture. The NAP sync stamps history rows with it (never the sync
+// time), so the series stays faithful and "stale never wins" falls out of an ordinary
+// latest-by-recorded_at read.
 type lastrankAllianceRow struct {
 	AllianceID string  `json:"alliance_id"`
 	Abbr       *string `json:"abbr"`
@@ -145,6 +151,9 @@ type lastrankAllianceRow struct {
 	ServerID   *int    `json:"server_id"`
 	Power      *int64  `json:"power"`
 	Kills      *int64  `json:"kills"`
+	PowerRank  *int    `json:"power_rank"`
+	KillsRank  *int    `json:"kills_rank"`
+	CapturedAt *string `json:"captured_at"`
 }
 
 type lastrankAlliancePage struct {
@@ -154,12 +163,19 @@ type lastrankAlliancePage struct {
 // searchLastRankAlliances finds alliances by fuzzy tag/name via /v1/global/alliances, optionally
 // restricted to a single server (strict) — matching the picker's "strict server + fuzzy name"
 // rule. Uses the shared 1 req/sec limiter; the caller owns a bounded context.
-func searchLastRankAlliances(ctx context.Context, query string, server *int) ([]VSLeagueAllianceSearchResult, error) {
+//
+// An empty query is legal and returns the whole server, sorted by power desc — which is how the
+// NAP sync reads the ladder. Since upstream sorts for us, the top-N IS the first N rows, so a
+// caller asking for `limit` rows never fetches the tail of the server.
+func searchLastRankAlliances(ctx context.Context, query string, server *int, limit int) ([]VSLeagueAllianceSearchResult, error) {
+	if limit <= 0 {
+		limit = 20
+	}
 	q := url.Values{}
 	q.Set("search", query)
 	q.Set("sort_by", "power")
 	q.Set("sort_dir", "desc")
-	q.Set("limit", "20")
+	q.Set("limit", strconv.Itoa(limit))
 	if server != nil {
 		q.Set("server_id", strconv.Itoa(*server))
 	}
@@ -176,6 +192,9 @@ func searchLastRankAlliances(ctx context.Context, query string, server *int) ([]
 			Server:     row.ServerID,
 			Power:      row.Power,
 			Kills:      row.Kills,
+			PowerRank:  row.PowerRank,
+			KillsRank:  row.KillsRank,
+			CapturedAt: row.CapturedAt,
 		})
 	}
 	return out, nil

@@ -490,7 +490,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00'),
         COALESCE(season_score_levels_default, '[{"key":"full","label":"FULL","points":10},{"key":"partial","label":"PARTIAL","points":5},{"key":"absent","label":"ABSENT","points":0}]'),
         COALESCE(alliance_name, ''), COALESCE(alliance_tag, ''),
-        COALESCE(lastrank_alliance_id, '')
+        COALESCE(lastrank_alliance_id, ''),
+        COALESCE(our_server_id, 0), COALESCE(nap_size, 10), COALESCE(nap_import_limit, 15)
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -512,6 +513,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.SeasonScoreLevelsDefault,
 		&s.AllianceName, &s.AllianceTag,
 		&s.LastRankAllianceID,
+		&s.OurServerID, &s.NAPSize, &s.NAPImportLimit,
 	)
 
 	if err != nil {
@@ -591,11 +593,46 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// NAP sizing. A zero means "not supplied" (a field-omitting PUT decodes to 0) and is preserved
+	// by the COALESCE(NULLIF(...)) in the UPDATE below — never clamped up to 1, which would
+	// silently reduce the pact to a single alliance. Any other out-of-range value is rejected,
+	// matching the vs_flag_days_threshold precedent above.
+	if settings.NAPSize < 0 || settings.NAPSize > 50 {
+		http.Error(w, "NAP size must be between 1 and 50", http.StatusBadRequest)
+		return
+	}
+	if settings.NAPImportLimit < 0 || settings.NAPImportLimit > 50 {
+		http.Error(w, "NAP import limit must be between 1 and 50", http.StatusBadRequest)
+		return
+	}
+	// Compare EFFECTIVE values: a payload that updates only one of the two must still be checked
+	// against the stored other, or an import limit could end up below the pact size.
+	effSize, effLimit := settings.NAPSize, settings.NAPImportLimit
+	if effSize == 0 || effLimit == 0 {
+		var curSize, curLimit int
+		db.QueryRow(`SELECT COALESCE(nap_size, 10), COALESCE(nap_import_limit, 15) FROM settings WHERE id = 1`).
+			Scan(&curSize, &curLimit)
+		if effSize == 0 {
+			effSize = curSize
+		}
+		if effLimit == 0 {
+			effLimit = curLimit
+		}
+	}
+	if effLimit < effSize {
+		http.Error(w, "NAP import limit must be at least the NAP size", http.StatusBadRequest)
+		return
+	}
+
 	// Accept either a bare 32-hex id or a pasted /a/<id> URL for the LastRank id.
 	allianceID := strings.TrimSpace(settings.LastRankAllianceID)
 	if parsed, ok := parseLastRankAllianceID(allianceID); ok {
 		allianceID = parsed
 	}
+
+	// Read the id we're replacing, so a *change* of alliance identity can re-assert Rule 2 below.
+	var prevAllianceID string
+	db.QueryRow(`SELECT COALESCE(lastrank_alliance_id, '') FROM settings WHERE id = 1`).Scan(&prevAllianceID)
 
 	// Note: current_season and season_start_date are no longer editable here —
 	// they are derived from the seasons table (owned by Season Hub).
@@ -614,7 +651,10 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		season_score_levels_default = ?,
 		alliance_name = ?, alliance_tag = ?,
 		lastrank_alliance_id = ?,
-		vs_flag_days_threshold = ?
+		vs_flag_days_threshold = ?,
+		our_server_id = NULLIF(?, 0),
+		nap_size = COALESCE(NULLIF(?, 0), nap_size),
+		nap_import_limit = COALESCE(NULLIF(?, 0), nap_import_limit)
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -631,6 +671,10 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.AllianceName, settings.AllianceTag,
 		allianceID,
 		settings.VsFlagDaysThreshold,
+		// 0 CLEARS the server number (unconfigured is a real state the form must express), but
+		// 0 KEEPS the NAP sizes (see the NULLIF/COALESCE asymmetry in the SET clause above).
+		settings.OurServerID,
+		settings.NAPSize, settings.NAPImportLimit,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)
@@ -650,6 +694,23 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 			slog.Error("failed to update password settings", "error", err)
 			http.Error(w, "Failed to update settings", http.StatusInternalServerError)
 			return
+		}
+	}
+
+	// Our alliance must never sit in the external_alliances registry (it feeds the VS opponent
+	// picker). If the operator just pointed us at a *different* LastRank alliance, that alliance
+	// may already be cached there from back when it was somebody else — and it would stay pickable
+	// until the next manual NAP refresh. Re-assert the invariant now.
+	//
+	// Deliberately id-only: an id typo matches nothing and is harmless, but scrubbing by *tag* on a
+	// settings save would let a tag typo delete an innocent alliance's registry row. A tag-matched
+	// leftover waits for the refresh scrub instead.
+	if allianceID != "" && !strings.EqualFold(allianceID, prevAllianceID) {
+		if n, serr := scrubOwnAllianceFromRegistry(allianceID, "", 0); serr != nil {
+			slog.Error("updateSettings: registry self-scrub failed", "error", serr)
+		} else if n > 0 {
+			logActivity(actor.ID, actor.Username, "deleted", "external_alliance", "our own alliance", false,
+				"removed from the external alliance registry after the LastRank alliance ID changed")
 		}
 	}
 
