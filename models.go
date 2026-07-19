@@ -1065,16 +1065,34 @@ type EligibleMember struct {
 }
 
 type AllianceFile struct {
-	ID          int    `json:"id"`
-	Title       string `json:"title"`
-	FileName    string `json:"file_name"`
-	FileType    string `json:"file_type"`
-	MinRank     string `json:"min_rank"`
-	MinEditRank string `json:"min_edit_rank"`
-	OwnerUserID int    `json:"owner_user_id"`
-	OwnerName   string `json:"owner_name"`
-	CreatedAt   string `json:"created_at"`
-	IsOwner     bool   `json:"is_owner"`
+	ID            int    `json:"id"`
+	Title         string `json:"title"`
+	FileName      string `json:"file_name"`
+	FileType      string `json:"file_type"`
+	MinRank       string `json:"min_rank"`
+	MinEditRank   string `json:"min_edit_rank"`
+	OwnerUserID   int    `json:"owner_user_id"`
+	OwnerName     string `json:"owner_name"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+	UpdatedByName string `json:"updated_by_name"` // username of the last editor ("" if unknown)
+	IsOwner       bool   `json:"is_owner"`
+	// Tags is rank-filtered to the requesting viewer, so a card never renders a
+	// badge the viewer isn't cleared for. Always a non-nil slice (empty, not null)
+	// so the frontend can .map() it unconditionally.
+	Tags []FileTag `json:"tags"`
+}
+
+// FileTag is a label that can be attached to files. MinRank raises the effective
+// view rank of any file it is attached to. Color is a semantic token key from
+// FileTagColors, never a hex value.
+type FileTag struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	MinRank   string `json:"min_rank"`
+	Color     string `json:"color"`
+	SortOrder int    `json:"sort_order"`
+	FileCount int    `json:"file_count"` // populated for the manage/delete-in-use flow
 }
 
 type WOPIClaims struct {

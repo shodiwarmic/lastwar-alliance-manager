@@ -253,10 +253,17 @@ func main() {
 	// Files Implementation API
 	router.HandleFunc("/api/files", authMiddleware(requirePermission("view_files", getFilesList))).Methods("GET")
 	router.HandleFunc("/api/files/upload", authMiddleware(requirePermission("upload_files", uploadFile))).Methods("POST")
+	router.HandleFunc("/api/files/create", authMiddleware(requirePermission("upload_files", createBlankFile))).Methods("POST")
 	router.HandleFunc("/api/files/{id}", authMiddleware(updateFile)).Methods("PUT")
 	router.HandleFunc("/api/files/{id}", authMiddleware(deleteFile)).Methods("DELETE")
 	router.HandleFunc("/api/files/download/{id}", authMiddleware(downloadFile)).Methods("GET")
 	router.HandleFunc("/api/files/{id}/wopi-token", authMiddleware(generateWOPIToken)).Methods("GET")
+
+	// File tags (labels on files). GET open to any file viewer; writes gated on manage_files.
+	router.HandleFunc("/api/file-tags", authMiddleware(requirePermission("view_files", getFileTags))).Methods("GET")
+	router.HandleFunc("/api/file-tags", authMiddleware(requirePermission("manage_files", createFileTag))).Methods("POST")
+	router.HandleFunc("/api/file-tags/{id}", authMiddleware(requirePermission("manage_files", updateFileTag))).Methods("PUT")
+	router.HandleFunc("/api/file-tags/{id}", authMiddleware(requirePermission("manage_files", deleteFileTag))).Methods("DELETE")
 
 	// WOPI Collabora API
 	wopiRouter := router.PathPrefix("/wopi").Subrouter()
