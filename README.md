@@ -162,7 +162,10 @@ A central hub for all alliance-wide mail templates, announcements, and reference
 ### 📁 Alliance Files & Document Management
 Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** container, the app provides a Google Drive-like experience natively.
 - **Live Document Editing**: Full browser-based collaborative editing for spreadsheets (`.xlsx`, `.csv`), text documents (`.docx`), and presentations.
+- **Create New**: Alongside uploading, officers with the **Upload Files** permission can create a blank document (`.docx`) or spreadsheet (`.xlsx`) directly in the app — set its title, tags, and rank restrictions, and it opens straight into the editor for immediate collaborative editing.
 - **Native Image Hosting**: Fast, secure distribution of alliance cheat sheets, war infographics, and maps.
+- **Tags & Filtering**: Officers with the **Manage Files** permission can create colored tags (e.g. "Guides", "Rules", "Violations") and attach them to files at upload or via edit. A Members-style search box, sort options (Name / Updated / Uploaded / Owner / Type), and tag filter chips make a large library easy to navigate. Each tag has a **minimum rank**: a tag restricted to R4+ hides both the tag and any file carrying it from lower ranks entirely — a single control for keeping sensitive material (like violation screenshots) out of view, even if the file's own rank is left open.
+- **Edit Tracking**: Every document save through the editor records a "last updated" time and a throttled activity-log entry, so it's clear when a shared document was last changed.
 - **Docker-Bridged Security**: Document data flows over a private, internal Docker network (`lastwar-net`), completely bypassing external firewalls and NAT hairpinning limits.
 - **Theme Synchronization**: The document editor dynamically reads your application's state, matching your Light or Dark mode preference automatically.
 
