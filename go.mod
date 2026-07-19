@@ -1,6 +1,6 @@
 module lastwar-alliance
 
-go 1.25.0
+go 1.25.7
 
 require (
 	cloud.google.com/go/storage v1.63.1
@@ -9,7 +9,7 @@ require (
 	github.com/gorilla/sessions v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/pressly/goose/v3 v3.27.0
+	github.com/pressly/goose/v3 v3.27.2
 	golang.org/x/crypto v0.54.0
 	golang.org/x/time v0.15.0
 	google.golang.org/api v0.288.0
@@ -48,7 +48,7 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.43.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.68.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.44.0 // indirect
@@ -71,7 +71,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.21 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	modernc.org/libc v1.73.4 // indirect
