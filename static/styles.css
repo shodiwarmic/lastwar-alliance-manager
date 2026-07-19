@@ -928,7 +928,7 @@ button {
 .rank-R4 { background: var(--color-danger-bg);   color: var(--color-danger); }
 .rank-R3 { background: var(--color-info-bg);     color: var(--color-info); }
 .rank-R2 { background: var(--color-success-bg);  color: var(--color-success); }
-.rank-R1 { background: var(--color-surface);      color: var(--color-text-mid); }
+.rank-R1 { background: var(--bg-tertiary);         color: var(--color-text-mid); }
 
 .member-eligible {
     display: inline-flex;
