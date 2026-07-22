@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
 
       # Auto-merge only patch and minor bumps. Major bumps are already
       # ignored in dependabot.yml, but this is a second guard: they will
