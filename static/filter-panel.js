@@ -132,8 +132,33 @@
         return render;
     }
 
+    // Wire two date inputs → onChange; expose current values, an active flag, and clear.
+    // Supports single-ended ranges (either input empty). Works with plain <input type=date>
+    // or a flatpickr-enhanced input (flatpickr re-dispatches a native 'change' on pick).
+    function setupDateRange(fromId, toId, onChange) {
+        const from = document.getElementById(fromId);
+        const to = document.getElementById(toId);
+        [from, to].forEach(el => el && el.addEventListener('change', () => onChange && onChange()));
+        return {
+            get: () => ({ from: (from && from.value) || '', to: (to && to.value) || '' }),
+            active: () => !!((from && from.value) || (to && to.value)),
+            clear: () => { if (from) from.value = ''; if (to) to.value = ''; },
+        };
+    }
+
+    // Pure predicate — an empty bound is open on that side (single-ended supported).
+    // Normalizes to YYYY-MM-DD so a caller passing a full ISO timestamp still compares
+    // correctly (train_logs.date is already date-only; this is defensive for reuse).
+    function dateInRange(value, from, to) {
+        const d = (value || '').substring(0, 10);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+    }
+
     window.FilterPanel = {
         setupChipGroup, setupToggle, updateActiveBadge,
         clearChipGroups, setupSearch, setupSortChips,
+        setupDateRange, dateInRange,
     };
 })();
