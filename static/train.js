@@ -20,6 +20,7 @@ let allMembers = [];   // [{id, name, rank}]
 let allRules = [];     // EligibilityRule[]
 let editingLogId = null;
 let editingRuleId = null;
+let trainTabs = null;  // Tabs controller (tabs.js) — for programmatic switches
 
 // Flatpickr instances — initialised in DOMContentLoaded
 let logDateFP = null;
@@ -46,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         itemSelectText: '', shouldSort: false, allowHTML: true,
     });
 
-    setupTabs();
+    trainTabs = Tabs.init({ hash: true, defaultTab: 'logs' });
     loadMembers().then(() => {
         loadTrainLogs(null, null);
         if (CAN_MANAGE) {
@@ -82,26 +83,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-apply-filter').addEventListener('click', applyFilter);
     document.getElementById('btn-clear-filter').addEventListener('click', clearFilter);
 });
-
-// ── Tabs ──────────────────────────────────────────────────────────────────────
-
-function setupTabs() {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(p => p.style.display = 'none');
-            btn.classList.add('active');
-            document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
-        });
-    });
-
-    // CSS hides all .tab-content by default — show the initial active tab explicitly.
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) {
-        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
-        if (target) target.style.display = 'block';
-    }
-}
 
 // ── Members ───────────────────────────────────────────────────────────────────
 
@@ -477,10 +458,7 @@ function renderEligibleList(members) {
         logBtn.className = 'btn btn-primary btn-sm';
         logBtn.textContent = 'Log Train';
         logBtn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(p => p.style.display = 'none');
-            document.querySelector('[data-tab="logs"]').classList.add('active');
-            document.getElementById('tab-logs').style.display = 'block';
+            trainTabs.show('logs');
             openLogModal({ conductor_id: m.member_id, conductor_name: m.name, train_type: 'FREE', date: gameToday(), notes: '', vip_id: null, vip_type: null });
         });
         card.appendChild(logBtn);
