@@ -21,23 +21,18 @@
     font-size: 1.1rem;
 }
 
-.panel-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
+/* ── Filter panel (shared chrome in filter-panel.css; page-specific bits only) ── */
 
-.date-range-row {
-    display: flex;
+/* Date-range inputs inside the collapsible panel's .filter-row. */
+.filter-row label {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 6px;
     font-size: 0.875rem;
     color: var(--color-text-mid);
 }
 
-.date-range-row input[type="date"] {
+.filter-row input[type="date"] {
     padding: 4px 8px;
     font-size: 0.875rem;
 }

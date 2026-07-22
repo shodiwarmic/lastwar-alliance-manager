@@ -21,6 +21,8 @@ let allRules = [];     // EligibilityRule[]
 let editingLogId = null;
 let editingRuleId = null;
 let trainTabs = null;  // Tabs controller (tabs.js) — for programmatic switches
+let dateCtl = null;    // FilterPanel.setupDateRange controller — module-scoped (read by filters)
+let allLogs = [];      // full fetched log set; filtered client-side by applyLogFilters
 
 // Flatpickr instances — initialised in DOMContentLoaded
 let logDateFP = null;
@@ -49,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     trainTabs = Tabs.init({ hash: true, defaultTab: 'logs' });
     loadMembers().then(() => {
-        loadTrainLogs(null, null);
+        loadTrainLogs();
         if (CAN_MANAGE) {
             loadRules();
         }
@@ -80,8 +82,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.getElementById('btn-apply-filter').addEventListener('click', applyFilter);
-    document.getElementById('btn-clear-filter').addEventListener('click', clearFilter);
+    // Client-side filter panel (search + type chips + date range) over the loaded set.
+    dateCtl = FilterPanel.setupDateRange('filter-from', 'filter-to', applyLogFilters);
+    FilterPanel.setupSearch('log-search', 'clear-log-search', applyLogFilters);
+    FilterPanel.setupChipGroup('.log-type-chip', 'ttype', applyLogFilters);
+    FilterPanel.setupToggle({ onClear: clearFilters });
 });
 
 // ── Members ───────────────────────────────────────────────────────────────────
@@ -117,23 +122,41 @@ function makeOpt(value, text) {
 
 // ── Train Logs ────────────────────────────────────────────────────────────────
 
-async function loadTrainLogs(from, to) {
-    let url = '/api/train-logs';
-    const params = [];
-    if (from) params.push('from=' + from);
-    if (to) params.push('to=' + to);
-    if (params.length) url += '?' + params.join('&');
-
-    const res = await fetch(url);
+async function loadTrainLogs() {
+    // The whole set is loaded once; date/search/type filtering happens client-side.
+    const res = await fetch('/api/train-logs');
     if (!res.ok) return;
-    const logs = await res.json();
-    renderLogsTable(logs);
+    allLogs = await res.json();
+    applyLogFilters();
+}
+
+// Filter the loaded set by search text + type chips + date range, then render.
+function applyLogFilters() {
+    const q = (document.getElementById('log-search').value || '').trim().toLowerCase();
+    const activeTypes = [...document.querySelectorAll('.log-type-chip.active')].map(c => c.dataset.ttype);
+    const typeOn = activeTypes.length > 0 && !activeTypes.includes('all');
+    const { from, to } = dateCtl.get();
+
+    const filtered = allLogs.filter(l => {
+        if (typeOn && !activeTypes.includes(l.train_type)) return false;
+        if (!FilterPanel.dateInRange(l.date, from, to)) return false;
+        if (q) {
+            const hay = ((l.conductor_name || '') + ' ' + (l.vip_name || '') + ' ' + (l.notes || '')).toLowerCase();
+            if (!hay.includes(q)) return false;
+        }
+        return true;
+    });
+
+    renderLogsTable(filtered);
+    FilterPanel.updateActiveBadge([['.log-type-chip', 'ttype']], { extra: (q ? 1 : 0) + (dateCtl.active() ? 1 : 0) });
 }
 
 function renderLogsTable(logs) {
     const container = document.getElementById('logs-container');
     if (!logs || logs.length === 0) {
-        container.replaceChildren(emptyState('No trains logged yet.'));
+        container.replaceChildren(emptyState(
+            allLogs.length === 0 ? 'No trains logged yet.' : 'No trains match your filters.'
+        ));
         return;
     }
 
@@ -213,16 +236,14 @@ function renderLogsTable(logs) {
     container.replaceChildren(wrap);
 }
 
-function applyFilter() {
-    const from = document.getElementById('filter-from').value;
-    const to = document.getElementById('filter-to').value;
-    loadTrainLogs(from || null, to || null);
-}
-
-function clearFilter() {
-    filterFromFP.clear(false);
+// Clear-all (panel toggle's onClear): reset chips, search (+ its ×), and dates, then refilter.
+function clearFilters() {
+    FilterPanel.clearChipGroups([['.log-type-chip', 'ttype']]);
+    document.getElementById('log-search').value = '';
+    document.getElementById('clear-log-search').style.display = 'none';
+    filterFromFP.clear(false);  // existing flatpickr instances; false suppresses onChange
     filterToFP.clear(false);
-    loadTrainLogs(null, null);
+    applyLogFilters();
 }
 
 // ── Log Train Modal ───────────────────────────────────────────────────────────
@@ -297,26 +318,17 @@ async function saveTrainLog() {
     }
 
     closeLogModal();
-    loadTrainLogs(
-        document.getElementById('filter-from').value || null,
-        document.getElementById('filter-to').value || null
-    );
+    loadTrainLogs();
 }
 
 async function deleteTrainLog(id) {
     const res = await fetch(`/api/train-logs/${id}`, { method: 'DELETE' });
     if (!res.ok) {
         // restore the row to its original state on failure
-        loadTrainLogs(
-            document.getElementById('filter-from').value || null,
-            document.getElementById('filter-to').value || null
-        );
+        loadTrainLogs();
         return;
     }
-    loadTrainLogs(
-        document.getElementById('filter-from').value || null,
-        document.getElementById('filter-to').value || null
-    );
+    loadTrainLogs();
 }
 
 // ── Eligibility Rules ─────────────────────────────────────────────────────────
