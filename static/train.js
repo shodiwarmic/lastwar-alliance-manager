@@ -80,6 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('btn-run-rule').disabled =
                 !document.getElementById('sel-rule-picker').value;
         });
+
+        FilterPanel.setupSearch('rule-search', 'clear-rule-search', applyRuleFilters);
     }
 
     // Client-side filter panel (search + type chips + date range) over the loaded set.
@@ -337,22 +339,31 @@ async function loadRules() {
     const res = await fetch('/api/eligibility-rules');
     if (!res.ok) return;
     allRules = await res.json();
-    renderRules();
-    populateRulePicker();
+    applyRuleFilters();          // renders (filtered by the search box, if any)
+    populateRulePicker();        // picker always lists the full, unfiltered set
 }
 
-function renderRules() {
+// Filter the rules list by name against the search box, then render.
+function applyRuleFilters() {
+    const q = (document.getElementById('rule-search').value || '').trim().toLowerCase();
+    const filtered = q ? allRules.filter(r => (r.name || '').toLowerCase().includes(q)) : allRules;
+    renderRules(filtered);
+}
+
+function renderRules(rules = allRules) {
     const container = document.getElementById('rules-container');
     if (!container) return;
-    if (!allRules || allRules.length === 0) {
-        container.replaceChildren(emptyState('No rules yet. Create one to get started.'));
+    if (!rules || rules.length === 0) {
+        container.replaceChildren(emptyState(
+            allRules.length === 0 ? 'No rules yet. Create one to get started.' : 'No rules match your search.'
+        ));
         return;
     }
 
     const list = document.createElement('div');
     list.className = 'rules-list';
 
-    allRules.forEach(rule => {
+    rules.forEach(rule => {
         const card = document.createElement('div');
         card.className = 'rule-card';
 

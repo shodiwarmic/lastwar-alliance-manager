@@ -37,6 +37,13 @@
     font-size: 0.875rem;
 }
 
+/* Rules-tab search sits standalone (no .filter-sort-top flex parent), so its
+   flex:1/min-width are inert — constrain it so it doesn't stretch full-width. */
+#tab-rules .filter-search-wrap {
+    max-width: 420px;
+    margin-bottom: 16px;
+}
+
 /* ── Train Log Table ──────────────────────────────────────────────────────── */
 
 .train-table {
