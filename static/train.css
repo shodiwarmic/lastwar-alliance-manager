@@ -23,9 +23,11 @@
 
 /* ── Filter panel (shared chrome + date-range styling live in filter-panel.css) ── */
 
-/* Rules-tab search sits standalone (no .filter-sort-top flex parent), so its
-   flex:1/min-width are inert — constrain it so it doesn't stretch full-width. */
-#tab-rules .filter-search-wrap {
+/* Train-specific modifier on the shared .filter-search-wrap: the Rules-tab search
+   sits standalone (no .filter-sort-top flex parent), so the shared flex:1/min-width
+   are inert — constrain it so it doesn't stretch full-width. train- prefix marks it
+   as page-specific (not part of the shared component). */
+.train-rule-search {
     max-width: 420px;
     margin-bottom: 16px;
 }
