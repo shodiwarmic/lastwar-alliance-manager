@@ -21,21 +21,7 @@
     font-size: 1.1rem;
 }
 
-/* ── Filter panel (shared chrome in filter-panel.css; page-specific bits only) ── */
-
-/* Date-range inputs inside the collapsible panel's .filter-row. */
-.filter-row label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.875rem;
-    color: var(--color-text-mid);
-}
-
-.filter-row input[type="date"] {
-    padding: 4px 8px;
-    font-size: 0.875rem;
-}
+/* ── Filter panel (shared chrome + date-range styling live in filter-panel.css) ── */
 
 /* Rules-tab search sits standalone (no .filter-sort-top flex parent), so its
    flex:1/min-width are inert — constrain it so it doesn't stretch full-width. */
