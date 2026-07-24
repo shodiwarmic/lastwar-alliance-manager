@@ -22,7 +22,9 @@ let editingLogId = null;
 let editingRuleId = null;
 let trainTabs = null;  // Tabs controller (tabs.js) — for programmatic switches
 let dateCtl = null;    // FilterPanel.setupDateRange controller — module-scoped (read by filters)
-let allLogs = [];      // full fetched log set; filtered client-side by applyLogFilters
+let allLogs = [];      // full fetched log set (enriched w/ aliases); filtered client-side
+let aliasById = new Map(); // member id → "global, personal" aliases (for log search)
+let logsFuse = null;   // Fuse index over enriched logs — matches the Members page's search
 
 // Flatpickr instances — initialised in DOMContentLoaded
 let logDateFP = null;
@@ -97,6 +99,10 @@ async function loadMembers() {
     const res = await fetch('/api/members');
     if (!res.ok) return;
     allMembers = await res.json();
+    // id → combined global+personal aliases, so log search matches the same strings the
+    // Members page does (its Fuse keys include global_aliases + personal_aliases).
+    aliasById = new Map(allMembers.map(m =>
+        [m.id, [m.global_aliases, m.personal_aliases].filter(Boolean).join(', ')]));
     populateMemberDropdowns();
 }
 
@@ -128,24 +134,40 @@ async function loadTrainLogs() {
     // The whole set is loaded once; date/search/type filtering happens client-side.
     const res = await fetch('/api/train-logs');
     if (!res.ok) return;
-    allLogs = await res.json();
+    // Enrich each log with its conductor/VIP aliases so search can match them (see aliasById).
+    allLogs = (await res.json()).map(l => ({
+        ...l,
+        _conductor_aliases: aliasById.get(l.conductor_id) || '',
+        _vip_aliases: aliasById.get(l.vip_id) || '',
+    }));
+    rebuildLogsFuse();
     applyLogFilters();
 }
 
-// Filter the loaded set by search text + type chips + date range, then render.
+// Fuse index over the enriched logs — same library + config as the Members page
+// (fuzzy threshold 0.4), so a query that finds a member there finds their trains here.
+function rebuildLogsFuse() {
+    if (typeof Fuse === 'undefined') { logsFuse = null; return; }
+    logsFuse = new Fuse(allLogs, {
+        keys: ['conductor_name', '_conductor_aliases', 'vip_name', '_vip_aliases', 'notes'],
+        threshold: 0.4,
+        includeScore: false,
+        minMatchCharLength: 1,
+    });
+}
+
+// Filter the loaded set by search text (Fuse) + type chips + date range, then render.
 function applyLogFilters() {
-    const q = (document.getElementById('log-search').value || '').trim().toLowerCase();
+    const q = (document.getElementById('log-search').value || '').trim();
     const activeTypes = [...document.querySelectorAll('.log-type-chip.active')].map(c => c.dataset.ttype);
     const typeOn = activeTypes.length > 0 && !activeTypes.includes('all');
     const { from, to } = dateCtl.get();
 
-    const filtered = allLogs.filter(l => {
+    // Fuzzy, alias-aware text match via Fuse (matches Members); then narrow by chips + date.
+    const base = (q && logsFuse) ? logsFuse.search(q).map(r => r.item) : allLogs;
+    const filtered = base.filter(l => {
         if (typeOn && !activeTypes.includes(l.train_type)) return false;
         if (!FilterPanel.dateInRange(l.date, from, to)) return false;
-        if (q) {
-            const hay = ((l.conductor_name || '') + ' ' + (l.vip_name || '') + ' ' + (l.notes || '')).toLowerCase();
-            if (!hay.includes(q)) return false;
-        }
         return true;
     });
 
