@@ -39,6 +39,12 @@ function getVSTheme(dateStr) {
     return VS_THEMES[(d.getUTCDay() + 6) % 7];
 }
 
+// Fold diacritics + lowercase for accent-insensitive search: "Pàcha" → "pacha".
+// Fuse's own `ignoreDiacritics` option is a no-op in fuse.js 7.0.0, so callers pre-fold
+// BOTH the indexed text and the query with this before handing them to Fuse.
+window.foldSearch = (s) =>
+    String(s == null ? '' : s).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
 // ---- Join-date helpers (anchored to today's GAME date) ----
 // Pure UTC date math so there's no local-timezone drift. "days ago" >= 0 = past.
 window.gameDaysAgoToISO = (n) => {

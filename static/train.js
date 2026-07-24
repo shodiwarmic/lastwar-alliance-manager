@@ -134,23 +134,28 @@ async function loadTrainLogs() {
     // The whole set is loaded once; date/search/type filtering happens client-side.
     const res = await fetch('/api/train-logs');
     if (!res.ok) return;
-    // Enrich each log with its conductor/VIP aliases so search can match them (see aliasById).
+    // Enrich each log with FOLDED search fields (accent-insensitive): a member's name +
+    // their global/personal aliases become one searchable blob per role. Fuse's own
+    // ignoreDiacritics is a no-op in 7.0.0, so we fold here (and fold the query below).
     allLogs = (await res.json()).map(l => ({
         ...l,
-        _conductor_aliases: aliasById.get(l.conductor_id) || '',
-        _vip_aliases: aliasById.get(l.vip_id) || '',
+        _s_conductor: foldSearch((l.conductor_name || '') + ' ' + (aliasById.get(l.conductor_id) || '')),
+        _s_vip: foldSearch((l.vip_name || '') + ' ' + (aliasById.get(l.vip_id) || '')),
+        _s_notes: foldSearch(l.notes || ''),
     }));
     rebuildLogsFuse();
     applyLogFilters();
 }
 
-// Fuse index over the enriched logs — same library + config as the Members page
-// (fuzzy threshold 0.4), so a query that finds a member there finds their trains here.
+// Fuse index over the enriched logs. We pre-fold accents ourselves (the _s_* fields + the
+// query), so "Pàcha" is an EXACT match — which lets us run a tight threshold (0.2) that
+// keeps light typo tolerance but drops the fuzzy false positives a looser 0.4 produced
+// ("pacha" no longer matches chanchuyo / Charlie9042 / Patata con Poncho).
 function rebuildLogsFuse() {
     if (typeof Fuse === 'undefined') { logsFuse = null; return; }
     logsFuse = new Fuse(allLogs, {
-        keys: ['conductor_name', '_conductor_aliases', 'vip_name', '_vip_aliases', 'notes'],
-        threshold: 0.4,
+        keys: ['_s_conductor', '_s_vip', '_s_notes'],
+        threshold: 0.2,
         includeScore: false,
         minMatchCharLength: 1,
     });
@@ -164,7 +169,7 @@ function applyLogFilters() {
     const { from, to } = dateCtl.get();
 
     // Fuzzy, alias-aware text match via Fuse (matches Members); then narrow by chips + date.
-    const base = (q && logsFuse) ? logsFuse.search(q).map(r => r.item) : allLogs;
+    const base = (q && logsFuse) ? logsFuse.search(foldSearch(q)).map(r => r.item) : allLogs;
     const filtered = base.filter(l => {
         if (typeOn && !activeTypes.includes(l.train_type)) return false;
         if (!FilterPanel.dateInRange(l.date, from, to)) return false;
