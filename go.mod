@@ -3,7 +3,7 @@ module lastwar-alliance
 go 1.25.7
 
 require (
-	cloud.google.com/go/storage v1.63.1
+	cloud.google.com/go/storage v1.64.0
 	github.com/gorilla/csrf v1.7.3
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.4.0
