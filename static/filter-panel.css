@@ -1,8 +1,8 @@
 /* filter-panel.css — shared chrome for the collapsible search / sort / filter panel.
    The CSS counterpart to filter-panel.js: any page that uses the panel links this
    file and drives it through the FilterPanel helpers. Extracted from files.css /
-   members.css (which carried duplicate copies). Consumers today: Train, Files.
-   Members + External Alliances still carry local copies — tracked to migrate here.
+   members.css (which carried duplicate copies). Consumers today: Train, Files,
+   Members. External Alliances still carries a local copy — tracked to migrate here.
 
    The pill primitive `.filter-chip` / `.filter-chip-label` is intentionally NOT here:
    it's a global utility in styles.css, used on pages with no filter panel (storm, etc.). */

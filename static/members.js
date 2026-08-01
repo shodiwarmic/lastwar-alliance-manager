@@ -14,8 +14,8 @@ let allMembers = [];
 let isPowerTrackingEnabled = false;
 let isSquadTrackingEnabled = false;
 let currentMaxHQ = 35;
-let sortField = 'name';
-let sortDir = 'asc';
+const sortState = { field: 'name', dir: 'asc' };
+let renderSortChips = () => {}; // replaced by FilterPanel.setupSortChips once wired
 let fuseInstance = null;
 let skillRegistry = []; // [{key, label}] — populated from GET /api/skills
 let currentFilteredMembers = [];
@@ -24,6 +24,12 @@ const SORT_DEFAULTS = {
     name: 'asc', rank: 'desc', power: 'desc',
     hq: 'desc', hero_power: 'desc', kills: 'desc', squad_power: 'desc',
     joined: 'desc', // most days in alliance (oldest join date) first
+};
+
+const SORT_LABELS = {
+    name: 'Name', rank: 'Rank', power: 'Power',
+    hq: 'HQ', hero_power: 'Hero Power', kills: 'Kills', squad_power: 'Squad Power',
+    joined: 'Joined',
 };
 
 // Sort key for join date: YYYYMMDD as a number (string order == chronological).
@@ -90,9 +96,9 @@ async function fetchSettings() {
             });
             const activeSortChip = document.querySelector('.sort-chip.active');
             if (activeSortChip && activeSortChip.style.display === 'none') {
-                sortField = 'name';
-                sortDir = 'asc';
-                updateSortChips();
+                sortState.field = 'name';
+                sortState.dir = 'asc';
+                renderSortChips();
             }
 
             // Dynamically hide ANY troop tier that exceeds the server's Max HQ setting
@@ -180,18 +186,19 @@ function updateDisplayedMembers() {
     });
 
     const RANK_ORDER = { R5: 5, R4: 4, R3: 3, R2: 2, R1: 1 };
+    const field = sortState.field;
     filtered.sort((a, b) => {
         let diff = 0;
-        if (sortField === 'name')             diff = a.name.localeCompare(b.name);
-        else if (sortField === 'rank')        diff = (RANK_ORDER[a.rank] || 0) - (RANK_ORDER[b.rank] || 0);
-        else if (sortField === 'power')       diff = (a.power || 0) - (b.power || 0);
-        else if (sortField === 'hq')          diff = (a.level || 0) - (b.level || 0);
-        else if (sortField === 'hero_power')  diff = (a.hero_power || 0) - (b.hero_power || 0);
-        else if (sortField === 'kills')       diff = (a.current_kills || 0) - (b.current_kills || 0);
-        else if (sortField === 'squad_power') diff = (a.squad_power || 0) - (b.squad_power || 0);
-        else if (sortField === 'joined')      diff = joinedSortKey(b) - joinedSortKey(a); // higher tenure = positive
+        if (field === 'name')             diff = a.name.localeCompare(b.name);
+        else if (field === 'rank')        diff = (RANK_ORDER[a.rank] || 0) - (RANK_ORDER[b.rank] || 0);
+        else if (field === 'power')       diff = (a.power || 0) - (b.power || 0);
+        else if (field === 'hq')          diff = (a.level || 0) - (b.level || 0);
+        else if (field === 'hero_power')  diff = (a.hero_power || 0) - (b.hero_power || 0);
+        else if (field === 'kills')       diff = (a.current_kills || 0) - (b.current_kills || 0);
+        else if (field === 'squad_power') diff = (a.squad_power || 0) - (b.squad_power || 0);
+        else if (field === 'joined')      diff = joinedSortKey(b) - joinedSortKey(a); // higher tenure = positive
         if (diff === 0) diff = a.name.localeCompare(b.name);
-        return sortDir === 'asc' ? diff : -diff;
+        return sortState.dir === 'asc' ? diff : -diff;
     });
 
     currentFilteredMembers = filtered;
@@ -209,30 +216,14 @@ const FILTER_GROUPS = [
 ];
 
 // Collapsible sort/filter panel — toggled via the "Sort & Filter" button.
-// Always starts collapsed (to save space) and wires the Clear button.
+// Chrome (collapse, active-count badge, Clear) comes from the shared FilterPanel.
 function setupFilterToggle() {
-    const toggle = document.getElementById('toggle-filters');
-    const panel = document.getElementById('filter-collapse');
-    if (toggle && panel) {
-        const setOpen = (open) => {
-            panel.classList.toggle('open', open);
-            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        };
-        setOpen(false);
-        toggle.addEventListener('click', () => setOpen(!panel.classList.contains('open')));
-    }
-
-    const clearBtn = document.getElementById('clear-filters');
-    if (clearBtn) clearBtn.addEventListener('click', clearAllFilters);
+    FilterPanel.setupToggle({ onClear: clearAllFilters });
 }
 
 // Reset every filter group to its "All" chip (sort and search are left alone).
 function clearAllFilters() {
-    FILTER_GROUPS.forEach(([sel, attr]) => {
-        document.querySelectorAll(sel).forEach(c => {
-            c.classList.toggle('active', c.dataset[attr] === 'all');
-        });
-    });
+    FilterPanel.clearChipGroups(FILTER_GROUPS);
     updateDisplayedMembers();
 }
 
@@ -240,15 +231,7 @@ function clearAllFilters() {
 // enabled state of the Clear button, so active filters are visible (and
 // clearable) even while the panel is collapsed.
 function updateActiveFilterBadge() {
-    const count = FILTER_GROUPS.reduce((n, [sel, attr]) => {
-        const active = Array.from(document.querySelectorAll(`${sel}.active`));
-        return n + (active.length > 0 && !active.some(c => c.dataset[attr] === 'all') ? 1 : 0);
-    }, 0);
-
-    const badge = document.getElementById('active-filter-count');
-    if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
-    const clearBtn = document.getElementById('clear-filters');
-    if (clearBtn) clearBtn.disabled = count === 0;
+    FilterPanel.updateActiveBadge(FILTER_GROUPS);
 }
 
 function buildExportTable(members) {
@@ -301,9 +284,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     const activeSortChipAfterPower = document.querySelector('.sort-chip.active');
     if (activeSortChipAfterPower && activeSortChipAfterPower.style.display === 'none') {
-        sortField = 'name';
-        sortDir = 'asc';
-        updateSortChips();
+        sortState.field = 'name';
+        sortState.dir = 'asc';
+        renderSortChips();
     }
 
     const actionBar = document.querySelector('.action-bar');
@@ -1252,48 +1235,16 @@ function updateMemberCount(count) {
 }
 
 function setupSearch() {
-    const searchInput = document.getElementById('search-input');
-    const clearBtn = document.getElementById('clear-search');
+    FilterPanel.setupSearch('search-input', 'clear-search', updateDisplayedMembers);
 
-    if (searchInput) searchInput.addEventListener('input', updateDisplayedMembers);
+    FilterPanel.setupChipGroup('.rank-chip', 'rank', updateDisplayedMembers);
+    FilterPanel.setupChipGroup('.prof-chip', 'prof', updateDisplayedMembers);
+    FilterPanel.setupChipGroup('.squad-chip', 'squad', updateDisplayedMembers);
+    FilterPanel.setupChipGroup('.troop-chip', 'troop', updateDisplayedMembers);
+    FilterPanel.setupChipGroup('.skill-chip', 'skill', updateDisplayedMembers);
 
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            searchInput.value = '';
-            updateDisplayedMembers();
-            searchInput.focus();
-        });
-    }
-
-    function setupChipGroup(chipSelector, dataAttribute) {
-        const chips = document.querySelectorAll(chipSelector);
-        chips.forEach(chip => {
-            chip.addEventListener('click', e => {
-                const clickedValue = e.target.getAttribute(`data-${dataAttribute}`);
-
-                if (clickedValue === 'all') {
-                    chips.forEach(c => c.classList.remove('active'));
-                    e.target.classList.add('active');
-                } else {
-                    document.querySelector(`${chipSelector}[data-${dataAttribute}="all"]`).classList.remove('active');
-                    e.target.classList.toggle('active');
-
-                    const activeChips = document.querySelectorAll(`${chipSelector}.active`);
-                    if (activeChips.length === 0) {
-                        document.querySelector(`${chipSelector}[data-${dataAttribute}="all"]`).classList.add('active');
-                    }
-                }
-                updateDisplayedMembers();
-            });
-        });
-    }
-
-    setupChipGroup('.rank-chip', 'rank');
-    setupChipGroup('.prof-chip', 'prof');
-    setupChipGroup('.squad-chip', 'squad');
-    setupChipGroup('.troop-chip', 'troop');
-    setupChipGroup('.skill-chip', 'skill');
-
+    // Eligibility is single-select (All / Eligible / Not Eligible), not the
+    // multi-select "All + others" shape the shared chip group implements.
     document.querySelectorAll('.eligible-chip').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.eligible-chip').forEach(b => b.classList.remove('active'));
@@ -1302,19 +1253,8 @@ function setupSearch() {
         });
     });
 
-    document.querySelectorAll('.sort-chip').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const field = btn.dataset.sort;
-            if (sortField === field) {
-                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-            } else {
-                sortField = field;
-                sortDir = SORT_DEFAULTS[field] || 'asc';
-            }
-            updateSortChips();
-            updateDisplayedMembers();
-        });
-    });
+    renderSortChips = FilterPanel.setupSortChips(
+        '.sort-chip', sortState, SORT_LABELS, SORT_DEFAULTS, updateDisplayedMembers);
 }
 
 // Fuse index over the folded fields. Because both the index and the query are
@@ -1328,20 +1268,6 @@ function rebuildFuse() {
         threshold: 0.2,
         includeScore: false,
         minMatchCharLength: 1,
-    });
-}
-
-function updateSortChips() {
-    const SORT_LABELS = {
-        name: 'Name', rank: 'Rank', power: 'Power',
-        hq: 'HQ', hero_power: 'Hero Power', kills: 'Kills', squad_power: 'Squad Power',
-        joined: 'Joined',
-    };
-    document.querySelectorAll('.sort-chip').forEach(btn => {
-        const field = btn.dataset.sort;
-        const isActive = field === sortField;
-        btn.classList.toggle('active', isActive);
-        btn.textContent = SORT_LABELS[field] + (isActive ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '');
     });
 }
 
