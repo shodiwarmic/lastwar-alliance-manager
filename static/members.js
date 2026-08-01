@@ -142,7 +142,8 @@ function updateDisplayedMembers() {
 
     let base;
     if (searchTerm.length > 0 && fuseInstance) {
-        base = fuseInstance.search(searchTerm).map(r => r.item);
+        // Fold the query the same way the index is folded, so accents match either way.
+        base = fuseInstance.search(foldSearch(searchTerm)).map(r => r.item);
     } else {
         base = [...allMembers];
     }
@@ -509,7 +510,15 @@ async function loadMembers() {
     try {
         const response = await fetch(API_URL);
         const members = await response.json();
-        allMembers = members;
+        // Enrich each member with FOLDED search fields (accent-insensitive) — Fuse's
+        // own ignoreDiacritics is a no-op in 7.0.0, so we fold here and fold the
+        // query too (same approach as the Train page).
+        allMembers = members.map(m => ({
+            ...m,
+            _s_name: foldSearch(m.name),
+            _s_global_aliases: foldSearch(m.global_aliases),
+            _s_personal_aliases: foldSearch(m.personal_aliases),
+        }));
         rebuildFuse();
         updateDisplayedMembers();
     } catch (error) {
@@ -1308,11 +1317,15 @@ function setupSearch() {
     });
 }
 
+// Fuse index over the folded fields. Because both the index and the query are
+// pre-folded, "Pàcha" is an EXACT match for "pacha" — which lets us run a tight
+// threshold (0.2) that keeps light typo tolerance but drops the fuzzy false
+// positives a looser 0.4 produced.
 function rebuildFuse() {
     if (typeof Fuse === 'undefined') return;
     fuseInstance = new Fuse(allMembers, {
-        keys: ['name', 'global_aliases', 'personal_aliases'],
-        threshold: 0.4,
+        keys: ['_s_name', '_s_global_aliases', '_s_personal_aliases'],
+        threshold: 0.2,
         includeScore: false,
         minMatchCharLength: 1,
     });
