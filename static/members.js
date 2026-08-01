@@ -160,7 +160,7 @@ function updateDisplayedMembers() {
     const activeProfs = Array.from(document.querySelectorAll('.prof-chip.active')).map(c => c.dataset.prof);
     const activeSquads = Array.from(document.querySelectorAll('.squad-chip.active')).map(c => c.dataset.squad);
     const activeTroops = Array.from(document.querySelectorAll('.troop-chip.active')).map(c => c.dataset.troop);
-    const activeEligible = document.querySelector('.eligible-chip.active')?.dataset.eligible || 'all';
+    const activeEligible = Array.from(document.querySelectorAll('.eligible-chip.active')).map(c => c.dataset.eligible);
     const activeSkills = Array.from(document.querySelectorAll('.skill-chip.active')).map(c => c.dataset.skill);
 
     let filtered = base.filter(member => {
@@ -176,9 +176,9 @@ function updateDisplayedMembers() {
         const matchesTroop = activeTroops.includes('all') || activeTroops.includes(memTroop);
 
         const matchesEligible =
-            activeEligible === 'all' ||
-            (activeEligible === 'eligible' && member.eligible !== false) ||
-            (activeEligible === 'not-eligible' && member.eligible === false);
+            activeEligible.length === 0 || activeEligible.includes('all') ||
+            (activeEligible.includes('eligible') && member.eligible !== false) ||
+            (activeEligible.includes('not-eligible') && member.eligible === false);
 
         const memberSkillList = member.skills ? member.skills.split(',') : [];
         const matchesSkill = activeSkills.length === 0 || activeSkills.includes('all') ||
@@ -1255,16 +1255,7 @@ function setupSearch() {
     FilterPanel.setupChipGroup('.squad-chip', 'squad', updateDisplayedMembers);
     FilterPanel.setupChipGroup('.troop-chip', 'troop', updateDisplayedMembers);
     FilterPanel.setupChipGroup('.skill-chip', 'skill', updateDisplayedMembers);
-
-    // Eligibility is single-select (All / Eligible / Not Eligible), not the
-    // multi-select "All + others" shape the shared chip group implements.
-    document.querySelectorAll('.eligible-chip').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.eligible-chip').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            updateDisplayedMembers();
-        });
-    });
+    FilterPanel.setupChipGroup('.eligible-chip', 'eligible', updateDisplayedMembers);
 
     renderSortChips = FilterPanel.setupSortChips(
         '.sort-chip', sortState, SORT_LABELS, SORT_DEFAULTS, updateDisplayedMembers);
