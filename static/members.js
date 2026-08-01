@@ -23,12 +23,14 @@ let currentFilteredMembers = [];
 const SORT_DEFAULTS = {
     name: 'asc', rank: 'desc', power: 'desc',
     hq: 'desc', hero_power: 'desc', kills: 'desc', squad_power: 'desc',
+    profession_level: 'desc', troop_level: 'desc',
     joined: 'desc', // most days in alliance (oldest join date) first
 };
 
 const SORT_LABELS = {
     name: 'Name', rank: 'Rank', power: 'Power',
     hq: 'HQ', hero_power: 'Hero Power', kills: 'Kills', squad_power: 'Squad Power',
+    profession_level: 'Profession Level', troop_level: 'Troop Level',
     joined: 'Joined',
 };
 
@@ -196,6 +198,10 @@ function updateDisplayedMembers() {
         else if (field === 'hero_power')  diff = (a.hero_power || 0) - (b.hero_power || 0);
         else if (field === 'kills')       diff = (a.current_kills || 0) - (b.current_kills || 0);
         else if (field === 'squad_power') diff = (a.squad_power || 0) - (b.squad_power || 0);
+        // Nullable numerics: unset counts as 0, so unrecorded members land at the
+        // end of the default (descending) view — same as hero power / kills.
+        else if (field === 'profession_level') diff = (a.profession_level || 0) - (b.profession_level || 0);
+        else if (field === 'troop_level')      diff = (a.troop_level || 0) - (b.troop_level || 0);
         else if (field === 'joined')      diff = joinedSortKey(b) - joinedSortKey(a); // higher tenure = positive
         if (diff === 0) diff = a.name.localeCompare(b.name);
         return sortState.dir === 'asc' ? diff : -diff;
