@@ -2931,7 +2931,9 @@ button {
 }
 
 /* Badge classes for JS-generated member cards */
-.badge-hq         { background: var(--color-surface);              color: var(--color-text-mid); }
+/* --bg-tertiary, not --color-surface: surface is the card background itself, so
+   the badge vanished into the card (same fix as .rank-R1). */
+.badge-hq         { background: var(--bg-tertiary);                color: var(--color-text-mid); }
 .badge-troop      { background: rgba(221,107,32,0.15);           color: #dd6b20; } /* amber — intentional, no token */
 .badge-profession { background: var(--color-purple-bg);          color: var(--color-purple); }
 .badge-squad-type { background: var(--color-info-bg);            color: var(--color-info); }

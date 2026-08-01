@@ -174,9 +174,11 @@
     flex-shrink: 0;
 }
 
-/* "Member Since" badge — neutral metadata chip on member cards */
+/* "Member Since" badge — neutral metadata chip on member cards. Same
+   --bg-tertiary as .badge-hq: --color-surface is the card background, so the
+   badge washed out against it. */
 .badge-since {
-    background: var(--color-surface);
+    background: var(--bg-tertiary);
     color: var(--color-text-mid);
 }
 

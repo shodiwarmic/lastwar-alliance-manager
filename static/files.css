@@ -78,7 +78,7 @@
 }
 
 /* Compact icon+value pills. Scoped to .file-meta so the primary rank badge used
-   elsewhere keeps its own sizing. Owner/updated use .badge-hq (muted); view/edit
+   elsewhere keeps its own sizing. Owner/updated use .file-meta-muted; view/edit
    carry their per-rank color from .rank-*. */
 .file-meta .member-rank {
     display: inline-flex;
@@ -90,7 +90,8 @@
 }
 
 /* Muted badges (owner / updated) — a visible light-gray pill, matching the mockup.
-   (Not .badge-hq, whose --color-surface reads darker than the card and vanishes.) */
+   Its own class rather than .badge-hq so file metadata keeps its text colour
+   independent of the member-card HQ badge. */
 .file-meta .file-meta-muted {
     background: var(--bg-tertiary);
     color: var(--text-secondary);
