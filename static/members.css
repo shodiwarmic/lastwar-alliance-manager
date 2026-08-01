@@ -70,10 +70,18 @@
    .btn-* rules in styles.css (every button in the app uses the same outlined,
    colour-coded weight), so no member-specific button overrides are needed. */
 
-/* Member-card action buttons collapse to icon-only on mobile (≤768px, where
-   the card stacks) so the per-card action row stays compact. Labels and
-   title/aria-label keep them readable on desktop and accessible on touch. */
+/* Member-card action buttons collapse to icon-only when there's no room for
+   three labelled buttons beside a readable name. Two triggers, same pair the
+   Files card uses: the mobile shell, and any narrow card (card width, not
+   viewport — see .member-card's container-type). Labels and title/aria-label
+   keep them readable on desktop and accessible on touch. */
 @media (max-width: 768px) {
+    .member-action-label {
+        display: none;
+    }
+}
+
+@container (max-width: 520px) {
     .member-action-label {
         display: none;
     }

@@ -875,7 +875,8 @@ button {
    Same column shape as the Files card: the top row holds the name (left) and the
    action buttons (right); the badge row is a sibling below it, so badges flow
    under the buttons at every width instead of being trapped in a narrow left
-   column beside them. */
+   column beside them. Each card is its own query container so the button labels
+   can collapse to icons on the CARD's width (see members.css). */
 .member-card {
     background: var(--color-card);
     border: 2px solid var(--color-border);
@@ -884,6 +885,7 @@ button {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    container-type: inline-size;
     transition: all 0.3s;
 }
 
