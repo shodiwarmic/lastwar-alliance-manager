@@ -20,6 +20,11 @@ let allMembers = [];   // [{id, name, rank}]
 let allRules = [];     // EligibilityRule[]
 let editingLogId = null;
 let editingRuleId = null;
+let trainTabs = null;  // Tabs controller (tabs.js) — for programmatic switches
+let dateCtl = null;    // FilterPanel.setupDateRange controller — module-scoped (read by filters)
+let allLogs = [];      // full fetched log set (enriched w/ aliases); filtered client-side
+let aliasById = new Map(); // member id → "global, personal" aliases (for log search)
+let logsFuse = null;   // Fuse index over enriched logs — matches the Members page's search
 
 // Flatpickr instances — initialised in DOMContentLoaded
 let logDateFP = null;
@@ -46,9 +51,9 @@ document.addEventListener('DOMContentLoaded', () => {
         itemSelectText: '', shouldSort: false, allowHTML: true,
     });
 
-    setupTabs();
+    trainTabs = Tabs.init({ hash: true, defaultTab: 'logs' });
     loadMembers().then(() => {
-        loadTrainLogs(null, null);
+        loadTrainLogs();
         if (CAN_MANAGE) {
             loadRules();
         }
@@ -77,31 +82,16 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('btn-run-rule').disabled =
                 !document.getElementById('sel-rule-picker').value;
         });
+
+        FilterPanel.setupSearch('rule-search', 'clear-rule-search', applyRuleFilters);
     }
 
-    document.getElementById('btn-apply-filter').addEventListener('click', applyFilter);
-    document.getElementById('btn-clear-filter').addEventListener('click', clearFilter);
+    // Client-side filter panel (search + type chips + date range) over the loaded set.
+    dateCtl = FilterPanel.setupDateRange('filter-from', 'filter-to', applyLogFilters);
+    FilterPanel.setupSearch('log-search', 'clear-log-search', applyLogFilters);
+    FilterPanel.setupChipGroup('.log-type-chip', 'ttype', applyLogFilters);
+    FilterPanel.setupToggle({ onClear: clearFilters });
 });
-
-// ── Tabs ──────────────────────────────────────────────────────────────────────
-
-function setupTabs() {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(p => p.style.display = 'none');
-            btn.classList.add('active');
-            document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
-        });
-    });
-
-    // CSS hides all .tab-content by default — show the initial active tab explicitly.
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) {
-        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
-        if (target) target.style.display = 'block';
-    }
-}
 
 // ── Members ───────────────────────────────────────────────────────────────────
 
@@ -109,6 +99,10 @@ async function loadMembers() {
     const res = await fetch('/api/members');
     if (!res.ok) return;
     allMembers = await res.json();
+    // id → combined global+personal aliases, so log search matches the same strings the
+    // Members page does (its Fuse keys include global_aliases + personal_aliases).
+    aliasById = new Map(allMembers.map(m =>
+        [m.id, [m.global_aliases, m.personal_aliases].filter(Boolean).join(', ')]));
     populateMemberDropdowns();
 }
 
@@ -136,23 +130,62 @@ function makeOpt(value, text) {
 
 // ── Train Logs ────────────────────────────────────────────────────────────────
 
-async function loadTrainLogs(from, to) {
-    let url = '/api/train-logs';
-    const params = [];
-    if (from) params.push('from=' + from);
-    if (to) params.push('to=' + to);
-    if (params.length) url += '?' + params.join('&');
-
-    const res = await fetch(url);
+async function loadTrainLogs() {
+    // The whole set is loaded once; date/search/type filtering happens client-side.
+    const res = await fetch('/api/train-logs');
     if (!res.ok) return;
-    const logs = await res.json();
-    renderLogsTable(logs);
+    // Enrich each log with FOLDED search fields (accent-insensitive): a member's name +
+    // their global/personal aliases become one searchable blob per role. Fuse's own
+    // ignoreDiacritics is a no-op in 7.0.0, so we fold here (and fold the query below).
+    allLogs = (await res.json()).map(l => ({
+        ...l,
+        _s_conductor: foldSearch((l.conductor_name || '') + ' ' + (aliasById.get(l.conductor_id) || '')),
+        _s_vip: foldSearch((l.vip_name || '') + ' ' + (aliasById.get(l.vip_id) || '')),
+        _s_notes: foldSearch(l.notes || ''),
+    }));
+    rebuildLogsFuse();
+    applyLogFilters();
+}
+
+// Fuse index over the enriched logs. We pre-fold accents ourselves (the _s_* fields + the
+// query), so "Pàcha" is an EXACT match — which lets us run a tight threshold (0.2) that
+// keeps light typo tolerance but drops the fuzzy false positives a looser 0.4 produced
+// ("pacha" no longer matches chanchuyo / Charlie9042 / Patata con Poncho).
+function rebuildLogsFuse() {
+    if (typeof Fuse === 'undefined') { logsFuse = null; return; }
+    logsFuse = new Fuse(allLogs, {
+        keys: ['_s_conductor', '_s_vip', '_s_notes'],
+        threshold: 0.2,
+        includeScore: false,
+        minMatchCharLength: 1,
+    });
+}
+
+// Filter the loaded set by search text (Fuse) + type chips + date range, then render.
+function applyLogFilters() {
+    const q = (document.getElementById('log-search').value || '').trim();
+    const activeTypes = [...document.querySelectorAll('.log-type-chip.active')].map(c => c.dataset.ttype);
+    const typeOn = activeTypes.length > 0 && !activeTypes.includes('all');
+    const { from, to } = dateCtl.get();
+
+    // Fuzzy, alias-aware text match via Fuse (matches Members); then narrow by chips + date.
+    const base = (q && logsFuse) ? logsFuse.search(foldSearch(q)).map(r => r.item) : allLogs;
+    const filtered = base.filter(l => {
+        if (typeOn && !activeTypes.includes(l.train_type)) return false;
+        if (!FilterPanel.dateInRange(l.date, from, to)) return false;
+        return true;
+    });
+
+    renderLogsTable(filtered);
+    FilterPanel.updateActiveBadge([['.log-type-chip', 'ttype']], { extra: (q ? 1 : 0) + (dateCtl.active() ? 1 : 0) });
 }
 
 function renderLogsTable(logs) {
     const container = document.getElementById('logs-container');
     if (!logs || logs.length === 0) {
-        container.replaceChildren(emptyState('No trains logged yet.'));
+        container.replaceChildren(emptyState(
+            allLogs.length === 0 ? 'No trains logged yet.' : 'No trains match your filters.'
+        ));
         return;
     }
 
@@ -232,16 +265,14 @@ function renderLogsTable(logs) {
     container.replaceChildren(wrap);
 }
 
-function applyFilter() {
-    const from = document.getElementById('filter-from').value;
-    const to = document.getElementById('filter-to').value;
-    loadTrainLogs(from || null, to || null);
-}
-
-function clearFilter() {
-    filterFromFP.clear(false);
+// Clear-all (panel toggle's onClear): reset chips, search (+ its ×), and dates, then refilter.
+function clearFilters() {
+    FilterPanel.clearChipGroups([['.log-type-chip', 'ttype']]);
+    document.getElementById('log-search').value = '';
+    document.getElementById('clear-log-search').style.display = 'none';
+    filterFromFP.clear(false);  // existing flatpickr instances; false suppresses onChange
     filterToFP.clear(false);
-    loadTrainLogs(null, null);
+    applyLogFilters();
 }
 
 // ── Log Train Modal ───────────────────────────────────────────────────────────
@@ -316,26 +347,17 @@ async function saveTrainLog() {
     }
 
     closeLogModal();
-    loadTrainLogs(
-        document.getElementById('filter-from').value || null,
-        document.getElementById('filter-to').value || null
-    );
+    loadTrainLogs();
 }
 
 async function deleteTrainLog(id) {
     const res = await fetch(`/api/train-logs/${id}`, { method: 'DELETE' });
     if (!res.ok) {
         // restore the row to its original state on failure
-        loadTrainLogs(
-            document.getElementById('filter-from').value || null,
-            document.getElementById('filter-to').value || null
-        );
+        loadTrainLogs();
         return;
     }
-    loadTrainLogs(
-        document.getElementById('filter-from').value || null,
-        document.getElementById('filter-to').value || null
-    );
+    loadTrainLogs();
 }
 
 // ── Eligibility Rules ─────────────────────────────────────────────────────────
@@ -344,22 +366,31 @@ async function loadRules() {
     const res = await fetch('/api/eligibility-rules');
     if (!res.ok) return;
     allRules = await res.json();
-    renderRules();
-    populateRulePicker();
+    applyRuleFilters();          // renders (filtered by the search box, if any)
+    populateRulePicker();        // picker always lists the full, unfiltered set
 }
 
-function renderRules() {
+// Filter the rules list by name against the search box, then render.
+function applyRuleFilters() {
+    const q = (document.getElementById('rule-search').value || '').trim().toLowerCase();
+    const filtered = q ? allRules.filter(r => (r.name || '').toLowerCase().includes(q)) : allRules;
+    renderRules(filtered);
+}
+
+function renderRules(rules = allRules) {
     const container = document.getElementById('rules-container');
     if (!container) return;
-    if (!allRules || allRules.length === 0) {
-        container.replaceChildren(emptyState('No rules yet. Create one to get started.'));
+    if (!rules || rules.length === 0) {
+        container.replaceChildren(emptyState(
+            allRules.length === 0 ? 'No rules yet. Create one to get started.' : 'No rules match your search.'
+        ));
         return;
     }
 
     const list = document.createElement('div');
     list.className = 'rules-list';
 
-    allRules.forEach(rule => {
+    rules.forEach(rule => {
         const card = document.createElement('div');
         card.className = 'rule-card';
 
@@ -477,10 +508,7 @@ function renderEligibleList(members) {
         logBtn.className = 'btn btn-primary btn-sm';
         logBtn.textContent = 'Log Train';
         logBtn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(p => p.style.display = 'none');
-            document.querySelector('[data-tab="logs"]').classList.add('active');
-            document.getElementById('tab-logs').style.display = 'block';
+            trainTabs.show('logs');
             openLogModal({ conductor_id: m.member_id, conductor_name: m.name, train_type: 'FREE', date: gameToday(), notes: '', vip_id: null, vip_type: null });
         });
         card.appendChild(logBtn);

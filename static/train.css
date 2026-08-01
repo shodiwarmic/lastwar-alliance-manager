@@ -21,25 +21,15 @@
     font-size: 1.1rem;
 }
 
-.panel-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
+/* ── Filter panel (shared chrome + date-range styling live in filter-panel.css) ── */
 
-.date-range-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    font-size: 0.875rem;
-    color: var(--color-text-mid);
-}
-
-.date-range-row input[type="date"] {
-    padding: 4px 8px;
-    font-size: 0.875rem;
+/* Train-specific modifier on the shared .filter-search-wrap: the Rules-tab search
+   sits standalone (no .filter-sort-top flex parent), so the shared flex:1/min-width
+   are inert — constrain it so it doesn't stretch full-width. train- prefix marks it
+   as page-specific (not part of the shared component). */
+.train-rule-search {
+    max-width: 420px;
+    margin-bottom: 16px;
 }
 
 /* ── Train Log Table ──────────────────────────────────────────────────────── */

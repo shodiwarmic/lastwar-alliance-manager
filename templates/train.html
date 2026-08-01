@@ -7,12 +7,14 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="/filter-panel.css">
 <link rel="stylesheet" href="/train.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
 <link rel="stylesheet" href="/choices-theme.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 {{end}}
 
 {{define "content"}}
@@ -32,16 +34,39 @@
 
         <div class="panel-header">
             <h3>Train Log</h3>
-            <div class="panel-header-actions">
-                <div class="date-range-row">
-                    <label>From <input type="date" id="filter-from"></label>
-                    <label>Until <input type="date" id="filter-to"></label>
-                    <button id="btn-apply-filter" class="btn btn-secondary btn-sm">Filter</button>
-                    <button id="btn-clear-filter" class="btn btn-ghost btn-sm">Clear</button>
+            {{if .Permissions.ManageTrain}}
+            <button id="btn-log-train" class="btn btn-primary">+ Log Train</button>
+            {{end}}
+        </div>
+
+        <div class="filter-sort-controls card">
+            <div class="filter-sort-top">
+                <div class="filter-search-wrap">
+                    <input type="text" id="log-search" class="form-input" placeholder="Search conductor, VIP, notes…">
+                    <button id="clear-log-search" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
                 </div>
-                {{if .Permissions.ManageTrain}}
-                <button id="btn-log-train" class="btn btn-primary">+ Log Train</button>
-                {{end}}
+                <button type="button" id="toggle-filters" class="btn btn-secondary btn-sm filter-toggle" aria-expanded="false" aria-controls="filter-collapse">
+                    <svg width="14" height="14" aria-hidden="true" class="svg-icon chevron"><use href="/icons.svg#icon-chevron-down"/></svg>
+                    Sort &amp; Filter
+                    <span id="active-filter-count" class="filter-count-badge" hidden></span>
+                </button>
+                <button type="button" id="clear-filters" class="btn btn-ghost btn-sm" disabled>Clear</button>
+            </div>
+            <div id="filter-collapse" class="filter-collapse">
+                <hr class="filter-sort-divider">
+                <div class="filter-sort-grid">
+                    <div class="filter-row filter-row-full">
+                        <span class="filter-chip-label">Type:</span>
+                        <button class="filter-chip log-type-chip active" data-ttype="all">All</button>
+                        <button class="filter-chip log-type-chip" data-ttype="FREE">Free</button>
+                        <button class="filter-chip log-type-chip" data-ttype="PURCHASED">Purchased</button>
+                    </div>
+                    <div class="filter-row filter-row-full">
+                        <span class="filter-chip-label">Date:</span>
+                        <label>From <input type="date" id="filter-from"></label>
+                        <label>Until <input type="date" id="filter-to"></label>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -80,6 +105,10 @@
             <h3>Eligibility Rules</h3>
             <button id="btn-new-rule" class="btn btn-primary">+ New Rule</button>
         </div>
+        <div class="filter-search-wrap train-rule-search">
+            <input type="text" id="rule-search" class="form-input" placeholder="Search rules…">
+            <button id="clear-rule-search" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+        </div>
         <div id="rules-container">
             <p class="empty-state">Loading…</p>
         </div>
@@ -91,6 +120,8 @@
 
 {{define "scripts"}}
 <div id="page-config" data-can-manage="{{if .Permissions.ManageTrain}}true{{else}}false{{end}}" hidden></div>
+<script src="/tabs.js"></script>
+<script src="/filter-panel.js"></script>
 <script src="/train.js"></script>
 {{end}}
 
