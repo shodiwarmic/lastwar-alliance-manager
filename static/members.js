@@ -598,7 +598,14 @@ function buildMemberCard(member) {
     const card = document.createElement('div');
     card.className = 'member-card';
 
-    // ── info column ──────────────────────────────────────────────
+    // The card is a column (same shape as the Files card): a top row holding the
+    // name (left) and the action buttons (right), with the badge row as a sibling
+    // beneath — so badges flow under the buttons at every width instead of being
+    // confined to a narrow left column.
+    const top = document.createElement('div');
+    top.className = 'member-card-top';
+
+    // ── badge row ────────────────────────────────────────────────
     const info = document.createElement('div');
     info.className = 'member-info';
 
@@ -671,7 +678,7 @@ function buildMemberCard(member) {
     addAliasChips(member.global_aliases, 'alias-global');
     if (aliasGroup.children.length) nameDiv.appendChild(aliasGroup);
 
-    info.appendChild(nameDiv);
+    top.appendChild(nameDiv);
 
     // Rank badge
     const rankBadge = document.createElement('span');
@@ -799,9 +806,7 @@ function buildMemberCard(member) {
         }
     }
 
-    card.appendChild(info);
-
-    // ── actions column ───────────────────────────────────────────
+    // ── actions (right side of the top row) ──────────────────────
     if (canManageRanks) {
         const actions = document.createElement('div');
         actions.className = 'member-actions';
@@ -822,8 +827,10 @@ function buildMemberCard(member) {
             actions.appendChild(inviteUserBtn);
         }
 
-        card.appendChild(actions);
+        top.appendChild(actions);
     }
+
+    card.append(top, info);
 
     return card;
 }

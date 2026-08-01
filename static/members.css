@@ -5,13 +5,9 @@
    .member-search-wrap was renamed to the generic .filter-search-wrap there. */
 
 /* ── Member name cell (name + aliases stacked) ────────────────────────── */
-/* Let the info column shrink to the card width instead of being widened by
-   long nowrap aliases (which would overflow the card). */
-.member-info {
-    min-width: 0;
-}
-
-/* The name "cell": name (+ alias button) on top, aliases on the line below. */
+/* The name "cell": name (+ alias button) on top, aliases on the line below.
+   min-width:0 lets it shrink to the top row instead of being widened by long
+   nowrap aliases (which would push the action buttons off the card). */
 .member-name {
     display: flex;
     flex-direction: column;
