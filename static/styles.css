@@ -871,14 +871,21 @@ button {
     gap: 15px;
 }
 
+/* ── Member card: name + actions on a top row, badges full-width beneath ──────
+   Same column shape as the Files card: the top row holds the name (left) and the
+   action buttons (right); the badge row is a sibling below it, so badges flow
+   under the buttons at every width instead of being trapped in a narrow left
+   column beside them. Each card is its own query container so the button labels
+   can collapse to icons on the CARD's width (see members.css). */
 .member-card {
     background: var(--color-card);
     border: 2px solid var(--color-border);
     border-radius: 10px;
     padding: 20px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 10px;
+    container-type: inline-size;
     transition: all 0.3s;
 }
 
@@ -886,6 +893,29 @@ button {
     border-color: var(--color-accent);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
     transform: translateY(-2px);
+}
+
+.member-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+/* The name fills the top row so the actions sit hard right; min-width:0 lets a
+   long name (and its alias line) truncate instead of shoving the buttons off.
+   Scoped to the card row: .member-name is reused on other pages (e.g. Dyno)
+   where it must keep its own full-width basis. */
+.member-card-top .member-name {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Buttons keep their size and stay hard right; they wrap as a block rather than
+   compressing when the name is long (same as .file-actions). */
+.member-card-top .member-actions {
+    flex-shrink: 0;
+    justify-content: flex-end;
 }
 
 .member-info {
@@ -1090,29 +1120,20 @@ button {
         width: 100%;
     }
 
-    /* Member cards — pin the action icons to the top-right corner (inline with
-       the name) and take them out of flow, so the info/badges span the full
-       width and flow beneath the icons instead of being confined to a reserved
-       right column. */
+    /* Member cards — the name/actions row and the full-width badge row beneath
+       come from the base .member-card column layout; mobile only tightens the
+       padding, type size and action gap. */
     .member-card {
-        position: relative;
         padding: 15px;
     }
 
-    /* Scoped to .member-card so these don't leak onto .member-name / .member-rank
+    /* Scoped to .member-card so this doesn't leak onto .member-name / .member-rank
        reused in other tables (e.g. the VS Points table). */
     .member-card .member-name {
         font-size: 1.1em;
-        margin-bottom: 8px;
-        padding-right: 150px;  /* keep the name clear of the corner icons */
-        min-height: 44px;      /* so the alias line clears the corner icons */
     }
 
     .member-card .member-actions {
-        position: absolute;
-        top: 15px;
-        right: 15px;
-        margin: 0;
         gap: 8px;
     }
 
@@ -2931,7 +2952,9 @@ button {
 }
 
 /* Badge classes for JS-generated member cards */
-.badge-hq         { background: var(--color-surface);              color: var(--color-text-mid); }
+/* --bg-tertiary, not --color-surface: surface is the card background itself, so
+   the badge vanished into the card (same fix as .rank-R1). */
+.badge-hq         { background: var(--bg-tertiary);                color: var(--color-text-mid); }
 .badge-troop      { background: rgba(221,107,32,0.15);           color: #dd6b20; } /* amber — intentional, no token */
 .badge-profession { background: var(--color-purple-bg);          color: var(--color-purple); }
 .badge-squad-type { background: var(--color-info-bg);            color: var(--color-info); }

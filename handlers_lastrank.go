@@ -112,6 +112,28 @@ func lastRankInsertHistory(tx *sql.Tx, table, valueCol string, memberID int, val
 	return err
 }
 
+// lastRankResolveMember matches a LastRank entry to a roster member, trying the
+// stored lastrank_public_id (captured on a previous sync) FIRST: it's
+// authoritative and survives an in-game name change, which exact/alias matching
+// can't — a renamed member would otherwise land in the unmatched pile. An entry
+// with no stored id (a first-time sync) falls through to the shared name/alias
+// resolution unchanged.
+//
+// This is the one-shot form, for callers that resolve a single entry. The
+// alliance preview instead runs the same priority as explicit passes over the
+// whole roster (see lastRankPreview), so a public_id match can't be beaten to a
+// member by another entry's name match.
+func lastRankResolveMember(tx *sql.Tx, name string, publicID, userID int) (*Member, string, error) {
+	if publicID != 0 {
+		var m Member
+		err := tx.QueryRow("SELECT id, name, rank FROM members WHERE lastrank_public_id = ?", publicID).Scan(&m.ID, &m.Name, &m.Rank)
+		if err == nil {
+			return &m, "public_id", nil
+		}
+	}
+	return resolveMemberAlias(tx, name, userID)
+}
+
 // --- Phase 1: alliance preview ---
 
 func lastRankPreview(w http.ResponseWriter, r *http.Request) {
@@ -156,20 +178,68 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 	unrankedMatched := map[int]bool{}
 
 	capture := alliance.LastSeenAt
-	for _, lm := range alliance.Members {
+
+	// Resolve every entry to a roster member BEFORE building diffs, in passes, so
+	// a stored public_id always beats a name/alias match on a different entry:
+	//   0. ranked entries with a stored lastrank_public_id (authoritative)
+	//   1. ranked entries by name/alias (first-time syncs, no stored id)
+	//   2. unranked entries — resolved only to mark "likely left"; never claim,
+	//      so an unranked entry can't take a member away from a ranked one.
+	// A member is claimed by at most one entry; a later entry resolving to an
+	// already-claimed member is reported as unmatched rather than proposing a
+	// second, conflicting set of changes for the same member.
+	matches := make([]*Member, len(alliance.Members))
+	matchTypes := make([]string, len(alliance.Members))
+	ranked := make([]bool, len(alliance.Members))
+	claimed := map[int]bool{}
+	for i, lm := range alliance.Members {
+		ranked[i] = lastRankRankToString(lm.AllianceRank) != ""
+	}
+
+	for i, lm := range alliance.Members {
+		if !ranked[i] || lm.PublicID == 0 {
+			continue
+		}
+		var m Member
+		if err := tx.QueryRow("SELECT id, name, rank FROM members WHERE lastrank_public_id = ?", lm.PublicID).Scan(&m.ID, &m.Name, &m.Rank); err != nil || claimed[m.ID] {
+			continue
+		}
+		matches[i], matchTypes[i], claimed[m.ID] = &m, "public_id", true
+	}
+
+	for i, lm := range alliance.Members {
+		if !ranked[i] || matches[i] != nil {
+			continue
+		}
+		m, mt, err := resolveMemberAlias(tx, lm.Name, userID)
+		if err != nil || m == nil || claimed[m.ID] {
+			continue
+		}
+		matches[i], matchTypes[i], claimed[m.ID] = m, mt, true
+	}
+
+	for i, lm := range alliance.Members {
+		if ranked[i] {
+			continue
+		}
+		if m, _, err := lastRankResolveMember(tx, lm.Name, lm.PublicID, userID); err == nil && m != nil {
+			matches[i] = m
+		}
+	}
+
+	for i, lm := range alliance.Members {
 		rankStr := lastRankRankToString(lm.AllianceRank)
-		member, matchType, mErr := resolveMemberAlias(tx, lm.Name, userID)
-		matched := mErr == nil && member != nil
+		member, matchType := matches[i], matchTypes[i]
 
 		// Unranked on LastRank ≈ left the alliance: don't update or confirm.
 		if rankStr == "" {
-			if matched {
+			if member != nil {
 				unrankedMatched[member.ID] = true
 			}
 			continue
 		}
 
-		if !matched {
+		if member == nil {
 			resp.Unmatched = append(resp.Unmatched, LastRankUnmatched{
 				LastRankName:     lm.Name,
 				LastRankPublicID: lm.PublicID,
@@ -205,8 +275,9 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 		if newRank := lastRankRankToString(lm.AllianceRank); newRank != "" && newRank != member.Rank {
 			diff.RankDiff = &LastRankRankDiff{Current: member.Rank, New: newRank}
 		}
-		// Matched via an alias whose name differs from our primary → likely a
-		// rename. Surface it for review (case-only differences are ignored).
+		// Matched via an alias or a stored public_id, but under a name that differs
+		// from our primary → likely a rename. Surface it for review (case-only
+		// differences are ignored).
 		if !strings.EqualFold(lm.Name, member.Name) {
 			diff.NameChange = &LastRankNameChange{Current: member.Name, New: lm.Name}
 		}

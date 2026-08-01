@@ -1,7 +1,7 @@
 // filter-panel.js — shared search / sort / filter-chip plumbing for list pages.
 //
-// Files consumes this today; Members and External Alliances still carry their own
-// local copies and are tracked to migrate here (see the filter-panel dedup follow-up).
+// Train, Files and Members consume this today; External Alliances still carries its
+// own local copy and is tracked to migrate here (see the filter-panel dedup follow-up).
 // The page owns its data and its apply/sort function; this module owns the generic
 // bits: chip-group toggle logic, the collapsible panel, the active-filter badge, the
 // Clear button, the search box, and the sort-chip direction toggle. Every helper runs

@@ -1,116 +1,13 @@
-/* members.css — Members page layout and filter controls */
+/* members.css — Members page layout */
 
-.filter-sort-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    margin-bottom: 25px;
-    background: var(--color-surface);
-    padding: 20px;
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-}
-
-.filter-sort-top {
-    display: flex;
-    gap: 15px;
-    flex-wrap: wrap;
-    align-items: center;
-}
-
-.filter-sort-divider {
-    border: 0;
-    border-top: 1px solid var(--color-border);
-    margin: 0;
-}
-
-.filter-sort-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-    gap: 20px;
-}
-
-.filter-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: center;
-}
-
-/* Filter rows that span the full width of the filter grid */
-.filter-row-full {
-    grid-column: 1 / -1;
-}
-
-.member-search-wrap {
-    flex: 1;
-    min-width: 250px;
-    position: relative;
-}
-
-.member-search-wrap .form-input {
-    padding: 10px 35px 10px 15px;
-    border-radius: 20px;
-}
-
-#clear-search {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--color-text-mid);
-}
-
-/* ── Collapsible sort/filter panel ────────────────────────────────────── */
-.filter-collapse {
-    display: none;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.filter-collapse.open {
-    display: flex;
-}
-
-.filter-toggle {
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-
-.filter-toggle .chevron {
-    transition: transform 0.2s;
-}
-
-.filter-toggle[aria-expanded="true"] .chevron {
-    transform: rotate(180deg);
-}
-
-.filter-count-badge {
-    background: var(--color-accent);
-    color: #fff;
-    border-radius: 999px;
-    padding: 0 6px;
-    font-size: 0.75em;
-    font-weight: 600;
-    min-width: 1.4em;
-    text-align: center;
-}
+/* The search / sort / filter panel chrome lives in the shared
+   static/filter-panel.css (linked from head_tags); the page-prefixed
+   .member-search-wrap was renamed to the generic .filter-search-wrap there. */
 
 /* ── Member name cell (name + aliases stacked) ────────────────────────── */
-/* Let the info column shrink to the card width instead of being widened by
-   long nowrap aliases (which would overflow the card). */
-.member-info {
-    min-width: 0;
-}
-
-/* The name "cell": name (+ alias button) on top, aliases on the line below. */
+/* The name "cell": name (+ alias button) on top, aliases on the line below.
+   min-width:0 lets it shrink to the top row instead of being widened by long
+   nowrap aliases (which would push the action buttons off the card). */
 .member-name {
     display: flex;
     flex-direction: column;
@@ -173,10 +70,18 @@
    .btn-* rules in styles.css (every button in the app uses the same outlined,
    colour-coded weight), so no member-specific button overrides are needed. */
 
-/* Member-card action buttons collapse to icon-only on mobile (≤768px, where
-   the card stacks) so the per-card action row stays compact. Labels and
-   title/aria-label keep them readable on desktop and accessible on touch. */
+/* Member-card action buttons collapse to icon-only when there's no room for
+   three labelled buttons beside a readable name. Two triggers, same pair the
+   Files card uses: the mobile shell, and any narrow card (card width, not
+   viewport — see .member-card's container-type). Labels and title/aria-label
+   keep them readable on desktop and accessible on touch. */
 @media (max-width: 768px) {
+    .member-action-label {
+        display: none;
+    }
+}
+
+@container (max-width: 520px) {
     .member-action-label {
         display: none;
     }
@@ -273,9 +178,11 @@
     flex-shrink: 0;
 }
 
-/* "Member Since" badge — neutral metadata chip on member cards */
+/* "Member Since" badge — neutral metadata chip on member cards. Same
+   --bg-tertiary as .badge-hq: --color-surface is the card background, so the
+   badge washed out against it. */
 .badge-since {
-    background: var(--color-surface);
+    background: var(--bg-tertiary);
     color: var(--color-text-mid);
 }
 

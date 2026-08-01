@@ -1,4 +1,5 @@
 {{define "head_tags"}}
+<link rel="stylesheet" href="/filter-panel.css">
 <link rel="stylesheet" href="/members.css">
 <link rel="stylesheet" href="/lastrank.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -73,7 +74,7 @@
                 <div class="filter-sort-controls">
 
                     <div class="filter-sort-top">
-                        <div class="member-search-wrap">
+                        <div class="filter-search-wrap">
                             <input type="text" id="search-input" class="form-input" placeholder="Search members...">
                             <button id="clear-search" style="display: none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
                         </div>
@@ -98,6 +99,8 @@
                             <button class="filter-chip sort-chip" data-sort="hq">HQ</button>
                             <button class="filter-chip sort-chip" data-sort="hero_power">Hero Power</button>
                             <button class="filter-chip sort-chip" data-sort="kills">Kills</button>
+                            <button class="filter-chip sort-chip" data-sort="profession_level">Profession Level</button>
+                            <button class="filter-chip sort-chip" data-sort="troop_level">Troop Level</button>
                             <button class="filter-chip sort-chip" data-sort="joined">Joined</button>
                             <button class="filter-chip sort-chip squad-sort-option" data-sort="squad_power" style="display:none">Squad Power</button>
                         </div>
@@ -430,6 +433,7 @@
     data-manage-train="{{if .Permissions.ManageTrain}}true{{else}}false{{end}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+<script src="/filter-panel.js"></script>
 <script src="/members.js"></script>
 <script src="/lastrank.js"></script>
 {{end}}
