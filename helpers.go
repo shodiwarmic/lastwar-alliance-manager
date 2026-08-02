@@ -1,10 +1,8 @@
 package main
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"log/slog"
-	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -133,19 +131,6 @@ func normalizeToGameWeekMonday(dateStr string) (string, error) {
 }
 
 // Generate random alphanumeric password
-func generateRandomPassword(length int) (string, error) {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	password := make([]byte, length)
-	for i := range password {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		if err != nil {
-			return "", err
-		}
-		password[i] = charset[num.Int64()]
-	}
-	return string(password), nil
-}
-
 // Normalize name for matching (remove common prefixes, spaces, special chars)
 func normalizeName(name string) string {
 	name = strings.ToLower(name)

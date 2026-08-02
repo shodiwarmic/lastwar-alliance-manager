@@ -241,7 +241,6 @@ func main() {
 	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(createAdminUser))).Methods("POST")
 	router.HandleFunc("/api/admin/users/{id}", authMiddleware(adminMiddleware(updateAdminUser))).Methods("PUT")
 	router.HandleFunc("/api/admin/users/{id}", authMiddleware(adminMiddleware(deleteAdminUser))).Methods("DELETE")
-	router.HandleFunc("/api/admin/users/{id}/reset-password", authMiddleware(adminMiddleware(resetUserPassword))).Methods("POST")
 	router.HandleFunc("/api/admin/users/{id}/reset-link", authMiddleware(adminMiddleware(generateUserResetLink))).Methods("POST")
 	router.HandleFunc("/api/admin/users/{id}/deactivate", authMiddleware(adminMiddleware(deactivateUser))).Methods("PUT")
 	router.HandleFunc("/api/admin/users/{id}/reactivate", authMiddleware(adminMiddleware(reactivateUser))).Methods("PUT")

@@ -5038,24 +5038,6 @@ button {
     font-size: 14px;
 }
 
-/* Modal Overrides for Admin */
-#reset-password-result {
-    padding: 20px;
-    background: rgba(72, 187, 120, 0.1);
-    border-radius: 10px;
-    border: 2px solid rgba(72, 187, 120, 0.3);
-}
-
-#result-password {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 10px 15px;
-    border-radius: 8px;
-    display: inline-block;
-    margin: 10px 0;
-    font-family: var(--font-mono);
-    letter-spacing: 2px;
-}
-
 .checkbox-group {
     background: var(--color-surface);
     padding: 15px;

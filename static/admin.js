@@ -4,7 +4,6 @@ let allUsers = [];
 let allMembers = [];
 let allLogins = [];
 let currentEditUserId = null;
-let currentResetUserId = null;
 
 // Choices.js instances — initialised in DOMContentLoaded
 let memberIdChoices = null;
@@ -57,11 +56,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('user-form').addEventListener('submit', saveUser);
         document.getElementById('user-cancel-btn').addEventListener('click', closeUserModal);
 
-        // Reset password modal
-        document.getElementById('copy-password-btn').addEventListener('click', copyPassword);
-        document.getElementById('confirm-reset-btn').addEventListener('click', confirmResetPassword);
-        document.getElementById('reset-password-cancel-btn').addEventListener('click', closeResetPasswordModal);
-
         // Reset link modal
         setupResetLinkModal();
 
@@ -74,7 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('delete-gcp-cancel-btn').addEventListener('click', closeDeleteGCPModal);
 
         // Close modals on backdrop click (no corner × per design standard)
-        ['user-modal', 'reset-password-modal', 'transfer-files-modal', 'delete-gcp-modal'].forEach(id => {
+        ['user-modal', 'transfer-files-modal', 'delete-gcp-modal'].forEach(id => {
             const modal = document.getElementById(id);
             if (modal) modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = ''; });
         });
@@ -563,61 +557,6 @@ async function executeUserDelete(userId) {
     } catch (error) {
         showToast('Error: ' + error.message, 'error');
     }
-}
-
-// Show Reset Password Modal
-function showResetPasswordModal(userId, username) {
-    currentResetUserId = userId;
-    document.getElementById('reset-username').textContent = username;
-    document.getElementById('reset-password-info').style.display = 'block';
-    document.getElementById('reset-password-result').style.display = 'none';
-    document.getElementById('confirm-reset-btn').style.display = 'inline-block';
-    const resetModal = document.getElementById('reset-password-modal');
-    resetModal.style.display = 'flex';
-    trapFocus(resetModal);
-}
-
-// Close Reset Password Modal
-function closeResetPasswordModal() {
-    const resetModal = document.getElementById('reset-password-modal');
-    releaseFocus(resetModal);
-    resetModal.style.display = 'none';
-    currentResetUserId = null;
-}
-
-// Confirm Reset Password
-async function confirmResetPassword() {
-    try {
-        const response = await fetch(`/api/admin/users/${currentResetUserId}/reset-password`, {
-            method: 'POST'
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
-        }
-
-        const result = await response.json();
-
-        // Show the result
-        document.getElementById('result-username').textContent = result.username;
-        document.getElementById('result-password').textContent = result.password;
-        document.getElementById('reset-password-info').style.display = 'none';
-        document.getElementById('confirm-reset-btn').style.display = 'none';
-        document.getElementById('reset-password-result').style.display = 'block';
-
-        loadUsers();
-    } catch (error) {
-        showToast('Error: ' + error.message, 'error');
-    }
-}
-
-// Copy Password
-function copyPassword() {
-    const password = document.getElementById('result-password').textContent;
-    navigator.clipboard.writeText(password).then(() => {
-        showToast('Password copied to clipboard.');
-    });
 }
 
 // Load Login History

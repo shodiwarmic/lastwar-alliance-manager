@@ -467,55 +467,6 @@ func reactivateUser(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "User reactivated"})
 }
 
-// Admin: Reset user password
-func resetUserPassword(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userID, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
-		return
-	}
-
-	var username string
-	err = db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
-	if err != nil {
-		http.Error(w, "User not found", http.StatusNotFound)
-		return
-	}
-
-	randomPassword, err := generateRandomPassword(10)
-	if err != nil {
-		http.Error(w, "Failed to generate password", http.StatusInternalServerError)
-		return
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(randomPassword), bcrypt.DefaultCost)
-	if err != nil {
-		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
-		return
-	}
-
-	_, err = db.Exec("UPDATE users SET password = ?, force_password_change = 1, password_changed_at = CURRENT_TIMESTAMP WHERE id = ?", string(hashedPassword), userID)
-	if err != nil {
-		slog.Error("failed to reset user password", "error", err, "userID", userID)
-		http.Error(w, "Failed to reset password", http.StatusInternalServerError)
-		return
-	}
-
-	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", userID, string(hashedPassword))
-
-	actor := getAuthUser(r)
-	actorID, actorName := actor.ID, actor.Username
-	logActivity(actorID, actorName, "reset_password", "user", username, true)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":  "Password reset successfully",
-		"username": username,
-		"password": randomPassword,
-	})
-}
-
 // Admin: Get login history
 func getLoginHistory(w http.ResponseWriter, r *http.Request) {
 	userIDParam := r.URL.Query().Get("user_id")
