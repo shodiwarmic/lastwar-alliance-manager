@@ -30,6 +30,7 @@ const ENTITY_LABELS = {
     storm_config:     'storm config',
     storm_group:      'storm group',
     invite:           'invite',
+    password_reset_link: 'password reset link',
     vs_points:        'VS points',
     power_records:    'power records',
     kill_count:       'Troop Kills',

@@ -62,6 +62,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('confirm-reset-btn').addEventListener('click', confirmResetPassword);
         document.getElementById('reset-password-cancel-btn').addEventListener('click', closeResetPasswordModal);
 
+        // Reset link modal
+        setupResetLinkModal();
+
         // Transfer files modal
         document.getElementById('transfer-files-confirm-btn').addEventListener('click', confirmTransferFiles);
         document.getElementById('transfer-files-cancel-btn').addEventListener('click', closeTransferFilesModal);
@@ -197,10 +200,13 @@ function buildUserCard(user) {
     editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
     editBtn.addEventListener('click', () => editUser(user.id));
 
+    // Reset links are meaningless for a deactivated account — the server refuses to
+    // mint one, so don't offer the button.
     const resetBtn = document.createElement('button');
     resetBtn.className = 'btn btn-sm btn-warning';
-    resetBtn.append(svgIcon('key'), document.createTextNode(' Reset Password'));
-    resetBtn.addEventListener('click', () => showResetPasswordModal(user.id, user.username));
+    resetBtn.append(svgIcon('link'), document.createTextNode(' Reset Link'));
+    resetBtn.addEventListener('click', () => generateResetLink(user.id, user.username));
+    if (!user.is_active) resetBtn.style.display = 'none';
 
     const statusBtn = document.createElement('button');
     if (user.is_active) {
@@ -447,6 +453,53 @@ async function deleteUser(userId, username) {
 
     if (!await showConfirm(`Delete user "${username}"? This action cannot be undone.`, 'Delete User')) return;
     executeUserDelete(userId);
+}
+
+// Generate a single-use password reset link and show it for copying. No plaintext
+// password is ever created — the user sets their own via the link.
+let currentResetLinkUrl = '';
+
+function setupResetLinkModal() {
+    const modal = document.getElementById('reset-link-modal');
+    if (!modal) return;
+    const copyBtn = document.getElementById('reset-link-copy');
+
+    const closeModal = () => {
+        releaseFocus(modal);
+        modal.style.display = '';
+    };
+
+    copyBtn.addEventListener('click', () => {
+        copyToClipboard(currentResetLinkUrl, () => {
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+        });
+    });
+
+    document.getElementById('reset-link-close').addEventListener('click', closeModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+}
+
+async function generateResetLink(userId, username) {
+    if (!await showConfirm(`Generate a password reset link for ${username}?`, 'Generate')) return;
+    try {
+        const response = await fetch(`/api/admin/users/${userId}/reset-link`, { method: 'POST' });
+        if (!response.ok) throw new Error((await response.text()).trim());
+
+        const result = await response.json();
+        currentResetLinkUrl = window.location.origin + result.reset_url;
+
+        document.getElementById('reset-link-username').textContent = username;
+        document.getElementById('reset-link-validity').textContent = result.expires_in || '24 hours';
+        document.getElementById('reset-link-url').value = currentResetLinkUrl;
+        document.getElementById('reset-link-copy').textContent = 'Copy';
+
+        const modal = document.getElementById('reset-link-modal');
+        modal.style.display = 'flex';
+        trapFocus(modal);
+    } catch (error) {
+        showToast(error.message || 'Failed to generate reset link.', 'error', 6000);
+    }
 }
 
 // Deactivate / reactivate a user account. Deactivation preserves the account and its

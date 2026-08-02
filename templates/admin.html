@@ -257,6 +257,21 @@
         </div>
     </div>
 
+    <!-- Password Reset Link Modal -->
+    <div id="reset-link-modal" class="modal">
+        <div class="modal-content modal-md">
+            <h2>Password Reset Link</h2>
+            <p class="help-text">Share this link with <strong id="reset-link-username"></strong>. Valid for <span id="reset-link-validity">24 hours</span>. It can only be used once.</p>
+            <div class="link-row">
+                <input type="text" id="reset-link-url" class="form-input" readonly>
+                <button type="button" id="reset-link-copy" class="btn btn-secondary btn-sm">Copy</button>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="reset-link-close" class="btn btn-primary">Done</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Transfer Files Modal -->
     <div id="transfer-files-modal" class="modal">
         <div class="modal-content">
