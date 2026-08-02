@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"net/http"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -79,10 +77,13 @@ func jwtSubjectStillValid(userID int, issuedAt *jwt.NumericDate) bool {
 	}
 
 	if issuedAt != nil && pwdChanged.Valid {
-		// password_changed_at is always written by CURRENT_TIMESTAMP, so it is UTC in
-		// sqliteTimeLayout shape. Parse it as UTC explicitly — time.Parse would assume
-		// the host's local zone and skew the comparison on a non-UTC deployment.
-		if t, perr := time.ParseInLocation(sqliteTimeLayout, strings.TrimSpace(pwdChanged.String), time.UTC); perr == nil {
+		// Parse with lastRankParseTime, NOT a single layout. password_changed_at is
+		// written by CURRENT_TIMESTAMP as "2006-01-02 15:04:05", but it never reaches us
+		// in that shape: the column is DECLARED TIMESTAMP, and the driver parses
+		// declared DATE/DATETIME/TIMESTAMP columns into a time.Time (rows.go ~195),
+		// which database/sql then renders into our string as RFC3339Nano. Matching only
+		// the space form would silently never match, degrading this check to a no-op.
+		if t, ok := lastRankParseTime(pwdChanged.String); ok {
 			// Strict After: a login in the same second as a password change is fine.
 			if t.After(issuedAt.Time) {
 				return false

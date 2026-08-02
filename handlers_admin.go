@@ -329,6 +329,14 @@ func deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 	var deletedUsername string
 	db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&deletedUsername)
 
+	// Explicit — the table's ON DELETE CASCADE never fires, since foreign_keys is off
+	// app-wide. Without this the tokens outlive the user row.
+	if _, err := db.Exec("DELETE FROM password_reset_tokens WHERE user_id = ?", userID); err != nil {
+		slog.Error("failed to clear reset tokens on delete", "error", err, "userID", userID)
+		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
+		return
+	}
+
 	_, err = db.Exec("DELETE FROM users WHERE id = ?", userID)
 	if err != nil {
 		slog.Error("failed to delete user", "error", err, "userID", userID)
@@ -404,6 +412,16 @@ func deactivateUser(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := tx.Exec("UPDATE users SET is_active = 0 WHERE id = ?", userID); err != nil {
 		slog.Error("failed to deactivate user", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// A pending reset link must not outlive the account it unlocks. Explicit because
+	// the table's ON DELETE CASCADE never fires — foreign_keys is off app-wide.
+	if _, err := tx.Exec(
+		"DELETE FROM password_reset_tokens WHERE user_id = ? AND used_at IS NULL", userID,
+	); err != nil {
+		slog.Error("failed to clear reset tokens on deactivate", "error", err, "userID", userID)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}

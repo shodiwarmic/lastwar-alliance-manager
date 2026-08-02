@@ -152,6 +152,9 @@ func main() {
 	router.HandleFunc("/api/members/{id}/invite", authMiddleware(requirePermission("manage_members", generateInvite))).Methods("POST")
 	router.HandleFunc("/invite/{token}", showInvitePage).Methods("GET")
 	router.HandleFunc("/invite/{token}", claimInvite).Methods("POST")
+	router.HandleFunc("/api/members/{id}/reset-link", authMiddleware(requirePermission("manage_settings", generateMemberResetLink))).Methods("POST")
+	router.HandleFunc("/reset-password/{token}", showResetPasswordPage).Methods("GET")
+	router.HandleFunc("/reset-password/{token}", claimPasswordReset).Methods("POST")
 
 	// Activity log
 	router.HandleFunc("/api/activity", authMiddleware(getActivityLog)).Methods("GET")
@@ -239,6 +242,7 @@ func main() {
 	router.HandleFunc("/api/admin/users/{id}", authMiddleware(adminMiddleware(updateAdminUser))).Methods("PUT")
 	router.HandleFunc("/api/admin/users/{id}", authMiddleware(adminMiddleware(deleteAdminUser))).Methods("DELETE")
 	router.HandleFunc("/api/admin/users/{id}/reset-password", authMiddleware(adminMiddleware(resetUserPassword))).Methods("POST")
+	router.HandleFunc("/api/admin/users/{id}/reset-link", authMiddleware(adminMiddleware(generateUserResetLink))).Methods("POST")
 	router.HandleFunc("/api/admin/users/{id}/deactivate", authMiddleware(adminMiddleware(deactivateUser))).Methods("PUT")
 	router.HandleFunc("/api/admin/users/{id}/reactivate", authMiddleware(adminMiddleware(reactivateUser))).Methods("PUT")
 	router.HandleFunc("/api/admin/login-history", authMiddleware(adminMiddleware(getLoginHistory))).Methods("GET")
