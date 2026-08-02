@@ -152,7 +152,7 @@ function buildUserCard(user) {
     const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString(undefined, { hour12: false }) : 'Never';
 
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = user.is_active ? 'card' : 'card inactive';
     card.style.marginBottom = '0';
     card.dataset.username = user.username.toLowerCase();
 
@@ -170,6 +170,12 @@ function buildUserCard(user) {
         adminBadge.className = 'admin-badge';
         adminBadge.textContent = 'Admin';
         h3.appendChild(adminBadge);
+    }
+    if (!user.is_active) {
+        const inactiveBadge = document.createElement('span');
+        inactiveBadge.className = 'inactive-badge';
+        inactiveBadge.textContent = 'Inactive';
+        h3.appendChild(inactiveBadge);
     }
 
     const memberSpan = document.createElement('span');
@@ -196,12 +202,23 @@ function buildUserCard(user) {
     resetBtn.append(svgIcon('key'), document.createTextNode(' Reset Password'));
     resetBtn.addEventListener('click', () => showResetPasswordModal(user.id, user.username));
 
+    const statusBtn = document.createElement('button');
+    if (user.is_active) {
+        statusBtn.className = 'btn btn-sm btn-danger';
+        statusBtn.append(svgIcon('user-off'), document.createTextNode(' Deactivate'));
+        statusBtn.addEventListener('click', () => setUserActive(user.id, user.username, false));
+    } else {
+        statusBtn.className = 'btn btn-sm btn-secondary';
+        statusBtn.append(svgIcon('user-check'), document.createTextNode(' Reactivate'));
+        statusBtn.addEventListener('click', () => setUserActive(user.id, user.username, true));
+    }
+
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'btn btn-sm btn-danger';
     deleteBtn.append(svgIcon('trash'), document.createTextNode(' Delete'));
     deleteBtn.addEventListener('click', () => deleteUser(user.id, user.username));
 
-    actions.append(editBtn, resetBtn, deleteBtn);
+    actions.append(editBtn, resetBtn, statusBtn, deleteBtn);
     header.append(userInfo, actions);
 
     // Stats
@@ -430,6 +447,30 @@ async function deleteUser(userId, username) {
 
     if (!await showConfirm(`Delete user "${username}"? This action cannot be undone.`, 'Delete User')) return;
     executeUserDelete(userId);
+}
+
+// Deactivate / reactivate a user account. Deactivation preserves the account and its
+// history — unlike deleteUser, which is irreversible.
+async function setUserActive(userId, username, activate) {
+    const verb = activate ? 'Reactivate' : 'Deactivate';
+    const prompt = activate
+        ? `Reactivate "${username}"? They will be able to log in again.`
+        : `Deactivate "${username}"? They will be logged out and unable to sign in, on web and mobile. Their history is kept.`;
+    if (!await showConfirm(prompt, verb)) return;
+
+    try {
+        const response = await fetch(`/api/admin/users/${userId}/${activate ? 'reactivate' : 'deactivate'}`, {
+            method: 'PUT'
+        });
+        if (!response.ok) throw new Error((await response.text()).trim());
+
+        showToast(`${username} ${activate ? 'reactivated' : 'deactivated'}.`);
+        loadUsers();
+    } catch (error) {
+        // Surfaces the server's reason verbatim (e.g. the last-active-admin guard),
+        // which is more use than a generic failure string.
+        showToast(error.message || `Failed to ${verb.toLowerCase()} user.`, 'error', 6000);
+    }
 }
 
 function closeTransferFilesModal() {

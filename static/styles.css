@@ -4982,46 +4982,8 @@ button {
     color: var(--color-text-muted);
 }
 
-/* Users List */
-.users-list {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.user-info {
-    position: static;
-    flex: 1;
-}
-
-.user-info h3 {
-    color: var(--color-text);
-    font-size: 1.3em;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.admin-badge {
-    background: var(--color-accent);
-    color: white;
-    padding: 3px 12px;
-    border-radius: 20px;
-    font-size: 0.75em;
-    font-weight: bold;
-    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 30%, transparent);
-}
-
-.member-badge {
-    background: var(--color-purple);
-    color: #fff;
-    padding: 4px 12px;
-    border-radius: 15px;
-    font-size: 0.9em;
-}
-
+/* Admin user-list, badge and login-entry styles moved to static/admin.css.
+   .no-member stays here — profile.html/profile.js use it too. */
 .no-member {
     color: var(--color-text-mid);
     font-size: 0.9em;
@@ -5029,29 +4991,9 @@ button {
     opacity: 0.6;
 }
 
-.user-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.user-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 15px;
-}
-
-.stat {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    background: var(--color-card);
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-}
-
+/* .stat-label / .stat-value are a general utility pair (members.js and others
+   build elements with these class names), so they stay global even though the
+   admin .stat container that sits beside them moved to admin.css. */
 .stat-label {
     color: var(--color-text-mid);
     font-size: 0.9em;
@@ -5060,49 +5002,6 @@ button {
 .stat-value {
     color: var(--color-text);
     font-weight: bold;
-}
-
-/* Recent Logins */
-.recent-logins {
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 1px solid var(--color-border);
-}
-
-.recent-logins strong {
-    color: var(--color-text);
-    display: block;
-    margin-bottom: 10px;
-}
-
-.login-entry {
-    display: grid;
-    grid-template-columns: 1fr 120px 150px;
-    gap: 10px;
-    padding: 8px;
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    margin-bottom: 6px;
-    font-size: 0.85em;
-}
-
-.login-location {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--color-text);
-}
-
-.login-ip {
-    color: var(--color-text-mid);
-    font-family: var(--font-mono);
-}
-
-.login-time {
-    color: var(--color-text-muted);
-    font-size: 0.9em;
-    opacity: 0.8;
 }
 
 /* Login History Table — base styling via global .data-table; failed-row tint only */
@@ -5213,25 +5112,7 @@ button {
     color: var(--color-text);
 }
 
-/* Responsive Admin Styles */
-@media (max-width: 768px) {
-    .user-actions {
-        width: 100%;
-        justify-content: flex-start;
-    }
-
-    .user-actions button {
-        flex: 1;
-        min-width: 0;
-        font-size: 0.85em;
-        padding: 8px 12px;
-    }
-
-    .login-entry {
-        grid-template-columns: 1fr;
-        gap: 5px;
-    }
-}
+/* Responsive admin rules moved to static/admin.css alongside the components they modify. */
 
 /* Login-history table scrolls horizontally on its own at any width if it can't
    fit (was previously gated to ≤480px). */
