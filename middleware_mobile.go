@@ -39,6 +39,14 @@ func mobileBearerMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// The JWT is stateless and lives 7 days, so signature validity says nothing about
+		// whether the account is still entitled to access. Passing IssuedAt also makes a
+		// password change revoke outstanding tokens.
+		if !jwtSubjectStillValid(claims.UserID, claims.IssuedAt) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		ctx := context.WithValue(r.Context(), mobileContextKey{}, claims)
 		next(w, r.WithContext(ctx))
 	}

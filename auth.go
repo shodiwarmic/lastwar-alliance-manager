@@ -161,15 +161,16 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	var forcePasswordChange bool
 	var isExpired bool
+	var isActive bool
 	var minLen int
 	var reqSpecial, reqUpper, reqLower, reqNumber bool
 
 	err := db.QueryRow(`
-		SELECT u.id, u.username, u.password, u.member_id, u.is_admin, u.force_password_change,
+		SELECT u.id, u.username, u.password, u.member_id, u.is_admin, u.force_password_change, u.is_active,
 		       CASE WHEN s.pwd_validity_days > 0 AND (julianday('now') - julianday(u.password_changed_at)) > s.pwd_validity_days THEN 1 ELSE 0 END as expired,
 		       s.pwd_min_length, s.pwd_require_special, s.pwd_require_upper, s.pwd_require_lower, s.pwd_require_number
 		FROM users u CROSS JOIN settings s WHERE s.id = 1 AND u.username = ?`, creds.Username).Scan(
-		&user.ID, &user.Username, &user.Password, &memberID, &isAdmin, &forcePasswordChange, &isExpired,
+		&user.ID, &user.Username, &user.Password, &memberID, &isAdmin, &forcePasswordChange, &isActive, &isExpired,
 		&minLen, &reqSpecial, &reqUpper, &reqLower, &reqNumber)
 
 	if err != nil {
@@ -188,6 +189,15 @@ func login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		trackLogin(user.ID, user.Username, r, false)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	// Checked AFTER the password compare so the response never reveals account state to
+	// an unauthenticated prober. Without this, a deactivated user would authenticate
+	// successfully here and only hit a 401 on their next request.
+	if !isActive {
+		trackLogin(user.ID, user.Username, r, false)
+		http.Error(w, "This account has been deactivated. Contact an alliance officer.", http.StatusForbidden)
 		return
 	}
 
@@ -236,6 +246,17 @@ func forceChangePassword(w http.ResponseWriter, r *http.Request) {
 	userID, ok := session.Values["force_change_user_id"].(int)
 	if !ok {
 		http.Error(w, `{"message": "Unauthorized or session expired"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// This handler authenticates off force_change_user_id, so it never passes through
+	// authMiddleware/loadUserFromDB. Without this check a user deactivated while parked
+	// in the force-change flow could still set a new password.
+	var fcActive bool
+	if err := db.QueryRow("SELECT is_active FROM users WHERE id = ?", userID).Scan(&fcActive); err != nil || !fcActive {
+		delete(session.Values, "force_change_user_id")
+		session.Save(r, w)
+		http.Error(w, `{"message": "This account has been deactivated. Contact an alliance officer."}`, http.StatusForbidden)
 		return
 	}
 

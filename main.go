@@ -508,8 +508,17 @@ func main() {
 	router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := store.Get(r, "session")
 		if userID, ok := session.Values["user_id"].(int); ok && userID > 0 {
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-			return
+			// Validate against the DB rather than trusting the cookie. A session naming a
+			// user who no longer resolves (deactivated or deleted) would otherwise bounce
+			// forever: every page redirects here because !IsAuthenticated, and this
+			// handler redirected straight back to "/". Clear it and render the form.
+			if loadUserFromDB(userID) != nil {
+				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+				return
+			}
+			delete(session.Values, "user_id")
+			delete(session.Values, "authenticated")
+			session.Save(r, w)
 		}
 
 		var rawMessage string

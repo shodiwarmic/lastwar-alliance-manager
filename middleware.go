@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -30,14 +32,20 @@ func getAuthUser(r *http.Request) *AuthUser {
 }
 
 // loadUserFromDB fetches a fresh AuthUser from the database.
-// Returns nil if the user does not exist.
+// Returns nil if the user does not exist OR has been deactivated.
+//
+// This is the single chokepoint for is_active on the session-cookie paths: it is called
+// by both authMiddleware (API routes -> 401) and getPageData (page routes -> /login
+// redirect via !IsAuthenticated), so one check here covers both with the correct
+// response shape on each side. Do not duplicate it in authMiddleware.
 func loadUserFromDB(userID int) *AuthUser {
 	user := &AuthUser{ID: userID}
 	var memberID sql.NullInt64
+	var isActive bool
 	err := db.QueryRow(
-		"SELECT username, is_admin, member_id FROM users WHERE id = ?", userID,
-	).Scan(&user.Username, &user.IsAdmin, &memberID)
-	if err != nil {
+		"SELECT username, is_admin, member_id, is_active FROM users WHERE id = ?", userID,
+	).Scan(&user.Username, &user.IsAdmin, &memberID, &isActive)
+	if err != nil || !isActive {
 		return nil
 	}
 	if memberID.Valid {
@@ -46,6 +54,44 @@ func loadUserFromDB(userID int) *AuthUser {
 		db.QueryRow("SELECT rank FROM members WHERE id = ?", mid).Scan(&user.Rank)
 	}
 	return user
+}
+
+// jwtSubjectStillValid re-checks a stateless JWT's subject against the database.
+//
+// Signature validity alone is not enough: our tokens are long-lived (mobile 7 days, WOPI
+// 10 hours) and carry no server-side state, so without this a deactivated user keeps
+// access until natural expiry. One indexed QueryRow per request — strictly cheaper than
+// what the session path already pays in loadUserFromDB.
+//
+// issuedAt opts into password-change revocation: when non-nil, a token minted before the
+// user's last password change is rejected, so "change your password" actually revokes a
+// stolen token. Pass nil to check liveness only — WOPI does, because invalidating an
+// in-flight Collabora session on a routine password change risks losing unsaved edits.
+func jwtSubjectStillValid(userID int, issuedAt *jwt.NumericDate) bool {
+	var isActive bool
+	var pwdChanged sql.NullString
+	err := db.QueryRow(
+		"SELECT is_active, password_changed_at FROM users WHERE id = ?", userID,
+	).Scan(&isActive, &pwdChanged)
+	// sql.ErrNoRows (hard-deleted user) lands here too — fail closed.
+	if err != nil || !isActive {
+		return false
+	}
+
+	if issuedAt != nil && pwdChanged.Valid {
+		// password_changed_at is always written by CURRENT_TIMESTAMP, so it is UTC in
+		// sqliteTimeLayout shape. Parse it as UTC explicitly — time.Parse would assume
+		// the host's local zone and skew the comparison on a non-UTC deployment.
+		if t, perr := time.ParseInLocation(sqliteTimeLayout, strings.TrimSpace(pwdChanged.String), time.UTC); perr == nil {
+			// Strict After: a login in the same second as a password change is fine.
+			if t.After(issuedAt.Time) {
+				return false
+			}
+		}
+		// An unparseable timestamp falls through as "no constraint" — the staleness
+		// check degrades open, but is_active above has already failed closed.
+	}
+	return true
 }
 
 // authMiddleware verifies the session has a valid user_id, loads that user
@@ -145,6 +191,13 @@ func wopiAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		// Liveness only (nil issuedAt): a deactivated user loses their document session,
+		// but a routine password change must not kill an in-flight edit.
+		if !jwtSubjectStillValid(claims.UserID, nil) {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
