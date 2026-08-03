@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/mux"
@@ -74,11 +73,17 @@ func generateInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := hex.EncodeToString(raw)
-	expiresAt := time.Now().Add(48 * time.Hour)
 
+	// expires_at is computed in SQL, not bound from a Go time.Time. The driver has no
+	// _time_format in its DSN, so it writes time.Time via time.Time.String() —
+	// "2026-08-04 12:34:56.789 +0200 CEST" — which is then compared lexically against
+	// UTC CURRENT_TIMESTAMP on read, silently shifting the TTL by the host's UTC offset
+	// (a UTC-11 host expired a 48h invite after ~37h). datetime('now', ...) produces
+	// exactly CURRENT_TIMESTAMP's shape and basis.
 	_, err = db.Exec(
-		"INSERT INTO invite_tokens (token, member_id, created_by, expires_at) VALUES (?, ?, ?, ?)",
-		token, memberID, createdBy, expiresAt,
+		`INSERT INTO invite_tokens (token, member_id, created_by, expires_at)
+		 VALUES (?, ?, ?, datetime('now', '+48 hours'))`,
+		token, memberID, createdBy,
 	)
 	if err != nil {
 		slog.Error("failed to insert invite token", "error", err, "memberID", memberID)
