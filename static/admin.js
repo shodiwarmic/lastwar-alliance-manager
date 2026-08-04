@@ -196,7 +196,7 @@ function buildUserCard(user) {
 
     // Reset links are meaningless for a deactivated account — the server refuses to
     // mint one, so don't offer the button.
-    const resetBtn = rowActionBtn('btn btn-sm btn-warning', 'link', 'Reset Link',
+    const resetBtn = rowActionBtn('btn btn-sm btn-warning', 'key', 'Reset Link',
         () => generateResetLink(user.id, user.username));
     if (!user.is_active) resetBtn.style.display = 'none';
 

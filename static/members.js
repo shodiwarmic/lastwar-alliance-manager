@@ -828,7 +828,7 @@ function buildMemberCard(member) {
         }
 
         if (isR5OrAdmin && member.has_user) {
-            const resetLinkBtn = memberActionBtn('btn btn-sm btn-secondary', 'link', 'Reset Link');
+            const resetLinkBtn = memberActionBtn('btn btn-sm btn-secondary', 'key', 'Reset Link');
             resetLinkBtn.addEventListener('click', () => resetLinkForMember(member.id, member.name));
             actions.appendChild(resetLinkBtn);
         }
