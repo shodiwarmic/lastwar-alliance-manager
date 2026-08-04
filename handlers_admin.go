@@ -246,8 +246,22 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Guard and write share one transaction. With SetMaxOpenConns(1) that serializes
+	// them, so two concurrent demotions of the last two admins can't both pass the
+	// count before either UPDATE lands.
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("failed to begin user update transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
 	var existingUsername string
-	err = db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&existingUsername)
+	var oldIsAdmin, oldIsActive bool
+	err = tx.QueryRow(
+		"SELECT username, is_admin, is_active FROM users WHERE id = ?", userID,
+	).Scan(&existingUsername, &oldIsAdmin, &oldIsActive)
 	if err != nil {
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
@@ -255,27 +269,52 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 
 	if req.Username != "" && req.Username != existingUsername {
 		var otherID int
-		err = db.QueryRow("SELECT id FROM users WHERE username = ? AND id != ?", req.Username, userID).Scan(&otherID)
+		err = tx.QueryRow("SELECT id FROM users WHERE username = ? AND id != ?", req.Username, userID).Scan(&otherID)
 		if err == nil {
 			http.Error(w, "Username already exists", http.StatusConflict)
 			return
 		}
 	}
 
-	var oldIsAdmin bool
-	db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&oldIsAdmin)
+	// Removing admin from the last active admin locks everyone out of /admin, and this
+	// app has no bootstrap or self-service recovery — the only way back is editing the
+	// database by hand. Same lockout the deactivate and delete guards prevent, reachable
+	// here just by clearing a checkbox in the edit modal.
+	//
+	// Only fires when the target is currently an ACTIVE admin: demoting an already
+	// deactivated admin cannot reduce the number of admins who can actually log in.
+	if oldIsAdmin && oldIsActive && !req.IsAdmin {
+		var remaining int
+		if err := tx.QueryRow(
+			"SELECT COUNT(*) FROM users WHERE is_admin = 1 AND is_active = 1 AND id != ?", userID,
+		).Scan(&remaining); err != nil {
+			slog.Error("failed to count active admins", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if remaining == 0 {
+			http.Error(w, "Cannot remove admin access from the last active admin account", http.StatusConflict)
+			return
+		}
+	}
 
 	if req.Username != "" {
-		_, err = db.Exec("UPDATE users SET username = ?, member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
+		_, err = tx.Exec("UPDATE users SET username = ?, member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
 			req.Username, req.MemberID, req.IsAdmin, req.ForcePasswordChange, userID)
 	} else {
-		_, err = db.Exec("UPDATE users SET member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
+		_, err = tx.Exec("UPDATE users SET member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
 			req.MemberID, req.IsAdmin, req.ForcePasswordChange, userID)
 	}
 
 	if err != nil {
 		slog.Error("failed to update user", "error", err, "userID", userID)
 		http.Error(w, "Failed to update user", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("failed to commit user update transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
