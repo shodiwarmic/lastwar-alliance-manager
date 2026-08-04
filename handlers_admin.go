@@ -313,21 +313,30 @@ func deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Counts ACTIVE admins only: a deactivated admin row would otherwise pad the count
-	// and allow deleting the last admin who can actually log in.
-	var adminCount int
-	err = db.QueryRow("SELECT COUNT(*) FROM users WHERE is_admin = 1 AND is_active = 1").Scan(&adminCount)
-	if err == nil && adminCount <= 1 {
-		var isAdmin bool
-		db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin)
-		if isAdmin {
-			http.Error(w, "Cannot delete the last admin user", http.StatusForbidden)
-			return
-		}
+	var deletedUsername string
+	var isActive bool
+	if err := db.QueryRow(
+		"SELECT username, is_active FROM users WHERE id = ?", userID,
+	).Scan(&deletedUsername, &isActive); err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
 	}
 
-	var deletedUsername string
-	db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&deletedUsername)
+	// Deletion is the second step of a two-stage flow: deactivate, then delete. Making
+	// the destructive path deliberate matters more here than elsewhere because deleting
+	// a user discards their login history, activity attribution and file ownership,
+	// which is exactly what deactivation exists to preserve.
+	//
+	// This also subsumes the old last-active-admin guard. deactivateUser already refuses
+	// to deactivate the last active admin (and refuses self-deactivation), so any
+	// account that reaches this point is inactive and therefore not the last active
+	// admin — and removing an inactive row cannot reduce the active-admin count. Keeping
+	// the old count here would have been actively wrong: with two admins, deactivating
+	// one left adminCount = 1, which then blocked deleting that same inactive admin.
+	if isActive {
+		http.Error(w, "Deactivate this account before deleting it. Deactivation preserves the account's history; deletion does not.", http.StatusConflict)
+		return
+	}
 
 	// Explicit — the table's ON DELETE CASCADE never fires, since foreign_keys is off
 	// app-wide. Without this the tokens outlive the user row.

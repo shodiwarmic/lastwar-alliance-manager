@@ -206,8 +206,13 @@ function buildUserCard(user) {
         : rowActionBtn('btn btn-sm btn-secondary', 'user-check', 'Reactivate',
             () => setUserActive(user.id, user.username, true));
 
+    // Delete is the second stage of deactivate-then-delete, so it only appears once the
+    // account is already deactivated (the server enforces the same rule). That keeps the
+    // row at three buttons and means the destructive action is never adjacent to Reset
+    // Link or Deactivate.
     const deleteBtn = rowActionBtn('btn btn-sm btn-danger', 'trash', 'Delete',
         () => deleteUser(user.id, user.username));
+    if (user.is_active) deleteBtn.style.display = 'none';
 
     actions.append(editBtn, resetBtn, statusBtn, deleteBtn);
     header.append(userInfo, actions);
