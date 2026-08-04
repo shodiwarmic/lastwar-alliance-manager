@@ -189,34 +189,25 @@ function buildUserCard(user) {
     const actions = document.createElement('div');
     actions.className = 'user-actions';
 
-    const editBtn = document.createElement('button');
-    editBtn.className = 'btn btn-sm btn-secondary';
-    editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
-    editBtn.addEventListener('click', () => editUser(user.id));
+    // Built via rowActionBtn so the labels collapse to icon-only ≤768px (.action-label),
+    // keeping four actions on one line on mobile. title/aria-label carry the meaning.
+    const editBtn = rowActionBtn('btn btn-sm btn-secondary', 'pencil', 'Edit',
+        () => editUser(user.id));
 
     // Reset links are meaningless for a deactivated account — the server refuses to
     // mint one, so don't offer the button.
-    const resetBtn = document.createElement('button');
-    resetBtn.className = 'btn btn-sm btn-warning';
-    resetBtn.append(svgIcon('link'), document.createTextNode(' Reset Link'));
-    resetBtn.addEventListener('click', () => generateResetLink(user.id, user.username));
+    const resetBtn = rowActionBtn('btn btn-sm btn-warning', 'link', 'Reset Link',
+        () => generateResetLink(user.id, user.username));
     if (!user.is_active) resetBtn.style.display = 'none';
 
-    const statusBtn = document.createElement('button');
-    if (user.is_active) {
-        statusBtn.className = 'btn btn-sm btn-danger';
-        statusBtn.append(svgIcon('user-off'), document.createTextNode(' Deactivate'));
-        statusBtn.addEventListener('click', () => setUserActive(user.id, user.username, false));
-    } else {
-        statusBtn.className = 'btn btn-sm btn-secondary';
-        statusBtn.append(svgIcon('user-check'), document.createTextNode(' Reactivate'));
-        statusBtn.addEventListener('click', () => setUserActive(user.id, user.username, true));
-    }
+    const statusBtn = user.is_active
+        ? rowActionBtn('btn btn-sm btn-danger', 'user-off', 'Deactivate',
+            () => setUserActive(user.id, user.username, false))
+        : rowActionBtn('btn btn-sm btn-secondary', 'user-check', 'Reactivate',
+            () => setUserActive(user.id, user.username, true));
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'btn btn-sm btn-danger';
-    deleteBtn.append(svgIcon('trash'), document.createTextNode(' Delete'));
-    deleteBtn.addEventListener('click', () => deleteUser(user.id, user.username));
+    const deleteBtn = rowActionBtn('btn btn-sm btn-danger', 'trash', 'Delete',
+        () => deleteUser(user.id, user.username));
 
     actions.append(editBtn, resetBtn, statusBtn, deleteBtn);
     header.append(userInfo, actions);

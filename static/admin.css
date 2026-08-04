@@ -142,14 +142,16 @@
 
 /* Mobile: the nav chrome swap breakpoint — see DESIGN_STANDARD.md */
 @media (max-width: 768px) {
+    /* Buttons collapse to icon-only here (global .action-label rule), so all four
+       fit on one line. nowrap + auto width instead of the old flex:1 stretch, which
+       forced wrapping and split "Reset Link" across two lines. */
     .user-actions {
         width: 100%;
         justify-content: flex-start;
+        flex-wrap: nowrap;
     }
 
     .user-actions button {
-        flex: 1;
-        min-width: 0;
         font-size: 0.85em;
         padding: 8px 12px;
     }
