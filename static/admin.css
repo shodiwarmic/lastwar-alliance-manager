@@ -87,11 +87,14 @@
 /* Moved from styles.css: .filter-controls is used only by this page. It was
    defined there TWICE with the later rule overriding only gap and flex-wrap;
    this is the merged result of that cascade, so the rendering is unchanged. */
+/* No margin-bottom: the merged rule carried 20px from when this was a standalone
+   filter bar, but it now sits inside a .card-header whose align-items:center turns
+   that phantom space into a vertical offset against the heading — the same bug as
+   the Choices margin below, one level up. */
 .filter-controls {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 20px;
     padding: 15px;
     background: var(--color-card);
     border-radius: 8px;
@@ -99,13 +102,38 @@
     flex-wrap: wrap;
 }
 
-.filter-controls select {
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
+/* The user filter is a Choices.js control and the limit is a native <select>, so they
+   have to be matched by hand. Scoped to #login-limit rather than `select` so it can't
+   touch the original element Choices keeps in the DOM behind its wrapper.
+
+   Metrics mirror .choices__inner (choices-theme.css): 38px min-height, 2px border,
+   6px radius. box-sizing is border-box globally, so 38px is the full outer height —
+   the native select was computing to ~35px, hence the visible height mismatch. */
+.filter-controls #login-limit {
+    min-height: 38px;
+    padding: 4px 12px;
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
     background: var(--color-surface);
     color: var(--color-text);
-    font-size: 14px;
+    font-size: 0.95rem;
+}
+
+/* margin-bottom: Choices ships `.choices { margin-bottom: 24px }` and nothing
+   overrides it here. Beyond the stray gap, that phantom space below the control drags
+   its optical centre upward under the row's align-items:center — which is what made
+   the two dropdowns look vertically offset from each other.
+
+   min-width: room to breathe on wider screens without a new width breakpoint
+   (DESIGN_STANDARD allows exactly one, for the nav chrome swap). The user filter holds
+   names so it gets the larger share; the limit only ever shows "Last N". */
+.filter-controls .choices {
+    margin-bottom: 0;
+    min-width: clamp(170px, 20vw, 280px);
+}
+
+.filter-controls #login-limit {
+    min-width: clamp(120px, 10vw, 170px);
 }
 
 /* Metric tiles above the login table — a grid of .card, per DESIGN_STANDARD
