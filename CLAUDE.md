@@ -49,6 +49,13 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 
 **Batching**: consecutive `"created"` calls for the same `entity_type` by the same user within 15 minutes are automatically merged (count increments). All other actions always create a new row.
 
+> **Exempt from batching**: entity types listed in `neverBatched` (`activity.go`) always get
+> their own row — currently `password_reset_link` and `invite`. Batching overwrites
+> `entity_name` with the most recent value and only bumps a counter, so three reset links
+> in a row collapsed to one row naming only the last recipient. For anything that grants
+> credentials or access, the audit trail has to answer "who was given access, and by
+> whom" — add the entity type to `neverBatched` rather than accepting the merge.
+
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
 `member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`
 
