@@ -16,13 +16,13 @@
 {{define "content"}}
         <!-- Tabs -->
         <div class="tab-bar">
-            <button class="tab-btn active" id="tab-btn-users"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> User Management</button>
-            <button class="tab-btn" id="tab-btn-logins"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Login History</button>
-            <button class="tab-btn" id="tab-btn-security"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-lock"/></svg> Security &amp; API</button>
+            <button class="tab-btn active" data-tab="users"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> User Management</button>
+            <button class="tab-btn" data-tab="logins"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Login History</button>
+            <button class="tab-btn" data-tab="security"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-lock"/></svg> Security &amp; API</button>
         </div>
 
         <!-- User Management Tab -->
-        <div id="users-tab" class="tab-content">
+        <div id="tab-users" class="tab-content">
             <div class="card">
                 <div class="card-header">
                     <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> User Management</h2>
@@ -40,7 +40,7 @@
         </div>
 
         <!-- Login History Tab -->
-        <div id="logins-tab" class="tab-content">
+        <div id="tab-logins" class="tab-content">
             <div class="card">
                 <div class="card-header">
                     <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Login History</h2>
@@ -68,7 +68,7 @@
         </div>
 
         <!-- Security & API Tab -->
-        <div id="security-tab" class="tab-content">
+        <div id="tab-security" class="tab-content">
             <div class="card">
                 <div class="card-header">
                     <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-lock"/></svg> Security &amp; API Configuration</h2>
@@ -287,5 +287,6 @@
 {{end}}
 
 {{define "scripts"}}
-    <script src="admin.js"></script>
+    <script src="/tabs.js"></script>
+    <script src="/admin.js"></script>
 {{end}}

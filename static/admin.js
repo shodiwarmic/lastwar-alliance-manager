@@ -33,11 +33,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadMembers();
         await loadStormSlots();
 
-        // Tab buttons
-        document.getElementById('users-tab').style.display = 'block';
-        document.getElementById('tab-btn-users').addEventListener('click', () => switchTab('users'));
-        document.getElementById('tab-btn-logins').addEventListener('click', () => switchTab('logins'));
-        document.getElementById('tab-btn-security').addEventListener('click', () => switchTab('security'));
+        // Tabs — shared module handles switching, the initial panel, and #hash
+        // persistence so /admin#security is linkable and survives a refresh.
+        // Initialised after the awaits above because onActivate can fire immediately
+        // (deep link) and the per-tab loaders depend on that data and on the Choices
+        // instances above.
+        Tabs.init({
+            hash: true,
+            onActivate: (name) => {
+                if (name === 'logins') loadLoginHistory();
+                if (name === 'security') loadSecuritySettings();
+            },
+        });
 
         // User management
         document.getElementById('create-user-btn').addEventListener('click', showCreateUserModal);
@@ -80,17 +87,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         slotSaveBtn.addEventListener('click', saveStormSlots);
     }
 });
-
-// Tab Switching
-function switchTab(tabName) {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('tab-btn-' + tabName).classList.add('active');
-    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
-    document.getElementById(tabName + '-tab').style.display = 'block';
-    if (tabName === 'logins') {
-        loadLoginHistory();
-    }
-}
 
 // Load Users
 async function loadUsers() {
@@ -746,15 +742,7 @@ window.onclick = function(event) {
 };
 
 // --- SECURITY & API TAB LOGIC ---
-
-// Hook into the switchTab function
-const originalSwitchTab = switchTab;
-switchTab = function(tabName) {
-    originalSwitchTab(tabName);
-    if (tabName === 'security') {
-        loadSecuritySettings();
-    }
-};
+// Lazy-loaded on activation via the Tabs.init onActivate callback above.
 
 async function loadSecuritySettings() {
     try {
