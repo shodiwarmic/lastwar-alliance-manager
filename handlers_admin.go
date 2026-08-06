@@ -86,13 +86,13 @@ func getPermissionsSchema(w http.ResponseWriter, r *http.Request) {
 // Admin: Get all users with login information (DEADLOCK FIXED)
 func getAdminUsers(w http.ResponseWriter, r *http.Request) {
 	query := `
-		SELECT u.id, u.username, u.member_id, u.is_admin, u.force_password_change, 
+		SELECT u.id, u.username, u.member_id, u.is_admin, u.is_active, u.force_password_change,
 		   m.name as member_name,
 		   (SELECT login_time FROM login_sessions WHERE user_id = u.id AND success = 1 ORDER BY login_time DESC LIMIT 1) as last_login,
 		   (SELECT COUNT(*) FROM login_sessions WHERE user_id = u.id AND success = 1) as login_count
 		FROM users u
 		LEFT JOIN members m ON u.member_id = m.id
-		ORDER BY u.is_admin DESC, u.username ASC
+		ORDER BY u.is_active DESC, u.is_admin DESC, u.username ASC
 	`
 
 	rows, err := db.Query(query)
@@ -110,7 +110,7 @@ func getAdminUsers(w http.ResponseWriter, r *http.Request) {
 		var memberName sql.NullString
 		var lastLogin sql.NullString
 
-		err := rows.Scan(&user.ID, &user.Username, &memberID, &user.IsAdmin, &user.ForcePasswordChange,
+		err := rows.Scan(&user.ID, &user.Username, &memberID, &user.IsAdmin, &user.IsActive, &user.ForcePasswordChange,
 			&memberName, &lastLogin, &user.LoginCount)
 		if err != nil {
 			continue
@@ -246,8 +246,22 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Guard and write share one transaction. With SetMaxOpenConns(1) that serializes
+	// them, so two concurrent demotions of the last two admins can't both pass the
+	// count before either UPDATE lands.
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("failed to begin user update transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
 	var existingUsername string
-	err = db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&existingUsername)
+	var oldIsAdmin, oldIsActive bool
+	err = tx.QueryRow(
+		"SELECT username, is_admin, is_active FROM users WHERE id = ?", userID,
+	).Scan(&existingUsername, &oldIsAdmin, &oldIsActive)
 	if err != nil {
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
@@ -255,27 +269,52 @@ func updateAdminUser(w http.ResponseWriter, r *http.Request) {
 
 	if req.Username != "" && req.Username != existingUsername {
 		var otherID int
-		err = db.QueryRow("SELECT id FROM users WHERE username = ? AND id != ?", req.Username, userID).Scan(&otherID)
+		err = tx.QueryRow("SELECT id FROM users WHERE username = ? AND id != ?", req.Username, userID).Scan(&otherID)
 		if err == nil {
 			http.Error(w, "Username already exists", http.StatusConflict)
 			return
 		}
 	}
 
-	var oldIsAdmin bool
-	db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&oldIsAdmin)
+	// Removing admin from the last active admin locks everyone out of /admin, and this
+	// app has no bootstrap or self-service recovery — the only way back is editing the
+	// database by hand. Same lockout the deactivate and delete guards prevent, reachable
+	// here just by clearing a checkbox in the edit modal.
+	//
+	// Only fires when the target is currently an ACTIVE admin: demoting an already
+	// deactivated admin cannot reduce the number of admins who can actually log in.
+	if oldIsAdmin && oldIsActive && !req.IsAdmin {
+		var remaining int
+		if err := tx.QueryRow(
+			"SELECT COUNT(*) FROM users WHERE is_admin = 1 AND is_active = 1 AND id != ?", userID,
+		).Scan(&remaining); err != nil {
+			slog.Error("failed to count active admins", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if remaining == 0 {
+			http.Error(w, "Cannot remove admin access from the last active admin account", http.StatusConflict)
+			return
+		}
+	}
 
 	if req.Username != "" {
-		_, err = db.Exec("UPDATE users SET username = ?, member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
+		_, err = tx.Exec("UPDATE users SET username = ?, member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
 			req.Username, req.MemberID, req.IsAdmin, req.ForcePasswordChange, userID)
 	} else {
-		_, err = db.Exec("UPDATE users SET member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
+		_, err = tx.Exec("UPDATE users SET member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
 			req.MemberID, req.IsAdmin, req.ForcePasswordChange, userID)
 	}
 
 	if err != nil {
 		slog.Error("failed to update user", "error", err, "userID", userID)
 		http.Error(w, "Failed to update user", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("failed to commit user update transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -313,19 +352,38 @@ func deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var adminCount int
-	err = db.QueryRow("SELECT COUNT(*) FROM users WHERE is_admin = 1").Scan(&adminCount)
-	if err == nil && adminCount <= 1 {
-		var isAdmin bool
-		db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin)
-		if isAdmin {
-			http.Error(w, "Cannot delete the last admin user", http.StatusForbidden)
-			return
-		}
+	var deletedUsername string
+	var isActive bool
+	if err := db.QueryRow(
+		"SELECT username, is_active FROM users WHERE id = ?", userID,
+	).Scan(&deletedUsername, &isActive); err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
 	}
 
-	var deletedUsername string
-	db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&deletedUsername)
+	// Deletion is the second step of a two-stage flow: deactivate, then delete. Making
+	// the destructive path deliberate matters more here than elsewhere because deleting
+	// a user discards their login history, activity attribution and file ownership,
+	// which is exactly what deactivation exists to preserve.
+	//
+	// This also subsumes the old last-active-admin guard. deactivateUser already refuses
+	// to deactivate the last active admin (and refuses self-deactivation), so any
+	// account that reaches this point is inactive and therefore not the last active
+	// admin — and removing an inactive row cannot reduce the active-admin count. Keeping
+	// the old count here would have been actively wrong: with two admins, deactivating
+	// one left adminCount = 1, which then blocked deleting that same inactive admin.
+	if isActive {
+		http.Error(w, "Deactivate this account before deleting it. Deactivation preserves the account's history; deletion does not.", http.StatusConflict)
+		return
+	}
+
+	// Explicit — the table's ON DELETE CASCADE never fires, since foreign_keys is off
+	// app-wide. Without this the tokens outlive the user row.
+	if _, err := db.Exec("DELETE FROM password_reset_tokens WHERE user_id = ?", userID); err != nil {
+		slog.Error("failed to clear reset tokens on delete", "error", err, "userID", userID)
+		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
+		return
+	}
 
 	_, err = db.Exec("DELETE FROM users WHERE id = ?", userID)
 	if err != nil {
@@ -342,8 +400,95 @@ func deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "User deleted successfully"})
 }
 
-// Admin: Reset user password
-func resetUserPassword(w http.ResponseWriter, r *http.Request) {
+// Admin: Deactivate a user account.
+//
+// The guard and the write share one transaction. With SetMaxOpenConns(1) that fully
+// serializes them — otherwise two concurrent requests could both pass the last-admin
+// count before either UPDATE ran, deactivating every admin.
+func deactivateUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	actor := getAuthUser(r)
+
+	// The last-admin guard doesn't cover a multi-admin setup where an admin locks
+	// themselves out mid-session, so refuse self-deactivation outright.
+	if userID == actor.ID {
+		http.Error(w, "You cannot deactivate your own account", http.StatusConflict)
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("failed to begin deactivate transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	var username string
+	var isAdmin, isActive bool
+	err = tx.QueryRow("SELECT username, is_admin, is_active FROM users WHERE id = ?", userID).
+		Scan(&username, &isAdmin, &isActive)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+	if !isActive {
+		http.Error(w, "This account is already deactivated", http.StatusConflict)
+		return
+	}
+
+	if isAdmin {
+		var remaining int
+		if err := tx.QueryRow(
+			"SELECT COUNT(*) FROM users WHERE is_admin = 1 AND is_active = 1 AND id != ?", userID,
+		).Scan(&remaining); err != nil {
+			slog.Error("failed to count active admins", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if remaining == 0 {
+			http.Error(w, "Cannot deactivate the last active admin account", http.StatusConflict)
+			return
+		}
+	}
+
+	if _, err := tx.Exec("UPDATE users SET is_active = 0 WHERE id = ?", userID); err != nil {
+		slog.Error("failed to deactivate user", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// A pending reset link must not outlive the account it unlocks. Explicit because
+	// the table's ON DELETE CASCADE never fires — foreign_keys is off app-wide.
+	if _, err := tx.Exec(
+		"DELETE FROM password_reset_tokens WHERE user_id = ? AND used_at IS NULL", userID,
+	); err != nil {
+		slog.Error("failed to clear reset tokens on deactivate", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("failed to commit deactivate transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	logActivity(actor.ID, actor.Username, "deactivated", "user", username, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "User deactivated"})
+}
+
+// Admin: Reactivate a user account. No guard needed — reactivation can only add an
+// active admin, never remove the last one.
+func reactivateUser(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	userID, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -352,43 +497,22 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var username string
-	err = db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
-	if err != nil {
+	if err := db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username); err != nil {
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	randomPassword, err := generateRandomPassword(10)
-	if err != nil {
-		http.Error(w, "Failed to generate password", http.StatusInternalServerError)
+	if _, err := db.Exec("UPDATE users SET is_active = 1 WHERE id = ?", userID); err != nil {
+		slog.Error("failed to reactivate user", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(randomPassword), bcrypt.DefaultCost)
-	if err != nil {
-		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
-		return
-	}
-
-	_, err = db.Exec("UPDATE users SET password = ?, force_password_change = 1, password_changed_at = CURRENT_TIMESTAMP WHERE id = ?", string(hashedPassword), userID)
-	if err != nil {
-		slog.Error("failed to reset user password", "error", err, "userID", userID)
-		http.Error(w, "Failed to reset password", http.StatusInternalServerError)
-		return
-	}
-
-	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", userID, string(hashedPassword))
 
 	actor := getAuthUser(r)
-	actorID, actorName := actor.ID, actor.Username
-	logActivity(actorID, actorName, "reset_password", "user", username, true)
+	logActivity(actor.ID, actor.Username, "reactivated", "user", username, true)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":  "Password reset successfully",
-		"username": username,
-		"password": randomPassword,
-	})
+	json.NewEncoder(w).Encode(map[string]string{"message": "User reactivated"})
 }
 
 // Admin: Get login history

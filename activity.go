@@ -4,9 +4,24 @@ package main
 
 import "log/slog"
 
+// neverBatched lists entity types whose "created" events must always get their own
+// row, overriding the 15-minute merge below.
+//
+// Batching keeps the feed readable for bulk data entry, but it overwrites entity_name
+// with the most recent value and only bumps a counter — so issuing three reset links in
+// a row collapsed to one row reading "created 3 password reset links" naming only the
+// last user. For credential-granting actions that is the wrong trade: the audit trail
+// exists precisely to answer "who was given access, and by whom", and that question
+// becomes unanswerable the moment two are issued together.
+var neverBatched = map[string]bool{
+	"password_reset_link": true,
+	"invite":              true,
+}
+
 // logActivity records an audit entry. When action is "created", consecutive writes
 // by the same user for the same entity_type within 15 minutes are merged: the
-// entity_count increments and entity_name updates to the most-recent value.
+// entity_count increments and entity_name updates to the most-recent value — unless
+// the entity_type is in neverBatched, which always gets its own row.
 // For all other actions each call always inserts a new row.
 // An optional details string (first element of the variadic) provides extra context.
 func logActivity(userID int, username, action, entityType, entityName string, isSensitive bool, details ...string) {
@@ -20,7 +35,7 @@ func logActivity(userID int, username, action, entityType, entityName string, is
 		det = details[0]
 	}
 
-	if action == "created" {
+	if action == "created" && !neverBatched[entityType] {
 		var id int
 		err := db.QueryRow(`
 			SELECT id FROM activity_log

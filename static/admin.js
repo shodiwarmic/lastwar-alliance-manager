@@ -4,7 +4,6 @@ let allUsers = [];
 let allMembers = [];
 let allLogins = [];
 let currentEditUserId = null;
-let currentResetUserId = null;
 
 // Choices.js instances — initialised in DOMContentLoaded
 let memberIdChoices = null;
@@ -34,11 +33,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadMembers();
         await loadStormSlots();
 
-        // Tab buttons
-        document.getElementById('users-tab').style.display = 'block';
-        document.getElementById('tab-btn-users').addEventListener('click', () => switchTab('users'));
-        document.getElementById('tab-btn-logins').addEventListener('click', () => switchTab('logins'));
-        document.getElementById('tab-btn-security').addEventListener('click', () => switchTab('security'));
+        // Tabs — shared module handles switching, the initial panel, and #hash
+        // persistence so /admin#security is linkable and survives a refresh.
+        // Initialised after the awaits above because onActivate can fire immediately
+        // (deep link) and the per-tab loaders depend on that data and on the Choices
+        // instances above.
+        Tabs.init({
+            hash: true,
+            onActivate: (name) => {
+                if (name === 'logins') loadLoginHistory();
+                if (name === 'security') loadSecuritySettings();
+            },
+        });
 
         // User management
         document.getElementById('create-user-btn').addEventListener('click', showCreateUserModal);
@@ -57,10 +63,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('user-form').addEventListener('submit', saveUser);
         document.getElementById('user-cancel-btn').addEventListener('click', closeUserModal);
 
-        // Reset password modal
-        document.getElementById('copy-password-btn').addEventListener('click', copyPassword);
-        document.getElementById('confirm-reset-btn').addEventListener('click', confirmResetPassword);
-        document.getElementById('reset-password-cancel-btn').addEventListener('click', closeResetPasswordModal);
+        // Reset link modal
+        setupResetLinkModal();
 
         // Transfer files modal
         document.getElementById('transfer-files-confirm-btn').addEventListener('click', confirmTransferFiles);
@@ -71,7 +75,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('delete-gcp-cancel-btn').addEventListener('click', closeDeleteGCPModal);
 
         // Close modals on backdrop click (no corner × per design standard)
-        ['user-modal', 'reset-password-modal', 'transfer-files-modal', 'delete-gcp-modal'].forEach(id => {
+        ['user-modal', 'transfer-files-modal', 'delete-gcp-modal'].forEach(id => {
             const modal = document.getElementById(id);
             if (modal) modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = ''; });
         });
@@ -83,17 +87,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         slotSaveBtn.addEventListener('click', saveStormSlots);
     }
 });
-
-// Tab Switching
-function switchTab(tabName) {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('tab-btn-' + tabName).classList.add('active');
-    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
-    document.getElementById(tabName + '-tab').style.display = 'block';
-    if (tabName === 'logins') {
-        loadLoginHistory();
-    }
-}
 
 // Load Users
 async function loadUsers() {
@@ -152,7 +145,7 @@ function buildUserCard(user) {
     const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString(undefined, { hour12: false }) : 'Never';
 
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = user.is_active ? 'card' : 'card inactive';
     card.style.marginBottom = '0';
     card.dataset.username = user.username.toLowerCase();
 
@@ -171,6 +164,12 @@ function buildUserCard(user) {
         adminBadge.textContent = 'Admin';
         h3.appendChild(adminBadge);
     }
+    if (!user.is_active) {
+        const inactiveBadge = document.createElement('span');
+        inactiveBadge.className = 'inactive-badge';
+        inactiveBadge.textContent = 'Inactive';
+        h3.appendChild(inactiveBadge);
+    }
 
     const memberSpan = document.createElement('span');
     if (user.member_name) {
@@ -186,22 +185,32 @@ function buildUserCard(user) {
     const actions = document.createElement('div');
     actions.className = 'user-actions';
 
-    const editBtn = document.createElement('button');
-    editBtn.className = 'btn btn-sm btn-secondary';
-    editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
-    editBtn.addEventListener('click', () => editUser(user.id));
+    // Built via rowActionBtn so the labels collapse to icon-only ≤768px (.action-label),
+    // keeping four actions on one line on mobile. title/aria-label carry the meaning.
+    const editBtn = rowActionBtn('btn btn-sm btn-secondary', 'pencil', 'Edit',
+        () => editUser(user.id));
 
-    const resetBtn = document.createElement('button');
-    resetBtn.className = 'btn btn-sm btn-warning';
-    resetBtn.append(svgIcon('key'), document.createTextNode(' Reset Password'));
-    resetBtn.addEventListener('click', () => showResetPasswordModal(user.id, user.username));
+    // Reset links are meaningless for a deactivated account — the server refuses to
+    // mint one, so don't offer the button.
+    const resetBtn = rowActionBtn('btn btn-sm btn-warning', 'key', 'Reset Link',
+        () => generateResetLink(user.id, user.username));
+    if (!user.is_active) resetBtn.style.display = 'none';
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'btn btn-sm btn-danger';
-    deleteBtn.append(svgIcon('trash'), document.createTextNode(' Delete'));
-    deleteBtn.addEventListener('click', () => deleteUser(user.id, user.username));
+    const statusBtn = user.is_active
+        ? rowActionBtn('btn btn-sm btn-danger', 'user-off', 'Deactivate',
+            () => setUserActive(user.id, user.username, false))
+        : rowActionBtn('btn btn-sm btn-secondary', 'user-check', 'Reactivate',
+            () => setUserActive(user.id, user.username, true));
 
-    actions.append(editBtn, resetBtn, deleteBtn);
+    // Delete is the second stage of deactivate-then-delete, so it only appears once the
+    // account is already deactivated (the server enforces the same rule). That keeps the
+    // row at three buttons and means the destructive action is never adjacent to Reset
+    // Link or Deactivate.
+    const deleteBtn = rowActionBtn('btn btn-sm btn-danger', 'trash', 'Delete',
+        () => deleteUser(user.id, user.username));
+    if (user.is_active) deleteBtn.style.display = 'none';
+
+    actions.append(editBtn, resetBtn, statusBtn, deleteBtn);
     header.append(userInfo, actions);
 
     // Stats
@@ -255,10 +264,13 @@ function displayUsers(users) {
 
 // Filter Users
 function filterUsers() {
-    const searchTerm = document.getElementById('user-search').value.toLowerCase();
+    // Fold accents on both sides so typing "Pacha" finds the member "Pàcha" — without
+    // this, an accented member name is only reachable if the username happens to match.
+    // foldSearch also lowercases, so no separate toLowerCase is needed.
+    const searchTerm = foldSearch(document.getElementById('user-search').value);
     const filtered = allUsers.filter(user =>
-        user.username.toLowerCase().includes(searchTerm) ||
-        (user.member_name && user.member_name.toLowerCase().includes(searchTerm))
+        foldSearch(user.username).includes(searchTerm) ||
+        (user.member_name && foldSearch(user.member_name).includes(searchTerm))
     );
     displayUsers(filtered);
 }
@@ -432,6 +444,77 @@ async function deleteUser(userId, username) {
     executeUserDelete(userId);
 }
 
+// Generate a single-use password reset link and show it for copying. No plaintext
+// password is ever created — the user sets their own via the link.
+let currentResetLinkUrl = '';
+
+function setupResetLinkModal() {
+    const modal = document.getElementById('reset-link-modal');
+    if (!modal) return;
+    const copyBtn = document.getElementById('reset-link-copy');
+
+    const closeModal = () => {
+        releaseFocus(modal);
+        modal.style.display = '';
+    };
+
+    copyBtn.addEventListener('click', () => {
+        copyToClipboard(currentResetLinkUrl, () => {
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+        });
+    });
+
+    document.getElementById('reset-link-close').addEventListener('click', closeModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+}
+
+async function generateResetLink(userId, username) {
+    if (!await showConfirm(`Generate a password reset link for ${username}?`, 'Generate')) return;
+    try {
+        const response = await fetch(`/api/admin/users/${userId}/reset-link`, { method: 'POST' });
+        if (!response.ok) throw new Error((await response.text()).trim());
+
+        const result = await response.json();
+        currentResetLinkUrl = window.location.origin + result.reset_url;
+
+        document.getElementById('reset-link-username').textContent = username;
+        document.getElementById('reset-link-validity').textContent = result.expires_in || '24 hours';
+        document.getElementById('reset-link-url').value = currentResetLinkUrl;
+        document.getElementById('reset-link-copy').textContent = 'Copy';
+
+        const modal = document.getElementById('reset-link-modal');
+        modal.style.display = 'flex';
+        trapFocus(modal);
+    } catch (error) {
+        showToast(error.message || 'Failed to generate reset link.', 'error', 6000);
+    }
+}
+
+// Deactivate / reactivate a user account. Deactivation preserves the account and its
+// history — unlike deleteUser, which is irreversible.
+async function setUserActive(userId, username, activate) {
+    const verb = activate ? 'Reactivate' : 'Deactivate';
+    const prompt = activate
+        ? `Reactivate "${username}"? They will be able to log in again.`
+        : `Deactivate "${username}"? They will be logged out and unable to sign in, on web and mobile. Their history is kept.`;
+    if (!await showConfirm(prompt, verb)) return;
+
+    try {
+        const response = await fetch(`/api/admin/users/${userId}/${activate ? 'reactivate' : 'deactivate'}`, {
+            method: 'PUT'
+        });
+        if (!response.ok) throw new Error((await response.text()).trim());
+
+        showToast(`${username} ${activate ? 'reactivated' : 'deactivated'}.`);
+        loadUsers();
+    } catch (error) {
+        // Surfaces the server's reason verbatim (e.g. the last-active-admin guard),
+        // which is more use than a generic failure string.
+        showToast(error.message || `Failed to ${verb.toLowerCase()} user.`, 'error', 6000);
+    }
+}
+
 function closeTransferFilesModal() {
     const transferModal = document.getElementById('transfer-files-modal');
     releaseFocus(transferModal);
@@ -469,61 +552,6 @@ async function executeUserDelete(userId) {
     } catch (error) {
         showToast('Error: ' + error.message, 'error');
     }
-}
-
-// Show Reset Password Modal
-function showResetPasswordModal(userId, username) {
-    currentResetUserId = userId;
-    document.getElementById('reset-username').textContent = username;
-    document.getElementById('reset-password-info').style.display = 'block';
-    document.getElementById('reset-password-result').style.display = 'none';
-    document.getElementById('confirm-reset-btn').style.display = 'inline-block';
-    const resetModal = document.getElementById('reset-password-modal');
-    resetModal.style.display = 'flex';
-    trapFocus(resetModal);
-}
-
-// Close Reset Password Modal
-function closeResetPasswordModal() {
-    const resetModal = document.getElementById('reset-password-modal');
-    releaseFocus(resetModal);
-    resetModal.style.display = 'none';
-    currentResetUserId = null;
-}
-
-// Confirm Reset Password
-async function confirmResetPassword() {
-    try {
-        const response = await fetch(`/api/admin/users/${currentResetUserId}/reset-password`, {
-            method: 'POST'
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
-        }
-
-        const result = await response.json();
-
-        // Show the result
-        document.getElementById('result-username').textContent = result.username;
-        document.getElementById('result-password').textContent = result.password;
-        document.getElementById('reset-password-info').style.display = 'none';
-        document.getElementById('confirm-reset-btn').style.display = 'none';
-        document.getElementById('reset-password-result').style.display = 'block';
-
-        loadUsers();
-    } catch (error) {
-        showToast('Error: ' + error.message, 'error');
-    }
-}
-
-// Copy Password
-function copyPassword() {
-    const password = document.getElementById('result-password').textContent;
-    navigator.clipboard.writeText(password).then(() => {
-        showToast('Password copied to clipboard.');
-    });
 }
 
 // Load Login History
@@ -572,15 +600,14 @@ function populateLoginFilter() {
 
 function buildStatCard(value, label) {
     const card = document.createElement('div');
-    card.className = 'card';
-    card.style.cssText = 'margin-bottom:0;text-align:center;';
+    card.className = 'card stat-tile';
 
     const valDiv = document.createElement('div');
-    valDiv.style.cssText = 'font-size:2em;font-weight:bold;line-height:1;color:var(--color-text);';
+    valDiv.className = 'stat-tile-value';
     valDiv.textContent = value;
 
     const labelDiv = document.createElement('div');
-    labelDiv.style.cssText = 'font-size:0.85em;color:var(--color-text-mid);margin-top:5px;';
+    labelDiv.className = 'stat-tile-label';
     labelDiv.textContent = label;
 
     card.append(valDiv, labelDiv);
@@ -679,7 +706,13 @@ function displayLoginHistory(logins) {
     logins.forEach(login => tbody.appendChild(buildLoginRow(login)));
 
     table.append(thead, tbody);
-    loginsList.replaceChildren(table);
+
+    // Wrap in the global .table-scroll utility rather than relying on an
+    // admin-specific overflow rule — same pattern as allies/storm/officer_command.
+    const scroll = document.createElement('div');
+    scroll.className = 'table-scroll';
+    scroll.appendChild(table);
+    loginsList.replaceChildren(scroll);
 }
 
 // Extract device info from user agent → { icon, label, browser }
@@ -717,15 +750,7 @@ window.onclick = function(event) {
 };
 
 // --- SECURITY & API TAB LOGIC ---
-
-// Hook into the switchTab function
-const originalSwitchTab = switchTab;
-switchTab = function(tabName) {
-    originalSwitchTab(tabName);
-    if (tabName === 'security') {
-        loadSecuritySettings();
-    }
-};
+// Lazy-loaded on activation via the Tabs.init onActivate callback above.
 
 async function loadSecuritySettings() {
     try {

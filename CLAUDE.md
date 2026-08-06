@@ -27,7 +27,10 @@ Every handler that creates, updates, or deletes data must call `logActivity`. Th
 logActivity(userID int, username, action, entityType, entityName string, isSensitive bool, details ...string)
 ```
 
-**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"reset_password"`
+**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"deactivated"`, `"reactivated"`, `"reset"`
+
+> `"reset_password"` is retired — no handler emits it since the random-password flow was
+> removed. Historical rows keep it, which is harmless: `activity.js` renders actions verbatim.
 
 **`isSensitive`**: `true` for user accounts, permissions matrix, settings, credentials, and invite events. These are hidden from non-admin users on the activity page.
 
@@ -46,8 +49,15 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 
 **Batching**: consecutive `"created"` calls for the same `entity_type` by the same user within 15 minutes are automatically merged (count increments). All other actions always create a new row.
 
+> **Exempt from batching**: entity types listed in `neverBatched` (`activity.go`) always get
+> their own row — currently `password_reset_link` and `invite`. Batching overwrites
+> `entity_name` with the most recent value and only bumps a counter, so three reset links
+> in a row collapsed to one row naming only the last recipient. For anything that grants
+> credentials or access, the audit trail has to answer "who was given access, and by
+> whom" — add the entity type to `neverBatched` rather than accepting the merge.
+
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -337,6 +347,45 @@ next statement on that `tx`. When a handler needs both a network call and a tran
 
 Shape any read-then-write handler as **read-all-into-memory → close cursor → write-all**. See
 `refreshNAP`/`applyNAPLadder` in `handlers_nap.go` and the note at `handlers_polls.go:854`.
+
+### Timestamps: compute in SQL, and never assume the shape you read back
+
+Two separate traps, both silent.
+
+**Writing — never bind a Go `time.Time` to a timestamp column.** `database.go` opens the
+DB with a bare path (no `_time_format` in the DSN), so the driver formats a bound
+`time.Time` with `time.Time.String()`:
+
+```
+2026-08-04 12:34:56.789012345 +0200 CEST     ← what lands in the column
+2026-08-02 10:34:56                          ← what CURRENT_TIMESTAMP writes (UTC)
+```
+
+Both are TEXT, so `expires_at > CURRENT_TIMESTAMP` is a **lexical string comparison**
+between a local wall-clock value carrying an offset and zone name and a UTC value with
+neither — the effective TTL silently shifts by the host's UTC offset. This bit
+`invite_tokens` (a 48h invite expired after ~37h under `TZ=Pacific/Midway`); it was
+invisible in production only because nothing sets `TZ`, so containers default to UTC.
+
+Compute the value in SQL instead — same shape, same basis, no host timezone in the path:
+
+```sql
+INSERT INTO password_reset_tokens (..., expires_at) VALUES (..., datetime('now', '+24 hours'))
+```
+
+When Go genuinely must supply the value, format with `sqliteTimeLayout`
+(`lastrank_client.go:405`) — never `time.RFC3339`.
+
+**Reading — a column DECLARED `TIMESTAMP`/`DATETIME`/`DATE` does not come back as you
+wrote it.** The driver parses those declared types into a `time.Time`, and `database/sql`
+then renders that into a string destination as **RFC3339Nano**. So a column written by
+`CURRENT_TIMESTAMP` as `2026-08-02 23:24:33` scans into a `string`/`sql.NullString` as
+`2026-08-02T23:24:33Z`. Parsing it with a single space-form layout silently never
+matches. This turned the mobile token-revocation check into a no-op that allowed every
+token until it was caught in end-to-end testing.
+
+Parse with `lastRankParseTime`, which handles both shapes, and compare as `time.Time` —
+never as strings.
 
 ### CSP — no inline scripts allowed (`script-src 'self'` only)
 `install.sh` sets `script-src 'self' https://cdn.jsdelivr.net` — **`'unsafe-inline'` is not in `script-src`**. Any inline `<script>` block in a template will be silently blocked in production (and on Android, this is immediately visible as a broken feature).

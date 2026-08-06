@@ -827,6 +827,12 @@ function buildMemberCard(member) {
             actions.appendChild(inviteUserBtn);
         }
 
+        if (isR5OrAdmin && member.has_user) {
+            const resetLinkBtn = memberActionBtn('btn btn-sm btn-secondary', 'key', 'Reset Link');
+            resetLinkBtn.addEventListener('click', () => resetLinkForMember(member.id, member.name));
+            actions.appendChild(resetLinkBtn);
+        }
+
         top.appendChild(actions);
     }
 
@@ -1168,22 +1174,10 @@ window.toggleEligible = async function (id, currentStatus, actionsContainer, tog
     }
 };
 
-function fallbackCopy(text, onSuccess) {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    try {
-        if (document.execCommand('copy')) onSuccess();
-    } finally {
-        document.body.removeChild(ta);
-    }
-}
-
 let currentInviteUrl = '';
 
+// One modal serves both invite and password-reset links — same shape, only the heading,
+// help text and validity window differ.
 function setupInviteModal() {
     const modal = document.getElementById('invite-link-modal');
     if (!modal) return;
@@ -1195,19 +1189,27 @@ function setupInviteModal() {
     };
 
     copyBtn.addEventListener('click', () => {
-        const onSuccess = () => {
+        copyToClipboard(currentInviteUrl, () => {
             copyBtn.textContent = 'Copied!';
             setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
-        };
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(currentInviteUrl).then(onSuccess).catch(() => fallbackCopy(currentInviteUrl, onSuccess));
-        } else {
-            fallbackCopy(currentInviteUrl, onSuccess);
-        }
+        });
     });
 
     document.getElementById('invite-link-close').addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+}
+
+function showLinkModal({ title, memberName, url, validFor }) {
+    currentInviteUrl = url;
+    document.getElementById('invite-link-title').textContent = title;
+    document.getElementById('invite-link-member').textContent = memberName;
+    document.getElementById('invite-link-validity').textContent = validFor;
+    document.getElementById('invite-link-url').value = url;
+    document.getElementById('invite-link-copy').textContent = 'Copy';
+
+    const modal = document.getElementById('invite-link-modal');
+    modal.style.display = 'flex';
+    trapFocus(modal);
 }
 
 window.inviteUserForMember = async function (memberId, memberName) {
@@ -1219,18 +1221,36 @@ window.inviteUserForMember = async function (memberId, memberName) {
             throw new Error(errText);
         }
         const result = await response.json();
-        currentInviteUrl = window.location.origin + result.invite_url;
-
-        document.getElementById('invite-link-member').textContent = memberName;
-        document.getElementById('invite-link-url').value = currentInviteUrl;
-        document.getElementById('invite-link-copy').textContent = 'Copy';
-
-        const modal = document.getElementById('invite-link-modal');
-        modal.style.display = 'flex';
-        trapFocus(modal);
+        showLinkModal({
+            title: 'Invite Link',
+            memberName,
+            url: window.location.origin + result.invite_url,
+            validFor: result.expires_in || '48 hours',
+        });
     } catch (error) {
         console.error('Error generating invite:', error);
         showToast(error.message || 'Failed to generate invite.', 'error');
+    }
+};
+
+window.resetLinkForMember = async function (memberId, memberName) {
+    if (!await showConfirm(`Generate a password reset link for ${memberName}?`, 'Generate')) return;
+    try {
+        const response = await fetch(`${API_URL}/${memberId}/reset-link`, { method: 'POST' });
+        if (!response.ok) throw new Error((await response.text()).trim());
+
+        const result = await response.json();
+        showLinkModal({
+            title: 'Password Reset Link',
+            memberName,
+            url: window.location.origin + result.reset_url,
+            validFor: result.expires_in || '24 hours',
+        });
+    } catch (error) {
+        console.error('Error generating reset link:', error);
+        // Server text verbatim: it explains WHY (admin-account guard, deactivated
+        // account), which a generic string would throw away. 6s — it's a sentence.
+        showToast(error.message || 'Failed to generate reset link.', 'error', 6000);
     }
 };
 

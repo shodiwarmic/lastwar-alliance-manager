@@ -152,6 +152,9 @@ func main() {
 	router.HandleFunc("/api/members/{id}/invite", authMiddleware(requirePermission("manage_members", generateInvite))).Methods("POST")
 	router.HandleFunc("/invite/{token}", showInvitePage).Methods("GET")
 	router.HandleFunc("/invite/{token}", claimInvite).Methods("POST")
+	router.HandleFunc("/api/members/{id}/reset-link", authMiddleware(requirePermission("manage_settings", generateMemberResetLink))).Methods("POST")
+	router.HandleFunc("/reset-password/{token}", showResetPasswordPage).Methods("GET")
+	router.HandleFunc("/reset-password/{token}", claimPasswordReset).Methods("POST")
 
 	// Activity log
 	router.HandleFunc("/api/activity", authMiddleware(getActivityLog)).Methods("GET")
@@ -238,7 +241,9 @@ func main() {
 	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(createAdminUser))).Methods("POST")
 	router.HandleFunc("/api/admin/users/{id}", authMiddleware(adminMiddleware(updateAdminUser))).Methods("PUT")
 	router.HandleFunc("/api/admin/users/{id}", authMiddleware(adminMiddleware(deleteAdminUser))).Methods("DELETE")
-	router.HandleFunc("/api/admin/users/{id}/reset-password", authMiddleware(adminMiddleware(resetUserPassword))).Methods("POST")
+	router.HandleFunc("/api/admin/users/{id}/reset-link", authMiddleware(adminMiddleware(generateUserResetLink))).Methods("POST")
+	router.HandleFunc("/api/admin/users/{id}/deactivate", authMiddleware(adminMiddleware(deactivateUser))).Methods("PUT")
+	router.HandleFunc("/api/admin/users/{id}/reactivate", authMiddleware(adminMiddleware(reactivateUser))).Methods("PUT")
 	router.HandleFunc("/api/admin/login-history", authMiddleware(adminMiddleware(getLoginHistory))).Methods("GET")
 	router.HandleFunc("/api/admin/users/{id}/file-count", authMiddleware(adminMiddleware(getUserFileCount))).Methods("GET")
 	router.HandleFunc("/api/admin/users/{id}/transfer-files", authMiddleware(adminMiddleware(transferUserFiles))).Methods("POST")
@@ -508,8 +513,17 @@ func main() {
 	router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := store.Get(r, "session")
 		if userID, ok := session.Values["user_id"].(int); ok && userID > 0 {
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-			return
+			// Validate against the DB rather than trusting the cookie. A session naming a
+			// user who no longer resolves (deactivated or deleted) would otherwise bounce
+			// forever: every page redirects here because !IsAuthenticated, and this
+			// handler redirected straight back to "/". Clear it and render the form.
+			if loadUserFromDB(userID) != nil {
+				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+				return
+			}
+			delete(session.Values, "user_id")
+			delete(session.Values, "authenticated")
+			session.Save(r, w)
 		}
 
 		var rawMessage string

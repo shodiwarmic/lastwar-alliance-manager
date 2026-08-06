@@ -25,11 +25,12 @@ func mobileLogin(w http.ResponseWriter, r *http.Request) {
 	var memberID sql.NullInt64
 	var isAdmin sql.NullBool
 	var forcePasswordChange bool
+	var isActive bool
 
 	err := db.QueryRow(`
-		SELECT u.id, u.username, u.password, u.member_id, u.is_admin, u.force_password_change
+		SELECT u.id, u.username, u.password, u.member_id, u.is_admin, u.force_password_change, u.is_active
 		FROM users u WHERE u.username = ?`, creds.Username).Scan(
-		&user.ID, &user.Username, &user.Password, &memberID, &isAdmin, &forcePasswordChange)
+		&user.ID, &user.Username, &user.Password, &memberID, &isAdmin, &forcePasswordChange, &isActive)
 
 	if err != nil {
 		trackLogin(0, creds.Username, r, false)
@@ -46,6 +47,13 @@ func mobileLogin(w http.ResponseWriter, r *http.Request) {
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password)); err != nil {
 		trackLogin(user.ID, user.Username, r, false)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	// After the password compare, same as the web login — don't leak account state.
+	if !isActive {
+		trackLogin(user.ID, user.Username, r, false)
+		http.Error(w, "This account has been deactivated. Contact an alliance officer.", http.StatusForbidden)
 		return
 	}
 

@@ -1,0 +1,336 @@
+/* Admin page — user list, login history and account-status styling.
+   Extracted from styles.css so the admin page follows the same page-CSS
+   convention as members/train/files. Only rules used exclusively by
+   admin.html/admin.js live here: .no-member (shared with profile) and
+   .stat-label/.stat-value (a general utility pair) deliberately stay global. */
+
+/* ── Users list ─────────────────────────────────────────── */
+.users-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.user-info {
+    position: static;
+    flex: 1;
+}
+
+.user-info h3 {
+    color: var(--color-text);
+    font-size: 1.3em;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.admin-badge {
+    background: var(--color-accent);
+    color: white;
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 0.75em;
+    font-weight: bold;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+.member-badge {
+    background: var(--color-purple);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 0.9em;
+}
+
+.user-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.user-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background: var(--color-card);
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+}
+
+/* ── Deactivated accounts ───────────────────────────────── */
+/* Dimmed so an inactive account reads as present-but-disabled rather than
+   removed — the whole point of deactivation over deletion. */
+.card.inactive {
+    opacity: 0.6;
+}
+
+.inactive-badge {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 0.75em;
+    font-weight: bold;
+}
+
+/* ── Login history ──────────────────────────────────────── */
+/* Moved from styles.css: .filter-controls is used only by this page. It was
+   defined there TWICE with the later rule overriding only gap and flex-wrap;
+   this is the merged result of that cascade, so the rendering is unchanged. */
+/* No margin-bottom: the merged rule carried 20px from when this was a standalone
+   filter bar, but it now sits inside a .card-header whose align-items:center turns
+   that phantom space into a vertical offset against the heading — the same bug as
+   the Choices margin below, one level up. */
+.filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    background: var(--color-card);
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    flex-wrap: wrap;
+}
+
+/* The user filter is a Choices.js control and the limit is a native <select>, so they
+   have to be matched by hand. Scoped to #login-limit rather than `select` so it can't
+   touch the original element Choices keeps in the DOM behind its wrapper.
+
+   Metrics mirror .choices__inner (choices-theme.css): 38px min-height, 2px border,
+   6px radius. box-sizing is border-box globally, so 38px is the full outer height —
+   the native select was computing to ~35px, hence the visible height mismatch. */
+.filter-controls #login-limit {
+    min-height: 38px;
+    padding: 4px 12px;
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.95rem;
+}
+
+/* margin-bottom: Choices ships `.choices { margin-bottom: 24px }` and nothing
+   overrides it here. Beyond the stray gap, that phantom space below the control drags
+   its optical centre upward under the row's align-items:center — which is what made
+   the two dropdowns look vertically offset from each other.
+
+   min-width: room to breathe on wider screens without a new width breakpoint
+   (DESIGN_STANDARD allows exactly one, for the nav chrome swap). The user filter holds
+   names so it gets the larger share; the limit only ever shows "Last N". */
+.filter-controls .choices {
+    margin-bottom: 0;
+    min-width: clamp(170px, 20vw, 280px);
+}
+
+.filter-controls #login-limit {
+    min-width: clamp(120px, 10vw, 170px);
+}
+
+/* Metric tiles above the login table — a grid of .card, per DESIGN_STANDARD
+   (no bespoke .stat-card).
+
+   The 130px floor is what makes this 2x2 on a phone: two tracks need ~270px,
+   which still fits inside the enclosing .card's 25px padding on a 360px device,
+   whereas the previous 200px floor needed 420px and so collapsed to a single tall
+   column. There are exactly four tiles, so on desktop auto-fit's surplus tracks
+   collapse and the four stretch to fill the row — still 4-across, no breakpoint. */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: clamp(10px, 2vw, 20px);
+    margin-bottom: 20px;
+}
+
+/* Tiles shrink with the viewport rather than at a breakpoint, so four stacked
+   metrics don't push the table below the fold on mobile. */
+.stat-tile {
+    margin-bottom: 0;
+    padding: clamp(12px, 3vw, 25px);
+    text-align: center;
+}
+
+.stat-tile-value {
+    font-size: clamp(1.5rem, 5vw, 2em);
+    font-weight: bold;
+    line-height: 1;
+    color: var(--color-text);
+}
+
+.stat-tile-label {
+    font-size: clamp(0.75rem, 2vw, 0.85em);
+    color: var(--color-text-mid);
+    margin-top: 5px;
+}
+
+/* ── Recent logins ──────────────────────────────────────── */
+.recent-logins {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--color-border);
+}
+
+.recent-logins strong {
+    color: var(--color-text);
+    display: block;
+    margin-bottom: 10px;
+}
+
+.login-entry {
+    display: grid;
+    grid-template-columns: 1fr 120px 150px;
+    gap: 10px;
+    padding: 8px;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 0.85em;
+}
+
+.login-location {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--color-text);
+}
+
+.login-ip {
+    color: var(--color-text-mid);
+    font-family: var(--font-mono);
+}
+
+.login-time {
+    color: var(--color-text-muted);
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+
+/* ── Security & API tab: settings form layout ───────────── */
+/* Replaces per-element inline styles in admin.html. Page layout belongs in page
+   CSS; the remaining inline style="display:none" attributes there are the
+   intentional first-paint-hidden ones JS reveals later (Category B). */
+.settings-form {
+    padding: 20px;
+}
+
+/* Divider between settings groups. -divided sits above the next group,
+   -divided-top below the previous one — both exist because the OCR and storm
+   groups are appended after a group that already has a bottom rule. */
+.settings-group-divided {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.settings-group-divided-top {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid var(--color-border);
+}
+
+.settings-subheading {
+    margin: 16px 0 8px;
+}
+
+.settings-status {
+    margin-top: 0;
+}
+
+/* Inputs that shouldn't stretch the full width of a wide settings panel. */
+.input-constrained {
+    width: 100%;
+    max-width: 500px;
+}
+
+.pwd-policy-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 15px;
+}
+
+.pwd-policy-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 15px;
+    margin-bottom: 15px;
+}
+
+.credential-panel {
+    background: var(--color-surface);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+}
+
+.button-group-spaced {
+    margin-top: 15px;
+}
+
+.storm-slot-header {
+    display: grid;
+    grid-template-columns: 60px 1fr 100px;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 6px;
+    font-weight: 600;
+    font-size: 0.85em;
+    color: var(--color-text-muted);
+}
+
+.storm-slot-actions {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.search-spaced {
+    margin-bottom: 20px;
+}
+
+/* ── Link modal (invite / password reset) ───────────────── */
+.link-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 15px 0;
+}
+
+.link-row input {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+}
+
+/* Mobile: the nav chrome swap breakpoint — see DESIGN_STANDARD.md */
+@media (max-width: 768px) {
+    /* Buttons collapse to icon-only here (global .action-label rule), so all four
+       fit on one line. nowrap + auto width instead of the old flex:1 stretch, which
+       forced wrapping and split "Reset Link" across two lines. */
+    .user-actions {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+    }
+
+    .user-actions button {
+        font-size: 0.85em;
+        padding: 8px 12px;
+    }
+
+    .login-entry {
+        grid-template-columns: 1fr;
+        gap: 5px;
+    }
+}

@@ -286,6 +286,7 @@ type AdminUserResponse struct {
 	MemberID            *int           `json:"member_id,omitempty"`
 	MemberName          *string        `json:"member_name,omitempty"`
 	IsAdmin             bool           `json:"is_admin"`
+	IsActive            bool           `json:"is_active"`
 	CreatedAt           string         `json:"created_at,omitempty"`
 	LastLogin           *string        `json:"last_login,omitempty"`
 	LoginCount          int            `json:"login_count"`

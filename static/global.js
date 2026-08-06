@@ -289,6 +289,31 @@ function clearButtonLoading(btn) {
     btn.textContent = btn._originalText ?? btn.textContent;
 }
 
+// ---- Clipboard ----
+// navigator.clipboard is unavailable on insecure origins (plain-HTTP LAN access is a
+// normal way this app is reached), so fall back to a hidden textarea + execCommand.
+function fallbackCopy(text, onSuccess) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+        if (document.execCommand('copy')) onSuccess();
+    } finally {
+        document.body.removeChild(ta);
+    }
+}
+
+function copyToClipboard(text, onSuccess) {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(onSuccess).catch(() => fallbackCopy(text, onSuccess));
+    } else {
+        fallbackCopy(text, onSuccess);
+    }
+}
+
 function svgIcon(name, size = 14) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', size);
