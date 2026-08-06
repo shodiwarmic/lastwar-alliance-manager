@@ -264,10 +264,13 @@ function displayUsers(users) {
 
 // Filter Users
 function filterUsers() {
-    const searchTerm = document.getElementById('user-search').value.toLowerCase();
+    // Fold accents on both sides so typing "Pacha" finds the member "Pàcha" — without
+    // this, an accented member name is only reachable if the username happens to match.
+    // foldSearch also lowercases, so no separate toLowerCase is needed.
+    const searchTerm = foldSearch(document.getElementById('user-search').value);
     const filtered = allUsers.filter(user =>
-        user.username.toLowerCase().includes(searchTerm) ||
-        (user.member_name && user.member_name.toLowerCase().includes(searchTerm))
+        foldSearch(user.username).includes(searchTerm) ||
+        (user.member_name && foldSearch(user.member_name).includes(searchTerm))
     );
     displayUsers(filtered);
 }
@@ -597,15 +600,14 @@ function populateLoginFilter() {
 
 function buildStatCard(value, label) {
     const card = document.createElement('div');
-    card.className = 'card';
-    card.style.cssText = 'margin-bottom:0;text-align:center;';
+    card.className = 'card stat-tile';
 
     const valDiv = document.createElement('div');
-    valDiv.style.cssText = 'font-size:2em;font-weight:bold;line-height:1;color:var(--color-text);';
+    valDiv.className = 'stat-tile-value';
     valDiv.textContent = value;
 
     const labelDiv = document.createElement('div');
-    labelDiv.style.cssText = 'font-size:0.85em;color:var(--color-text-mid);margin-top:5px;';
+    labelDiv.className = 'stat-tile-label';
     labelDiv.textContent = label;
 
     card.append(valDiv, labelDiv);
@@ -704,7 +706,13 @@ function displayLoginHistory(logins) {
     logins.forEach(login => tbody.appendChild(buildLoginRow(login)));
 
     table.append(thead, tbody);
-    loginsList.replaceChildren(table);
+
+    // Wrap in the global .table-scroll utility rather than relying on an
+    // admin-specific overflow rule — same pattern as allies/storm/officer_command.
+    const scroll = document.createElement('div');
+    scroll.className = 'table-scroll';
+    scroll.appendChild(table);
+    loginsList.replaceChildren(scroll);
 }
 
 // Extract device info from user agent → { icon, label, browser }

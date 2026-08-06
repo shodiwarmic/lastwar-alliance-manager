@@ -3254,18 +3254,8 @@ button {
     gap: 15px;
 }
 
-.filter-controls {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    margin-bottom: 20px;
-    padding: 15px;
-    background: var(--color-card);
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-    flex-wrap: wrap;
-}
-
+/* .filter-controls moved to admin.css — it was defined twice here and is used
+   only by the admin page. .filter-group stays: rankings.html uses it. */
 .filter-group {
     display: flex;
     align-items: center;
@@ -5022,22 +5012,6 @@ button {
     color: var(--color-text-mid);
 }
 
-/* Filter Controls */
-.filter-controls {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.filter-controls select {
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    color: var(--color-text);
-    font-size: 14px;
-}
-
 .checkbox-group {
     background: var(--color-surface);
     padding: 15px;
@@ -5095,12 +5069,6 @@ button {
 }
 
 /* Responsive admin rules moved to static/admin.css alongside the components they modify. */
-
-/* Login-history table scrolls horizontally on its own at any width if it can't
-   fit (was previously gated to ≤480px). */
-#logins-list {
-    overflow-x: auto;
-}
 
 /* Admin Panel Cards */
 .card {
