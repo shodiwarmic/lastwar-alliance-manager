@@ -137,28 +137,37 @@
 }
 
 /* Metric tiles above the login table — a grid of .card, per DESIGN_STANDARD
-   (no bespoke .stat-card). */
+   (no bespoke .stat-card).
+
+   The 130px floor is what makes this 2x2 on a phone: two tracks need ~270px,
+   which still fits inside the enclosing .card's 25px padding on a 360px device,
+   whereas the previous 200px floor needed 420px and so collapsed to a single tall
+   column. There are exactly four tiles, so on desktop auto-fit's surplus tracks
+   collapse and the four stretch to fill the row — still 4-across, no breakpoint. */
 .stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: clamp(10px, 2vw, 20px);
     margin-bottom: 20px;
 }
 
+/* Tiles shrink with the viewport rather than at a breakpoint, so four stacked
+   metrics don't push the table below the fold on mobile. */
 .stat-tile {
     margin-bottom: 0;
+    padding: clamp(12px, 3vw, 25px);
     text-align: center;
 }
 
 .stat-tile-value {
-    font-size: 2em;
+    font-size: clamp(1.5rem, 5vw, 2em);
     font-weight: bold;
     line-height: 1;
     color: var(--color-text);
 }
 
 .stat-tile-label {
-    font-size: 0.85em;
+    font-size: clamp(0.75rem, 2vw, 0.85em);
     color: var(--color-text-mid);
     margin-top: 5px;
 }
