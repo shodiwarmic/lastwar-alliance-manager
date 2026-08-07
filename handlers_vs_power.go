@@ -493,6 +493,15 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	var processedSummaries []string
 	seenSummaries := make(map[string]bool)
 
+	// Built once for every image and every row — resolveOCRPlayer's tier-3 folded
+	// fallback would otherwise rebuild it per candidate. Non-fatal on failure:
+	// exact and alias matching still work, only accent tolerance is lost.
+	foldIdx, err := buildFoldedNameIndex(tx, currentUserID)
+	if err != nil {
+		slog.Error("OCR import: folded name index build failed; continuing without accent tolerance", "error", err)
+		foldIdx = nil
+	}
+
 	// Iterate through the structured JSON the worker handed back
 	for category, records := range workerResults {
 		// If the user explicitly forced a category from the frontend, override the worker's logic
@@ -518,7 +527,7 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, record := range records {
-			_, resolvedScore, member, matchType := resolveOCRPlayer(tx, record, currentUserID)
+			_, resolvedScore, member, matchType := resolveOCRPlayer(tx, record, currentUserID, foldIdx)
 
 			row, exists := payloadMap[record.PlayerName]
 			if !exists {

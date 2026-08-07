@@ -412,6 +412,9 @@ func main() {
 	router.HandleFunc("/api/lastrank/prospect", authMiddleware(requirePermission("manage_recruiting", lastRankProspectLookup))).Methods("POST")
 	// Same finish handler, gated for recruiting officers (kind="prospects").
 	router.HandleFunc("/api/lastrank/prospect/finish", authMiddleware(requirePermission("manage_recruiting", lastRankFinish))).Methods("POST")
+	// Player name search, so recruiters find a prospect's LastRank id in-app instead
+	// of copy-pasting a URL from a browser tab.
+	router.HandleFunc("/api/lastrank/player-search", authMiddleware(requirePermission("manage_recruiting", lastRankPlayerSearch))).Methods("GET")
 
 	// Mobile API (bearer token auth, CSRF exempt)
 	router.HandleFunc("/api/mobile/login", mobileLogin).Methods("POST")

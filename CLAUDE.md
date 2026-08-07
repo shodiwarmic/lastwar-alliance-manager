@@ -217,6 +217,36 @@ Never bulk-enrich the whole roster — it's slow and abusive to the volunteer se
 no unique index): it deletes any same-named OCR/global alias first so global wins
 over background OCR, leaving per-user personal aliases alone.
 
+## Name matching — the folded fallback tier
+
+`resolveMemberAlias` (`handlers_vs_import.go`) resolves in three tiers: exact name →
+alias hierarchy (personal → global → OCR) → **accent-folded**. Tier 3 exists because
+SQLite's `LOWER()` and the `NOCASE` collation are both ASCII-only, so a roster
+`Pàcha` never matched an incoming `Pacha`. In the LastRank sync that miss cost
+twice: the member landed in "Unmatched names" *and* in "Possibly left the alliance",
+inviting an officer to archive an active member over a stray accent.
+
+`foldName` (`namematch.go`) is the Go counterpart of `window.foldSearch`
+(`static/global.js`) — NFD, drop `unicode.Mn`, lowercase. **Keep the two in sync**,
+or client-side search and server-side matching disagree about what is the same name.
+
+Two rules for tier 3:
+
+1. **A folded key reaching two or more distinct members is NO match.** Guessing
+   would silently attribute one player's stats to another; leaving the row unmatched
+   puts it in front of an officer. `foldedNameIndex.lookup` enforces this.
+2. **Build the index once per batch.** `resolveMemberAlias` is called once per
+   incoming row inside loops over the whole roster, so a tier 3 that rebuilds per
+   lookup is O(N²) queries on the single DB connection. Bulk callers use
+   `buildFoldedNameIndex` + `resolveMemberAliasWithIndex(tx, name, userID, idx)`;
+   plain `resolveMemberAlias` keeps the old signature and builds on demand (only on
+   a tier 1/2 miss) for genuine one-shot callers. Existing bulk sites: the LastRank
+   preview, `mobilePreview`, the OCR import, the contributions import, and the CSV
+   import. `namematch_test.go` guards the no-rebuild contract.
+
+Folding is **strictly additive** — it only runs after tiers 1 and 2 miss, so it can
+turn a miss into a match but never change an existing match.
+
 **Avatars** are hotlinked from the game CDN (`lastwar-cdn.akamaized.net` /
 `lastwar-cdn.lastwarapp.net`) — built via `buildLastRankAvatar()` in `global.js`
 with host failover. These hosts MUST be in the reverse-proxy CSP `img-src`
@@ -828,6 +858,26 @@ These names appear in older code but are NOT defined in `styles.css`. They silen
   - `.badge-hq` / `.badge-troop` / `.badge-profession` / `.badge-squad-type` — secondary member badges (used alongside `.member-rank`)
   - `.btn`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.btn-sm`
   - `.form-input` — input/select/textarea styling (alias for `.form-group input`)
+  - `.finder-*` — dropdown/head/item/name/meta/msg/err/action for the shared
+    type-ahead combobox (`buildRemoteFinder` in `global.js`)
+
+### Type-ahead pickers: use `buildRemoteFinder`
+
+`buildRemoteFinder(opts)` in `static/global.js` is the shared combobox: instant local
+matches as you type, plus a remote lookup behind an **explicit click**. Used by the
+Recruiting player picker.
+
+**Never fire the remote search per keystroke, debounced or otherwise.** Every remote
+source is the volunteer-run LastRank API behind the shared 1 req/sec limiter, so
+searching has to stay a deliberate act — one officer typing a name must not become a
+burst of upstream calls.
+
+> The older `.ext-find-*` (`external-alliances.js`) and `.vsl-find-*`
+> (`vs-league.js`) pickers predate this helper and still hand-roll the same
+> mechanics; migrating them is a pending follow-up. Note their CSS references
+> `--color-text-muted` / `--color-text` / `--color-surface`, none of which exist in
+> any theme block — fix those to `--text-muted` / `--text-primary` / `--bg-primary`
+> when migrating. Don't copy those blocks for anything new.
 
 ## Session Key Requirement
 

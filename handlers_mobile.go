@@ -121,13 +121,22 @@ func mobilePreview(w http.ResponseWriter, r *http.Request) {
 		AllMembers: allMembers,
 	}
 
+	// Built once for the whole batch — the tier-3 folded fallback inside
+	// resolveMemberAlias would otherwise rebuild it per entry. A failure is
+	// non-fatal: tiers 1 and 2 still resolve, we just lose accent tolerance.
+	foldIdx, err := buildFoldedNameIndex(tx, claims.UserID)
+	if err != nil {
+		slog.Error("mobilePreview: folded name index build failed; continuing without accent tolerance", "error", err)
+		foldIdx = nil
+	}
+
 	for _, entry := range req.Entries {
 		match := MobilePreviewMatch{
 			OriginalName: entry.Name,
 			Category:     entry.Category,
 			Score:        entry.Score,
 		}
-		member, matchType, err := resolveMemberAlias(tx, entry.Name, claims.UserID)
+		member, matchType, err := resolveMemberAliasWithIndex(tx, entry.Name, claims.UserID, foldIdx)
 		if err != nil {
 			resp.Unresolved = append(resp.Unresolved, match)
 		} else {

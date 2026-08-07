@@ -5,13 +5,26 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 )
 
-// resolveMemberAlias resolves aliases using the tiered Alias Engine
+// resolveMemberAlias resolves aliases using the tiered Alias Engine.
+//
+// This is the single-lookup form: on a tier 1/2 miss it builds the folded index
+// itself, costing one extra query. Callers resolving many names in a loop must
+// use resolveMemberAliasWithIndex with a prebuilt index instead — see
+// buildFoldedNameIndex in namematch.go.
 func resolveMemberAlias(tx *sql.Tx, providedName string, currentUserID int) (*Member, string, error) {
+	return resolveMemberAliasWithIndex(tx, providedName, currentUserID, nil)
+}
+
+// resolveMemberAliasWithIndex is resolveMemberAlias with a caller-supplied folded
+// index for tier 3. Pass nil to have it built on demand (and only on a tier 1/2
+// miss, so the common path never pays for it).
+func resolveMemberAliasWithIndex(tx *sql.Tx, providedName string, currentUserID int, idx *foldedNameIndex) (*Member, string, error) {
 	var m Member
 
 	// 1. Exact Name
@@ -22,16 +35,16 @@ func resolveMemberAlias(tx *sql.Tx, providedName string, currentUserID int) (*Me
 
 	// 2. Alias Hierarchy (Personal -> Global -> OCR)
 	query := `
-		SELECT m.id, m.name, m.rank, a.category 
+		SELECT m.id, m.name, m.rank, a.category
 		FROM member_aliases a
 		JOIN members m ON a.member_id = m.id
 		WHERE LOWER(a.alias) = LOWER(?) AND (a.user_id = ? OR a.user_id IS NULL)
-		ORDER BY 
-			CASE a.category 
-				WHEN 'personal' THEN 1 
-				WHEN 'global' THEN 2 
-				WHEN 'ocr' THEN 3 
-				ELSE 4 
+		ORDER BY
+			CASE a.category
+				WHEN 'personal' THEN 1
+				WHEN 'global' THEN 2
+				WHEN 'ocr' THEN 3
+				ELSE 4
 			END ASC
 		LIMIT 1`
 
@@ -39,6 +52,21 @@ func resolveMemberAlias(tx *sql.Tx, providedName string, currentUserID int) (*Me
 	err = tx.QueryRow(query, providedName, currentUserID).Scan(&m.ID, &m.Name, &m.Rank, &category)
 	if err == nil {
 		return &m, category + "_alias", nil
+	}
+
+	// 3. Accent-folded fallback. Tiers 1 and 2 compare with SQLite's LOWER(),
+	// which is ASCII-only, so "Pàcha" and "Pacha" miss each other. Folding
+	// catches that; an ambiguous fold is reported as no match rather than a
+	// guess (see foldedNameIndex.lookup).
+	if idx == nil {
+		built, err := buildFoldedNameIndex(tx, currentUserID)
+		if err != nil {
+			return nil, "none", sql.ErrNoRows
+		}
+		idx = built
+	}
+	if folded, ok := idx.lookup(providedName); ok {
+		return folded, "folded", nil
 	}
 
 	return nil, "none", sql.ErrNoRows
@@ -50,16 +78,21 @@ func resolveMemberAlias(tx *sql.Tx, providedName string, currentUserID int) (*Me
 // If no candidate resolves, it returns the heuristic fallback (candidates[0]) with
 // a nil Member so the caller can decide how to handle it (surface for manual review,
 // fall through to fuzzy matching, etc.).
-func resolveOCRPlayer(tx *sql.Tx, entry OCRPlayer, userID int) (name string, score int64, member *Member, matchType string) {
+//
+// idx is the shared accent-folded index for tier 3; pass nil to have it built on
+// demand. Callers in a loop should build it once (buildFoldedNameIndex) and pass
+// it — an ambiguous OCR row tries every candidate, so a nil index can mean
+// several rebuilds for a single entry.
+func resolveOCRPlayer(tx *sql.Tx, entry OCRPlayer, userID int, idx *foldedNameIndex) (name string, score int64, member *Member, matchType string) {
 	if len(entry.Candidates) == 0 {
-		m, mt, err := resolveMemberAlias(tx, entry.PlayerName, userID)
+		m, mt, err := resolveMemberAliasWithIndex(tx, entry.PlayerName, userID, idx)
 		if err != nil {
 			return entry.PlayerName, entry.Score, nil, "none"
 		}
 		return entry.PlayerName, entry.Score, m, mt
 	}
 	for _, c := range entry.Candidates {
-		m, mt, err := resolveMemberAlias(tx, c.PlayerName, userID)
+		m, mt, err := resolveMemberAliasWithIndex(tx, c.PlayerName, userID, idx)
 		if err == nil && m != nil {
 			return c.PlayerName, c.Score, m, mt
 		}
@@ -334,6 +367,15 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 
 	validDays := []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
 
+	// Built once for the whole file — the tier-3 folded fallback inside
+	// resolveMemberAlias would otherwise rebuild it for every unmatched row.
+	// Non-fatal on failure: exact and alias matching still work.
+	foldIdx, err := buildFoldedNameIndex(tx, currentUserID)
+	if err != nil {
+		slog.Error("CSV import: folded name index build failed; continuing without accent tolerance", "error", err)
+		foldIdx = nil
+	}
+
 	for _, row := range records[1:] {
 		if len(row) <= nameIdx {
 			continue
@@ -361,7 +403,7 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 			importRow.Total = providedTotal
 		}
 
-		member, matchType, err := resolveMemberAlias(tx, providedName, currentUserID)
+		member, matchType, err := resolveMemberAliasWithIndex(tx, providedName, currentUserID, foldIdx)
 		if err != nil {
 			importRow.MatchType = "unresolved"
 			response.Unresolved = append(response.Unresolved, importRow)

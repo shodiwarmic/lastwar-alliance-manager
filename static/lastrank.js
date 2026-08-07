@@ -135,7 +135,7 @@
         if (candidates.length === 0) {
             bodyEl.appendChild(el('p', { className: 'lr-empty', textContent: 'Everyone on your roster is active on LastRank.' }));
         } else {
-            bodyEl.appendChild(el('p', { className: 'lr-summary', textContent: 'Nothing happens unless you tick Archive. Verify first — a name LastRank couldn’t match (alias drift) can appear here even if the member is still active.' }));
+            bodyEl.appendChild(el('p', { className: 'lr-summary', textContent: 'Nothing happens unless you tick Archive. Verify first — a member who changed their in-game name to something we have no alias for can appear here even though they are still active. (Accent-only differences are matched automatically and no longer land here.)' }));
         }
         candidates.forEach(c => {
             const cb = el('input', { type: 'checkbox' }); // default unchecked = no action
@@ -278,13 +278,21 @@
         });
 
         const unmatched = [];
+        const incomplete = [];
         (previewData.unmatched || []).forEach(u => {
+            if (u._member) clearFieldError(u._member);
             const action = u._action ? u._action.value : 'ignore';
             if (action === 'ignore') return;
             const entry = { lastrank_name: u.lastrank_name, lastrank_public_id: u.lastrank_public_id, action };
             if (action === 'alias' || action === 'rename') {
                 const mid = u._member ? parseInt(u._member.value, 10) : 0;
-                if (!mid) return; // skip incomplete selections
+                if (!mid) {
+                    // Used to be skipped silently: the officer picked an action, saw a
+                    // success toast, and the row was never applied. Block instead.
+                    if (u._member) setFieldError(u._member, 'Pick a member, or set this row to Ignore.');
+                    incomplete.push(u);
+                    return;
+                }
                 entry.member_id = mid;
             }
             if (action === 'add') {
@@ -299,6 +307,12 @@
             }
             unmatched.push(entry);
         });
+
+        if (incomplete.length) {
+            showToast(`Pick a member for ${incomplete.length} unmatched name(s), or set them to Ignore.`, 'error');
+            if (incomplete[0]._member) incomplete[0]._member.scrollIntoView({ block: 'center' });
+            return;
+        }
 
         const archive = (previewData.archive_candidates || [])
             .filter(c => c._archive && c._archive.checked)

@@ -200,6 +200,70 @@ func searchLastRankAlliances(ctx context.Context, query string, server *int, lim
 	return out, nil
 }
 
+// lastrankPlayerRow is one row of /v1/global/players. Verified live 2026-08-07:
+// every field below is present in real responses, and kills_rank / thp / thp_rank
+// / svip_level / country come back null for some players — hence pointers
+// throughout. alliance_abbr / alliance_name are null for an unaffiliated player.
+type lastrankPlayerRow struct {
+	PublicID     int     `json:"public_id"`
+	Name         string  `json:"name"`
+	ServerID     *int    `json:"server_id"`
+	AllianceAbbr *string `json:"alliance_abbr"`
+	AllianceName *string `json:"alliance_name"`
+	Country      *string `json:"country"`
+	Power        *int64  `json:"power"`
+	Kills        *int64  `json:"kills"`
+	THP          *int64  `json:"thp"`
+	PhotoURL     *string `json:"photo_url"`
+	CapturedAt   *string `json:"captured_at"`
+}
+
+type lastrankPlayerPage struct {
+	Rows []lastrankPlayerRow `json:"rows"`
+}
+
+// searchLastRankPlayers finds players by fuzzy name via /v1/global/players,
+// optionally restricted to a single server (strict) — the same "strict server +
+// fuzzy name" rule as the alliance picker. Uses the shared 1 req/sec limiter; the
+// caller owns a bounded context.
+//
+// Search is cross-server when server is nil, which is what recruiting wants: a
+// prospect is by definition somebody else's player, often on another server.
+func searchLastRankPlayers(ctx context.Context, query string, server *int, limit int) ([]LastRankPlayerSearchResult, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	q := url.Values{}
+	q.Set("search", query)
+	q.Set("sort_by", "power")
+	q.Set("sort_dir", "desc")
+	q.Set("limit", strconv.Itoa(limit))
+	if server != nil {
+		q.Set("server_id", strconv.Itoa(*server))
+	}
+	var page lastrankPlayerPage
+	if err := lastRankDo(ctx, http.MethodGet, "/v1/global/players?"+q.Encode(), &page); err != nil {
+		return nil, err
+	}
+	out := make([]LastRankPlayerSearchResult, 0, len(page.Rows))
+	for _, row := range page.Rows {
+		out = append(out, LastRankPlayerSearchResult{
+			PublicID:     row.PublicID,
+			Name:         row.Name,
+			Server:       row.ServerID,
+			AllianceTag:  row.AllianceAbbr,
+			AllianceName: row.AllianceName,
+			Country:      row.Country,
+			Power:        row.Power,
+			Kills:        row.Kills,
+			HeroPower:    row.THP,
+			PhotoURL:     row.PhotoURL,
+			CapturedAt:   row.CapturedAt,
+		})
+	}
+	return out, nil
+}
+
 // getLastRankPlayer reads the cached player record (fast). Used by the bulk
 // extended sync — enriching the whole roster would mean ~100 live game pulls,
 // which is slow and abusive to the volunteer service.

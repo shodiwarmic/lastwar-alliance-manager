@@ -925,14 +925,67 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ── LastRank prospect enrichment ──────────────────────────────────────────────
 let lrCurrentProspect = null;
+let lrProspectFinder = null;
+
+// The lookup field takes either a name to search or a URL/ID to use directly.
+// Recognising the latter keeps the old paste-the-URL workflow working for anyone
+// who already has the link, while a name goes to the in-app search.
+function looksLikeLastRankPlayerRef(v) {
+    return /\/p\/\d+/.test(v) || /^\d+$/.test(v.trim());
+}
+
+// Built once, lazily — the modal's fields exist from first render, and rebuilding
+// per open would stack duplicate listeners on the same input.
+function ensureProspectFinder() {
+    if (lrProspectFinder) return lrProspectFinder;
+    const input = document.getElementById('lr-prospect-input');
+    const serverInput = document.getElementById('lr-prospect-server');
+    const host = document.getElementById('lr-prospect-find');
+    if (!input || !host) return null;
+
+    lrProspectFinder = buildRemoteFinder({
+        inputs: [input],
+        remoteHead: 'From LastRank',
+        actionLabel: q => `Search LastRank for “${q}”`,
+        // A URL or bare ID needs no search — Fetch consumes it as-is.
+        guard: q => looksLikeLastRankPlayerRef(q)
+            ? 'That looks like a LastRank ID — just press Fetch.' : null,
+        remoteSearch: async q => {
+            const srv = (serverInput?.value || '').trim();
+            const url = '/api/lastrank/player-search?q=' + encodeURIComponent(q)
+                + (srv ? '&server=' + encodeURIComponent(srv) : '');
+            const res = await fetch(url);
+            if (!res.ok) throw new Error((await res.text()) || 'Search failed');
+            return await res.json();
+        },
+        item: r => ({
+            label: r.name,
+            meta: [
+                r.server != null ? 'S' + r.server : null,
+                r.alliance_tag ? '[' + r.alliance_tag + ']' : null,
+                r.power != null ? formatPower(r.power) + ' pw' : null,
+                r.hero_power != null ? formatPower(r.hero_power) + ' hero' : null,
+            ].filter(Boolean).join(' · '),
+            // Picking fills the id and fetches straight away — the officer already
+            // made the identifying choice, so a second click would be busywork.
+            onPick: p => { input.value = String(p.public_id); doLastRankProspectFetch(); },
+        }),
+    });
+    host.appendChild(lrProspectFinder.dropdown);
+    return lrProspectFinder;
+}
 
 function openLastRankProspectModal(p) {
     lrCurrentProspect = p;
     const modal = document.getElementById('lastrank-prospect-modal');
     document.getElementById('lr-prospect-name').textContent = p.name + (p.lastrank_public_id ? ` (saved ID: ${p.lastrank_public_id})` : '');
-    document.getElementById('lr-prospect-input').value = '';
+    const input = document.getElementById('lr-prospect-input');
+    // Seed with the prospect's name so the officer can just hit Enter.
+    input.value = p.lastrank_public_id ? '' : (p.name || '');
+    const serverInput = document.getElementById('lr-prospect-server');
+    if (serverInput) serverInput.value = p.server || '';
     document.getElementById('lr-prospect-result').textContent = '';
-    document.getElementById('lr-prospect-search').href = 'https://lastrank.fun/search?q=' + encodeURIComponent(p.name);
+    ensureProspectFinder()?.close();
     if (modal) { modal.style.display = 'flex'; if (typeof trapFocus === 'function') trapFocus(modal); }
 }
 
@@ -941,12 +994,23 @@ async function doLastRankProspectFetch() {
     const input = document.getElementById('lr-prospect-input');
     const result = document.getElementById('lr-prospect-result');
     const btn = document.getElementById('lr-prospect-fetch-btn');
+
+    // A name in the box means "search", not "fetch" — sending it as-is would only
+    // earn a 400 from the ID parser. Blank is fine: the server falls back to the
+    // prospect's saved ID.
+    const raw = input.value.trim();
+    if (raw && !looksLikeLastRankPlayerRef(raw)) {
+        lrProspectFinder?.runRemote();
+        return;
+    }
+    lrProspectFinder?.close();
+
     btn.disabled = true;
     result.textContent = 'Fetching…';
     try {
         const res = await fetch('/api/lastrank/prospect', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prospect_id: lrCurrentProspect.id, lastrank_input: input.value.trim() })
+            body: JSON.stringify({ prospect_id: lrCurrentProspect.id, lastrank_input: raw })
         });
         if (!res.ok) throw new Error((await res.text()) || 'Lookup failed');
         const d = await res.json();

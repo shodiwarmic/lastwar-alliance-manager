@@ -6,11 +6,14 @@ package main
 // the capture date as recorded_at), and activity logging.
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // rowQuerier is satisfied by both *sql.DB and *sql.Tx.
@@ -123,7 +126,9 @@ func lastRankInsertHistory(tx *sql.Tx, table, valueCol string, memberID int, val
 // alliance preview instead runs the same priority as explicit passes over the
 // whole roster (see lastRankPreview), so a public_id match can't be beaten to a
 // member by another entry's name match.
-func lastRankResolveMember(tx *sql.Tx, name string, publicID, userID int) (*Member, string, error) {
+// idx is the shared accent-folded index for tier 3; pass nil to have it built on
+// demand (see resolveMemberAliasWithIndex).
+func lastRankResolveMember(tx *sql.Tx, name string, publicID, userID int, idx *foldedNameIndex) (*Member, string, error) {
 	if publicID != 0 {
 		var m Member
 		err := tx.QueryRow("SELECT id, name, rank FROM members WHERE lastrank_public_id = ?", publicID).Scan(&m.ID, &m.Name, &m.Rank)
@@ -131,7 +136,46 @@ func lastRankResolveMember(tx *sql.Tx, name string, publicID, userID int) (*Memb
 			return &m, "public_id", nil
 		}
 	}
-	return resolveMemberAlias(tx, name, userID)
+	return resolveMemberAliasWithIndex(tx, name, userID, idx)
+}
+
+// lastRankPlayerSearch backs the recruiting player picker. Mirrors
+// searchExternalAlliancesLastRank: bounded context, generic client-facing errors,
+// and a distinct 503 when upstream is merely slow so the UI can say "try again"
+// rather than "broken".
+//
+// Server is optional here, unlike the alliance picker. A prospect is somebody
+// else's player and is frequently on another server, so defaulting to a strict
+// server filter would hide the very people recruiters are looking for.
+func lastRankPlayerSearch(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		http.Error(w, "Enter a player name to search", http.StatusBadRequest)
+		return
+	}
+	var server *int
+	if s := strings.TrimSpace(r.URL.Query().Get("server")); s != "" {
+		n, ok := parseServerNumber(s)
+		if !ok {
+			http.Error(w, "server must be a number", http.StatusBadRequest)
+			return
+		}
+		server = &n
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	results, err := searchLastRankPlayers(ctx, q, server, 20)
+	if err != nil {
+		slogLastRank("lastRankPlayerSearch failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that search", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, results)
 }
 
 // --- Phase 1: alliance preview ---
@@ -182,12 +226,24 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 	// Resolve every entry to a roster member BEFORE building diffs, in passes, so
 	// a stored public_id always beats a name/alias match on a different entry:
 	//   0. ranked entries with a stored lastrank_public_id (authoritative)
-	//   1. ranked entries by name/alias (first-time syncs, no stored id)
+	//   1. ranked entries by name/alias, then accent-folded (first-time syncs,
+	//      no stored id; folding rescues "Pàcha" vs "Pacha", which would
+	//      otherwise land in BOTH unmatched and the archive candidates)
 	//   2. unranked entries — resolved only to mark "likely left"; never claim,
 	//      so an unranked entry can't take a member away from a ranked one.
 	// A member is claimed by at most one entry; a later entry resolving to an
 	// already-claimed member is reported as unmatched rather than proposing a
 	// second, conflicting set of changes for the same member.
+	// Built once for the whole reconciliation: resolveMemberAlias's tier-3 folded
+	// fallback would otherwise rebuild it per entry, making this O(N²) queries on
+	// the app's single connection. A failure here is not fatal — tiers 1 and 2
+	// still work, we just lose accent tolerance for this run.
+	foldIdx, err := buildFoldedNameIndex(tx, userID)
+	if err != nil {
+		slogLastRank("lastrank folded name index build failed; continuing without accent tolerance", err)
+		foldIdx = nil
+	}
+
 	matches := make([]*Member, len(alliance.Members))
 	matchTypes := make([]string, len(alliance.Members))
 	ranked := make([]bool, len(alliance.Members))
@@ -211,7 +267,7 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 		if !ranked[i] || matches[i] != nil {
 			continue
 		}
-		m, mt, err := resolveMemberAlias(tx, lm.Name, userID)
+		m, mt, err := resolveMemberAliasWithIndex(tx, lm.Name, userID, foldIdx)
 		if err != nil || m == nil || claimed[m.ID] {
 			continue
 		}
@@ -222,7 +278,7 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 		if ranked[i] {
 			continue
 		}
-		if m, _, err := lastRankResolveMember(tx, lm.Name, lm.PublicID, userID); err == nil && m != nil {
+		if m, _, err := lastRankResolveMember(tx, lm.Name, lm.PublicID, userID, foldIdx); err == nil && m != nil {
 			matches[i] = m
 		}
 	}
