@@ -150,9 +150,13 @@ func deferPendingChanges(ids []int, status string, userID int) (int, error) {
 	}
 	n := 0
 	for _, id := range ids {
+		// Guarded on the status CHANGING, not on it being 'open': an officer moving
+		// a row from "not now" to "not until it changes" is a real edit, and an
+		// open-only guard would silently no-op it. Re-applying the same deferral is
+		// still a no-op, which is what the count should say.
 		res, err := tx.Exec(`UPDATE lastrank_pending_changes
 			SET status = ?, deferred_by_user_id = ?, deferred_at = CURRENT_TIMESTAMP
-			WHERE id = ? AND status = 'open'`, status, actor, id)
+			WHERE id = ? AND status != ?`, status, actor, id, status)
 		if err != nil {
 			return 0, err
 		}

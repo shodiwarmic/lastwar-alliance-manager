@@ -189,7 +189,8 @@
                 showToast(e.message || 'Could not apply.', 'error');
             }
         });
-        row.appendChild(el('div', { className: 'lr-unmatched-controls' }, applyBtn, deferControls(p)));
+        row.appendChild(el('div', { className: 'lr-unmatched-controls' }, applyBtn,
+            deferControls(p, () => applyBtn.remove())));
         return row;
     }
 
@@ -269,7 +270,8 @@
             bodyEl.appendChild(el('div', { className: 'lr-row' },
                 el('div', { className: 'lr-row-name', textContent: `${c.name} (${c.rank})` }),
                 el('label', { className: 'lr-field' }, cb, el('span', {}, ` Archive — ${c.reason}`)),
-                deferControls(pendingFor('archive:m:' + c.member_id))
+                deferControls(pendingFor('archive:m:' + c.member_id),
+                    () => { cb.checked = false; cb.disabled = true; })
             ));
         });
     }
@@ -292,10 +294,13 @@
     // "Not now" hides an item until a genuinely newer pull; "Not until it changes"
     // hides it until LastRank proposes something different. Both are reversible —
     // nothing is applied and nothing is lost.
-    function deferControls(pending) {
+    // onDeferred neutralises whatever control this sits beside. Without it a
+    // deferred item keeps its live checkbox/select, and Confirm would apply the
+    // very change the officer just parked.
+    function deferControls(pending, onDeferred) {
         if (!pending) return null;
         const wrap = el('span', { className: 'lr-defer' });
-        const mk = (label, action, title) => {
+        const mk = (label, action, title, done) => {
             const b = el('button', { className: 'btn btn-secondary btn-sm', type: 'button', title });
             b.textContent = label;
             b.addEventListener('click', async () => {
@@ -306,7 +311,8 @@
                         body: JSON.stringify({ ids: [pending.id], action })
                     });
                     if (!res.ok) throw new Error((await res.text()) || 'Could not defer');
-                    wrap.replaceChildren(el('span', { className: 'lr-skip', textContent: 'deferred' }));
+                    wrap.replaceChildren(el('span', { className: 'lr-skip', textContent: done }));
+                    if (onDeferred) onDeferred();
                     refreshPendingBadge();
                 } catch (e) {
                     b.disabled = false;
@@ -316,8 +322,10 @@
             return b;
         };
         wrap.append(
-            mk('Not now', 'defer_once', 'Hide until a newer LastRank pull'),
-            mk('Not until it changes', 'defer_until_changed', 'Hide until LastRank proposes something different')
+            mk('Not now', 'defer_once', 'Hide until a newer LastRank pull',
+                'deferred until a newer pull'),
+            mk('Not until it changes', 'defer_until_changed', 'Hide until LastRank proposes something different',
+                'deferred until LastRank changes it')
         );
         return wrap;
     }
@@ -364,7 +372,8 @@
                 el('span', { className: 'lr-skip', textContent: `  (roster: ${m.name_change.current})` })));
             const nameMid = m.matched_member && m.matched_member.id;
             row.appendChild(el('div', { className: 'lr-unmatched-controls' }, sel,
-                deferControls(pendingFor('name:m:' + nameMid))));
+                deferControls(pendingFor('name:m:' + nameMid),
+                    () => { sel.value = ''; sel.disabled = true; })));
         }
 
         const pf = statField('Power', m.power, m, 'power');
@@ -387,7 +396,8 @@
                 el('span', {}, `Rank: ${m.rank_diff.current} → `),
                 el('span', { className: 'lr-new', textContent: m.rank_diff.new }),
                 el('span', { className: 'lr-skip', textContent: '  (review — leave unchecked to keep current)' }),
-                deferControls(pendingFor('rank:m:' + mid))));
+                deferControls(pendingFor('rank:m:' + mid),
+                    () => { cb.checked = false; cb.disabled = true; })));
         }
         return row;
     }
@@ -437,7 +447,14 @@
             el('div', { className: 'lr-unmatched-controls' }, actionSel, memberSel,
                 deferControls(pendingFor(u.lastrank_public_id
                     ? 'unmatched:p:' + u.lastrank_public_id
-                    : 'unmatched:n:' + foldSearch(u.lastrank_name)))),
+                    : 'unmatched:n:' + foldSearch(u.lastrank_name)),
+                    () => {
+                        actionSel.value = 'ignore';
+                        actionSel.disabled = true;
+                        memberSel.style.display = 'none';
+                        applyLabel.style.display = 'none';
+                        joinLabel.style.display = 'none';
+                    })),
             applyLabel,
             joinLabel
         );

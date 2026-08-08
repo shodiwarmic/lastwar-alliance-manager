@@ -235,3 +235,32 @@ func queueID(t *testing.T, subjectKey string) int {
 	}
 	return id
 }
+
+// Switching from "not now" to "not until it changes" is a real edit. An
+// open-only guard would silently no-op it and report success.
+func TestQueueDeferCanBeUpgradedBetweenKinds(t *testing.T) {
+	setupQueueTestDB(t)
+	id := seedQueueMember(t, "Warmic", "R3")
+	key := lastRankSubjectKey(PendingKindRank, id, 0, "")
+	reconcile(t, []pendingProposal{{Kind: PendingKindRank, MemberID: id, ProposedValue: "R4"}}, "2026-08-01T00:00:00Z")
+	rowID := queueID(t, key)
+
+	if n, err := deferPendingChanges([]int{rowID}, PendingDeferOnce, 1); err != nil || n != 1 {
+		t.Fatalf("first defer: n=%d err=%v", n, err)
+	}
+	n, err := deferPendingChanges([]int{rowID}, PendingDeferUnchange, 1)
+	if err != nil {
+		t.Fatalf("upgrade defer: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("upgrading a deferral reported %d changed, want 1", n)
+	}
+	if status, _, _ := queueRow(t, PendingKindRank, key); status != PendingDeferUnchange {
+		t.Errorf("status = %q, want %q", status, PendingDeferUnchange)
+	}
+
+	// Re-applying the same deferral changes nothing, and should say so.
+	if n, _ := deferPendingChanges([]int{rowID}, PendingDeferUnchange, 1); n != 0 {
+		t.Errorf("re-applying the same deferral reported %d changed, want 0", n)
+	}
+}
