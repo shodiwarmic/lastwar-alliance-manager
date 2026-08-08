@@ -312,6 +312,24 @@ normalizes a client-declared origin. No other history/state tables carry a
 > capture idempotency) silently swallows `CHECK` violations too, so assert the
 > registry id is valid *before* inserting rather than letting `OR IGNORE` mask a bug.
 
+> **Two writers, two clocks — and change-only datapoints.** The ladder refresh
+> (`insertLadderStats`) appends a row per ladder capture, carrying `power_rank` /
+> `kills_rank`, stamped `recorded_at = <ladder captured_at>`. The NAP member gather
+> uses the per-alliance DETAIL endpoint and appends via `appendDetailDatapoint`,
+> stamped `recorded_at = <detail last_seen_at>` with ranks left **NULL** — a rank is
+> a position within one ladder capture, and the detail endpoint has no ladder to
+> rank against.
+>
+> The detail path writes a datapoint **only when power, kills and member_count all
+> differ from the temporally preceding row**. A point identical to its predecessor
+> carries no information: the series already says the value was that and has been
+> since, so recording it again just inflates the history at whatever cadence the
+> gather happens to run and makes "when did this change?" harder to read.
+>
+> The detail path must never touch `external_alliances.lastrank_captured_at`,
+> `power_rank` or `kills_rank` — see migration 058 for why mixing the two clocks
+> strands a row's rank at NULL forever. It guards on and writes `lastrank_seen_at`.
+
 ## Our own alliance must never be in `external_alliances` (Rule 2)
 
 `external_alliances` is a registry of **external** alliances. It feeds the VS League

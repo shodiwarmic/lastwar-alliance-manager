@@ -52,7 +52,22 @@ func seedExtAlliance(t *testing.T, lastrankID string, power, kills int64, seenAt
 	}
 }
 
-func int64p(v int64) *int64 { return &v }
+// snap builds a detail snapshot for the seeded test alliance.
+func snap(power, kills int64, members int, seen string) napDetailSnapshot {
+	return napDetailSnapshot{
+		LastRankID: "abc123", Server: 1712, Tag: "TEST", Name: "Test Alliance",
+		Power: power, Kills: kills, MemberCount: members, Seen: seen,
+	}
+}
+
+func countHistory(t *testing.T) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM alliance_stats_history`).Scan(&n); err != nil {
+		t.Fatalf("count history: %v", err)
+	}
+	return n
+}
 
 // The gather already pays for the per-alliance detail request to get a member
 // count; power and kills come back in the same response, so discarding them was
@@ -61,7 +76,7 @@ func TestNAPSnapshotAppliesFreePowerAndKills(t *testing.T) {
 	setupNAPTestDB(t)
 	seedExtAlliance(t, "abc123", 100, 200, "2026-08-01T00:00:00Z", "2026-08-01 00:00:00", 5)
 
-	applied, err := storeNAPAllianceSnapshot("abc123", "", 87, int64p(999), int64p(888), "2026-08-06T00:00:00Z")
+	applied, _, err := storeNAPAllianceSnapshot("", snap(999, 888, 87, "2026-08-06T00:00:00Z"))
 	if err != nil {
 		t.Fatalf("storeNAPAllianceSnapshot: %v", err)
 	}
@@ -83,7 +98,7 @@ func TestNAPSnapshotStaleDetailDoesNotWalkBackStats(t *testing.T) {
 	setupNAPTestDB(t)
 	seedExtAlliance(t, "abc123", 5000, 6000, "2026-08-06T00:00:00Z", "2026-08-06 00:00:00", 3)
 
-	applied, err := storeNAPAllianceSnapshot("abc123", "", 91, int64p(10), int64p(20), "2026-08-01T00:00:00Z")
+	applied, _, err := storeNAPAllianceSnapshot("", snap(10, 20, 91, "2026-08-01T00:00:00Z"))
 	if err != nil {
 		t.Fatalf("storeNAPAllianceSnapshot: %v", err)
 	}
@@ -107,7 +122,7 @@ func TestNAPSnapshotLeavesLadderColumnsAlone(t *testing.T) {
 	setupNAPTestDB(t)
 	seedExtAlliance(t, "abc123", 100, 200, "2026-08-01T00:00:00Z", "2026-08-01 00:00:00", 7)
 
-	if _, err := storeNAPAllianceSnapshot("abc123", "", 50, int64p(999), int64p(888), "2026-08-06T00:00:00Z"); err != nil {
+	if _, _, err := storeNAPAllianceSnapshot("", snap(999, 888, 50, "2026-08-06T00:00:00Z")); err != nil {
 		t.Fatalf("storeNAPAllianceSnapshot: %v", err)
 	}
 	r := readExtRow(t, "abc123")
@@ -129,11 +144,77 @@ func TestNAPSnapshotLeavesLadderColumnsAlone(t *testing.T) {
 // no row to update. That must report "not applied" rather than claiming a write.
 func TestNAPSnapshotReportsNoWriteForUnregisteredAlliance(t *testing.T) {
 	setupNAPTestDB(t)
-	applied, err := storeNAPAllianceSnapshot("not-in-registry", "", 42, int64p(1), int64p(2), "2026-08-06T00:00:00Z")
-	if err != nil {
-		t.Fatalf("storeNAPAllianceSnapshot: %v", err)
+	d := snap(1, 2, 42, "2026-08-06T00:00:00Z")
+	d.LastRankID = "not-in-registry"
+	applied, _, err := storeNAPAllianceSnapshot("", d)
+	// No registry row and not our own alliance: there is no valid subject key, and
+	// INSERT OR IGNORE would have swallowed the CHECK violation silently.
+	if err == nil {
+		t.Fatal("expected an error rather than a silently-dropped datapoint")
 	}
 	if applied {
 		t.Error("reported a write for an alliance with no registry row")
+	}
+}
+
+// The rule: a datapoint identical to its predecessor carries no information. The
+// series already says the value was that, and has been since — recording it again
+// just inflates the history at whatever cadence the gather happens to run.
+func TestDetailDatapointSkippedWhenUnchanged(t *testing.T) {
+	setupNAPTestDB(t)
+	seedExtAlliance(t, "abc123", 100, 200, "", "", 5)
+
+	_, added, err := storeNAPAllianceSnapshot("", snap(500, 600, 80, "2026-08-01T00:00:00Z"))
+	if err != nil || !added {
+		t.Fatalf("first datapoint not recorded (added=%v, err=%v)", added, err)
+	}
+	if got := countHistory(t); got != 1 {
+		t.Fatalf("history rows = %d, want 1", got)
+	}
+
+	// Same values, later capture → no new datapoint.
+	_, added, err = storeNAPAllianceSnapshot("", snap(500, 600, 80, "2026-08-02T00:00:00Z"))
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if added {
+		t.Error("recorded a duplicate datapoint identical to its predecessor")
+	}
+	if got := countHistory(t); got != 1 {
+		t.Errorf("history rows = %d, want 1 — the series gained a redundant point", got)
+	}
+
+	// Any change at all → a new datapoint. Member count alone counts as a change.
+	_, added, err = storeNAPAllianceSnapshot("", snap(500, 600, 81, "2026-08-03T00:00:00Z"))
+	if err != nil {
+		t.Fatalf("third call: %v", err)
+	}
+	if !added {
+		t.Error("a changed member count should record a datapoint")
+	}
+	if got := countHistory(t); got != 2 {
+		t.Errorf("history rows = %d, want 2", got)
+	}
+}
+
+// Ranks are a position WITHIN a ladder capture; the detail endpoint has no ladder
+// to rank against, so claiming one would be a fabricated number.
+func TestDetailDatapointLeavesRanksNull(t *testing.T) {
+	setupNAPTestDB(t)
+	seedExtAlliance(t, "abc123", 100, 200, "", "", 5)
+	if _, _, err := storeNAPAllianceSnapshot("", snap(1, 2, 3, "2026-08-01T00:00:00Z")); err != nil {
+		t.Fatalf("storeNAPAllianceSnapshot: %v", err)
+	}
+	var pr, kr sql.NullInt64
+	var source string
+	if err := db.QueryRow(`SELECT power_rank, kills_rank, source FROM alliance_stats_history
+		ORDER BY id DESC LIMIT 1`).Scan(&pr, &kr, &source); err != nil {
+		t.Fatalf("read datapoint: %v", err)
+	}
+	if pr.Valid || kr.Valid {
+		t.Error("detail-sourced datapoint claimed a ladder rank")
+	}
+	if source != "lastrank" {
+		t.Errorf("source = %q, want lastrank", source)
 	}
 }

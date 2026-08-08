@@ -26,7 +26,15 @@ type napMembersJob struct {
 	actor      jobActor
 	server     int
 	capturedAt string
-	byID       map[int]string // job item RefID → lastrank_id
+	byID       map[int]napJobTarget // job item Seq → what to fetch and how to key it
+}
+
+// napJobTarget carries the identity Step needs, resolved once in Plan. IsOwn
+// matters because our own alliance has no registry row (Rule 2) and so keys its
+// history datapoint on is_own + server instead of external_alliance_id.
+type napJobTarget struct {
+	LastRankID string
+	IsOwn      bool
 }
 
 // Plan mirrors getNAP's assembly (registry ladder + our own row, truncated to the
@@ -64,7 +72,7 @@ func (j *napMembersJob) Plan(ctx context.Context) ([]jobItem, error) {
 		return (alliances[i].MemberCount == nil) && (alliances[k].MemberCount != nil)
 	})
 
-	j.byID = map[int]string{}
+	j.byID = map[int]napJobTarget{}
 	var items []jobItem
 	for _, a := range alliances {
 		if a.LastRankID == nil || strings.TrimSpace(*a.LastRankID) == "" {
@@ -83,22 +91,22 @@ func (j *napMembersJob) Plan(ctx context.Context) ([]jobItem, error) {
 			label += " — us"
 		}
 		seq := len(items)
-		j.byID[seq] = strings.TrimSpace(*a.LastRankID)
+		j.byID[seq] = napJobTarget{LastRankID: strings.TrimSpace(*a.LastRankID), IsOwn: a.IsUs}
 		items = append(items, jobItem{Seq: seq, Label: label, RefID: a.ExternalID})
 	}
 	return items, nil
 }
 
 func (j *napMembersJob) Step(ctx context.Context, it jobItem) (jobStep, error) {
-	lastrankID := j.byID[it.Seq]
-	if lastrankID == "" {
+	target := j.byID[it.Seq]
+	if target.LastRankID == "" {
 		return jobStep{State: "skip", Detail: "no LastRank id"}, nil
 	}
 
 	// Bounded per item so one unresponsive alliance cannot stall the whole sweep.
 	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	a, err := fetchLastRankAlliance(fetchCtx, lastrankID)
+	a, err := fetchLastRankAlliance(fetchCtx, target.LastRankID)
 	if err != nil {
 		return jobStep{}, err
 	}
@@ -109,8 +117,17 @@ func (j *napMembersJob) Step(ctx context.Context, it jobItem) (jobStep, error) {
 	// Power and kills ride along free — they are already in this response, which we
 	// were fetching for the member count anyway. Same idea as the member extended
 	// sync taking power/hero/HQ off the one player record.
-	statsApplied, err := storeNAPAllianceSnapshot(
-		lastrankID, j.capturedAt, a.CurMember, &a.Fightpower, &a.ArmyKill, a.LastSeenAt)
+	statsApplied, historyAdded, err := storeNAPAllianceSnapshot(j.capturedAt, napDetailSnapshot{
+		LastRankID:  target.LastRankID,
+		IsOwn:       target.IsOwn,
+		Server:      a.ServerID,
+		Tag:         a.Abbr,
+		Name:        a.Name,
+		Power:       a.Fightpower,
+		Kills:       a.ArmyKill,
+		MemberCount: a.CurMember,
+		Seen:        a.LastSeenAt,
+	})
 	if err != nil {
 		return jobStep{}, err
 	}
@@ -126,6 +143,10 @@ func (j *napMembersJob) Step(ctx context.Context, it jobItem) (jobStep, error) {
 		detail = fmt.Sprintf("✓ %s power · %s kills · %d/%d members",
 			formatBigInt(a.Fightpower), formatBigInt(a.ArmyKill), a.CurMember, max)
 	}
+	if historyAdded {
+		counters["datapoints"] = 1
+		detail += " · +1 datapoint"
+	}
 	return jobStep{State: "done", Detail: detail, Counters: counters}, nil
 }
 
@@ -138,6 +159,6 @@ func (j *napMembersJob) Finish(ctx context.Context, counters map[string]int, pro
 	}
 	logActivity(j.actor.UserID, j.actor.Username, "imported", "alliance_stats",
 		fmt.Sprintf("server %d ladder", j.server), false,
-		fmt.Sprintf("%d alliances checked; %d member counts; %d power/kills refreshed; captured %s",
-			processed, synced, counters["stats_synced"], j.capturedAt))
+		fmt.Sprintf("%d alliances checked; %d member counts; %d power/kills refreshed; %d new datapoints; captured %s",
+			processed, synced, counters["stats_synced"], counters["datapoints"], j.capturedAt))
 }
