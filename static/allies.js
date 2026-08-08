@@ -39,8 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const napRefreshBtn = document.getElementById('nap-refresh-btn');
     if (napRefreshBtn) napRefreshBtn.addEventListener('click', () => refreshNap(napRefreshBtn));
 
-    const napMembersBtn = document.getElementById('nap-members-btn');
-    if (napMembersBtn) napMembersBtn.addEventListener('click', () => gatherNapMembers(napMembersBtn));
+    // The member-count gather is a server-side job; JobProgress owns its button.
+    wireNapMembersJob();
 
     // Show inactive toggle
     const toggle = document.getElementById('show-inactive-toggle');
@@ -718,113 +718,25 @@ async function refreshNap(btn) {
     }
 }
 
-// Phase 2: member counts, one alliance at a time, with per-alliance progress.
-async function gatherNapMembers(btn) {
-    if (btn.disabled) return;
-    if (!napData || !napData.alliances || !napData.alliances.length) {
-        showToast('Refresh the ladder first.', 'info');
-        return;
-    }
-
-    // Only alliances we can actually look up. Missing counts first, so an interrupted run resumes
-    // where it left off rather than re-fetching what it already has — same rule as the External
-    // Alliances gather.
-    const queue = napData.alliances
-        .filter(a => a.lastrank_id)
-        .sort((a, b) => (a.member_count == null ? 0 : 1) - (b.member_count == null ? 0 : 1));
-
-    if (!queue.length) {
-        showToast('No alliances have a LastRank ID yet. Refresh the ladder first.', 'info');
-        return;
-    }
-    if (!await showConfirm(
-        `Fetch member counts for ${queue.length} alliance(s)? Each is pulled from LastRank at ~1/second.`,
-        'Start')) return;
-
-    const progressEl = document.getElementById('nap-progress');
-    const original = btn.textContent;
-    const refreshBtn = document.getElementById('nap-refresh-btn');
-
-    btn.disabled = true;
-    if (refreshBtn) refreshBtn.disabled = true;
-    btn.textContent = 'Gathering…';
-
-    progressEl.style.display = 'block';
-    progressEl.replaceChildren();
-
-    const rowEls = new Map();
-    queue.forEach(a => {
-        const status = document.createElement('span');
-        status.className = 'nap-prog-status';
-        status.textContent = 'queued';
-
-        const name = document.createElement('span');
-        name.className = 'nap-prog-name';
-        const label = a.tag ? `[${a.tag}]${a.name ? ' ' + a.name : ''}` : (a.name || '?');
-        name.textContent = a.is_us ? label + ' — us' : label;
-
-        const row = document.createElement('div');
-        row.className = 'nap-prog-row';
-        row.append(name, status);
-        rowEls.set(a.lastrank_id, { row, status });
-        progressEl.appendChild(row);
+// Phase 2 (member counts) runs SERVER-SIDE as a background job — see jobs_nap.go.
+// Member counts are not on the ladder endpoint, so this costs one upstream request
+// per alliance at ~1/second; it no longer needs the tab held open.
+function wireNapMembersJob() {
+    const btn = document.getElementById('nap-members-btn');
+    const progress = document.getElementById('nap-progress');
+    if (!btn || !progress || !window.JobProgress) return;
+    window.JobProgress.attach({
+        kind: 'nap_members',
+        startBtn: btn,
+        container: progress,
+        statusEl: document.getElementById('nap-status'),
+        cancelBtn: document.getElementById('nap-members-cancel'),
+        busyEls: [document.getElementById('nap-refresh-btn')],
+        confirm: 'Fetch member counts for every ladder alliance with a LastRank ID? '
+            + 'Each is pulled at ~1/second on the server — you can leave this page.',
+        summarize: c => `Member counts gathered for ${c.members_synced || 0} alliance(s).`,
+        onDone: () => { if (typeof loadNap === 'function') loadNap(); },
     });
-
-    let synced = 0;
-    let i = 0;
-    for (const a of queue) {
-        i++;
-        setNapStatus(`Fetching ${i} of ${queue.length}…`);
-        const entry = rowEls.get(a.lastrank_id);
-        entry.row.className = 'nap-prog-row active';
-        entry.status.textContent = 'fetching…';
-        try {
-            const r = await fetch('/api/allies/nap/member', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lastrank_id: a.lastrank_id, captured_at: napData.captured_at }),
-            });
-            if (!r.ok) throw new Error(await r.text());
-            const data = await r.json();
-            if (data.applied) {
-                synced++;
-                entry.row.className = 'nap-prog-row done';
-                entry.status.textContent = `✓ ${data.member_count}/${data.max_member || 100} members`;
-            } else {
-                entry.row.className = 'nap-prog-row skip';
-                entry.status.textContent = 'no member count';
-            }
-        } catch {
-            // One alliance failing must not sink the run — the ladder is already saved, and the next
-            // gather picks up whatever is still missing.
-            entry.row.className = 'nap-prog-row err';
-            entry.status.textContent = 'error — skipped';
-        }
-    }
-
-    setNapStatus('');
-
-    // One activity row for the whole run, not one per alliance.
-    try {
-        await fetch('/api/allies/nap/finish', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                server: napData.server,
-                alliances: queue.length,
-                recorded: 0,
-                members_synced: synced,
-                captured_at: napData.captured_at,
-            }),
-        });
-    } catch { /* logging only — never fail the run over it */ }
-
-    showToast(`Member counts gathered for ${synced} of ${queue.length} alliance(s).`);
-    await loadNap();
-
-    btn.disabled = false;
-    if (refreshBtn) refreshBtn.disabled = false;
-    btn.textContent = original;
 }
 
 function setNapStatus(msg) {

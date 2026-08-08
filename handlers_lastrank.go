@@ -693,6 +693,68 @@ func syncOneMember(ctx context.Context, memberID int) (LastRankPlayerSyncRespons
 	return out, nil
 }
 
+// refreshOneProspect fetches a prospect's LastRank record and persists power, hero
+// power and avatar. Shared by the on-demand lookup handler and the bulk job.
+//
+// bulk picks the fetch strategy: a single on-demand lookup forces a fresh enrich
+// (the recruiter is waiting and wants live numbers), while a bulk refresh uses the
+// gentle GET-then-enrich-if-stale hybrid so a recruiter with many linked prospects
+// doesn't trigger a live game pull for each one.
+//
+// Shaped for db.SetMaxOpenConns(1): the caller has already resolved pubID and
+// closed its cursor, the fetch holds no database handle, and the writes follow.
+func refreshOneProspect(ctx context.Context, prospectID, pubID int, bulk bool) (LastRankProspectLookupResponse, error) {
+	out := LastRankProspectLookupResponse{ProspectID: prospectID, LastRankPublicID: pubID}
+
+	var player *lastrankPlayerResp
+	var err error
+	if bulk {
+		player, err = lastRankPlayerBulk(ctx, pubID)
+	} else {
+		player, err = lastRankPlayerFresh(ctx, pubID)
+	}
+	if err != nil {
+		return out, err
+	}
+
+	heroVal := int64(0)
+	if player.HeroPower != nil {
+		heroVal = *player.HeroPower
+	}
+	// Wrapped so a partial write can't survive, per the standing convention. The
+	// staleness gate this still lacks (a cached response can overwrite a fresher
+	// hand-entered figure) needs prospects.lastrank_captured_at, which arrives with
+	// the scheduler — it matters once this runs unattended, not on a click.
+	tx, err := db.Begin()
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE prospects SET power = ?, hero_power = ?, lastrank_photo_url = ?, lastrank_photo_failover = ?
+		WHERE id = ?`, player.Power, heroVal, player.PhotoURL, player.PhotoURLFailover, prospectID); err != nil {
+		return out, err
+	}
+	if err := tx.Commit(); err != nil {
+		return out, err
+	}
+
+	out.LastRankName = player.Name
+	out.Power = int64Ptr(player.Power)
+	out.HeroPower = player.HeroPower
+	out.ServerID = player.HomeServerID
+	out.BaseLevel = player.BaseLevel
+	out.Rank = lastRankRankToString(player.AllianceRank)
+	out.CaptureDate = player.LastSeenAt
+	out.Updated = true
+	if player.AllianceAbbr != nil {
+		out.AllianceAbbr = *player.AllianceAbbr
+	}
+	if player.AllianceName != nil {
+		out.AllianceName = *player.AllianceName
+	}
+	return out, nil
+}
+
 // lastRankFinish logs the single summary row for a browser-driven batch.
 func lastRankFinish(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
@@ -756,47 +818,11 @@ func lastRankProspectLookup(w http.ResponseWriter, r *http.Request) {
 		pubID = int(stored.Int64)
 	}
 
-	// Single on-demand lookup → force a fresh enrich. Bulk refresh → the gentle
-	// GET-then-enrich-if-stale hybrid, same as the member extended sync, so a
-	// recruiter with many linked prospects doesn't trigger a live pull each.
-	var player *lastrankPlayerResp
-	var err error
-	if req.Bulk {
-		player, err = lastRankPlayerBulk(r.Context(), pubID)
-	} else {
-		player, err = lastRankPlayerFresh(r.Context(), pubID)
-	}
+	out, err := refreshOneProspect(r.Context(), req.ProspectID, pubID, req.Bulk)
 	if err != nil {
 		slogLastRank("lastrank prospect lookup failed", err)
 		http.Error(w, "Couldn't reach LastRank for this player.", http.StatusBadGateway)
 		return
-	}
-
-	// Persist the enrichment onto the prospect record.
-	heroVal := int64(0)
-	if player.HeroPower != nil {
-		heroVal = *player.HeroPower
-	}
-	db.Exec("UPDATE prospects SET power = ?, hero_power = ?, lastrank_photo_url = ?, lastrank_photo_failover = ? WHERE id = ?",
-		player.Power, heroVal, player.PhotoURL, player.PhotoURLFailover, req.ProspectID)
-
-	out := LastRankProspectLookupResponse{
-		ProspectID:       req.ProspectID,
-		LastRankPublicID: pubID,
-		LastRankName:     player.Name,
-		Power:            int64Ptr(player.Power),
-		HeroPower:        player.HeroPower,
-		ServerID:         player.HomeServerID,
-		BaseLevel:        player.BaseLevel,
-		Rank:             lastRankRankToString(player.AllianceRank),
-		CaptureDate:      player.LastSeenAt,
-		Updated:          true,
-	}
-	if player.AllianceAbbr != nil {
-		out.AllianceAbbr = *player.AllianceAbbr
-	}
-	if player.AllianceName != nil {
-		out.AllianceName = *player.AllianceName
 	}
 
 	if !req.Bulk {

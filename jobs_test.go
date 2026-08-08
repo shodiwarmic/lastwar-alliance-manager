@@ -204,6 +204,46 @@ func TestJobSlotIsSingleOccupancy(t *testing.T) {
 	}
 }
 
+// THE deadlock guard. database.go sets SetMaxOpenConns(1): if the runner held a
+// cursor or an open transaction while a Step ran, every other query in the process
+// would block forever waiting for a connection that can never be freed — silently,
+// with no error and no log. That is the single worst failure mode in this design.
+//
+// Here a Step blocks (standing in for its upstream HTTP call) while the test issues
+// an ordinary query. If the runner ever regresses to holding the connection across
+// Step, this test hangs instead of passing, and `go test -timeout` reports it.
+func TestRunnerDoesNotHoldTheConnectionDuringStep(t *testing.T) {
+	setupJobsTestDB(t)
+	release := make(chan struct{})
+	f := &fakeRunner{stepErrOn: -1, block: release, items: []jobItem{{Seq: 0, Label: "alpha"}}}
+	registerFake(t, "test_deadlock", f)
+
+	if _, err := startJob("test_deadlock", jobActor{UserID: 1, Username: "tester"}); err != nil {
+		t.Fatalf("startJob: %v", err)
+	}
+	defer close(release)
+
+	// Wait until the Step is actually in flight, so we're querying mid-run.
+	deadline := time.Now().Add(2 * time.Second)
+	for len(f.steps()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	queried := make(chan error, 1)
+	go func() {
+		var n int
+		queried <- db.QueryRow(`SELECT COUNT(*) FROM members`).Scan(&n)
+	}()
+	select {
+	case err := <-queried:
+		if err != nil {
+			t.Fatalf("query during a running step failed: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("a query blocked while a job step was running — the runner is holding the single DB connection across Step")
+	}
+}
+
 // A row still marked 'running' after a restart belongs to a dead process.
 func TestReconcileMarksRunningJobsInterrupted(t *testing.T) {
 	setupJobsTestDB(t)

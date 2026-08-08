@@ -261,7 +261,8 @@
    Same component as the Members "Sync from LastRank" panel and the External Alliances gather:
    an icon heading, help text, a fast primary action + a slow per-item secondary one sharing a
    status line, and a per-alliance progress list beneath. Class names mirror .lastrank-* /
-   .ext-gather-* / .lr-prog-* deliberately — this is one pattern, not three. */
+   .ext-gather-* deliberately — this is one pattern, not three. The progress list itself is no
+   longer duplicated: all three now use the shared .job-progress component. */
 
 .nap-sync-section {
     margin-bottom: 20px;
@@ -290,29 +291,5 @@
 
 /* Per-alliance progress for the member-count pass */
 
-.nap-progress-list {
-    margin-top: 14px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    max-height: 320px;
-    overflow-y: auto;
-}
-
-.nap-prog-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 12px;
-    border-bottom: 1px solid var(--border-color);
-    font-size: 0.88rem;
-}
-
-.nap-prog-row:last-child { border-bottom: none; }
-.nap-prog-name { color: var(--text-primary); }
-.nap-prog-status { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
-.nap-prog-row.active { background: var(--bg-secondary); }
-.nap-prog-row.active .nap-prog-status { color: var(--color-primary); }
-.nap-prog-row.done .nap-prog-status { color: var(--color-success); }
-.nap-prog-row.skip .nap-prog-status { color: var(--text-muted); }
-.nap-prog-row.err .nap-prog-status { color: var(--color-danger); }
+/* Progress list: now the shared .job-progress / .job-prog-* component in
+   job-progress.css — see job-progress.js. */

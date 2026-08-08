@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="/job-progress.css">
     <link rel="stylesheet" href="/external-alliances.css">
 {{end}}
 
@@ -35,9 +36,12 @@
                 <button type="button" id="ext-gather-btn" class="btn btn-primary">
                     <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-crosshair"/></svg> Gather Latest Stats
                 </button>
+                <button type="button" id="ext-gather-cancel" class="btn btn-danger btn-sm" style="display:none;">
+                    <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Stop
+                </button>
                 <span id="ext-gather-status" class="status-msg"></span>
             </div>
-            <div id="ext-gather-progress" class="ext-prog-list" style="display:none;"></div>
+            <div id="ext-gather-progress" class="job-progress" style="display:none;"></div>
         </div>
     </section>
     {{end}}
@@ -122,5 +126,6 @@
      data-can-manage="{{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}true{{else}}false{{end}}"
      data-our-server-id="{{.OurServerID}}" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+<script src="/job-progress.js"></script>
 <script src="/external-alliances.js"></script>
 {{end}}

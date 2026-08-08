@@ -348,6 +348,66 @@ invariant).
 > My Profile, CSV import, prospect accept) and LastRank sync all append rows;
 > HQ never regresses (only a higher value is recorded).
 
+## Background jobs (`jobs.go`)
+
+Four bulk flows run server-side rather than as browser loops: `lastrank_extended`,
+`nap_members`, `ext_alliance_gather`, `prospect_refresh_transfer` /
+`prospect_refresh_prospect`. Progress is persisted to `background_jobs` /
+`background_job_items` (migration 063), so any browser can watch a run — and the
+run survives the tab closing.
+
+### THE RULE — read → fetch → write
+
+`database.go` sets `db.SetMaxOpenConns(1)`. A `Step` that holds a rows cursor or an
+open transaction across its upstream HTTP call waits forever for a connection that
+can never be freed, and it **hangs the whole process silently** — no error, no log,
+no panic. Every `Step` must be shaped:
+
+```
+read what you need (short query, cursor closed)
+  → upstream fetch (NO db handle held, no open tx)
+    → db.Begin() → write → Commit()
+```
+
+`syncOneMember`, `refreshOneExternalAlliance` and `refreshOneProspect` are written
+this way and shared by both the HTTP handler and the job. `TestRunnerDoesNotHoldTheConnectionDuringStep`
+guards the runner half: it hangs (rather than failing cleanly) if that regresses.
+
+### Adding a flow
+
+Implement `jobRunner` (`Plan` / `Step` / `Finish`) in a `jobs_<feature>.go` and call
+`registerJobKind` from that file's `init()` — registration lives next to the
+implementation, so adding a flow never touches `jobs.go`. Then attach the UI with
+`JobProgress.attach()` (`static/job-progress.js` + `job-progress.css`).
+
+- **`Plan` must fully drain any cursor before returning** — the runner writes
+  immediately afterwards.
+- **Returning zero items is a success, not an error.** No items → no `Finish`, so
+  no activity row. Idle ticks must not write audit noise.
+- **`Step` returning an error records that item as `err` and the run CONTINUES.**
+  One unreachable player must never sink a hundred-item sweep.
+- **Order oldest-touched-first** so an interrupted run resumes rather than
+  restarting. Advance the ordering column even for skipped items, or the sweep
+  retries the same row forever.
+- **`Finish` writes ONE summary activity row** for the whole run, not one per item.
+
+### Operational notes
+
+- **One job at a time, process-wide.** Every flow shares the same 1 req/sec upstream
+  limiter, so a second concurrent run would only halve both rates while doubling
+  contention on the single connection. A second start returns **409** naming the
+  running kind and how long it has been going.
+- **Restart handling**: `reconcileInterruptedJobs()` at boot marks any row still
+  `running` as `interrupted` — that process is gone. No resume machinery exists or
+  is needed, because re-running *is* resuming.
+- **Shutdown**: `drainJobs` cancels and waits, bounded. An in-flight enrich has its
+  own 25s ceiling and can outlast the drain; the boot-time reconcile is the backstop.
+- **Retention**: `pruneOldJobs` keeps the newest 10 runs per kind and deletes item
+  rows **explicitly** — `foreign_keys` is off app-wide so the schema's
+  `ON DELETE CASCADE` never fires.
+- **Scheduled runs** use `jobActor{UserID: 0, Scheduled: true}`; `logActivity` maps a
+  non-positive id to `NULL` rather than a dangling `users(id)` reference.
+
 ## Known gotchas
 
 ### One DB connection — a query issued while a cursor is open DEADLOCKS

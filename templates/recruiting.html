@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="/job-progress.css">
 <link rel="stylesheet" href="/recruiting.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
@@ -42,8 +43,13 @@
                 <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg></span>
                 <span class="btn-text">Refresh from LastRank</span>
             </button>
+            <button type="button" class="btn btn-danger btn-sm lastrank-bulk-cancel" data-type="transfer" style="display:none;">
+                <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></span>
+                <span class="btn-text">Stop</span>
+            </button>
             <span class="status-msg lastrank-bulk-status" data-type="transfer"></span>
         </div>
+        <div class="job-progress lastrank-bulk-progress" data-type="transfer" style="display:none;"></div>
         {{end}}
         <div id="transfers-list">
             <p class="loading-msg">Loading transfers...</p>
@@ -62,8 +68,13 @@
                 <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg></span>
                 <span class="btn-text">Refresh from LastRank</span>
             </button>
+            <button type="button" class="btn btn-danger btn-sm lastrank-bulk-cancel" data-type="prospect" style="display:none;">
+                <span class="btn-icon"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></span>
+                <span class="btn-text">Stop</span>
+            </button>
             <span class="status-msg lastrank-bulk-status" data-type="prospect"></span>
         </div>
+        <div class="job-progress lastrank-bulk-progress" data-type="prospect" style="display:none;"></div>
         {{end}}
         <div id="prospects-list">
             <p class="loading-msg">Loading prospects...</p>
@@ -323,5 +334,6 @@
      data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}"
      data-has-former-tab="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
      hidden></div>
+<script src="/job-progress.js"></script>
 <script src="/recruiting.js"></script>
 {{end}}

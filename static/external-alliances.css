@@ -61,21 +61,9 @@
 }
 .ext-gather-help { color: var(--color-text-muted); font-size: 0.88rem; margin: 6px 0 12px; }
 .ext-gather-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.ext-prog-list {
-    margin-top: 14px; max-height: 320px; overflow-y: auto;
-    border: 1px solid var(--color-border); border-radius: 6px;
-}
-.ext-prog-row {
-    display: flex; justify-content: space-between; align-items: center; gap: 12px;
-    padding: 7px 12px; border-bottom: 1px solid var(--color-border);
-}
-.ext-prog-row:last-child { border-bottom: none; }
-.ext-prog-name { color: var(--color-text); }
-.ext-prog-status { color: var(--color-text-muted); font-size: 0.82rem; white-space: nowrap; }
-.ext-prog-row.active { background: var(--bg-secondary); }
-.ext-prog-row.active .ext-prog-status { color: var(--color-primary); }
-.ext-prog-row.done .ext-prog-status { color: var(--color-success); }
-.ext-prog-row.err .ext-prog-status { color: var(--color-danger); }
+/* Progress list: now the shared .job-progress / .job-prog-* component in
+   job-progress.css. The copy that lived here was missing the `skip` state and used
+   --color-text / --color-text-muted, neither of which is defined in any theme block. */
 
 /* ── Add/edit modal: find-alliance combobox on the Tag & Name fields ──
    The dropdown is a child of the identity grid (position: relative) and is anchored under the

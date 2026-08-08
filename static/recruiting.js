@@ -917,10 +917,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('click', e => { if (e.target === lrModal) closeLrModal(); });
     document.getElementById('lr-prospect-fetch-btn')?.addEventListener('click', doLastRankProspectFetch);
 
-    // LastRank bulk refresh (one button per tab)
-    document.querySelectorAll('.lastrank-bulk-btn').forEach(btn => {
-        btn.addEventListener('click', () => doLastRankProspectBulk(btn.dataset.type));
-    });
+    // LastRank bulk refresh (one server-side job per tab); JobProgress owns the buttons.
+    wireProspectBulkJobs();
 });
 
 // ── LastRank prospect enrichment ──────────────────────────────────────────────
@@ -1028,45 +1026,26 @@ async function doLastRankProspectFetch() {
     }
 }
 
-async function doLastRankProspectBulk(type) {
-    const statusEl = document.querySelector(`.lastrank-bulk-status[data-type="${type}"]`);
-    const setS = m => { if (statusEl) statusEl.textContent = m || ''; };
-    let prospects;
-    try {
-        const res = await fetch('/api/prospects');
-        prospects = await res.json();
-    } catch (e) { showToast('Could not load prospects.', 'error'); return; }
-
-    const pool = (prospects || []).filter(p => p.prospect_type === type && p.lastrank_public_id);
-    const noun = type === 'transfer' ? 'transfer' : 'prospect';
-    if (pool.length === 0) {
-        showToast(`No ${noun}s have a saved LastRank ID yet. Use "Look up on LastRank" on a card first.`, 'info');
-        return;
-    }
-    if (!await showConfirm(`Refresh ${pool.length} ${noun}(s) from LastRank? This runs at ~1/second.`, 'Start')) return;
-
-    document.querySelectorAll('.lastrank-bulk-btn').forEach(b => b.disabled = true);
-    let synced = 0, i = 0;
-    for (const p of pool) {
-        i++;
-        setS(`Refreshing ${i} of ${pool.length}…`);
-        try {
-            const res = await fetch('/api/lastrank/prospect', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prospect_id: p.id, bulk: true })
-            });
-            if (res.ok) synced++;
-        } catch (e) { /* skip individual failures */ }
-    }
-    setS('');
-    try {
-        await fetch('/api/lastrank/prospect/finish', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ kind: 'prospects', prospects_synced: synced })
+// Bulk prospect refresh runs SERVER-SIDE as a background job — see
+// jobs_prospects.go. It also gains the per-item progress list it never had; as a
+// browser loop it showed only a rolling "Refreshing i of N…" counter.
+function wireProspectBulkJobs() {
+    if (!window.JobProgress) return;
+    [['transfer', 'prospect_refresh_transfer'], ['prospect', 'prospect_refresh_prospect']].forEach(([type, kind]) => {
+        const btn = document.querySelector(`.lastrank-bulk-btn[data-type="${type}"]`);
+        const progress = document.querySelector(`.lastrank-bulk-progress[data-type="${type}"]`);
+        if (!btn || !progress) return;
+        window.JobProgress.attach({
+            kind,
+            startBtn: btn,
+            container: progress,
+            statusEl: document.querySelector(`.lastrank-bulk-status[data-type="${type}"]`),
+            cancelBtn: document.querySelector(`.lastrank-bulk-cancel[data-type="${type}"]`),
+            busyEls: Array.from(document.querySelectorAll('.lastrank-bulk-btn')),
+            confirm: `Refresh every ${type} with a saved LastRank ID? `
+                + 'This runs at ~1/second on the server — you can leave this page.',
+            summarize: c => `Refreshed ${c.refreshed || 0} ${type}(s) from LastRank.`,
+            onDone: () => loadAllProspects(),
         });
-    } catch (e) { /* logging only */ }
-
-    document.querySelectorAll('.lastrank-bulk-btn').forEach(b => b.disabled = false);
-    showToast(`Refreshed ${synced} ${noun}(s) from LastRank.`);
-    await loadAllProspects();
+    });
 }
