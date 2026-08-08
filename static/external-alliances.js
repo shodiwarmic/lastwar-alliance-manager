@@ -450,47 +450,22 @@
     const gatherProgress = document.getElementById('ext-gather-progress');
     const setGatherStatus = m => { if (gatherStatus) gatherStatus.textContent = m || ''; };
 
-    async function gatherExtended(btn) {
-        // Oldest-updated first so an interrupted run resumes where it left off.
-        const pool = all.filter(a => a.lastrank_id)
-            .sort((a, b) => (a.updated_at || '').localeCompare(b.updated_at || ''));
-        if (!pool.length) { showToast('No alliances have a LastRank link yet. Edit one and add its link first.', 'info'); return; }
-        if (!await showConfirm('Re-pull power, kills & members for ' + pool.length + ' alliance' + (pool.length === 1 ? '' : 's') + ' from LastRank? Each is fetched at ~1/second.', 'Start')) return;
-
-        btn.disabled = true;
-        gatherProgress.style.display = 'block';
-        gatherProgress.replaceChildren();
-        const rowEls = new Map();
-        pool.forEach(a => {
-            const status = el('span', { className: 'ext-prog-status', text: 'queued' });
-            const label = a.tag ? '[' + a.tag + ']' + (a.name ? ' ' + a.name : '') : (a.name || '?');
-            const row = el('div', { className: 'ext-prog-row' }, el('span', { className: 'ext-prog-name', text: label }), status);
-            rowEls.set(a.id, { row, status });
-            gatherProgress.appendChild(row);
+    // The gather runs SERVER-SIDE as a background job — see jobs_external.go. It
+    // also finally writes an activity row, which the browser loop never did.
+    function wireGatherJob() {
+        const btn = document.getElementById('ext-gather-btn');
+        if (!btn || !gatherProgress || !window.JobProgress) return;
+        window.JobProgress.attach({
+            kind: 'ext_alliance_gather',
+            startBtn: btn,
+            container: gatherProgress,
+            statusEl: gatherStatus,
+            cancelBtn: document.getElementById('ext-gather-cancel'),
+            confirm: 'Re-pull power, kills & members for every alliance with a LastRank link? '
+                + 'Each is fetched at ~1/second on the server — you can leave this page.',
+            summarize: c => `Refreshed ${c.refreshed || 0} alliance(s) from LastRank.`,
+            onDone: () => load(),
         });
-
-        let updated = 0, failed = 0, i = 0;
-        for (const a of pool) {
-            i++;
-            setGatherStatus('Gathering ' + i + ' of ' + pool.length + '…');
-            const { row, status } = rowEls.get(a.id);
-            row.className = 'ext-prog-row active';
-            status.textContent = 'fetching…';
-            try {
-                const snap = await api('POST', '/api/external-alliances/' + a.id + '/refresh');
-                updated++;
-                row.className = 'ext-prog-row done';
-                status.textContent = '✓ ' + fmtBig(snap.power) + ' power · ' + fmtBig(snap.kills) + ' kills · ' + (snap.member_count != null ? snap.member_count : '?') + '/100';
-            } catch (e) {
-                failed++;
-                row.className = 'ext-prog-row err';
-                status.textContent = 'error — skipped';
-            }
-        }
-        setGatherStatus('');
-        showToast('Refreshed ' + updated + ' of ' + pool.length + (failed ? ' (' + failed + ' failed)' : '') + '.');
-        btn.disabled = false;
-        await load();
     }
 
     // ---- action bar (manage only) ----
@@ -506,8 +481,8 @@
                 if (!showing) gatherSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             });
         }
-        const gatherBtn = document.getElementById('ext-gather-btn');
-        if (gatherBtn) gatherBtn.addEventListener('click', () => gatherExtended(gatherBtn));
+        // Server-side job; JobProgress owns the gather button.
+        wireGatherJob();
     }
 
     setupControls();

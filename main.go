@@ -142,6 +142,10 @@ func main() {
 	// Start the local-archive retention janitor (no-op unless OCR_ARCHIVE_DIR set).
 	startLocalArchiveJanitor()
 
+	// Any job still marked 'running' belongs to a process that no longer exists.
+	// Every flow plans oldest-touched-first, so re-running is resuming.
+	reconcileInterruptedJobs()
+
 	router := mux.NewRouter()
 
 	// Auth routes (public)
@@ -415,6 +419,14 @@ func main() {
 	// Player name search, so recruiters find a prospect's LastRank id in-app instead
 	// of copy-pasting a URL from a browser tab.
 	router.HandleFunc("/api/lastrank/player-search", authMiddleware(requirePermission("manage_recruiting", lastRankPlayerSearch))).Methods("GET")
+
+	// Background jobs. No requirePermission wrapper here on purpose: the permission
+	// depends on the job KIND in the payload (manage_members / manage_allies /
+	// manage_recruiting / manage_external_alliances), so each handler resolves it
+	// via resolveJobKind. See jobs.go.
+	router.HandleFunc("/api/jobs/start", authMiddleware(startJobHandler)).Methods("POST")
+	router.HandleFunc("/api/jobs/current", authMiddleware(currentJobHandler)).Methods("GET")
+	router.HandleFunc("/api/jobs/cancel", authMiddleware(cancelJobHandler)).Methods("POST")
 
 	// Mobile API (bearer token auth, CSRF exempt)
 	router.HandleFunc("/api/mobile/login", mobileLogin).Methods("POST")
@@ -731,6 +743,11 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		slog.Error("Server forced to shutdown", "error", err)
 	}
+
+	// Stop any running background job before draining archives. Bounded: an
+	// in-flight LastRank enrich has its own 25s ceiling and we cannot always
+	// outlast it, so reconcileInterruptedJobs on the next boot is the backstop.
+	drainJobs(10 * time.Second)
 
 	// Drain in-flight OCR archive goroutines. archiveSem is acquire-by-send /
 	// release-by-receive (cap 4): sending cap times blocks until every active

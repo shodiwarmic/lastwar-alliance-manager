@@ -477,28 +477,180 @@ func napMemberCount(w http.ResponseWriter, r *http.Request) {
 //
 // Our own alliance has NO registry row (Rule 2), so its only home is the is_own history row — which
 // is exactly why the history backfill exists rather than relying on the registry.
+// napDetailSnapshot is one per-alliance detail response, reduced to what we store.
+// Seen is the upstream last_seen_at (game-side "as of"), which is BOTH the
+// staleness guard for the registry and the recorded_at for the history datapoint.
+type napDetailSnapshot struct {
+	LastRankID  string
+	IsOwn       bool
+	Server      int
+	Tag, Name   string
+	Power       int64
+	Kills       int64
+	MemberCount int
+	Seen        string
+}
+
+// storeNAPMemberCount records only a member count (no detail stats available).
 func storeNAPMemberCount(lastrankID, capturedAt string, cur, max int) error {
+	_, _, err := storeNAPAllianceSnapshot(capturedAt, napDetailSnapshot{
+		LastRankID: lastrankID, MemberCount: cur,
+	})
+	return err
+}
+
+// storeNAPAllianceSnapshot writes the member count, plus the power/kills that came
+// free in the very same per-alliance detail response. The gather was already
+// paying for that request and throwing both away — the alliance-level analogue of
+// how the member extended sync takes power/hero/HQ off the one player record.
+//
+// Three writes, deliberately distinct:
+//  1. registry "current" values, guarded so a stale response can't walk them back
+//  2. member_count backfilled onto the LADDER's history row for this capture
+//  3. a NEW history datapoint, but only when it differs from its predecessor
+//
+// CLOCKS: this data comes from the DETAIL endpoint, so it is guarded against — and
+// writes — lastrank_seen_at. It must never touch lastrank_captured_at or the
+// power_rank/kills_rank columns, which belong to the LADDER capture. Migration 058
+// spells out why: guarding a ladder captured_at against a detail last_seen_at
+// would let one per-alliance refresh permanently block ladder writes for that row,
+// stranding its rank at NULL forever.
+//
+// d.Seen empty means "member count only" — no stats to apply, no datapoint to add.
+func storeNAPAllianceSnapshot(capturedAt string, d napDetailSnapshot) (statsApplied, historyAdded bool, err error) {
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return false, false, err
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`UPDATE external_alliances SET member_count = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE lastrank_id = ? COLLATE NOCASE`, cur, lastrankID); err != nil {
-		return err
+	hasStats := d.Seen != ""
+
+	// Read the registry row up front: its id keys the history datapoint, and its
+	// lastrank_seen_at is the staleness guard. Our own alliance has no registry row
+	// at all (Rule 2), so eaID stays invalid and only the is_own history path runs.
+	var eaID sql.NullInt64
+	var storedSeen sql.NullString
+	if d.LastRankID != "" {
+		tx.QueryRow(`SELECT id, lastrank_seen_at FROM external_alliances WHERE lastrank_id = ? COLLATE NOCASE`,
+			d.LastRankID).Scan(&eaID, &storedSeen)
 	}
 
-	// Only fills a hole; never rewrites a datapoint we already recorded.
+	// Never let a stale detail response walk back a fresher one. Compared as
+	// parsed times, never as strings: lastrank_seen_at is a declared DATETIME, so
+	// it reads back RFC3339Nano while LastRank sends ISO — lexical comparison
+	// silently mis-sorts the two forms.
+	fresh := hasStats && lastRankCaptureNewer(d.Seen, storedSeen.String)
+
+	if fresh {
+		res, uerr := tx.Exec(`UPDATE external_alliances
+			SET member_count = ?, power = ?, kills = ?, lastrank_seen_at = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE lastrank_id = ? COLLATE NOCASE`,
+			d.MemberCount, d.Power, d.Kills, d.Seen, d.LastRankID)
+		if uerr != nil {
+			return false, false, uerr
+		}
+		// Our own alliance legitimately matches zero rows — report that honestly
+		// rather than claiming a write.
+		n, _ := res.RowsAffected()
+		statsApplied = n > 0
+	} else if _, uerr := tx.Exec(`UPDATE external_alliances SET member_count = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE lastrank_id = ? COLLATE NOCASE`, d.MemberCount, d.LastRankID); uerr != nil {
+		return false, false, uerr
+	}
+
+	// Backfill the member count onto the LADDER's row for this capture. Only fills
+	// a hole; never rewrites a datapoint we already recorded. Deliberately
+	// member_count only — that row carries the ladder's power/kills at its own
+	// recorded_at, and overwriting them with detail figures would put two clocks in
+	// one datapoint.
 	if capturedAt != "" {
 		if _, err := tx.Exec(`UPDATE alliance_stats_history SET member_count = ?
 			WHERE member_count IS NULL AND recorded_at = ? AND source = ?
 			  AND lastrank_id = ? COLLATE NOCASE`,
-			cur, capturedAt, provenanceSource("lastrank"), lastrankID); err != nil {
-			return err
+			d.MemberCount, capturedAt, provenanceSource("lastrank"), d.LastRankID); err != nil {
+			return false, false, err
 		}
 	}
-	return tx.Commit()
+
+	if hasStats {
+		historyAdded, err = appendDetailDatapoint(tx, eaID, d)
+		if err != nil {
+			return statsApplied, false, err
+		}
+	}
+
+	return statsApplied, historyAdded, tx.Commit()
+}
+
+// appendDetailDatapoint adds a history row for a detail response, but ONLY when it
+// differs from the datapoint immediately preceding it in time.
+//
+// A point whose power, kills and member count all match its predecessor carries no
+// information — the series already says the value was that, and has been since.
+// Recording it anyway would inflate the series with duplicates at whatever cadence
+// the gather happens to run, making "when did this change?" harder to read, not
+// easier. A point that differs from its predecessor is exactly where a change
+// happened, which is the thing worth storing.
+//
+// recorded_at is the upstream capture date, never the sync time — same rule as
+// every other LastRank history write, so "stale never wins" falls out of the
+// ordinary latest-by-recorded_at read.
+func appendDetailDatapoint(tx *sql.Tx, eaID sql.NullInt64, d napDetailSnapshot) (bool, error) {
+	recordedAt, ok := lastRankCaptureToSQLite(d.Seen)
+	if !ok || recordedAt == "" {
+		// No trustworthy date, so no datapoint. Inventing one (e.g. "now") would
+		// put a game-side value on a wall-clock axis.
+		return false, nil
+	}
+
+	// INSERT OR IGNORE below suppresses EVERY constraint violation including the
+	// CHECK, so an invalid subject key would silently drop the datapoint and the
+	// series would just quietly miss this alliance. Validate before inserting
+	// rather than letting OR IGNORE be the thing that "handles" a bug.
+	subject := `external_alliance_id = ?`
+	subjectArg := any(eaID.Int64)
+	if d.IsOwn {
+		subject = `is_own = 1 AND server = ?`
+		subjectArg = d.Server
+	} else if !eaID.Valid {
+		return false, fmt.Errorf("no registry row for alliance %q — cannot key a datapoint", d.LastRankID)
+	}
+
+	var pPower, pKills, pMembers sql.NullInt64
+	err := tx.QueryRow(`SELECT power, kills, member_count FROM alliance_stats_history
+		WHERE `+subject+` AND recorded_at < ?
+		ORDER BY recorded_at DESC LIMIT 1`, subjectArg, recordedAt).Scan(&pPower, &pKills, &pMembers)
+	if err == nil &&
+		pPower.Valid && pPower.Int64 == d.Power &&
+		pKills.Valid && pKills.Int64 == d.Kills &&
+		pMembers.Valid && pMembers.Int64 == int64(d.MemberCount) {
+		return false, nil // unchanged since the previous datapoint
+	}
+	if err != nil && err != sql.ErrNoRows {
+		return false, err
+	}
+
+	// power_rank / kills_rank stay NULL: a rank is a position WITHIN one ladder
+	// capture, and the detail endpoint has no ladder to rank against. Claiming one
+	// here would be a fabricated number.
+	var extID any
+	isOwn := 0
+	if d.IsOwn {
+		isOwn = 1
+	} else {
+		extID = eaID.Int64
+	}
+	res, err := tx.Exec(`INSERT OR IGNORE INTO alliance_stats_history
+		(external_alliance_id, is_own, lastrank_id, server, tag, name, power, kills, member_count, recorded_at, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		extID, isOwn, nullStr(d.LastRankID), d.Server, nullStr(d.Tag), nullStr(d.Name),
+		d.Power, d.Kills, d.MemberCount, recordedAt, provenanceSource("lastrank"))
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 // napFinish is phase 3: one activity row for the whole run, matching how the LastRank member sync

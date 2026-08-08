@@ -1,7 +1,7 @@
 // lastrank.js — LastRank.fun sync UI on the Members page.
 // Phase 1: one alliance fetch → review modal → commit (stats auto, rank/unmatched
-// reviewed). Phase 2: browser-driven per-player loop for troop kills, oldest
-// lastrank_synced_at first so an interrupted run resumes cleanly.
+// reviewed). Phase 2 (extended per-player sync) runs SERVER-SIDE as a background
+// job — see jobs.go; this file only starts it and watches via JobProgress.
 // Safe DOM only (no innerHTML); feedback via showToast/showConfirm.
 
 (function () {
@@ -66,9 +66,27 @@
         });
     }
     if (fetchBtn) fetchBtn.addEventListener('click', doFetch);
-    if (extendedBtn) extendedBtn.addEventListener('click', doExtended);
     if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
     if (confirmBtn) confirmBtn.addEventListener('click', doCommit);
+
+    // Phase 2 (extended sync) runs server-side — see jobs.go. This page only
+    // watches it, so closing the tab no longer stops the run.
+    if (extendedBtn) {
+        window.JobProgress.attach({
+            kind: 'lastrank_extended',
+            startBtn: extendedBtn,
+            container: progressEl,
+            statusEl: statusEl,
+            cancelBtn: document.getElementById('lastrank-extended-cancel'),
+            busyEls: [fetchBtn],
+            confirm: 'Fetch full stats (kills, power, hero, HQ) + photos for every member with a LastRank ID? '
+                + 'This runs on the server at ~1/second — you can close this page and come back.',
+            summarize: c => `Extended sync complete across ${c.members || 0} member(s) — `
+                + `${c.kills || 0} kills, ${c.power || 0} power, ${c.hero || 0} hero, `
+                + `${c.HQ || 0} HQ, ${c['profession lv'] || 0} profession lv, ${c.photo || 0} photos.`,
+            onDone: () => { if (typeof loadMembers === 'function') loadMembers(); },
+        });
+    }
 
     function closeModal() { modal.style.display = ''; }
 
@@ -338,97 +356,4 @@
         }
     }
 
-    // --- Phase 2: extended (per-player kills), browser-driven ---
-    async function doExtended() {
-        let members;
-        try {
-            const res = await fetch('/api/members');
-            members = await res.json();
-        } catch (e) {
-            showToast('Could not load roster.', 'error');
-            return;
-        }
-        // Oldest-synced first so an interrupted run resumes where it left off.
-        // localeCompare returns 0 on ties (the old a<b?-1:1 returned 1 on ties,
-        // which mis-ordered equal timestamps and made re-runs restart at the top).
-        const pool = (members || [])
-            .filter(m => m.lastrank_public_id)
-            .sort((a, b) => (a.lastrank_synced_at || '').localeCompare(b.lastrank_synced_at || ''));
-
-        if (pool.length === 0) {
-            showToast('No members have a LastRank ID yet. Run "Fetch Alliance Data" first.', 'info');
-            return;
-        }
-        if (!await showConfirm(`Fetch full stats (kills, power, hero, HQ) + photos for ${pool.length} member(s)? This pulls each from LastRank at ~1/second.`, 'Start')) return;
-
-        extendedBtn.disabled = true;
-        fetchBtn.disabled = true;
-        progressEl.style.display = 'block';
-        progressEl.replaceChildren();
-
-        const rowEls = new Map();
-        pool.forEach(m => {
-            const status = el('span', { className: 'lr-prog-status', textContent: 'queued' });
-            const row = el('div', { className: 'lr-prog-row' }, el('span', { className: 'lr-prog-name', textContent: m.name }), status);
-            rowEls.set(m.id, { row, status });
-            progressEl.appendChild(row);
-        });
-
-        let synced = 0, killRecords = 0, powerRecords = 0, heroRecords = 0, hqRecords = 0, professionRecords = 0, professionChanges = 0, photoRecords = 0, i = 0;
-        for (const m of pool) {
-            i++;
-            setStatus(`Fetching ${i} of ${pool.length}…`);
-            const { row, status } = rowEls.get(m.id);
-            row.className = 'lr-prog-row active';
-            status.textContent = 'fetching…';
-            try {
-                const r = await fetch('/api/lastrank/player', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ member_id: m.id })
-                });
-                if (!r.ok) throw new Error(await r.text());
-                const data = await r.json();
-                synced++;
-                if (data.kills_applied) killRecords++;
-                if (data.power_applied) powerRecords++;
-                if (data.hero_applied) heroRecords++;
-                if (data.hq_applied) hqRecords++;
-                if (data.profession_level_applied) professionRecords++;
-                if (data.profession_changed) professionChanges++;
-                if (data.photo_updated) photoRecords++;
-                if (data.kills_applied || data.power_applied || data.hero_applied || data.hq_applied || data.profession_level_applied || data.profession_changed || data.photo_updated) {
-                    const parts = [];
-                    if (data.kills_applied) parts.push('kills');
-                    if (data.power_applied) parts.push('power');
-                    if (data.hero_applied) parts.push('hero');
-                    if (data.hq_applied) parts.push('HQ');
-                    if (data.profession_level_applied) parts.push('profession lv');
-                    if (data.profession_changed) parts.push('profession');
-                    if (data.photo_updated) parts.push('photo');
-                    row.className = 'lr-prog-row done';
-                    status.textContent = '✓ ' + parts.join(' + ') + ' updated';
-                } else {
-                    row.className = 'lr-prog-row skip';
-                    status.textContent = data.skip_reason === 'no_id' ? 'no LastRank id'
-                        : data.skip_reason === 'stale' ? 'your data is newer' : 'no change';
-                }
-            } catch (e) {
-                row.className = 'lr-prog-row err';
-                status.textContent = 'error — skipped';
-            }
-        }
-
-        setStatus('');
-        try {
-            await fetch('/api/lastrank/finish', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kind: 'extended', members_synced: synced, kill_records: killRecords, power_records: powerRecords, hero_records: heroRecords, hq_records: hqRecords, profession_records: professionRecords, profession_changes: professionChanges, photo_records: photoRecords })
-            });
-        } catch (e) { /* logging only — ignore */ }
-
-        showToast(`Extended sync complete across ${synced} member(s) — ${killRecords} kills, ${powerRecords} power, ${heroRecords} hero, ${hqRecords} HQ, ${professionRecords} profession lv, ${photoRecords} photos.`);
-        extendedBtn.disabled = false;
-        fetchBtn.disabled = false;
-        if (typeof loadMembers === 'function') loadMembers();
-    }
 })();

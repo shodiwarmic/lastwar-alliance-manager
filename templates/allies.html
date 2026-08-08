@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="/job-progress.css">
 <link rel="stylesheet" href="/allies.css">
 {{end}}
 
@@ -51,18 +52,23 @@
                     power, kills and rank for the top alliances, in a single call.
                     Member counts are not on the ladder, so they are gathered per alliance and paced at
                     ~1/second; that pass is slower, and alliances missing a count are done first so an
-                    interrupted run resumes where it left off.
+                    interrupted run resumes where it left off. Each lookup also refreshes that alliance's
+                    power and kills at no extra cost, since they come back in the same response. The gather
+                    runs on the server, so you can leave this page and check back.
                 </p>
                 <div class="nap-sync-actions">
                     <button type="button" id="nap-refresh-btn" class="btn btn-primary">
                         <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Refresh Ladder
                     </button>
                     <button type="button" id="nap-members-btn" class="btn btn-secondary">
-                        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-crosshair"/></svg> Gather Member Counts
+                        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-crosshair"/></svg> Gather Extended Info
+                    </button>
+                    <button type="button" id="nap-members-cancel" class="btn btn-danger btn-sm" style="display:none;">
+                        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Stop
                     </button>
                     <span id="nap-status" class="status-msg"></span>
                 </div>
-                <div id="nap-progress" class="nap-progress-list" style="display:none;"></div>
+                <div id="nap-progress" class="job-progress" style="display:none;"></div>
             </div>
         </section>
         {{end}}
@@ -93,6 +99,7 @@
 <div id="page-config"
      data-can-manage="{{if .Permissions.ManageAllies}}true{{else}}false{{end}}"
      data-our-server-id="{{.OurServerID}}" hidden></div>
+<script src="/job-progress.js"></script>
 <script src="/allies.js"></script>
 {{end}}
 

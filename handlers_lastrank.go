@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -564,6 +565,11 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 // summarized by a single lastRankFinish call at the end of the browser loop,
 // rather than one activity row per member.
 
+// errMemberNotFound lets syncOneMember's callers tell "no such member" apart from
+// an upstream failure — the HTTP handler maps it to 404, the job runner to a
+// skipped item.
+var errMemberNotFound = errors.New("member not found")
+
 func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 	var req LastRankPlayerSyncRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -571,29 +577,51 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var pubID sql.NullInt64
-	var name, curPhoto string
-	err := db.QueryRow("SELECT lastrank_public_id, name, COALESCE(lastrank_photo_url, '') FROM members WHERE id = ?", req.MemberID).Scan(&pubID, &name, &curPhoto)
+	out, err := syncOneMember(r.Context(), req.MemberID)
 	if err != nil {
-		http.Error(w, "Member not found", http.StatusNotFound)
+		if errors.Is(err, errMemberNotFound) {
+			http.Error(w, "Member not found", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, errLastRankUpstream) {
+			slogLastRank("lastrank player fetch failed", err)
+			http.Error(w, "Couldn't reach LastRank for this player.", http.StatusBadGateway)
+			return
+		}
+		slog.Error("lastrank player sync failed", "member_id", req.MemberID, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	writeJSON(w, out)
+}
 
-	out := LastRankPlayerSyncResponse{MemberID: req.MemberID, LastRankName: name}
+// syncOneMember refreshes one member from their LastRank player record: kills,
+// power, hero power, HQ, profession + profession level, and avatar — all free from
+// the single fetch. Shared by the HTTP handler and the background job runner.
+//
+// Shaped for db.SetMaxOpenConns(1): the member row is read and the cursor closed,
+// THEN the network call happens with no database handle held, THEN a transaction
+// opens for the writes. Reordering these deadlocks the whole process silently.
+func syncOneMember(ctx context.Context, memberID int) (LastRankPlayerSyncResponse, error) {
+	var pubID sql.NullInt64
+	var name, curPhoto string
+	err := db.QueryRow("SELECT lastrank_public_id, name, COALESCE(lastrank_photo_url, '') FROM members WHERE id = ?", memberID).Scan(&pubID, &name, &curPhoto)
+	if err != nil {
+		return LastRankPlayerSyncResponse{MemberID: memberID}, errMemberNotFound
+	}
+
+	out := LastRankPlayerSyncResponse{MemberID: memberID, LastRankName: name}
 	if !pubID.Valid {
 		out.SkipReason = "no_id"
-		writeJSON(w, out)
-		return
+		return out, nil
 	}
 
 	// Bulk sync: cheap cached GET, upgraded to a live enrich only when the record
 	// is stale (older than the freshness window). Recently-enriched members stay
 	// fast; the GET is the fallback if a stale member's enrich is slow/fails.
-	player, err := lastRankPlayerBulk(r.Context(), int(pubID.Int64))
+	player, err := lastRankPlayerBulk(ctx, int(pubID.Int64))
 	if err != nil {
-		slogLastRank("lastrank player fetch failed", err)
-		http.Error(w, "Couldn't reach LastRank for this player.", http.StatusBadGateway)
-		return
+		return out, err
 	}
 
 	kills := player.ArmyKill
@@ -604,12 +632,11 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := db.Begin()
 	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return out, err
 	}
 	defer tx.Rollback()
 
-	cur, at, ok := lastRankLatestHistory(tx, "kill_history", "kills", req.MemberID)
+	cur, at, ok := lastRankLatestHistory(tx, "kill_history", "kills", memberID)
 	recordedAt, _ := lastRankCaptureToSQLite(player.LastSeenAt)
 	switch {
 	case !lastRankCaptureNewer(player.LastSeenAt, at):
@@ -617,7 +644,7 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 	case ok && cur == kills:
 		out.SkipReason = "unchanged"
 	default:
-		if err := lastRankInsertHistory(tx, "kill_history", "kills", req.MemberID, kills, recordedAt); err == nil {
+		if err := lastRankInsertHistory(tx, "kill_history", "kills", memberID, kills, recordedAt); err == nil {
 			out.KillsApplied = true
 		}
 	}
@@ -625,7 +652,7 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 	// Power, hero power, and HQ ride along for free (already in the record).
 	// Power/hero use per-metric staleness gating; HQ only ever increases.
 	power := player.Power
-	pN, hN, hqN := lastRankApplyPairedStats(tx, req.MemberID, &power, player.HeroPower, player.BaseLevel, recordedAt, player.LastSeenAt)
+	pN, hN, hqN := lastRankApplyPairedStats(tx, memberID, &power, player.HeroPower, player.BaseLevel, recordedAt, player.LastSeenAt)
 	out.PowerApplied = pN > 0
 	out.HeroApplied = hN > 0
 	out.HQApplied = hqN > 0
@@ -633,9 +660,9 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 	// Profession level (career_lv): history-only, per-metric staleness gate + dedup
 	// (same shape as the kill history above).
 	if player.CareerLv > 0 {
-		cur, at, ok := lastRankLatestHistory(tx, "profession_level_history", "profession_level", req.MemberID)
+		cur, at, ok := lastRankLatestHistory(tx, "profession_level_history", "profession_level", memberID)
 		if lastRankCaptureNewer(player.LastSeenAt, at) && !(ok && cur == int64(player.CareerLv)) {
-			if err := lastRankInsertHistory(tx, "profession_level_history", "profession_level", req.MemberID, int64(player.CareerLv), recordedAt); err == nil {
+			if err := lastRankInsertHistory(tx, "profession_level_history", "profession_level", memberID, int64(player.CareerLv), recordedAt); err == nil {
 				out.ProfessionLevelApplied = true
 			}
 		}
@@ -645,9 +672,9 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 	// label differs; an unset/unknown code must never clobber an existing profession.
 	if label, ok := CareerTypeLabels[player.CareerType]; ok {
 		var curProf string
-		tx.QueryRow("SELECT COALESCE(profession, '') FROM members WHERE id = ?", req.MemberID).Scan(&curProf)
+		tx.QueryRow("SELECT COALESCE(profession, '') FROM members WHERE id = ?", memberID).Scan(&curProf)
 		if label != curProf {
-			if _, err := tx.Exec("UPDATE members SET profession = ? WHERE id = ?", label, req.MemberID); err == nil {
+			if _, err := tx.Exec("UPDATE members SET profession = ? WHERE id = ?", label, memberID); err == nil {
 				out.ProfessionChanged = true
 			}
 		}
@@ -657,14 +684,75 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 	// even when a member is skipped (keeps re-runs from re-fetching the same one).
 	// Avatar URLs are refreshed here too (hotlinked from the game CDN).
 	tx.Exec("UPDATE members SET lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now'), lastrank_public_id = ?, lastrank_photo_url = ?, lastrank_photo_failover = ? WHERE id = ?",
-		pubID.Int64, player.PhotoURL, player.PhotoURLFailover, req.MemberID)
+		pubID.Int64, player.PhotoURL, player.PhotoURLFailover, memberID)
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, "Failed to save changes", http.StatusInternalServerError)
-		return
+		return out, err
 	}
 	out.SyncedAt = "just now"
-	writeJSON(w, out)
+	return out, nil
+}
+
+// refreshOneProspect fetches a prospect's LastRank record and persists power, hero
+// power and avatar. Shared by the on-demand lookup handler and the bulk job.
+//
+// bulk picks the fetch strategy: a single on-demand lookup forces a fresh enrich
+// (the recruiter is waiting and wants live numbers), while a bulk refresh uses the
+// gentle GET-then-enrich-if-stale hybrid so a recruiter with many linked prospects
+// doesn't trigger a live game pull for each one.
+//
+// Shaped for db.SetMaxOpenConns(1): the caller has already resolved pubID and
+// closed its cursor, the fetch holds no database handle, and the writes follow.
+func refreshOneProspect(ctx context.Context, prospectID, pubID int, bulk bool) (LastRankProspectLookupResponse, error) {
+	out := LastRankProspectLookupResponse{ProspectID: prospectID, LastRankPublicID: pubID}
+
+	var player *lastrankPlayerResp
+	var err error
+	if bulk {
+		player, err = lastRankPlayerBulk(ctx, pubID)
+	} else {
+		player, err = lastRankPlayerFresh(ctx, pubID)
+	}
+	if err != nil {
+		return out, err
+	}
+
+	heroVal := int64(0)
+	if player.HeroPower != nil {
+		heroVal = *player.HeroPower
+	}
+	// Wrapped so a partial write can't survive, per the standing convention. The
+	// staleness gate this still lacks (a cached response can overwrite a fresher
+	// hand-entered figure) needs prospects.lastrank_captured_at, which arrives with
+	// the scheduler — it matters once this runs unattended, not on a click.
+	tx, err := db.Begin()
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE prospects SET power = ?, hero_power = ?, lastrank_photo_url = ?, lastrank_photo_failover = ?
+		WHERE id = ?`, player.Power, heroVal, player.PhotoURL, player.PhotoURLFailover, prospectID); err != nil {
+		return out, err
+	}
+	if err := tx.Commit(); err != nil {
+		return out, err
+	}
+
+	out.LastRankName = player.Name
+	out.Power = int64Ptr(player.Power)
+	out.HeroPower = player.HeroPower
+	out.ServerID = player.HomeServerID
+	out.BaseLevel = player.BaseLevel
+	out.Rank = lastRankRankToString(player.AllianceRank)
+	out.CaptureDate = player.LastSeenAt
+	out.Updated = true
+	if player.AllianceAbbr != nil {
+		out.AllianceAbbr = *player.AllianceAbbr
+	}
+	if player.AllianceName != nil {
+		out.AllianceName = *player.AllianceName
+	}
+	return out, nil
 }
 
 // lastRankFinish logs the single summary row for a browser-driven batch.
@@ -730,47 +818,11 @@ func lastRankProspectLookup(w http.ResponseWriter, r *http.Request) {
 		pubID = int(stored.Int64)
 	}
 
-	// Single on-demand lookup → force a fresh enrich. Bulk refresh → the gentle
-	// GET-then-enrich-if-stale hybrid, same as the member extended sync, so a
-	// recruiter with many linked prospects doesn't trigger a live pull each.
-	var player *lastrankPlayerResp
-	var err error
-	if req.Bulk {
-		player, err = lastRankPlayerBulk(r.Context(), pubID)
-	} else {
-		player, err = lastRankPlayerFresh(r.Context(), pubID)
-	}
+	out, err := refreshOneProspect(r.Context(), req.ProspectID, pubID, req.Bulk)
 	if err != nil {
 		slogLastRank("lastrank prospect lookup failed", err)
 		http.Error(w, "Couldn't reach LastRank for this player.", http.StatusBadGateway)
 		return
-	}
-
-	// Persist the enrichment onto the prospect record.
-	heroVal := int64(0)
-	if player.HeroPower != nil {
-		heroVal = *player.HeroPower
-	}
-	db.Exec("UPDATE prospects SET power = ?, hero_power = ?, lastrank_photo_url = ?, lastrank_photo_failover = ? WHERE id = ?",
-		player.Power, heroVal, player.PhotoURL, player.PhotoURLFailover, req.ProspectID)
-
-	out := LastRankProspectLookupResponse{
-		ProspectID:       req.ProspectID,
-		LastRankPublicID: pubID,
-		LastRankName:     player.Name,
-		Power:            int64Ptr(player.Power),
-		HeroPower:        player.HeroPower,
-		ServerID:         player.HomeServerID,
-		BaseLevel:        player.BaseLevel,
-		Rank:             lastRankRankToString(player.AllianceRank),
-		CaptureDate:      player.LastSeenAt,
-		Updated:          true,
-	}
-	if player.AllianceAbbr != nil {
-		out.AllianceAbbr = *player.AllianceAbbr
-	}
-	if player.AllianceName != nil {
-		out.AllianceName = *player.AllianceName
 	}
 
 	if !req.Bulk {

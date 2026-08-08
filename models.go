@@ -601,6 +601,33 @@ type VSLeagueAllianceSearchResult struct {
 	CapturedAt *string `json:"captured_at"`
 }
 
+// BackgroundJob is one server-side bulk run, as served to the progress poll.
+//
+// Counters is the raw JSON blob from the row — each job kind defines its own keys,
+// so the runner never needs to know them and adding a metric needs no schema change.
+type BackgroundJob struct {
+	ID         int64               `json:"id"`
+	Kind       string              `json:"kind"`
+	Status     string              `json:"status"`  // running|done|failed|interrupted|cancelled
+	Trigger    string              `json:"trigger"` // manual|scheduled
+	StartedBy  string              `json:"started_by"`
+	Total      int                 `json:"total"`
+	Processed  int                 `json:"processed"`
+	Counters   string              `json:"counters"`
+	Error      string              `json:"error"`
+	StartedAt  string              `json:"started_at"`
+	FinishedAt string              `json:"finished_at"`
+	Items      []BackgroundJobItem `json:"items"`
+}
+
+type BackgroundJobItem struct {
+	Seq    int    `json:"seq"`
+	Label  string `json:"label"`
+	RefID  int    `json:"ref_id"`
+	State  string `json:"state"` // queued|active|done|skip|err
+	Detail string `json:"detail"`
+}
+
 // LastRankPlayerSearchResult is one hit from the recruiting player search. Mirrors
 // VSLeagueAllianceSearchResult in shape and intent: everything nullable upstream
 // stays a pointer, so "no alliance" and "alliance unknown" don't collapse into "".

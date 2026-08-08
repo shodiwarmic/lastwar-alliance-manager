@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -1708,40 +1709,68 @@ func deleteExternalAlliance(w http.ResponseWriter, r *http.Request) {
 // refreshExternalAlliance re-pulls a single cached alliance's stats from LastRank by its stored
 // id. The frontend calls this in a paced loop for a bulk refresh; the shared 1 req/sec limiter
 // naturally throttles it, and no DB handle is held across the network call (single connection).
+// errNoLastRankLink marks an alliance with no lastrank_id — a user-fixable state,
+// not a failure. The HTTP handler returns 400; the job runner skips the item.
+var errNoLastRankLink = errors.New("no lastrank id on this alliance")
+
 func refreshExternalAlliance(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
 		badRequest(w, "Invalid id")
 		return
 	}
-	var lrid *string
-	if err := db.QueryRow(`SELECT lastrank_id FROM external_alliances WHERE id=?`, id).Scan(&lrid); err != nil {
-		http.Error(w, "Alliance not found", http.StatusNotFound)
-		return
-	}
-	if lrid == nil || strings.TrimSpace(*lrid) == "" {
-		badRequest(w, "No LastRank id on this alliance — edit it and add a lastrank.fun link first")
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	snap, err := fetchLastRankOpponentSnapshot(ctx, *lrid)
+	snap, err := refreshOneExternalAlliance(r.Context(), id)
 	if err != nil {
-		slogLastRank("refreshExternalAlliance failed", err)
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			http.Error(w, "Alliance not found", http.StatusNotFound)
+		case errors.Is(err, errNoLastRankLink):
+			badRequest(w, "No LastRank id on this alliance — edit it and add a lastrank.fun link first")
+		case errors.Is(err, context.DeadlineExceeded):
+			slogLastRank("refreshExternalAlliance failed", err)
 			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
-			return
+		case errors.Is(err, errLastRankUpstream):
+			slogLastRank("refreshExternalAlliance failed", err)
+			http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
+		default:
+			dbError(w, "refreshExternalAlliance update", err)
 		}
-		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
-		return
-	}
-	if _, err := db.Exec(`UPDATE external_alliances SET tag=COALESCE(NULLIF(?,''),tag), name=COALESCE(NULLIF(?,''),name),
-		server=?, power=?, kills=?, member_count=?, lastrank_seen_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, snap.LastSeenAt, id); err != nil {
-		dbError(w, "refreshExternalAlliance update", err)
 		return
 	}
 	writeJSON(w, snap)
+}
+
+// refreshOneExternalAlliance re-pulls one registry row's snapshot from LastRank.
+// Shared by the HTTP handler and the gather job.
+//
+// Shaped for db.SetMaxOpenConns(1): read the id (cursor closed) → fetch with no
+// database handle held → write.
+func refreshOneExternalAlliance(ctx context.Context, id int) (VSLeagueOpponentSnapshot, error) {
+	var snap VSLeagueOpponentSnapshot
+	var lrid *string
+	if err := db.QueryRow(`SELECT lastrank_id FROM external_alliances WHERE id=?`, id).Scan(&lrid); err != nil {
+		return snap, err
+	}
+	if lrid == nil || strings.TrimSpace(*lrid) == "" {
+		return snap, errNoLastRankLink
+	}
+
+	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	snap, err := fetchLastRankOpponentSnapshot(fetchCtx, *lrid)
+	if err != nil {
+		if errors.Is(fetchCtx.Err(), context.DeadlineExceeded) {
+			return snap, context.DeadlineExceeded
+		}
+		return snap, err
+	}
+
+	if _, err := db.Exec(`UPDATE external_alliances SET tag=COALESCE(NULLIF(?,''),tag), name=COALESCE(NULLIF(?,''),name),
+		server=?, power=?, kills=?, member_count=?, lastrank_seen_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		snap.Tag, snap.Name, snap.ServerID, snap.Power, snap.Kills, snap.MemberCount, snap.LastSeenAt, id); err != nil {
+		return snap, err
+	}
+	return snap, nil
 }
 
 // lookupExternalAlliance resolves a pasted LastRank link/id to a snapshot WITHOUT caching, for
