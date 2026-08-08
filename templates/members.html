@@ -47,7 +47,9 @@
                     <p class="lastrank-help">
                         Pull power, hero power, HQ level and rank from
                         <a href="https://lastrank.fun" target="_blank" rel="noopener noreferrer">lastrank.fun</a>.
-                        Stat updates apply only when newer than your data; rank changes and unmatched names are shown for review.
+                        Stat updates apply only when newer than your data. Rank changes, renames, unmatched names and
+                        possible departures go to a review queue that survives closing this page — defer one and it stays
+                        hidden until a newer pull, or until LastRank proposes something different.
                         Extended info (troop kills, power, hero power, HQ, and profile photos) is gathered per player at ~1/second,
                         so it takes a while — it runs on the server, so you can close this page and check back later.
                     </p>
@@ -57,6 +59,10 @@
                         </button>
                         <button type="button" id="lastrank-extended-btn" class="btn btn-secondary">
                             <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-crosshair"/></svg> Gather Extended Info
+                        </button>
+                        <button type="button" id="lastrank-queue-btn" class="btn btn-secondary" style="display: none;">
+                            <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-list-check"/></svg>
+                            Review Queue <span id="lastrank-pending-badge" class="filter-count-badge" hidden></span>
                         </button>
                         <button type="button" id="lastrank-extended-cancel" class="btn btn-danger btn-sm" style="display: none;">
                             <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Stop

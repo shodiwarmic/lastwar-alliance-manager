@@ -420,6 +420,12 @@ func main() {
 	// of copy-pasting a URL from a browser tab.
 	router.HandleFunc("/api/lastrank/player-search", authMiddleware(requirePermission("manage_recruiting", lastRankPlayerSearch))).Methods("GET")
 
+	// LastRank Phase-1 review queue. The read costs nothing upstream, so an officer
+	// can work a backlog without spending a request against the volunteer service.
+	router.HandleFunc("/api/lastrank/review", authMiddleware(requirePermission("manage_members", getLastRankReview))).Methods("GET")
+	router.HandleFunc("/api/lastrank/review/summary", authMiddleware(requirePermission("manage_members", getLastRankReviewSummary))).Methods("GET")
+	router.HandleFunc("/api/lastrank/review/action", authMiddleware(requirePermission("manage_members", lastRankReviewAction))).Methods("POST")
+
 	// Background jobs. No requirePermission wrapper here on purpose: the permission
 	// depends on the job KIND in the payload (manage_members / manage_allies /
 	// manage_recruiting / manage_external_alliances), so each handler resolves it

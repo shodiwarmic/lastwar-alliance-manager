@@ -367,8 +367,75 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Persist the decisions this pull proposes, so they outlive the modal and a
+	// deferral means something. Stats stay ephemeral on purpose: they are
+	// staleness-gated append-only history and need no decision.
+	//
+	// The transaction was previously read-only (deferred rollback as a consistent
+	// snapshot). It now has to commit — but only the queue is written here; nothing
+	// this preview shows has been applied.
+	if err := reconcilePendingChanges(tx, buildPendingProposals(resp), capture); err != nil {
+		slog.Error("lastrank queue reconcile failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		slog.Error("lastrank preview commit failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if pending, err := loadPendingChanges(true); err == nil {
+		resp.Pending = pending
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// buildPendingProposals turns a preview into the decisions worth queueing.
+//
+// Deliberately NOT the stat diffs: power / hero / HQ are staleness-gated,
+// provenance-stamped and append-only, so there is nothing for an officer to
+// decide. What lands here is what a human has to judge — a rank moved, a member
+// renamed, a name we can't place, a member who looks gone.
+func buildPendingProposals(resp LastRankSyncPreviewResponse) []pendingProposal {
+	var out []pendingProposal
+
+	for _, m := range resp.Matched {
+		if m.MatchedMember == nil {
+			continue
+		}
+		if m.RankDiff != nil {
+			out = append(out, pendingProposal{
+				Kind: PendingKindRank, MemberID: m.MatchedMember.ID, PublicID: m.LastRankPublicID,
+				LastRankName: m.LastRankName,
+				CurrentValue: m.RankDiff.Current, ProposedValue: m.RankDiff.New,
+			})
+		}
+		if m.NameChange != nil {
+			out = append(out, pendingProposal{
+				Kind: PendingKindName, MemberID: m.MatchedMember.ID, PublicID: m.LastRankPublicID,
+				LastRankName: m.LastRankName,
+				CurrentValue: m.NameChange.Current, ProposedValue: m.NameChange.New,
+			})
+		}
+	}
+	for _, u := range resp.Unmatched {
+		out = append(out, pendingProposal{
+			Kind: PendingKindUnmatched, PublicID: u.LastRankPublicID,
+			LastRankName: u.LastRankName, ProposedValue: u.LastRankName,
+			Reason: "On LastRank as " + u.Rank + ", matched no roster member",
+		})
+	}
+	for _, c := range resp.ArchiveCandidates {
+		out = append(out, pendingProposal{
+			Kind: PendingKindArchive, MemberID: c.MemberID,
+			LastRankName: c.Name, CurrentValue: c.Rank, ProposedValue: "EX",
+			Reason: c.Reason,
+		})
+	}
+	return out
 }
 
 // --- Phase 1: commit ---

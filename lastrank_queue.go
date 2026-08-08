@@ -56,13 +56,13 @@ func lastRankFingerprint(kind string, memberID int, proposed string) string {
 
 // pendingProposal is one decision a pull wants to put in front of an officer.
 type pendingProposal struct {
-	Kind           string
-	MemberID       int
-	PublicID       int
-	LastRankName   string
-	CurrentValue   string
-	ProposedValue  string
-	Reason         string
+	Kind          string
+	MemberID      int
+	PublicID      int
+	LastRankName  string
+	CurrentValue  string
+	ProposedValue string
+	Reason        string
 }
 
 // reconcilePendingChanges makes the queue match what this pull proposes. It is the

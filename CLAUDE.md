@@ -27,7 +27,7 @@ Every handler that creates, updates, or deletes data must call `logActivity`. Th
 logActivity(userID int, username, action, entityType, entityName string, isSensitive bool, details ...string)
 ```
 
-**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"deactivated"`, `"reactivated"`, `"reset"`
+**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"deferred"`, `"deactivated"`, `"reactivated"`, `"reset"`
 
 > `"reset_password"` is retired — no handler emits it since the random-password flow was
 > removed. Historical rows keep it, which is harmless: `activity.js` renders actions verbatim.
@@ -57,7 +57,7 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 > whom" — add the entity type to `neverBatched` rather than accepting the merge.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -365,6 +365,41 @@ invariant).
 > JSON fields are populated from those subqueries. Manual edits (member modal,
 > My Profile, CSV import, prospect accept) and LastRank sync all append rows;
 > HQ never regresses (only a higher value is recorded).
+
+## LastRank review queue (`lastrank_queue.go`)
+
+Phase-1 **decisions** are durable: rank changes, name changes, unmatched names and
+possible departures live in `lastrank_pending_changes` (migration 064) instead of
+vanishing when the modal closes. Stats are deliberately NOT queued — power / hero /
+HQ are staleness-gated, provenance-stamped, append-only history, so there is
+nothing for a human to decide.
+
+**Keyed on `(kind, subject_key)`.** A naive `(member_id, lastrank_public_id)` key
+collides: `lastrankAllianceMember.PublicID` is a non-pointer `int`, so a missing
+upstream id decodes to `0` and two unmatched entries without one would both key on
+`('unmatched', 0, 0)`. Build keys with `lastRankSubjectKey` — the no-id case folds
+the name through `foldName`, so a re-accented name can't mint a duplicate.
+
+**Two kinds of "no".** `reconcilePendingChanges` re-opens a row when:
+- the **fingerprint changed** (LastRank now proposes something different), or
+- it was `deferred_once` and the **capture date advanced**.
+
+Keying "not now" on the capture date *advancing* — rather than on any refresh —
+means clicking Fetch twice in a minute doesn't evaporate the deferral. Proposals a
+pull no longer makes are **deleted**: upstream withdrew them.
+
+**Apply re-validates.** A queued proposal can be days old. Every apply goes through
+the shared helpers in `lastrank_apply.go` (`applyRankChange` / `applyNameChange` /
+`applyArchive` / `applyUnmatchedAction`), each of which reports whether it actually
+changed anything. A proposal reality already overtook resolves as **superseded**,
+not as a phantom success. Those helpers are shared with `lastRankCommit` on purpose
+— two paths that both "apply a rank change" would drift, and the queue path is the
+one nobody watches.
+
+**Unmatched names resolve one at a time.** Resolving one needs a per-row target
+(which member, or "add as new"), and the request carries only one; a batch
+containing an unmatched row is rejected rather than aliasing several different
+LastRank players to the same member.
 
 ## Background jobs (`jobs.go`)
 
