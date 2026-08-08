@@ -478,27 +478,78 @@ func napMemberCount(w http.ResponseWriter, r *http.Request) {
 // Our own alliance has NO registry row (Rule 2), so its only home is the is_own history row — which
 // is exactly why the history backfill exists rather than relying on the registry.
 func storeNAPMemberCount(lastrankID, capturedAt string, cur, max int) error {
+	_, err := storeNAPAllianceSnapshot(lastrankID, capturedAt, cur, nil, nil, "")
+	return err
+}
+
+// storeNAPAllianceSnapshot writes the member count, plus the power/kills that came
+// free in the very same per-alliance detail response. The gather was already
+// paying for that request and throwing both away — the alliance-level analogue of
+// how the member extended sync takes power/hero/HQ off the one player record.
+//
+// power/kills/seenAt are optional; pass nils to write only the member count.
+//
+// CLOCKS: this data comes from the DETAIL endpoint, so it is guarded against — and
+// writes — lastrank_seen_at. It must never touch lastrank_captured_at or the
+// power_rank/kills_rank columns, which belong to the LADDER capture. Migration 058
+// spells out why: guarding a ladder captured_at against a detail last_seen_at
+// would let one per-alliance refresh permanently block ladder writes for that row,
+// stranding its rank at NULL forever.
+//
+// Returns whether the power/kills were fresh enough to apply.
+func storeNAPAllianceSnapshot(lastrankID, capturedAt string, cur int, power, kills *int64, seenAt string) (statsApplied bool, err error) {
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`UPDATE external_alliances SET member_count = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE lastrank_id = ? COLLATE NOCASE`, cur, lastrankID); err != nil {
-		return err
+	// Never let a stale detail response walk back a fresher one. Compared as
+	// parsed times, never as strings: lastrank_seen_at is a declared DATETIME, so
+	// it reads back RFC3339Nano while LastRank sends ISO — lexical comparison
+	// silently mis-sorts the two forms.
+	applyStats := power != nil && kills != nil && seenAt != ""
+	if applyStats {
+		var stored sql.NullString
+		tx.QueryRow(`SELECT lastrank_seen_at FROM external_alliances WHERE lastrank_id = ? COLLATE NOCASE`,
+			lastrankID).Scan(&stored)
+		applyStats = lastRankCaptureNewer(seenAt, stored.String)
+	}
+
+	if applyStats {
+		res, uerr := tx.Exec(`UPDATE external_alliances
+			SET member_count = ?, power = ?, kills = ?, lastrank_seen_at = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE lastrank_id = ? COLLATE NOCASE`, cur, *power, *kills, seenAt, lastrankID)
+		if uerr != nil {
+			return false, uerr
+		}
+		// Our own alliance has no registry row (Rule 2), so this legitimately
+		// affects zero rows — report that honestly rather than claiming a write.
+		if n, _ := res.RowsAffected(); n == 0 {
+			statsApplied = false
+		} else {
+			statsApplied = true
+		}
+	} else if _, uerr := tx.Exec(`UPDATE external_alliances SET member_count = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE lastrank_id = ? COLLATE NOCASE`, cur, lastrankID); uerr != nil {
+		return false, uerr
 	}
 
 	// Only fills a hole; never rewrites a datapoint we already recorded.
+	//
+	// Deliberately member_count only. The history row for this capture was written
+	// by the ladder, carrying the LADDER's power/kills at recorded_at = capturedAt;
+	// overwriting those with detail-endpoint figures would put two different clocks
+	// in one datapoint. The registry above holds the current detail-sourced values.
 	if capturedAt != "" {
 		if _, err := tx.Exec(`UPDATE alliance_stats_history SET member_count = ?
 			WHERE member_count IS NULL AND recorded_at = ? AND source = ?
 			  AND lastrank_id = ? COLLATE NOCASE`,
 			cur, capturedAt, provenanceSource("lastrank"), lastrankID); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return tx.Commit()
+	return statsApplied, tx.Commit()
 }
 
 // napFinish is phase 3: one activity row for the whole run, matching how the LastRank member sync

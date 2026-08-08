@@ -106,18 +106,27 @@ func (j *napMembersJob) Step(ctx context.Context, it jobItem) (jobStep, error) {
 		return jobStep{State: "skip", Detail: "no member count"}, nil
 	}
 
-	if err := storeNAPMemberCount(lastrankID, j.capturedAt, a.CurMember, a.MaxMember); err != nil {
+	// Power and kills ride along free — they are already in this response, which we
+	// were fetching for the member count anyway. Same idea as the member extended
+	// sync taking power/hero/HQ off the one player record.
+	statsApplied, err := storeNAPAllianceSnapshot(
+		lastrankID, j.capturedAt, a.CurMember, &a.Fightpower, &a.ArmyKill, a.LastSeenAt)
+	if err != nil {
 		return jobStep{}, err
 	}
+
 	max := a.MaxMember
 	if max == 0 {
 		max = 100
 	}
-	return jobStep{
-		State:    "done",
-		Detail:   fmt.Sprintf("✓ %d/%d members", a.CurMember, max),
-		Counters: map[string]int{"members_synced": 1},
-	}, nil
+	counters := map[string]int{"members_synced": 1}
+	detail := fmt.Sprintf("✓ %d/%d members", a.CurMember, max)
+	if statsApplied {
+		counters["stats_synced"] = 1
+		detail = fmt.Sprintf("✓ %s power · %s kills · %d/%d members",
+			formatBigInt(a.Fightpower), formatBigInt(a.ArmyKill), a.CurMember, max)
+	}
+	return jobStep{State: "done", Detail: detail, Counters: counters}, nil
 }
 
 // Finish writes one activity row for the whole run, matching how the ladder
@@ -129,5 +138,6 @@ func (j *napMembersJob) Finish(ctx context.Context, counters map[string]int, pro
 	}
 	logActivity(j.actor.UserID, j.actor.Username, "imported", "alliance_stats",
 		fmt.Sprintf("server %d ladder", j.server), false,
-		fmt.Sprintf("%d alliances checked; %d member counts; captured %s", processed, synced, j.capturedAt))
+		fmt.Sprintf("%d alliances checked; %d member counts; %d power/kills refreshed; captured %s",
+			processed, synced, counters["stats_synced"], j.capturedAt))
 }

@@ -732,9 +732,10 @@ function wireNapMembersJob() {
         statusEl: document.getElementById('nap-status'),
         cancelBtn: document.getElementById('nap-members-cancel'),
         busyEls: [document.getElementById('nap-refresh-btn')],
-        confirm: 'Fetch member counts for every ladder alliance with a LastRank ID? '
+        confirm: 'Fetch member counts, power and kills for every ladder alliance with a LastRank ID? '
             + 'Each is pulled at ~1/second on the server — you can leave this page.',
-        summarize: c => `Member counts gathered for ${c.members_synced || 0} alliance(s).`,
+        summarize: c => `Gathered ${c.members_synced || 0} member count(s)`
+            + `, refreshed power/kills for ${c.stats_synced || 0}.`,
         onDone: () => { if (typeof loadNap === 'function') loadNap(); },
     });
 }
