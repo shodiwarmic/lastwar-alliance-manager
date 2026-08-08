@@ -27,32 +27,8 @@
 }
 
 /* Phase-2 per-member progress list */
-.lastrank-progress {
-    margin-top: 14px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    max-height: 320px;
-    overflow-y: auto;
-}
-
-.lr-prog-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 12px;
-    border-bottom: 1px solid var(--border-color);
-    font-size: 0.88rem;
-}
-
-.lr-prog-row:last-child { border-bottom: none; }
-.lr-prog-name { color: var(--text-primary); }
-.lr-prog-status { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
-.lr-prog-row.active { background: var(--bg-secondary); }
-.lr-prog-row.active .lr-prog-status { color: var(--color-primary); }
-.lr-prog-row.done .lr-prog-status { color: var(--color-success); }
-.lr-prog-row.skip .lr-prog-status { color: var(--text-muted); }
-.lr-prog-row.err .lr-prog-status { color: var(--color-danger); }
+/* Extended-sync progress now uses the shared .job-progress / .job-prog-* component
+   in job-progress.css — see job-progress.js. */
 
 /* Review modal */
 .lastrank-meta {

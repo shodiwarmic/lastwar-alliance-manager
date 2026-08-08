@@ -2,6 +2,7 @@
 <link rel="stylesheet" href="/filter-panel.css">
 <link rel="stylesheet" href="/members.css">
 <link rel="stylesheet" href="/lastrank.css">
+<link rel="stylesheet" href="/job-progress.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {{end}}
@@ -47,7 +48,8 @@
                         Pull power, hero power, HQ level and rank from
                         <a href="https://lastrank.fun" target="_blank" rel="noopener noreferrer">lastrank.fun</a>.
                         Stat updates apply only when newer than your data; rank changes and unmatched names are shown for review.
-                        Extended info (troop kills, power, hero power, HQ, and profile photos) is gathered per player and is slower.
+                        Extended info (troop kills, power, hero power, HQ, and profile photos) is gathered per player at ~1/second,
+                        so it takes a while — it runs on the server, so you can close this page and check back later.
                     </p>
                     <div class="lastrank-actions">
                         <button type="button" id="lastrank-fetch-btn" class="btn btn-primary">
@@ -56,9 +58,12 @@
                         <button type="button" id="lastrank-extended-btn" class="btn btn-secondary">
                             <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-crosshair"/></svg> Gather Extended Info
                         </button>
+                        <button type="button" id="lastrank-extended-cancel" class="btn btn-danger btn-sm" style="display: none;">
+                            <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Stop
+                        </button>
                         <span id="lastrank-status" class="status-msg"></span>
                     </div>
-                    <div id="lastrank-extended-progress" class="lastrank-progress" style="display: none;"></div>
+                    <div id="lastrank-extended-progress" class="job-progress" style="display: none;"></div>
                 </div>
             </section>
 
@@ -435,5 +440,6 @@
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 <script src="/filter-panel.js"></script>
 <script src="/members.js"></script>
+<script src="/job-progress.js"></script>
 <script src="/lastrank.js"></script>
 {{end}}
