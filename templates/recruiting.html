@@ -94,14 +94,17 @@
         <div class="modal-content modal-md">
             <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> LastRank Lookup</h2>
             <p class="help-text" id="lr-prospect-name" style="font-weight:600;"></p>
-            <ol class="help-text" style="margin:0 0 10px 1.1em;padding:0;">
-                <li><a id="lr-prospect-search" href="#" target="_blank" rel="noopener noreferrer">Search this player on LastRank</a> (opens a new tab).</li>
-                <li>Open the correct player, then copy the page URL (or the number after <code>/p/</code>).</li>
-                <li>Paste it below and fetch.</li>
-            </ol>
+            <p class="help-text" style="margin:0 0 10px;">
+                Type a player name, then press Enter or pick the search option to look them up on
+                LastRank. Already have the link? Paste the player URL or ID and press Fetch.
+            </p>
+            <div class="form-group" id="lr-prospect-find" style="position:relative;">
+                <label for="lr-prospect-input">Player name, or LastRank URL / ID:</label>
+                <input type="text" id="lr-prospect-input" class="form-input" autocomplete="off" placeholder="ShodiWarmic — or https://lastrank.fun/p/1585224">
+            </div>
             <div class="form-group">
-                <label for="lr-prospect-input">LastRank player URL or ID:</label>
-                <input type="text" id="lr-prospect-input" class="form-input" placeholder="https://lastrank.fun/p/1585224  — or just 1585224">
+                <label for="lr-prospect-server">Server # (optional — narrows the search):</label>
+                <input type="text" id="lr-prospect-server" class="form-input" inputmode="numeric" placeholder="any server">
             </div>
             <div id="lr-prospect-result" class="status-msg"></div>
             <div class="modal-actions">

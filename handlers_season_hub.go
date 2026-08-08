@@ -1463,13 +1463,21 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	matched := []ContributionImportRow{}
 	unresolved := []ContributionImportRow{}
 
+	// Built once for the whole batch — resolveOCRPlayer's tier-3 folded fallback
+	// would otherwise rebuild it per candidate. Non-fatal on failure.
+	foldIdx, err := buildFoldedNameIndex(tx, user.ID)
+	if err != nil {
+		slog.Error("handleContributionsImport: folded name index build failed; continuing without accent tolerance", "error", err)
+		foldIdx = nil
+	}
+
 	for _, rec := range records {
 		row := ContributionImportRow{
 			OriginalName: rec.PlayerName,
 			Points:       rec.Score,
 		}
 
-		resolvedName, resolvedScore, member, matchType := resolveOCRPlayer(tx, rec, user.ID)
+		resolvedName, resolvedScore, member, matchType := resolveOCRPlayer(tx, rec, user.ID, foldIdx)
 		_ = resolvedName // original name kept in row.OriginalName for display
 		row.Points = resolvedScore
 		if member == nil {

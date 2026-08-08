@@ -601,6 +601,26 @@ type VSLeagueAllianceSearchResult struct {
 	CapturedAt *string `json:"captured_at"`
 }
 
+// LastRankPlayerSearchResult is one hit from the recruiting player search. Mirrors
+// VSLeagueAllianceSearchResult in shape and intent: everything nullable upstream
+// stays a pointer, so "no alliance" and "alliance unknown" don't collapse into "".
+//
+// AllianceTag / AllianceName let the prospect form prefill the source alliance,
+// and PhotoURL feeds buildLastRankAvatar the same way the per-player endpoint does.
+type LastRankPlayerSearchResult struct {
+	PublicID     int     `json:"public_id"`
+	Name         string  `json:"name"`
+	Server       *int    `json:"server"`
+	AllianceTag  *string `json:"alliance_tag"`
+	AllianceName *string `json:"alliance_name"`
+	Country      *string `json:"country"`
+	Power        *int64  `json:"power"`
+	Kills        *int64  `json:"kills"`
+	HeroPower    *int64  `json:"hero_power"` // upstream calls this `thp`
+	PhotoURL     *string `json:"photo_url"`
+	CapturedAt   *string `json:"captured_at"`
+}
+
 // VSLeagueOpponentMember is one member of the opponent alliance from LastRank, for the daily-MVP
 // picker. We persist only the name (as mvp_name); power/rank are display hints in the dropdown.
 type VSLeagueOpponentMember struct {

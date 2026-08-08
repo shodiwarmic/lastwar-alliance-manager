@@ -5458,3 +5458,71 @@ html.theme-dark .numInputWrapper span.arrowUp::after {
 html.theme-dark .numInputWrapper span.arrowDown::after {
     border-top-color: var(--color-text-muted);
 }
+/* ── Remote finder (shared type-ahead combobox) ───────────────────────────────
+   Backs buildRemoteFinder() in global.js: the Recruiting player picker, and the
+   External Alliances / VS League alliance pickers. Mirrors the older
+   .ext-find-* / .vsl-find-* blocks those pages still carry, but on the real
+   token names — the originals reference --color-text-muted and --color-text,
+   which are not defined in any theme block and so fall through to browser
+   defaults in dark mode.
+
+   The dropdown is absolutely positioned: give its container position:relative,
+   or pass a `position` callback to anchor it yourself. */
+.finder-dropdown {
+    position: absolute;
+    z-index: 30;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.finder-head {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    padding: 8px 12px 4px;
+}
+
+.finder-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    border-top: 1px solid var(--border-color);
+    cursor: pointer;
+    text-align: left;
+    color: var(--text-primary);
+}
+
+.finder-item:hover { background: var(--bg-secondary); }
+.finder-head + .finder-item { border-top: none; }
+.finder-name { font-weight: 600; }
+.finder-meta { font-size: 0.8rem; color: var(--text-muted); }
+.finder-msg { font-size: 0.82rem; color: var(--text-muted); padding: 8px 12px; }
+.finder-err { color: var(--color-danger); font-weight: 600; }
+
+.finder-action {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 9px 12px;
+    background: none;
+    border: none;
+    border-top: 1px solid var(--border-color);
+    cursor: pointer;
+    text-align: left;
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.finder-action:hover { background: var(--bg-secondary); }

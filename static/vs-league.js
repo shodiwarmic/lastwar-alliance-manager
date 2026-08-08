@@ -932,11 +932,11 @@
         // Local source: the external-alliances registry (populated by past lookups/allies/prospects).
         let knownAlliances = [];
         api('GET', '/api/external-alliances').then(list => { knownAlliances = list || []; }).catch(() => { });
-        const localMatches = q => {
-            q = q.trim().toLowerCase();
+        const localMatches = raw => {
+            const q = foldSearch(raw.trim());
             if (!q) return [];
             return knownAlliances.filter(a =>
-                (a.tag || '').toLowerCase().includes(q) || (a.name || '').toLowerCase().includes(q)).slice(0, 6);
+                foldSearch(a.tag).includes(q) || foldSearch(a.name).includes(q)).slice(0, 6);
         };
         function setSnapFromMatch(m) {
             oppTag.value = m.tag || ''; oppName.value = m.name || ''; if (m.server != null) oppServer.value = m.server;
@@ -1117,14 +1117,17 @@
                 el('span', { className: 'vsl-find-name', text: nm }),
                 meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
             function render() {
-                const q = input.value.trim().toLowerCase();
+                // Folded on both sides: the opponent roster comes straight from
+                // LastRank and is the likeliest place in the app for accented
+                // in-game names.
+                const q = foldSearch(input.value.trim());
                 clear(dd);
                 if (!q) { close(); return; }
-                ourRoster.filter(m => (m.name || '').toLowerCase().includes(q)).slice(0, 6).forEach((m, i, arr) => {
+                ourRoster.filter(m => foldSearch(m.name).includes(q)).slice(0, 6).forEach((m, i, arr) => {
                     if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'Our roster' }));
                     dd.appendChild(item(m.name, m.rank || '', true));
                 });
-                (oppRoster || []).filter(m => (m.name || '').toLowerCase().includes(q)).slice(0, 6).forEach((m, i) => {
+                (oppRoster || []).filter(m => foldSearch(m.name).includes(q)).slice(0, 6).forEach((m, i) => {
                     if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: oppLabel }));
                     dd.appendChild(item(m.name, m.power != null ? fmtBig(m.power) + ' pw' : '', false));
                 });
@@ -1288,7 +1291,13 @@
             function open() { dd.hidden = false; document.addEventListener('mousedown', onDoc); }
             function close() { dd.hidden = true; document.removeEventListener('mousedown', onDoc); }
             const pick = a => { tagInput.value = a.tag || ''; row.name = a.name || ''; if (a.server != null) serverInput.value = a.server; close(); };
-            const localItems = q => knownAlliances.filter(a => (a.tag || '').toLowerCase().includes(q) || (a.name || '').toLowerCase().includes(q)).slice(0, 6);
+            // Folds its own argument (foldSearch lowercases too), so callers pass raw
+            // input and "pacha" still finds "[PÀCHA]".
+            const localItems = raw => {
+                const q = foldSearch(raw);
+                if (!q) return [];
+                return knownAlliances.filter(a => foldSearch(a.tag).includes(q) || foldSearch(a.name).includes(q)).slice(0, 6);
+            };
             function render(locals, lrs, msg, isErr) {
                 clear(dd);
                 (locals || []).forEach((a, i) => {
@@ -1310,23 +1319,23 @@
             async function lookupLR() {
                 const q = tagInput.value.trim(), srv = serverInput.value.trim();
                 if (!q) return;
-                if (!srv) { render(localItems(q.toLowerCase()), null, 'Enter this alliance’s server # to search LastRank.', true); serverInput.focus(); return; }
-                render(localItems(q.toLowerCase()), null, 'Searching LastRank…', false);
+                if (!srv) { render(localItems(q), null, 'Enter this alliance’s server # to search LastRank.', true); serverInput.focus(); return; }
+                render(localItems(q), null, 'Searching LastRank…', false);
                 try {
                     const list = await api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q) + '&server=' + encodeURIComponent(srv));
-                    render(localItems(q.toLowerCase()), list, (list && list.length) ? null : 'No matches on server ' + srv + '.', false);
-                } catch (e) { render(localItems(q.toLowerCase()), null, e.message, true); }
+                    render(localItems(q), list, (list && list.length) ? null : 'No matches on server ' + srv + '.', false);
+                } catch (e) { render(localItems(q), null, e.message, true); }
             }
             tagInput.addEventListener('input', () => {
-                const q = tagInput.value.trim().toLowerCase();
-                const exact = knownAlliances.find(a => (a.tag || '').toLowerCase() === q);
+                const q = foldSearch(tagInput.value.trim());
+                const exact = knownAlliances.find(a => foldSearch(a.tag) === q);
                 row.name = exact ? (exact.name || '') : '';
                 if (exact && exact.server != null && !serverInput.value) serverInput.value = exact.server;
                 if (!q) { close(); return; }
                 render(localItems(q), null, null, false);
                 markOurs();
             });
-            tagInput.addEventListener('focus', () => { const q = tagInput.value.trim().toLowerCase(); if (q) render(localItems(q), null, null, false); });
+            tagInput.addEventListener('focus', () => { const q = tagInput.value.trim(); if (q) render(localItems(q), null, null, false); });
             tagInput.addEventListener('keydown', e => { if (e.key === 'Escape') close(); else if (e.key === 'Enter' && !dd.hidden) { e.preventDefault(); lookupLR(); } });
             return wrap;
         }

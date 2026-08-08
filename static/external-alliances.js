@@ -111,7 +111,10 @@
     // ---- search + filter + sort ----
     function rebuildFuse() {
         if (typeof Fuse === 'undefined') { fuseInstance = null; return; }
-        fuseInstance = new Fuse(all, { keys: ['tag', 'name'], threshold: 0.4, minMatchCharLength: 1 });
+        // Indexes the folded fields, so "pacha" is an EXACT hit for "[PÀCHA]". That
+        // exactness is what lets the threshold tighten from 0.4 to 0.2: light typo
+        // tolerance stays, the fuzzy false positives 0.4 produced are gone.
+        fuseInstance = new Fuse(all, { keys: ['_s_tag', '_s_name'], threshold: 0.2, minMatchCharLength: 1 });
     }
 
     function matchesRel(a, rels) {
@@ -148,7 +151,7 @@
 
     function applyFilter() {
         const q = search.value.trim();
-        let base = (q && fuseInstance) ? fuseInstance.search(q).map(r => r.item) : all.slice();
+        let base = (q && fuseInstance) ? fuseInstance.search(foldSearch(q)).map(r => r.item) : all.slice();
 
         const rels = Array.from(document.querySelectorAll('.ext-rel-chip.active')).map(c => c.dataset.rel);
         const lrs = Array.from(document.querySelectorAll('.ext-lr-chip.active')).map(c => c.dataset.lr);
@@ -238,7 +241,14 @@
 
     async function load() {
         try {
-            all = await api('GET', '/api/external-alliances') || [];
+            all = (await api('GET', '/api/external-alliances') || []).map(a => ({
+                ...a,
+                // Folded copies for Fuse. Fuse 7's own ignoreDiacritics is a no-op, so
+                // both the index and the query are folded here — same approach as the
+                // Members and Train pages.
+                _s_tag: foldSearch(a.tag),
+                _s_name: foldSearch(a.name),
+            }));
             rebuildFuse();
             applyFilter();
         } catch (e) {
@@ -295,7 +305,7 @@
         // The identity row is the positioning context; the single shared dropdown anchors under
         // whichever of Tag / Name has focus and extends to the row's right edge for room. ---
         const localMatches = q => (q && fuseInstance)
-            ? fuseInstance.search(q).map(r => r.item).filter(x => x.id !== a.id).slice(0, 6) : [];
+            ? fuseInstance.search(foldSearch(q)).map(r => r.item).filter(x => x.id !== a.id).slice(0, 6) : [];
 
         const dropdown = el('div', { className: 'ext-find-dropdown', hidden: 'hidden' });
         const idGrid = el('div', { className: 'vsl-form-grid ext-id-grid' },
