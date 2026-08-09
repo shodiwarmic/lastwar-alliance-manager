@@ -14,6 +14,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 )
 
 const (
@@ -46,11 +47,23 @@ type prospectRefreshJob struct {
 // on them every sweep buys nothing. Unqualified transfers ARE included: rising
 // power is exactly what would requalify them.
 func (j *prospectRefreshJob) Plan(ctx context.Context) ([]jobItem, error) {
-	rows, err := db.Query(`
-		SELECT id, name, lastrank_public_id
-		FROM prospects
-		WHERE prospect_type = ? AND lastrank_public_id IS NOT NULL AND status != 'declined'
-		ORDER BY LOWER(name) ASC`, j.prospectType)
+	q := `SELECT id, name, lastrank_public_id FROM prospects
+	      WHERE prospect_type = ? AND lastrank_public_id IS NOT NULL AND status != 'declined'`
+	args := []any{j.prospectType}
+
+	// Same pre-filter as the member sweep, for the same reason: on a schedule the
+	// off-ticks must plan zero items and cost zero upstream requests. For prospects
+	// synced_at IS the attempt stamp — nothing else writes it — so only members need
+	// a separate attempted_at column.
+	if j.actor.Scheduled {
+		cutoff := "-" + strconv.Itoa(loadLastRankScheduleConfig().EnrichMaxAgeHours) + " hours"
+		q += ` AND (lastrank_enriched_at IS NULL OR lastrank_enriched_at < datetime('now', ?))
+		       AND (lastrank_synced_at IS NULL OR lastrank_synced_at < datetime('now', ?))`
+		args = append(args, cutoff, cutoff)
+	}
+	q += ` ORDER BY COALESCE(lastrank_synced_at, '') ASC, LOWER(name) ASC`
+
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}

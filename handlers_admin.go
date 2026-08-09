@@ -5,6 +5,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -615,7 +616,10 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(season_score_levels_default, '[{"key":"full","label":"FULL","points":10},{"key":"partial","label":"PARTIAL","points":5},{"key":"absent","label":"ABSENT","points":0}]'),
         COALESCE(alliance_name, ''), COALESCE(alliance_tag, ''),
         COALESCE(lastrank_alliance_id, ''),
-        COALESCE(our_server_id, 0), COALESCE(nap_size, 10), COALESCE(nap_import_limit, 15)
+        COALESCE(our_server_id, 0), COALESCE(nap_size, 10), COALESCE(nap_import_limit, 15),
+        COALESCE(lastrank_auto_sync_enabled, 0), COALESCE(lastrank_auto_sync_hour, 4),
+        COALESCE(lastrank_auto_sync_interval_hours, 6), COALESCE(lastrank_enrich_max_age_hours, 21),
+        COALESCE(nap_auto_refresh_enabled, 0), COALESCE(prospect_auto_refresh_enabled, 0)
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -638,6 +642,9 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.AllianceName, &s.AllianceTag,
 		&s.LastRankAllianceID,
 		&s.OurServerID, &s.NAPSize, &s.NAPImportLimit,
+		&s.LastRankAutoSyncEnabled, &s.LastRankAutoSyncHour,
+		&s.LastRankAutoSyncIntervalHours, &s.LastRankEnrichMaxAgeHours,
+		&s.NAPAutoRefreshEnabled, &s.ProspectAutoRefreshEnabled,
 	)
 
 	if err != nil {
@@ -717,6 +724,35 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Scheduled LastRank retrieval. The interval must divide the day, or slots drift
+	// across midnight and "the 04:00 run" stops meaning anything.
+	if settings.LastRankAutoSyncIntervalHours != 0 && !validScheduleInterval(settings.LastRankAutoSyncIntervalHours) {
+		http.Error(w, "Sync interval must be one of 1, 2, 3, 4, 6, 8, 12 or 24 hours", http.StatusBadRequest)
+		return
+	}
+	if settings.LastRankAutoSyncHour < 0 || settings.LastRankAutoSyncHour > 23 {
+		http.Error(w, "Sync hour must be between 0 and 23", http.StatusBadRequest)
+		return
+	}
+	// The enrich max age's legal band DEPENDS on the interval — computed here rather
+	// than hard-coded. Below the low bound an extra tick per day clears the
+	// threshold (more enriches than intended, for data the game hasn't changed);
+	// above the high bound a long run's own duration can push a member past the next
+	// day's slot and revive an alternate-day silent skip.
+	if settings.LastRankEnrichMaxAgeHours != 0 {
+		interval := settings.LastRankAutoSyncIntervalHours
+		if interval == 0 {
+			interval = 6
+		}
+		low, high := enrichMaxAgeBand(interval)
+		if settings.LastRankEnrichMaxAgeHours <= low || settings.LastRankEnrichMaxAgeHours > high {
+			http.Error(w, fmt.Sprintf(
+				"With a %dh interval, the enrich window must be between %dh and %dh — otherwise members re-enrich more often than intended, or skip a day entirely.",
+				interval, low+1, high), http.StatusBadRequest)
+			return
+		}
+	}
+
 	// NAP sizing. A zero means "not supplied" (a field-omitting PUT decodes to 0) and is preserved
 	// by the COALESCE(NULLIF(...)) in the UPDATE below — never clamped up to 1, which would
 	// silently reduce the pact to a single alliance. Any other out-of-range value is rejected,
@@ -778,7 +814,13 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		vs_flag_days_threshold = ?,
 		our_server_id = NULLIF(?, 0),
 		nap_size = COALESCE(NULLIF(?, 0), nap_size),
-		nap_import_limit = COALESCE(NULLIF(?, 0), nap_import_limit)
+		nap_import_limit = COALESCE(NULLIF(?, 0), nap_import_limit),
+		lastrank_auto_sync_enabled = ?,
+		lastrank_auto_sync_hour = ?,
+		lastrank_auto_sync_interval_hours = ?,
+		lastrank_enrich_max_age_hours = ?,
+		nap_auto_refresh_enabled = ?,
+		prospect_auto_refresh_enabled = ?
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -799,12 +841,19 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		// 0 KEEPS the NAP sizes (see the NULLIF/COALESCE asymmetry in the SET clause above).
 		settings.OurServerID,
 		settings.NAPSize, settings.NAPImportLimit,
+		settings.LastRankAutoSyncEnabled, settings.LastRankAutoSyncHour,
+		settings.LastRankAutoSyncIntervalHours, settings.LastRankEnrichMaxAgeHours,
+		settings.NAPAutoRefreshEnabled, settings.ProspectAutoRefreshEnabled,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)
 		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
 		return
 	}
+
+	// The scheduler reads its config through a short-TTL cache; drop it so a
+	// changed cadence takes effect now rather than up to a minute later.
+	invalidateLastRankScheduleCache()
 
 	if actor.IsAdmin && settings.PwdMinLength >= 6 {
 		_, err = db.Exec(`UPDATE settings SET 

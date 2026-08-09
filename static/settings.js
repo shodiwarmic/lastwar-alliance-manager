@@ -18,6 +18,13 @@ async function loadSettings() {
         document.getElementById('alliance-name').value = settings.alliance_name ?? '';
         document.getElementById('alliance-tag').value = settings.alliance_tag ?? '';
         document.getElementById('lastrank-alliance-id').value = settings.lastrank_alliance_id ?? '';
+        document.getElementById('lastrank-auto-sync-enabled').checked = !!settings.lastrank_auto_sync_enabled;
+        document.getElementById('lastrank-auto-sync-hour').value = settings.lastrank_auto_sync_hour ?? 4;
+        document.getElementById('lastrank-auto-sync-interval').value = String(settings.lastrank_auto_sync_interval_hours || 6);
+        document.getElementById('lastrank-enrich-max-age').value = settings.lastrank_enrich_max_age_hours ?? 21;
+        document.getElementById('prospect-auto-refresh-enabled').checked = !!settings.prospect_auto_refresh_enabled;
+        document.getElementById('nap-auto-refresh-enabled').checked = !!settings.nap_auto_refresh_enabled;
+        updateEnrichBandHelp();
         // 0 means "not configured" — show it as blank, not as a literal 0.
         document.getElementById('our-server-id').value = settings.our_server_id || '';
         document.getElementById('nap-size').value = settings.nap_size ?? 10;
@@ -227,6 +234,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadSettings();
         updateLastRankAllianceLink();
         document.getElementById('lastrank-alliance-id')?.addEventListener('input', updateLastRankAllianceLink);
+        document.getElementById('lastrank-auto-sync-interval')?.addEventListener('change', updateEnrichBandHelp);
+        document.getElementById('lastrank-enrich-max-age')?.addEventListener('input', updateEnrichBandHelp);
 
         document.getElementById('nap-size')?.addEventListener('input', syncNapImportMin);
 
@@ -257,6 +266,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alliance_name: document.getElementById('alliance-name').value.trim(),
                 alliance_tag: document.getElementById('alliance-tag').value.trim(),
                 lastrank_alliance_id: document.getElementById('lastrank-alliance-id').value.trim(),
+                lastrank_auto_sync_enabled: document.getElementById('lastrank-auto-sync-enabled').checked,
+                lastrank_auto_sync_hour: parseInt(document.getElementById('lastrank-auto-sync-hour').value, 10) || 0,
+                lastrank_auto_sync_interval_hours: parseInt(document.getElementById('lastrank-auto-sync-interval').value, 10) || 6,
+                lastrank_enrich_max_age_hours: parseInt(document.getElementById('lastrank-enrich-max-age').value, 10) || 21,
+                prospect_auto_refresh_enabled: document.getElementById('prospect-auto-refresh-enabled').checked,
+                nap_auto_refresh_enabled: document.getElementById('nap-auto-refresh-enabled').checked,
                 // A blank server number sends 0, which the backend stores as NULL (unconfigured).
                 our_server_id: parseInt(document.getElementById('our-server-id').value, 10) || 0,
                 nap_size: parseInt(document.getElementById('nap-size').value, 10) || 10,
@@ -862,3 +877,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     loadSeasonTemplates();
 })();
+
+// The legal window for re-pulling a player DEPENDS on the check interval, so the
+// help text is computed rather than fixed. Below the low bound an extra tick per
+// day clears the threshold — more live pulls for data the game hasn't changed.
+// Above it, a long run's own duration can push a member past the next day's slot
+// and skip them entirely. The server enforces the same band.
+function updateEnrichBandHelp() {
+    const help = document.getElementById('lastrank-enrich-band-help');
+    const intervalEl = document.getElementById('lastrank-auto-sync-interval');
+    const ageEl = document.getElementById('lastrank-enrich-max-age');
+    if (!help || !intervalEl || !ageEl) return;
+
+    const interval = parseInt(intervalEl.value, 10) || 6;
+    const low = 24 - interval + 1, high = 23;
+    const age = parseInt(ageEl.value, 10);
+    const perDay = Math.max(1, Math.floor(24 / interval));
+
+    help.textContent = `Must be ${low}–${high}h at a ${interval}h interval. `
+        + `At ${interval}h/${age || '?'}h each player is re-pulled once every 24h, `
+        + `so ${perDay - 1} of every ${perDay} checks cost nothing.`;
+    const bad = age && (age < low || age > high);
+    help.style.color = bad ? 'var(--color-danger)' : '';
+    if (bad) help.textContent += ' Out of range — the server will reject this.';
+}

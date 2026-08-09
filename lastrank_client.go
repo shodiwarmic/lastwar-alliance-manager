@@ -66,25 +66,29 @@ type lastrankAllianceResp struct {
 }
 
 type lastrankPlayerResp struct {
-	PublicID         int     `json:"public_id"`
-	Name             string  `json:"name"`
-	Country          *string `json:"country"`
-	AllianceID       *string `json:"alliance_id"`
-	AllianceAbbr     *string `json:"alliance_abbr"`
-	AllianceName     *string `json:"alliance_name"`
-	AllianceRank     *int    `json:"alliance_rank"`
-	HomeServerID     int     `json:"home_server_id"`
-	SrcServerID      int     `json:"src_server_id"`
-	Power            int64   `json:"power"`
-	HeroPower        *int64  `json:"hero_power"`
-	ArmyKill         int64   `json:"army_kill"`
-	BaseLevel        *int    `json:"base_level"`
-	CareerLv         int     `json:"career_lv"`
-	CareerType       int     `json:"career_type"`      // profession code; maps via CareerTypeLabels
-	LastSeenAt       string  `json:"last_seen_at"`     // game-side "last active" (as-of date)
-	LastEnrichedAt   string  `json:"last_enriched_at"` // when lastrank last re-pulled this record
-	PhotoURL         string  `json:"photo_url"`
-	PhotoURLFailover string  `json:"photo_url_failover"`
+	PublicID       int     `json:"public_id"`
+	Name           string  `json:"name"`
+	Country        *string `json:"country"`
+	AllianceID     *string `json:"alliance_id"`
+	AllianceAbbr   *string `json:"alliance_abbr"`
+	AllianceName   *string `json:"alliance_name"`
+	AllianceRank   *int    `json:"alliance_rank"`
+	HomeServerID   int     `json:"home_server_id"`
+	SrcServerID    int     `json:"src_server_id"`
+	Power          int64   `json:"power"`
+	HeroPower      *int64  `json:"hero_power"`
+	ArmyKill       int64   `json:"army_kill"`
+	BaseLevel      *int    `json:"base_level"`
+	CareerLv       int     `json:"career_lv"`
+	CareerType     int     `json:"career_type"`      // profession code; maps via CareerTypeLabels
+	LastSeenAt     string  `json:"last_seen_at"`     // game-side "last active" (as-of date)
+	LastEnrichedAt string  `json:"last_enriched_at"` // when lastrank last re-pulled this record
+	// "cached" | "fetched" | "gated" | "unavailable". Only "fetched" means a live
+	// re-pull actually happened — the scheduled sweep's freshness stamp keys on it,
+	// because stamping on "gated" would starve that member out of future sweeps.
+	EnrichStatus     string `json:"enrich_status"`
+	PhotoURL         string `json:"photo_url"`
+	PhotoURLFailover string `json:"photo_url_failover"`
 }
 
 // --- Fetch ---
@@ -299,17 +303,25 @@ func lastRankPlayerFresh(ctx context.Context, publicID int) (*lastrankPlayerResp
 	return getLastRankPlayer(ctx, publicID)
 }
 
-// lastRankEnrichMaxAge is how stale a record's last_enriched_at may be before the
-// bulk sync upgrades a cheap GET to a live enrich. Tunable: lower = fresher data
-// but more live pulls; higher = lighter on the volunteer service.
-const lastRankEnrichMaxAge = 24 * time.Hour
+// lastRankDefaultEnrichMaxAge is the fallback when settings are unreadable. The
+// live value comes from settings.lastrank_enrich_max_age_hours — see
+// lastrank_schedule.go, which explains why the legal band depends on the tick
+// interval.
+const lastRankDefaultEnrichMaxAge = 21 * time.Hour
 
+// lastRankNeedsEnrich decides whether a cheap GET should be upgraded to a live
+// enrich. Reads the operator-set max age through a process-cached helper, never a
+// query per member: a 100-member sweep would otherwise issue 100 settings reads on
+// the single connection.
+//
+// Safe to call here because every caller does its fetch with no transaction open —
+// see the read → fetch → write rule in jobs.go.
 func lastRankNeedsEnrich(lastEnrichedISO string) bool {
 	t, ok := lastRankParseTime(lastEnrichedISO)
 	if !ok {
 		return true // unknown/never enriched → refresh
 	}
-	return time.Since(t) > lastRankEnrichMaxAge
+	return time.Since(t) > lastRankEnrichMaxAge()
 }
 
 // lastRankPlayerBulk reads the cheap cached GET, then upgrades to a live enrich

@@ -366,6 +366,61 @@ invariant).
 > My Profile, CSV import, prospect accept) and LastRank sync all append rows;
 > HQ never regresses (only a higher value is recorded).
 
+## Scheduled LastRank retrieval (`lastrank_schedule.go`)
+
+Opt-in, off by default. A 15-minute ticker checks whether the current slot has been
+crossed since the last **completed scheduled** run of each kind — derived from
+`background_jobs`, so it self-heals across restarts with no extra state. A manual
+run deliberately does NOT satisfy the schedule.
+
+### The two numbers are coupled — do not tune one alone
+
+The tick **interval** decides how often we look; the enrich **max age** decides, per
+member, whether that tick actually re-pulls. At the 6h/21h default, ages of 6/12/18h
+all fall under 21h, so only the 24h slot clears it:
+
+| tick | age | enrich? | extended-sweep cost |
+|---|---|---|---|
+| 04:00 | 24h | **yes** | ~200 reqs, 10–40 min |
+| 10:00 | 6h | no | **0 reqs** |
+| 16:00 | 12h | no | **0 reqs** |
+| 22:00 | 18h | no | **0 reqs** |
+
+One enrich per member per 24h — a hard "refreshed within a day" guarantee — while
+the 1-request alliance pull runs 4×/day so decisions reach the review queue within
+6h. The legal band is `24 − interval < max_age ≤ 23`, computed by
+`enrichMaxAgeBand` and enforced in `updateSettings`.
+
+### Three timestamps, three questions
+
+Conflating any two reintroduces a starvation bug:
+
+| Column | Written | Used for |
+|---|---|---|
+| `lastrank_synced_at` | every attempt | **ordering** (always advances) |
+| `lastrank_enriched_at` | only on `enrich_status: "fetched"` | **freshness filter** |
+| `lastrank_attempted_at` | every per-player attempt | **scheduled backoff** |
+
+`attempted_at` exists because Phase-1 commit paths also stamp `synced_at` — a commit
+before a heavy tick would otherwise make the roster look freshly attempted. And
+without it, a permanently `gated` member never advances `enriched_at`, stays due
+forever, and is retried every tick — which is what stops the cheap ticks being
+free. Prospects need no `attempted_at`: nothing else writes their `synced_at`.
+
+**`TestScheduledSweepPlansNothingWhenNobodyIsDue` is the cost-model guard.** If the
+pre-filter in `lastRankExtendedJob.Plan` regresses, every tick costs a full roster
+of GETs and the tighter interval silently becomes more expensive than a looser one.
+
+### Tiering
+
+Scheduled Phase-1 (`jobs_alliance.go`) auto-applies **stats only** — staleness-gated,
+provenance-stamped, append-only history that needs no human. Rank changes, renames,
+unmatched names and archives always go to the queue and are **never** applied
+unattended. It stamps `lastrank_public_id` but deliberately not `lastrank_synced_at`:
+bumping that for the whole roster every 6h would scramble the extended sweep's
+ordering. It resolves with `userID 0`, so no officer's private aliases influence an
+unattended run.
+
 ## LastRank review queue (`lastrank_queue.go`)
 
 Phase-1 **decisions** are durable: rank changes, name changes, unmatched names and

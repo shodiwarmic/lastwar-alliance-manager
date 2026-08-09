@@ -31,10 +31,33 @@ type lastRankExtendedJob struct{ actor jobActor }
 // a public id, so every sweep spent upstream requests refreshing people who had
 // left the alliance.
 func (j *lastRankExtendedJob) Plan(ctx context.Context) ([]jobItem, error) {
-	rows, err := db.Query(`
-		SELECT id, name FROM members
-		WHERE lastrank_public_id IS NOT NULL AND rank != 'EX'
-		ORDER BY COALESCE(lastrank_synced_at, '') ASC, id ASC`)
+	q := `SELECT id, name FROM members
+	      WHERE lastrank_public_id IS NOT NULL AND rank != 'EX'`
+	args := []any{}
+
+	// THE PRE-FILTER THAT MAKES THE CHEAP TICKS FREE. A scheduled run takes only
+	// members actually due, so on a 6h/21h schedule three ticks in four plan ZERO
+	// items and cost ZERO upstream requests. Without it every tick would spend a
+	// full roster of GETs to discover there is nothing to do, and the tighter
+	// interval would silently cost more than a looser one — see lastrank_schedule.go.
+	//
+	// Two conditions, two different jobs:
+	//   enriched_at  — is the DATA stale enough to be worth re-pulling?
+	//   attempted_at — have we already tried recently? Without this a member whose
+	//                  enrich comes back permanently "gated" never advances
+	//                  enriched_at, stays due forever, and is re-attempted every
+	//                  single tick.
+	// Manual runs ignore both: the officer asked for the whole roster.
+	if j.actor.Scheduled {
+		maxAge := loadLastRankScheduleConfig().EnrichMaxAgeHours
+		cutoff := "-" + strconv.Itoa(maxAge) + " hours"
+		q += ` AND (lastrank_enriched_at IS NULL OR lastrank_enriched_at < datetime('now', ?))
+		       AND (lastrank_attempted_at IS NULL OR lastrank_attempted_at < datetime('now', ?))`
+		args = append(args, cutoff, cutoff)
+	}
+	q += ` ORDER BY COALESCE(lastrank_synced_at, '') ASC, id ASC`
+
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
