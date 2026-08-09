@@ -90,6 +90,113 @@
 
     function closeModal() { modal.style.display = ''; }
 
+    // ── Durable review queue ────────────────────────────────────────────────
+    // Decisions outlive the modal now, so the panel advertises the backlog and can
+    // open it WITHOUT a LastRank call — an officer working through it shouldn't
+    // have to spend a request against the volunteer service just to look.
+    const badgeEl = document.getElementById('lastrank-pending-badge');
+    const queueBtn = document.getElementById('lastrank-queue-btn');
+
+    async function refreshPendingBadge() {
+        if (!badgeEl) return;
+        try {
+            const res = await fetch('/api/lastrank/review/summary');
+            if (!res.ok) return;
+            const d = await res.json();
+            const n = d.open_count || 0;
+            badgeEl.textContent = String(n);
+            badgeEl.hidden = n === 0;
+            if (queueBtn) queueBtn.style.display = n === 0 ? 'none' : '';
+        } catch (e) { /* badge is decoration; never block the page on it */ }
+    }
+
+    async function openQueueOnly() {
+        setStatus('Loading review queue…');
+        try {
+            const res = await fetch('/api/lastrank/review');
+            if (!res.ok) throw new Error((await res.text()) || 'Could not load the queue');
+            const d = await res.json();
+            renderQueueOnly(d.items || []);
+            modal.style.display = 'flex';
+        } catch (e) {
+            showToast(e.message || 'Could not load the review queue.', 'error');
+        } finally {
+            setStatus('');
+        }
+    }
+
+    // Queue-only view: no alliance meta, no stat checkboxes — just the decisions,
+    // grouped the same way as the post-fetch review so the two read alike.
+    function renderQueueOnly(items) {
+        previewData = null; // Confirm has nothing to commit in this mode
+        indexPending(items);
+        metaEl.replaceChildren(el('strong', { textContent: `${items.length} change(s) waiting for review` }));
+        bodyEl.replaceChildren();
+        if (confirmBtn) confirmBtn.style.display = 'none';
+
+        if (!items.length) {
+            bodyEl.appendChild(el('p', { className: 'lr-empty', textContent: 'Nothing waiting. Run Fetch Alliance Data to check for new changes.' }));
+            return;
+        }
+        const groups = [
+            ['rank', 'Rank changes'],
+            ['name', 'Name changes'],
+            ['unmatched', 'Unmatched names'],
+            ['archive', 'Possibly left the alliance'],
+        ];
+        groups.forEach(([kind, title]) => {
+            const rows = items.filter(i => i.kind === kind);
+            if (!rows.length) return;
+            bodyEl.appendChild(el('div', { className: 'lr-group-title', textContent: `${title} (${rows.length})` }));
+            rows.forEach(p => bodyEl.appendChild(renderQueueRow(p)));
+        });
+    }
+
+    function renderQueueRow(p) {
+        const detail = p.kind === 'archive' ? p.reason
+            : p.kind === 'unmatched' ? p.reason
+            : `${p.current_value} → ${p.proposed_value}`;
+        const applyBtn = el('button', { className: 'btn btn-primary btn-sm', type: 'button' });
+        applyBtn.textContent = 'Apply';
+        const row = el('div', { className: 'lr-row' },
+            el('div', { className: 'lr-row-name', textContent: p.lastrank_name || p.current_value }),
+            el('div', { className: 'lr-field lr-skip', textContent: detail }));
+
+        if (p.kind === 'unmatched') {
+            // Resolving one needs a target member, which this compact view can't ask
+            // for — send the officer to the full review instead of guessing.
+            row.appendChild(el('div', { className: 'lr-field lr-skip', textContent: 'Run Fetch Alliance Data to resolve this one.' }));
+            row.appendChild(el('div', { className: 'lr-unmatched-controls' }, deferControls(p)));
+            return row;
+        }
+
+        applyBtn.addEventListener('click', async () => {
+            applyBtn.disabled = true;
+            try {
+                const res = await fetch('/api/lastrank/review/action', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: [p.id], action: 'apply' })
+                });
+                if (!res.ok) throw new Error((await res.text()) || 'Could not apply');
+                const d = await res.json();
+                row.replaceChildren(el('div', { className: 'lr-field lr-skip', textContent:
+                    d.applied ? `Applied: ${p.lastrank_name || p.current_value}`
+                              : `Already up to date — ${p.lastrank_name || p.current_value}` }));
+                refreshPendingBadge();
+                if (typeof loadMembers === 'function') loadMembers();
+            } catch (e) {
+                applyBtn.disabled = false;
+                showToast(e.message || 'Could not apply.', 'error');
+            }
+        });
+        row.appendChild(el('div', { className: 'lr-unmatched-controls' }, applyBtn,
+            deferControls(p, () => applyBtn.remove())));
+        return row;
+    }
+
+    if (queueBtn) queueBtn.addEventListener('click', openQueueOnly);
+    refreshPendingBadge();
+
     // --- Phase 1: fetch + review ---
     async function doFetch() {
         setStatus('Fetching from LastRank…');
@@ -111,6 +218,8 @@
     }
 
     function renderReview(data) {
+        if (confirmBtn) confirmBtn.style.display = '';
+        indexPending(data.pending);
         const a = data.alliance || {};
         const label = (a.abbr ? '[' + a.abbr + '] ' : '') + (a.name || 'Alliance');
         const nameNode = a.alliance_id
@@ -160,9 +269,65 @@
             c._archive = cb;
             bodyEl.appendChild(el('div', { className: 'lr-row' },
                 el('div', { className: 'lr-row-name', textContent: `${c.name} (${c.rank})` }),
-                el('label', { className: 'lr-field' }, cb, el('span', {}, ` Archive — ${c.reason}`))
+                el('label', { className: 'lr-field' }, cb, el('span', {}, ` Archive — ${c.reason}`)),
+                deferControls(pendingFor('archive:m:' + c.member_id),
+                    () => { cb.checked = false; cb.disabled = true; })
             ));
         });
+    }
+
+    // Maps each preview row to its durable queue row, so a defer has something to
+    // act on. Keys mirror lastRankSubjectKey in Go.
+    let pendingIndex = {};
+    function indexPending(list) {
+        pendingIndex = {};
+        (list || []).forEach(p => {
+            const key = p.kind === 'unmatched'
+                ? (p.lastrank_public_id ? 'unmatched:p:' + p.lastrank_public_id
+                                        : 'unmatched:n:' + foldSearch(p.lastrank_name))
+                : p.kind + ':m:' + p.member_id;
+            pendingIndex[key] = p;
+        });
+    }
+    const pendingFor = key => pendingIndex[key];
+
+    // "Not now" hides an item until a genuinely newer pull; "Not until it changes"
+    // hides it until LastRank proposes something different. Both are reversible —
+    // nothing is applied and nothing is lost.
+    // onDeferred neutralises whatever control this sits beside. Without it a
+    // deferred item keeps its live checkbox/select, and Confirm would apply the
+    // very change the officer just parked.
+    function deferControls(pending, onDeferred) {
+        if (!pending) return null;
+        const wrap = el('span', { className: 'lr-defer' });
+        const mk = (label, action, title, done) => {
+            const b = el('button', { className: 'btn btn-secondary btn-sm', type: 'button', title });
+            b.textContent = label;
+            b.addEventListener('click', async () => {
+                b.disabled = true;
+                try {
+                    const res = await fetch('/api/lastrank/review/action', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids: [pending.id], action })
+                    });
+                    if (!res.ok) throw new Error((await res.text()) || 'Could not defer');
+                    wrap.replaceChildren(el('span', { className: 'lr-skip', textContent: done }));
+                    if (onDeferred) onDeferred();
+                    refreshPendingBadge();
+                } catch (e) {
+                    b.disabled = false;
+                    showToast(e.message || 'Could not defer.', 'error');
+                }
+            });
+            return b;
+        };
+        wrap.append(
+            mk('Not now', 'defer_once', 'Hide until a newer LastRank pull',
+                'deferred until a newer pull'),
+            mk('Not until it changes', 'defer_until_changed', 'Hide until LastRank proposes something different',
+                'deferred until LastRank changes it')
+        );
+        return wrap;
     }
 
     function hasChange(m) {
@@ -205,7 +370,10 @@
                 el('span', {}, 'Name on LastRank: '),
                 el('span', { className: 'lr-new', textContent: m.name_change.new }),
                 el('span', { className: 'lr-skip', textContent: `  (roster: ${m.name_change.current})` })));
-            row.appendChild(el('div', { className: 'lr-unmatched-controls' }, sel));
+            const nameMid = m.matched_member && m.matched_member.id;
+            row.appendChild(el('div', { className: 'lr-unmatched-controls' }, sel,
+                deferControls(pendingFor('name:m:' + nameMid),
+                    () => { sel.value = ''; sel.disabled = true; })));
         }
 
         const pf = statField('Power', m.power, m, 'power');
@@ -223,10 +391,13 @@
         }
         if (m.rank_diff) {
             const cb = el('input', { type: 'checkbox' }); m._cb.rank = cb; // unchecked: review-only
+            const mid = m.matched_member && m.matched_member.id;
             row.appendChild(el('div', { className: 'lr-field lr-rank' }, cb,
                 el('span', {}, `Rank: ${m.rank_diff.current} → `),
                 el('span', { className: 'lr-new', textContent: m.rank_diff.new }),
-                el('span', { className: 'lr-skip', textContent: '  (review — leave unchecked to keep current)' })));
+                el('span', { className: 'lr-skip', textContent: '  (review — leave unchecked to keep current)' }),
+                deferControls(pendingFor('rank:m:' + mid),
+                    () => { cb.checked = false; cb.disabled = true; })));
         }
         return row;
     }
@@ -273,7 +444,17 @@
         return el('div', { className: 'lr-row' },
             el('div', { className: 'lr-row-name', textContent: u.lastrank_name }),
             detail ? el('div', { className: 'lr-field lr-skip', textContent: detail }) : null,
-            el('div', { className: 'lr-unmatched-controls' }, actionSel, memberSel),
+            el('div', { className: 'lr-unmatched-controls' }, actionSel, memberSel,
+                deferControls(pendingFor(u.lastrank_public_id
+                    ? 'unmatched:p:' + u.lastrank_public_id
+                    : 'unmatched:n:' + foldSearch(u.lastrank_name)),
+                    () => {
+                        actionSel.value = 'ignore';
+                        actionSel.disabled = true;
+                        memberSel.style.display = 'none';
+                        applyLabel.style.display = 'none';
+                        joinLabel.style.display = 'none';
+                    })),
             applyLabel,
             joinLabel
         );
@@ -348,6 +529,7 @@
             let msg = `Applied: power ${r.power_updated}, hero ${r.hero_updated}, HQ ${r.hq_updated}, rank ${r.rank_updated}.`;
             if (r.members_archived) msg += ` Archived ${r.members_archived}.`;
             showToast(msg);
+            refreshPendingBadge();
             if (typeof loadMembers === 'function') loadMembers();
         } catch (e) {
             showToast(e.message || 'Could not apply changes.', 'error');

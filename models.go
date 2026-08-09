@@ -601,6 +601,38 @@ type VSLeagueAllianceSearchResult struct {
 	CapturedAt *string `json:"captured_at"`
 }
 
+// LastRankPendingChange is one queued Phase-1 decision.
+//
+// Only decisions land here — rank/name changes, unmatched names, possible
+// departures. Stats are staleness-gated append-only history and need no human.
+type LastRankPendingChange struct {
+	ID               int    `json:"id"`
+	Kind             string `json:"kind"` // rank|name|unmatched|archive
+	MemberID         int    `json:"member_id"`
+	LastRankPublicID int    `json:"lastrank_public_id"`
+	LastRankName     string `json:"lastrank_name"`
+	CurrentValue     string `json:"current_value"`
+	ProposedValue    string `json:"proposed_value"`
+	Reason           string `json:"reason"`
+	CaptureDate      string `json:"capture_date"`
+	Status           string `json:"status"` // open|deferred_once|deferred_until_changed
+	FirstSeenAt      string `json:"first_seen_at"`
+	LastSeenAt       string `json:"last_seen_at"`
+}
+
+// LastRankReviewActionRequest applies or defers queued decisions in bulk.
+//
+// MemberID/NewRank/JoinedAt carry the officer's choice for an unmatched row, whose
+// resolution needs input the queue can't know (which member, what rank).
+type LastRankReviewActionRequest struct {
+	IDs      []int  `json:"ids"`
+	Action   string `json:"action"`  // apply|defer_once|defer_until_changed
+	Resolve  string `json:"resolve"` // unmatched only: alias|rename|add
+	MemberID int    `json:"member_id"`
+	NewRank  string `json:"new_rank"`
+	JoinedAt string `json:"joined_at"`
+}
+
 // BackgroundJob is one server-side bulk run, as served to the progress poll.
 //
 // Counters is the raw JSON blob from the row — each job kind defines its own keys,
@@ -1474,6 +1506,11 @@ type LastRankSyncPreviewResponse struct {
 	Unmatched         []LastRankUnmatched        `json:"unmatched"`
 	ArchiveCandidates []LastRankArchiveCandidate `json:"archive_candidates"`
 	AllMembers        []Member                   `json:"all_members"` // for the unmatched assign dropdown
+	// Pending is the durable queue as it stands after this pull reconciled into it.
+	// It overlaps Matched/Unmatched/ArchiveCandidates by design: those describe THIS
+	// pull, while Pending carries the row ids, deferral state and first-seen dates
+	// that let the modal offer "defer" and survive being closed.
+	Pending []LastRankPendingChange `json:"pending"`
 }
 
 // LastRankCommitMember is one confirmed set of Phase-1 changes to apply.

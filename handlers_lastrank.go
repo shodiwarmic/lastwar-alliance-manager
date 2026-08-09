@@ -367,8 +367,75 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Persist the decisions this pull proposes, so they outlive the modal and a
+	// deferral means something. Stats stay ephemeral on purpose: they are
+	// staleness-gated append-only history and need no decision.
+	//
+	// The transaction was previously read-only (deferred rollback as a consistent
+	// snapshot). It now has to commit — but only the queue is written here; nothing
+	// this preview shows has been applied.
+	if err := reconcilePendingChanges(tx, buildPendingProposals(resp), capture); err != nil {
+		slog.Error("lastrank queue reconcile failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		slog.Error("lastrank preview commit failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if pending, err := loadPendingChanges(true); err == nil {
+		resp.Pending = pending
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// buildPendingProposals turns a preview into the decisions worth queueing.
+//
+// Deliberately NOT the stat diffs: power / hero / HQ are staleness-gated,
+// provenance-stamped and append-only, so there is nothing for an officer to
+// decide. What lands here is what a human has to judge — a rank moved, a member
+// renamed, a name we can't place, a member who looks gone.
+func buildPendingProposals(resp LastRankSyncPreviewResponse) []pendingProposal {
+	var out []pendingProposal
+
+	for _, m := range resp.Matched {
+		if m.MatchedMember == nil {
+			continue
+		}
+		if m.RankDiff != nil {
+			out = append(out, pendingProposal{
+				Kind: PendingKindRank, MemberID: m.MatchedMember.ID, PublicID: m.LastRankPublicID,
+				LastRankName: m.LastRankName,
+				CurrentValue: m.RankDiff.Current, ProposedValue: m.RankDiff.New,
+			})
+		}
+		if m.NameChange != nil {
+			out = append(out, pendingProposal{
+				Kind: PendingKindName, MemberID: m.MatchedMember.ID, PublicID: m.LastRankPublicID,
+				LastRankName: m.LastRankName,
+				CurrentValue: m.NameChange.Current, ProposedValue: m.NameChange.New,
+			})
+		}
+	}
+	for _, u := range resp.Unmatched {
+		out = append(out, pendingProposal{
+			Kind: PendingKindUnmatched, PublicID: u.LastRankPublicID,
+			LastRankName: u.LastRankName, ProposedValue: u.LastRankName,
+			Reason: "On LastRank as " + u.Rank + ", matched no roster member",
+		})
+	}
+	for _, c := range resp.ArchiveCandidates {
+		out = append(out, pendingProposal{
+			Kind: PendingKindArchive, MemberID: c.MemberID,
+			LastRankName: c.Name, CurrentValue: c.Rank, ProposedValue: "EX",
+			Reason: c.Reason,
+		})
+	}
+	return out
 }
 
 // --- Phase 1: commit ---
@@ -398,22 +465,13 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 		if m.MemberID == 0 {
 			continue
 		}
-		// Name change disposition (matched-via-alias rename).
+		// Name change disposition (matched-via-alias rename). Shared with the
+		// review-queue path so the two can never drift — see lastrank_apply.go.
 		if m.NameNew != "" {
-			switch m.NameAction {
-			case "rename":
-				var oldName string
-				tx.QueryRow("SELECT name FROM members WHERE id = ?", m.MemberID).Scan(&oldName)
-				if _, err := tx.Exec("UPDATE members SET name = ? WHERE id = ?", m.NameNew, m.MemberID); err == nil {
-					nameN++
-					if oldName != "" && !strings.EqualFold(oldName, m.NameNew) {
-						addGlobalAliasOverwritingOCR(tx, m.MemberID, oldName)
-					}
-					// The new primary may have matched via an OCR alias — now redundant.
-					tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND category = 'ocr'", m.NameNew)
-				}
-			case "alias":
-				addGlobalAliasOverwritingOCR(tx, m.MemberID, m.NameNew)
+			if ok, err := applyNameChange(tx, m.MemberID, m.NameAction, m.NameNew); err != nil {
+				dbError(w, "lastRankCommit name change", err)
+				return
+			} else if ok {
 				nameN++
 			}
 		}
@@ -433,96 +491,47 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 				hqN++
 			}
 		}
-		if m.NewRank != "" {
-			if _, err := tx.Exec("UPDATE members SET rank = ? WHERE id = ?", m.NewRank, m.MemberID); err == nil {
-				rankN++
-			}
+		if ok, err := applyRankChange(tx, m.MemberID, m.NewRank); err != nil {
+			dbError(w, "lastRankCommit rank change", err)
+			return
+		} else if ok {
+			rankN++
 		}
 		// Always capture the public_id + mark synced, even with no stat change.
-		if m.LastRankPublicID != 0 {
-			tx.Exec("UPDATE members SET lastrank_public_id = ?, lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?", m.LastRankPublicID, m.MemberID)
-		} else {
-			tx.Exec("UPDATE members SET lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?", m.MemberID)
-		}
+		stampLastRankIdentity(tx, m.MemberID, m.LastRankPublicID)
 	}
 
 	for _, u := range req.Unmatched {
-		switch u.Action {
-		case "alias":
-			if u.MemberID == 0 {
-				continue
-			}
-			// Global alias supersedes any same-named OCR/global alias.
-			addGlobalAliasOverwritingOCR(tx, u.MemberID, u.LastRankName)
-			aliasN++
-			if u.LastRankPublicID != 0 {
-				tx.Exec("UPDATE members SET lastrank_public_id = ?, lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?", u.LastRankPublicID, u.MemberID)
-			}
-			if u.ApplyStats {
-				p, h, hq := lastRankApplyPairedStats(tx, u.MemberID, u.Power, u.HeroPower, u.BaseLevel, recordedAt, req.CaptureDate)
-				powerN += p
-				heroN += h
-				hqN += hq
-			}
-		case "rename":
-			if u.MemberID == 0 {
-				continue
-			}
-			if _, err := tx.Exec("UPDATE members SET name = ? WHERE id = ?", u.LastRankName, u.MemberID); err == nil {
-				renameN++
-				if u.LastRankPublicID != 0 {
-					tx.Exec("UPDATE members SET lastrank_public_id = ?, lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?", u.LastRankPublicID, u.MemberID)
-				}
-				if u.ApplyStats {
-					p, h, hq := lastRankApplyPairedStats(tx, u.MemberID, u.Power, u.HeroPower, u.BaseLevel, recordedAt, req.CaptureDate)
-					powerN += p
-					heroN += h
-					hqN += hq
-				}
-			}
-		case "add":
-			rank := u.NewRank
-			if rank == "" {
-				rank = "R1"
-			}
-			var pubID interface{}
-			if u.LastRankPublicID != 0 {
-				pubID = u.LastRankPublicID
-			}
-			// New member discovered via LastRank. Use the per-row join date from the
-			// confirmation UI when valid; else default to today's game date.
-			joinDate := gameDate()
-			if u.JoinedAt != "" {
-				if _, perr := parseDate(u.JoinedAt); perr == nil {
-					joinDate = u.JoinedAt
-				}
-			}
-			res, err := tx.Exec("INSERT INTO members (name, rank, eligible, lastrank_public_id, joined_at) VALUES (?, ?, 1, ?, ?)", u.LastRankName, rank, pubID, joinDate)
-			if err == nil {
-				addN++
-				if u.ApplyStats {
-					if newID, lerr := res.LastInsertId(); lerr == nil {
-						p, h, hq := lastRankApplyPairedStats(tx, int(newID), u.Power, u.HeroPower, u.BaseLevel, recordedAt, req.CaptureDate)
-						powerN += p
-						heroN += h
-						hqN += hq
-					}
-				}
-			}
+		out, err := applyUnmatchedAction(tx, u, recordedAt, req.CaptureDate)
+		if err != nil {
+			dbError(w, "lastRankCommit unmatched action", err)
+			return
 		}
+		switch {
+		case out.Aliased:
+			aliasN++
+		case out.Renamed:
+			renameN++
+		case out.Added:
+			addN++
+		}
+		// Paired stats count toward the same totals as the matched path, so the
+		// summary reflects everything the import actually wrote.
+		powerN += out.PowerRows
+		heroN += out.HeroRows
+		hqN += out.HQRows
 	}
 
 	// Archive members the officer confirmed as departed (rank → EX).
 	var archiveN int
 	for _, mid := range req.Archive {
-		if mid == 0 {
-			continue
+		ok, err := applyArchive(tx, mid)
+		if err != nil {
+			dbError(w, "lastRankCommit archive", err)
+			return
 		}
-		res, err := tx.Exec("UPDATE members SET rank = 'EX', eligible = 0, leave_reason = ? WHERE id = ? AND rank != 'EX'", "Left alliance (via LastRank)", mid)
-		if err == nil {
-			if n, _ := res.RowsAffected(); n > 0 {
-				archiveN++
-			}
+		if ok {
+			archiveN++
 		}
 	}
 

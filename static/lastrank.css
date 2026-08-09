@@ -105,3 +105,13 @@
     font-size: 0.86rem;
     margin: 8px 0 4px;
 }
+
+/* Defer controls on a review row. The queue makes "not now" and "not until it
+   changes" distinct choices, so both need to be reachable without leaving the row. */
+.lr-defer {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    margin-left: 8px;
+    flex-wrap: wrap;
+}
