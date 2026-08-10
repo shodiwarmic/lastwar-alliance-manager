@@ -315,6 +315,12 @@
     </div>
   </div>
 
+  <!-- Layout-level config for global.js. No inline <script> — script-src is
+       'self' only, so an inline block would be silently blocked in production. -->
+  <div id="layout-config"
+       data-can-manage-members="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
+       hidden></div>
+
   <script src="/global.js"></script>
   <script src="/csrf.js"></script>
   <script src="/modal-focus.js"></script>
