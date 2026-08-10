@@ -222,3 +222,117 @@ func TestScheduledSweepBacksOffGatedMembers(t *testing.T) {
 		t.Fatalf("planned %v, want exactly [Due] — a gated member is being retried every tick", items)
 	}
 }
+
+// enableSchedule turns the scheduler on with the given per-domain toggles.
+func enableSchedule(t *testing.T, nap, prospects bool) {
+	t.Helper()
+	b := func(v bool) int {
+		if v {
+			return 1
+		}
+		return 0
+	}
+	if _, err := db.Exec(`UPDATE settings SET lastrank_auto_sync_enabled = 1,
+		lastrank_auto_sync_interval_hours = 6, lastrank_enrich_max_age_hours = 21,
+		nap_auto_refresh_enabled = ?, prospect_auto_refresh_enabled = ? WHERE id = 1`,
+		b(nap), b(prospects)); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	invalidateLastRankScheduleCache()
+}
+
+// markKindRan records a completed scheduled run, which is how the due check knows
+// a kind has already had its turn in this slot.
+func markKindRan(t *testing.T, kind string) {
+	t.Helper()
+	if _, err := db.Exec(`INSERT INTO background_jobs (kind, status, trigger_source, started_at)
+		VALUES (?, 'done', 'scheduled', datetime('now'))`, kind); err != nil {
+		t.Fatalf("mark %s: %v", kind, err)
+	}
+}
+
+// dueKinds reports which registered kinds the scheduler would still consider, in
+// the order runScheduledLastRankTick evaluates them.
+func dueKinds(t *testing.T) []string {
+	t.Helper()
+	cfg := loadLastRankScheduleConfig()
+	order := []struct {
+		kind    string
+		enabled bool
+	}{
+		{JobLastRankAlliance, true},
+		{JobLastRankExtended, true},
+		{JobProspectRefreshTransfer, cfg.ProspectEnabled},
+		{JobProspectRefreshProspect, cfg.ProspectEnabled},
+		{JobNAPMembers, cfg.NAPEnabled},
+	}
+	var out []string
+	for _, k := range order {
+		if k.enabled && scheduledSlotDue(k.kind, cfg) {
+			out = append(out, k.kind)
+		}
+	}
+	return out
+}
+
+// The per-domain toggles gate their kinds. Prospects and NAP live behind different
+// permissions from the roster sync, so an operator must be able to schedule one
+// without the others.
+func TestSchedulerTogglesGateTheirKinds(t *testing.T) {
+	setupScheduleTestDB(t)
+
+	enableSchedule(t, false, false)
+	got := dueKinds(t)
+	if len(got) != 2 || got[0] != JobLastRankAlliance || got[1] != JobLastRankExtended {
+		t.Errorf("with both toggles off, due = %v; want only the two roster kinds", got)
+	}
+
+	enableSchedule(t, true, true)
+	if got := dueKinds(t); len(got) != 5 {
+		t.Errorf("with both toggles on, due = %v; want all 5 kinds", got)
+	}
+
+	enableSchedule(t, true, false)
+	got = dueKinds(t)
+	for _, k := range got {
+		if k == JobProspectRefreshTransfer || k == JobProspectRefreshProspect {
+			t.Errorf("prospect kind %q is due with its toggle off", k)
+		}
+	}
+	if len(got) != 3 {
+		t.Errorf("NAP-only = %v, want 3 kinds", got)
+	}
+}
+
+// The tick starts ONE job (the slot is single-occupancy), so successive ticks must
+// advance through the remaining kinds rather than retrying the first one forever.
+func TestSchedulerAdvancesThroughKindsAcrossTicks(t *testing.T) {
+	setupScheduleTestDB(t)
+	enableSchedule(t, true, true)
+
+	var order []string
+	for i := 0; i < 6; i++ {
+		due := dueKinds(t)
+		if len(due) == 0 {
+			break
+		}
+		order = append(order, due[0]) // what this tick would start
+		markKindRan(t, due[0])        // and what the next tick therefore skips
+	}
+
+	want := []string{
+		JobLastRankAlliance, JobLastRankExtended,
+		JobProspectRefreshTransfer, JobProspectRefreshProspect, JobNAPMembers,
+	}
+	if len(order) != len(want) {
+		t.Fatalf("cycled through %v, want all %d kinds — the scheduler is stuck on one", order, len(want))
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Errorf("tick %d started %q, want %q", i+1, order[i], want[i])
+		}
+	}
+	if due := dueKinds(t); len(due) != 0 {
+		t.Errorf("after every kind ran, %v is still due — the slot check is not holding", due)
+	}
+}
