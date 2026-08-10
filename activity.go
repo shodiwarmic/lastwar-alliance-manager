@@ -35,7 +35,9 @@ func logActivity(userID int, username, action, entityType, entityName string, is
 		det = details[0]
 	}
 
-	if action == "created" && !neverBatched[entityType] {
+	// Batching is per-user; a scheduled run has no user, and `user_id = NULL` never
+	// matches anyway. Skipping explicitly keeps the intent visible.
+	if action == "created" && !neverBatched[entityType] && userID > 0 {
 		var id int
 		err := db.QueryRow(`
 			SELECT id FROM activity_log
@@ -57,10 +59,19 @@ func logActivity(userID int, username, action, entityType, entityName string, is
 		}
 	}
 
+	// A non-positive id means "not a user" — the scheduler, which has no session.
+	// Write NULL rather than 0: activity_log.user_id references users(id), where 0
+	// never exists, and a sentinel would be a dangling reference that any future
+	// join or FK enforcement would trip over. ActivityLog.UserID is already *int,
+	// so the read path handles it.
+	var actor any
+	if userID > 0 {
+		actor = userID
+	}
 	if _, err := db.Exec(`
 		INSERT INTO activity_log (user_id, username, action, entity_type, entity_name, details, is_sensitive)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, userID, username, action, entityType, entityName, det, sensitive); err != nil {
+	`, actor, username, action, entityType, entityName, det, sensitive); err != nil {
 		slog.Error("activity_log insert failed", "error", err)
 	}
 }

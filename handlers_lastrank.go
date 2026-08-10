@@ -190,6 +190,8 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch BEFORE opening the transaction — holding a database handle across the
+	// wire deadlocks the single connection (see jobs.go).
 	alliance, err := fetchLastRankAlliance(r.Context(), allianceID)
 	if err != nil {
 		slogLastRank("lastrank alliance fetch failed", err)
@@ -204,6 +206,37 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+	resp := lastRankBuildPreview(tx, alliance, userID)
+
+	// Persist the decisions this pull proposes, so they outlive the modal and a
+	// deferral means something. Stats stay ephemeral on purpose: they are
+	// staleness-gated append-only history and need no decision.
+	if err := reconcilePendingChanges(tx, buildPendingProposals(resp), alliance.LastSeenAt); err != nil {
+		slog.Error("lastrank queue reconcile failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		slog.Error("lastrank preview commit failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if pending, err := loadPendingChanges(true); err == nil {
+		resp.Pending = pending
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// lastRankBuildPreview resolves an alliance response against the roster and builds
+// the review payload. Shared by the manual preview handler and the scheduled
+// alliance job, so the matcher can never drift between the two — the scheduled
+// path is the one nobody watches.
+//
+// Pure read: it writes nothing. The caller decides what to do with the result.
+func lastRankBuildPreview(tx *sql.Tx, alliance *lastrankAllianceResp, userID int) LastRankSyncPreviewResponse {
 	resp := LastRankSyncPreviewResponse{
 		Alliance: LastRankAllianceMeta{
 			AllianceID: alliance.AllianceID,
@@ -367,30 +400,7 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Persist the decisions this pull proposes, so they outlive the modal and a
-	// deferral means something. Stats stay ephemeral on purpose: they are
-	// staleness-gated append-only history and need no decision.
-	//
-	// The transaction was previously read-only (deferred rollback as a consistent
-	// snapshot). It now has to commit — but only the queue is written here; nothing
-	// this preview shows has been applied.
-	if err := reconcilePendingChanges(tx, buildPendingProposals(resp), capture); err != nil {
-		slog.Error("lastrank queue reconcile failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		slog.Error("lastrank preview commit failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	if pending, err := loadPendingChanges(true); err == nil {
-		resp.Pending = pending
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	return resp
 }
 
 // buildPendingProposals turns a preview into the decisions worth queueing.
@@ -689,11 +699,22 @@ func syncOneMember(ctx context.Context, memberID int) (LastRankPlayerSyncRespons
 		}
 	}
 
-	// Always advance synced_at so the oldest-first Phase-2 ordering progresses
-	// even when a member is skipped (keeps re-runs from re-fetching the same one).
-	// Avatar URLs are refreshed here too (hotlinked from the game CDN).
-	tx.Exec("UPDATE members SET lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now'), lastrank_public_id = ?, lastrank_photo_url = ?, lastrank_photo_failover = ? WHERE id = ?",
+	// Always advance synced_at AND attempted_at so both the oldest-first ordering
+	// and the scheduled backoff progress even when a member is skipped. Avatar URLs
+	// are refreshed here too (hotlinked from the game CDN).
+	//
+	// attempted_at is separate from synced_at because the Phase-1 commit paths also
+	// stamp synced_at: a commit shortly before a heavy tick would otherwise make the
+	// whole roster look freshly attempted and starve the sweep for a day.
+	tx.Exec("UPDATE members SET lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now'), lastrank_attempted_at = strftime('%Y-%m-%d %H:%M:%f','now'), lastrank_public_id = ?, lastrank_photo_url = ?, lastrank_photo_failover = ? WHERE id = ?",
 		pubID.Int64, player.PhotoURL, player.PhotoURLFailover, memberID)
+
+	// Freshness stamp — ONLY when a live re-pull actually happened. A "gated" or
+	// "cached" response means the data did not refresh, and stamping it would make
+	// the member look current and starve them out of future sweeps.
+	if player.EnrichStatus == "fetched" {
+		tx.Exec("UPDATE members SET lastrank_enriched_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?", memberID)
+	}
 
 	if err := tx.Commit(); err != nil {
 		return out, err
@@ -730,22 +751,51 @@ func refreshOneProspect(ctx context.Context, prospectID, pubID int, bulk bool) (
 	if player.HeroPower != nil {
 		heroVal = *player.HeroPower
 	}
-	// Wrapped so a partial write can't survive, per the standing convention. The
-	// staleness gate this still lacks (a cached response can overwrite a fresher
-	// hand-entered figure) needs prospects.lastrank_captured_at, which arrives with
-	// the scheduler — it matters once this runs unattended, not on a click.
+
 	tx, err := db.Begin()
 	if err != nil {
 		return out, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`UPDATE prospects SET power = ?, hero_power = ?, lastrank_photo_url = ?, lastrank_photo_failover = ?
-		WHERE id = ?`, player.Power, heroVal, player.PhotoURL, player.PhotoURLFailover, prospectID); err != nil {
+
+	// STALENESS GATE. Prospects store point-in-time values, not history, so a write
+	// here overwrites rather than appends. Without this a cached or gated response
+	// would clobber a fresher hand-entered figure — and hand entry is how most
+	// prospects get their numbers before anyone finds their LastRank id. Tolerable
+	// on a click; not tolerable four times a day unattended.
+	//
+	// Compared as parsed times, never strings: lastrank_captured_at is a declared
+	// DATETIME and reads back RFC3339Nano while LastRank sends ISO.
+	var storedCapture sql.NullString
+	tx.QueryRow(`SELECT lastrank_captured_at FROM prospects WHERE id = ?`, prospectID).Scan(&storedCapture)
+	fresh := lastRankCaptureNewer(player.LastSeenAt, storedCapture.String)
+
+	if fresh {
+		capturedAt, _ := lastRankCaptureToSQLite(player.LastSeenAt)
+		if _, err := tx.Exec(`UPDATE prospects
+			SET power = ?, hero_power = ?, lastrank_photo_url = ?, lastrank_photo_failover = ?,
+			    lastrank_captured_at = ?
+			WHERE id = ?`, player.Power, heroVal, player.PhotoURL, player.PhotoURLFailover,
+			capturedAt, prospectID); err != nil {
+			return out, err
+		}
+	}
+
+	// Attempt + freshness stamps, mirroring the member path. synced_at always
+	// advances (nothing else writes it for prospects, so it doubles as the attempt
+	// stamp and keeps the sweep ordering moving); enriched_at only on a confirmed
+	// live re-pull, or a permanently-gated prospect would be due on every tick.
+	if _, err := tx.Exec(`UPDATE prospects SET lastrank_synced_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?`,
+		prospectID); err != nil {
 		return out, err
+	}
+	if player.EnrichStatus == "fetched" {
+		tx.Exec(`UPDATE prospects SET lastrank_enriched_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?`, prospectID)
 	}
 	if err := tx.Commit(); err != nil {
 		return out, err
 	}
+	out.Updated = fresh
 
 	out.LastRankName = player.Name
 	out.Power = int64Ptr(player.Power)
@@ -754,7 +804,6 @@ func refreshOneProspect(ctx context.Context, prospectID, pubID int, bulk bool) (
 	out.BaseLevel = player.BaseLevel
 	out.Rank = lastRankRankToString(player.AllianceRank)
 	out.CaptureDate = player.LastSeenAt
-	out.Updated = true
 	if player.AllianceAbbr != nil {
 		out.AllianceAbbr = *player.AllianceAbbr
 	}

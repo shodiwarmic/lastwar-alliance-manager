@@ -57,6 +57,52 @@
                     </div>
 
                     <div class="settings-group">
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-clock"/></svg> Scheduled LastRank Sync</h4>
+                        <p class="help-text" style="margin-top:0;">
+                            Keeps roster data fresh without anyone clicking. Runs on the server, so nothing needs a browser open.
+                            Stat updates apply automatically; rank changes, renames, unmatched names and possible departures always
+                            go to the review queue and are never applied unattended.
+                        </p>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="lastrank-auto-sync-enabled"> Enable scheduled sync
+                            </label>
+                            <span class="help-text">Off by default. Nothing runs on a schedule until this is ticked.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="lastrank-auto-sync-hour">Anchor hour (game time, UTC−2):</label>
+                            <input type="number" id="lastrank-auto-sync-hour" class="form-input" min="0" max="23">
+                            <span class="help-text">The first slot of the day. Pick a quiet hour — the heavy pass can take tens of minutes.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="lastrank-auto-sync-interval">Check every (hours):</label>
+                            <select id="lastrank-auto-sync-interval" class="form-input">
+                                <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                                <option value="4">4</option><option value="6">6</option><option value="8">8</option>
+                                <option value="12">12</option><option value="24">24</option>
+                            </select>
+                            <span class="help-text">Must divide 24, or the slots drift across midnight.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="lastrank-enrich-max-age">Re-pull a player after (hours):</label>
+                            <input type="number" id="lastrank-enrich-max-age" class="form-input" min="1" max="23">
+                            <span class="help-text" id="lastrank-enrich-band-help"></span>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="prospect-auto-refresh-enabled"> Also refresh prospects &amp; transfers
+                            </label>
+                            <span class="help-text">Declined prospects are skipped.</span>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="nap-auto-refresh-enabled"> Also gather NAP member counts
+                            </label>
+                            <span class="help-text">One request per ladder alliance; also refreshes their power and kills.</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-handshake"/></svg> Non-Aggression Pact</h4>
                         <div class="form-group">
                             <label for="nap-size">NAP Size (top alliances):</label>

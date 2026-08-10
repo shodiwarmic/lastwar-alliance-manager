@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"sync"
@@ -285,5 +286,39 @@ func TestPruneOldJobsDeletesItemsNotJustJobs(t *testing.T) {
 	}
 	if items != jobsRetainPerKind {
 		t.Errorf("kept %d items, want %d — orphaned item rows leak forever", items, jobsRetainPerKind)
+	}
+}
+
+// The scheduler has no session, so its activity rows must record NULL — not a
+// sentinel 0. activity_log.user_id references users(id), where 0 never exists, so
+// a sentinel is a dangling reference that any future join or FK enforcement trips
+// over. Caught in live testing: the mapping was documented but not implemented.
+func TestLogActivityWritesNullForNonUserActor(t *testing.T) {
+	setupJobsTestDB(t)
+
+	logActivity(0, "System (scheduled)", "imported", "lastrank_sync", "Alliance pull", false, "detail")
+	var uid sql.NullInt64
+	var username string
+	if err := db.QueryRow(`SELECT user_id, username FROM activity_log ORDER BY id DESC LIMIT 1`).
+		Scan(&uid, &username); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if uid.Valid {
+		t.Errorf("user_id = %d, want NULL — a sentinel is a dangling users(id) reference", uid.Int64)
+	}
+	if username != "System (scheduled)" {
+		t.Errorf("username = %q, want the actor name to survive", username)
+	}
+
+	// A real user still records their id.
+	if _, err := db.Exec(`INSERT INTO users (id, username, password, is_admin) VALUES (7, 'real', 'x', 0)`); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	logActivity(7, "real", "updated", "member", "Someone", false)
+	if err := db.QueryRow(`SELECT user_id FROM activity_log ORDER BY id DESC LIMIT 1`).Scan(&uid); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !uid.Valid || uid.Int64 != 7 {
+		t.Errorf("user_id = %v, want 7", uid)
 	}
 }

@@ -351,6 +351,15 @@ type Settings struct {
 	// LastRankAllianceID is the 32-char hex id for the alliance on lastrank.fun,
 	// used by the Phase-1 sync. Empty by default (operator pastes it in Settings).
 	LastRankAllianceID string `json:"lastrank_alliance_id"`
+
+	// Scheduled LastRank retrieval. All default off; see lastrank_schedule.go for
+	// why the interval and the enrich max age are coupled.
+	LastRankAutoSyncEnabled       bool `json:"lastrank_auto_sync_enabled"`
+	LastRankAutoSyncHour          int  `json:"lastrank_auto_sync_hour"`
+	LastRankAutoSyncIntervalHours int  `json:"lastrank_auto_sync_interval_hours"`
+	LastRankEnrichMaxAgeHours     int  `json:"lastrank_enrich_max_age_hours"`
+	NAPAutoRefreshEnabled         bool `json:"nap_auto_refresh_enabled"`
+	ProspectAutoRefreshEnabled    bool `json:"prospect_auto_refresh_enabled"`
 	// OurServerID is the game server we play on. 0 = not configured.
 	OurServerID int `json:"our_server_id"`
 	// NAPSize is how many top alliances on our server the Non-Aggression Pact covers,

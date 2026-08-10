@@ -146,6 +146,10 @@ func main() {
 	// Every flow plans oldest-touched-first, so re-running is resuming.
 	reconcileInterruptedJobs()
 
+	// Opt-in scheduled LastRank retrieval. The ticker always runs; it does nothing
+	// until an operator enables it in Settings.
+	startLastRankScheduler()
+
 	router := mux.NewRouter()
 
 	// Auth routes (public)
