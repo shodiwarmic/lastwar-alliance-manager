@@ -21,6 +21,7 @@ const CARD_META = {
     'diplomacy':    { label: 'Diplomacy',        icon: 'heart' },
     'leader-flags':    { label: 'Leader Flags',    icon: 'alert-triangle' },
     'accountability':  { label: 'Accountability',  icon: 'scale' },
+    'lastrank-review': { label: 'LastRank Review',  icon: 'list-check' },
 };
 
 // --- Formatting helpers ---
@@ -328,6 +329,79 @@ function renderLeaderFlags(card, members, vsRows, joinedAtById, dayImported) {
     appendWeekNotes(card, dayImported);
 }
 
+// Mirrors renderLeaderFlags: a positive empty state, a populated list, and a
+// footnote saying how much to trust the number. The queue is filled by the manual
+// sync AND (when enabled) the scheduler, so this may be the only place an officer
+// learns a decision is waiting.
+const REVIEW_KIND_LABELS = {
+    rank:      'Rank change',
+    name:      'Name change',
+    unmatched: 'Unmatched name',
+    archive:   'Possibly left',
+};
+
+function renderLastRankReview(card, data) {
+    card.querySelector('.dash-card-loading')?.remove();
+
+    const total = (data && data.open_count) || 0;
+    if (total === 0) {
+        const p = el('p');
+        p.append(svgIcon('check'), document.createTextNode(' Nothing waiting — LastRank changes are all reviewed.'));
+        card.appendChild(p);
+        appendReviewSyncNote(card, data);
+        return;
+    }
+
+    const byKind = (data && data.by_kind) || {};
+    const grid = el('div', { className: 'dash-stat-grid' });
+    ['rank', 'name', 'unmatched', 'archive'].forEach(k => {
+        if (byKind[k]) grid.appendChild(statCell(String(byKind[k]), REVIEW_KIND_LABELS[k]));
+    });
+    if (grid.childNodes.length) card.appendChild(grid);
+
+    const top = (data && data.top) || [];
+    if (top.length) {
+        card.appendChild(el('p', { className: 'dash-section-label', textContent: 'Waiting for a decision' }));
+        const list = el('ul', { className: 'dash-list' });
+        top.forEach(item => {
+            const li = el('li');
+            li.appendChild(el('span', { className: 'dash-list-name', textContent: item.lastrank_name || item.current_value || 'Unknown' }));
+            const detail = item.kind === 'rank' || item.kind === 'name'
+                ? (item.current_value || '?') + ' \u2192 ' + (item.proposed_value || '?')
+                : REVIEW_KIND_LABELS[item.kind] || item.kind;
+            li.appendChild(el('span', { className: 'dash-list-value', textContent: detail }));
+            list.appendChild(li);
+        });
+        card.appendChild(list);
+    }
+
+    const link = el('a', { className: 'dash-card-link', href: '/members' });
+    link.textContent = total === 1 ? 'Review 1 change \u2192' : `Review all ${total} changes \u2192`;
+    card.appendChild(link);
+    appendReviewSyncNote(card, data);
+}
+
+// The count is only as current as the last pull, so say when that was rather than
+// letting a stale zero read as "all clear".
+function appendReviewSyncNote(card, data) {
+    const when = data && data.last_synced;
+    if (!when) return;
+    const note = el('p', { className: 'dash-week-note' });
+    note.textContent = 'Last LastRank pull: ' + relTimeShort(when) + '.';
+    card.appendChild(note);
+}
+
+function relTimeShort(iso) {
+    const t = new Date(iso);
+    if (isNaN(t)) return iso;
+    const mins = Math.round((Date.now() - t.getTime()) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    return Math.round(hrs / 24) + 'd ago';
+}
+
 function renderAccountability(card, data) {
     const grid = el('div', { className: 'dash-stat-grid' });
     grid.appendChild(statCell(String(data.at_risk),           'At Risk'));
@@ -469,6 +543,7 @@ async function boot() {
     const needSchedule      = visibleIds.has('schedule');
     const needAllies        = visibleIds.has('diplomacy');
     const needAccountability = visibleIds.has('accountability');
+    const needLastRankReview = visibleIds.has('lastrank-review');
 
     // Render card shells in prefs order (visible only)
     const cardEls = {};
@@ -495,6 +570,7 @@ async function boot() {
         fetches.agreementTypes = fetch('/api/ally-agreement-types').then(r => r.ok ? r.json() : Promise.reject());
     }
     if (needAccountability) fetches.accountability = fetch('/api/accountability/summary').then(r => r.ok ? r.json() : Promise.reject());
+    if (needLastRankReview) fetches.lastrankReview = fetch('/api/lastrank/review/summary').then(r => r.ok ? r.json() : Promise.reject());
 
     const results = {};
     await Promise.allSettled(
@@ -531,6 +607,10 @@ async function boot() {
     if (cardEls['accountability']) {
         if (results.accountability) renderAccountability(cardEls['accountability'], results.accountability);
         else { cardEls['accountability'].querySelector('.dash-card-loading')?.remove(); cardEls['accountability'].appendChild(errorEl('Failed to load accountability data.')); }
+    }
+    if (cardEls['lastrank-review']) {
+        if (results.lastrankReview) renderLastRankReview(cardEls['lastrank-review'], results.lastrankReview);
+        else { cardEls['lastrank-review'].querySelector('.dash-card-loading')?.remove(); cardEls['lastrank-review'].appendChild(errorEl('Failed to load the LastRank review queue.')); }
     }
 
     initGridSortable(grid);

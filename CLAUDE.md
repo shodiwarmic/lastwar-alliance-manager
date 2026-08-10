@@ -451,6 +451,15 @@ not as a phantom success. Those helpers are shared with `lastRankCommit` on purp
 — two paths that both "apply a rank change" would drift, and the queue path is the
 one nobody watches.
 
+**Three alert surfaces**, all fed by `GET /api/lastrank/review/summary` and all
+gated on `manage_members` — only someone who can act on a decision is told one is
+waiting: the `lastrank-review` dashboard card (registered in `allowedCards` +
+`CARD_META`), the Members-panel count badge, and a once-per-session login toast in
+`global.js`. The toast reads its permission from a `data-*` attribute on
+`#layout-config` rather than an inline `<script>`, which `script-src 'self'` would
+silently block. Deliberately no nav badge — `nav-links` renders twice from one
+block, so IDs there would collide.
+
 **Unmatched names resolve one at a time.** Resolving one needs a per-row target
 (which member, or "add as new"), and the request carries only one; a batch
 containing an unmatched row is rejected rather than aliasing several different

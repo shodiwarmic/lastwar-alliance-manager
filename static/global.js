@@ -662,3 +662,44 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+
+
+// ---- LastRank review nudge ----
+//
+// The review queue is filled by the manual sync AND, once the scheduler is on, by
+// runs nobody watched. A queue nobody is told about is a queue nobody works, so
+// permissioned officers get one nudge per session.
+//
+// Once per SESSION, not per page load: this is a reminder, not an alarm. It is also
+// deliberately cheap — one request, and only for users who could act on the answer.
+(function () {
+    const cfg = document.getElementById('layout-config');
+    if (!cfg || cfg.dataset.canManageMembers !== 'true') return;
+
+    const FLAG = 'lastrank-review-nudged';
+    try {
+        if (sessionStorage.getItem(FLAG)) return;
+    } catch (e) {
+        return; // storage blocked — better silent than nagging every page
+    }
+
+    // After first paint: the nudge must never compete with the page loading.
+    window.addEventListener('load', () => {
+        setTimeout(async () => {
+            try {
+                const res = await fetch('/api/lastrank/review/summary');
+                if (!res.ok) return;
+                const d = await res.json();
+                // Mark as shown even at zero, so a session gets at most one request.
+                sessionStorage.setItem(FLAG, '1');
+                const n = d.open_count || 0;
+                if (n === 0) return;
+                showToast(
+                    n === 1
+                        ? '1 LastRank change is waiting for review.'
+                        : `${n} LastRank changes are waiting for review.`,
+                    'info', 8000);
+            } catch (e) { /* never let a nudge break the page */ }
+        }, 1200);
+    });
+})();

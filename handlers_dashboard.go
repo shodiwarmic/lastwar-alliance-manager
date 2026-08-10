@@ -26,6 +26,11 @@ func allowedCards(data PageData) []DashboardCard {
 	if data.Permissions.ViewAccountability {
 		cards = append(cards, DashboardCard{ID: "accountability", Visible: true})
 	}
+	// Gated on manage_members, matching the review endpoints: only someone who can
+	// ACT on a queued decision should be told there are decisions waiting.
+	if data.Permissions.ManageMembers {
+		cards = append(cards, DashboardCard{ID: "lastrank-review", Visible: true})
+	}
 	return cards
 }
 
