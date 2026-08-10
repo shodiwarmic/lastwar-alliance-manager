@@ -596,7 +596,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	var s Settings
 
 	err := db.QueryRow(`SELECT
-        id, schedule_message_template, daily_message_template, power_tracking_enabled,
+        id, schedule_message_template, COALESCE(daily_message_template, ''), power_tracking_enabled,
         COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''), COALESCE(max_hq_level, 35),
         COALESCE(pwd_min_length, 12), COALESCE(pwd_require_special, 0),
         COALESCE(pwd_require_upper, 0), COALESCE(pwd_require_lower, 0),
@@ -648,6 +648,10 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
+		// Logged, not returned: the SELECT and Scan lists are positional and ~49
+		// entries long, so a mismatch here is the likeliest cause and is otherwise
+		// invisible.
+		slog.Error("failed to load settings", "error", err)
 		http.Error(w, "Failed to load settings", http.StatusInternalServerError)
 		return
 	}
