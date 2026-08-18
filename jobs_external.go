@@ -18,9 +18,14 @@ import (
 
 func init() {
 	registerJobKind(JobExtAllianceGather, jobKind{
-		Permission: "manage_external_alliances",
-		Label:      "The external-alliance gather",
-		New:        func(a jobActor) jobRunner { return &extGatherJob{actor: a} },
+		// The registry is writable by manage_allies OR manage_vs_points, which no single
+		// permission key expresses. It used to name "manage_external_alliances" — not a
+		// field on RankPermissions, so userHasPermission resolved it to false for every
+		// non-admin while the button rendered for both manage ranks. Share the handler's
+		// own predicate instead, so the job, HTTP and template gates cannot diverge.
+		Allow: canManageExternalAlliances,
+		Label: "The external-alliance gather",
+		New:   func(a jobActor) jobRunner { return &extGatherJob{actor: a} },
 	})
 }
 

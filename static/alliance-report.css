@@ -1,0 +1,149 @@
+/* alliance-report.css — the External Alliances "Scout Report" tab.
+   Page-specific layout only. The table, filter panel, progress list, finder dropdown,
+   chips and buttons all come from global utilities (styles.css, filter-panel.css,
+   job-progress.css) — see CLAUDE.md §6a. */
+
+/* ── Lookup card ──────────────────────────────────────────────────────── */
+.rep-lookup {
+    padding: 18px;
+    margin-bottom: 18px;
+}
+
+.rep-help {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    margin: 6px 0 14px;
+}
+
+.rep-lookup-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+/* buildRemoteFinder's dropdown is absolutely positioned, so its container has to
+   establish the positioning context. */
+.rep-find-wrap {
+    position: relative;
+    flex: 1 1 320px;
+    min-width: 0;
+}
+
+.rep-find-wrap .form-input { width: 100%; }
+.rep-find-wrap .finder-dropdown { top: calc(100% + 4px); left: 0; right: 0; }
+
+.rep-extended-toggle {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-top: 14px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.rep-extended-toggle input { margin-top: 3px; flex-shrink: 0; }
+.rep-extended-toggle strong { color: var(--text-primary); }
+
+.rep-run-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 12px;
+    min-height: 0;
+}
+
+/* ── Alliance header + summary tiles ──────────────────────────────────── */
+.rep-summary { margin-bottom: 18px; }
+
+.rep-alliance-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.rep-alliance-head h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.15rem;
+}
+
+.rep-alliance-meta {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.rep-alliance-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.rep-alliance-link:hover { text-decoration: underline; }
+
+/* Intrinsic sizing rather than a width breakpoint — the grid reflows on its own. */
+.rep-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.rep-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+}
+
+.rep-tile-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.rep-tile-value {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* Coverage note — how much of the alliance LastRank actually knows about. */
+.rep-coverage {
+    margin: 12px 0 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.rep-coverage-empty {
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+}
+
+.rep-coverage-empty strong { color: var(--color-warning); }
+
+/* ── Table ────────────────────────────────────────────────────────────── */
+.rep-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.rep-player-link {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+.rep-player-link:hover {
+    color: var(--color-primary);
+    text-decoration: underline;
+}

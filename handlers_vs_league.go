@@ -1824,9 +1824,27 @@ func searchExternalAlliancesLastRank(w http.ResponseWriter, r *http.Request) {
 		}
 		server = &n
 	}
+
+	// Two strategies, one response shape:
+	//
+	//   scope=server (default) — /v1/global/alliances, strict server + fuzzy name, carries
+	//     power/kills. What the registry add/edit modal wants: you are recording an alliance
+	//     you already know, usually on our own server.
+	//   scope=any — /v1/search, the site's own relevance-ranked search across ALL servers.
+	//     What a scout lookup wants: VS Duel League opponents are cross-server, so assuming
+	//     our server hides the alliances the officer is actually looking for.
+	//
+	// Defaulting to the existing behaviour keeps the registry modal unchanged.
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	results, err := searchLastRankAlliances(ctx, q, server, 20)
+
+	var results []VSLeagueAllianceSearchResult
+	var err error
+	if strings.TrimSpace(r.URL.Query().Get("scope")) == "any" {
+		results, err = searchLastRankAllianceHits(ctx, q, 20)
+	} else {
+		results, err = searchLastRankAlliances(ctx, q, server, 20)
+	}
 	if err != nil {
 		slogLastRank("searchExternalAlliancesLastRank failed", err)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

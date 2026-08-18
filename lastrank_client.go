@@ -164,6 +164,74 @@ type lastrankAlliancePage struct {
 	Rows []lastrankAllianceRow `json:"rows"`
 }
 
+// lastrankSearchHit is one hit from /v1/search — the endpoint lastrank.fun's own search box
+// uses. It is relevance-ranked on tag/name and spans EVERY server, which is what a scout
+// lookup needs: VS Duel League opponents come from other servers, so filtering to ours
+// would hide the very alliances an officer is trying to find.
+//
+// Deliberately a different endpoint from /v1/global/alliances, which substring-matches
+// names and sorts by power — searching "cROw" there surfaces "Crowned Vengeance" and
+// "NeCROWmancers" above the actual tag match. Documented as carrying no power/kills; the
+// live response includes the keys as nulls, so they stay pointers and stay optional.
+type lastrankSearchHit struct {
+	Kind        string  `json:"kind"` // "alliance" | "player"
+	ID          string  `json:"id"`
+	Name        *string `json:"name"`
+	Abbr        *string `json:"abbr"`
+	ServerID    *int    `json:"server_id"`
+	Power       *int64  `json:"power"`
+	MemberCount *int    `json:"member_count"`
+}
+
+type lastrankSearchResponse struct {
+	Query string              `json:"query"`
+	Hits  []lastrankSearchHit `json:"hits"`
+}
+
+// searchLastRankAllianceHits runs the site's own search across all servers and returns
+// alliance hits only. Mapped into the same app-facing shape as searchLastRankAlliances so
+// one picker can render either strategy; power/kills are simply nil here, and a picked hit
+// resolves its own details on the follow-up by-id fetch.
+func searchLastRankAllianceHits(ctx context.Context, query string, limit int) ([]VSLeagueAllianceSearchResult, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	q := url.Values{}
+	q.Set("q", query)
+	q.Set("kind", "alliance")
+
+	var resp lastrankSearchResponse
+	if err := lastRankDo(ctx, http.MethodGet, "/v1/search?"+q.Encode(), &resp); err != nil {
+		return nil, err
+	}
+	return mapLastRankSearchHits(resp.Hits, limit), nil
+}
+
+// mapLastRankSearchHits converts raw search hits to the app-facing shape. Split out from
+// the fetch so its filtering rules are testable without touching the network.
+func mapLastRankSearchHits(hits []lastrankSearchHit, limit int) []VSLeagueAllianceSearchResult {
+	out := make([]VSLeagueAllianceSearchResult, 0, len(hits))
+	for _, h := range hits {
+		// kind is requested as "alliance", but the upstream is a volunteer service whose
+		// shape can drift — never let a player hit render as an alliance, and never emit a
+		// row with no id, which would produce an unpickable entry.
+		if h.Kind != "alliance" || strings.TrimSpace(h.ID) == "" {
+			continue
+		}
+		out = append(out, VSLeagueAllianceSearchResult{
+			LastRankID: h.ID,
+			Tag:        h.Abbr,
+			Name:       h.Name,
+			Server:     h.ServerID,
+			Power:      h.Power,
+		})
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
 // searchLastRankAlliances finds alliances by fuzzy tag/name via /v1/global/alliances, optionally
 // restricted to a single server (strict) — matching the picker's "strict server + fuzzy name"
 // rule. Uses the shared 1 req/sec limiter; the caller owns a bounded context.

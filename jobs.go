@@ -98,6 +98,13 @@ type jobKind struct {
 	Permission string
 	Label      string
 	New        func(actor jobActor) jobRunner
+	// Allow overrides Permission when the flow's gate can't be written as one
+	// permission key. Some HTTP surfaces gate on a DISJUNCTION — the external-alliance
+	// registry is writable by manage_allies OR manage_vs_points — and a single string
+	// silently can't express that: userHasPermission resolves an unknown key to false,
+	// so the button renders and the start 403s. Set this to the same predicate the
+	// handler and template use, and the three gates cannot drift apart.
+	Allow func(user *AuthUser) bool
 }
 
 // jobRegistry is populated by each flow's init(). Keeping registration next to the
