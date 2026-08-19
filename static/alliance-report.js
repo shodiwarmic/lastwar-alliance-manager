@@ -476,11 +476,11 @@
         { key: 'kills',  label: 'Kills' },
         { key: 'prof',   label: 'Profession' },
         { key: 'career', label: 'Career Lv' },
-        // NOT "Last Active". Verified against the API: last_seen_at is when LastRank's
-        // crawler last observed the record — members of one alliance cluster within
-        // seconds of each other and of the alliance's own timestamp. Calling it activity
-        // would invite an officer to write off a player as dormant on crawl timing.
-        { key: 'seen',   label: 'Data Seen', title: 'When LastRank last observed this record — not the player’s last login' },
+        // NOT "Last Active" — last_seen_at is when LastRank scanned this player from the
+        // game, i.e. how fresh the row is. Members of one alliance are scanned together,
+        // so their timestamps cluster within seconds; reading it as activity would invite
+        // writing off a live player on the strength of scan scheduling.
+        { key: 'seen',   label: 'Scanned', title: 'When LastRank last scanned this player from the game — how fresh this row is, not the player’s last login' },
         { key: 'source', label: 'Source Server', title: 'Server this player originally came from' },
     ];
 

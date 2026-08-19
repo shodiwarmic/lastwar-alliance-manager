@@ -282,12 +282,17 @@ Our own alliance is handled by the `IsOwn` branch (Rule 2 → no registry row; t
 lands in the `is_own` series), and the activity row is written **only when something actually
 changed** — a report on unchanged numbers is a pure read.
 
-> **`last_seen_at` is a CRAWL timestamp, not player activity.** Verified against the API:
-> members of one alliance carry timestamps within seconds of each other and of the alliance's
-> own `last_seen_at`, and all of them precede `last_enriched_at`. The column is therefore
-> labelled **"Data Seen"**, and there is deliberately **no "last active" filter** — one would
-> let an officer write off a live player as dormant on the strength of crawl scheduling. If a
-> genuine activity signal ever appears upstream, that is what such a filter should key on.
+> **`last_seen_at` is a SCAN timestamp, not player activity.** It is when lastrank scanned
+> that player from the game — the as-of date of the data — while `last_enriched_at` is when
+> the enrich endpoint was last *called* on them (a record of our polling, not of the game).
+> Members of one alliance are scanned together, so their timestamps cluster within seconds of
+> each other and of the alliance's own.
+>
+> The report column is therefore labelled **"Scanned"**, and there is deliberately **no
+> "last active" filter** — one would let an officer write off a live player as dormant on the
+> strength of scan scheduling. The `// game-side "last active"` comment in `lastrank_client.go`
+> that seeded this misreading has been corrected; don't reintroduce that framing. If a genuine
+> activity signal ever appears upstream, that is what such a filter should key on.
 
 **Extended filters only exist once extended data does.** The profession / kills / origin chip
 rows (`.rep-ext-row`) are hidden until the first extended row lands and are reset when a new

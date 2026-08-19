@@ -60,7 +60,9 @@ type lastrankAllianceResp struct {
 	ArmyKill   int64                    `json:"army_kill"`
 	CurMember  int                      `json:"cur_member"`
 	MaxMember  int                      `json:"max_member"`
-	Country    *string                  `json:"country"`
+	Country *string `json:"country"`
+	// When lastrank scanned this alliance from the game (see lastrankPlayerResp.LastSeenAt).
+	// The staleness guard and every history row's recorded_at key on it.
 	LastSeenAt string                   `json:"last_seen_at"`
 	Members    []lastrankAllianceMember `json:"members"`
 }
@@ -81,8 +83,15 @@ type lastrankPlayerResp struct {
 	BaseLevel      *int    `json:"base_level"`
 	CareerLv       int     `json:"career_lv"`
 	CareerType     int     `json:"career_type"`      // profession code; maps via CareerTypeLabels
-	LastSeenAt     string  `json:"last_seen_at"`     // game-side "last active" (as-of date)
-	LastEnrichedAt string  `json:"last_enriched_at"` // when lastrank last re-pulled this record
+	// When lastrank SCANNED this player from the game — the as-of date of the data, and
+	// what every history write uses as recorded_at. It is NOT the player's last login:
+	// members of one alliance are scanned together, so their timestamps cluster within
+	// seconds of each other and of the alliance's own. Never surface it as "last active";
+	// doing so invites writing off a live player on the strength of scan scheduling.
+	LastSeenAt string `json:"last_seen_at"`
+	// When the enrich endpoint was last CALLED on this player — a record of our own
+	// polling, not of the game. Only the freshness filter reads it.
+	LastEnrichedAt string `json:"last_enriched_at"`
 	// "cached" | "fetched" | "gated" | "unavailable". Only "fetched" means a live
 	// re-pull actually happened — the scheduled sweep's freshness stamp keys on it,
 	// because stamping on "gated" would starve that member out of future sweeps.
