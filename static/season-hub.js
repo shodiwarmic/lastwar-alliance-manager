@@ -515,11 +515,42 @@
             const tdNote = document.createElement('td');
             const noteInput = document.createElement('input');
             noteInput.type = 'text';
-            noteInput.className = 'note-input form-input';
+            noteInput.className = 'general-note-input note-input form-input';
             noteInput.value = e.note || '';
             noteInput.placeholder = 'Optional note';
             tdNote.appendChild(noteInput);
             tr.appendChild(tdNote);
+
+            // Attack / Defense notes and in-game poll confirmations.
+            // Each week has one attack action and one defense action, so the
+            // role-specific note says which context the officer meant.
+            const mkRoleNote = (cls, value, placeholder) => {
+                const td = document.createElement('td');
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = `${cls} note-input form-input`;
+                input.value = value || '';
+                input.placeholder = placeholder;
+                td.appendChild(input);
+                return td;
+            };
+            const mkPollCheck = (cls, checked, label) => {
+                const td = document.createElement('td');
+                td.className = 'poll-cell';
+                const box = document.createElement('input');
+                box.type = 'checkbox';
+                box.className = `${cls} poll-check`;
+                box.checked = !!checked;
+                box.title = label;
+                box.setAttribute('aria-label', `${label} — ${m.name}`);
+                td.appendChild(box);
+                return td;
+            };
+
+            tr.appendChild(mkRoleNote('attack-note-input', e.attack_note, 'Attack note'));
+            tr.appendChild(mkPollCheck('attack-poll-check', e.attack_poll_voted, 'Voted on attack poll'));
+            tr.appendChild(mkRoleNote('defense-note-input', e.defense_note, 'Defense note'));
+            tr.appendChild(mkPollCheck('defense-poll-check', e.defense_poll_voted, 'Voted on defense poll'));
 
             return tr;
         });
@@ -545,8 +576,19 @@
             if (!memberId) return;
             const score = tr.querySelector('.score-select').value;
             const attended = parseInt(tr.querySelector('.key-event-count').value, 10) || 0;
-            const note = tr.querySelector('.note-input').value;
-            entries.push({ member_id: memberId, score, attended_key_event: attended, note });
+            // '.note-input' is shared styling across all three note fields, so
+            // select each by its own role class rather than by the shared one.
+            const note = tr.querySelector('.general-note-input').value;
+            entries.push({
+                member_id: memberId,
+                score,
+                attended_key_event: attended,
+                note,
+                attack_note:        tr.querySelector('.attack-note-input').value,
+                defense_note:       tr.querySelector('.defense-note-input').value,
+                attack_poll_voted:  tr.querySelector('.attack-poll-check').checked,
+                defense_poll_voted: tr.querySelector('.defense-poll-check').checked
+            });
         });
 
         setButtonLoading(btnSaveParticipation);

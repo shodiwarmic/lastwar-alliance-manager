@@ -280,6 +280,21 @@
     font-size: 0.85rem;
 }
 
+/* In-game poll confirmation checkboxes (attack / defense) — one per role,
+   centred in their column so a scan down the grid reads as a tick list. */
+.poll-cell {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.poll-check {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+    vertical-align: middle;
+}
+
 /* ── Contributions tab ────────────────────────────────────────────────── */
 .contrib-input {
     width: 120px;
