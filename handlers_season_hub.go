@@ -111,6 +111,13 @@ type ParticipationEntry struct {
 	Score            string `json:"score"`
 	AttendedKeyEvent int    `json:"attended_key_event"` // count, not bool — key event may occur >1× per week
 	Note             string `json:"note"`
+	// Each week carries one Attack action and one Defense action, so a note is
+	// ambiguous unless it names its role. Note (above) stays as the general note.
+	AttackNote  string `json:"attack_note"`
+	DefenseNote string `json:"defense_note"`
+	// Officer-confirmed responses to the IN-GAME poll — not the app's Poll Tracker.
+	AttackPollVoted  bool `json:"attack_poll_voted"`
+	DefensePollVoted bool `json:"defense_poll_voted"`
 }
 
 type ContributionImportRow struct {
@@ -1233,7 +1240,8 @@ func handleParticipationGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := db.Query(`
-		SELECT sp.member_id, m.name, sp.week_number, sp.score, sp.attended_key_event, sp.note
+		SELECT sp.member_id, m.name, sp.week_number, sp.score, sp.attended_key_event, sp.note,
+		       sp.attack_note, sp.defense_note, sp.attack_poll_voted, sp.defense_poll_voted
 		FROM season_participation sp
 		JOIN members m ON m.id = sp.member_id
 		WHERE sp.season_id = ?
@@ -1252,11 +1260,16 @@ func handleParticipationGet(w http.ResponseWriter, r *http.Request) {
 		Score            string `json:"score"`
 		AttendedKeyEvent int    `json:"attended_key_event"`
 		Note             string `json:"note"`
+		AttackNote       string `json:"attack_note"`
+		DefenseNote      string `json:"defense_note"`
+		AttackPollVoted  bool   `json:"attack_poll_voted"`
+		DefensePollVoted bool   `json:"defense_poll_voted"`
 	}
 	entries := []entry{}
 	for rows.Next() {
 		var e entry
-		if err := rows.Scan(&e.MemberID, &e.MemberName, &e.WeekNumber, &e.Score, &e.AttendedKeyEvent, &e.Note); err != nil {
+		if err := rows.Scan(&e.MemberID, &e.MemberName, &e.WeekNumber, &e.Score, &e.AttendedKeyEvent, &e.Note,
+			&e.AttackNote, &e.DefenseNote, &e.AttackPollVoted, &e.DefensePollVoted); err != nil {
 			continue
 		}
 		entries = append(entries, e)
@@ -1332,15 +1345,22 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 			continue // skip invalid score keys silently
 		}
 		_, err := tx.Exec(`
-			INSERT INTO season_participation (season_id, member_id, week_number, score, attended_key_event, note, recorded_by, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			INSERT INTO season_participation (season_id, member_id, week_number, score, attended_key_event, note,
+			                                  attack_note, defense_note, attack_poll_voted, defense_poll_voted,
+			                                  recorded_by, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 			ON CONFLICT(season_id, member_id, week_number) DO UPDATE SET
 			  score = excluded.score,
 			  attended_key_event = excluded.attended_key_event,
 			  note = excluded.note,
+			  attack_note = excluded.attack_note,
+			  defense_note = excluded.defense_note,
+			  attack_poll_voted = excluded.attack_poll_voted,
+			  defense_poll_voted = excluded.defense_poll_voted,
 			  recorded_by = excluded.recorded_by,
 			  updated_at = CURRENT_TIMESTAMP`,
-			body.SeasonID, e.MemberID, body.WeekNumber, scoreKey, e.AttendedKeyEvent, e.Note, user.ID)
+			body.SeasonID, e.MemberID, body.WeekNumber, scoreKey, e.AttendedKeyEvent, e.Note,
+			e.AttackNote, e.DefenseNote, e.AttackPollVoted, e.DefensePollVoted, user.ID)
 		if err != nil {
 			slog.Error("handleParticipationSave: upsert", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
