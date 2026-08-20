@@ -8,11 +8,34 @@
 
 {{define "head_tags"}}
 <link rel="stylesheet" href="/job-progress.css">
+    <link rel="stylesheet" href="/filter-panel.css">
     <link rel="stylesheet" href="/external-alliances.css">
+    <link rel="stylesheet" href="/alliance-report.css">
 {{end}}
 
 {{define "content"}}
 <div id="ext-alliances-page">
+    {{/* The tab bar renders only for managers. The page itself is visible to view-only
+         ranks, but every scout-report action gates on manage — so a view-only user gets
+         today's flat page rather than a tab whose contents all 403. A lone tab would be
+         chrome for nothing, so there is no bar unless both tabs exist. */}}
+    {{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="registry">
+            <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-world"/></svg>
+            Registry
+        </button>
+        <button class="tab-btn" data-tab="report">
+            <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-binoculars"/></svg>
+            Scout Report
+        </button>
+    </div>
+    {{end}}
+
+    {{/* `.tab-content` is display:none until JS activates a tab. A view-only user gets no
+         tab bar, so nothing would ever activate it — hence the class only when tabs exist,
+         which also avoids a first-paint flash and survives JS failing to load. */}}
+    <div id="tab-registry" class="{{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}tab-content{{end}}">
     {{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}
     <div class="action-bar">
         <button type="button" id="ext-add-btn" class="btn btn-primary">
@@ -118,6 +141,135 @@
             </table>
         </div>
     </div>
+    </div><!-- /#tab-registry -->
+
+    {{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}
+    <div id="tab-report" class="tab-content">
+        <section class="card rep-lookup">
+            <h4 class="icon-heading">
+                <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-binoculars"/></svg>
+                Scout an alliance
+            </h4>
+            <p class="rep-help">
+                Search your registry, or look up any alliance on
+                <a href="https://lastrank.fun" target="_blank" rel="noopener noreferrer">lastrank.fun</a>
+                &mdash; <strong>across every server</strong>, since VS Duel League opponents usually
+                aren't on ours. A tag often exists on many servers, so check the server number before picking.
+                You can also paste a lastrank.fun alliance link directly.
+                The report is <strong>not saved</strong> &mdash; it lives in this tab until you leave.
+                If the alliance is already in your registry, its power, kills and member count are refreshed.
+            </p>
+            <div class="rep-lookup-row">
+                <div class="rep-find-wrap">
+                    <input type="text" id="rep-alliance-input" class="form-input" placeholder="Tag, name, or lastrank.fun link…" autocomplete="off">
+                </div>
+                <button type="button" id="rep-run-btn" class="btn btn-primary">
+                    <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-binoculars"/></svg>
+                    Report
+                </button>
+            </div>
+            <label class="rep-extended-toggle">
+                <input type="checkbox" id="rep-extended">
+                <span>
+                    <strong>Extended report</strong>
+                    &mdash; adds kills, profession, career level, source server and scan date.
+                    Each member is looked up individually, and anything LastRank hasn't refreshed
+                    in the last day is re-pulled live from the game so you aren't scouting on
+                    week-old numbers. A well-tracked alliance takes a couple of minutes; one nobody
+                    has scouted before can take considerably longer, and the list below shows which
+                    members needed a live refresh. You can stop at any point and keep what's loaded.
+                    <strong>Keep this tab open</strong> while it runs.
+                </span>
+            </label>
+            <div class="rep-run-actions">
+                <button type="button" id="rep-stop-btn" class="btn btn-danger btn-sm" style="display:none;">
+                    <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Stop
+                </button>
+                <span id="rep-status" class="status-msg"></span>
+            </div>
+            <div id="rep-progress" class="job-progress" style="display:none;"></div>
+        </section>
+
+        <section id="rep-summary" class="rep-summary" style="display:none;"></section>
+
+        <div id="rep-results" style="display:none;">
+            <div class="filter-sort-controls">
+                <div class="filter-sort-top">
+                    <div class="filter-search-wrap">
+                        <input type="text" id="rep-search" class="form-input" placeholder="Search member name…">
+                        <button id="rep-clear-search" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+                    </div>
+                    <button type="button" id="rep-toggle-filters" class="btn btn-secondary btn-sm filter-toggle" aria-expanded="false" aria-controls="rep-filter-collapse">
+                        <svg width="14" height="14" aria-hidden="true" class="svg-icon chevron"><use href="/icons.svg#icon-chevron-down"/></svg>
+                        Filter
+                        <span id="rep-filter-count" class="filter-count-badge" hidden></span>
+                    </button>
+                    <button type="button" id="rep-clear-filters" class="btn btn-ghost btn-sm" disabled>Clear</button>
+                    <span class="status-msg" id="rep-count" style="margin-left:auto;"></span>
+                </div>
+
+                <div id="rep-filter-collapse" class="filter-collapse">
+                    <hr class="filter-sort-divider">
+                    <div class="filter-sort-grid">
+                        <div class="filter-row">
+                            <span class="filter-chip-label">Rank:</span>
+                            <button class="filter-chip rep-rank-chip active" data-rank="all">All</button>
+                            <button class="filter-chip rep-rank-chip" data-rank="R5">R5</button>
+                            <button class="filter-chip rep-rank-chip" data-rank="R4">R4</button>
+                            <button class="filter-chip rep-rank-chip" data-rank="R3">R3</button>
+                            <button class="filter-chip rep-rank-chip" data-rank="R2">R2</button>
+                            <button class="filter-chip rep-rank-chip" data-rank="R1">R1</button>
+                            <button class="filter-chip rep-rank-chip" data-rank="none">Unranked</button>
+                        </div>
+                        <div class="filter-row">
+                            <span class="filter-chip-label">HQ:</span>
+                            <button class="filter-chip rep-hq-chip active" data-hq="all">All</button>
+                            <button class="filter-chip rep-hq-chip" data-hq="30plus">30+</button>
+                            <button class="filter-chip rep-hq-chip" data-hq="25-29">25&ndash;29</button>
+                            <button class="filter-chip rep-hq-chip" data-hq="under25">Under 25</button>
+                            <button class="filter-chip rep-hq-chip" data-hq="unknown">Unknown</button>
+                        </div>
+                        {{/* Extended-only filters. Hidden until an extended run supplies the
+                             data they act on — offering them beforehand would mean chips that
+                             silently match nothing. JS reveals them (Category B inline style). */}}
+                        <div class="filter-row rep-ext-row" style="display:none;">
+                            <span class="filter-chip-label">Profession:</span>
+                            <button class="filter-chip rep-prof-chip active" data-prof="all">All</button>
+                            <button class="filter-chip rep-prof-chip" data-prof="Engineer">Engineer</button>
+                            <button class="filter-chip rep-prof-chip" data-prof="War Leader">War Leader</button>
+                            <button class="filter-chip rep-prof-chip" data-prof="unknown">Unknown</button>
+                        </div>
+                        <div class="filter-row rep-ext-row" style="display:none;">
+                            <span class="filter-chip-label">Kills:</span>
+                            <button class="filter-chip rep-kills-chip active" data-kills="all">All</button>
+                            <button class="filter-chip rep-kills-chip" data-kills="1m">1M+</button>
+                            <button class="filter-chip rep-kills-chip" data-kills="100k">100K&ndash;1M</button>
+                            <button class="filter-chip rep-kills-chip" data-kills="low">Under 100K</button>
+                        </div>
+                        <div class="filter-row rep-ext-row" style="display:none;">
+                            <span class="filter-chip-label">Origin:</span>
+                            <button class="filter-chip rep-origin-chip active" data-origin="all">All</button>
+                            <button class="filter-chip rep-origin-chip" data-origin="native">Native</button>
+                            <button class="filter-chip rep-origin-chip" data-origin="transfer">Transferred in</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="tab-toolbar">
+                    <span class="status-msg" id="rep-export-hint"></span>
+                </div>
+                <div class="table-scroll">
+                    <table class="data-table sortable-table" id="rep-table" data-export-csv="alliance-report.csv">
+                        <thead id="rep-thead"></thead>
+                        <tbody id="rep-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div><!-- /#tab-report -->
+    {{end}}
 </div>
 {{end}}
 
@@ -126,6 +278,10 @@
      data-can-manage="{{if or .Permissions.ManageAllies .Permissions.ManageVSPoints}}true{{else}}false{{end}}"
      data-our-server-id="{{.OurServerID}}" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <script src="/job-progress.js"></script>
+<script src="/tabs.js"></script>
+<script src="/filter-panel.js"></script>
 <script src="/external-alliances.js"></script>
+<script src="/alliance-report.js"></script>
 {{end}}

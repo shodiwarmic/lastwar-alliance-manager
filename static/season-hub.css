@@ -82,22 +82,8 @@
     }
 }
 
-/* ── Sortable table headers ───────────────────────────────────────────── */
-.sortable-table th[data-sort] {
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-    transition: background 0.15s;
-}
-
-.sortable-table th[data-sort]:hover {
-    filter: brightness(0.88);
-}
-
-.sortable-table th.sort-asc::after  { content: " ▲"; font-size: 0.75em; opacity: 0.85; }
-.sortable-table th.sort-desc::after { content: " ▼"; font-size: 0.75em; opacity: 0.85; }
-
-/* .tab-toolbar and .status-msg are defined in styles.css (global utilities) */
+/* .tab-toolbar, .status-msg and .sortable-table are defined in styles.css
+   (global utilities) */
 
 .tab-count {
     font-size: 0.85rem;

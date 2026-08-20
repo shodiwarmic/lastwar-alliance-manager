@@ -38,7 +38,13 @@ func resolveJobKind(w http.ResponseWriter, r *http.Request, kind string) (jobKin
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return jobKind{}, false
 	}
-	if !userHasPermission(user, def.Permission) {
+	// Allow wins when set: it's the flow's real gate, expressed as the same predicate
+	// its HTTP handler and template use (see jobKind.Allow).
+	allowed := userHasPermission(user, def.Permission)
+	if def.Allow != nil {
+		allowed = def.Allow(user)
+	}
+	if !allowed {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return jobKind{}, false
 	}

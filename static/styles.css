@@ -4796,6 +4796,26 @@ button {
     padding: 20px;
 }
 
+/* ── Sortable table headers ───────────────────────────────────────────────
+   Opt in by adding `.sortable-table` alongside `.data-table` and `data-sort`
+   on each sortable `<th>`; the page's JS toggles `.sort-asc` / `.sort-desc`.
+   Global rather than page-scoped because click-to-sort headers are the app's
+   pattern for real tables (season hub, the scout report) — a second copy is
+   exactly what the filter-panel and tabs consolidations removed. */
+.sortable-table th[data-sort] {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+
+.sortable-table th[data-sort]:hover {
+    filter: brightness(0.88);
+}
+
+.sortable-table th.sort-asc::after  { content: " ▲"; font-size: 0.75em; opacity: 0.85; }
+.sortable-table th.sort-desc::after { content: " ▼"; font-size: 0.75em; opacity: 0.85; }
+
 /* ── Mobile: freeze the first column of wide tables ───────────────────────
    When a wide table scrolls horizontally on mobile, pin its first column (the
    row identifier — member/name) so you don't lose track of which row you're

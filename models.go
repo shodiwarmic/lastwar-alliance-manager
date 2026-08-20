@@ -697,6 +697,77 @@ type VSLeagueOpponentMember struct {
 	AllianceRank *int   `json:"alliance_rank,omitempty"`
 }
 
+// --- External alliance scout report ---
+//
+// Nothing in this block is ever persisted. The member rows exist for the life of one
+// browser tab: they are scouting data about players in somebody else's alliance, and the
+// app has no business keeping a shadow roster of them. Only the ALLIANCE-level numbers are
+// stored, and then only when that alliance already has an external_alliances row — see
+// saveReportAllianceStats in handlers_alliance_report.go.
+
+// AllianceReportMember is one row of the basic report — everything the single
+// GET /v1/alliances/{id} response already carries per member. Nullable upstream fields stay
+// pointers so "unranked" and "rank unknown" don't collapse into 0.
+type AllianceReportMember struct {
+	PublicID     int     `json:"public_id"`
+	Name         string  `json:"name"`
+	Country      *string `json:"country"`
+	Power        int64   `json:"power"`
+	HeroPower    *int64  `json:"hero_power"`
+	AllianceRank *int    `json:"alliance_rank"` // 5=R5 … 1=R1, nil=unranked
+	BaseLevel    *int    `json:"base_level"`    // HQ level
+}
+
+// AllianceReportPlayer is the extended per-member payload, from GET /v1/players/{id}.
+// Every field here costs one upstream request, which is why it is opt-in.
+type AllianceReportPlayer struct {
+	PublicID         int     `json:"public_id"`
+	Name             string  `json:"name"`
+	Kills            int64   `json:"kills"`
+	Power            int64   `json:"power"`
+	HeroPower        *int64  `json:"hero_power"`
+	BaseLevel        *int    `json:"base_level"`
+	Profession       string  `json:"profession"` // "" when the career code is unknown
+	CareerLevel      int     `json:"career_level"`
+	HomeServerID     int     `json:"home_server_id"`
+	SrcServerID      int     `json:"src_server_id"`
+	LastSeenAt       string  `json:"last_seen_at"`
+	PhotoURL         *string `json:"photo_url"`
+	PhotoURLFailover *string `json:"photo_url_failover"`
+	// EnrichStatus is passed through so the UI can say WHY a row took 20 seconds:
+	// "fetched" means a live re-pull actually happened, "cached" that the stored record
+	// was fresh enough. "gated"/"unavailable" mean upstream declined, and the row still
+	// carries the cached numbers rather than nothing.
+	EnrichStatus string `json:"enrich_status"`
+}
+
+// AllianceReportRegistry reports what the basic fetch did with the ALLIANCE-level stats.
+// InRegistry false means the alliance has no external_alliances row, so nothing was saved
+// and the UI can offer to add it. IsOwn means the caller reported on our own alliance,
+// which by Rule 2 has no registry row at all — its stats land in the is_own history series.
+type AllianceReportRegistry struct {
+	InRegistry         bool  `json:"in_registry"`
+	IsOwn              bool  `json:"is_own"`
+	ExternalAllianceID *int  `json:"external_alliance_id"`
+	StatsApplied       bool  `json:"stats_applied"`
+	HistoryAdded       bool  `json:"history_added"`
+}
+
+// AllianceReport is the basic-report response: one upstream request's worth of data.
+type AllianceReport struct {
+	LastRankID  string                 `json:"lastrank_id"`
+	Tag         string                 `json:"tag"`
+	Name        string                 `json:"name"`
+	ServerID    int                    `json:"server_id"`
+	Power       int64                  `json:"power"`
+	Kills       int64                  `json:"kills"`
+	MemberCount int                    `json:"member_count"`
+	MaxMember   int                    `json:"max_member"`
+	LastSeenAt  string                 `json:"last_seen_at"`
+	Members     []AllianceReportMember `json:"members"`
+	Registry    AllianceReportRegistry `json:"registry"`
+}
+
 // VSLeagueAnalytics is the cross-season roll-up (a season is only 4 weeks, so trends are only
 // meaningful across seasons). Computed on read from weeks/days; nothing is persisted.
 type VSLeagueAnalytics struct {

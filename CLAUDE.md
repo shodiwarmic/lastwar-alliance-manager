@@ -198,13 +198,31 @@ Two phases, both manual-trigger only:
   activity row. Prospect lookups (`/prospect`, `/prospect/finish`) mirror this.
 
 **NAP ladder sync** (`/api/allies/nap/*`) follows the same three-phase shape:
-`/refresh` (one ladder call, writes the registry + history) → `/member` per alliance (browser-driven
-loop; member counts are NOT on the ladder endpoint, only on the per-alliance detail record, so each
-costs its own upstream call at ~1/sec) → `/finish` (one activity row). Phase-2 writes are
-deferred-logged. Same reason as the member sync: it gives per-item progress, an interrupted run
-keeps what it wrote, and it never blocks one request for ~15s. The UI is the same two-level display
-as the Members sync and the External Alliances gather — a status line plus a per-item row list
-(`.nap-prog-*`, mirroring `.lr-prog-*` / `.ext-prog-*`). Don't invent a fourth progress mechanism.
+`/refresh` (one ladder call, writes the registry + history) → per-alliance member counts (member
+counts are NOT on the ladder endpoint, only on the per-alliance detail record, so each costs its own
+upstream call at ~1/sec) → `/finish` (one activity row). Phase-2 writes are deferred-logged. It gives
+per-item progress, an interrupted run keeps what it wrote, and it never blocks one request for ~15s.
+
+> **The bulk phase runs SERVER-SIDE** as the `nap_members` job (`jobs_nap.go`), not as a browser
+> loop — as do the Members extended sync and the External Alliances gather. The three
+> byte-identical `.lr-prog-*` / `.ext-prog-*` / `.nap-prog-*` CSS blocks were consolidated into
+> **`job-progress.css`** (`.job-progress` / `.job-prog-row` / `.job-prog-name` / `.job-prog-status`,
+> states `queued|active|done|skip|err`), driven by `JobProgress.attach()`. Use those classes for any
+> per-item progress list — don't invent a fourth progress mechanism, and don't reintroduce the
+> per-page prefixes. `/api/allies/nap/member` still exists as the single-alliance endpoint the job's
+> `Step` shares with the HTTP path.
+
+**The one sanctioned browser-driven loop** is the Scout Report's extended pass
+(`static/alliance-report.js`). It is a deliberate exception to the server-side-jobs rule, for two
+reasons that don't apply to any other flow:
+1. `jobKind.New` takes only a `jobActor` — the framework has **no per-run target**, and every other
+   runner derives its work from the DB. "Report on *this* alliance" can't be expressed without
+   changing the framework.
+2. `background_job_items.label` persists one row per item, which would write every opponent player's
+   name into the database — exactly the data the report exists to *not* store.
+
+It still reuses `job-progress.css`, and pacing is enforced server-side by `lastRankLimiter`, so the
+client cannot outrun the politeness budget however fast it iterates. Don't "fix" it into a job.
 
 **Fetch strategy** (`lastrank_client.go`): `GET /v1/players/{id}` is the cheap
 cached read; `POST /v1/players/{id}/enrich` forces a slow live game re-pull
@@ -216,6 +234,109 @@ Never bulk-enrich the whole roster — it's slow and abusive to the volunteer se
 **Adding a global alias** uses `addGlobalAliasOverwritingOCR` (member_aliases has
 no unique index): it deletes any same-named OCR/global alias first so global wins
 over background OCR, leaving per-user personal aliases alone.
+
+## Scout Report (`handlers_alliance_report.go`)
+
+A member-by-member report on an **outside** alliance — the Scout Report tab on
+`/external-alliances`. Two endpoints, deliberately asymmetric:
+
+| | Route | Cost | Writes? |
+|---|---|---|---|
+| Basic | `POST /api/external-alliances/report` | 1 upstream request, whole roster | alliance stats only |
+| Extended | `GET /api/external-alliances/report/player` | 1 per member | **nothing** |
+
+**The member data is NEVER persisted.** It is scouting data about players in somebody else's
+alliance; the app keeps no shadow roster of them. The rows live in the browser tab and are
+exported from there. Adding a table for them would be the wrong fix for any feature request
+that seems to want one.
+
+**Three rules that must hold:**
+
+1. **The roster fetch is POST, not GET** — it writes (registry stats, a history datapoint, an
+   activity row), and gorilla/csrf only covers POST/PUT/DELETE. The per-player step is a pure
+   read and stays GET.
+2. **The extended pass uses `lastRankPlayerBulk`** — the shared bulk strategy: cheap cached
+   GET, upgraded to a live enrich only when the record is older than `lastRankEnrichMaxAge`.
+   Scouting on stale figures is worse than useless, because it invites planning against a
+   version of the alliance that no longer exists.
+
+   The cost is **variable and can be large**: a well-tracked alliance is nearly all cached
+   GETs, while one nobody has looked at can need an enrich per member (25s ceiling each, plus
+   the 1/sec limiter). That is contained by the pass being opt-in, cancellable mid-run, and
+   reporting `enrich_status` per row so a 20-second row reads as "refreshed live" rather than
+   as a hang. The handler ceiling is `allianceReportEnrichTimeout` (30s) — it must stay above
+   `lastRankEnrichHTTP`'s 25s, or it would cancel the very re-pull it asked for.
+
+   This is the one bulk path over players we do **not** own, so it is also the one most
+   exposed to the volunteer service. Don't widen it — no auto-run, no scheduled variant, and
+   never `lastRankPlayerFresh` (which enriches unconditionally).
+3. **The alliance save NEVER mints a registry row.** `saveReportAllianceStats` resolves an
+   *existing* row (by `lastrank_id`, then by tag — **backfilling `lastrank_id` before the
+   write**, since `storeNAPAllianceSnapshot` resolves by that column alone) and otherwise saves
+   nothing, reporting `in_registry:false` so the UI can offer to add it. Deliberately not
+   `findOrCreateExternalAllianceTx`: looking an opponent up must not grow the registry. A
+   same-tag row carrying a *different* `lastrank_id` is treated as untracked — tags are
+   reusable, and retargeting it would overwrite an unrelated alliance's stats.
+
+Our own alliance is handled by the `IsOwn` branch (Rule 2 → no registry row; the datapoint
+lands in the `is_own` series), and the activity row is written **only when something actually
+changed** — a report on unchanged numbers is a pure read.
+
+> **`last_seen_at` is a SCAN timestamp, not player activity.** It is when lastrank scanned
+> that player from the game — the as-of date of the data — while `last_enriched_at` is when
+> the enrich endpoint was last *called* on them (a record of our polling, not of the game).
+> Members of one alliance are scanned together, so their timestamps cluster within seconds of
+> each other and of the alliance's own.
+>
+> The report column is therefore labelled **"Scanned"**, and there is deliberately **no
+> "last active" filter** — one would let an officer write off a live player as dormant on the
+> strength of scan scheduling. The `// game-side "last active"` comment in `lastrank_client.go`
+> that seeded this misreading has been corrected; don't reintroduce that framing. If a genuine
+> activity signal ever appears upstream, that is what such a filter should key on.
+
+**Extended filters only exist once extended data does.** The profession / kills / origin chip
+rows (`.rep-ext-row`) are hidden until the first extended row lands and are reset when a new
+basic report starts — a stale extended filter left active over a basic report would silently
+hide rows with no visible chip explaining why. Rows still awaiting their lookup legitimately
+fail an extended predicate and drop out mid-run; that is correct, and it is the reason the
+chips stay hidden beforehand rather than matching nothing.
+
+> **`members[]` is sparse upstream, and that is not a bug.** `GET /v1/alliances/{id}` returns
+> only players LastRank actually holds a record for — a function of who has been looked up
+> there, not of the alliance's real size. Verified live 2026-08-18: our own alliance returned
+> 99 members (`cur_member` 91 — it includes recently-departed players), while `Clts`
+> (`cur_member` 67) returned **0** and `WARK` (24) returned **1**. `member_limit` does not
+> change this, and `GET /v1/global/players?alliance_abbr=` agrees (0 rows for `Clts`), so
+> there is no alternative endpoint to switch to — and no alliance-level enrich exists.
+> The UI states this explicitly rather than rendering an empty table, because an unexplained
+> empty result reads as a broken lookup and invites pointless retries. Don't "fix" it by
+> hunting for another endpoint; do preserve the empty-state explanation.
+
+**Alliance search: two strategies, one endpoint.** `GET /api/external-alliances/search` takes a
+`scope` param, and both branches return `[]VSLeagueAllianceSearchResult`:
+
+| `scope` | Upstream | Use |
+|---|---|---|
+| *(default)* | `/v1/global/alliances?search=&server_id=` | Registry add/edit modal — strict server, fuzzy name, carries power/kills |
+| `any` | `/v1/search?kind=alliance` | Scout picker — the site's own relevance search, **every server**, no power |
+
+**The scout picker must never assume our server.** VS Duel League is cross-server, so the
+opponent an officer is looking for is usually *not* on our server — filtering to it hides
+exactly the alliance they want. The two upstreams also rank differently: `/v1/global/alliances`
+substring-matches names sorted by power, so searching `cROw` surfaces "Crowned Vengeance" and
+"NeCROWmancers" above the real tag match, while `/v1/search` returns the tag hits the site's
+own search box shows. `/v1/search` carries no power — that's why `Power` stays a nil pointer
+rather than 0, and why a picked hit resolves its details on the follow-up by-id fetch.
+
+Because a tag search routinely returns the same tag on 20 different servers (verified live:
+`cROw` → 20 hits, 20 distinct servers), **the server number is the only disambiguator** — keep
+it first in the picker's meta line, and keep `mapLastRankSearchHits` dropping `kind != "alliance"`
+and id-less rows.
+
+> Careless probing of `lastrank.fun` **will trip Cloudflare's bot challenge** (an HTML
+> "Just a moment…" page, not JSON). Always send the `User-Agent` that `lastRankDo` sets and
+> keep to ~1 req/sec — the limiter does this for app traffic, but hand-run `curl` checks
+> bypass it entirely.
 
 ## Name matching — the folded fallback tier
 
@@ -496,6 +617,17 @@ Implement `jobRunner` (`Plan` / `Step` / `Finish`) in a `jobs_<feature>.go` and 
 `registerJobKind` from that file's `init()` — registration lives next to the
 implementation, so adding a flow never touches `jobs.go`. Then attach the UI with
 `JobProgress.attach()` (`static/job-progress.js` + `job-progress.css`).
+
+**Gating: `Permission` for a single key, `Allow` for anything else.** `resolveJobKind`
+prefers `jobKind.Allow` when set. Use it whenever the flow's HTTP surface gates on a
+*disjunction* — the external-alliance gather is writable by `manage_allies` **or**
+`manage_vs_points` — and pass the same predicate the handler uses (`Allow:
+canManageExternalAlliances`). A single string silently can't express that:
+`userHasPermission` resolves an unknown key to `false` via
+`COALESCE(json_extract(...), 0)`, so the button renders for both manage ranks and the start
+403s for everyone but admins. That was a live bug until the `Allow` predicate landed — if
+you find yourself inventing a permission string, check it is a real `RankPermissions` field
+first.
 
 - **`Plan` must fully drain any cursor before returning** — the runner writes
   immediately afterwards.
