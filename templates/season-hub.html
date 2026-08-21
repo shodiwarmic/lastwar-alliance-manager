@@ -58,7 +58,7 @@
             No active season. {{if .Permissions.ManageSeasonRewards}}Create one above to get started.{{end}}
         </div>
         <div class="table-scroll">
-            <table class="data-table sortable-table" id="rankings-table" style="display:none" data-export-csv="rankings.csv">
+            <table class="data-table sortable-table" id="rankings-table" style="display:none" data-export-csv="rankings.csv" translate="no">
                 <thead>
                     <tr>
                         <th class="col-rank" data-sort="rank_position">#</th>
@@ -94,7 +94,7 @@
             <span id="participation-status" class="status-msg"></span>
         </div>
         <div id="participation-grid-wrap" class="table-scroll">
-            <table class="data-table" id="participation-table" data-export-csv="participation.csv">
+            <table class="data-table" id="participation-table" data-export-csv="participation.csv" translate="no">
                 <thead>
                     <tr>
                         <th>Member</th>
@@ -137,7 +137,7 @@
         </div>
 
         <div class="table-scroll">
-            <table class="data-table" id="contrib-manual-table" data-export-csv="contributions.csv">
+            <table class="data-table" id="contrib-manual-table" data-export-csv="contributions.csv" translate="no">
                 <thead>
                     <tr id="contrib-manual-thead-row">
                         <th>Member</th>
@@ -164,7 +164,7 @@
             {{if .Permissions.ManageSeasonRewards}}<button class="btn btn-primary btn-sm" id="btn-assign-reward">+ Assign Reward</button>{{end}}
         </div>
         <div class="table-scroll">
-            <table class="data-table" id="rewards-table" data-export-csv="rewards.csv">
+            <table class="data-table" id="rewards-table" data-export-csv="rewards.csv" translate="no">
                 <thead>
                     <tr>
                         <th>Member</th>

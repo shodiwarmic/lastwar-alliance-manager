@@ -1043,7 +1043,9 @@
             const tdTier = document.createElement('td'); tdTier.appendChild(makeTierBadge(rw.reward_tier)); tr.appendChild(tdTier);
             const tdPart = document.createElement('td'); tdPart.textContent = (rw.participation_pct || 0).toFixed(1) + '%'; tr.appendChild(tdPart);
             const tdContrib = document.createElement('td'); tdContrib.textContent = rw.contribution_pct != null ? (rw.contribution_pct).toFixed(1) + '%' : '—'; tr.appendChild(tdContrib);
-            const tdNote = document.createElement('td'); tdNote.textContent = rw.note || ''; tr.appendChild(tdNote);
+            // #rewards-table is translate="no" to protect names and the CSV/XLSX export,
+            // but this cell is free-form officer prose — opt it back in.
+            const tdNote = document.createElement('td'); tdNote.setAttribute('translate', 'yes'); tdNote.textContent = rw.note || ''; tr.appendChild(tdNote);
             const tdBy = document.createElement('td'); tdBy.textContent = rw.logged_by || ''; tr.appendChild(tdBy);
 
             if (CAN_MANAGE_REWARDS) {
