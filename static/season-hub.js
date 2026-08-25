@@ -159,10 +159,15 @@
     }
 
     // ── Rankings tab ──────────────────────────────────────────────────────────
-    const rankingsSearch = document.getElementById('rankings-search');
-    if (rankingsSearch) {
-        rankingsSearch.addEventListener('input', renderRankingsTable);
-    }
+    QuickSearch.attach({
+        input: 'rankings-search',
+        container: 'rankings-tbody',
+        rows: 'tr',
+        count: 'rankings-count',
+        countLabel: (shown, total, q) =>
+            q.trim() ? `${shown} of ${total} members` : `${total} member${total !== 1 ? 's' : ''}`,
+        emptyText: 'No members match your search.',
+    });
 
     const rankingsTable = document.getElementById('rankings-table');
     if (rankingsTable) {
@@ -184,7 +189,6 @@
         const noSeasonMsg = document.getElementById('no-season-msg');
         const table = document.getElementById('rankings-table');
         const tbody = document.getElementById('rankings-tbody');
-        const countEl = document.getElementById('rankings-count');
 
         if (!activeSeason) {
             if (noSeasonMsg) noSeasonMsg.style.display = '';
@@ -197,10 +201,11 @@
         const maxScorePts = scoreLevels.length > 0 ? Math.max(...scoreLevels.map(sl => sl.points)) : 0;
         const maxPts = activeSeason ? activeSeason.week_count * maxScorePts : 0;
 
-        const query = (rankingsSearch ? rankingsSearch.value : '').toLowerCase();
-        let filtered = allMembers.filter(m =>
-            !query || m.name.toLowerCase().includes(query)
-        );
+        // Search is applied by hiding rows (QuickSearch), NOT by filtering here:
+        // rank positions below must be computed over the whole roster, or typing
+        // in the search box renumbers the leaderboard and #1 becomes whoever you
+        // searched for.
+        let filtered = allMembers.slice();
 
         // Assign stable rank positions based on the default order (participation % desc,
         // then contribution % desc) before any user-chosen sort is applied.
@@ -238,10 +243,10 @@
             }
         });
 
-        if (countEl) countEl.textContent = filtered.length + ' member' + (filtered.length !== 1 ? 's' : '');
-
         const rows = filtered.map((m, i) => {
             const tr = document.createElement('tr');
+
+            tr.dataset.search = m.name + ' ' + m.rank;
 
             // Rank position (stable — always reflects default sort order)
             const tdPos = document.createElement('td');
@@ -293,6 +298,7 @@
         });
 
         tbody.replaceChildren(...rows);
+        QuickSearch.apply('rankings-search');
     }
 
     function makeParticipationCell(m, maxPts) {
@@ -404,6 +410,17 @@
     }
 
     // ── Participation tab ─────────────────────────────────────────────────────
+
+    // Rows carry a score <select>, key-event count and three note inputs, so the
+    // search hides rows rather than re-rendering — a re-render would wipe every
+    // unsaved edit. saveParticipation walks all rows, so hidden members still save.
+    QuickSearch.attach({
+        input: 'participation-search',
+        container: 'participation-tbody',
+        rows: 'tr',
+        emptyText: 'No members match your search.',
+    });
+
     function populateWeekSelect() {
         const sel = document.getElementById('week-select');
         if (!sel || !activeSeason) return;
@@ -474,6 +491,7 @@
             const e = existing[m.member_id] || {};
             const tr = document.createElement('tr');
             tr.dataset.memberId = m.member_id;
+            tr.dataset.search = m.name + ' ' + m.rank;
 
             const tdName = document.createElement('td');
             tdName.textContent = m.name;
@@ -556,6 +574,7 @@
         });
 
         tbody.replaceChildren(...rows);
+        QuickSearch.apply('participation-search');
     }
 
     const btnSaveParticipation = document.getElementById('btn-save-participation');
@@ -651,13 +670,16 @@
         if (!tbody) return;
 
         const trackables = activeSeason ? (activeSeason.trackables || []) : [];
-        const query = (document.getElementById('contrib-manual-search') || {}).value || '';
-        const members = allMembers.filter(m => m.rank !== 'EX' &&
-            (!query || m.name.toLowerCase().includes(query.toLowerCase())));
+        // Render EVERY member and let QuickSearch hide rows. Filtering here would
+        // rebuild the grid on each keystroke, blanking unsaved .contrib-input
+        // values and re-fetching them, and would drop hidden members from the
+        // save payload (saveManualContributions walks the rows, not the array).
+        const members = allMembers.filter(m => m.rank !== 'EX');
 
         const rows = members.map(m => {
             const tr = document.createElement('tr');
             tr.dataset.memberId = m.member_id;
+            tr.dataset.search = m.name + ' ' + m.rank;
 
             const tdName = document.createElement('td');
             tdName.textContent = m.name;
@@ -687,6 +709,7 @@
         });
 
         tbody.replaceChildren(...rows);
+        QuickSearch.apply('contrib-manual-search');
         loadContribValues();
     }
 
@@ -710,6 +733,7 @@
                         input.value = e !== undefined ? ((e.records || {})[input.dataset.key] ?? 0) : '';
                     });
                 });
+                QuickSearch.apply('contrib-manual-search');
             })
             .catch(() => {}); // silent — table still usable without pre-populated values
     }
@@ -720,11 +744,14 @@
         contribWeekEl.addEventListener('change', loadContribValues);
     }
 
-    // Search filter
-    const contribManualSearch = document.getElementById('contrib-manual-search');
-    if (contribManualSearch) {
-        contribManualSearch.addEventListener('input', renderManualTable);
-    }
+    // Search hides rows in place — see renderManualTable for why re-rendering
+    // on keystroke was destructive.
+    QuickSearch.attach({
+        input: 'contrib-manual-search',
+        container: 'contrib-manual-tbody',
+        rows: 'tr',
+        emptyText: 'No members match your search.',
+    });
 
     // Save manual entries
     const btnContribManualSave = document.getElementById('btn-contrib-manual-save');
@@ -959,6 +986,14 @@
     }
 
     // ── Rewards tab ───────────────────────────────────────────────────────────
+
+    QuickSearch.attach({
+        input: 'rewards-search',
+        container: 'rewards-tbody',
+        rows: 'tr',
+        emptyText: 'No rewards match your search.',
+    });
+
     function loadRewards() {
         if (!activeSeason) return;
         fetch('/api/season-hub/rewards?season_id=' + activeSeason.id)
@@ -987,6 +1022,8 @@
 
         const rows = allRewards.map(rw => {
             const tr = document.createElement('tr');
+
+            tr.dataset.search = rw.member_name + ' ' + rw.member_rank;
 
             const tdName = document.createElement('td'); tdName.textContent = rw.member_name; tr.appendChild(tdName);
             const tdRank = document.createElement('td'); const rankChip4 = document.createElement('span'); rankChip4.className = `member-rank rank-${rw.member_rank}`; rankChip4.textContent = rw.member_rank; tdRank.appendChild(rankChip4); tr.appendChild(tdRank);
@@ -1019,6 +1056,7 @@
         });
 
         tbody.replaceChildren(...rows);
+        QuickSearch.apply('rewards-search');
     }
 
     function openRewardModal(rw) {

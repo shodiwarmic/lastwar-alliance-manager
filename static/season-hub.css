@@ -85,10 +85,6 @@
 /* .tab-toolbar, .status-msg, .tab-count and .sortable-table are defined in
    styles.css (global utilities) */
 
-/* Toolbar search inputs */
-#rankings-search { width: 220px; }
-#contrib-manual-search { width: 200px; }
-
 /* ── Info panel ───────────────────────────────────────────────────────── */
 .info-panel {
     padding: 16px;
