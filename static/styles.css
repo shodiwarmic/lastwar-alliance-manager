@@ -2663,6 +2663,35 @@ button {
     flex-wrap: wrap;
 }
 
+/* Search input + its clear (x) button. Promoted here from filter-panel.css:
+   the filter panel uses it, but so does QuickSearch (global.js) on pages that
+   have no panel, so it can't live in a per-page stylesheet. */
+.filter-search-wrap {
+    flex: 1;
+    min-width: 250px;
+    position: relative;
+}
+
+.filter-search-wrap .form-input {
+    padding: 10px 35px 10px 15px;
+    border-radius: 20px;
+}
+
+.filter-search-wrap button {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-mid);
+}
+
 .filter-chip {
     display: inline-flex;
     align-items: center;
@@ -4987,10 +5016,73 @@ button {
     margin-left: auto;
 }
 
+/* Export scope toggle — injected next to the export buttons by the same
+   auto-wire, and shown ONLY while a QuickSearch filter is actually narrowing
+   the table. Unfiltered tables (and tables with no search at all) are
+   visually unchanged. */
+.export-scope {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--color-text-mid);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.export-scope.is-visible {
+    display: inline-flex;
+}
+
+.export-scope input {
+    margin: 0;
+    cursor: pointer;
+}
+
+/* Quick search — the search box QuickSearch (global.js) drives.
+   Standalone: capped and spaced, matching .train-rule-search which predates it. */
+.quick-search {
+    max-width: 420px;
+    margin-bottom: 12px;
+}
+
+/* In a toolbar it becomes a flex item instead. The max-width is load-bearing:
+   .table-export-actions right-aligns with margin-left:auto, which needs free space
+   in the flex row to push into — a .filter-search-wrap left at its panel default of
+   flex:1 would eat all of it and the buttons would sit flush against the input.
+   margin-bottom MUST be cleared: these toolbars are align-items:center, so a flex
+   item's MARGIN box is what gets centred and a stray bottom margin lifts the input
+   ~6px above the buttons beside it. */
+.tab-toolbar .quick-search,
+.acc-toolbar .quick-search,
+.action-bar .quick-search {
+    flex: 1 1 200px;
+    min-width: 180px;
+    max-width: 300px;
+    margin-bottom: 0;
+}
+
+/* .empty-state is a 60px full-page state; a "no matches" note inside a list is
+   an inline one. */
+.qs-empty-cell,
+p.qs-empty {
+    padding: 24px 20px;
+    text-align: center;
+    color: var(--color-text-muted);
+}
+
 .status-msg {
     font-size: 0.85rem;
     color: var(--color-text-muted);
 }
+
+/* Row-count text beside a toolbar search ("12 of 98"). Promoted from
+   season-hub.css — QuickSearch drives one on any page. */
+.tab-count {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
 
 /* Admin user-list, badge and login-entry styles moved to static/admin.css.
    .no-member stays here — profile.html/profile.js use it too. */

@@ -141,7 +141,11 @@ window.buildJoinDateField = function (initialISO, onChange) {
 
 // ---- Table export (CSV + XLSX) ----
 
-function _extractTableData(tableEl) {
+// scope: 'all' exports every row; anything else (the default) honours an active
+// QuickSearch filter, so the file matches what the officer can actually see.
+// Keyed on the marker QuickSearch sets, not getComputedStyle/offsetParent —
+// those would also drop rows in an inactive tab and force layout per row.
+function _extractTableData(tableEl, scope) {
     const skipCols = new Set();
     const rows = [];
 
@@ -154,6 +158,8 @@ function _extractTableData(tableEl) {
     rows.push(headers);
 
     tableEl.querySelectorAll('tbody tr').forEach(tr => {
+        if (scope !== 'all' && tr.dataset.qsHidden === '1') return;
+        if (tr.hasAttribute('data-qs-empty')) return;
         const tds = tr.querySelectorAll('td');
         if (tds.length === 1 && tds[0].colSpan > 1) return;
         const cells = [];
@@ -174,11 +180,11 @@ function _extractTableData(tableEl) {
     return rows;
 }
 
-function exportTableToCSV(tableEl, filename) {
+function exportTableToCSV(tableEl, filename, scope) {
     if (typeof tableEl === 'string') tableEl = document.getElementById(tableEl);
     if (!tableEl) return;
 
-    const rows = _extractTableData(tableEl);
+    const rows = _extractTableData(tableEl, scope);
     const csv = '﻿' + rows.map(row =>
         row.map(val => {
             const s = String(val ?? '');
@@ -199,10 +205,10 @@ function exportTableToCSV(tableEl, filename) {
     URL.revokeObjectURL(url);
 }
 
-function exportTableToXLSX(tableEl, filename) {
+function exportTableToXLSX(tableEl, filename, scope) {
     if (typeof tableEl === 'string') tableEl = document.getElementById(tableEl);
     if (!tableEl) return;
-    const rows = _extractTableData(tableEl);
+    const rows = _extractTableData(tableEl, scope);
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -461,6 +467,279 @@ function svgIcon(name, size = 14) {
     return svg;
 }
 
+// ---- Quick search (shared list filter) ------------------------------------
+//
+// ONE searchable-list primitive for every member list in the app. Two modes:
+//
+//   hide (default) — toggles row visibility in place, leaving the DOM alone.
+//        MANDATORY for any list with editable cells or transient DOM state.
+//        Re-rendering a table on every keystroke throws away unsaved input; where
+//        the values arrive from a fetch it also fires one request per keystroke
+//        (season-hub's Contributions grid did both — see renderManualTable).
+//   custom — pages that legitimately rebuild from their data array pass onQuery
+//        and use QuickSearch.filter/matcher themselves. Safe only when nothing in
+//        a row holds state the data array doesn't already have.
+//
+// Matching folds diacritics through foldSearch and ANDs whitespace-separated
+// tokens, so "pàcha r4" matches a row whose data-search is "Pacha R4", and a
+// pasted " Pacha " still matches. NOTE: foldSearch deliberately does NOT trim —
+// it has to stay byte-for-byte in step with Go's foldName (namematch.go), which
+// does. Trimming belongs here, at the call site, not in foldSearch.
+//
+// Match text comes from row.dataset.search. That is an ATTRIBUTE, so the
+// browser's translator never rewrites it, and it holds the SOURCE name rather
+// than the row's rendered text — which on most of our rows also contains rank
+// chips, point totals and button labels, so matching textContent would make "e"
+// match every row carrying an Edit button. opts.text is the escape hatch;
+// textContent is the last-resort default.
+(function () {
+    'use strict';
+
+    const node = (t) => (typeof t === 'string' ? document.getElementById(t) : t);
+
+    const tokens = (q) => window.foldSearch(q).split(/\s+/).filter(Boolean);
+
+    // Pure predicate — for pages that filter their own data array.
+    function match(text, query) {
+        const toks = tokens(query);
+        if (!toks.length) return true;
+        const hay = window.foldSearch(text);
+        return toks.every(t => hay.includes(t));
+    }
+
+    // Same, with the query folded once for a whole pass.
+    //   const ok = QuickSearch.matcher(q); list.filter(x => ok(x.name));
+    function matcher(query) {
+        const toks = tokens(query);
+        if (!toks.length) return () => true;
+        return (text) => {
+            const hay = window.foldSearch(text);
+            return toks.every(t => hay.includes(t));
+        };
+    }
+
+    // Array convenience. `pick` returns the haystack for one item; join several
+    // fields with ' ' to search across them.
+    function filter(list, query, pick) {
+        const ok = matcher(query);
+        const get = pick || (x => (x && x.name) || '');
+        return (list || []).filter(x => ok(get(x)));
+    }
+
+    // Folded key, memoized per element: recomputed only when the source text
+    // actually changes, so a 100-row table costs 100 string compares per
+    // keystroke instead of 100 NFD normalizations.
+    function rowKey(row, text) {
+        const raw = text ? text(row)
+            : (row.dataset.search != null ? row.dataset.search : row.textContent);
+        if (row._qsRaw !== raw) {
+            row._qsRaw = raw;
+            row._qsKey = window.foldSearch(raw);
+        }
+        return row._qsKey;
+    }
+
+    // A list's own placeholder ("Loading…", "No rewards assigned yet.") is a
+    // single spanning cell — the same shape _extractTableData skips. It is the
+    // table's state, not data, so it is never filtered and never counted.
+    function isPlaceholder(row) {
+        if (row.tagName !== 'TR') return false;
+        return row.children.length === 1
+            && row.children[0].tagName === 'TD'
+            && row.children[0].colSpan > 1;
+    }
+
+    function buildEmpty(container, opts) {
+        const msg = opts.emptyText || 'No matches.';
+        const rowGroup = /^(TBODY|THEAD|TFOOT|TABLE)$/.test(container.tagName);
+        let el;
+        if (rowGroup) {
+            const table = container.closest('table');
+            el = document.createElement('tr');
+            const td = document.createElement('td');
+            // colSpan >= 2 so _extractTableData's placeholder rule skips it too.
+            td.colSpan = Math.max(2, opts.colspan
+                || (table ? table.querySelectorAll('thead th').length : 0));
+            td.className = 'empty-state qs-empty-cell';
+            td.textContent = msg;
+            el.appendChild(td);
+        } else {
+            el = document.createElement('p');
+            el.className = 'empty-state qs-empty';
+            el.textContent = msg;
+        }
+        el.setAttribute('data-qs-empty', '');
+        return el;
+    }
+
+    // Build the standard widget for lists whose toolbar is constructed in JS.
+    // Same markup the templates hand-write.
+    function widget(opts) {
+        opts = opts || {};
+        const wrap = document.createElement('div');
+        wrap.className = 'filter-search-wrap quick-search';
+
+        const input = document.createElement('input');
+        input.type = 'text';   // not "search" — that adds a second native clear x
+        input.className = 'form-input';
+        input.autocomplete = 'off';
+        input.placeholder = opts.placeholder || 'Search members…';
+        input.setAttribute('aria-label', opts.label || input.placeholder);
+        if (opts.id) input.id = opts.id;
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.style.display = 'none';
+        clearBtn.setAttribute('aria-label', 'Clear search');
+        clearBtn.appendChild(svgIcon('x', 14));
+
+        wrap.append(input, clearBtn);
+        return { wrap, input, clearBtn };
+    }
+
+    // Stamp shown/total on the nearest ancestor table and let the export wire
+    // know. Keeps QuickSearch ignorant of the export UI: it publishes counts,
+    // the export wire decides what to do with them.
+    function publish(container, shown, total, filtered) {
+        const table = container.closest ? container.closest('table') : null;
+        if (!table) return;
+        table.dataset.qsShown = String(shown);
+        table.dataset.qsTotal = String(total);
+        table.dataset.qsFiltered = filtered ? '1' : '0';
+        table.dispatchEvent(new CustomEvent('quicksearch:filtered', {
+            bubbles: true,
+            detail: { shown, total, filtered },
+        }));
+    }
+
+    // attach(opts) -> handle
+    //
+    //   input      element | id                (required)
+    //   clearBtn   element | id                (default: the button inside the
+    //                                           enclosing .filter-search-wrap)
+    //   container  element | id | () => el     the STABLE ancestor of the rows.
+    //                                          Never the table — three targets
+    //                                          build their table in JS with no id.
+    //   rows       selector, relative to container (default 'tbody > tr')
+    //   text       (row) => string             override for data-search
+    //   groups     selector for section wrappers to collapse when empty
+    //   count      element | id                gets "N of M"
+    //   countLabel (shown, total, raw) => string
+    //   emptyText  string | false              in-list "no matches" node
+    //   colspan    number                      override for the empty <tr>
+    //   initial    string                      seed the box (re-created inputs)
+    //   onFilter   (shown, total, raw)         fires after every hide pass
+    //   onQuery    (raw, handle)               CUSTOM MODE: page filters+renders
+    //
+    // handle: { apply, clear, value, input, destroy }
+    function attach(opts) {
+        const input = node(opts.input);
+        if (!input) return null;
+
+        const wrap = input.closest('.filter-search-wrap');
+        const clearBtn = opts.clearBtn ? node(opts.clearBtn)
+            : (wrap ? wrap.querySelector('button') : null);
+        const countEl = opts.count ? node(opts.count) : null;
+        const rowsSel = opts.rows || 'tbody > tr';
+
+        const container = () =>
+            (typeof opts.container === 'function' ? opts.container() : node(opts.container));
+
+        function hidePass() {
+            const c = container();
+            if (!c) return;
+            const toks = tokens(input.value);
+            let shown = 0, total = 0;
+
+            c.querySelectorAll(rowsSel).forEach(row => {
+                if (row.hasAttribute('data-qs-empty') || isPlaceholder(row)) return;
+                total++;
+                const ok = !toks.length
+                    || toks.every(t => rowKey(row, opts.text).includes(t));
+                // '' (not 'block'/'table-row') so the stylesheet's own display —
+                // grid for .lr-row, flex for .prospect-card — takes back over.
+                row.style.display = ok ? '' : 'none';
+                if (ok) { delete row.dataset.qsHidden; shown++; }
+                else { row.dataset.qsHidden = '1'; }
+            });
+
+            if (opts.groups) {
+                c.querySelectorAll(opts.groups).forEach(g => {
+                    const any = Array.from(g.querySelectorAll(rowsSel)).some(r =>
+                        r.dataset.qsHidden !== '1'
+                        && !r.hasAttribute('data-qs-empty') && !isPlaceholder(r));
+                    g.style.display = (!toks.length || any) ? '' : 'none';
+                });
+            }
+
+            if (opts.emptyText !== false) {
+                const want = toks.length > 0 && shown === 0 && total > 0;
+                let e = c.querySelector('[data-qs-empty]');
+                if (want && !e) { e = buildEmpty(c, opts); c.appendChild(e); }
+                if (e) e.style.display = want ? '' : 'none';
+            }
+
+            if (countEl) {
+                countEl.textContent = opts.countLabel
+                    ? opts.countLabel(shown, total, input.value)
+                    : (toks.length ? shown + ' of ' + total : String(total));
+            }
+            publish(c, shown, total, toks.length > 0 && shown < total);
+            if (opts.onFilter) opts.onFilter(shown, total, input.value);
+        }
+
+        function run() {
+            if (opts.onQuery) opts.onQuery(input.value, handle);
+            else hidePass();
+        }
+
+        function syncClear() {
+            if (clearBtn) clearBtn.style.display = input.value ? 'flex' : 'none';
+        }
+        const onInput = () => { syncClear(); run(); };
+        function onClear() { input.value = ''; syncClear(); run(); input.focus(); }
+        // Escape clears the box first. modal-focus.js's trap listens on the modal
+        // in the bubble phase, so stopping propagation here means Escape clears a
+        // non-empty search and only the SECOND Escape closes the modal.
+        const onKey = (e) => {
+            if (e.key === 'Escape' && input.value) { e.stopPropagation(); onClear(); }
+        };
+
+        input.addEventListener('input', onInput);
+        input.addEventListener('keydown', onKey);
+        if (clearBtn) clearBtn.addEventListener('click', onClear);
+
+        const handle = {
+            apply: run,
+            clear: onClear,
+            value: () => input.value,
+            input,
+            destroy() {
+                input.removeEventListener('input', onInput);
+                input.removeEventListener('keydown', onKey);
+                if (clearBtn) clearBtn.removeEventListener('click', onClear);
+                delete input._quickSearch;
+            },
+        };
+        input._quickSearch = handle;
+
+        if (opts.initial) input.value = opts.initial;
+        syncClear();
+        if (opts.autoApply !== false) run();
+        return handle;
+    }
+
+    // Re-apply the active query for an input whose handle you don't hold. Lets a
+    // render fn a thousand lines from the attach site stay one self-documenting
+    // line:  QuickSearch.apply('participation-search');
+    function apply(target) {
+        const el = node(target);
+        if (el && el._quickSearch) el._quickSearch.apply();
+    }
+
+    window.QuickSearch = { attach, apply, widget, match, matcher, filter };
+})();
+
 // Swap the sidebar user tile's initials for the logged-in user's LastRank photo
 // when present. Falls back to initials if the photo (and failover) fail to load
 // or are blocked by CSP, so production stays safe before the CDN is allowlisted.
@@ -621,17 +900,46 @@ document.addEventListener('DOMContentLoaded', () => {
         const csvFilename  = table.dataset.exportCsv;
         const xlsxFilename = csvFilename.replace(/\.csv$/i, '.xlsx');
 
+        // Export scope. The checkbox appears only while a QuickSearch filter is
+        // actually narrowing this table, so unfiltered tables — and tables with no
+        // search at all — look exactly as they did before. Checked = export what
+        // you see, which is the pre-existing behaviour of every filtered export.
+        const scopeLabel = document.createElement('label');
+        scopeLabel.className = 'export-scope';
+        const scopeBox = document.createElement('input');
+        scopeBox.type = 'checkbox';
+        scopeBox.checked = true;
+        scopeLabel.append(scopeBox, document.createTextNode('Filtered only'));
+        const scope = () => (scopeBox.checked ? 'visible' : 'all');
+
         const csvBtn = document.createElement('button');
         csvBtn.className = 'btn btn-secondary btn-sm';
         csvBtn.textContent = '↓ CSV';
         csvBtn.title = 'Download as CSV';
-        csvBtn.addEventListener('click', () => exportTableToCSV(table, csvFilename));
+        csvBtn.addEventListener('click', () => exportTableToCSV(table, csvFilename, scope()));
 
         const xlsxBtn = document.createElement('button');
         xlsxBtn.className = 'btn btn-secondary btn-sm';
         xlsxBtn.textContent = '↓ XLSX';
         xlsxBtn.title = 'Download as Excel spreadsheet';
-        xlsxBtn.addEventListener('click', () => exportTableToXLSX(table, xlsxFilename));
+        xlsxBtn.addEventListener('click', () => exportTableToXLSX(table, xlsxFilename, scope()));
+
+        // Reflect the row count in the labels while filtered, so the choice can't
+        // surprise anyone: "↓ CSV 12" vs "↓ CSV 98".
+        function syncScopeUI() {
+            const filtered = table.dataset.qsFiltered === '1';
+            scopeLabel.classList.toggle('is-visible', filtered);
+            if (!filtered) {
+                csvBtn.textContent = '↓ CSV';
+                xlsxBtn.textContent = '↓ XLSX';
+                return;
+            }
+            const n = scopeBox.checked ? table.dataset.qsShown : table.dataset.qsTotal;
+            csvBtn.textContent = '↓ CSV ' + n;
+            xlsxBtn.textContent = '↓ XLSX ' + n;
+        }
+        table.addEventListener('quicksearch:filtered', syncScopeUI);
+        scopeBox.addEventListener('change', syncScopeUI);
 
         // Find nearest preceding .tab-toolbar, searching up through ancestors
         let toolbar = null;
@@ -649,7 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // the end of the toolbar regardless of the toolbar's other content.
         const exportActions = document.createElement('div');
         exportActions.className = 'table-export-actions';
-        exportActions.append(csvBtn, xlsxBtn);
+        exportActions.append(scopeLabel, csvBtn, xlsxBtn);
 
         if (toolbar) {
             toolbar.appendChild(exportActions);
