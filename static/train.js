@@ -38,6 +38,13 @@ let vipChoices = null;
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Selection tab only. The Logs tab has the FilterPanel and Rules has its own
+    // box — never both on one list.
+    QuickSearch.attach({
+        input: 'eligible-search', container: 'eligible-container', rows: '.eligible-card',
+        emptyText: 'No members match your search.',
+    });
+
     logDateFP    = flatpickr('#log-date',    { dateFormat: 'Y-m-d', allowInput: true });
     filterFromFP = flatpickr('#filter-from', { dateFormat: 'Y-m-d', allowInput: true });
     filterToFP   = flatpickr('#filter-to',   { dateFormat: 'Y-m-d', allowInput: true });
@@ -470,6 +477,7 @@ function renderEligibleList(members) {
     members.forEach((m, index) => {
         const card = document.createElement('div');
         card.className = 'eligible-card';
+        card.dataset.search = m.name + ' ' + m.rank;
 
         const left = document.createElement('div');
         left.style.display = 'flex';
@@ -517,6 +525,7 @@ function renderEligibleList(members) {
     });
 
     container.replaceChildren(list);
+    QuickSearch.apply('eligible-search');
 }
 
 function makeStat(label, value) {

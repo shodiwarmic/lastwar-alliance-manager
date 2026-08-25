@@ -1080,6 +1080,7 @@ function renderRegistrationView() {
 
     for (const reg of sorted) {
         const tr = document.createElement('tr');
+        tr.dataset.search = reg.member_name + ' ' + (reg.member_rank || '');
 
         const nameCell = document.createElement('td');
         nameCell.textContent = reg.member_name;
@@ -1116,6 +1117,7 @@ function renderRegistrationView() {
     wrap.className = 'table-scroll';
     wrap.appendChild(table);
     container.replaceChildren(wrap);
+    QuickSearch.apply('reg-view-search');
 }
 
 async function cycleRegPill(el) {
@@ -1491,6 +1493,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const poolSearch = document.getElementById('pool-search');
     if (poolSearch) poolSearch.addEventListener('input', renderPool);
+
+    // Registration View: hide rows rather than re-render — the .reg-pill cells
+    // are click-to-cycle and write straight through to the API.
+    QuickSearch.attach({
+        input: 'reg-view-search', container: 'reg-view-container', rows: 'tbody > tr',
+        emptyText: 'No members match your search.',
+    });
 
     const btnAddGroup = document.getElementById('btn-add-group');
     const groupNameModal = document.getElementById('group-name-modal');

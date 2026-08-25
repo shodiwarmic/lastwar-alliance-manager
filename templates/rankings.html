@@ -83,6 +83,12 @@
 
         <section class="rankings-section">
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trophy"/></svg> Weekly VS Leaderboard</h3>
+            <div class="tab-toolbar">
+                <div class="filter-search-wrap quick-search">
+                    <input type="text" id="vs-search" class="form-input" placeholder="Search commander..." aria-label="Search commander..." autocomplete="off">
+                    <button type="button" id="vs-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+                </div>
+            </div>
             <div style="overflow-x: auto;">
                 <table class="analytics-table" id="vs-table" data-export-csv="vs-leaderboard.csv">
                     <thead>

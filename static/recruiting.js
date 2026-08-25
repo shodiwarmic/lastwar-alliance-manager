@@ -121,6 +121,8 @@ function renderFormerMembers(members, container) {
     members.forEach(m => {
         const tr = tbody.insertRow();
 
+        tr.dataset.search = m.name;
+
         const nameTd = tr.insertCell();
         nameTd.textContent = m.name;
 
@@ -177,6 +179,7 @@ function renderFormerMembers(members, container) {
     wrap.className = 'table-scroll';
     wrap.appendChild(table);
     container.replaceChildren(wrap);
+    QuickSearch.apply('former-search');
 }
 
 function openReactivateModal(id, name) {
@@ -377,6 +380,7 @@ function renderProspects(items, container, typeContext) {
 
     const cards = items.map(p => buildProspectCard(p, typeContext));
     container.replaceChildren(...cards);
+    QuickSearch.apply(typeContext === 'transfer' ? 'transfers-search' : 'prospects-search');
 }
 
 const STATUS_LABELS = {
@@ -390,6 +394,7 @@ const STATUS_LABELS = {
 function buildProspectCard(p, typeContext) {
     const card = document.createElement('div');
     card.className = 'prospect-card';
+    card.dataset.search = (p.name || '') + ' ' + (p.source_alliance || '');
 
     // Header row
     const header = document.createElement('div');
@@ -793,6 +798,20 @@ async function loadSettingsForHeader() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
+    QuickSearch.attach({
+        input: 'transfers-search', container: 'transfers-list', rows: '.prospect-card',
+        emptyText: 'No transfers match your search.',
+    });
+    QuickSearch.attach({
+        input: 'prospects-search', container: 'prospects-list', rows: '.prospect-card',
+        emptyText: 'No prospects match your search.',
+    });
+    // The former-members table is built in JS with no id — anchor on its container.
+    QuickSearch.attach({
+        input: 'former-search', container: 'former-members-list', rows: 'tbody > tr',
+        emptyText: 'No former members match your search.',
+    });
+
     prospectContactedFP = flatpickr('#prospect-contacted', { dateFormat: 'Y-m-d', allowInput: true });
 
     recruiterChoices = new Choices('#prospect-recruiter', {

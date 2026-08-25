@@ -507,6 +507,14 @@ function renderGrowthTable(data) {
 // Hide mode rather than re-render: these are data-export-csv tables, so hiding
 // lets the export scope toggle offer "filtered only" vs the full table. It also
 // keeps the row set stable for anything else reading the tbody.
+// The leaderboard position in column 0 is the member's real standing, so gaps
+// under a filter (#1, #7, #12) are correct and must not be renumbered — another
+// reason this hides rather than re-renders.
+QuickSearch.attach({
+    input: 'vs-search', container: 'vs-tbody', rows: 'tr',
+    emptyText: 'No commanders match your search.',
+});
+
 QuickSearch.attach({
     input: 'growth-search', container: 'growth-tbody', rows: 'tr',
     emptyText: 'No commanders match your search.',
@@ -565,6 +573,7 @@ async function loadVSData() {
 
 function buildVSRow(v, idx) {
     const tr = document.createElement('tr');
+    tr.dataset.search = v.member_name;
 
     const tdIdx = document.createElement('td');
     tdIdx.style.cssText = 'color: var(--color-text-muted); font-size: 0.9em;';
@@ -666,6 +675,7 @@ function renderVSWeek(weekDate) {
 
     // 2. Render Table
     document.getElementById('vs-tbody').replaceChildren(...weekData.map(buildVSRow));
+    QuickSearch.apply('vs-search');
 }
 
 QuickSearch.attach({

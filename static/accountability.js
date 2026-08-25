@@ -372,6 +372,7 @@ async function loadStrikes() {
     const tbody = document.createElement('tbody');
     strikes.forEach(s => {
         const tr = document.createElement('tr');
+        tr.dataset.search = s.member_name + ' ' + s.member_rank + ' ' + strikeTypeLabel(s.strike_type);
 
         const tdMember = document.createElement('td');
         const link = document.createElement('a');
@@ -420,6 +421,7 @@ async function loadStrikes() {
     });
     table.appendChild(tbody);
     container.appendChild(table);
+    QuickSearch.apply('strikes-search');
 }
 
 async function excuseStrikeInline(strikeID) {
@@ -463,6 +465,7 @@ async function loadStormAttendance() {
         const row = document.createElement('div');
         row.className = 'storm-member-row';
         row.dataset.memberId = m.member_id;
+        row.dataset.search = m.member_name + ' ' + m.member_rank;
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'storm-member-name';
@@ -501,6 +504,8 @@ async function loadStormAttendance() {
         row.append(nameSpan, statusSel, excuseInput);
         container.appendChild(row);
     });
+
+    QuickSearch.apply('storm-search');
 
     document.getElementById('btn-storm-save').style.display = '';
     document.getElementById('storm-save-status').textContent = '';
@@ -654,6 +659,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     QuickSearch.attach({
         input: 'member-search', container: 'members-tbody', rows: 'tr',
+        emptyText: 'No members match your search.',
+    });
+
+    // The strikes table is built in JS with no id, so anchor on its container.
+    QuickSearch.attach({
+        input: 'strikes-search', container: 'strikes-container', rows: 'tbody > tr',
+        emptyText: 'No strikes match your search.',
+    });
+
+    // Rows carry a status <select> and an excuse input — hide, never re-render.
+    QuickSearch.attach({
+        input: 'storm-search', container: 'storm-member-list', rows: '.storm-member-row',
         emptyText: 'No members match your search.',
     });
 
