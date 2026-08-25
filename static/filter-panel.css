@@ -5,7 +5,9 @@
    Members. External Alliances still carries a local copy — tracked to migrate here.
 
    The pill primitive `.filter-chip` / `.filter-chip-label` is intentionally NOT here:
-   it's a global utility in styles.css, used on pages with no filter panel (storm, etc.). */
+   it's a global utility in styles.css, used on pages with no filter panel (storm, etc.).
+   `.filter-search-wrap` moved to styles.css for the same reason: QuickSearch reuses the
+   same input+clear-button markup on pages that have no panel. */
 
 .filter-sort-controls {
     display: flex;
@@ -46,32 +48,6 @@
 
 .filter-row-full {
     grid-column: 1 / -1;
-}
-
-.filter-search-wrap {
-    flex: 1;
-    min-width: 250px;
-    position: relative;
-}
-
-.filter-search-wrap .form-input {
-    padding: 10px 35px 10px 15px;
-    border-radius: 20px;
-}
-
-.filter-search-wrap button {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--color-text-mid);
 }
 
 .filter-collapse {

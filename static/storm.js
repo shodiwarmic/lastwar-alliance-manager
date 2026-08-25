@@ -244,12 +244,8 @@ function renderPool() {
 
     const unassigned = allMembers.filter(m => {
         if (assigned.has(m.id)) return false;
-        if (searchVal) {
-            const q = searchVal.toLowerCase();
-            if (!m.name.toLowerCase().includes(q) &&
-                !m.rank.toLowerCase().includes(q) &&
-                !(m.squad_type || '').toLowerCase().includes(q)) return false;
-        }
+        if (searchVal && !QuickSearch.match(
+            [m.name, m.rank, m.squad_type || ''].join(' '), searchVal)) return false;
         return true;
     });
 
@@ -399,10 +395,8 @@ function renderInlineSearch(groupId, buildingId, isDirect) {
         getCandidates: () => allMembers,
         isExcluded: (m) => allAssignedIds().has(m.id),
         // Preserve Storm's richer search (name/rank/squad_type) and pool ordering.
-        matches: (m, q) =>
-            (m.name || '').toLowerCase().includes(q) ||
-            (m.rank || '').toLowerCase().includes(q) ||
-            (m.squad_type || '').toLowerCase().includes(q),
+        matches: (m, q) => QuickSearch.match(
+            [m.name || '', m.rank || '', m.squad_type || ''].join(' '), q),
         sort: stormPickerSort,
         renderRow: (m) => {
             const { nameDiv, metaDiv, regDiv } = memberInfoNodes(m);
@@ -1086,6 +1080,7 @@ function renderRegistrationView() {
 
     for (const reg of sorted) {
         const tr = document.createElement('tr');
+        tr.dataset.search = reg.member_name + ' ' + (reg.member_rank || '');
 
         const nameCell = document.createElement('td');
         nameCell.textContent = reg.member_name;
@@ -1122,6 +1117,7 @@ function renderRegistrationView() {
     wrap.className = 'table-scroll';
     wrap.appendChild(table);
     container.replaceChildren(wrap);
+    QuickSearch.apply('reg-view-search');
 }
 
 async function cycleRegPill(el) {
@@ -1497,6 +1493,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const poolSearch = document.getElementById('pool-search');
     if (poolSearch) poolSearch.addEventListener('input', renderPool);
+
+    // Registration View: hide rows rather than re-render — the .reg-pill cells
+    // are click-to-cycle and write straight through to the API.
+    QuickSearch.attach({
+        input: 'reg-view-search', container: 'reg-view-container', rows: 'tbody > tr',
+        emptyText: 'No members match your search.',
+    });
 
     const btnAddGroup = document.getElementById('btn-add-group');
     const groupNameModal = document.getElementById('group-name-modal');

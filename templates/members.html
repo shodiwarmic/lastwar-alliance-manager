@@ -340,6 +340,10 @@
         <div class="modal-content modal-lg">
             <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-copy"/></svg> Review CSV Import</h2>
             <div id="csv-summary" class="csv-summary"></div>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="csv-search" class="form-input" placeholder="Search members…" aria-label="Search members…" autocomplete="off">
+                <button type="button" id="csv-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <div id="csv-members-preview" class="csv-members-preview"></div>
             
             <div id="remove-members-section" class="remove-members-section" style="display: none;">
@@ -411,6 +415,10 @@
         <div class="modal-content modal-lg">
             <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-cloud-download"/></svg> Review LastRank Sync</h2>
             <div id="lastrank-alliance-meta" class="lastrank-meta"></div>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="lastrank-search" class="form-input" placeholder="Search names…" aria-label="Search names…" autocomplete="off">
+                <button type="button" id="lastrank-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <div id="lastrank-review-body" class="lastrank-review-body"></div>
             <div class="modal-actions">
                 <button type="button" id="lastrank-confirm-btn" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-check"/></svg> Apply Selected Changes</button>

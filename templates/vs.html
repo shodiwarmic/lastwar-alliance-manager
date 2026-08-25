@@ -50,7 +50,10 @@
     </section>
 
     <div class="tab-toolbar">
-        <input type="text" id="search-box" class="form-input" placeholder="Search member...">
+        <div class="filter-search-wrap quick-search">
+            <input type="text" id="search-box" class="form-input" placeholder="Search member..." aria-label="Search member..." autocomplete="off">
+            <button type="button" id="search-box-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+        </div>
     </div>
 
     <section class="table-wrapper">
@@ -93,6 +96,10 @@
         
         <div class="preview-section">
             <h3>Unresolved Names <span id="unresolved-count" class="badge">0</span></h3>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="unresolved-search" class="form-input" placeholder="Search names…" aria-label="Search names…" autocomplete="off">
+                <button type="button" id="unresolved-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <p class="hint">These names were not found. Select an existing member to map them manually.</p>
             <table id="unresolved-table" class="data-table">
                 <thead>
@@ -108,6 +115,10 @@
 
         <div class="preview-section mt-4">
             <h3>Matched Names <span id="matched-count" class="badge">0</span></h3>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="matched-search" class="form-input" placeholder="Search names…" aria-label="Search names…" autocomplete="off">
+                <button type="button" id="matched-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <table id="matched-table" class="data-table">
                 <thead>
                     <tr>

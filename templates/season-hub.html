@@ -48,7 +48,10 @@
     <!-- ── Rankings ──────────────────────────────────────────────────────── -->
     <div id="tab-rankings" class="tab-content">
         <div class="tab-toolbar">
-            <input type="text" id="rankings-search" class="form-input" placeholder="Search members…">
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="rankings-search" class="form-input" placeholder="Search members…" aria-label="Search members…" autocomplete="off">
+                <button type="button" id="rankings-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <span id="rankings-count" class="tab-count"></span>
         </div>
         <div id="no-season-msg" class="info-panel" style="display:none">
@@ -82,6 +85,10 @@
             <div class="participation-week-nav">
                 <label for="week-select">Week:</label>
                 <select id="week-select" class="form-input week-select"></select>
+            </div>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="participation-search" class="form-input" placeholder="Search members…" aria-label="Search members…" autocomplete="off">
+                <button type="button" id="participation-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
             </div>
             <button class="btn btn-primary" id="btn-save-participation">Save Week</button>
             <span id="participation-status" class="status-msg"></span>
@@ -120,7 +127,10 @@
                     <option value="0">Season Total</option>
                 </select>
             </div>
-            <input type="text" id="contrib-manual-search" class="form-input" placeholder="Search members…">
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="contrib-manual-search" class="form-input" placeholder="Search members…" aria-label="Search members…" autocomplete="off">
+                <button type="button" id="contrib-manual-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <button class="btn btn-primary" id="btn-contrib-manual-save">Save</button>
             <button class="btn btn-secondary" id="btn-contrib-ocr">Import from Screenshots</button>
             <span id="contrib-manual-status" class="status-msg"></span>
@@ -146,11 +156,13 @@
 
     <!-- ── Rewards ───────────────────────────────────────────────────────── -->
     <div id="tab-rewards" class="tab-content" style="display:none">
-        {{if .Permissions.ManageSeasonRewards}}
         <div class="tab-toolbar">
-            <button class="btn btn-primary btn-sm" id="btn-assign-reward">+ Assign Reward</button>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="rewards-search" class="form-input" placeholder="Search members…" aria-label="Search members…" autocomplete="off">
+                <button type="button" id="rewards-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
+            {{if .Permissions.ManageSeasonRewards}}<button class="btn btn-primary btn-sm" id="btn-assign-reward">+ Assign Reward</button>{{end}}
         </div>
-        {{end}}
         <div class="table-scroll">
             <table class="data-table" id="rewards-table" data-export-csv="rewards.csv">
                 <thead>
@@ -427,6 +439,10 @@
         <div id="contrib-import-status" class="status-msg"></div>
         <div id="contrib-preview-card" style="display:none">
             <p id="contrib-preview-summary"></p>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="contrib-preview-search" class="form-input" placeholder="Search names…" aria-label="Search names…" autocomplete="off">
+                <button type="button" id="contrib-preview-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <table class="data-table">
                 <thead>
                     <tr><th>OCR Name</th><th>Matched Member</th><th>Match Type</th><th>Points</th></tr>
@@ -435,6 +451,10 @@
             </table>
             <div id="contrib-unresolved-wrap" style="display:none">
                 <p class="contrib-unresolved-title">Unresolved — map to a member or ignore:</p>
+                <div class="filter-search-wrap quick-search">
+                    <input type="text" id="contrib-unresolved-search" class="form-input" placeholder="Search names…" aria-label="Search names…" autocomplete="off">
+                    <button type="button" id="contrib-unresolved-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+                </div>
                 <table class="data-table">
                     <thead><tr><th>OCR Name</th><th>Points</th><th>Map to Member</th><th>Save Alias</th></tr></thead>
                     <tbody id="contrib-unresolved-list"></tbody>

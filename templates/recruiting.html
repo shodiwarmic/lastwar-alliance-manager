@@ -33,6 +33,10 @@
 
     <!-- Transfers Tab (default active) -->
     <div id="tab-transfers" class="tab-content">
+        <div class="filter-search-wrap quick-search">
+            <input type="text" id="transfers-search" class="form-input" placeholder="Search transfers…" aria-label="Search transfers…" autocomplete="off">
+            <button type="button" id="transfers-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+        </div>
         {{if .Permissions.ManageRecruiting}}
         <div class="action-bar" style="margin-bottom: 20px;">
             <button type="button" id="add-transfer-btn" class="btn btn-primary">
@@ -58,6 +62,10 @@
 
     <!-- Prospects Tab -->
     <div id="tab-prospects" class="tab-content">
+        <div class="filter-search-wrap quick-search">
+            <input type="text" id="prospects-search" class="form-input" placeholder="Search prospects…" aria-label="Search prospects…" autocomplete="off">
+            <button type="button" id="prospects-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+        </div>
         {{if .Permissions.ManageRecruiting}}
         <div class="action-bar" style="margin-bottom: 20px;">
             <button type="button" id="add-prospect-btn" class="btn btn-primary">
@@ -89,6 +97,10 @@
                 Archived members. Their train logs, VS points, and power history are preserved.
                 Use <strong>Reactivate</strong> to restore them with an active rank.
             </p>
+        </div>
+        <div class="filter-search-wrap quick-search">
+            <input type="text" id="former-search" class="form-input" placeholder="Search former members…" aria-label="Search former members…" autocomplete="off">
+            <button type="button" id="former-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
         </div>
         <div id="former-members-list">
             <p class="loading-msg">Loading former members...</p>

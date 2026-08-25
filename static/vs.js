@@ -117,6 +117,7 @@ function buildVSRow(member) {
 
     const tr = document.createElement('tr');
     tr.dataset.memberId = member.id;
+    tr.dataset.search = member.name + ' ' + (member.rank || '');
 
     // Name cell
     const tdName = document.createElement('td');
@@ -201,11 +202,14 @@ function renderTable() {
         totalHeader.textContent = isTotalMode ? "Enter Weekly Total" : "Total";
     }
 
-    const searchTerm = document.getElementById('search-box')?.value.toLowerCase().trim() || '';
-    const filteredMembers = sortData(allMembers.filter(member => member.name.toLowerCase().includes(searchTerm)));
+    // Search hides rows (QuickSearch) instead of filtering here: this is a
+    // data-export-csv table, so hiding lets the export scope toggle offer the
+    // full table as well as the filtered one.
+    const sortedMembers = sortData(allMembers.slice());
 
-    tbody.replaceChildren(...filteredMembers.map(buildVSRow));
+    tbody.replaceChildren(...sortedMembers.map(buildVSRow));
     attachInputListeners();
+    QuickSearch.apply('search-box');
 }
 
 function attachInputListeners() {
@@ -387,7 +391,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('vs-preview-confirm-btn').addEventListener('click', commitImport);
 
         // Search
-        document.getElementById('search-box')?.addEventListener('input', renderTable);
+        QuickSearch.attach({
+            input: 'search-box', container: 'vs-tbody', rows: 'tr',
+            emptyText: 'No members match your search.',
+        });
 
         // Sorting
         document.querySelectorAll('th[data-sort]').forEach(th => {
@@ -455,6 +462,7 @@ function buildMatchedRow(row) {
         .join(', ');
 
     const tr = document.createElement('tr');
+    tr.dataset.search = (row.original_name || '') + ' ' + (row.matched_member.name || '');
 
     const tdName = document.createElement('td');
     tdName.textContent = row.matched_member.name;
@@ -486,6 +494,7 @@ function buildUnresolvedRow(row, idx, availableMembers) {
 
     const tr = document.createElement('tr');
     tr.dataset.index = idx;
+    tr.dataset.search = row.original_name || '';
 
     const tdName = document.createElement('td');
     tdName.textContent = row.original_name;
@@ -530,6 +539,15 @@ function buildUnresolvedRow(row, idx, availableMembers) {
     return tr;
 }
 
+QuickSearch.attach({
+    input: 'matched-search', container: 'matched-body', rows: 'tr',
+    emptyText: 'No names match your search.',
+});
+QuickSearch.attach({
+    input: 'unresolved-search', container: 'unresolved-body', rows: 'tr',
+    emptyText: 'No names match your search.',
+});
+
 function renderPreviewModal(data) {
     const matchedBody = document.getElementById('matched-body');
     const unresolvedBody = document.getElementById('unresolved-body');
@@ -546,6 +564,8 @@ function renderPreviewModal(data) {
     const availableMembers = allMembers.filter(m => !matchedIds.includes(m.id));
     const unresolvedRows = (data.unresolved || []).map((row, idx) => buildUnresolvedRow(row, idx, availableMembers));
     unresolvedBody.replaceChildren(...unresolvedRows);
+    QuickSearch.apply('matched-search');
+    QuickSearch.apply('unresolved-search');
 
     document.getElementById('import-preview-modal').style.display = 'flex';
 }

@@ -571,13 +571,6 @@
     width: 120px;
 }
 
-/* Member search on the by-member view */
-.poll-member-search {
-    width: 100%;
-    box-sizing: border-box;
-    margin-bottom: 12px;
-}
-
 /* ── By-option view ─────────────────────────────────────────────────────── */
 .poll-view-toggle {
     display: flex;

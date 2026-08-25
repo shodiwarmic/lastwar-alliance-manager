@@ -28,7 +28,10 @@
     <div id="tab-members" class="tab-content">
 
         <div class="tab-toolbar">
-            <input type="text" id="member-search" class="form-input" placeholder="Search members…" style="width:220px;">
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="member-search" class="form-input" placeholder="Search members…" aria-label="Search members…" autocomplete="off">
+                <button type="button" id="member-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
         </div>
 
         <div id="vs-flag-banner" style="display:none" class="acc-flag-banner">
@@ -68,6 +71,10 @@
                     <option value="active" selected>Active only</option>
                     <option value="excused">Excused only</option>
                 </select>
+                <div class="filter-search-wrap quick-search">
+                    <input type="text" id="strikes-search" class="form-input" placeholder="Search members…" aria-label="Search members…" autocomplete="off">
+                    <button type="button" id="strikes-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+                </div>
             </div>
         </div>
 
@@ -85,6 +92,10 @@
                 <label for="storm-date-input" style="font-size:0.9rem;color:var(--color-text-muted);">Storm Date</label>
                 <input type="date" id="storm-date-input" class="form-input" style="width:180px;">
                 <button id="btn-storm-load" class="btn btn-secondary btn-sm">Load</button>
+                <div class="filter-search-wrap quick-search">
+                    <input type="text" id="storm-search" class="form-input" placeholder="Search members…" aria-label="Search members" autocomplete="off">
+                    <button type="button" id="storm-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+                </div>
             </div>
             <div class="acc-toolbar-right">
                 <button id="btn-storm-save" class="btn btn-primary btn-sm" style="display:none;">Save Attendance</button>

@@ -125,7 +125,7 @@ function setupReactiveSearch() {
             return;
         }
 
-        const matches = allMembers.filter(m => m.name.toLowerCase().includes(term));
+        const matches = QuickSearch.filter(allMembers, term, m => m.name);
 
         if (matches.length > 0) {
             resultsContainer.style.display = 'block';
@@ -460,13 +460,12 @@ function renderDynoRecommendations() {
     if (!container) return;
 
     const searchInput = document.getElementById('filter-search');
-    const filterSearch = searchInput ? searchInput.value.toLowerCase() : '';
+    const filterSearch = searchInput ? searchInput.value : '';
+    const searchOk = QuickSearch.matcher(filterSearch);
 
     // Apply filter
     let filtered = allDynoRecs.filter(rec => {
-        const memberMatch = rec.member_name.toLowerCase().includes(filterSearch);
-        const creatorMatch = rec.created_by.toLowerCase().includes(filterSearch);
-        const searchMatch = !filterSearch || memberMatch || creatorMatch;
+        const searchMatch = searchOk(rec.member_name + ' ' + rec.created_by);
 
         let statusMatch = true;
         if (currentFilter === 'active') {

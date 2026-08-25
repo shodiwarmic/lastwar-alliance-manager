@@ -22,6 +22,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # Member search must fold diacritics, or a roster "Pacha" spelled with an
+      # accent never matches a typed plain one -- and client-side search then
+      # disagrees with Go's foldName about what is the same name.
+      # See CLAUDE.md -> "Quick search".
+      # Runs as a step of this job rather than its own job: the required status
+      # checks in branch protection are pinned to job names, and a new job would
+      # silently not gate until those are updated.
+      - name: Accent-folded search check
+        run: |
+          python3 - <<'EOF'
+          import pathlib, sys
+
+          # `.toLowerCase().includes(` is the hand-rolled accent-blind search this
+          # codebase used 23 times before QuickSearch landed. Use QuickSearch.match
+          # / .matcher / .filter (or window.foldSearch directly) instead -- they
+          # fold diacritics the same way namematch.go's foldName does.
+          NEEDLE = '.toLowerCase().includes('
+
+          fails = []
+          for path in sorted(pathlib.Path('static').rglob('*.js')):
+              for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                  if NEEDLE in line:
+                      fails.append(f'{path}:{n}: accent-blind search -- use QuickSearch')
+
+          if fails:
+              print('Accent-folded search check failed:\n')
+              for f in fails:
+                  print('  ' + f)
+              print('\nSee CLAUDE.md -> "Quick search".')
+              sys.exit(1)
+          print('Accent-folded search check passed.')
+          EOF
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:

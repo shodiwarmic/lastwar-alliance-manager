@@ -197,8 +197,10 @@ async function loadMembers() {
         banner.style.display = 'none';
     }
 
-    const search = document.getElementById('member-search').value.toLowerCase();
-    const filtered = search ? members.filter(m => m.name.toLowerCase().includes(search)) : members;
+    // Search hides rows (QuickSearch), so this renders the whole roster: the
+    // table is data-export-csv and hiding lets the export scope toggle offer
+    // the full roster as well as the filtered view.
+    const filtered = members;
 
     tbody.replaceChildren();
 
@@ -215,6 +217,7 @@ async function loadMembers() {
     filtered.forEach(m => {
         const tr = document.createElement('tr');
         if (m.below_threshold) tr.className = 'acc-row--below-vs';
+        tr.dataset.search = m.name + ' ' + m.rank;
 
         const tdName = document.createElement('td');
         tdName.textContent = m.name;
@@ -259,6 +262,7 @@ async function loadMembers() {
         tr.append(tdName, tdRank, tdTag, tdStrikes, tdVS, tdActions);
         tbody.appendChild(tr);
     });
+    QuickSearch.apply('member-search');
 }
 
 function currentMonday() {
@@ -368,6 +372,7 @@ async function loadStrikes() {
     const tbody = document.createElement('tbody');
     strikes.forEach(s => {
         const tr = document.createElement('tr');
+        tr.dataset.search = s.member_name + ' ' + s.member_rank + ' ' + strikeTypeLabel(s.strike_type);
 
         const tdMember = document.createElement('td');
         const link = document.createElement('a');
@@ -416,6 +421,7 @@ async function loadStrikes() {
     });
     table.appendChild(tbody);
     container.appendChild(table);
+    QuickSearch.apply('strikes-search');
 }
 
 async function excuseStrikeInline(strikeID) {
@@ -459,6 +465,7 @@ async function loadStormAttendance() {
         const row = document.createElement('div');
         row.className = 'storm-member-row';
         row.dataset.memberId = m.member_id;
+        row.dataset.search = m.member_name + ' ' + m.member_rank;
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'storm-member-name';
@@ -497,6 +504,8 @@ async function loadStormAttendance() {
         row.append(nameSpan, statusSel, excuseInput);
         container.appendChild(row);
     });
+
+    QuickSearch.apply('storm-search');
 
     document.getElementById('btn-storm-save').style.display = '';
     document.getElementById('storm-save-status').textContent = '';
@@ -648,7 +657,22 @@ document.addEventListener('DOMContentLoaded', () => {
     applyVSWeekNotes();
     loadMembers();
 
-    document.getElementById('member-search').addEventListener('input', loadMembers);
+    QuickSearch.attach({
+        input: 'member-search', container: 'members-tbody', rows: 'tr',
+        emptyText: 'No members match your search.',
+    });
+
+    // The strikes table is built in JS with no id, so anchor on its container.
+    QuickSearch.attach({
+        input: 'strikes-search', container: 'strikes-container', rows: 'tbody > tr',
+        emptyText: 'No strikes match your search.',
+    });
+
+    // Rows carry a status <select> and an excuse input — hide, never re-render.
+    QuickSearch.attach({
+        input: 'storm-search', container: 'storm-member-list', rows: '.storm-member-row',
+        emptyText: 'No members match your search.',
+    });
 
     if (CAN_MANAGE) {
         fetch('/api/accountability/strike-types')

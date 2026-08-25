@@ -12,12 +12,34 @@ let pollDetailView = 'member';       // 'member' | 'option'
 let pollDetailData = null;           // cached detail payload
 let pollDetailInstance = null;       // current poll instance
 let activeOptionPickers = [];        // member-pickers mounted in the by-option view
+let pollSearchQuery = '';            // survives renderPollDetail rebuilding the body
+let pollSearchHandle = null;         // QuickSearch handle for the current view
 let pollListDirty = false;           // refresh the instance-list card on close if true
 const pollToggleInFlight = new Set();// per-mutation guard keys (defeats rapid re-taps)
 
 function destroyOptionPickers() {
     activeOptionPickers.forEach(p => p.destroy());
     activeOptionPickers = [];
+    // The search input is rebuilt with the body, so its listeners go too.
+    if (pollSearchHandle) { pollSearchHandle.destroy(); pollSearchHandle = null; }
+}
+
+// Both detail views get the same search. renderPollDetail rebuilds bodyEl
+// wholesale (view toggle, add/remove from an option), destroying the input, so
+// the query lives in pollSearchQuery and is seeded back via `initial`.
+function mountPollSearch(bodyEl, opts) {
+    const { wrap, input } = QuickSearch.widget({ placeholder: opts.placeholder });
+    bodyEl.appendChild(wrap);
+    pollSearchHandle = QuickSearch.attach({
+        input,
+        container: bodyEl,
+        rows: opts.rows,
+        groups: opts.groups,
+        emptyText: false,        // sections collapse instead; an extra node would sit oddly
+        initial: pollSearchQuery,
+        onFilter: (shown, total, raw) => { pollSearchQuery = raw; },
+    });
+    return wrap;
 }
 
 // ── Data loaders (exposed on window so comms.js switchTab can call them) ─────
@@ -748,13 +770,11 @@ function renderPollByMember(pi, data, bodyEl) {
     const pending = data.pending || [];
     const responded = data.responded || [];
 
-    // Member search — filters rows in place (no re-render) so focus is preserved.
-    const search = document.createElement('input');
-    search.type = 'text';
-    search.className = 'form-input poll-member-search';
-    search.placeholder = 'Search member…';
-    search.autocomplete = 'off';
-    bodyEl.appendChild(search);
+    const search = mountPollSearch(bodyEl, {
+        placeholder: 'Search member…',
+        rows: '.poll-member-row',
+        groups: '.poll-pending-section, .poll-responded-section',
+    });
 
     const sections = [];
 
@@ -797,18 +817,8 @@ function renderPollByMember(pi, data, bodyEl) {
         return;
     }
 
-    search.addEventListener('input', () => {
-        const q = search.value.trim().toLowerCase();
-        sections.forEach(sec => {
-            let anyVisible = false;
-            sec.querySelectorAll('.poll-member-row').forEach(row => {
-                const show = !q || (row.dataset.name || '').includes(q);
-                row.style.display = show ? '' : 'none';
-                if (show) anyVisible = true;
-            });
-            sec.style.display = anyVisible ? '' : 'none';
-        });
-    });
+    // Rows exist now — apply the carried-over query.
+    if (pollSearchHandle) pollSearchHandle.apply();
 }
 
 // ── By-option view ───────────────────────────────────────────────────────────
@@ -822,6 +832,12 @@ function renderPollByOption(pi, data, bodyEl) {
         bodyEl.appendChild(p);
         return;
     }
+
+    mountPollSearch(bodyEl, {
+        placeholder: 'Search member…',
+        rows: '.poll-option-chip',
+        groups: '.poll-option-section',
+    });
 
     // Candidate pool = every eligible member (pending ∪ responded), normalized to
     // the picker's {id,name,rank} shape. No roster fetch needed.
@@ -867,11 +883,16 @@ function renderPollByOption(pi, data, bodyEl) {
 
         bodyEl.appendChild(section);
     });
+
+    // The (n) beside each option heading is the true response count, not a
+    // search count — it deliberately does not change while filtering.
+    if (pollSearchHandle) pollSearchHandle.apply();
 }
 
 function renderOptionChip(pi, option, m) {
     const chip = document.createElement('span');
     chip.className = 'poll-option-chip';
+    chip.dataset.search = (m.member_name || '') + ' ' + (m.rank || '');
     const rank = document.createElement('span');
     rank.className = 'member-rank rank-' + m.rank;
     rank.textContent = m.rank;
@@ -1012,6 +1033,8 @@ function closePollDetailModal() {
     // the picker teardown and the deferred instance-list refresh hang off it — if a
     // backdrop/Esc close is added later, route it through here too.
     destroyOptionPickers();
+    // The query is carried across re-renders WITHIN one poll, not between polls.
+    pollSearchQuery = '';
     document.getElementById('modal-poll-detail').style.display = '';
     if (pollListDirty) {
         pollListDirty = false;
@@ -1026,7 +1049,7 @@ function closePollDetailModal() {
 function renderMemberRow(m, pi, hasResponded) {
     const row = document.createElement('div');
     row.className = 'poll-member-row' + (pi.multi_select ? ' poll-member-row--multi' : '');
-    row.dataset.name = (m.member_name || '').toLowerCase();
+    row.dataset.search = (m.member_name || '') + ' ' + (m.rank || '');
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'poll-member-name';

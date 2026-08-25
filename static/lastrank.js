@@ -144,13 +144,27 @@
             ['unmatched', 'Unmatched names'],
             ['archive', 'Possibly left the alliance'],
         ];
+        // Each group is wrapped so QuickSearch can collapse the heading along
+        // with its rows — otherwise a filtered view shows "Rank changes (4)"
+        // sitting over nothing.
         groups.forEach(([kind, title]) => {
             const rows = items.filter(i => i.kind === kind);
             if (!rows.length) return;
-            bodyEl.appendChild(el('div', { className: 'lr-group-title', textContent: `${title} (${rows.length})` }));
-            rows.forEach(p => bodyEl.appendChild(renderQueueRow(p)));
+            const group = el('div', { className: 'lr-group' });
+            group.appendChild(el('div', { className: 'lr-group-title', textContent: `${title} (${rows.length})` }));
+            rows.forEach(p => group.appendChild(renderQueueRow(p)));
+            bodyEl.appendChild(group);
         });
+        QuickSearch.apply('lastrank-search');
     }
+
+    QuickSearch.attach({
+        input: 'lastrank-search',
+        container: 'lastrank-review-body',
+        rows: '.lr-row',
+        groups: '.lr-group',
+        emptyText: 'No names match your search.',
+    });
 
     function renderQueueRow(p) {
         const detail = p.kind === 'archive' ? p.reason
@@ -158,7 +172,7 @@
             : `${p.current_value} → ${p.proposed_value}`;
         const applyBtn = el('button', { className: 'btn btn-primary btn-sm', type: 'button' });
         applyBtn.textContent = 'Apply';
-        const row = el('div', { className: 'lr-row' },
+        const row = el('div', { className: 'lr-row', 'data-search': p.lastrank_name || p.current_value },
             el('div', { className: 'lr-row-name', textContent: p.lastrank_name || p.current_value }),
             el('div', { className: 'lr-field lr-skip', textContent: detail }));
 
@@ -238,42 +252,53 @@
         const withChanges = matched.filter(hasChange);
         const upToDate = matched.length - withChanges.length;
 
+        // Each group is wrapped so QuickSearch can collapse the heading along with
+        // its rows — otherwise a filtered view leaves "Updates (12)" sitting over
+        // nothing. The .lr-empty / .lr-summary notes ride inside their group.
+        const newGroup = (title, n) => {
+            const g = el('div', { className: 'lr-group' });
+            g.appendChild(el('div', { className: 'lr-group-title', textContent: `${title} (${n})` }));
+            bodyEl.appendChild(g);
+            return g;
+        };
+
         // Matched changes
-        bodyEl.appendChild(el('div', { className: 'lr-group-title', textContent: `Updates (${withChanges.length})` }));
+        let group = newGroup('Updates', withChanges.length);
         if (withChanges.length === 0) {
-            bodyEl.appendChild(el('p', { className: 'lr-empty', textContent: 'No stat or rank changes to apply.' }));
+            group.appendChild(el('p', { className: 'lr-empty', textContent: 'No stat or rank changes to apply.' }));
         }
-        withChanges.forEach(m => bodyEl.appendChild(renderMatchedRow(m)));
+        withChanges.forEach(m => group.appendChild(renderMatchedRow(m)));
         if (upToDate > 0) {
-            bodyEl.appendChild(el('p', { className: 'lr-summary', textContent: `${upToDate} member(s) already up to date — their LastRank ID is still saved for extended sync.` }));
+            group.appendChild(el('p', { className: 'lr-summary', textContent: `${upToDate} member(s) already up to date — their LastRank ID is still saved for extended sync.` }));
         }
 
         // Unmatched
         const unmatched = data.unmatched || [];
-        bodyEl.appendChild(el('div', { className: 'lr-group-title', textContent: `Unmatched names (${unmatched.length})` }));
+        group = newGroup('Unmatched names', unmatched.length);
         if (unmatched.length === 0) {
-            bodyEl.appendChild(el('p', { className: 'lr-empty', textContent: 'Every LastRank member matched a roster member.' }));
+            group.appendChild(el('p', { className: 'lr-empty', textContent: 'Every LastRank member matched a roster member.' }));
         }
-        unmatched.forEach(u => bodyEl.appendChild(renderUnmatchedRow(u, data.all_members || [])));
+        unmatched.forEach(u => group.appendChild(renderUnmatchedRow(u, data.all_members || [])));
 
         // Possibly-departed members (absent from LastRank, or unranked there).
         const candidates = data.archive_candidates || [];
-        bodyEl.appendChild(el('div', { className: 'lr-group-title', textContent: `Possibly left the alliance (${candidates.length})` }));
+        group = newGroup('Possibly left the alliance', candidates.length);
         if (candidates.length === 0) {
-            bodyEl.appendChild(el('p', { className: 'lr-empty', textContent: 'Everyone on your roster is active on LastRank.' }));
+            group.appendChild(el('p', { className: 'lr-empty', textContent: 'Everyone on your roster is active on LastRank.' }));
         } else {
-            bodyEl.appendChild(el('p', { className: 'lr-summary', textContent: 'Nothing happens unless you tick Archive. Verify first — a member who changed their in-game name to something we have no alias for can appear here even though they are still active. (Accent-only differences are matched automatically and no longer land here.)' }));
+            group.appendChild(el('p', { className: 'lr-summary', textContent: 'Nothing happens unless you tick Archive. Verify first — a member who changed their in-game name to something we have no alias for can appear here even though they are still active. (Accent-only differences are matched automatically and no longer land here.)' }));
         }
         candidates.forEach(c => {
             const cb = el('input', { type: 'checkbox' }); // default unchecked = no action
             c._archive = cb;
-            bodyEl.appendChild(el('div', { className: 'lr-row' },
+            group.appendChild(el('div', { className: 'lr-row', 'data-search': c.name + ' ' + c.rank },
                 el('div', { className: 'lr-row-name', textContent: `${c.name} (${c.rank})` }),
                 el('label', { className: 'lr-field' }, cb, el('span', {}, ` Archive — ${c.reason}`)),
                 deferControls(pendingFor('archive:m:' + c.member_id),
                     () => { cb.checked = false; cb.disabled = true; })
             ));
         });
+        QuickSearch.apply('lastrank-search');
     }
 
     // Maps each preview row to its durable queue row, so a defer has something to
@@ -354,7 +379,7 @@
     function renderMatchedRow(m) {
         m._cb = {};
         const name = (m.matched_member && m.matched_member.name) || m.lastrank_name;
-        const row = el('div', { className: 'lr-row' },
+        const row = el('div', { className: 'lr-row', 'data-search': name },
             el('div', { className: 'lr-row-name', textContent: name })
         );
 
@@ -441,7 +466,7 @@
         });
         u._action = actionSel;
         u._member = memberSel;
-        return el('div', { className: 'lr-row' },
+        return el('div', { className: 'lr-row', 'data-search': u.lastrank_name },
             el('div', { className: 'lr-row-name', textContent: u.lastrank_name }),
             detail ? el('div', { className: 'lr-field lr-skip', textContent: detail }) : null,
             el('div', { className: 'lr-unmatched-controls' }, actionSel, memberSel,

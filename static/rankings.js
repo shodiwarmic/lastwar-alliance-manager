@@ -100,6 +100,7 @@ function formatKillDelta(delta) {
 
 function buildKillRow(k) {
     const tr = document.createElement('tr');
+    tr.dataset.search = k.member_name + ' ' + k.member_rank;
 
     const tdName = document.createElement('td');
     const strong = document.createElement('strong');
@@ -151,6 +152,7 @@ function renderKillTable(data) {
         return;
     }
     tbody.replaceChildren(...data.map(buildKillRow));
+    QuickSearch.apply('kills-search');
 }
 
 // --- Shared cell builders for the HQ / Profession leaderboards ---
@@ -202,6 +204,7 @@ async function loadHQData() {
 
 function buildHQRow(s) {
     const tr = document.createElement('tr');
+    tr.dataset.search = s.member_name + ' ' + s.member_rank;
     const [tdName, tdRank] = buildNameRankCells(s.member_name, s.member_rank);
 
     const tdLevel = document.createElement('td');
@@ -231,6 +234,7 @@ function renderHQTable(data) {
         return;
     }
     tbody.replaceChildren(...data.map(buildHQRow));
+    QuickSearch.apply('hq-search');
 }
 
 // --- Tab: Profession Level ---
@@ -254,6 +258,7 @@ async function loadProfessionData() {
 
 function buildProfessionRow(s) {
     const tr = document.createElement('tr');
+    tr.dataset.search = s.member_name + ' ' + s.member_rank;
     const [tdName, tdRank] = buildNameRankCells(s.member_name, s.member_rank);
 
     const tdProf = document.createElement('td');
@@ -286,6 +291,7 @@ function renderProfessionTable(data) {
         return;
     }
     tbody.replaceChildren(...data.map(buildProfessionRow));
+    QuickSearch.apply('profession-search');
 }
 
 // --- Utility Formatters ---
@@ -427,6 +433,7 @@ function renderCompositionCharts() {
 
 function buildGrowthRow(m) {
     const tr = document.createElement('tr');
+    tr.dataset.search = m.name + ' ' + m.rank;
 
     const tdName = document.createElement('td');
     const strong = document.createElement('strong');
@@ -494,12 +501,23 @@ function renderGrowthTable(data) {
         return;
     }
     tbody.replaceChildren(...data.map(buildGrowthRow));
+    QuickSearch.apply('growth-search');
 }
 
-document.getElementById('growth-search')?.addEventListener('input', (e) => {
-    const term = e.target.value.toLowerCase();
-    const filtered = rawGrowthData.filter(m => m.name.toLowerCase().includes(term));
-    renderGrowthTable(filtered);
+// Hide mode rather than re-render: these are data-export-csv tables, so hiding
+// lets the export scope toggle offer "filtered only" vs the full table. It also
+// keeps the row set stable for anything else reading the tbody.
+// The leaderboard position in column 0 is the member's real standing, so gaps
+// under a filter (#1, #7, #12) are correct and must not be renumbered — another
+// reason this hides rather than re-renders.
+QuickSearch.attach({
+    input: 'vs-search', container: 'vs-tbody', rows: 'tr',
+    emptyText: 'No commanders match your search.',
+});
+
+QuickSearch.attach({
+    input: 'growth-search', container: 'growth-tbody', rows: 'tr',
+    emptyText: 'No commanders match your search.',
 });
 
 // --- Tab 2: VS Duel Activity ---
@@ -555,6 +573,7 @@ async function loadVSData() {
 
 function buildVSRow(v, idx) {
     const tr = document.createElement('tr');
+    tr.dataset.search = v.member_name;
 
     const tdIdx = document.createElement('td');
     tdIdx.style.cssText = 'color: var(--color-text-muted); font-size: 0.9em;';
@@ -656,22 +675,22 @@ function renderVSWeek(weekDate) {
 
     // 2. Render Table
     document.getElementById('vs-tbody').replaceChildren(...weekData.map(buildVSRow));
+    QuickSearch.apply('vs-search');
 }
 
-document.getElementById('kills-search')?.addEventListener('input', (e) => {
-    const term = e.target.value.toLowerCase();
-    const filtered = rawKillData.filter(k => k.member_name.toLowerCase().includes(term));
-    renderKillTable(filtered);
+QuickSearch.attach({
+    input: 'kills-search', container: 'kills-tbody', rows: 'tr',
+    emptyText: 'No commanders match your search.',
 });
 
-document.getElementById('hq-search')?.addEventListener('input', (e) => {
-    const term = e.target.value.toLowerCase();
-    renderHQTable(rawHQData.filter(s => s.member_name.toLowerCase().includes(term)));
+QuickSearch.attach({
+    input: 'hq-search', container: 'hq-tbody', rows: 'tr',
+    emptyText: 'No commanders match your search.',
 });
 
-document.getElementById('profession-search')?.addEventListener('input', (e) => {
-    const term = e.target.value.toLowerCase();
-    renderProfessionTable(rawProfessionData.filter(s => s.member_name.toLowerCase().includes(term)));
+QuickSearch.attach({
+    input: 'profession-search', container: 'profession-tbody', rows: 'tr',
+    emptyText: 'No commanders match your search.',
 });
 
 // --- Theme adaptation ---

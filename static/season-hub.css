@@ -82,17 +82,8 @@
     }
 }
 
-/* .tab-toolbar, .status-msg and .sortable-table are defined in styles.css
-   (global utilities) */
-
-.tab-count {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-}
-
-/* Toolbar search inputs */
-#rankings-search { width: 220px; }
-#contrib-manual-search { width: 200px; }
+/* .tab-toolbar, .status-msg, .tab-count and .sortable-table are defined in
+   styles.css (global utilities) */
 
 /* ── Info panel ───────────────────────────────────────────────────────── */
 .info-panel {

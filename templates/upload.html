@@ -116,6 +116,10 @@
         <div class="preview-section">
             <h3>Unresolved Scans <span id="unresolved-count" class="badge">0</span></h3>
             <p class="hint">The OCR could not perfectly match these names. Map them manually and optionally save as an OCR Alias to fix future scans.</p>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="unresolved-search" class="form-input" placeholder="Search names…" aria-label="Search names…" autocomplete="off">
+                <button type="button" id="unresolved-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <table id="unresolved-table" class="data-table">
                 <thead>
                     <tr>
@@ -130,6 +134,10 @@
 
         <div class="preview-section mt-4">
             <h3>Matched Scans <span id="matched-count" class="badge">0</span></h3>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="matched-search" class="form-input" placeholder="Search names…" aria-label="Search names…" autocomplete="off">
+                <button type="button" id="matched-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <table id="matched-table" class="data-table">
                 <thead>
                     <tr>
