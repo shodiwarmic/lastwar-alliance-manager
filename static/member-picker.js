@@ -14,9 +14,11 @@
 (function () {
     'use strict';
 
+    // `q` arrives raw (not pre-lowercased): QuickSearch.match folds both sides,
+    // so accents match either way. Any caller-supplied `matches` override must
+    // fold too — see stormPicker in storm.js.
     function defaultMatches(m, q) {
-        return (m.name || '').toLowerCase().includes(q) ||
-               (m.rank || '').toLowerCase().includes(q);
+        return QuickSearch.match((m.name || '') + ' ' + (m.rank || ''), q);
     }
     function defaultSort(a, b) {
         return (a.name || '').localeCompare(b.name || '');
@@ -133,7 +135,7 @@
         }
 
         function renderList() {
-            const q = input.value.trim().toLowerCase();
+            const q = input.value.trim();
             let list = (getCandidates() || []).filter(m => !isExcluded(m));
             if (q) list = list.filter(m => matches(m, q));
             list.sort(sort);

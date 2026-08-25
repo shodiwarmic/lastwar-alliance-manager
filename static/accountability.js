@@ -197,8 +197,10 @@ async function loadMembers() {
         banner.style.display = 'none';
     }
 
-    const search = document.getElementById('member-search').value.toLowerCase();
-    const filtered = search ? members.filter(m => m.name.toLowerCase().includes(search)) : members;
+    // Search hides rows (QuickSearch), so this renders the whole roster: the
+    // table is data-export-csv and hiding lets the export scope toggle offer
+    // the full roster as well as the filtered view.
+    const filtered = members;
 
     tbody.replaceChildren();
 
@@ -215,6 +217,7 @@ async function loadMembers() {
     filtered.forEach(m => {
         const tr = document.createElement('tr');
         if (m.below_threshold) tr.className = 'acc-row--below-vs';
+        tr.dataset.search = m.name + ' ' + m.rank;
 
         const tdName = document.createElement('td');
         tdName.textContent = m.name;
@@ -259,6 +262,7 @@ async function loadMembers() {
         tr.append(tdName, tdRank, tdTag, tdStrikes, tdVS, tdActions);
         tbody.appendChild(tr);
     });
+    QuickSearch.apply('member-search');
 }
 
 function currentMonday() {
@@ -648,7 +652,10 @@ document.addEventListener('DOMContentLoaded', () => {
     applyVSWeekNotes();
     loadMembers();
 
-    document.getElementById('member-search').addEventListener('input', loadMembers);
+    QuickSearch.attach({
+        input: 'member-search', container: 'members-tbody', rows: 'tr',
+        emptyText: 'No members match your search.',
+    });
 
     if (CAN_MANAGE) {
         fetch('/api/accountability/strike-types')

@@ -244,12 +244,8 @@ function renderPool() {
 
     const unassigned = allMembers.filter(m => {
         if (assigned.has(m.id)) return false;
-        if (searchVal) {
-            const q = searchVal.toLowerCase();
-            if (!m.name.toLowerCase().includes(q) &&
-                !m.rank.toLowerCase().includes(q) &&
-                !(m.squad_type || '').toLowerCase().includes(q)) return false;
-        }
+        if (searchVal && !QuickSearch.match(
+            [m.name, m.rank, m.squad_type || ''].join(' '), searchVal)) return false;
         return true;
     });
 
@@ -399,10 +395,8 @@ function renderInlineSearch(groupId, buildingId, isDirect) {
         getCandidates: () => allMembers,
         isExcluded: (m) => allAssignedIds().has(m.id),
         // Preserve Storm's richer search (name/rank/squad_type) and pool ordering.
-        matches: (m, q) =>
-            (m.name || '').toLowerCase().includes(q) ||
-            (m.rank || '').toLowerCase().includes(q) ||
-            (m.squad_type || '').toLowerCase().includes(q),
+        matches: (m, q) => QuickSearch.match(
+            [m.name || '', m.rank || '', m.squad_type || ''].join(' '), q),
         sort: stormPickerSort,
         renderRow: (m) => {
             const { nameDiv, metaDiv, regDiv } = memberInfoNodes(m);

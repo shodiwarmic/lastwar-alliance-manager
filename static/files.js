@@ -169,17 +169,15 @@ function sortFiles(list) {
 
 function applyFilters() {
     const grid = document.getElementById('files-grid');
-    const q = (document.getElementById('file-search').value || '').trim().toLowerCase();
+    const q = (document.getElementById('file-search').value || '').trim();
+    const searchOk = QuickSearch.matcher(q);
     const activeTypes = Array.from(document.querySelectorAll('.type-chip.active')).map(c => c.dataset.type);
     const typeFilterOn = activeTypes.length > 0 && !activeTypes.includes('all');
     const activeTags = Array.from(document.querySelectorAll('.tag-chip.active')).map(c => c.dataset.tag);
     const tagFilterOn = activeTags.length > 0 && !activeTags.includes('all');
 
     let list = allFilesData.filter(f => {
-        if (q) {
-            const hay = ((f.title || '') + ' ' + (f.owner_name || '')).toLowerCase();
-            if (!hay.includes(q)) return false;
-        }
+        if (q && !searchOk((f.title || '') + ' ' + (f.owner_name || ''))) return false;
         if (typeFilterOn && !activeTypes.includes(f.file_type)) return false;
         if (tagFilterOn) {
             const ids = (f.tags || []).map(t => String(t.id));

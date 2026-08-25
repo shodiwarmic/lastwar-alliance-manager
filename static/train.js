@@ -372,8 +372,8 @@ async function loadRules() {
 
 // Filter the rules list by name against the search box, then render.
 function applyRuleFilters() {
-    const q = (document.getElementById('rule-search').value || '').trim().toLowerCase();
-    const filtered = q ? allRules.filter(r => (r.name || '').toLowerCase().includes(q)) : allRules;
+    const q = (document.getElementById('rule-search').value || '').trim();
+    const filtered = q ? QuickSearch.filter(allRules, q, r => r.name || '') : allRules;
     renderRules(filtered);
 }
 

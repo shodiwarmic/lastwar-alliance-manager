@@ -82,14 +82,11 @@ async function loadTemplates(type) {
 
 function renderTemplateList(type) {
     const listEl = document.getElementById(type + '-list');
-    const query = document.getElementById(type + '-search').value.trim().toLowerCase();
+    const query = document.getElementById(type + '-search').value.trim();
     const items = cache[type] || [];
 
     if (query) {
-        const filtered = items.filter(t =>
-            t.title.toLowerCase().includes(query) ||
-            t.content.toLowerCase().includes(query)
-        );
+        const filtered = QuickSearch.filter(items, query, t => t.title + ' ' + t.content);
         listEl.replaceChildren();
         const count = document.createElement('p');
         count.className = 'comms-results-count';
@@ -254,11 +251,11 @@ async function loadResources() {
 
 function renderResourceList() {
     const listEl = document.getElementById('resource-list');
-    const query = document.getElementById('resource-search').value.trim().toLowerCase();
+    const query = document.getElementById('resource-search').value.trim();
     const items = cache.resources || [];
 
     const filtered = query
-        ? items.filter(r => r.title.toLowerCase().includes(query) || r.description.toLowerCase().includes(query) || r.url.toLowerCase().includes(query))
+        ? QuickSearch.filter(items, query, r => [r.title, r.description, r.url].join(' '))
         : items;
 
     listEl.replaceChildren();
