@@ -1169,6 +1169,58 @@ These names appear in older code but are NOT defined in `styles.css`. They silen
   - `.form-input` — input/select/textarea styling (alias for `.form-group input`)
   - `.finder-*` — dropdown/head/item/name/meta/msg/err/action for the shared
     type-ahead combobox (`buildRemoteFinder` in `global.js`)
+  - `.filter-search-wrap` / `.quick-search` — the search box + clear (×) button,
+    used both inside the filter panel and standalone (`QuickSearch` in `global.js`)
+  - `.export-scope` — the "Filtered only" checkbox injected beside the export buttons
+  - `.tab-count` — row-count text beside a toolbar search ("12 of 98")
+
+### Searchable lists: use `QuickSearch`
+
+`QuickSearch` (`static/global.js`) is the shared list filter. Every member list in
+the app goes through it, and **it folds diacritics** — a roster `Pàcha` matches a
+typed `Pacha`, the same equivalence `foldName` (`namematch.go`) enforces server-side.
+Hand-rolling `.toLowerCase().includes(...)` reintroduces the mismatch and **fails the
+build** (`build-check.yml` → "Accent-folded search check").
+
+```js
+// Hide mode (default) — the row set is stable; only visibility changes.
+QuickSearch.attach({
+    input: 'thing-search', container: 'thing-tbody', rows: 'tr',
+    emptyText: 'No members match your search.',
+});
+// ...and at the END of the render fn, so the filter survives a re-render:
+QuickSearch.apply('thing-search');
+```
+
+Four rules:
+
+1. **A list with editable cells or DOM-held state MUST use hide mode.** Re-rendering
+   on every keystroke throws away unsaved input. `renderManualTable` (`season-hub.js`)
+   did exactly that: typing in the Contributions search blanked every `.contrib-input`,
+   re-fetched the values one request per keystroke, and dropped the hidden members
+   from the save payload. Hiding also means the save loops — which walk rows, not the
+   data array — still submit everyone while a filter is active.
+2. **Stamp `row.dataset.search` from the SOURCE data**, not the rendered text.
+   An attribute is never rewritten by the browser's translator, and whole-row
+   `textContent` includes rank chips and button labels, so `e` would match every row
+   with an Edit button. Store the raw value; folding happens at match time.
+3. **Call `QuickSearch.apply('<input-id>')` at the end of the render fn.** Any
+   re-render (week change, status filter, save, reload) drops the filter otherwise.
+   `apply` looks the handle up off the input, so the render fn needs no reference to it.
+4. **One search per list — never a quick search *and* the filter panel.** The panel
+   already bundles its own box. Pages using `FilterPanel` (Members roster, Train logs,
+   Files, External Alliances, Scout Report) must not gain a second one.
+
+For pages that legitimately rebuild from their data array, `QuickSearch.match(text, q)`,
+`.matcher(q)` and `.filter(list, q, pick)` are the folded predicates. `QuickSearch.widget()`
+builds the standard input + clear button for toolbars constructed in JS.
+
+**Export scope**: `_extractTableData` skips rows QuickSearch has hidden, so a
+`data-export-csv` table exports what the officer can see. A "Filtered only" checkbox
+appears beside the export buttons *only* while a filter is narrowing that table, and
+the button labels carry the row count. This is automatic for hide mode; a table
+filtered by re-rendering has no hidden rows to restore and would need to register a
+full-data provider.
 
 ### Type-ahead pickers: use `buildRemoteFinder`
 
