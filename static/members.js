@@ -1427,6 +1427,13 @@ function displayCSVModalStatus(msg) {
 function showCSVPreview(result) {
     const summaryDiv = document.getElementById('csv-summary');
     const previewDiv = document.getElementById('csv-members-preview');
+    if (!previewDiv._qsAttached) {
+        previewDiv._qsAttached = true;
+        QuickSearch.attach({
+            input: 'csv-search', container: 'csv-members-preview', rows: '.csv-member-item',
+            emptyText: 'No members match your search.',
+        });
+    }
 
     const newCount = result.detected_members.filter(m => m.is_new).length;
     const changedCount = result.detected_members.filter(m => m.rank_changed).length;
@@ -1464,6 +1471,7 @@ function showCSVPreview(result) {
 
         const item = document.createElement('div');
         item.className = `csv-member-item ${statusClass}`;
+        item.dataset.search = (member.name || '') + ' ' + (member.rank || '');
 
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -1584,6 +1592,7 @@ function showCSVPreview(result) {
     });
 
     previewDiv.replaceChildren(listDiv);
+    QuickSearch.apply('csv-search');
 
     // Remove members section
     const removeSection = document.getElementById('remove-members-section');

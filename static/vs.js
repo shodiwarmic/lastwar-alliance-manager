@@ -462,6 +462,7 @@ function buildMatchedRow(row) {
         .join(', ');
 
     const tr = document.createElement('tr');
+    tr.dataset.search = (row.original_name || '') + ' ' + (row.matched_member.name || '');
 
     const tdName = document.createElement('td');
     tdName.textContent = row.matched_member.name;
@@ -493,6 +494,7 @@ function buildUnresolvedRow(row, idx, availableMembers) {
 
     const tr = document.createElement('tr');
     tr.dataset.index = idx;
+    tr.dataset.search = row.original_name || '';
 
     const tdName = document.createElement('td');
     tdName.textContent = row.original_name;
@@ -537,6 +539,15 @@ function buildUnresolvedRow(row, idx, availableMembers) {
     return tr;
 }
 
+QuickSearch.attach({
+    input: 'matched-search', container: 'matched-body', rows: 'tr',
+    emptyText: 'No names match your search.',
+});
+QuickSearch.attach({
+    input: 'unresolved-search', container: 'unresolved-body', rows: 'tr',
+    emptyText: 'No names match your search.',
+});
+
 function renderPreviewModal(data) {
     const matchedBody = document.getElementById('matched-body');
     const unresolvedBody = document.getElementById('unresolved-body');
@@ -553,6 +564,8 @@ function renderPreviewModal(data) {
     const availableMembers = allMembers.filter(m => !matchedIds.includes(m.id));
     const unresolvedRows = (data.unresolved || []).map((row, idx) => buildUnresolvedRow(row, idx, availableMembers));
     unresolvedBody.replaceChildren(...unresolvedRows);
+    QuickSearch.apply('matched-search');
+    QuickSearch.apply('unresolved-search');
 
     document.getElementById('import-preview-modal').style.display = 'flex';
 }

@@ -887,6 +887,15 @@
             .finally(() => clearButtonLoading(btn));
     }
 
+    QuickSearch.attach({
+        input: 'contrib-preview-search', container: 'contrib-preview-tbody', rows: 'tr',
+        emptyText: 'No names match your search.',
+    });
+    QuickSearch.attach({
+        input: 'contrib-unresolved-search', container: 'contrib-unresolved-list', rows: 'tr',
+        emptyText: 'No names match your search.',
+    });
+
     function renderContribPreview(data) {
         const card = document.getElementById('contrib-preview-card');
         const summary = document.getElementById('contrib-preview-summary');
@@ -903,6 +912,7 @@
 
         const rows = matched.map(row => {
             const tr = document.createElement('tr');
+            tr.dataset.search = (row.original_name || '') + ' ' + (row.member_name || '');
             const tdOcr = document.createElement('td');
             tdOcr.textContent = row.original_name;
             const tdMember = document.createElement('td');
@@ -915,6 +925,7 @@
             return tr;
         });
         if (tbody) tbody.replaceChildren(...rows);
+        QuickSearch.apply('contrib-preview-search');
 
         if (unresolvedWrap && unresolvedList) {
             if (unresolved.length > 0) {
@@ -922,6 +933,7 @@
                 const rows = unresolved.map((row, idx) => {
                     const tr = document.createElement('tr');
                     tr.dataset.idx = idx;
+                    tr.dataset.search = row.original_name || '';
 
                     const tdName = document.createElement('td');
                     tdName.textContent = row.original_name;
@@ -964,6 +976,7 @@
                     return tr;
                 });
                 unresolvedList.replaceChildren(...rows);
+                QuickSearch.apply('contrib-unresolved-search');
             } else {
                 unresolvedWrap.style.display = 'none';
             }

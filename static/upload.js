@@ -335,6 +335,7 @@ function buildMatchedRow(row) {
     const updates = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`).join(', ');
 
     const tr = document.createElement('tr');
+    tr.dataset.search = (row.original_name || '') + ' ' + (row.matched_member.name || '');
 
     const tdName = document.createElement('td');
     tdName.textContent = row.matched_member.name;
@@ -357,6 +358,7 @@ function buildReviewRow(row, idx, bucketType, preSelectedId) {
 
     const tr = document.createElement('tr');
     tr.dataset.index = idx;
+    tr.dataset.search = row.original_name || '';
     tr.dataset.bucket = bucketType;
 
     const tdName = document.createElement('td');
@@ -411,6 +413,15 @@ function buildReviewRow(row, idx, bucketType, preSelectedId) {
     return tr;
 }
 
+QuickSearch.attach({
+    input: 'matched-search', container: 'matched-body', rows: 'tr',
+    emptyText: 'No names match your search.',
+});
+QuickSearch.attach({
+    input: 'unresolved-search', container: 'unresolved-body', rows: 'tr',
+    emptyText: 'No names match your search.',
+});
+
 function renderPreviewModal(data) {
     const matchedBody = document.getElementById('matched-body');
     const unresolvedBody = document.getElementById('unresolved-body');
@@ -444,6 +455,9 @@ function renderPreviewModal(data) {
             unresolvedBody.appendChild(buildReviewRow(row, idx, 'unresolved', null));
         });
     }
+
+    QuickSearch.apply('matched-search');
+    QuickSearch.apply('unresolved-search');
 
     const previewModal = document.getElementById('import-preview-modal');
     previewModal.style.display = 'flex';

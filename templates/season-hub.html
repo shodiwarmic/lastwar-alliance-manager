@@ -439,6 +439,10 @@
         <div id="contrib-import-status" class="status-msg"></div>
         <div id="contrib-preview-card" style="display:none">
             <p id="contrib-preview-summary"></p>
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="contrib-preview-search" class="form-input" placeholder="Search names…" aria-label="Search names…" autocomplete="off">
+                <button type="button" id="contrib-preview-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
             <table class="data-table">
                 <thead>
                     <tr><th>OCR Name</th><th>Matched Member</th><th>Match Type</th><th>Points</th></tr>
@@ -447,6 +451,10 @@
             </table>
             <div id="contrib-unresolved-wrap" style="display:none">
                 <p class="contrib-unresolved-title">Unresolved — map to a member or ignore:</p>
+                <div class="filter-search-wrap quick-search">
+                    <input type="text" id="contrib-unresolved-search" class="form-input" placeholder="Search names…" aria-label="Search names…" autocomplete="off">
+                    <button type="button" id="contrib-unresolved-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+                </div>
                 <table class="data-table">
                     <thead><tr><th>OCR Name</th><th>Points</th><th>Map to Member</th><th>Save Alias</th></tr></thead>
                     <tbody id="contrib-unresolved-list"></tbody>
