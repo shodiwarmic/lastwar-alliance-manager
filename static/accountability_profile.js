@@ -136,6 +136,7 @@ function renderStrikes(strikes) {
 
         const tdReason = document.createElement('td');
         tdReason.textContent = s.reason;
+        if (s.reason) TranslateBlock.attach(tdReason, s.reason);
 
         const tdDate = document.createElement('td');
         tdDate.textContent = s.ref_date || s.created_at.slice(0, 10);
@@ -258,6 +259,7 @@ function renderStormHistory(stormHistory) {
         tdStatus.appendChild(statusSpan);
         const tdExcuse = document.createElement('td');
         tdExcuse.textContent = s.excuse_reason || '—';
+        if (s.excuse_reason) TranslateBlock.attach(tdExcuse, s.excuse_reason);
         const tdBy = document.createElement('td');
         tdBy.textContent = s.recorded_by || '—';
         tr.append(tdDate, tdStatus, tdExcuse, tdBy);

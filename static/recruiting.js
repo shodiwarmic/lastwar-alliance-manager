@@ -494,6 +494,7 @@ function buildProspectCard(p, typeContext) {
         const notesEl = document.createElement('p');
         notesEl.className = 'prospect-notes';
         notesEl.textContent = p.notes;
+        TranslateBlock.attach(notesEl, p.notes);
         card.appendChild(notesEl);
     }
 

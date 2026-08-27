@@ -324,6 +324,8 @@
   <script src="{{asset "/global.js"}}"></script>
   <script src="{{asset "/csrf.js"}}"></script>
   <script src="{{asset "/modal-focus.js"}}"></script>
+  <!-- After global.js: TranslateBlock builds its control with svgIcon(). -->
+  <script src="{{asset "/translate.js"}}"></script>
 
   {{block "scripts" .}}{{end}}
 </body>

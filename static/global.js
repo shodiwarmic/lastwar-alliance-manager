@@ -167,7 +167,12 @@ function _extractTableData(tableEl, scope) {
             if (skipCols.has(i)) return;
             const input = td.querySelector('input, select, textarea');
             let val;
-            if (input) {
+            if (td.dataset.exportText !== undefined) {
+                // Source text stamped by whatever rendered the cell -- currently
+                // translate.js, whose control can swap the visible text for a
+                // translation. The export must carry the original either way.
+                val = td.dataset.exportText;
+            } else if (input) {
                 val = input.type === 'checkbox' ? (input.checked ? 'Yes' : 'No') : input.value;
             } else {
                 val = td.textContent;
