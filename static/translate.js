@@ -42,6 +42,14 @@
     // back, which is what an unguarded await gives you.
     const STALL_MS = 45000;
 
+    // Language pairs that failed to become usable this session. A pack that will
+    // not download fails for every block in that language, so one 45-second wait
+    // is informative and ten in a row is just punishment. Blocks rendered after a
+    // failure stop offering the control for that pair; blocks already on screen
+    // keep theirs, so a deliberate retry is still one click away.
+    const failedPairs = new Set();
+    const pairKey = src => src + '>' + TARGET;
+
     let detectorPromise = null;
     let detectorChecked = false;
 
@@ -183,6 +191,7 @@
                 sourceLang = await detectLang(text, detector);
                 if (sourceLang === TARGET) return;      // nothing to offer
                 if (sourceLang) {
+                    if (failedPairs.has(pairKey(sourceLang))) return;
                     if ((await pairAvailability(sourceLang)) === 'unavailable') return;
                     btn.title = 'Translate from ' + langName(sourceLang);
                 }
@@ -275,7 +284,10 @@
                 // started. The pack may still arrive, so this is worth retrying
                 // rather than reporting as a permanent failure.
                 const stalled = err && err.message === 'stalled';
-                if (stalled) aborter.abort();
+                if (stalled) {
+                    aborter.abort();
+                    if (sourceLang) failedPairs.add(pairKey(sourceLang));
+                }
                 note(stalled
                     ? 'Still preparing this language. Try again in a moment.'
                     : 'Translation unavailable.');
