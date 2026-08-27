@@ -227,6 +227,8 @@
             // it; the session would stay half-created and hold the model. Both
             // engines take a signal, so a stall can actually release it.
             const aborter = new AbortController();
+            const startedAt = performance.now();
+            let progressEvents = 0;
 
             try {
                 if (!sourceLang) {
@@ -259,6 +261,7 @@
                     signal: aborter.signal,
                     monitor(m) {
                         m.addEventListener('downloadprogress', e => {
+                            progressEvents++;
                             if (guard) guard.bump();
                             setLabel(btn, 'Downloading ' + progressPct(e) + '%');
                         });
@@ -292,7 +295,35 @@
                     ? 'Still preparing this language. Try again in a moment.'
                     : 'Translation unavailable.');
                 setLabel(btn, 'Translate');
-                console.warn('[translate] ' + (sourceLang || '?') + '→' + TARGET + ':', err);
+                // "stalled" on its own does not distinguish a pair the engine
+                // cannot supply from one it accepted and never began downloading.
+                // Report enough to tell them apart without anyone having to run a
+                // console snippet by hand.
+                let pairState = 'n/a';
+                let detectorState = 'n/a';
+                try {
+                    if (sourceLang) {
+                        pairState = await Translator.availability({
+                            sourceLanguage: sourceLang, targetLanguage: TARGET,
+                        });
+                    }
+                } catch (e) { pairState = 'threw: ' + e.name; }
+                try {
+                    detectorState = await LanguageDetector.availability();
+                } catch (e) { detectorState = 'threw: ' + e.name; }
+
+                console.warn('[translate] FAILED — copy this whole object:', {
+                    pair: (sourceLang || '?') + '->' + TARGET,
+                    error: err && (err.name + ': ' + err.message),
+                    pairAvailability: pairState,
+                    detectorAvailability: detectorState,
+                    progressEvents,
+                    elapsedMs: Math.round(performance.now() - startedAt),
+                    secureContext: window.isSecureContext,
+                    ua: navigator.userAgentData
+                        ? JSON.stringify(navigator.userAgentData.brands)
+                        : navigator.userAgent,
+                });
             } finally {
                 busy = false;
                 btn.disabled = false;
