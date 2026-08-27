@@ -747,6 +747,86 @@ const CAN_MANAGE = cfg.canManage === 'true';
 
 If you need layout.html-level JS (e.g. mobile nav handlers), add it to `static/global.js` — not as an inline script.
 
+### Browser translation — never build a payload from rendered DOM text
+
+The app has no i18n framework; non-English speakers use the browser's built-in
+translation (Chrome/Edge/Safari). That rewrites **text nodes in place**, so any
+value read back out of the DOM is whatever the translator last put there.
+
+The corollary is that **attributes are safe** — the translator never rewrites
+them. Quick Search relies on exactly this, matching on `row.dataset.search`
+rather than `textContent`; see the comment above `QuickSearch` in
+`static/global.js` and rule 2 of "Searchable lists" below. Same rule, two
+readings: what the translator can reach is text nodes, not attributes.
+
+```javascript
+// Wrong — copies/saves/exports the browser's translation
+element.textContent = generatedText;
+// ...later...
+save(element.textContent);
+
+// Correct — the rendered node is display-only
+let sourceText = generatedText;
+element.textContent = sourceText;
+// ...later...
+save(sourceText);
+```
+
+Retain the original value in a variable (or re-read the data object that
+produced it) and build every clipboard copy, save body, and export from there.
+This is already the pattern in `copyWithVariables` (`mail.js`), which copies
+from the fetched template `content` and from `input.value` — never from
+rendered text. `storm.js`'s battle mail was the exception and now holds
+`generatedMailText`.
+
+Form controls are the mirror image of the same trap: **never render user
+content into a form control server-side.**
+
+```html
+<!-- Wrong — a translatable text node; saving the form writes the translation back -->
+<textarea>{{.Notes}}</textarea>
+
+<!-- Correct — ship it empty and populate from JS -->
+<textarea id="notes-field"></textarea>
+```
+
+```javascript
+document.getElementById('notes-field').value = data.notes;
+```
+
+`.value` set from JS is not a text node and is not translated, so the round
+trip is safe. Server-rendered `<textarea>{{...}}</textarea>` content is, and
+overwriting the original is silent — no error, no log line. `build-check.yml`
+fails the build on that pattern.
+
+### `translate="no"` on identifier surfaces, not on prose
+
+`translate="no"` is inherited by descendants and can be overridden by
+`translate="yes"` further down, so mark a container once rather than every leaf.
+
+Apply it to surfaces whose text is an **identifier or a payload** — player and
+alliance names, tags, anything pasted into the game verbatim, and every table
+the CSV/XLSX helper can reach. `_extractTableData` (`global.js`) reads
+`th.textContent` / `td.textContent`, so a translated table exports translated
+member names that no longer match on re-import. **Any new table given
+`data-export-csv` must also carry `translate="no"`** — `build-check.yml`
+enforces this.
+
+Do **not** apply it to member-written prose — shout-out notes, mail bodies,
+ally/prospect notes, strike reasons, reward notes. That content is exactly what
+a non-English speaker needs translated. Where prose sits inside a marked table,
+opt the cell back in (see the Note cell in `renderRewardsTable`, `season-hub.js`).
+
+Two things that look like they need it but don't:
+
+- **A table built detached from the document** — the translator never sees it.
+  `buildExportTable` (`members.js`) constructs its export table at click time
+  from the data array, so that export is already safe.
+- **`<input>` / `<select>` values** — `input.value` and `option.value` are not
+  translated. Only `option.text` is, which is why reading `.value` is correct
+  and `storm.js`'s registration table reading `option.text` for its time-slot
+  headers is fine (display text, not payload).
+
 ### One structural width breakpoint — everything else is fluid
 
 The site has a **single** width breakpoint: `@media (max-width: 768px)` (and its

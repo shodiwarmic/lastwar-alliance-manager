@@ -134,8 +134,9 @@
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-mail"/></svg> Battle Mail</h3>
             <button class="btn btn-primary" id="btn-generate-mail">Generate Mail</button>
             <div id="mail-output" class="hidden">
-                <button class="btn btn-secondary" id="btn-copy-mail"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-copy"/></svg> Copy to Clipboard</button>
-                <pre id="mail-content"></pre>
+                <button class="btn btn-secondary" id="btn-copy-mail"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-copy"/></svg> <span class="btn-copy-mail-label">Copy to Clipboard</span></button>
+                <!-- translate="no": the mail is pasted into the game verbatim. -->
+                <pre id="mail-content" translate="no"></pre>
             </div>
         </section>
     </div>

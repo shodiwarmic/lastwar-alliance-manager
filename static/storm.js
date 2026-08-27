@@ -108,6 +108,9 @@ let dragSourceGroupId = null;
 let dragSourceBuildingId = null;
 let dragSourceIsDirect = false;
 let slotPickers = [];   // inline member-pickers mounted in the current render
+// Source of truth for the generated battle mail. The <pre> that displays it is a
+// translatable text node, so the copy handler must read from here, never from the DOM.
+let generatedMailText = '';
 
 // ── Error display ─────────────────────────────────────────────────
 function showError(msg) {
@@ -1327,25 +1330,32 @@ function generateMail() {
     mail += `💪 LET'S WIN THIS!\n`;
     mail += `═══════════════════════════════════════\n`;
 
+    generatedMailText = mail;
+
     const mailContent = document.getElementById('mail-content');
     const mailOutput = document.getElementById('mail-output');
     if (mailContent && mailOutput) {
-        mailContent.textContent = mail;
+        mailContent.textContent = mail;   // display only — never read back
         mailOutput.classList.remove('hidden');
         mailOutput.scrollIntoView({ behavior: 'smooth' });
     }
 }
 
 async function copyMail() {
-    const mailContent = document.getElementById('mail-content');
-    if (!mailContent) return;
+    // Copy the generated source text, not #mail-content's textContent: on a
+    // translated page the rendered text node carries the browser's translation,
+    // which would put a translated battle mail into the game.
+    if (!generatedMailText) return;
     const btn = document.getElementById('btn-copy-mail');
     try {
-        await navigator.clipboard.writeText(mailContent.textContent);
+        await navigator.clipboard.writeText(generatedMailText);
         if (btn) {
-            const orig = btn.textContent;
-            btn.textContent = '✓ Copied!';
-            setTimeout(() => { btn.textContent = orig; }, 2000);
+            const label = btn.querySelector('.btn-copy-mail-label');
+            if (label) {
+                const orig = label.textContent;
+                label.textContent = 'Copied!';
+                setTimeout(() => { label.textContent = orig; }, 2000);
+            }
         }
     } catch {
         showError('Copy failed — please select the text and copy manually.');

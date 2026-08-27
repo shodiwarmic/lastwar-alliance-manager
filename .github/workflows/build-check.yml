@@ -93,6 +93,49 @@ jobs:
           print('Versioned static asset check passed.')
           EOF
 
+      # Browser translation rewrites text nodes in place, so anything read back
+      # out of the DOM is whatever the translator put there.
+      # See CLAUDE.md -> Known gotchas -> "Browser translation".
+      # Runs as a step of this job rather than its own job: the required status
+      # checks in branch protection are pinned to job names, and a new job would
+      # silently not gate until those are updated.
+      - name: Translation-safety check
+        run: |
+          python3 - <<'EOF'
+          import pathlib, re, sys
+
+          # Server-rendered content inside a <textarea> is a translatable text
+          # node; saving the form writes the translation back over the data.
+          # <select> is deliberately not checked -- its saved value comes from
+          # option.value, an attribute, which is never translated, and templates
+          # legitimately wrap <option> lists in {{if}} blocks.
+          TEXTAREA = re.compile(r'<textarea\b[^>]*>\s*\{\{')
+
+          # _extractTableData (static/global.js) exports from td.textContent, so a
+          # translated exportable table exports translated member names that no
+          # longer match on re-import.
+          TABLE_TAG = re.compile(r'<table\b[^>]*>')
+
+          fails = []
+          for path in sorted(pathlib.Path('templates').rglob('*.html')):
+              src = path.read_text(encoding='utf-8')
+              for m in TEXTAREA.finditer(src):
+                  fails.append(f'{path}:{src.count(chr(10), 0, m.start()) + 1}: '
+                               'server-rendered content inside <textarea>')
+              for m in TABLE_TAG.finditer(src):
+                  if 'data-export-csv' in m.group(0) and 'translate="no"' not in m.group(0):
+                      fails.append(f'{path}:{src.count(chr(10), 0, m.start()) + 1}: '
+                                   'exportable table is missing translate="no"')
+
+          if fails:
+              print('Translation-safety check failed:\n')
+              for f in fails:
+                  print('  ' + f)
+              print('\nSee CLAUDE.md -> Known gotchas -> "Browser translation".')
+              sys.exit(1)
+          print('Translation-safety check passed.')
+          EOF
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
