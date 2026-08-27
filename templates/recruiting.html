@@ -7,11 +7,11 @@
 {{end}}
 
 {{define "head_tags"}}
-<link rel="stylesheet" href="/job-progress.css">
-<link rel="stylesheet" href="/recruiting.css">
+<link rel="stylesheet" href="{{asset "/job-progress.css"}}">
+<link rel="stylesheet" href="{{asset "/recruiting.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
-<link rel="stylesheet" href="/choices-theme.css">
+<link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
 {{end}}
@@ -346,6 +346,6 @@
      data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}"
      data-has-former-tab="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
      hidden></div>
-<script src="/job-progress.js"></script>
-<script src="/recruiting.js"></script>
+<script src="{{asset "/job-progress.js"}}"></script>
+<script src="{{asset "/recruiting.js"}}"></script>
 {{end}}

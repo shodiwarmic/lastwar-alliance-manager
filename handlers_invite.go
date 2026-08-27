@@ -269,7 +269,9 @@ func claimInvite(w http.ResponseWriter, r *http.Request) {
 }
 
 func renderInvitePage(w http.ResponseWriter, data InvitePageData) {
-	t, err := template.ParseFiles("templates/invite.html")
+	noStoreHTML(w)
+
+	t, err := parseTemplates("templates/invite.html")
 	if err != nil {
 		slog.Error("failed to parse invite template", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

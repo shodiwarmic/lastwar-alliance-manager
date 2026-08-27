@@ -7,10 +7,10 @@
 {{end}}
 
 {{define "head_tags"}}
-<link rel="stylesheet" href="/job-progress.css">
-    <link rel="stylesheet" href="/filter-panel.css">
-    <link rel="stylesheet" href="/external-alliances.css">
-    <link rel="stylesheet" href="/alliance-report.css">
+<link rel="stylesheet" href="{{asset "/job-progress.css"}}">
+    <link rel="stylesheet" href="{{asset "/filter-panel.css"}}">
+    <link rel="stylesheet" href="{{asset "/external-alliances.css"}}">
+    <link rel="stylesheet" href="{{asset "/alliance-report.css"}}">
 {{end}}
 
 {{define "content"}}
@@ -279,9 +279,9 @@
      data-our-server-id="{{.OurServerID}}" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
-<script src="/job-progress.js"></script>
-<script src="/tabs.js"></script>
-<script src="/filter-panel.js"></script>
-<script src="/external-alliances.js"></script>
-<script src="/alliance-report.js"></script>
+<script src="{{asset "/job-progress.js"}}"></script>
+<script src="{{asset "/tabs.js"}}"></script>
+<script src="{{asset "/filter-panel.js"}}"></script>
+<script src="{{asset "/external-alliances.js"}}"></script>
+<script src="{{asset "/alliance-report.js"}}"></script>
 {{end}}

@@ -7,9 +7,9 @@
 {{end}}
 
 {{define "head_tags"}}
-<link rel="stylesheet" href="/activity.css">
+<link rel="stylesheet" href="{{asset "/activity.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
-<link rel="stylesheet" href="/choices-theme.css">
+<link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
 {{end}}
 
@@ -51,5 +51,5 @@
 
 {{define "scripts"}}
 <div id="page-config" data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}" hidden></div>
-<script src="/activity.js"></script>
+<script src="{{asset "/activity.js"}}"></script>
 {{end}}

@@ -142,5 +142,5 @@
     data-username="{{.Username}}"
     data-can-manage="{{if .Permissions.ManageDyno}}true{{else}}false{{end}}"
     hidden></div>
-<script src="dyno.js"></script>
+<script src="{{asset "/dyno.js"}}"></script>
 {{end}}

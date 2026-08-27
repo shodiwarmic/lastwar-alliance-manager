@@ -6,8 +6,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/styles.css">
-  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="{{asset "/styles.css"}}">
+  <script src="{{asset "/theme.js"}}"></script>
   {{block "head_tags" .}}{{end}}
 </head>
 <body>
@@ -321,9 +321,9 @@
        data-can-manage-members="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
        hidden></div>
 
-  <script src="/global.js"></script>
-  <script src="/csrf.js"></script>
-  <script src="/modal-focus.js"></script>
+  <script src="{{asset "/global.js"}}"></script>
+  <script src="{{asset "/csrf.js"}}"></script>
+  <script src="{{asset "/modal-focus.js"}}"></script>
 
   {{block "scripts" .}}{{end}}
 </body>

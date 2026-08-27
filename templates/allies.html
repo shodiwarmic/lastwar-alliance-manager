@@ -7,8 +7,8 @@
 {{end}}
 
 {{define "head_tags"}}
-<link rel="stylesheet" href="/job-progress.css">
-<link rel="stylesheet" href="/allies.css">
+<link rel="stylesheet" href="{{asset "/job-progress.css"}}">
+<link rel="stylesheet" href="{{asset "/allies.css"}}">
 {{end}}
 
 {{define "content"}}
@@ -99,8 +99,8 @@
 <div id="page-config"
      data-can-manage="{{if .Permissions.ManageAllies}}true{{else}}false{{end}}"
      data-our-server-id="{{.OurServerID}}" hidden></div>
-<script src="/job-progress.js"></script>
-<script src="/allies.js"></script>
+<script src="{{asset "/job-progress.js"}}"></script>
+<script src="{{asset "/allies.js"}}"></script>
 {{end}}
 
 {{define "modals"}}

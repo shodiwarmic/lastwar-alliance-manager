@@ -14,9 +14,9 @@
 3. **Routes** — register in `main.go` following the existing pattern. UI page routes go in the `pages` map and `pagePermissions` map.
 4. **Handler file** — one file per feature, e.g. `handlers_feature.go`.
 5. **Template** — `templates/feature.html`. Define `header_text` (page-specific title, not the app title), `head_tags`, `content`, `scripts`, and `modals` blocks. All modals go in `{{define "modals"}}` — not inside `{{define "content"}}`.
-6. **CSS** — `static/feature.css`, linked via `{{define "head_tags"}}`. Never embed `<style>` blocks in templates.
+6. **CSS** — `static/feature.css`, linked via `{{define "head_tags"}}` as `<link rel="stylesheet" href="{{asset "/feature.css"}}">`. The `{{asset}}` wrapper is required — see "Static asset cache busting". Never embed `<style>` blocks in templates.
 6a. **Global utility check** — before adding any CSS to your page file, check if `styles.css` already provides what you need: `.card`/`.card-header`, `.data-table`, `.filter-chip`, `.tab-toolbar`, `.status-msg`, `.badge-*`, `.btn`, `.form-input`, `.tab-bar`, `.tab-btn`. For metric tiles use a grid of `.card`s (see DESIGN_STANDARD.md → Cards), not a bespoke `.stat-card`. Page CSS is for page-specific layout only.
-7. **JS** — `static/feature.js`, loaded in `{{define "scripts"}}`.
+7. **JS** — `static/feature.js`, loaded in `{{define "scripts"}}` as `<script src="{{asset "/feature.js"}}"></script>`. The `{{asset}}` wrapper is required — see "Static asset cache busting".
 8. **Activity log** — call `logActivity` for every write operation (see section below).
 
 ## Activity logging
@@ -961,7 +961,7 @@ For bad-request (400) errors from JSON decode failures, use `"Invalid request bo
 | Block | Purpose |
 |-------|---------|
 | `header_text` | `<h1>emoji Title</h1><h2>Subtitle</h2>` — matches page header style |
-| `head_tags` | Link page CSS: `<link rel="stylesheet" href="/feature.css">` |
+| `head_tags` | Link page CSS: `<link rel="stylesheet" href="{{asset "/feature.css"}}">` |
 | `content` | Main page body |
 | `scripts` | JS includes + inline `window.*` config vars |
 | `modals` | Modal HTML — rendered outside the container div |
@@ -1264,6 +1264,58 @@ before enabling `PRODUCTION=true`.
 
 Keep `README.md` up to date whenever a user-facing feature is added, changed, or removed. Each feature should have an entry under the appropriate `###` section in the Features block, written in the same style as existing entries (bullet points, bolded lead phrase, plain-English description of what it does and its permission model). Do not document internal implementation details — README is for end users and operators.
 
+## Static asset cache busting
+
+Every same-origin `.js` / `.css` reference in a template goes through the `{{asset}}`
+template function, which appends a content-hash query token:
+
+```html
+<link rel="stylesheet" href="{{asset "/feature.css"}}">
+<script src="{{asset "/feature.js"}}"></script>
+<!-- renders as /feature.css?v=a1b2c3d4 -->
+```
+
+**Never write a bare `src="/foo.js"` or `href="/foo.css"`** — `build-check.yml`'s "Versioned
+static asset check" fails the PR, and it also fails an `{{asset}}` naming a file that isn't in
+`static/`.
+
+The token is the first 8 hex of the file's SHA-256, built once at boot by `buildAssetHashes()`
+(`assets.go`) into a map that is **written before any request-serving goroutine exists and
+read-only thereafter** — that ordering is its only synchronisation, so a runtime rebuild
+(SIGHUP, file watcher) would need an `atomic.Pointer` first.
+
+Because the token follows the *bytes*, the URL changes if and only if the content changes: a
+restart busts nothing, and a deploy that touches one file re-downloads one file. This is
+deliberately not a single global token stamped at startup — a restart is not a new file
+version, and a boot timestamp would re-download all 70 files on every crash-loop and
+`docker compose restart`.
+
+**New template parse sites must use `parseTemplates()` (`assets.go`), never
+`template.ParseFiles`.** `html/template` rejects an unknown function at *parse* time, so a
+site that misses the FuncMap 500s on its first request. `parseTemplates` names the template
+after `filepath.Base(files[0])`, which is what keeps both `t.ExecuteTemplate(w, "layout.html",
+data)` and the standalone pages' `t.Execute(w, data)` working.
+
+**Rendered HTML is `Cache-Control: no-store`** via `noStoreHTML()`, called *before*
+`w.WriteHeader` (a header set afterwards is silently dropped — that is why 403 and 404 go
+through `renderTemplateStatus`). Without it a cached page would carry stale `?v=` tokens and
+defeat the whole scheme.
+
+**Failing to version something is safe, just slower.** The static handler grants
+`max-age=31536000, immutable` only when the request's `?v=` matches the file's current hash;
+anything else gets `no-cache` plus an `ETag`, i.e. a revalidation round-trip and a 304 — never
+a stale file. Verifying the token is also what makes `immutable` safe to promise: a naive "any
+`?v=` means immutable" would pin new bytes under an old token for a year mid-rollout.
+
+**`icons.svg` is deliberately NOT versioned.** `svgIcon()` (`static/global.js`) builds its
+`<use href="/icons.svg#icon-…">` in JS, so versioning the 266 template refs without also
+plumbing a token into that function would make the two disagree and fetch the 27 KB sprite
+twice per page. It rides the `no-cache` + `ETag` fallback instead: one ~200-byte 304 per page,
+body never re-downloaded.
+
+Nothing here needs a `Caddyfile`, `Dockerfile`, or CI build-arg change — Caddy only adds its
+named security headers and passes `Cache-Control` / `ETag` through untouched.
+
 ## Icons
 
 All icons are **Tabler Icons** (outline set), delivered as a sprite at `static/icons.svg`.
@@ -1284,6 +1336,16 @@ Migrations run automatically on startup via `initDB()`.
 
 **Static asset caching:** in non-production (`PRODUCTION != "true"`) the server sends
 `Cache-Control: no-store` for `static/` files (see `main.go`), so JS/CSS/SVG edits reload
-without stale-cache issues. Production is unaffected. Templates and `static/` are served from
+without stale-cache issues. In production those files are content-hashed and cached
+far-future instead — see "Static asset cache busting". Templates and `static/` are served from
 disk (dev volume mounts), so `.html`/`.css`/`.js`/`.svg` edits show on refresh with no rebuild;
 Go changes still need `docker compose up -d --build` (or restart `go run .`).
+
+Because dev deliberately disables caching, **cache behaviour cannot be tested in dev**. To
+exercise the real production headers locally, run with `PRODUCTION=true` against a scratch DB
+on a spare port:
+
+```bash
+PORT=8099 PRODUCTION=true SESSION_KEY=<32+ chars> DATABASE_PATH=/tmp/scratch.db go run .
+curl -sI localhost:8099/styles.css   # inspect Cache-Control / ETag
+```

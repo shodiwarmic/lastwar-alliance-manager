@@ -21,6 +21,15 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 )
 
+// staticDir is the on-disk directory served at the root URL prefix, so
+// static/styles.css is reachable as /styles.css (there is no /static/ prefix).
+const staticDir = "static"
+
+// isProduction reports whether the app is running in its production
+// deployment. It gates browser-caching policy: dev bind-mounts ./static, so
+// edits must always win there, while production caches aggressively.
+func isProduction() bool { return os.Getenv("PRODUCTION") == "true" }
+
 // getPageData loads the current user from the database and populates PageData.
 // The session cookie is only used to identify the user (user_id); all
 // authorization data is sourced live from the DB.
@@ -99,13 +108,53 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	return data
 }
 
+// noStoreHTML marks a rendered HTML page as never-cacheable.
+//
+// Nothing else in this app sets Cache-Control on an HTML response, so without
+// this the browser applies RFC 9111 heuristic freshness (roughly 10% of the
+// page's age) and can serve a cached copy for days without revalidating. Two
+// reasons that is wrong here:
+//
+//  1. A cached page pins the asset URLs inside it. Once those URLs carry a
+//     cache-busting token, a stale page carries stale tokens and defeats the
+//     whole scheme.
+//  2. These pages are permission-filtered per user and carry a live CSRF
+//     token, so a copy left on a shared machine's disk is a genuine leak.
+//
+// no-store rather than no-cache is deliberate: it also keeps the page out of
+// the back/forward cache, so Back re-renders rather than restoring stale
+// numbers.
+//
+// MUST be called before w.WriteHeader — headers set afterwards are dropped.
+func noStoreHTML(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+}
+
 // renderTemplate parses the shared layout and the specific page together
 func renderTemplate(w http.ResponseWriter, r *http.Request, tmplName string, data PageData) {
-	t, err := template.ParseFiles("templates/layout.html", "templates/"+tmplName)
+	renderTemplateStatus(w, r, tmplName, 0, data)
+}
+
+// renderTemplateStatus renders layout.html + tmplName with an explicit status
+// code. status == 0 means "let the first Write imply 200", which keeps the
+// error paths below able to emit a real 500 rather than a 200 carrying an
+// error body.
+//
+// Callers needing a non-200 status MUST come through here rather than calling
+// w.WriteHeader themselves: a header set after WriteHeader is silently
+// dropped, which is what left the 403 and 404 pages cacheable.
+func renderTemplateStatus(w http.ResponseWriter, r *http.Request, tmplName string, status int, data PageData) {
+	noStoreHTML(w) // before the parse, so an error response carries it too
+
+	t, err := parseTemplates("templates/layout.html", "templates/"+tmplName)
 	if err != nil {
 		slog.Error("Template parsing error", "error", err, "template", tmplName)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
+	}
+
+	if status != 0 {
+		w.WriteHeader(status)
 	}
 
 	err = t.ExecuteTemplate(w, "layout.html", data)
@@ -125,6 +174,10 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 	slog.Info("Initializing Alliance Manager server")
+
+	// Hash static/ before anything can serve a request: assetHashes is written
+	// here and read-only afterwards, which is what makes it lock-free.
+	buildAssetHashes()
 
 	// 3. Initialize Database & Sessions
 	initSessionStore()
@@ -528,8 +581,7 @@ func main() {
 	// 1. Custom 404 Handler
 	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data := getPageData(r, "404 Not Found - Alliance Manager", "404")
-		w.WriteHeader(http.StatusNotFound)
-		renderTemplate(w, r, "404.html", data)
+		renderTemplateStatus(w, r, "404.html", http.StatusNotFound, data)
 	})
 
 	router.HandleFunc("/", dashboardHandler).Methods("GET")
@@ -572,7 +624,9 @@ func main() {
 			CSRFToken:    csrf.TemplateField(r),
 		}
 
-		t, err := template.ParseFiles("templates/login.html")
+		noStoreHTML(w)
+
+		t, err := parseTemplates("templates/login.html")
 		if err != nil {
 			slog.Error("Template parsing error", "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -640,8 +694,7 @@ func main() {
 			if hasAccess, exists := pagePermissions[tmpl]; exists && !hasAccess {
 				data.Title = "403 Access Denied"
 				data.ActivePage = "403"
-				w.WriteHeader(http.StatusForbidden)
-				renderTemplate(w, r, "403.html", data)
+				renderTemplateStatus(w, r, "403.html", http.StatusForbidden, data)
 				return
 			}
 
@@ -654,27 +707,68 @@ func main() {
 	}
 
 	// --- Serve Static Files (with Custom 404 Catch) ---
+	// Hoisted out of the handler: the old code allocated a fresh file handler
+	// on every single request.
+	staticFiles := http.FileServer(http.Dir(staticDir))
 	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Clean the path to prevent directory traversal attacks
 		cleanPath := filepath.Clean(r.URL.Path)
-		fullPath := filepath.Join("static", cleanPath)
+		fullPath := filepath.Join(staticDir, cleanPath)
 
-		// Check if the file actually exists in the /static folder
+		// Check if the file actually exists in the /static folder.
+		//
+		// Note `err != nil`, not `os.IsNotExist(err)`: a stat failure for any
+		// other reason (ENAMETOOLONG on an overlong URL segment, ELOOP,
+		// EACCES) leaves info nil, and `||` still evaluates info.IsDir() when
+		// the left operand is false — which nil-derefs.
 		info, err := os.Stat(fullPath)
-		if os.IsNotExist(err) || info.IsDir() {
+		if err != nil || info.IsDir() {
 			// It's not a real file, so trigger our custom 404 template!
 			router.NotFoundHandler.ServeHTTP(w, r)
 			return
 		}
 
-		// The file exists (like style.css or app.js), serve it normally.
-		// In the test/dev environment (PRODUCTION != "true") disable browser
-		// caching so edited JS/CSS/SVG always reload — avoids stale assets,
-		// especially on mobile. Production is unaffected.
-		if os.Getenv("PRODUCTION") != "true" {
+		if !isProduction() {
+			// Dev/test: ./static is bind-mounted, so an edited JS/CSS/SVG must
+			// always win — avoids stale assets, especially on mobile.
 			w.Header().Set("Cache-Control", "no-store, must-revalidate")
+			staticFiles.ServeHTTP(w, r)
+			return
 		}
-		http.FileServer(http.Dir("static")).ServeHTTP(w, r)
+
+		// Production. Before this existed, nothing set Cache-Control here at
+		// all, so browsers applied RFC 9111 heuristic freshness (roughly 10% of
+		// the file's age) with no revalidation — which is how season-hub.js went
+		// out of sync with its HTML for some users after the Quick Search
+		// deploy.
+		//
+		// Note that no-cache does not mean "do not cache"; it means "cache, but
+		// revalidate every time". It is the fail-safe, not the failure mode.
+		hash, known := assetHashFor(cleanPath)
+		switch {
+		case known && cleanPath == r.URL.Path && r.URL.Query().Get("v") == hash:
+			// The token matches the bytes on disk RIGHT NOW. Verifying it is
+			// what makes `immutable` safe to promise: a naive "any ?v= means
+			// immutable" would poison caches mid-rollout, pinning new bytes
+			// under an old token for a year.
+			//
+			// The cleanPath == r.URL.Path guard keeps a non-canonical path
+			// (/a/../styles.css) out of this branch, since FileServer answers
+			// those with a 301 and a year-long immutable redirect is not
+			// something to hand out.
+			w.Header().Set("ETag", `"`+hash+`"`)
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		case known:
+			// No token, or a stale one. Revalidate every time, so a forgotten
+			// {{asset}} costs one 304 round-trip and never a stale file.
+			w.Header().Set("ETag", `"`+hash+`"`)
+			w.Header().Set("Cache-Control", "no-cache")
+		default:
+			// Not in the manifest: added after boot, or the walk failed. No
+			// ETag to offer, but FileServer's Last-Modified still yields 304s.
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		staticFiles.ServeHTTP(w, r)
 	})
 
 	// 4. Initialize CSRF Protection

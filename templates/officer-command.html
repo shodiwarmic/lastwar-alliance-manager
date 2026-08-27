@@ -1,6 +1,6 @@
 {{define "head_tags"}}
-<link rel="stylesheet" href="/officer_command.css">
-<link rel="stylesheet" href="/member-picker.css">
+<link rel="stylesheet" href="{{asset "/officer_command.css"}}">
+<link rel="stylesheet" href="{{asset "/member-picker.css"}}">
 {{end}}
 
 {{define "header_text"}}
@@ -88,6 +88,6 @@
 
 {{define "scripts"}}
 <div id="page-config" data-can-manage="{{if .Permissions.ManageOfficerCommand}}true{{else}}false{{end}}" hidden></div>
-<script src="/member-picker.js"></script>
-<script src="/officer_command.js"></script>
+<script src="{{asset "/member-picker.js"}}"></script>
+<script src="{{asset "/officer_command.js"}}"></script>
 {{end}}
