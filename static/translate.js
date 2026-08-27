@@ -35,8 +35,30 @@
     // text already in their language.
     const MIN_CONFIDENCE = 0.5;
 
+    // Give up only when nothing has happened for this long. A first-run language
+    // pack can take minutes and Translator.create() stays pending for the whole
+    // download, so a total-duration cap would kill working downloads. What is
+    // never acceptable is a control stuck on "Translating…" forever with no way
+    // back, which is what an unguarded await gives you.
+    const STALL_MS = 45000;
+
     let detectorPromise = null;
     let detectorChecked = false;
+
+    // Rejects when `bump()` has not been called for `stallMs`. Callers bump on
+    // every sign of life (download progress), so a slow-but-moving download is
+    // left alone and only a genuinely wedged one is abandoned.
+    function withStallTimeout(promise, stallMs) {
+        let rejectGuard;
+        let timer;
+        const guard = new Promise((_, rej) => { rejectGuard = rej; });
+        const bump = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => rejectGuard(new Error('stalled')), stallMs);
+        };
+        bump();
+        return { bump, result: Promise.race([promise, guard]).finally(() => clearTimeout(timer)) };
+    }
 
     let displayNames = null;
     try {
@@ -88,6 +110,15 @@
         } catch {
             return 'unavailable';
         }
+    }
+
+    // The two engines disagree on the shape of downloadprogress. Chrome reports
+    // `loaded` as a 0-1 fraction; Edge reports `loaded`/`total` as byte counts.
+    // Multiplying Edge's byte count by 100 renders "Downloading 4823700%".
+    function progressPct(e) {
+        const loaded = e.loaded || 0;
+        if (e.total) return Math.round((loaded / e.total) * 100);
+        return Math.round(loaded * 100);
     }
 
     function setLabel(btn, text) {
@@ -183,6 +214,11 @@
             status.hidden = true;
             setLabel(btn, 'Translating…');
 
+            // Giving up on the promise does not by itself stop the work behind
+            // it; the session would stay half-created and hold the model. Both
+            // engines take a signal, so a stall can actually release it.
+            const aborter = new AbortController();
+
             try {
                 if (!sourceLang) {
                     // This click is user activation, so a model download is
@@ -200,25 +236,51 @@
                     return;
                 }
 
-                const translator = await Translator.create({
+                // Chrome reports every pair as "downloadable" regardless of what
+                // is actually cached, so there is no way to know in advance
+                // whether this call is instant or a multi-minute download. Say
+                // "Preparing" until the answer arrives rather than "Translating",
+                // which implies work that has not started yet.
+                setLabel(btn, 'Preparing…');
+
+                let guard;
+                const creating = Translator.create({
                     sourceLanguage: sourceLang,
                     targetLanguage: TARGET,
+                    signal: aborter.signal,
                     monitor(m) {
                         m.addEventListener('downloadprogress', e => {
-                            const pct = Math.round((e.loaded || 0) * 100);
-                            setLabel(btn, 'Downloading ' + pct + '%');
+                            if (guard) guard.bump();
+                            setLabel(btn, 'Downloading ' + progressPct(e) + '%');
                         });
                     },
                 });
+                guard = withStallTimeout(creating, STALL_MS);
+                const translator = await guard.result;
 
-                translated = await translator.translate(text);
+                setLabel(btn, 'Translating…');
+                translated = await withStallTimeout(
+                    translator.translate(text, { signal: aborter.signal }), STALL_MS).result;
+
+                // The model stays in memory until the session is released, and
+                // the result is cached above, so this translator has no further use.
+                try { translator.destroy(); } catch { /* not in every build */ }
                 span.textContent = translated;
                 span.lang = TARGET;
                 setLabel(btn, 'Show original');
                 showingTranslation = true;
-            } catch {
-                note('Translation unavailable.');
+            } catch (err) {
+                // A stall means the engine accepted the request and then went
+                // quiet -- most often a first-run model download that never
+                // started. The pack may still arrive, so this is worth retrying
+                // rather than reporting as a permanent failure.
+                const stalled = err && err.message === 'stalled';
+                if (stalled) aborter.abort();
+                note(stalled
+                    ? 'Still preparing this language. Try again in a moment.'
+                    : 'Translation unavailable.');
                 setLabel(btn, 'Translate');
+                console.warn('[translate] ' + (sourceLang || '?') + '→' + TARGET + ':', err);
             } finally {
                 busy = false;
                 btn.disabled = false;

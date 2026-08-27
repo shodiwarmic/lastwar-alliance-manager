@@ -853,6 +853,18 @@ Three things to know before extending it:
    work on mobile means a server-side fallback, which is a cost and privacy
    decision, not a coding one.
 
+   > **The two engines disagree on `downloadprogress`.** Chrome reports `loaded`
+   > as a 0–1 fraction; Edge reports `loaded`/`total` as byte counts. Normalise
+   > via `progressPct()` — multiplying Edge's byte count by 100 renders
+   > "Downloading 4823700%". Never branch on user agent here: the API is a
+   > standards-track proposal, so treat it as a capability and tolerate both
+   > shapes.
+   >
+   > **A first-run model download sometimes never starts**, leaving `create()`
+   > pending with zero progress events. Microsoft documents the remedy as
+   > restarting the browser. That is why the stall guard exists and why its
+   > message invites a retry instead of reporting permanent failure.
+
    > **Testing it locally: use `localhost`, not the LAN IP.** `localhost` and
    > `127.0.0.1` are secure contexts without TLS, so `http://localhost:8080`
    > shows the control. `http://10.7.1.16:8080` — the same dev server reached by
