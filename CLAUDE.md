@@ -852,6 +852,13 @@ Three things to know before extending it:
    LAN access — absent, not broken. Do not "fix" this with a polyfill; making it
    work on mobile means a server-side fallback, which is a cost and privacy
    decision, not a coding one.
+
+   > **Testing it locally: use `localhost`, not the LAN IP.** `localhost` and
+   > `127.0.0.1` are secure contexts without TLS, so `http://localhost:8080`
+   > shows the control. `http://10.7.1.16:8080` — the same dev server reached by
+   > IP, which is a normal way this app gets opened — is *not*, so the control
+   > is silently absent and the feature reads as broken. Production behind Caddy
+   > is HTTPS and fine.
 2. **`attach` restructures the element.** The prose moves into a
    `<span class="tl-text">` so the control survives swapping text back and forth,
    and the element is stamped `data-export-text` with the **original**.
