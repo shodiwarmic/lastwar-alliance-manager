@@ -827,6 +827,44 @@ Two things that look like they need it but don't:
   and `storm.js`'s registration table reading `option.text` for its time-slot
   headers is fine (display text, not payload).
 
+### Inline translation of member prose: `TranslateBlock`
+
+Page translation is all-or-nothing and can only run in one direction. It does
+nothing for the opposite case — an English reader meeting one Spanish shout-out
+inside an English page — because `layout.html` declares `lang="en"` and Chrome
+detects the page as English, so the bar is never offered however foreign that
+card is.
+
+`TranslateBlock.attach(el, sourceText)` (`static/translate.js`, loaded from
+`layout.html` after `global.js` so `svgIcon` exists) puts a per-block Translate
+control on member-written prose. Always pass the text from the **data**, not
+`el.textContent`. Currently wired to 8 render sites: shout-out notes
+(`dyno.js`), season mail items (`season-hub.js`), prospect notes
+(`recruiting.js`), ally notes (`allies.js`), schedule event notes
+(`schedule.js`), and the strike/excuse reason cells (`accountability.js`,
+`accountability_profile.js`).
+
+Three things to know before extending it:
+
+1. **It is desktop-only, by nature of the API.** Chrome/Edge's built-in
+   `Translator` / `LanguageDetector` do not exist on mobile browsers and need a
+   secure context, so the control never renders on a phone or over plain-HTTP
+   LAN access — absent, not broken. Do not "fix" this with a polyfill; making it
+   work on mobile means a server-side fallback, which is a cost and privacy
+   decision, not a coding one.
+2. **`attach` restructures the element.** The prose moves into a
+   `<span class="tl-text">` so the control survives swapping text back and forth,
+   and the element is stamped `data-export-text` with the **original**.
+   `_extractTableData` (`global.js`) prefers that attribute, so a translated cell
+   still exports its source text — without it, this feature would reintroduce
+   precisely the export bug the rules above exist to prevent.
+3. **Detection is deliberately two-track.** A model download needs user
+   activation, which a render pass does not have. So the detector is created at
+   render time only when it needs no download (giving the precise behaviour: no
+   control at all on prose already in the reader's language); otherwise the
+   control is shown and the language settled on first click, which does carry
+   activation.
+
 ### One structural width breakpoint — everything else is fluid
 
 The site has a **single** width breakpoint: `@media (max-width: 768px)` (and its

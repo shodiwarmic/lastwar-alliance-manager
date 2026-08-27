@@ -191,6 +191,13 @@ To maintain a lightweight core application, heavy image processing and Optical C
 - **Scan Diagnostics in the Activity Log**: Every screenshot import logs a one-line OCR summary alongside the import entry on the Activity page — the engine used, image count, and a roll-up of how images were classified (e.g. `12×day_color_saturation@0.95, 2×day_text_fallback@0.75`), including any images that yielded no players. This surfaces extraction quality at a glance without enabling full archival. (Shown only when the OCR service reports diagnostics.)
 - See [image_recognition.md](image_recognition.md) for detailed technical documentation.
 
+### 🌐 Inline Translation
+
+- **Translate a single note, not the whole page**: Alliances are rarely all one language. Where a member has written free text — a shoutout note, an alliance mail, a prospect or ally note, a schedule note, or a strike reason — a small **Translate** control appears next to it for readers whose language differs. One click swaps that block into your language; another click brings the original straight back. The rest of the page is untouched, and the stored text is never modified.
+- **Runs entirely on your own machine**: Translation uses your browser's built-in, on-device translator. No text is sent to any server, there is no API key to configure, and there is no cost. The first use of a given language may briefly download that language pack.
+- **Where it appears**: The control only shows up when there is something to do — prose already in your language gets none. **This is a desktop-browser feature**: recent Chrome and Edge on desktop provide the built-in translator, so the control does not appear on phones or tablets, and it requires the site to be served over HTTPS. Where it is unavailable, nothing is shown and everything else works exactly as before.
+- **Exports always keep the original**: Translating a table cell on screen never changes what a CSV or XLSX export contains — exports always carry the text as it was written.
+
 ---
 
 ## Infrastructure & Deployment
