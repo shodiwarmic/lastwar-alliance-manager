@@ -1,8 +1,8 @@
 {{define "head_tags"}}
-<link rel="stylesheet" href="/filter-panel.css">
-<link rel="stylesheet" href="/files.css">
+<link rel="stylesheet" href="{{asset "/filter-panel.css"}}">
+<link rel="stylesheet" href="{{asset "/files.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
-<link rel="stylesheet" href="/choices-theme.css">
+<link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
 {{end}}
 
@@ -289,6 +289,6 @@
     data-can-upload="{{if .Permissions.UploadFiles}}true{{else}}false{{end}}"
     data-user-rank="{{.Rank}}"
     hidden></div>
-<script src="/filter-panel.js"></script>
-<script src="/files.js"></script>
+<script src="{{asset "/filter-panel.js"}}"></script>
+<script src="{{asset "/files.js"}}"></script>
 {{end}}

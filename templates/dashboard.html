@@ -1,6 +1,6 @@
 {{define "head_tags"}}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
-<link rel="stylesheet" href="/dashboard.css">
+<link rel="stylesheet" href="{{asset "/dashboard.css"}}">
 {{end}}
 
 {{define "header_text"}}
@@ -39,5 +39,5 @@
      data-user-rank="{{.Rank}}"
      data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}"
      hidden></div>
-<script src="/dashboard.js"></script>
+<script src="{{asset "/dashboard.js"}}"></script>
 {{end}}

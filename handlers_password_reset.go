@@ -365,7 +365,7 @@ func claimPasswordReset(w http.ResponseWriter, r *http.Request) {
 func renderResetPage(w http.ResponseWriter, data ResetPageData) {
 	noStoreHTML(w)
 
-	t, err := template.ParseFiles("templates/reset_password.html")
+	t, err := parseTemplates("templates/reset_password.html")
 	if err != nil {
 		slog.Error("failed to parse reset password template", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

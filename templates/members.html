@@ -1,8 +1,8 @@
 {{define "head_tags"}}
-<link rel="stylesheet" href="/filter-panel.css">
-<link rel="stylesheet" href="/members.css">
-<link rel="stylesheet" href="/lastrank.css">
-<link rel="stylesheet" href="/job-progress.css">
+<link rel="stylesheet" href="{{asset "/filter-panel.css"}}">
+<link rel="stylesheet" href="{{asset "/members.css"}}">
+<link rel="stylesheet" href="{{asset "/lastrank.css"}}">
+<link rel="stylesheet" href="{{asset "/job-progress.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {{end}}
@@ -452,8 +452,8 @@
     data-manage-train="{{if .Permissions.ManageTrain}}true{{else}}false{{end}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
-<script src="/filter-panel.js"></script>
-<script src="/members.js"></script>
-<script src="/job-progress.js"></script>
-<script src="/lastrank.js"></script>
+<script src="{{asset "/filter-panel.js"}}"></script>
+<script src="{{asset "/members.js"}}"></script>
+<script src="{{asset "/job-progress.js"}}"></script>
+<script src="{{asset "/lastrank.js"}}"></script>
 {{end}}

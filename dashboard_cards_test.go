@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"html/template"
 	"strings"
 	"testing"
 )
@@ -61,7 +60,7 @@ func TestLayoutRendersReviewNudgeGate(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			tmpl, err := template.ParseFiles("templates/layout.html", "templates/dashboard.html")
+			tmpl, err := parseTemplates("templates/layout.html", "templates/dashboard.html")
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}

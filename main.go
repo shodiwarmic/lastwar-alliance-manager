@@ -146,7 +146,7 @@ func renderTemplate(w http.ResponseWriter, r *http.Request, tmplName string, dat
 func renderTemplateStatus(w http.ResponseWriter, r *http.Request, tmplName string, status int, data PageData) {
 	noStoreHTML(w) // before the parse, so an error response carries it too
 
-	t, err := template.ParseFiles("templates/layout.html", "templates/"+tmplName)
+	t, err := parseTemplates("templates/layout.html", "templates/"+tmplName)
 	if err != nil {
 		slog.Error("Template parsing error", "error", err, "template", tmplName)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -174,6 +174,10 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 	slog.Info("Initializing Alliance Manager server")
+
+	// Hash static/ before anything can serve a request: assetHashes is written
+	// here and read-only afterwards, which is what makes it lock-free.
+	buildAssetHashes()
 
 	// 3. Initialize Database & Sessions
 	initSessionStore()
@@ -622,7 +626,7 @@ func main() {
 
 		noStoreHTML(w)
 
-		t, err := template.ParseFiles("templates/login.html")
+		t, err := parseTemplates("templates/login.html")
 		if err != nil {
 			slog.Error("Template parsing error", "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -732,18 +736,38 @@ func main() {
 			return
 		}
 
-		// Production previously set NO Cache-Control at all, which left the
-		// browser applying RFC 9111 heuristic freshness (roughly 10% of the
-		// file's age) with no revalidation. A user who first cached an asset
-		// long after the previous deploy could therefore hold a stale copy for
-		// days — which is how season-hub.js went out of sync with its HTML for
-		// some users after the Quick Search deploy.
+		// Production. Before this existed, nothing set Cache-Control here at
+		// all, so browsers applied RFC 9111 heuristic freshness (roughly 10% of
+		// the file's age) with no revalidation — which is how season-hub.js went
+		// out of sync with its HTML for some users after the Quick Search
+		// deploy.
 		//
-		// no-cache does not mean "do not cache"; it means "cache, but
-		// revalidate every time". FileServer's Last-Modified turns that into a
-		// bodyless 304 for an unchanged file, so the cost is one round-trip
-		// rather than a re-download, and a stale asset becomes impossible.
-		w.Header().Set("Cache-Control", "no-cache")
+		// Note that no-cache does not mean "do not cache"; it means "cache, but
+		// revalidate every time". It is the fail-safe, not the failure mode.
+		hash, known := assetHashFor(cleanPath)
+		switch {
+		case known && cleanPath == r.URL.Path && r.URL.Query().Get("v") == hash:
+			// The token matches the bytes on disk RIGHT NOW. Verifying it is
+			// what makes `immutable` safe to promise: a naive "any ?v= means
+			// immutable" would poison caches mid-rollout, pinning new bytes
+			// under an old token for a year.
+			//
+			// The cleanPath == r.URL.Path guard keeps a non-canonical path
+			// (/a/../styles.css) out of this branch, since FileServer answers
+			// those with a 301 and a year-long immutable redirect is not
+			// something to hand out.
+			w.Header().Set("ETag", `"`+hash+`"`)
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		case known:
+			// No token, or a stale one. Revalidate every time, so a forgotten
+			// {{asset}} costs one 304 round-trip and never a stale file.
+			w.Header().Set("ETag", `"`+hash+`"`)
+			w.Header().Set("Cache-Control", "no-cache")
+		default:
+			// Not in the manifest: added after boot, or the walk failed. No
+			// ETag to offer, but FileServer's Last-Modified still yields 304s.
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		staticFiles.ServeHTTP(w, r)
 	})
 

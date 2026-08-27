@@ -10,11 +10,11 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
-<link rel="stylesheet" href="/choices-theme.css">
+<link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
-<link rel="stylesheet" href="/comms.css">
-<link rel="stylesheet" href="/member-picker.css">
-<link rel="stylesheet" href="/assignment.css">
+<link rel="stylesheet" href="{{asset "/comms.css"}}">
+<link rel="stylesheet" href="{{asset "/member-picker.css"}}">
+<link rel="stylesheet" href="{{asset "/assignment.css"}}">
 {{end}}
 
 {{define "content"}}
@@ -89,10 +89,10 @@
     data-can-manage-polls="{{if .Permissions.ManagePolls}}true{{else}}false{{end}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
-<script src="/mail.js"></script>
-<script src="/comms.js"></script>
-<script src="/member-picker.js"></script>
-<script src="/polls.js"></script>
+<script src="{{asset "/mail.js"}}"></script>
+<script src="{{asset "/comms.js"}}"></script>
+<script src="{{asset "/member-picker.js"}}"></script>
+<script src="{{asset "/polls.js"}}"></script>
 {{end}}
 
 {{define "modals"}}

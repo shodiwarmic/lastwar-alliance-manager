@@ -146,9 +146,9 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<link rel="stylesheet" href="/storm.css">
-<link rel="stylesheet" href="/member-picker.css">
-<link rel="stylesheet" href="/assignment.css">
+<link rel="stylesheet" href="{{asset "/storm.css"}}">
+<link rel="stylesheet" href="{{asset "/member-picker.css"}}">
+<link rel="stylesheet" href="{{asset "/assignment.css"}}">
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
@@ -173,7 +173,7 @@
 {{end}}
 
 {{define "scripts"}}
-<script src="/mail.js"></script>
-<script src="/member-picker.js"></script>
-<script src="/storm.js"></script>
+<script src="{{asset "/mail.js"}}"></script>
+<script src="{{asset "/member-picker.js"}}"></script>
+<script src="{{asset "/storm.js"}}"></script>
 {{end}}

@@ -8,7 +8,7 @@
 
 {{define "head_tags"}}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<link rel="stylesheet" href="/schedule.css">
+<link rel="stylesheet" href="{{asset "/schedule.css"}}">
 {{end}}
 
 {{define "content"}}
@@ -225,7 +225,7 @@
     data-can-manage="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="/schedule.js"></script>
+<script src="{{asset "/schedule.js"}}"></script>
 {{end}}
 
 {{define "modals"}}
