@@ -1294,6 +1294,7 @@
             contentBox.className = 'mail-item-content';
             contentBox.style.display = 'none';
             contentBox.textContent = item.content || '';
+            if (item.content) TranslateBlock.attach(contentBox, item.content);
 
             wrapper.append(div, contentBox);
             return wrapper;

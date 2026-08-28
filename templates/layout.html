@@ -319,11 +319,14 @@
        'self' only, so an inline block would be silently blocked in production. -->
   <div id="layout-config"
        data-can-manage-members="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
+       data-translation-mode="{{.TranslationBackendMode}}"
        hidden></div>
 
   <script src="{{asset "/global.js"}}"></script>
   <script src="{{asset "/csrf.js"}}"></script>
   <script src="{{asset "/modal-focus.js"}}"></script>
+  <!-- After global.js: TranslateBlock builds its control with svgIcon(). -->
+  <script src="{{asset "/translate.js"}}"></script>
 
   {{block "scripts" .}}{{end}}
 </body>

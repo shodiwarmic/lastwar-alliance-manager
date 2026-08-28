@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('password-policy-form').addEventListener('submit', savePasswordPolicy);
         document.getElementById('cv-worker-form').addEventListener('submit', saveCVWorkerUrl);
         document.getElementById('ocr-archive-form').addEventListener('submit', saveOCRArchiveSettings);
+        document.getElementById('translation-form').addEventListener('submit', saveTranslationSettings);
         document.getElementById('gcp-upload-form').addEventListener('submit', uploadGCPCredentials);
         document.getElementById('delete-gcp-btn').addEventListener('click', showDeleteGCPModal);
 
@@ -814,8 +815,77 @@ async function loadSecuritySettings() {
                 archStatus.textContent = '';
             }
         }
+
+        // Translation backend
+        const trModeSel = document.getElementById('translation-backend-mode');
+        if (trModeSel) {
+            // Cloud translation reuses the Vision service-account key, so it is
+            // only selectable once that key exists.
+            for (const opt of trModeSel.options) {
+                if (opt.value === 'cloud') opt.disabled = !settings.has_gcp_credentials;
+            }
+            trModeSel.value = settings.translation_backend_mode || 'ondevice';
+        }
+        const trCap = document.getElementById('translation-char-cap');
+        if (trCap) trCap.value = settings.translation_monthly_char_cap ?? 400000;
+        loadTranslationUsage();
     } catch (error) {
         console.error('Error loading security settings:', error);
+    }
+}
+
+// Show this month's spend against the cap. Reads from the cache ledger, so it
+// counts characters actually sent upstream — repeat views of a cached note
+// cost nothing and do not appear here.
+async function loadTranslationUsage() {
+    const el = document.getElementById('translation-status');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/admin/security/translation/usage');
+        if (!res.ok) return;
+        const u = await res.json();
+        if (u.mode === 'ondevice') {
+            el.textContent = 'No server backend: translation happens in the browser, where supported.';
+            el.style.color = 'var(--text-muted)';
+            return;
+        }
+        const used = (u.chars_used || 0).toLocaleString();
+        const cap = u.char_cap ? u.char_cap.toLocaleString() : 'no limit';
+        el.textContent = `This month: ${used} characters translated (limit ${cap}).`;
+        el.style.color = u.char_cap && u.chars_used >= u.char_cap
+            ? 'var(--color-danger)' : 'var(--text-muted)';
+    } catch {
+        // Usage is informational; a failure here must not break the page.
+    }
+}
+
+// Save translation backend + monthly cap
+async function saveTranslationSettings(event) {
+    event.preventDefault();
+    const mode = document.getElementById('translation-backend-mode').value;
+    const capRaw = document.getElementById('translation-char-cap').value.trim();
+    const cap = capRaw === '' ? 0 : parseInt(capRaw, 10);
+
+    if (Number.isNaN(cap) || cap < 0) {
+        showToast('Monthly character limit must be zero or more.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/security/translation', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                translation_backend_mode: mode,
+                translation_monthly_char_cap: cap,
+            })
+        });
+
+        if (!response.ok) throw new Error((await response.text()).trim());
+        showToast('Translation settings updated.');
+        loadTranslationUsage();
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
     }
 }
 

@@ -598,6 +598,7 @@ function createDynoCard(rec, compact = false) {
     const notesDiv = document.createElement('div');
     notesDiv.className = 'rec-notes';
     notesDiv.textContent = rec.notes || 'No notes provided';
+    if (rec.notes) TranslateBlock.attach(notesDiv, rec.notes);
 
     // Footer
     const footer = document.createElement('div');

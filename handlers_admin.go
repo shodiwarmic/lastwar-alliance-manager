@@ -619,7 +619,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(our_server_id, 0), COALESCE(nap_size, 10), COALESCE(nap_import_limit, 15),
         COALESCE(lastrank_auto_sync_enabled, 0), COALESCE(lastrank_auto_sync_hour, 4),
         COALESCE(lastrank_auto_sync_interval_hours, 6), COALESCE(lastrank_enrich_max_age_hours, 21),
-        COALESCE(nap_auto_refresh_enabled, 0), COALESCE(prospect_auto_refresh_enabled, 0)
+        COALESCE(nap_auto_refresh_enabled, 0), COALESCE(prospect_auto_refresh_enabled, 0),
+        COALESCE(translation_backend_mode, 'ondevice'), COALESCE(translation_monthly_char_cap, 400000)
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -645,6 +646,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.LastRankAutoSyncEnabled, &s.LastRankAutoSyncHour,
 		&s.LastRankAutoSyncIntervalHours, &s.LastRankEnrichMaxAgeHours,
 		&s.NAPAutoRefreshEnabled, &s.ProspectAutoRefreshEnabled,
+		&s.TranslationBackendMode, &s.TranslationMonthlyCharCap,
 	)
 
 	if err != nil {

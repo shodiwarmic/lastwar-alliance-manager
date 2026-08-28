@@ -191,6 +191,16 @@ To maintain a lightweight core application, heavy image processing and Optical C
 - **Scan Diagnostics in the Activity Log**: Every screenshot import logs a one-line OCR summary alongside the import entry on the Activity page — the engine used, image count, and a roll-up of how images were classified (e.g. `12×day_color_saturation@0.95, 2×day_text_fallback@0.75`), including any images that yielded no players. This surfaces extraction quality at a glance without enabling full archival. (Shown only when the OCR service reports diagnostics.)
 - See [image_recognition.md](image_recognition.md) for detailed technical documentation.
 
+### 🌐 Inline Translation
+
+- **Translate a single note, not the whole page**: Alliances are rarely all one language. Where a member has written free text — a shoutout note, an alliance mail, a prospect or ally note, a schedule note, or a strike reason — a small **Translate** control appears next to it for readers whose language differs. One click swaps that block into your language; another click brings the original straight back. The rest of the page is untouched, and the stored text is never modified.
+- **Two ways to translate, chosen in Admin → Security**:
+  - **On-device only** (default): uses your browser's own built-in translator. Nothing is sent anywhere, there is no key to configure and no cost — but it exists only in recent desktop Chrome and Edge, so it never works on phones, and the first use of a language downloads a pack that can occasionally fail to start.
+  - **Google Cloud Translation**: translates on the server instead, so it works for **everyone — phones included** — in any browser, with no pack downloads. It reuses the same Google service account key already configured for screenshot OCR; there is no second key to manage. On that Google Cloud project, enable the **Cloud Translation API** and grant the service account the **Cloud Translation API User** role.
+- **Free in practice, and capped so it stays that way**: Google gives 500,000 characters every month at no charge, permanently. Each note is translated **once** and then cached and shared, so re-reading it — by you or anyone else — costs nothing at all. A monthly character limit (default 400,000) is enforced server-side, so a free allowance cannot quietly turn into a bill; Admin → Security shows the running total.
+- **Where it appears**: The control shows up only when there is something to do — prose already in your language gets none. With a server backend configured it works on any device. On-device translation additionally requires a trusted address: an `https://` site or `localhost`, so reaching a server directly by its LAN IP over plain `http://` falls back to the server backend. Where nothing is available, no control is shown and everything else works exactly as before.
+- **Exports always keep the original**: Translating a table cell on screen never changes what a CSV or XLSX export contains — exports always carry the text as it was written.
+
 ---
 
 ## Infrastructure & Deployment

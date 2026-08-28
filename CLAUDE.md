@@ -827,6 +827,110 @@ Two things that look like they need it but don't:
   and `storm.js`'s registration table reading `option.text` for its time-slot
   headers is fine (display text, not payload).
 
+### Inline translation of member prose: `TranslateBlock`
+
+Page translation is all-or-nothing and can only run in one direction. It does
+nothing for the opposite case — an English reader meeting one Spanish shout-out
+inside an English page — because `layout.html` declares `lang="en"` and Chrome
+detects the page as English, so the bar is never offered however foreign that
+card is.
+
+`TranslateBlock.attach(el, sourceText)` (`static/translate.js`, loaded from
+`layout.html` after `global.js` so `svgIcon` exists) puts a per-block Translate
+control on member-written prose. Always pass the text from the **data**, not
+`el.textContent`. Currently wired to 8 render sites: shout-out notes
+(`dyno.js`), season mail items (`season-hub.js`), prospect notes
+(`recruiting.js`), ally notes (`allies.js`), schedule event notes
+(`schedule.js`), and the strike/excuse reason cells (`accountability.js`,
+`accountability_profile.js`).
+
+**Three tiers, in this order** (`resolve()` in `translate.js`):
+
+1. **Shared server cache** — keyed on `sha256(text) + target_lang`, so it needs
+   **no language detection at all**. That is what makes it viable as the first tier.
+2. **On-device, only when `Translator.availability()` is `'available'`** — never at
+   `'downloadable'`, which is the path that stalls. Note Chrome **masks** pack status
+   for anti-fingerprinting and reports `'downloadable'` regardless of what is cached,
+   so this tier rarely fires there. It is honest, not load-bearing: **do not build
+   anything that depends on it firing.** With a backend configured, the practical
+   behaviour is server-wins.
+3. **Server backend** (`translation.go`) — Cloud Translation auto-detects the source,
+   so this tier needs no client detection either. That is what makes it work on a
+   phone, where the built-in APIs do not exist.
+
+The extra cache round trip is only spent when tier 2 is plausible; otherwise the
+client goes straight to the full request, which checks the cache server-side anyway.
+Common path: **one** round trip.
+
+**Rules that must hold:**
+
+- **On-device results are NEVER written to the shared cache.** Every user reads that
+  store; letting a client write to it is a way to put words in another member's mouth.
+  Server-authored only.
+- **The cache is also the spend ledger.** `monthlyCharsUsed()` sums `char_count` for
+  the month, so **rows are never DELETEd** — a delete undercounts the month and the cap
+  leaks. Anything retiring an entry (a future "this translation is wrong" flag) must use
+  a column, not a DELETE.
+- **Same-language answers store an EMPTY `translated_text`**, with `source_lang ==
+  target_lang` as the marker. Writing the original back would put a second copy of
+  member prose in a table that deliberately holds only a hash of it.
+- **Hashing happens server-side.** The obvious alternative — the client hashing and
+  asking about a digest — needs `crypto.subtle`, which exists only in a **secure
+  context**. This app is routinely reached over plain HTTP on a LAN, which is exactly
+  the deployment a server backend exists to serve.
+- **`/api/translate` refuses unless the mode is a server mode.** Without that, an
+  install holding `gcp_vision` credentials for OCR could have its Translation quota
+  spent on a feature the operator never enabled. It is also the only route in the app
+  that spends a metered external quota, hence the per-user rate limit.
+- **`Translate()` is shaped read → fetch → write** — cache read and budget SUM complete
+  before the upstream call, the INSERT after. With `SetMaxOpenConns(1)` anything else is
+  the silent process-hang gotcha.
+
+**Cloud setup** reuses the existing `gcp_vision` service-account credential — no second
+key. The operator enables the Cloud Translation API and grants
+`roles/cloudtranslate.user`; the project id is parsed from the key itself. `mimeType` is
+set to `text/plain`, or the v3 default (HTML) mangles `&` and `<` in ordinary prose.
+
+Three things to know before extending it:
+
+1. **It is desktop-only, by nature of the API.** Chrome/Edge's built-in
+   `Translator` / `LanguageDetector` do not exist on mobile browsers and need a
+   secure context, so the control never renders on a phone or over plain-HTTP
+   LAN access — absent, not broken. Do not "fix" this with a polyfill; making it
+   work on mobile means a server-side fallback, which is a cost and privacy
+   decision, not a coding one.
+
+   > **The two engines disagree on `downloadprogress`.** Chrome reports `loaded`
+   > as a 0–1 fraction; Edge reports `loaded`/`total` as byte counts. Normalise
+   > via `progressPct()` — multiplying Edge's byte count by 100 renders
+   > "Downloading 4823700%". Never branch on user agent here: the API is a
+   > standards-track proposal, so treat it as a capability and tolerate both
+   > shapes.
+   >
+   > **A first-run model download sometimes never starts**, leaving `create()`
+   > pending with zero progress events. Microsoft documents the remedy as
+   > restarting the browser. That is why the stall guard exists and why its
+   > message invites a retry instead of reporting permanent failure.
+
+   > **Testing it locally: use `localhost`, not the LAN IP.** `localhost` and
+   > `127.0.0.1` are secure contexts without TLS, so `http://localhost:8080`
+   > shows the control. `http://10.7.1.16:8080` — the same dev server reached by
+   > IP, which is a normal way this app gets opened — is *not*, so the control
+   > is silently absent and the feature reads as broken. Production behind Caddy
+   > is HTTPS and fine.
+2. **`attach` restructures the element.** The prose moves into a
+   `<span class="tl-text">` so the control survives swapping text back and forth,
+   and the element is stamped `data-export-text` with the **original**.
+   `_extractTableData` (`global.js`) prefers that attribute, so a translated cell
+   still exports its source text — without it, this feature would reintroduce
+   precisely the export bug the rules above exist to prevent.
+3. **Detection is deliberately two-track.** A model download needs user
+   activation, which a render pass does not have. So the detector is created at
+   render time only when it needs no download (giving the precise behaviour: no
+   control at all on prose already in the reader's language); otherwise the
+   control is shown and the language settled on first click, which does carry
+   activation.
+
 ### One structural width breakpoint — everything else is fluid
 
 The site has a **single** width breakpoint: `@media (max-width: 768px)` (and its

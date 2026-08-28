@@ -176,6 +176,7 @@ function renderAllyCard(ally) {
         if (ally.notes) {
             const notesLine = document.createElement('span');
             notesLine.textContent = ally.notes;
+            TranslateBlock.attach(notesLine, ally.notes);
             meta.appendChild(notesLine);
         }
         body.appendChild(meta);

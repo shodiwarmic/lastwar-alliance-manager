@@ -355,6 +355,7 @@ function buildEventCard(evt, dateStr) {
         const notes = document.createElement('div');
         notes.className = 'event-card-notes';
         notes.textContent = evt.notes;
+        TranslateBlock.attach(notes, evt.notes);
         card.appendChild(notes);
     }
 

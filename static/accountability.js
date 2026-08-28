@@ -389,6 +389,7 @@ async function loadStrikes() {
 
         const tdReason = document.createElement('td');
         tdReason.textContent = s.reason;
+        if (s.reason) TranslateBlock.attach(tdReason, s.reason);
 
         const tdDate = document.createElement('td');
         tdDate.textContent = s.ref_date || s.created_at.slice(0, 10);

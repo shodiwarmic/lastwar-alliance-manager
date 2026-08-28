@@ -5632,3 +5632,52 @@ html.theme-dark .numInputWrapper span.arrowDown::after {
 }
 
 .finder-action:hover { background: var(--bg-secondary); }
+
+/* ---- Inline translation control (translate.js) ----
+   Attached to member-written prose (shout-out notes, mail bodies, ally and
+   prospect notes, strike reasons). Quiet by default: this sits inside content,
+   so it must read as an affordance rather than compete with the text. */
+
+.tl-text { white-space: inherit; }
+
+.tl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 8px;
+    padding: 1px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    /* The mail body is a <pre>; without these the control inherits monospace
+       and the block's whitespace handling. */
+    white-space: normal;
+    vertical-align: baseline;
+    cursor: pointer;
+}
+
+.tl-btn:hover:not(:disabled) {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.tl-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
+.tl-btn:disabled { cursor: default; opacity: 0.7; }
+
+.tl-btn .svg-icon { flex-shrink: 0; }
+
+.tl-status {
+    margin-left: 8px;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.75rem;
+    white-space: normal;
+}
