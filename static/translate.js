@@ -7,25 +7,40 @@
 // `lang="en"` and the surrounding UI is English, so Chrome detects the page as
 // English and never offers the bar, however foreign that one card is.
 //
-// This attaches a per-block Translate control to member-written prose, driven by
-// Chrome/Edge's built-in on-device Translator + LanguageDetector APIs. Nothing
-// leaves the reader's machine: no API key, no server round-trip, no cost.
+// Resolution order, in this order and for these reasons:
 //
-// DESKTOP ONLY. The built-in AI APIs do not exist on mobile browsers and need a
-// secure context, so on a phone -- or over plain-HTTP LAN access -- the control
-// simply never renders. Absent, not broken. Making these blocks translatable on
-// mobile needs a server-side fallback; see P3 in translation-handling-proposals.md.
+//   1. SHARED SERVER CACHE -- keyed on a hash of the text plus the target
+//      language, so it needs no language detection at all. That is what makes
+//      it viable as the first tier.
+//   2. ON-DEVICE, ONLY IF INSTANTLY READY -- the browser's built-in Translator,
+//      used solely when availability() says 'available'. Free and private, with
+//      no stall risk. Note that Chrome masks pack status for anti-fingerprinting
+//      and reports 'downloadable' regardless of what is cached, so on Chrome
+//      this tier rarely fires; it is honest rather than load-bearing.
+//   3. SERVER BACKEND -- Cloud Translation, which auto-detects the source
+//      language, so this tier needs no client detection either. That is what
+//      makes it work on a phone, where the built-in APIs do not exist at all.
 //
-// Never automatic and never page-wide: translating is always an explicit click on
-// one block, and the original is always one click back.
+// On-device results are NEVER written back to the shared cache: that store is
+// read by every user, and letting a client put arbitrary text into it would be
+// a way to put words in another member's mouth. The cache is server-authored.
+//
+// With no server backend configured (`ondevice` mode) this file behaves exactly
+// as it did when it shipped: browser-only, desktop-only, with a stall guard.
 
 (function () {
     'use strict';
 
     const HAS_API = 'Translator' in self && 'LanguageDetector' in self;
 
-    // The reader's language, base subtag only ('en-GB' -> 'en'). The translation
-    // APIs key on the base tag, and regional variants would fragment the cache.
+    // Whether a SERVER backend is configured. `ondevice` is deliberately not
+    // called `off` -- the browser path keeps working in every mode.
+    const cfgEl = document.getElementById('layout-config');
+    const SERVER_MODE = !!cfgEl && cfgEl.dataset.translationMode
+        && cfgEl.dataset.translationMode !== 'ondevice';
+
+    // The reader's language, base subtag only ('en-GB' -> 'en'). The engines key
+    // on the base tag, and regional variants would fragment the cache.
     const TARGET = (navigator.language || 'en').split('-')[0].toLowerCase();
 
     // Below this, detection is noise rather than signal -- "ok", "+5", "n/a".
@@ -44,14 +59,25 @@
 
     // Language pairs that failed to become usable this session. A pack that will
     // not download fails for every block in that language, so one 45-second wait
-    // is informative and ten in a row is just punishment. Blocks rendered after a
-    // failure stop offering the control for that pair; blocks already on screen
-    // keep theirs, so a deliberate retry is still one click away.
+    // is informative and ten in a row is just punishment.
     const failedPairs = new Set();
     const pairKey = src => src + '>' + TARGET;
 
     let detectorPromise = null;
     let detectorChecked = false;
+
+    let displayNames = null;
+    try {
+        displayNames = new Intl.DisplayNames([TARGET], { type: 'language' });
+    } catch { /* Intl.DisplayNames is optional sugar for the tooltip */ }
+
+    function langName(code) {
+        try {
+            return (displayNames && displayNames.of(code)) || code;
+        } catch {
+            return code;
+        }
+    }
 
     // Rejects when `bump()` has not been called for `stallMs`. Callers bump on
     // every sign of life (download progress), so a slow-but-moving download is
@@ -68,23 +94,9 @@
         return { bump, result: Promise.race([promise, guard]).finally(() => clearTimeout(timer)) };
     }
 
-    let displayNames = null;
-    try {
-        displayNames = new Intl.DisplayNames([TARGET], { type: 'language' });
-    } catch { /* Intl.DisplayNames is optional sugar for the tooltip */ }
-
-    function langName(code) {
-        try {
-            return (displayNames && displayNames.of(code)) || code;
-        } catch {
-            return code;
-        }
-    }
-
     // Create the shared detector only when it needs no download. Creating a
     // downloadable model requires user activation, which a render pass does not
-    // have -- blocks rendered before then fall back to resolving on first click,
-    // which does carry activation.
+    // have -- blocks rendered before then settle their language on first click.
     async function sharedDetector() {
         if (detectorChecked) return detectorPromise;
         detectorChecked = true;
@@ -134,6 +146,33 @@
     }
 
     /**
+     * Ask the server. `cacheOnly` asks for tier 1 alone: answer from the cache
+     * or report a miss, never spend quota.
+     *
+     * The source text is POSTed rather than a hash of it, because hashing in the
+     * browser needs crypto.subtle -- which exists only in a secure context. This
+     * app is routinely reached over plain HTTP on a LAN, which is exactly the
+     * deployment a server backend exists to serve.
+     */
+    async function serverTranslate(text, cacheOnly) {
+        const res = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, target: TARGET, cache_only: !!cacheOnly }),
+        });
+        if (res.status === 204) return null;            // cache miss, by design
+        if (!res.ok) {
+            const detail = (await res.text()).trim();
+            throw new Error(detail || 'Translation unavailable.');
+        }
+        const data = await res.json();
+        return {
+            text: data.translated_text || '',
+            alreadyTarget: !!data.already_target,
+        };
+    }
+
+    /**
      * Attach a Translate control to one block of member-written prose.
      *
      * @param {HTMLElement} el   Element whose text is the prose. Its children are
@@ -142,7 +181,7 @@
      * @param {string} sourceText The prose, from the DATA rather than the DOM.
      */
     function attach(el, sourceText) {
-        if (!HAS_API || !el) return;
+        if ((!HAS_API && !SERVER_MODE) || !el) return;
 
         const text = String(sourceText == null ? el.textContent || '' : sourceText).trim();
         if (text.length < MIN_CHARS) return;
@@ -181,48 +220,40 @@
             status.hidden = false;
         }
 
-        // Decide whether this block needs a control at all. When the detector is
-        // ready we can be precise and stay silent on prose already in the
-        // reader's language; when it is not, we show the control and settle the
-        // question on click.
+        function showTranslation(value) {
+            span.textContent = value;
+            span.lang = TARGET;
+            setLabel(btn, 'Show original');
+            showingTranslation = true;
+        }
+
+        // Decide whether this block needs a control at all.
+        //
+        // Where the detector is ready we can be precise and stay silent on prose
+        // already in the reader's language. Where it is not -- notably on mobile,
+        // which has no LanguageDetector and is exactly where a server backend
+        // matters most -- we show the control and let the server settle the
+        // language. A same-language answer is cached, so that noise corrects
+        // itself per note rather than on every view.
         (async () => {
-            const detector = await sharedDetector();
+            const detector = HAS_API ? await sharedDetector() : null;
             if (detector) {
                 sourceLang = await detectLang(text, detector);
                 if (sourceLang === TARGET) return;      // nothing to offer
-                if (sourceLang) {
-                    if (failedPairs.has(pairKey(sourceLang))) return;
-                    if ((await pairAvailability(sourceLang)) === 'unavailable') return;
-                    btn.title = 'Translate from ' + langName(sourceLang);
-                }
+                if (sourceLang) btn.title = 'Translate from ' + langName(sourceLang);
+            }
+            if (!SERVER_MODE && sourceLang) {
+                // With no server fallback, a pair the engine cannot serve means
+                // a control that could only ever fail.
+                if (failedPairs.has(pairKey(sourceLang))) return;
+                if ((await pairAvailability(sourceLang)) === 'unavailable') return;
             }
             btn.hidden = false;
         })();
 
-        btn.addEventListener('click', async () => {
-            if (busy) return;
-
-            if (showingTranslation) {
-                span.textContent = text;
-                span.removeAttribute('lang');
-                setLabel(btn, 'Translate');
-                showingTranslation = false;
-                return;
-            }
-
-            if (translated !== null) {
-                span.textContent = translated;
-                span.lang = TARGET;
-                setLabel(btn, 'Show original');
-                showingTranslation = true;
-                return;
-            }
-
-            busy = true;
-            btn.disabled = true;
-            status.hidden = true;
-            setLabel(btn, 'Translating…');
-
+        // The on-device attempt, with its own download wait, stall guard and
+        // failure diagnostics. Returns a result, or null having reported why.
+        async function onDeviceTranslate() {
             // Giving up on the promise does not by itself stop the work behind
             // it; the session would stay half-created and hold the model. Both
             // engines take a signal, so a stall can actually release it.
@@ -238,13 +269,10 @@
                 }
                 if (!sourceLang) {
                     note('Could not identify the language.');
-                    setLabel(btn, 'Translate');
-                    return;
+                    return null;
                 }
                 if (sourceLang === TARGET) {
-                    note('Already in ' + langName(TARGET) + '.');
-                    btn.hidden = true;
-                    return;
+                    return { text: '', alreadyTarget: true };
                 }
 
                 // Chrome reports every pair as "downloadable" regardless of what
@@ -271,30 +299,20 @@
                 const translator = await guard.result;
 
                 setLabel(btn, 'Translating…');
-                translated = await withStallTimeout(
+                const out = await withStallTimeout(
                     translator.translate(text, { signal: aborter.signal }), STALL_MS).result;
 
                 // The model stays in memory until the session is released, and
-                // the result is cached above, so this translator has no further use.
+                // the result is held above, so this translator has no further use.
                 try { translator.destroy(); } catch { /* not in every build */ }
-                span.textContent = translated;
-                span.lang = TARGET;
-                setLabel(btn, 'Show original');
-                showingTranslation = true;
+                return { text: out, alreadyTarget: false };
             } catch (err) {
-                // A stall means the engine accepted the request and then went
-                // quiet -- most often a first-run model download that never
-                // started. The pack may still arrive, so this is worth retrying
-                // rather than reporting as a permanent failure.
                 const stalled = err && err.message === 'stalled';
                 if (stalled) {
                     aborter.abort();
                     if (sourceLang) failedPairs.add(pairKey(sourceLang));
                 }
-                note(stalled
-                    ? 'Still preparing this language. Try again in a moment.'
-                    : 'Translation unavailable.');
-                setLabel(btn, 'Translate');
+
                 // "stalled" on its own does not distinguish a pair the engine
                 // cannot supply from one it accepted and never began downloading.
                 // Report enough to tell them apart without anyone having to run a
@@ -312,7 +330,7 @@
                     detectorState = await LanguageDetector.availability();
                 } catch (e) { detectorState = 'threw: ' + e.name; }
 
-                console.warn('[translate] FAILED — copy this whole object:', {
+                console.warn('[translate] on-device FAILED — copy this whole object:', {
                     pair: (sourceLang || '?') + '->' + TARGET,
                     error: err && (err.name + ': ' + err.message),
                     pairAvailability: pairState,
@@ -320,10 +338,93 @@
                     progressEvents,
                     elapsedMs: Math.round(performance.now() - startedAt),
                     secureContext: window.isSecureContext,
+                    serverBackend: SERVER_MODE,
                     ua: navigator.userAgentData
                         ? JSON.stringify(navigator.userAgentData.brands)
                         : navigator.userAgent,
                 });
+
+                // With a server backend the caller falls through to it, so this
+                // is not the end of the road and must not claim to be.
+                if (!SERVER_MODE) {
+                    note(stalled
+                        ? 'Still preparing this language. Try again in a moment.'
+                        : 'Translation unavailable.');
+                }
+                return null;
+            }
+        }
+
+        // Walk the tiers. Returns a result, or null having reported why.
+        async function resolve() {
+            // Is the browser able to answer instantly? Only then is the extra
+            // cache round trip worth making before asking the server, and only
+            // then can on-device run without any stall risk.
+            const quickLocal = HAS_API && sourceLang && sourceLang !== TARGET
+                && !failedPairs.has(pairKey(sourceLang))
+                && (await pairAvailability(sourceLang)) === 'available';
+
+            if (quickLocal) {
+                if (SERVER_MODE) {
+                    try {
+                        const hit = await serverTranslate(text, true);   // tier 1
+                        if (hit) return hit;
+                    } catch {
+                        // A cache probe failing is not worth reporting; the
+                        // remaining tiers can still answer.
+                    }
+                }
+                const local = await onDeviceTranslate();                 // tier 2
+                if (local) return local;
+                if (!SERVER_MODE) return null;   // already reported
+            }
+
+            if (SERVER_MODE) {                                           // tier 3
+                try {
+                    return await serverTranslate(text, false);
+                } catch (err) {
+                    note(err.message || 'Translation unavailable.');
+                    return null;
+                }
+            }
+
+            return await onDeviceTranslate();
+        }
+
+        btn.addEventListener('click', async () => {
+            if (busy) return;
+
+            if (showingTranslation) {
+                span.textContent = text;
+                span.removeAttribute('lang');
+                setLabel(btn, 'Translate');
+                showingTranslation = false;
+                return;
+            }
+
+            if (translated !== null) {
+                showTranslation(translated);
+                return;
+            }
+
+            busy = true;
+            btn.disabled = true;
+            status.hidden = true;
+            setLabel(btn, 'Translating…');
+
+            try {
+                const result = await resolve();
+                if (!result) {
+                    setLabel(btn, 'Translate');
+                    return;
+                }
+                if (result.alreadyTarget) {
+                    note('Already in ' + langName(TARGET) + '.');
+                    btn.hidden = true;
+                    return;
+                }
+                translated = result.text;
+                showTranslation(translated);
             } finally {
                 busy = false;
                 btn.disabled = false;
@@ -331,5 +432,5 @@
         });
     }
 
-    window.TranslateBlock = { attach, supported: HAS_API };
+    window.TranslateBlock = { attach, supported: HAS_API || SERVER_MODE };
 })();

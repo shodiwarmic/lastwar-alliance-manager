@@ -84,15 +84,24 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	data.OurServerID = ourServerID
 
 	// NEW: Check if the CV Worker URL is configured + which OCR backend is active
-	var cvWorkerURL, ocrMode string
+	// One query, not two: db.SetMaxOpenConns(1) means every extra per-render
+	// QueryRow is another turn on the single connection.
+	var cvWorkerURL, ocrMode, translationMode string
 	db.QueryRow(
-		"SELECT COALESCE(cv_worker_url, ''), COALESCE(ocr_backend_mode, 'cloud') FROM settings WHERE id = 1",
-	).Scan(&cvWorkerURL, &ocrMode)
+		`SELECT COALESCE(cv_worker_url, ''), COALESCE(ocr_backend_mode, 'cloud'),
+		        COALESCE(translation_backend_mode, 'ondevice')
+		 FROM settings WHERE id = 1`,
+	).Scan(&cvWorkerURL, &ocrMode, &translationMode)
 
 	if ocrMode != string(OCRBackendLocal) {
 		ocrMode = string(OCRBackendCloud)
 	}
 	data.OCRBackendMode = ocrMode
+
+	if !validTranslationMode(translationMode) {
+		translationMode = string(TranslationOnDevice)
+	}
+	data.TranslationBackendMode = translationMode
 
 	// The pipeline is ready when:
 	//   - cloud mode: GCP credentials AND a worker URL are configured
@@ -313,6 +322,12 @@ func main() {
 	router.HandleFunc("/api/admin/security/password-policy", authMiddleware(adminMiddleware(updatePasswordPolicy))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/cv-worker", authMiddleware(adminMiddleware(updateCVWorkerURL))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/ocr-archive", authMiddleware(adminMiddleware(updateOCRArchiveSettings))).Methods("PUT")
+	router.HandleFunc("/api/admin/security/translation", authMiddleware(adminMiddleware(updateTranslationSettings))).Methods("PUT")
+	router.HandleFunc("/api/admin/security/translation/usage", authMiddleware(adminMiddleware(translationUsage))).Methods("GET")
+	// Translating is a read affordance over content the user can already see, so
+	// it needs no permission beyond being signed in. POST (not GET) so gorilla/csrf
+	// covers it and so the source text travels in a body rather than a URL.
+	router.HandleFunc("/api/translate", authMiddleware(translateText)).Methods("POST")
 	router.HandleFunc("/api/admin/credentials", authMiddleware(adminMiddleware(updateExternalCredentials))).Methods("POST")
 	router.HandleFunc("/api/admin/credentials/{service}", authMiddleware(adminMiddleware(deleteExternalCredential))).Methods("DELETE")
 
@@ -637,25 +652,25 @@ func main() {
 
 	// 2. Updated Page Map (Removed Train, Awards, Recs)
 	pages := map[string]string{
-		"/members":         "members",
-		"/dyno":            "dyno",
-		"/rankings":        "rankings",
-		"/storm":           "storm",
-		"/vs":              "vs",
-		"/upload":          "upload",
-		"/settings":        "settings",
-		"/admin":           "admin",
-		"/profile":         "profile",
-		"/files":           "files",
-		"/schedule":        "schedule",
-		"/officer-command": "officer-command",
-		"/train":           "train",
-		"/recruiting":      "recruiting",
-		"/allies":          "allies",
+		"/members":            "members",
+		"/dyno":               "dyno",
+		"/rankings":           "rankings",
+		"/storm":              "storm",
+		"/vs":                 "vs",
+		"/upload":             "upload",
+		"/settings":           "settings",
+		"/admin":              "admin",
+		"/profile":            "profile",
+		"/files":              "files",
+		"/schedule":           "schedule",
+		"/officer-command":    "officer-command",
+		"/train":              "train",
+		"/recruiting":         "recruiting",
+		"/allies":             "allies",
 		"/external-alliances": "external-alliances",
-		"/activity":        "activity",
-		"/season-hub":      "season-hub",
-		"/comms":           "comms",
+		"/activity":           "activity",
+		"/season-hub":         "season-hub",
+		"/comms":              "comms",
 	}
 
 	for path, templateName := range pages {
@@ -670,24 +685,24 @@ func main() {
 			}
 
 			pagePermissions := map[string]bool{
-				"dyno":            data.Permissions.ViewDyno,
-				"rankings":        data.Permissions.ViewRankings,
-				"storm":           data.Permissions.ViewStorm,
-				"vs":              data.Permissions.ViewVSPoints,
-				"upload":          data.Permissions.ViewUpload,
-				"settings":        data.Permissions.ManageSettings,
-				"admin":           data.IsAdmin,
-				"schedule":        data.Permissions.ViewSchedule,
-				"officer-command": data.Permissions.ViewOfficerCommand,
-				"train":           data.Permissions.ViewTrain,
-				"recruiting":      data.Permissions.ViewRecruiting,
-				"allies":          data.Permissions.ViewAllies,
+				"dyno":               data.Permissions.ViewDyno,
+				"rankings":           data.Permissions.ViewRankings,
+				"storm":              data.Permissions.ViewStorm,
+				"vs":                 data.Permissions.ViewVSPoints,
+				"upload":             data.Permissions.ViewUpload,
+				"settings":           data.Permissions.ManageSettings,
+				"admin":              data.IsAdmin,
+				"schedule":           data.Permissions.ViewSchedule,
+				"officer-command":    data.Permissions.ViewOfficerCommand,
+				"train":              data.Permissions.ViewTrain,
+				"recruiting":         data.Permissions.ViewRecruiting,
+				"allies":             data.Permissions.ViewAllies,
 				"external-alliances": data.Permissions.ViewAllies,
-				"activity":        data.Permissions.ViewActivity || data.IsAdmin,
-				"accountability":  data.Permissions.ViewAccountability,
-				"season-hub":      data.Permissions.ViewSeasonHub,
-				"files":           data.Permissions.ViewFiles,
-				"comms":           data.Permissions.ViewComms || data.Permissions.ViewPolls,
+				"activity":           data.Permissions.ViewActivity || data.IsAdmin,
+				"accountability":     data.Permissions.ViewAccountability,
+				"season-hub":         data.Permissions.ViewSeasonHub,
+				"files":              data.Permissions.ViewFiles,
+				"comms":              data.Permissions.ViewComms || data.Permissions.ViewPolls,
 			}
 
 			// 3. Custom 403 Handler for Access Denied

@@ -322,8 +322,19 @@ type Settings struct {
 	// OCRArchiveBucket is the GCS bucket for the gcp/both destinations (set in the
 	// admin UI, like CVWorkerURL). The local destination's path is OCR_ARCHIVE_DIR
 	// (env). See ocr_archive.go.
-	OCRArchiveMode                  string `json:"ocr_archive_mode"`
-	OCRArchiveBucket                string `json:"ocr_archive_bucket"`
+	OCRArchiveMode   string `json:"ocr_archive_mode"`
+	OCRArchiveBucket string `json:"ocr_archive_bucket"`
+	// TranslationBackendMode selects the SERVER-side translation backend:
+	// "ondevice" (default — no server backend, so the browser's built-in
+	// Translator is the only path), "cloud" (Google Cloud Translation, reusing
+	// the same gcp_vision credential as OCR), or "local" (LibreTranslate
+	// sidecar — not implemented yet). Deliberately NOT named "off": the
+	// on-device path keeps working in every mode. See translation.go.
+	TranslationBackendMode string `json:"translation_backend_mode"`
+	// TranslationMonthlyCharCap bounds monthly upstream spend (0 disables the
+	// guard). Summed from translation_cache.char_count — which is why cache
+	// rows are never deleted.
+	TranslationMonthlyCharCap       int    `json:"translation_monthly_char_cap"`
 	TrainFreeDailyLimit             int    `json:"train_free_daily_limit"`
 	TrainPurchasedDailyLimit        int    `json:"train_purchased_daily_limit"`
 	AllianceMaxMembers              int    `json:"alliance_max_members"`
@@ -1324,8 +1335,12 @@ type PageData struct {
 	// use this to swap help text and conditionally disable the
 	// auto-detect option in the upload page.
 	OCRBackendMode string
-	AllianceName   string
-	AllianceTag    string
+	// TranslationBackendMode drives whether static/translate.js may use the
+	// server tier at all; surfaced to the page via a data-* attribute on
+	// #layout-config, since script-src 'self' forbids an inline <script>.
+	TranslationBackendMode string
+	AllianceName           string
+	AllianceTag            string
 	// OurServerID is the game server we play on (0 = not configured). Available on every page.
 	OurServerID int
 	SkillLabels map[string]string

@@ -319,6 +319,7 @@
        'self' only, so an inline block would be silently blocked in production. -->
   <div id="layout-config"
        data-can-manage-members="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
+       data-translation-mode="{{.TranslationBackendMode}}"
        hidden></div>
 
   <script src="{{asset "/global.js"}}"></script>
