@@ -844,6 +844,53 @@ control on member-written prose. Always pass the text from the **data**, not
 (`schedule.js`), and the strike/excuse reason cells (`accountability.js`,
 `accountability_profile.js`).
 
+**Three tiers, in this order** (`resolve()` in `translate.js`):
+
+1. **Shared server cache** — keyed on `sha256(text) + target_lang`, so it needs
+   **no language detection at all**. That is what makes it viable as the first tier.
+2. **On-device, only when `Translator.availability()` is `'available'`** — never at
+   `'downloadable'`, which is the path that stalls. Note Chrome **masks** pack status
+   for anti-fingerprinting and reports `'downloadable'` regardless of what is cached,
+   so this tier rarely fires there. It is honest, not load-bearing: **do not build
+   anything that depends on it firing.** With a backend configured, the practical
+   behaviour is server-wins.
+3. **Server backend** (`translation.go`) — Cloud Translation auto-detects the source,
+   so this tier needs no client detection either. That is what makes it work on a
+   phone, where the built-in APIs do not exist.
+
+The extra cache round trip is only spent when tier 2 is plausible; otherwise the
+client goes straight to the full request, which checks the cache server-side anyway.
+Common path: **one** round trip.
+
+**Rules that must hold:**
+
+- **On-device results are NEVER written to the shared cache.** Every user reads that
+  store; letting a client write to it is a way to put words in another member's mouth.
+  Server-authored only.
+- **The cache is also the spend ledger.** `monthlyCharsUsed()` sums `char_count` for
+  the month, so **rows are never DELETEd** — a delete undercounts the month and the cap
+  leaks. Anything retiring an entry (a future "this translation is wrong" flag) must use
+  a column, not a DELETE.
+- **Same-language answers store an EMPTY `translated_text`**, with `source_lang ==
+  target_lang` as the marker. Writing the original back would put a second copy of
+  member prose in a table that deliberately holds only a hash of it.
+- **Hashing happens server-side.** The obvious alternative — the client hashing and
+  asking about a digest — needs `crypto.subtle`, which exists only in a **secure
+  context**. This app is routinely reached over plain HTTP on a LAN, which is exactly
+  the deployment a server backend exists to serve.
+- **`/api/translate` refuses unless the mode is a server mode.** Without that, an
+  install holding `gcp_vision` credentials for OCR could have its Translation quota
+  spent on a feature the operator never enabled. It is also the only route in the app
+  that spends a metered external quota, hence the per-user rate limit.
+- **`Translate()` is shaped read → fetch → write** — cache read and budget SUM complete
+  before the upstream call, the INSERT after. With `SetMaxOpenConns(1)` anything else is
+  the silent process-hang gotcha.
+
+**Cloud setup** reuses the existing `gcp_vision` service-account credential — no second
+key. The operator enables the Cloud Translation API and grants
+`roles/cloudtranslate.user`; the project id is parsed from the key itself. `mimeType` is
+set to `text/plain`, or the v3 default (HTML) mangles `&` and `<` in ordinary prose.
+
 Three things to know before extending it:
 
 1. **It is desktop-only, by nature of the API.** Chrome/Edge's built-in
