@@ -1134,10 +1134,10 @@
 
     const rewardMemberEl = document.getElementById('reward-member');
     if (rewardMemberEl) {
-        rewardMemberChoices = new Choices(rewardMemberEl, {
+        rewardMemberChoices = noTranslateChoices(new Choices(rewardMemberEl, {
             searchEnabled: true, searchPlaceholderValue: 'Search…',
             itemSelectText: '', shouldSort: false, allowHTML: true,
-        });
+        }));
     }
 
     const formAssignReward = document.getElementById('form-assign-reward');

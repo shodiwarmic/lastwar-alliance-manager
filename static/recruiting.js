@@ -123,7 +123,7 @@ function renderFormerMembers(members, container) {
 
         tr.dataset.search = m.name;
 
-        const nameTd = tr.insertCell();
+        const nameTd = noTranslate(tr.insertCell());
         nameTd.textContent = m.name;
 
         const powerTd = tr.insertCell();
@@ -187,7 +187,7 @@ function openReactivateModal(id, name) {
     const modal = document.getElementById('reactivate-modal');
     const nameEl = document.getElementById('reactivate-member-name');
     const statusEl = document.getElementById('reactivate-status');
-    if (nameEl) nameEl.textContent = `Reactivating: ${name}`;
+    if (nameEl) setLabeledName(nameEl, 'Reactivating: ', name);
     if (statusEl) statusEl.textContent = '';
     if (modal) { modal.style.display = 'flex'; trapFocus(modal); }
 }
@@ -252,7 +252,7 @@ async function handleFormerEditSubmit(e) {
 async function openFormerAliasModal(memberId, memberName) {
     currentFormerAliasMemberId = memberId;
     const titleEl = document.getElementById('former-alias-modal-title');
-    if (titleEl) titleEl.textContent = `Nicknames for ${memberName}`;
+    if (titleEl) setLabeledName(titleEl, 'Nicknames for ', memberName);
 
     const globalWrapper = document.getElementById('former-global-alias-checkbox-wrapper');
     if (globalWrapper) {
@@ -297,7 +297,7 @@ async function loadFormerAliases() {
                 badge.textContent = a.category.charAt(0).toUpperCase() + a.category.slice(1);
                 left.appendChild(badge);
             }
-            const strong = document.createElement('strong');
+            const strong = noTranslate(document.createElement('strong'));
             strong.textContent = a.alias;
             left.appendChild(strong);
             row.appendChild(left);
@@ -430,7 +430,7 @@ function buildProspectCard(p, typeContext) {
         nameGroup.appendChild(av);
     }
 
-    const nameEl = document.createElement('span');
+    const nameEl = noTranslate(document.createElement('span'));
     nameEl.className = 'prospect-name';
     nameEl.textContent = p.name;
     nameGroup.appendChild(nameEl);
@@ -471,20 +471,26 @@ function buildProspectCard(p, typeContext) {
 
     const detailItems = [];
     if (p.server) detailItems.push(['Server', p.server]);
-    if (p.source_alliance) detailItems.push(['Alliance', p.source_alliance]);
+    if (p.source_alliance) detailItems.push(['Alliance', p.source_alliance, true]);
     if (p.power) detailItems.push(['Power', formatPower(p.power)]);
     if (p.hero_power != null) detailItems.push(['Total Hero Power', formatPower(p.hero_power)]);
     if (p.rank_in_alliance) detailItems.push(['Rank', p.rank_in_alliance]);
-    if (p.recruiter_name) detailItems.push(['Recruiter', p.recruiter_name]);
+    if (p.recruiter_name) detailItems.push(['Recruiter', p.recruiter_name, true]);
     if (p.first_contacted) detailItems.push(['Contacted', p.first_contacted]);
 
-    detailItems.forEach(([label, value]) => {
+    detailItems.forEach(([label, value, isIdentifier]) => {
         const span = document.createElement('span');
         span.className = 'prospect-detail';
         const lbl = document.createElement('strong');
         lbl.textContent = label + ': ';
         span.appendChild(lbl);
-        span.appendChild(document.createTextNode(value));
+        if (isIdentifier) {
+            const val = noTranslate(document.createElement('span'));
+            val.textContent = value;
+            span.appendChild(val);
+        } else {
+            span.appendChild(document.createTextNode(value));
+        }
         details.appendChild(span);
     });
 
@@ -561,7 +567,7 @@ async function deleteProspect(id, name) {
 function openConvertModal(prospect) {
     convertingProspect = prospect;
     const nameEl = document.getElementById('convert-prospect-name');
-    if (nameEl) nameEl.textContent = `Converting: ${prospect.name}`;
+    if (nameEl) setLabeledName(nameEl, 'Converting: ', prospect.name);
     document.getElementById('convert-rank').value = 'R1';
     document.getElementById('convert-level').value = '';
     document.getElementById('convert-power').value = prospect.power ? prospect.power : '';
@@ -815,10 +821,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     prospectContactedFP = flatpickr('#prospect-contacted', { dateFormat: 'Y-m-d', allowInput: true });
 
-    recruiterChoices = new Choices('#prospect-recruiter', {
+    recruiterChoices = noTranslateChoices(new Choices('#prospect-recruiter', {
         searchEnabled: true, searchPlaceholderValue: 'Search…',
         itemSelectText: '', shouldSort: false,
-    });
+    }));
 
     setupTabs();
 
@@ -996,7 +1002,8 @@ function ensureProspectFinder() {
 function openLastRankProspectModal(p) {
     lrCurrentProspect = p;
     const modal = document.getElementById('lastrank-prospect-modal');
-    document.getElementById('lr-prospect-name').textContent = p.name + (p.lastrank_public_id ? ` (saved ID: ${p.lastrank_public_id})` : '');
+    noTranslate(document.getElementById('lr-prospect-name')).textContent =
+        p.name + (p.lastrank_public_id ? ` (saved ID: ${p.lastrank_public_id})` : '');
     const input = document.getElementById('lr-prospect-input');
     // Seed with the prospect's name so the officer can just hit Enter.
     input.value = p.lastrank_public_id ? '' : (p.name || '');
@@ -1032,6 +1039,7 @@ async function doLastRankProspectFetch() {
         });
         if (!res.ok) throw new Error((await res.text()) || 'Lookup failed');
         const d = await res.json();
+        noTranslate(result);
         result.textContent = `${d.lastrank_name}: ${formatPower(d.power)} power`
             + (d.hero_power != null ? `, ${formatPower(d.hero_power)} hero power` : '')
             + (d.alliance_abbr ? ` · [${d.alliance_abbr}]` : '')

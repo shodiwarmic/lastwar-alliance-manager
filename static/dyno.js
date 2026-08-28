@@ -133,7 +133,7 @@ function setupReactiveSearch() {
                 const div = document.createElement('div');
                 div.className = 'member-search-item';
 
-                const strong = document.createElement('strong');
+                const strong = noTranslate(document.createElement('strong'));
                 strong.textContent = member.name;
                 const badge = document.createElement('span');
                 badge.className = `member-rank rank-${member.rank}`;
@@ -143,7 +143,7 @@ function setupReactiveSearch() {
                 div.addEventListener('click', () => {
                     hiddenSelect.value = member.id;
                     searchInput.value = ''; // Clear search bar
-                    displayElement.textContent = `Target: ${member.name} (${member.rank})`;
+                    setLabeledName(displayElement, 'Target: ', `${member.name} (${member.rank})`);
                     displayElement.style.display = 'block';
                     resultsContainer.style.display = 'none';
                 });
@@ -527,7 +527,7 @@ function renderGroupedView(recs, container) {
 
         const memberInfo = document.createElement('div');
         memberInfo.className = 'member-info';
-        const nameSpan = document.createElement('span');
+        const nameSpan = noTranslate(document.createElement('span'));
         nameSpan.className = 'member-name';
         nameSpan.textContent = group.member.name;
         const rankBadge = document.createElement('span');
@@ -579,7 +579,7 @@ function createDynoCard(rec, compact = false) {
     if (!compact) {
         const memberInfo = document.createElement('div');
         memberInfo.className = 'member-info';
-        const nameSpan = document.createElement('span');
+        const nameSpan = noTranslate(document.createElement('span'));
         nameSpan.className = 'member-name';
         nameSpan.textContent = rec.member_name;
         const rankBadge = document.createElement('span');
@@ -611,7 +611,7 @@ function createDynoCard(rec, compact = false) {
 
     const bySpan = document.createElement('span');
     bySpan.className = 'rec-by';
-    bySpan.textContent = `by ${rec.created_by}`;
+    setLabeledName(bySpan, 'by ', rec.created_by);
     meta.appendChild(bySpan);
 
     if (!rec.is_author_public && currentUsername && rec.created_by === currentUsername) {
@@ -750,7 +750,7 @@ function editDynoRecommendation(id) {
     // Populate form fields
     document.getElementById('member-select').value = rec.member_id;
     const displayElement = document.getElementById('selected-member-display');
-    displayElement.textContent = `Target: ${rec.member_name} (${rec.member_rank})`;
+    setLabeledName(displayElement, 'Target: ', `${rec.member_name} (${rec.member_rank})`);
     displayElement.style.display = 'block';
 
     document.getElementById('points-input').value = rec.points;

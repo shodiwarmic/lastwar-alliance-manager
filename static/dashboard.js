@@ -199,7 +199,7 @@ function renderVS(card, vsRows, members, joinedAtById, dayImported) {
     const topList = el('ul', { className: 'dash-list' });
     totals.slice(0, 3).forEach(r => {
         const li = el('li');
-        li.appendChild(el('span', { className: 'dash-list-name', textContent: r.name }));
+        li.appendChild(noTranslate(el('span', { className: 'dash-list-name', textContent: r.name })));
         li.appendChild(el('span', { className: 'dash-list-value', textContent: fmtNumber(r.total) }));
         topList.appendChild(li);
     });
@@ -208,7 +208,7 @@ function renderVS(card, vsRows, members, joinedAtById, dayImported) {
     const botList = el('ul', { className: 'dash-list' });
     totals.slice(-3).reverse().forEach(r => {
         const li = el('li');
-        li.appendChild(el('span', { className: 'dash-list-name', textContent: r.name }));
+        li.appendChild(noTranslate(el('span', { className: 'dash-list-name', textContent: r.name })));
         li.appendChild(el('span', { className: 'dash-list-value', textContent: fmtNumber(r.total) }));
         botList.appendChild(li);
     });
@@ -265,7 +265,7 @@ function renderDiplomacy(card, allies, agreementTypes) {
     active.forEach(ally => {
         const li = el('li', { style: { flexWrap: 'wrap', gap: '0.25rem' } });
 
-        const nameSpan = el('span', { className: 'dash-list-name' });
+        const nameSpan = noTranslate(el('span', { className: 'dash-list-name' }));
         nameSpan.textContent = (ally.tag ? '[' + ally.tag + '] ' : '') + ally.name;
         li.appendChild(nameSpan);
 
@@ -318,10 +318,10 @@ function renderLeaderFlags(card, members, vsRows, joinedAtById, dayImported) {
     const list = el('ul', { className: 'dash-list' });
     below.forEach(r => {
         const li = el('li');
-        li.appendChild(el('span', { className: 'dash-list-name' },
+        li.appendChild(noTranslate(el('span', { className: 'dash-list-name' },
             r.name + ' ',
             el('span', { className: `member-rank rank-${r.rank}` }, r.rank)
-        ));
+        )));
         li.appendChild(el('span', { className: 'dash-list-value', textContent: r.daysBelow + ' day' + (r.daysBelow !== 1 ? 's' : '') }));
         list.appendChild(li);
     });
@@ -365,11 +365,14 @@ function renderLastRankReview(card, data) {
         const list = el('ul', { className: 'dash-list' });
         top.forEach(item => {
             const li = el('li');
-            li.appendChild(el('span', { className: 'dash-list-name', textContent: item.lastrank_name || item.current_value || 'Unknown' }));
-            const detail = item.kind === 'rank' || item.kind === 'name'
+            li.appendChild(noTranslate(el('span', { className: 'dash-list-name', textContent: item.lastrank_name || item.current_value || 'Unknown' })));
+            const isIdentifierDiff = item.kind === 'rank' || item.kind === 'name';
+            const detail = isIdentifierDiff
                 ? (item.current_value || '?') + ' \u2192 ' + (item.proposed_value || '?')
                 : REVIEW_KIND_LABELS[item.kind] || item.kind;
-            li.appendChild(el('span', { className: 'dash-list-value', textContent: detail }));
+            const detailEl = el('span', { className: 'dash-list-value', textContent: detail });
+            if (isIdentifierDiff) noTranslate(detailEl);
+            li.appendChild(detailEl);
             list.appendChild(li);
         });
         card.appendChild(list);
@@ -416,10 +419,10 @@ function renderAccountability(card, data) {
         const list = el('ul', { className: 'dash-list' });
         data.top_at_risk.forEach(m => {
             const li = el('li');
-            li.appendChild(el('span', { className: 'dash-list-name' },
+            li.appendChild(noTranslate(el('span', { className: 'dash-list-name' },
                 m.name + ' ',
                 el('span', { className: `member-rank rank-${m.rank}` }, m.rank)
-            ));
+            )));
             li.appendChild(el('span', { className: 'dash-list-value', textContent: m.active_strikes + ' strike' + (m.active_strikes !== 1 ? 's' : '') }));
             list.appendChild(li);
         });

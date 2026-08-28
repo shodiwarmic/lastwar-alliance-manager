@@ -304,7 +304,7 @@
             tileEl.appendChild(el('div', { className: 'res', text: oc === 'pending' ? '—' : oc.toUpperCase() }));
             if (d && d.our_score != null && d.opponent_score != null)
                 tileEl.appendChild(el('div', { className: 'raw', text: 'Raw ' + fmtBig(d.our_score) + ' – ' + fmtBig(d.opponent_score) }));
-            if (d && d.mvp_name) tileEl.appendChild(el('div', { className: 'raw', text: '★ ' + d.mvp_name + (d.mvp_is_ours ? '' : ' (opp)') }));
+            if (d && d.mvp_name) tileEl.appendChild(el('div', { className: 'raw', translate: 'no', text: '★ ' + d.mvp_name + (d.mvp_is_ours ? '' : ' (opp)') }));
             grid.appendChild(tileEl);
         }
         return grid;
@@ -368,7 +368,7 @@
                 : el('button', { className: 'btn btn-secondary btn-sm', onclick: () => gotoWeek(wk) }, 'Details');
             tb.appendChild(el('tr', {},
                 el('td', { text: 'Week ' + (wk.week_number != null ? wk.week_number : '') }),
-                el('td', { text: opp }),
+                el('td', { translate: 'no', text: opp }),
                 el('td', { text: st.our_points + ' – ' + st.opponent_points }),
                 el('td', {}, pillFor(st)),
                 el('td', {}, wk.strategy_label ? el('span', { className: 'vsl-strat ' + wk.strategy_label, text: wk.strategy_label }) : el('span', { className: 'vsl-help', text: '—' })),
@@ -450,7 +450,7 @@
             const isUs = !!(MY_TAG && r.tag && r.tag.toLowerCase() === MY_TAG.toLowerCase());
             const cells = [
                 el('td', { className: 'vsl-rk' + (r.rank <= 3 ? ' rk' + r.rank : ''), text: r.rank <= 16 ? String(r.rank) : '—' }),
-                el('td', { className: 'vsl-al', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || '') + (isUs ? ' · us' : '') }),
+                el('td', { className: 'vsl-al', translate: 'no', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || '') + (isUs ? ' · us' : '') }),
             ];
             per.forEach(pw => cells.push(el('td', { className: 'vsl-wc' }, summaryResultCell(pw.byTag.get(r.k), pw.status))));
             tb.appendChild(el('tr', { className: isUs ? 'us' : null }, ...cells));
@@ -568,7 +568,7 @@
                 + (isUs ? ' us' : '');
             const c = el('div', { className: cls });
             if (side.rank != null) c.appendChild(el('span', { className: 'rk', text: '#' + side.rank }));
-            c.appendChild(el('span', { className: 'nm', text: (isUs ? '★ ' : '') + (side.tag ? '[' + side.tag + '] ' : '') + (side.name || '') }));
+            c.appendChild(el('span', { className: 'nm', translate: 'no', text: (isUs ? '★ ' : '') + (side.tag ? '[' + side.tag + '] ' : '') + (side.name || '') }));
             if (side.pts != null) c.appendChild(el('span', { className: 's', text: side.pts }));
             return c;
         };
@@ -659,11 +659,15 @@
             nodes.forEach(n => { if (n) c.appendChild(n); });
             return c;
         };
-        const table = (heads, rowsArr) => {
+        // `idCols` names the column indices holding identifiers (alliance names and
+        // the like) so the browser translator leaves them alone.
+        const table = (heads, rowsArr, idCols) => {
+            const isId = i => !!idCols && idCols.includes(i);
             const tbl = el('table', { className: 'data-table' });
             tbl.appendChild(el('thead', {}, el('tr', {}, ...heads.map(h => el('th', { text: h })))));
             const tb = el('tbody');
-            rowsArr.forEach(cells => tb.appendChild(el('tr', {}, ...cells.map(c => el('td', { text: c })))));
+            rowsArr.forEach(cells => tb.appendChild(el('tr', {}, ...cells.map((c, i) =>
+                el('td', isId(i) ? { translate: 'no', text: c } : { text: c })))));
             tbl.appendChild(tb);
             return el('div', { className: 'table-scroll' }, tbl);
         };
@@ -734,7 +738,8 @@
         if (a.opponents && a.opponents.length) {
             holder.appendChild(cardWith('Opponents faced', table(
                 ['Alliance', 'Record', 'Meetings'],
-                a.opponents.map(o => [(o.tag ? '[' + o.tag + '] ' : '') + (o.name || '—'), rec(o.wins, o.losses, o.ties), String(o.meetings)]))));
+                a.opponents.map(o => [(o.tag ? '[' + o.tag + '] ' : '') + (o.name || '—'), rec(o.wins, o.losses, o.ties), String(o.meetings)]),
+                [0])));
         }
     }
 
@@ -978,7 +983,7 @@
         function localItem(m) {
             const meta = [m.server != null ? 'S' + m.server : null, m.lastrank_id ? 'saved snapshot' : null].filter(Boolean).join(' · ');
             return el('button', { className: 'vsl-find-item', type: 'button', onclick: () => { closeDropdown(); setSnapFromMatch(m); } },
-                el('span', { className: 'vsl-find-name', text: (m.tag ? '[' + m.tag + '] ' : '') + (m.name || '') }),
+                el('span', { className: 'vsl-find-name', translate: 'no', text: (m.tag ? '[' + m.tag + '] ' : '') + (m.name || '') }),
                 meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
         }
         function lrItem(r) {
@@ -998,7 +1003,7 @@
                 }
                 fillOppSnapshot(snap.power, snap.kills, snap.member_count);
             } },
-                el('span', { className: 'vsl-find-name', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
+                el('span', { className: 'vsl-find-name', translate: 'no', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
                 meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
         }
         function renderDropdown(localList, lrList, msg, isError, showAction) {
@@ -1114,7 +1119,7 @@
             function close() { dd.hidden = true; document.removeEventListener('mousedown', onDocDown); }
             const pick = (nm, isOurs) => { input.value = nm; side.value = isOurs ? 'ours' : 'opp'; close(); };
             const item = (nm, meta, isOurs) => el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick(nm, isOurs) },
-                el('span', { className: 'vsl-find-name', text: nm }),
+                el('span', { className: 'vsl-find-name', translate: 'no', text: nm }),
                 meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
             function render() {
                 // Folded on both sides: the opponent roster comes straight from
@@ -1303,13 +1308,13 @@
                 (locals || []).forEach((a, i) => {
                     if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'Registry' }));
                     dd.appendChild(el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick(a) },
-                        el('span', { className: 'vsl-find-name', text: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || '') }),
+                        el('span', { className: 'vsl-find-name', translate: 'no', text: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || '') }),
                         a.server != null ? el('span', { className: 'vsl-find-meta', text: 'S' + a.server }) : null));
                 });
                 (lrs || []).forEach((a, i) => {
                     if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'LastRank' }));
                     dd.appendChild(el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick({ tag: a.tag, name: a.name, server: a.server }) },
-                        el('span', { className: 'vsl-find-name', text: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || '') }),
+                        el('span', { className: 'vsl-find-name', translate: 'no', text: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || '') }),
                         el('span', { className: 'vsl-find-meta', text: [a.server != null ? 'S' + a.server : null, a.power != null ? fmtBig(a.power) + ' pw' : null].filter(Boolean).join(' · ') })));
                 });
                 if (msg) dd.appendChild(el('div', { className: isErr ? 'vsl-find-msg vsl-find-err' : 'vsl-find-msg', text: msg }));

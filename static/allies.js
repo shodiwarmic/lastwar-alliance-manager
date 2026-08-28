@@ -130,11 +130,11 @@ function renderAllyCard(ally) {
     const headerRow = document.createElement('div');
     headerRow.className = 'ally-header-row';
 
-    const tag = document.createElement('span');
+    const tag = noTranslate(document.createElement('span'));
     tag.className = 'ally-tag';
     tag.textContent = '[' + ally.tag + ']';
 
-    const name = document.createElement('span');
+    const name = noTranslate(document.createElement('span'));
     name.className = 'ally-name';
     name.textContent = ally.name;
 
@@ -169,7 +169,7 @@ function renderAllyCard(ally) {
         const meta = document.createElement('div');
         meta.className = 'ally-meta';
         if (ally.contact) {
-            const contactLine = document.createElement('span');
+            const contactLine = noTranslate(document.createElement('span'));
             contactLine.append(svgIcon('phone', 13), document.createTextNode(' ' + ally.contact));
             meta.appendChild(contactLine);
         }
@@ -570,7 +570,7 @@ function renderNapRow(a) {
     // An inline-flex wrapper INSIDE the cell. Setting display on the <td> itself would take it out
     // of the table layout and the columns would stop lining up.
     const alliance = document.createElement('td');
-    const wrap = document.createElement('span');
+    const wrap = noTranslate(document.createElement('span'));
     wrap.className = 'nap-cell';
     if (a.tag) {
         const tag = document.createElement('span');

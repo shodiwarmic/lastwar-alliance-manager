@@ -49,14 +49,14 @@ document.addEventListener('DOMContentLoaded', () => {
     filterFromFP = flatpickr('#filter-from', { dateFormat: 'Y-m-d', allowInput: true });
     filterToFP   = flatpickr('#filter-to',   { dateFormat: 'Y-m-d', allowInput: true });
 
-    conductorChoices = new Choices('#log-conductor', {
+    conductorChoices = noTranslateChoices(new Choices('#log-conductor', {
         searchEnabled: true, searchPlaceholderValue: 'Search…',
         itemSelectText: '', shouldSort: false, allowHTML: true,
-    });
-    vipChoices = new Choices('#log-vip', {
+    }));
+    vipChoices = noTranslateChoices(new Choices('#log-vip', {
         searchEnabled: true, searchPlaceholderValue: 'Search…',
         itemSelectText: '', shouldSort: false, allowHTML: true,
-    });
+    }));
 
     trainTabs = Tabs.init({ hash: true, defaultTab: 'logs' });
     loadMembers().then(() => {
@@ -222,11 +222,13 @@ function renderLogsTable(logs) {
         typeTd.appendChild(badge);
 
         // Conductor
-        td(tr, log.conductor_name);
+        noTranslate(td(tr, log.conductor_name));
 
-        // VIP
+        // VIP — the name is an identifier; the Guest/Guardian badge beside it is
+        // a label, but it is ours and short enough to live with untranslated.
         const vipTd = tr.insertCell();
         if (log.vip_name) {
+            noTranslate(vipTd);
             vipTd.textContent = log.vip_name;
             if (log.vip_type) {
                 const vbadge = document.createElement('span');
@@ -490,7 +492,7 @@ function renderEligibleList(members) {
         left.appendChild(pos);
 
         const nameRank = document.createElement('div');
-        const nameEl = document.createElement('div');
+        const nameEl = noTranslate(document.createElement('div'));
         nameEl.className = 'eligible-card-name';
         nameEl.textContent = m.name;
         const rankEl = document.createElement('span');

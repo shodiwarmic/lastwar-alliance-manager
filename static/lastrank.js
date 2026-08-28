@@ -167,14 +167,17 @@
     });
 
     function renderQueueRow(p) {
+        // rank/name proposals read "current → proposed", i.e. two identifiers;
+        // archive/unmatched carry a human-readable reason that should translate.
+        const isIdentifierDetail = p.kind !== 'archive' && p.kind !== 'unmatched';
         const detail = p.kind === 'archive' ? p.reason
             : p.kind === 'unmatched' ? p.reason
             : `${p.current_value} → ${p.proposed_value}`;
         const applyBtn = el('button', { className: 'btn btn-primary btn-sm', type: 'button' });
         applyBtn.textContent = 'Apply';
         const row = el('div', { className: 'lr-row', 'data-search': p.lastrank_name || p.current_value },
-            el('div', { className: 'lr-row-name', textContent: p.lastrank_name || p.current_value }),
-            el('div', { className: 'lr-field lr-skip', textContent: detail }));
+            el('div', { className: 'lr-row-name', translate: 'no', textContent: p.lastrank_name || p.current_value }),
+            el('div', { className: 'lr-field lr-skip', translate: isIdentifierDetail ? 'no' : 'yes', textContent: detail }));
 
         if (p.kind === 'unmatched') {
             // Resolving one needs a target member, which this compact view can't ask
@@ -193,7 +196,7 @@
                 });
                 if (!res.ok) throw new Error((await res.text()) || 'Could not apply');
                 const d = await res.json();
-                row.replaceChildren(el('div', { className: 'lr-field lr-skip', textContent:
+                row.replaceChildren(el('div', { className: 'lr-field lr-skip', translate: 'no', textContent:
                     d.applied ? `Applied: ${p.lastrank_name || p.current_value}`
                               : `Already up to date — ${p.lastrank_name || p.current_value}` }));
                 refreshPendingBadge();
@@ -237,8 +240,8 @@
         const a = data.alliance || {};
         const label = (a.abbr ? '[' + a.abbr + '] ' : '') + (a.name || 'Alliance');
         const nameNode = a.alliance_id
-            ? el('a', { href: 'https://lastrank.fun/a/' + a.alliance_id, target: '_blank', rel: 'noopener noreferrer', title: 'View alliance on LastRank' }, el('strong', { textContent: label }))
-            : el('strong', { textContent: label });
+            ? el('a', { href: 'https://lastrank.fun/a/' + a.alliance_id, target: '_blank', rel: 'noopener noreferrer', title: 'View alliance on LastRank' }, el('strong', { translate: 'no', textContent: label }))
+            : el('strong', { translate: 'no', textContent: label });
         metaEl.replaceChildren(
             nameNode,
             document.createTextNode(
@@ -292,7 +295,7 @@
             const cb = el('input', { type: 'checkbox' }); // default unchecked = no action
             c._archive = cb;
             group.appendChild(el('div', { className: 'lr-row', 'data-search': c.name + ' ' + c.rank },
-                el('div', { className: 'lr-row-name', textContent: `${c.name} (${c.rank})` }),
+                el('div', { className: 'lr-row-name', translate: 'no', textContent: `${c.name} (${c.rank})` }),
                 el('label', { className: 'lr-field' }, cb, el('span', {}, ` Archive — ${c.reason}`)),
                 deferControls(pendingFor('archive:m:' + c.member_id),
                     () => { cb.checked = false; cb.disabled = true; })
@@ -380,12 +383,14 @@
         m._cb = {};
         const name = (m.matched_member && m.matched_member.name) || m.lastrank_name;
         const row = el('div', { className: 'lr-row', 'data-search': name },
-            el('div', { className: 'lr-row-name', textContent: name })
+            el('div', { className: 'lr-row-name', translate: 'no', textContent: name })
         );
 
         // Name change (matched via alias) — ask what to do; default keeps the name.
         if (m.name_change) {
-            const sel = el('select', { className: 'form-input' },
+            // Option text is translated (only option.value is safe) and every
+            // option here quotes a player name, so the control is fenced off.
+            const sel = el('select', { className: 'form-input', translate: 'no' },
                 el('option', { value: '', textContent: `Keep "${m.name_change.current}"` }),
                 el('option', { value: 'rename', textContent: `Rename to "${m.name_change.new}"` }),
                 el('option', { value: 'alias', textContent: `Add "${m.name_change.new}" as global alias` })
@@ -393,8 +398,8 @@
             m._nameAction = sel;
             row.appendChild(el('div', { className: 'lr-field lr-rank' },
                 el('span', {}, 'Name on LastRank: '),
-                el('span', { className: 'lr-new', textContent: m.name_change.new }),
-                el('span', { className: 'lr-skip', textContent: `  (roster: ${m.name_change.current})` })));
+                el('span', { className: 'lr-new', translate: 'no', textContent: m.name_change.new }),
+                el('span', { className: 'lr-skip', translate: 'no', textContent: `  (roster: ${m.name_change.current})` })));
             const nameMid = m.matched_member && m.matched_member.id;
             row.appendChild(el('div', { className: 'lr-unmatched-controls' }, sel,
                 deferControls(pendingFor('name:m:' + nameMid),
@@ -435,7 +440,7 @@
             el('option', { value: 'rename', textContent: 'Rename member to this name' }),
             el('option', { value: 'add', textContent: 'Add as new member' })
         );
-        const memberSel = el('select', { className: 'form-input' },
+        const memberSel = el('select', { className: 'form-input', translate: 'no' },
             el('option', { value: '', textContent: '— pick member —' }),
             ...roster.map(r => el('option', { value: String(r.id), textContent: `${r.name} (${r.rank})` }))
         );
@@ -467,7 +472,7 @@
         u._action = actionSel;
         u._member = memberSel;
         return el('div', { className: 'lr-row', 'data-search': u.lastrank_name },
-            el('div', { className: 'lr-row-name', textContent: u.lastrank_name }),
+            el('div', { className: 'lr-row-name', translate: 'no', textContent: u.lastrank_name }),
             detail ? el('div', { className: 'lr-field lr-skip', textContent: detail }) : null,
             el('div', { className: 'lr-unmatched-controls' }, actionSel, memberSel,
                 deferControls(pendingFor(u.lastrank_public_id

@@ -311,8 +311,8 @@ function buildFileCard(file) {
     const metaDiv = document.createElement('div');
     metaDiv.className = 'file-meta';
     metaDiv.append(
-        fileMetaBadge('user', file.owner_name, null,
-            `Uploaded by ${file.owner_name} · ${fileTimestampFull(file.created_at)}`),
+        noTranslate(fileMetaBadge('user', file.owner_name, null,
+            `Uploaded by ${file.owner_name} · ${fileTimestampFull(file.created_at)}`)),
         fileMetaBadge('eye', file.min_rank, `rank-${file.min_rank}`,
             `Minimum rank to view: ${file.min_rank}`),
         fileMetaBadge('pencil', file.min_edit_rank, `rank-${file.min_edit_rank}`,

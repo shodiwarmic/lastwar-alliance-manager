@@ -580,7 +580,7 @@ async function saveRespOrder(ci) {
 
 // ── inline member picker ─────────────────────────────────────────
 function buildAssigneeChip(ci, ri, a) {
-    const chip = document.createElement('span');
+    const chip = noTranslate(document.createElement('span'));
     chip.className = 'oc-chip';
     chip.appendChild(document.createTextNode(a.name + ' '));
     const rankBadge = document.createElement('span');

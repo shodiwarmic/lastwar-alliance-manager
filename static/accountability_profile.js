@@ -75,7 +75,7 @@ function renderHeader(profile) {
     header.replaceChildren();
 
     const nameDiv = document.createElement('div');
-    const nameP = document.createElement('p');
+    const nameP = noTranslate(document.createElement('p'));
     nameP.className = 'acc-profile-name';
     nameP.textContent = profile.name;
     const subP = document.createElement('p');

@@ -375,7 +375,7 @@ async function loadStrikes() {
         tr.dataset.search = s.member_name + ' ' + s.member_rank + ' ' + strikeTypeLabel(s.strike_type);
 
         const tdMember = document.createElement('td');
-        const link = document.createElement('a');
+        const link = noTranslate(document.createElement('a'));
         link.href = '/accountability/' + s.member_id;
         link.textContent = s.member_name + ' ';
         const linkRankChip = document.createElement('span');
@@ -468,7 +468,7 @@ async function loadStormAttendance() {
         row.dataset.memberId = m.member_id;
         row.dataset.search = m.member_name + ' ' + m.member_rank;
 
-        const nameSpan = document.createElement('span');
+        const nameSpan = noTranslate(document.createElement('span'));
         nameSpan.className = 'storm-member-name';
         nameSpan.textContent = m.member_name + ' ';
         const stormRankChip = document.createElement('span');
@@ -564,7 +564,7 @@ function memberListEl(members, valueFormatter) {
     list.className = 'dash-list';
     members.forEach(m => {
         const li = document.createElement('li');
-        const nameSpan = document.createElement('span');
+        const nameSpan = noTranslate(document.createElement('span'));
         nameSpan.className = 'dash-list-name';
         nameSpan.textContent = m.name + ' ';
         const nameRankChip = document.createElement('span');
