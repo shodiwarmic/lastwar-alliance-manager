@@ -809,8 +809,11 @@ alliance names, tags, anything pasted into the game verbatim, and every table
 the CSV/XLSX helper can reach. `_extractTableData` (`global.js`) reads
 `th.textContent` / `td.textContent`, so a translated table exports translated
 member names that no longer match on re-import. **Any new table given
-`data-export-csv` must also carry `translate="no"`** — `build-check.yml`
-enforces this.
+`data-export-csv` must also carry `translate="no"`** — and so must any template
+table with a name column (`Member`, `Name`, `Player`, `Commander`, `Conductor`,
+`VIP`, `Alliance`, `User`, …), exportable or not: a translated player name is one
+nobody can find in the game. `build-check.yml` enforces both, keyed on the `<th>`
+text for the second.
 
 Do **not** apply it to member-written prose — shout-out notes, mail bodies,
 ally/prospect notes, strike reasons, reward notes. That content is exactly what
@@ -825,7 +828,37 @@ Two things that look like they need it but don't:
 - **`<input>` / `<select>` values** — `input.value` and `option.value` are not
   translated. Only `option.text` is, which is why reading `.value` is correct
   and `storm.js`'s registration table reading `option.text` for its time-slot
-  headers is fine (display text, not payload).
+  headers is fine (display text, not payload). The flip side still bites the
+  *reader*: a `<select>` listing member names **renders** translated names, so a
+  roster dropdown needs `translate="no"` on the control even though what it
+  submits is safe.
+
+#### Marking JS-built DOM: `noTranslate` (`global.js`)
+
+Templates say this with a `translate="no"` attribute. JS-built DOM has no such
+container to mark, so mark the node as it is built — three helpers, all in
+`global.js` and therefore loaded before every page script:
+
+| Helper | Use |
+|---|---|
+| `noTranslate(el)` | Stamp (and return) the element holding an identifier. |
+| `setLabeledName(el, label, name)` | Render `"<prose label><identifier>"` — e.g. `setLabeledName(h2, 'Archive ', name)`. Keeps the label translatable; a plain `el.textContent = 'Archive ' + name` freezes both or neither. |
+| `noTranslateChoices(instance)` | Wrap every `new Choices(…)` over a list of names. **Choices.js wraps the original `<select>` and renders the visible list as a SIBLING of it**, so `translate="no"` on the `<select>` never reaches the rendered items. |
+
+The `el()` helpers in `dashboard.js` / `lastrank.js` / `vs-league.js` /
+`external-alliances.js` / `alliance-report.js` pass unknown keys through to
+`setAttribute`, so those files write `translate: 'no'` in the props object
+instead.
+
+**Mark the smallest element that wraps the identifier.** Marking a whole card,
+row or table also freezes its buttons, headings and empty states, which are UI
+prose a non-English reader does need. Where a row genuinely mixes the two, split
+it: a bare text node can't be opted out, so give the name a `<span>` of its own
+(see `buildMemberChip` in `storm.js` and `defaultRenderRow` in `member-picker.js`).
+
+A leaf already inside a marked ancestor needs nothing — the rows built by
+`rankings.js`, `vs.js`, `upload.js` and `season-hub.js` land in tables the
+template already marked.
 
 ### Inline translation of member prose: `TranslateBlock`
 

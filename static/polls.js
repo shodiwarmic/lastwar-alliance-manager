@@ -890,7 +890,7 @@ function renderPollByOption(pi, data, bodyEl) {
 }
 
 function renderOptionChip(pi, option, m) {
-    const chip = document.createElement('span');
+    const chip = noTranslate(document.createElement('span'));
     chip.className = 'poll-option-chip';
     chip.dataset.search = (m.member_name || '') + ' ' + (m.rank || '');
     const rank = document.createElement('span');

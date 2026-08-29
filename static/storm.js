@@ -183,7 +183,7 @@ function memberInfoNodes(m) {
     const regVal = getRegVal(m.id, activeSlotIdx);
     const otherRegVal = otherSlotIdx && otherSlotIdx !== activeSlotIdx ? getRegVal(m.id, otherSlotIdx) : 0;
 
-    const nameDiv = document.createElement('div');
+    const nameDiv = noTranslate(document.createElement('div'));
     nameDiv.className = 'pool-name';
     nameDiv.textContent = m.name;
 
@@ -351,7 +351,9 @@ function buildMemberChip(m, gid, bid, isDirect) {
     if (bid) chip.dataset.chipBuildingId = bid;
     chip.dataset.chipDirect = isDirect ? 'true' : 'false';
 
-    chip.appendChild(document.createTextNode(mName));
+    const chipName = noTranslate(document.createElement('span'));
+    chipName.textContent = mName;
+    chip.appendChild(chipName);
     for (const badge of memberChipBadges(member)) {
         chip.appendChild(badge);
     }
@@ -1085,7 +1087,7 @@ function renderRegistrationView() {
         const tr = document.createElement('tr');
         tr.dataset.search = reg.member_name + ' ' + (reg.member_rank || '');
 
-        const nameCell = document.createElement('td');
+        const nameCell = noTranslate(document.createElement('td'));
         nameCell.textContent = reg.member_name;
         tr.appendChild(nameCell);
 

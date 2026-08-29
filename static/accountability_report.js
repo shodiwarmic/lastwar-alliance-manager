@@ -30,7 +30,7 @@ function memberList(members, valueFormatter) {
     list.className = 'dash-list';
     members.forEach(m => {
         const li = document.createElement('li');
-        const nameSpan = document.createElement('span');
+        const nameSpan = noTranslate(document.createElement('span'));
         nameSpan.className = 'dash-list-name';
         nameSpan.textContent = m.name + ' ';
         const rankChip = document.createElement('span');

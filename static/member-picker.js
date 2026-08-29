@@ -25,7 +25,11 @@
     }
     function defaultRenderRow(m) {
         const frag = document.createDocumentFragment();
-        frag.appendChild(document.createTextNode((m.name || '') + ' '));
+        // A bare text node can't be opted out of translation, so the name gets a
+        // span of its own. A caller overriding renderRow must do the same.
+        const name = noTranslate(document.createElement('span'));
+        name.textContent = (m.name || '') + ' ';
+        frag.appendChild(name);
         const rank = document.createElement('span');
         rank.className = 'member-rank rank-' + (m.rank || '');
         rank.textContent = m.rank || '';

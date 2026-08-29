@@ -615,6 +615,7 @@ function buildMemberCard(member) {
     // +N indicator when they would overflow.
     const nameDiv = document.createElement('div');
     nameDiv.className = 'member-name';
+    noTranslate(nameDiv);   // name + aliases: identifiers, never translated
 
     // Top line: name + alias-manager button.
     const nameTop = document.createElement('div');
@@ -1144,7 +1145,7 @@ function setupArchiveModal() {
 
 function archiveMember(id, name) {
     archiveTargetId = id;
-    document.getElementById('archive-modal-title').textContent = `Archive ${name}`;
+    setLabeledName(document.getElementById('archive-modal-title'), 'Archive ', name);
     document.getElementById('archive-member-modal').style.display = 'flex';
 }
 
@@ -1487,7 +1488,7 @@ function showCSVPreview(result) {
         const memberInfo = document.createElement('div');
         memberInfo.className = 'member-info';
 
-        const nameSpan = document.createElement('span');
+        const nameSpan = noTranslate(document.createElement('span'));
         nameSpan.className = 'member-name';
         nameSpan.textContent = member.name;
         memberInfo.appendChild(nameSpan);
@@ -1555,7 +1556,8 @@ function showCSVPreview(result) {
             const text = document.createElement('span');
             text.textContent = 'Similar name(s) found.';
 
-            const select = document.createElement('select');
+            // Option text is translated, and each one quotes a roster name.
+            const select = noTranslate(document.createElement('select'));
             select.className = 'rename-select';
             select.dataset.index = index;
             select.dataset.newName = member.name;
@@ -1619,7 +1621,7 @@ function showCSVPreview(result) {
             const memberInfo = document.createElement('div');
             memberInfo.className = 'remove-member-info';
 
-            const nameSpan = document.createElement('span');
+            const nameSpan = noTranslate(document.createElement('span'));
             nameSpan.className = 'remove-member-name';
             nameSpan.textContent = member.name;
 
@@ -1700,7 +1702,7 @@ function renderAliases() {
             left.appendChild(badge);
         }
 
-        const strong = document.createElement('strong');
+        const strong = noTranslate(document.createElement('strong'));
         strong.textContent = a.alias;
         left.appendChild(strong);
         row.appendChild(left);
@@ -1726,7 +1728,7 @@ async function openAliasModal(memberId, memberName) {
     currentAliasMemberId = memberId;
     loadedAliases = [];
     activeAliasFilter = 'all';
-    document.getElementById('alias-modal-title').textContent = `Nicknames for ${memberName}`;
+    setLabeledName(document.getElementById('alias-modal-title'), 'Nicknames for ', memberName);
 
     document.querySelectorAll('[data-alias-filter]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.aliasFilter === 'all');

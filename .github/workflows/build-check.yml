@@ -116,6 +116,14 @@ jobs:
           # longer match on re-import.
           TABLE_TAG = re.compile(r'<table\b[^>]*>')
 
+          # A table with a name column shows identifiers whether or not it is
+          # exportable: a translated player name is one nobody can find in the
+          # game. Keyed on the header text, which is ours and stable.
+          TABLE_BLOCK = re.compile(r'<table\b[^>]*>.*?</table>', re.S)
+          TH = re.compile(r'<th\b[^>]*>(.*?)</th>', re.S)
+          ID_HEADERS = {'member', 'members', 'name', 'player', 'commander', 'conductor',
+                        'vip', 'alliance', 'user', 'username', 'ocr name', 'matched member'}
+
           fails = []
           for path in sorted(pathlib.Path('templates').rglob('*.html')):
               src = path.read_text(encoding='utf-8')
@@ -126,6 +134,15 @@ jobs:
                   if 'data-export-csv' in m.group(0) and 'translate="no"' not in m.group(0):
                       fails.append(f'{path}:{src.count(chr(10), 0, m.start()) + 1}: '
                                    'exportable table is missing translate="no"')
+              for m in TABLE_BLOCK.finditer(src):
+                  open_tag = m.group(0).split('>', 1)[0] + '>'
+                  if 'translate="no"' in open_tag:
+                      continue
+                  heads = [re.sub(r'<[^>]+>', '', h).strip().lower() for h in TH.findall(m.group(0))]
+                  hit = sorted(set(heads) & ID_HEADERS)
+                  if hit:
+                      fails.append(f'{path}:{src.count(chr(10), 0, m.start()) + 1}: '
+                                   f'table with identifier column(s) {hit} is missing translate="no"')
 
           if fails:
               print('Translation-safety check failed:\n')

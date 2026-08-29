@@ -335,7 +335,7 @@
                 : x.is_opponent ? 'VS opponent' : x.prospect_count > 0 ? 'Prospect source' : '';
             const meta = [x.server != null ? 'S' + x.server : null, badge || null].filter(Boolean).join(' · ');
             return el('button', { className: 'ext-find-item', type: 'button', onclick: () => { closeDropdown(); if (modalApi.close) modalApi.close(); openModal(x); } },
-                el('span', { className: 'ext-find-name', text: (x.tag ? '[' + x.tag + '] ' : '') + (x.name || '') }),
+                el('span', { className: 'ext-find-name', translate: 'no', text: (x.tag ? '[' + x.tag + '] ' : '') + (x.name || '') }),
                 meta ? el('span', { className: 'ext-find-meta', text: meta }) : null);
         }
 
@@ -354,7 +354,7 @@
                 try { applySnapshot(await api('POST', '/api/external-alliances/lookup', { url: r.lastrank_id })); }
                 catch (e) { note.textContent = 'Selected — power ' + fmtBig(r.power) + ' · kills ' + fmtBig(r.kills); }
             } },
-                el('span', { className: 'ext-find-name', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
+                el('span', { className: 'ext-find-name', translate: 'no', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
                 meta ? el('span', { className: 'ext-find-meta', text: meta }) : null);
         }
 

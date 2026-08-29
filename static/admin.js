@@ -15,18 +15,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Check if we are actually on the admin page
     const usersList = document.getElementById('users-list');
     if (usersList) {
-        memberIdChoices = new Choices('#member-id', {
+        memberIdChoices = noTranslateChoices(new Choices('#member-id', {
             searchEnabled: true, searchPlaceholderValue: 'Search…',
             itemSelectText: '', shouldSort: false,
-        });
-        newOwnerChoices = new Choices('#new-owner-select', {
+        }));
+        newOwnerChoices = noTranslateChoices(new Choices('#new-owner-select', {
             searchEnabled: true, searchPlaceholderValue: 'Search…',
             itemSelectText: '', shouldSort: false,
-        });
-        loginFilterChoices = new Choices('#login-filter', {
+        }));
+        loginFilterChoices = noTranslateChoices(new Choices('#login-filter', {
             searchEnabled: true, searchPlaceholderValue: 'Search…',
             itemSelectText: '', shouldSort: false,
-        });
+        }));
 
         // Load initial data
         await loadUsers();
@@ -158,7 +158,9 @@ function buildUserCard(user) {
     userInfo.className = 'user-info';
 
     const h3 = document.createElement('h3');
-    h3.textContent = user.username;
+    const unameSpan = noTranslate(document.createElement('span'));
+    unameSpan.textContent = user.username;
+    h3.appendChild(unameSpan);
     if (user.is_admin) {
         const adminBadge = document.createElement('span');
         adminBadge.className = 'admin-badge';
@@ -176,6 +178,7 @@ function buildUserCard(user) {
     if (user.member_name) {
         memberSpan.className = 'member-badge';
         memberSpan.textContent = user.member_name;
+        noTranslate(memberSpan);
     } else {
         memberSpan.className = 'no-member';
         memberSpan.textContent = 'No member linked';
@@ -652,7 +655,7 @@ function buildLoginRow(login) {
     tdStatus.appendChild(statusBadge);
 
     const tdUser = document.createElement('td');
-    const strong = document.createElement('strong');
+    const strong = noTranslate(document.createElement('strong'));
     strong.textContent = login.username;
     tdUser.appendChild(strong);
 

@@ -130,7 +130,7 @@ function renderEntry(entry) {
     const row = document.createElement('div');
     row.className = 'activity-entry' + (entry.is_sensitive ? ' activity-entry--sensitive' : '');
 
-    const actor = document.createElement('span');
+    const actor = noTranslate(document.createElement('span'));
     actor.className = 'activity-entry__actor';
     actor.textContent = entry.username;
 
@@ -154,7 +154,7 @@ function renderEntry(entry) {
     text.appendChild(labelSpan);
 
     if (desc.name) {
-        const nameSpan = document.createElement('span');
+        const nameSpan = noTranslate(document.createElement('span'));
         nameSpan.className = 'activity-entry__name';
         nameSpan.textContent = ' "' + desc.name + '"';
         text.appendChild(nameSpan);
@@ -280,10 +280,10 @@ async function loadActivity() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    userFilterChoices = new Choices('#user-filter', {
+    userFilterChoices = noTranslateChoices(new Choices('#user-filter', {
         searchEnabled: true, searchPlaceholderValue: 'Search…',
         itemSelectText: '', shouldSort: false,
-    });
+    }));
 
     loadActivity();
 

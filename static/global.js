@@ -17,6 +17,53 @@
     };
 })();
 
+// ---- Identifier surfaces: opt out of browser translation ----
+// Player names, aliases, alliance names/tags and usernames are IDENTIFIERS, not
+// prose: they are typed back into the game, matched against the roster on import,
+// and carried into CSV/XLSX exports. The browser translator rewrites text nodes in
+// place, so a translated "Pàcha" is a name that matches nothing any more.
+//
+// Templates say this with translate="no" on the container. JS-built DOM has no
+// such container to mark, so mark the node holding the identifier as it is built:
+//
+//     noTranslate(nameSpan);                       // stamp an existing element
+//     row.appendChild(noTranslate(el('span', …))); // or inline, it returns the node
+//
+// Mark the SMALLEST element that wraps the identifier — marking a whole card or
+// table also freezes its buttons, headers and empty states, which are UI prose a
+// non-English reader does need translated. See CLAUDE.md -> `translate="no"` on
+// identifier surfaces, not on prose.
+function noTranslate(el) {
+    if (el) el.translate = false;
+    return el;
+}
+window.noTranslate = noTranslate;
+
+// Render "<label><identifier>" into `el` -- e.g. setLabeledName(h, 'Converting: ',
+// 'Pàcha'). The label stays translatable prose; only the name is fenced off. A
+// plain `el.textContent = 'Converting: ' + name` would freeze both or neither.
+function setLabeledName(el, label, name) {
+    if (!el) return el;
+    const who = noTranslate(document.createElement('span'));
+    who.textContent = name;
+    el.replaceChildren(document.createTextNode(label), who);
+    return el;
+}
+window.setLabeledName = setLabeledName;
+
+// Choices.js WRAPS the original <select> in its own markup and renders the visible
+// list into that wrapper as a SIBLING of the select, not a descendant -- so
+// translate="no" on the <select> never reaches the rendered items. Call this right
+// after constructing a Choices control over a list of names.
+function noTranslateChoices(instance) {
+    if (!instance) return instance;
+    const passed = instance.passedElement && instance.passedElement.element;
+    noTranslate((instance.containerOuter && instance.containerOuter.element)
+        || (passed && passed.closest('.choices')));
+    return instance;
+}
+window.noTranslateChoices = noTranslateChoices;
+
 // ---- VS Themes (single source of truth) ----
 // Mon=0 … Sun=6, game-fixed for all servers. MUST keep all SEVEN entries: the schedule page
 // renders a full 7-day week and calls getVSTheme on Sunday (index 6). `points` is the VS Duel
@@ -354,6 +401,7 @@ function buildRemoteFinder(opts) {
         const nameEl = document.createElement('span');
         nameEl.className = prefix + '-name';
         nameEl.textContent = spec.label;
+        noTranslate(nameEl);   // a player/alliance name, not prose
         btn.appendChild(nameEl);
         if (spec.meta) {
             const metaEl = document.createElement('span');

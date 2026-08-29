@@ -179,7 +179,7 @@ function renderAssignmentBuilder() {
         const row = document.createElement('div');
         row.className = 'assignment-engineer-row';
 
-        const nameEl = document.createElement('div');
+        const nameEl = noTranslate(document.createElement('div'));
         nameEl.className = 'assignment-engineer-name';
         nameEl.textContent = pairing.engineer.name;
         row.appendChild(nameEl);
@@ -190,7 +190,9 @@ function renderAssignmentBuilder() {
                 .map(p => p.member.id)
         );
 
-        const sel = document.createElement('select');
+        // Option TEXT is translated (only option.value is safe), so the whole
+        // control is fenced off — it lists member names.
+        const sel = noTranslate(document.createElement('select'));
         sel.className = 'form-input';
         const defaultOpt = document.createElement('option');
         defaultOpt.value = '';
@@ -286,6 +288,7 @@ function buildVarInput(name, type) {
             placeholder.textContent = '— Select a member —';
             sel.appendChild(placeholder);
         }
+        noTranslate(sel);   // option text is translated; member names must not be
         roster.forEach(m => {
             const opt = document.createElement('option');
             opt.value = m.name;
@@ -369,12 +372,12 @@ async function copyWithVariables(content, prefilledValues) {
     // (comms.html, season-hub.html); native <select> is the fallback elsewhere.
     if (typeof Choices !== 'undefined') {
         form.querySelectorAll('select.member-var-select').forEach(el => {
-            new Choices(el, {
+            noTranslateChoices(new Choices(el, {
                 removeItemButton: el.multiple,
                 shouldSort: false,
                 itemSelectText: '',
                 searchPlaceholderValue: 'Search members…',
-            });
+            }));
         });
     }
 
