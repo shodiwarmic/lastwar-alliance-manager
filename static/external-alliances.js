@@ -448,7 +448,6 @@
     const gatherSection = document.getElementById('ext-gather-section');
     const gatherStatus = document.getElementById('ext-gather-status');
     const gatherProgress = document.getElementById('ext-gather-progress');
-    const setGatherStatus = m => { if (gatherStatus) gatherStatus.textContent = m || ''; };
 
     // The gather runs SERVER-SIDE as a background job — see jobs_external.go. It
     // also finally writes an activity row, which the browser loop never did.
