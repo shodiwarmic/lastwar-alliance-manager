@@ -1556,12 +1556,15 @@ source is the volunteer-run LastRank API behind the shared 1 req/sec limiter, so
 searching has to stay a deliberate act — one officer typing a name must not become a
 burst of upstream calls.
 
-> The older `.ext-find-*` (`external-alliances.js`) and `.vsl-find-*`
-> (`vs-league.js`) pickers predate this helper and still hand-roll the same
-> mechanics; migrating them is a pending follow-up. Note their CSS references
-> `--color-text-muted` / `--color-text` / `--color-surface`, none of which exist in
-> any theme block — fix those to `--text-muted` / `--text-primary` / `--bg-primary`
-> when migrating. Don't copy those blocks for anything new.
+> The older `.ext-find-*` (`external-alliances.css`) and `.vsl-find-*`
+> (`vs-league.css`) pickers predate this helper and still hand-roll the same
+> mechanics; migrating them is a pending follow-up — but only their mechanics.
+> Their **tokens are already correct**: they use `--color-text-muted`, which is
+> canonical and defined in `:root` and both `[data-theme]` blocks. An earlier
+> version of this note claimed that token was undefined and told you to "fix" it
+> to `--text-muted` / `--text-primary` / `--bg-primary`; that is backwards — those
+> are the deprecated names (DESIGN_STANDARD.md → Legacy tokens). Migrate *to* the
+> `--color-*` names, never away from them.
 
 ## Session Key Requirement
 
