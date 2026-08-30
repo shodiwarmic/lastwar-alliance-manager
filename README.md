@@ -259,6 +259,12 @@ The application relies on a `.env` file in the root directory:
 
 ---
 
+## License
+
+Released under the [MIT License](LICENSE). This project inherits its licence from the upstream repository it was forked from, whose copyright notice is retained in the `LICENSE` file alongside one for the divergent work.
+
+---
+
 ## Credits & Acknowledgements
 
 This project originated as a fork of [`vervelak/lastwar-alliance-manager`](https://github.com/vervelak/lastwar-alliance-manager). The original repository provided the foundation that this project was built upon, and we are grateful to its author for starting it. The codebases have since diverged significantly — features, architecture, and deployment have all evolved independently — but the original work deserves full credit for getting this started.
