@@ -1587,6 +1587,18 @@ before enabling `PRODUCTION=true`.
 
 Keep `README.md` up to date whenever a user-facing feature is added, changed, or removed. Each feature should have an entry under the appropriate `###` section in the Features block, written in the same style as existing entries (bullet points, bolded lead phrase, plain-English description of what it does and its permission model). Do not document internal implementation details — README is for end users and operators.
 
+### `docs/` — design references and API specs
+
+Non-runtime reference material lives in `docs/`, not in `static/`. **Never put a
+design mockup or reference document in `static/`**: the catch-all handler in
+`main.go` sits on the bare router with no auth middleware, so anything in there is
+served unauthenticated to anyone who guesses the URL, and `buildAssetHashes()`
+SHA-256s it at every boot for nothing.
+
+Third-party API references (e.g. the LastRank API notes) are kept in `docs/` but
+**gitignored** — they are not ours to publish and this repo is public. See
+`docs/README.md`.
+
 ## Static asset cache busting
 
 Every same-origin `.js` / `.css` reference in a template goes through the `{{asset}}`
