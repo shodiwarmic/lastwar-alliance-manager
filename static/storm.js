@@ -120,22 +120,6 @@ function showError(msg) {
     setTimeout(() => el.classList.add('hidden'), 6000);
 }
 
-// ── CSRF helper ───────────────────────────────────────────────────
-function getCsrfToken() {
-    const el = document.querySelector('input[name="gorilla.csrf.Token"]');
-    return el ? el.value : '';
-}
-
-// ── API helpers ───────────────────────────────────────────────────
-async function apiFetch(url, options = {}) {
-    if (!options.headers) options.headers = {};
-    if (options.method && options.method !== 'GET') {
-        options.headers['X-CSRF-Token'] = getCsrfToken();
-    }
-    const res = await fetch(url, options);
-    return res;
-}
-
 // ── All assigned IDs for current TF ──────────────────────────────
 function allAssignedIds() {
     const ids = new Set();
@@ -317,8 +301,6 @@ function powerSumNodes(memberIds) {
     return [svgIcon('bolt', 11), document.createTextNode(formatPowerSum(memberIds))];
 }
 
-const SQUAD_ICON_MAP = { Tank: 'tank', Aircraft: 'plane-tilt', Missile: 'rocket' };
-
 function memberChipBadges(member) {
     if (!member) return [];
     const badges = [];
@@ -328,7 +310,7 @@ function memberChipBadges(member) {
         span.append(svgIcon('bolt', 11), document.createTextNode(Number(member.power).toLocaleString()));
         badges.push(span);
     }
-    const iconName = SQUAD_ICON_MAP[member.squad_type];
+    const iconName = SQUAD_ICON[member.squad_type];
     if (iconName && member.squad_power != null && member.squad_power > 0) {
         const span = document.createElement('span');
         span.className = 'chip-power';
@@ -815,7 +797,7 @@ function debouncedSaveGroups() {
 async function saveAllGroups() {
     for (const g of groups) {
         try {
-            const res = await apiFetch(`${API_BASE}/groups/${g.id}/buildings`, {
+            const res = await fetch(`${API_BASE}/groups/${g.id}/buildings`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(g.buildings)
@@ -831,7 +813,7 @@ async function saveAllGroups() {
         }
 
         try {
-            const res = await apiFetch(`${API_BASE}/groups/${g.id}/members`, {
+            const res = await fetch(`${API_BASE}/groups/${g.id}/members`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(g.direct_members)
@@ -911,7 +893,7 @@ function updateCapacityBar() {
 // ── Group CRUD ────────────────────────────────────────────────────
 async function createGroup(name) {
     try {
-        const res = await apiFetch(`${API_BASE}/groups`, {
+        const res = await fetch(`${API_BASE}/groups`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ task_force: currentTF, name: name, instructions: '', sort_order: groups.length })
@@ -932,7 +914,7 @@ async function createGroup(name) {
 
 async function deleteGroup(id) {
     try {
-        const res = await apiFetch(`${API_BASE}/groups/${id}`, { method: 'DELETE' });
+        const res = await fetch(`${API_BASE}/groups/${id}`, { method: 'DELETE' });
         if (!res.ok) {
             const txt = await res.text();
             showError('Failed to delete group: ' + txt);
@@ -960,7 +942,7 @@ async function updateGroupMeta(groupId) {
     const textarea = document.querySelector(`textarea[data-group-id="${groupId}"]`);
     if (textarea) g.instructions = textarea.value;
     try {
-        const res = await apiFetch(`${API_BASE}/groups/${groupId}`, {
+        const res = await fetch(`${API_BASE}/groups/${groupId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: g.name, instructions: g.instructions, sort_order: g.sort_order })
@@ -1023,7 +1005,7 @@ function setMySlot(key, val) {
 
 async function saveMyRegistration() {
     try {
-        const res = await apiFetch(`${API_BASE}/registrations/me`, {
+        const res = await fetch(`${API_BASE}/registrations/me`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(myRegState)
@@ -1144,7 +1126,7 @@ async function cycleRegPill(el) {
         }
         body[slotKey] = val;
 
-        const res = await apiFetch(`${API_BASE}/registrations/${memberId}`, {
+        const res = await fetch(`${API_BASE}/registrations/${memberId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -1176,7 +1158,7 @@ async function saveConfig() {
     ];
 
     try {
-        const res = await apiFetch(`${API_BASE}/config`, {
+        const res = await fetch(`${API_BASE}/config`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -1440,7 +1422,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (canManage) {
         try {
-            const res = await apiFetch(`${API_BASE}/registrations`);
+            const res = await fetch(`${API_BASE}/registrations`);
             if (res.ok) {
                 registrations = await res.json();
             }
