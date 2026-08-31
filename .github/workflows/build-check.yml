@@ -93,6 +93,64 @@ jobs:
           print('Versioned static asset check passed.')
           EOF
 
+      # SheetJS is a per-template CDN script, but exportTableToXLSX lives in
+      # global.js and is auto-wired onto every data-export-csv table. A page
+      # that exports without loading the lib gets a dead button and a bare
+      # ReferenceError -- the Members page shipped that way.
+      # Runs as a step of this job rather than its own job, for the branch
+      # protection reason noted above.
+      - name: XLSX export dependency check
+        run: |
+          python3 - <<'EOF'
+          import pathlib, re, sys
+
+          # Real API/call forms only -- "CSV/XLSX export" in prose must not count.
+          USES = re.compile(r'\bXLSX\s*\.\s*(?:utils|write|read)|\bexportTableToXLSX\s*\(')
+          LOADS_JS = re.compile(r'\{\{\s*asset\s+"([^"]+\.js)"\s*\}\}')
+          HAS_LIB = re.compile(r'<script[^>]+src="[^"]*\bxlsx[^"]*\.js"')
+          BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.S)
+          LINE_COMMENT = re.compile(r'(?<!:)//.*$', re.M)   # (?<!:) keeps https:// intact
+
+          # global.js DEFINES exportTableToXLSX and is loaded on every page via
+          # layout.html; counting it would demand the lib everywhere.
+          DEFINER = 'global.js'
+
+          def uses_xlsx(js_path):
+              p = pathlib.Path('static') / js_path.lstrip('/')
+              if not p.is_file():
+                  return False   # the versioned-asset check reports missing files
+              src = p.read_text(encoding='utf-8')
+              src = LINE_COMMENT.sub('', BLOCK_COMMENT.sub('', src))
+              return bool(USES.search(src))
+
+          fails = []
+          for path in sorted(pathlib.Path('templates').rglob('*.html')):
+              html = path.read_text(encoding='utf-8')
+              if HAS_LIB.search(html):
+                  continue
+
+              reasons = []
+              # 1. Auto-wired: global.js puts an XLSX button on these.
+              if 'data-export-csv' in html:
+                  reasons.append('has a data-export-csv table')
+              # 2. Explicit: page JS calls the exporter or SheetJS directly.
+              for js in LOADS_JS.findall(html):
+                  if pathlib.Path(js).name != DEFINER and uses_xlsx(js):
+                      reasons.append(f'loads {js}, which uses XLSX')
+
+              if reasons:
+                  fails.append(f'{path}: {"; ".join(reasons)}, but does not load SheetJS')
+
+          if fails:
+              print('XLSX export dependency check failed:\n')
+              for f in fails:
+                  print('  ' + f)
+              print('\nAdd to the page template\'s {{define "scripts"}} block:')
+              print('  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>')
+              sys.exit(1)
+          print('XLSX export dependency check passed.')
+          EOF
+
       # Browser translation rewrites text nodes in place, so anything read back
       # out of the DOM is whatever the translator put there.
       # See CLAUDE.md -> Known gotchas -> "Browser translation".
