@@ -260,6 +260,15 @@ function exportTableToCSV(tableEl, filename, scope) {
 function exportTableToXLSX(tableEl, filename, scope) {
     if (typeof tableEl === 'string') tableEl = document.getElementById(tableEl);
     if (!tableEl) return;
+    // The XLSX button is auto-wired onto every data-export-csv table, but the
+    // SheetJS lib is a per-template CDN script. A page that adds an exportable
+    // table without it would otherwise throw a bare ReferenceError into the
+    // console and look like a dead button.
+    if (typeof XLSX === 'undefined') {
+        console.error('exportTableToXLSX: SheetJS not loaded. Add the xlsx.mini.min.js script tag to this page template.');
+        showToast('Excel export is unavailable on this page.', 'error');
+        return;
+    }
     const rows = _extractTableData(tableEl, scope);
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();
