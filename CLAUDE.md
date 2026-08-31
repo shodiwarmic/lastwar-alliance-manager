@@ -747,6 +747,32 @@ const CAN_MANAGE = cfg.canManage === 'true';
 
 If you need layout.html-level JS (e.g. mobile nav handlers), add it to `static/global.js` — not as an inline script.
 
+### XLSX export needs the SheetJS tag on that page template
+
+CSV export is self-contained in `global.js`; **XLSX is not**. `exportTableToXLSX`
+depends on SheetJS, which is a per-template CDN script:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
+```
+
+The trap is that the button is wired up whether or not the lib is there:
+`global.js` auto-attaches **both** a CSV and an XLSX button to every
+`table[data-export-csv]`. Miss the script tag and CSV works while XLSX throws a
+`ReferenceError` — a dead button, no toast, nothing but a console line. The
+Members page shipped that way.
+
+So a page needs the tag if **either** is true:
+- it has a `data-export-csv` table (the buttons are auto-wired), or
+- its JS calls `exportTableToXLSX` / `XLSX.*` directly (e.g. `polls.js`, whose
+  tag lives in `comms.html` — the template that loads it, which is not always
+  the one named after it).
+
+`build-check.yml`'s **"XLSX export dependency check"** fails the PR on both
+cases. `exportTableToXLSX` also guards on the lib being absent and shows a toast,
+so a miss degrades visibly rather than silently — but the check is what stops it
+reaching a user.
+
 ### Browser translation — never build a payload from rendered DOM text
 
 The app has no i18n framework; non-English speakers use the browser's built-in
