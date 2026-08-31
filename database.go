@@ -8,6 +8,7 @@ import (
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func initDB() error {
@@ -37,6 +38,28 @@ func initDB() error {
 	goose.SetDialect("sqlite3")
 	if err := goose.Up(db, "migrations"); err != nil {
 		return fmt.Errorf("failed to run database migrations: %v", err)
+	}
+
+	// Ensure a default admin account exists on first startup.
+	var adminCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE username = 'admin'`).Scan(&adminCount); err != nil {
+		return fmt.Errorf("failed to check for default admin user: %w", err)
+	}
+
+	if adminCount == 0 {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("failed to hash default admin password: %w", err)
+		}
+
+		if _, err := db.Exec(`
+			INSERT INTO users (username, password, is_admin, force_password_change)
+			VALUES (?, ?, 1, 1)
+		`, "admin", string(hashedPassword)); err != nil {
+			return fmt.Errorf("failed to create default admin user: %w", err)
+		}
+
+		slog.Info("Created default admin account")
 	}
 
 	// Add is_sub to storm_assignments if missing
