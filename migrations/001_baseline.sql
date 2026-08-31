@@ -200,6 +200,27 @@ CREATE TABLE IF NOT EXISTS rank_permissions (
     upload_files BOOLEAN DEFAULT 0,
     manage_files BOOLEAN DEFAULT 0
 );
+
+INSERT OR IGNORE INTO rank_permissions (
+    rank,
+    view_train, manage_train,
+    view_awards, manage_awards,
+    view_recs, manage_recs,
+    view_dyno, manage_dyno,
+    view_rankings,
+    view_storm, manage_storm,
+    view_vs_points, manage_vs_points,
+    view_upload,
+    manage_members,
+    manage_settings,
+    view_files, upload_files, manage_files
+) VALUES
+('R1', 1,0, 1,0, 1,0, 1,0, 1, 1,0, 1,0, 1, 0,0, 1,0,0),
+('R2', 1,0, 1,0, 1,0, 1,0, 1, 1,0, 1,0, 1, 0,0, 1,0,0),
+('R3', 1,0, 1,0, 1,0, 1,0, 1, 1,0, 1,0, 1, 0,0, 1,0,0),
+('R4', 1,1, 1,1, 1,1, 1,1, 1, 1,1, 1,1, 1, 1,1, 1,1,1),
+('R5', 1,1, 1,1, 1,1, 1,1, 1, 1,1, 1,1, 1, 1,1, 1,1,1);
+
 -- +goose StatementEnd
 
 -- +goose Down
