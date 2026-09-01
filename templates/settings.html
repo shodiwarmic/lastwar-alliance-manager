@@ -10,6 +10,11 @@
 <link rel="stylesheet" href="{{asset "/settings.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
+<link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
+<link rel="stylesheet" href="{{asset "/color-picker.css"}}">
+<script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
+<script src="{{asset "/color-picker.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -288,6 +293,20 @@
                 <div style="margin-top:10px;">
                     <button type="button" class="btn btn-primary btn-sm" id="btn-save-score-levels">Save Score Levels</button>
                     <span id="score-levels-status" style="margin-left:10px;font-size:0.85rem;"></span>
+                </div>
+
+                <h4 style="margin-top:24px;">Default Reward Tiers</h4>
+                <p style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:8px;">Applied when creating a new season. Changing this does not affect existing seasons — edit those from Season Hub &rarr; Edit Season.</p>
+                <div style="overflow-x:auto;">
+                    <table class="data-table" id="reward-tiers-table">
+                        <thead><tr><th>Key</th><th>Label</th><th>Slots</th><th>Colour</th><th>Order</th></tr></thead>
+                        <tbody id="reward-tiers-tbody"></tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-add-reward-tier" style="margin-top:6px;">+ Add Tier</button>
+                <div style="margin-top:10px;">
+                    <button type="button" class="btn btn-primary btn-sm" id="btn-save-reward-tiers">Save Reward Tiers</button>
+                    <span id="reward-tiers-status" style="margin-left:10px;font-size:0.85rem;"></span>
                 </div>
 
                 <h4 style="margin-top:24px;">Season Templates</h4>
