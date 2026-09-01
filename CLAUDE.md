@@ -1556,12 +1556,15 @@ source is the volunteer-run LastRank API behind the shared 1 req/sec limiter, so
 searching has to stay a deliberate act — one officer typing a name must not become a
 burst of upstream calls.
 
-> The older `.ext-find-*` (`external-alliances.js`) and `.vsl-find-*`
-> (`vs-league.js`) pickers predate this helper and still hand-roll the same
-> mechanics; migrating them is a pending follow-up. Note their CSS references
-> `--color-text-muted` / `--color-text` / `--color-surface`, none of which exist in
-> any theme block — fix those to `--text-muted` / `--text-primary` / `--bg-primary`
-> when migrating. Don't copy those blocks for anything new.
+> The older `.ext-find-*` (`external-alliances.css`) and `.vsl-find-*`
+> (`vs-league.css`) pickers predate this helper and still hand-roll the same
+> mechanics; migrating them is a pending follow-up — but only their mechanics.
+> Their **tokens are already correct**: they use `--color-text-muted`, which is
+> canonical and defined in `:root` and both `[data-theme]` blocks. An earlier
+> version of this note claimed that token was undefined and told you to "fix" it
+> to `--text-muted` / `--text-primary` / `--bg-primary`; that is backwards — those
+> are the deprecated names (DESIGN_STANDARD.md → Legacy tokens). Migrate *to* the
+> `--color-*` names, never away from them.
 
 ## Session Key Requirement
 
@@ -1586,6 +1589,18 @@ before enabling `PRODUCTION=true`.
 ## Documentation
 
 Keep `README.md` up to date whenever a user-facing feature is added, changed, or removed. Each feature should have an entry under the appropriate `###` section in the Features block, written in the same style as existing entries (bullet points, bolded lead phrase, plain-English description of what it does and its permission model). Do not document internal implementation details — README is for end users and operators.
+
+### `docs/` — design references and API specs
+
+Non-runtime reference material lives in `docs/`, not in `static/`. **Never put a
+design mockup or reference document in `static/`**: the catch-all handler in
+`main.go` sits on the bare router with no auth middleware, so anything in there is
+served unauthenticated to anyone who guesses the URL, and `buildAssetHashes()`
+SHA-256s it at every boot for nothing.
+
+Third-party API references (e.g. the LastRank API notes) are kept in `docs/` but
+**gitignored** — they are not ours to publish and this repo is public. See
+`docs/README.md`.
 
 ## Static asset cache busting
 

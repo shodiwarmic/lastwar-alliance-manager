@@ -5566,19 +5566,22 @@ html.theme-dark .numInputWrapper span.arrowDown::after {
 }
 /* ── Remote finder (shared type-ahead combobox) ───────────────────────────────
    Backs buildRemoteFinder() in global.js: the Recruiting player picker, and the
-   External Alliances / VS League alliance pickers. Mirrors the older
-   .ext-find-* / .vsl-find-* blocks those pages still carry, but on the real
-   token names — the originals reference --color-text-muted and --color-text,
-   which are not defined in any theme block and so fall through to browser
-   defaults in dark mode.
+   External Alliances / VS League alliance pickers. Supersedes the older
+   .ext-find-* / .vsl-find-* blocks those pages still carry; migrating them is a
+   pending follow-up, but only their mechanics — their tokens are already fine.
+
+   Written on the canonical --color-* tokens (DESIGN_STANDARD.md → Design Tokens).
+   The hover states use --color-accent-bg rather than a surface token: the literal
+   legacy mapping (--bg-secondary → --color-surface) resolves to #ffffff in light
+   mode, identical to the dropdown's own --color-card, so the hover would vanish.
 
    The dropdown is absolutely positioned: give its container position:relative,
    or pass a `position` callback to anchor it yourself. */
 .finder-dropdown {
     position: absolute;
     z-index: 30;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     max-height: 280px;
     overflow-y: auto;
@@ -5590,7 +5593,7 @@ html.theme-dark .numInputWrapper span.arrowDown::after {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     padding: 8px 12px 4px;
 }
 
@@ -5603,17 +5606,17 @@ html.theme-dark .numInputWrapper span.arrowDown::after {
     padding: 8px 12px;
     background: none;
     border: none;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--color-border);
     cursor: pointer;
     text-align: left;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
-.finder-item:hover { background: var(--bg-secondary); }
+.finder-item:hover { background: var(--color-accent-bg); }
 .finder-head + .finder-item { border-top: none; }
 .finder-name { font-weight: 600; }
-.finder-meta { font-size: 0.8rem; color: var(--text-muted); }
-.finder-msg { font-size: 0.82rem; color: var(--text-muted); padding: 8px 12px; }
+.finder-meta { font-size: 0.8rem; color: var(--color-text-muted); }
+.finder-msg { font-size: 0.82rem; color: var(--color-text-muted); padding: 8px 12px; }
 .finder-err { color: var(--color-danger); font-weight: 600; }
 
 .finder-action {
@@ -5624,14 +5627,14 @@ html.theme-dark .numInputWrapper span.arrowDown::after {
     padding: 9px 12px;
     background: none;
     border: none;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--color-border);
     cursor: pointer;
     text-align: left;
-    color: var(--color-primary);
+    color: var(--color-accent);
     font-weight: 600;
 }
 
-.finder-action:hover { background: var(--bg-secondary); }
+.finder-action:hover { background: var(--color-accent-bg); }
 
 /* ---- Inline translation control (translate.js) ----
    Attached to member-written prose (shout-out notes, mail bodies, ally and

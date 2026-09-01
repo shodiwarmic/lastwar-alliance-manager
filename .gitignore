@@ -57,4 +57,4 @@ docker-compose.override.yml
 .claude/settings.json
 
 # Third-party API reference — not ours to publish; kept local only
-LASTRANK_API_REFERENCE.md
+docs/LASTRANK_API_REFERENCE.md
