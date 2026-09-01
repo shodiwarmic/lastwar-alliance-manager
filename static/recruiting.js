@@ -7,6 +7,13 @@ const IS_ADMIN = cfg.isAdmin === 'true';
 const HAS_FORMER_TAB = cfg.hasFormerTab === 'true';
 
 let allMembers = [];        // for recruiter dropdown and capacity header
+
+// Last-rendered rows per tab. The export reads which rows are visible from the
+// DOM but takes their values from here, so a translated card can never leak its
+// translation into the file (see the Export section).
+let currentTransfers = [];
+let currentProspects = [];
+let currentFormerMembers = [];
 let editingProspectId = null;
 let currentModalType = 'transfer';  // tracks which type context the modal opened in
 let convertingProspect = null;
@@ -87,6 +94,7 @@ async function loadFormerMembers() {
         const res = await fetch('/api/former-members');
         if (!res.ok) throw new Error('Failed to load former members');
         const members = await res.json();
+        currentFormerMembers = members;
         renderFormerMembers(members, container);
     } catch (err) {
         console.error(err);
@@ -121,6 +129,7 @@ function renderFormerMembers(members, container) {
     members.forEach(m => {
         const tr = tbody.insertRow();
 
+        tr.dataset.mid = m.id;
         tr.dataset.search = m.name;
 
         const nameTd = noTranslate(tr.insertCell());
@@ -349,6 +358,8 @@ async function loadAllProspects() {
 
         const transfers = all.filter(p => p.prospect_type === 'transfer');
         const prospects = all.filter(p => p.prospect_type === 'prospect');
+        currentTransfers = transfers;
+        currentProspects = prospects;
 
         if (transfersContainer) renderProspects(transfers, transfersContainer, 'transfer');
         if (prospectsContainer) renderProspects(prospects, prospectsContainer, 'prospect');
@@ -394,13 +405,14 @@ const STATUS_LABELS = {
 function buildProspectCard(p, typeContext) {
     const card = document.createElement('div');
     card.className = 'prospect-card';
+    card.dataset.pid = p.id;
     card.dataset.search = (p.name || '') + ' ' + (p.source_alliance || '');
 
     // Header row
     const header = document.createElement('div');
     header.className = 'prospect-header';
 
-    const seatTitle = p.seat_color ? p.seat_color.charAt(0).toUpperCase() + p.seat_color.slice(1) + ' seat' : '';
+    const seatTitle = p.seat_color ? seatColorLabel(p.seat_color) + ' seat' : '';
 
     // Seat color dot — only when there's no avatar to carry the seat color as a
     // border (see below).
@@ -763,6 +775,10 @@ async function handleProspectSubmit(e) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function seatColorLabel(color) {
+    return color ? color.charAt(0).toUpperCase() + color.slice(1) : '';
+}
+
 function formatPower(power) {
     if (!power) return '';
     if (power >= 1000000000) return (power / 1000000000).toFixed(2) + 'B';
@@ -802,6 +818,117 @@ async function loadSettingsForHeader() {
     }
 }
 
+// ── Export ────────────────────────────────────────────────────────────────────
+
+// Neither list can use the declarative data-export-csv auto-wire: the two
+// prospect tabs render cards rather than a table, and the former-members table
+// is built in JS after DOMContentLoaded, which is when that pass runs. So this
+// follows members.js instead — build a detached table from the source data at
+// click time and hand it to the shared exporters. Detached also means the
+// browser translator never sees it, so no translate="no" is needed.
+
+// QuickSearch runs in hide mode here, so the visible set lives in the DOM
+// rather than in a filtered array the way it does on the Members page. Reading
+// it back keeps the file identical to what the officer can actually see, which
+// is what every other export in the app does. Requiring the id attribute also
+// skips QuickSearch's injected "no matches" row.
+function visibleRows(containerId, selector, key, items) {
+    const container = document.getElementById(containerId);
+    if (!container) return [];
+    const ids = new Set([...container.querySelectorAll(selector)].map(n => Number(n.dataset[key])));
+    return items.filter(item => ids.has(item.id));
+}
+
+function buildExportTable(headers, rows) {
+    const table = document.createElement('table');
+    const hr = table.createTHead().insertRow();
+    headers.forEach(label => {
+        const th = document.createElement('th');
+        th.textContent = label;
+        hr.appendChild(th);
+    });
+    const tbody = table.createTBody();
+    rows.forEach(values => {
+        const tr = tbody.insertRow();
+        values.forEach(value => { tr.insertCell().textContent = value; });
+    });
+    return table;
+}
+
+// One builder for both tabs. Server and Seat Color are transfer-only concepts —
+// the add/edit form already hides them for prospects — so the prospects export
+// drops them rather than shipping two blank columns.
+function buildProspectExportTable(items, includeTransferCols) {
+    const headers = ['Name'];
+    if (includeTransferCols) headers.push('Server');
+    headers.push('Alliance');
+    if (includeTransferCols) headers.push('Seat Color');
+    headers.push('Power', 'Total Hero Power');
+
+    return buildExportTable(headers, items.map(p => {
+        const row = [p.name || ''];
+        if (includeTransferCols) row.push(p.server || '');
+        row.push(p.source_alliance || '');
+        if (includeTransferCols) row.push(seatColorLabel(p.seat_color));
+        row.push(formatPower(p.power), formatPower(p.hero_power));
+        return row;
+    }));
+}
+
+function buildFormerExportTable(members) {
+    return buildExportTable(
+        ['Name', 'Last Power', 'Train Runs', 'Last VS Week', 'Reason'],
+        members.map(m => [
+            m.name || '',
+            formatPower(m.last_power),
+            m.train_count || 0,
+            m.last_vs_week || '',
+            m.leave_reason || '',
+        ]));
+}
+
+function exportButton(label, title, handler) {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.textContent = '↓ ' + label;
+    btn.title = title;
+    btn.addEventListener('click', handler);
+    return btn;
+}
+
+function attachExportBar(barId, filenameBase, getRows, buildTable) {
+    const bar = document.getElementById(barId);
+    if (!bar) return;   // Former Members only renders for manage_members
+
+    const onClick = (exportFn) => () => {
+        const rows = getRows();
+        if (!rows.length) { showToast('Nothing to export.', 'info'); return; }
+        exportFn(buildTable(rows));
+    };
+
+    // Both exporters are called by name rather than passed as references: CI's
+    // "XLSX export dependency check" greps for `exportTableToXLSX(`, and that
+    // literal is what keeps this page tied to its SheetJS script tag.
+    bar.appendChild(exportButton('CSV', 'Download as CSV',
+        onClick(table => exportTableToCSV(table, filenameBase + '.csv'))));
+    bar.appendChild(exportButton('XLSX', 'Download as Excel spreadsheet',
+        onClick(table => exportTableToXLSX(table, filenameBase + '.xlsx'))));
+}
+
+function setupExports() {
+    attachExportBar('transfers-export-bar', 'transfers',
+        () => visibleRows('transfers-list', '.prospect-card[data-pid]:not([data-qs-hidden="1"])', 'pid', currentTransfers),
+        items => buildProspectExportTable(items, true));
+
+    attachExportBar('prospects-export-bar', 'prospects',
+        () => visibleRows('prospects-list', '.prospect-card[data-pid]:not([data-qs-hidden="1"])', 'pid', currentProspects),
+        items => buildProspectExportTable(items, false));
+
+    attachExportBar('former-export-bar', 'former-members',
+        () => visibleRows('former-members-list', 'tbody > tr[data-mid]:not([data-qs-hidden="1"])', 'mid', currentFormerMembers),
+        buildFormerExportTable);
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -818,6 +945,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         input: 'former-search', container: 'former-members-list', rows: 'tbody > tr',
         emptyText: 'No former members match your search.',
     });
+
+    setupExports();
 
     prospectContactedFP = flatpickr('#prospect-contacted', { dateFormat: 'Y-m-d', allowInput: true });
 

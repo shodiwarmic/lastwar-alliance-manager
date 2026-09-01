@@ -33,9 +33,12 @@
 
     <!-- Transfers Tab (default active) -->
     <div id="tab-transfers" class="tab-content">
-        <div class="filter-search-wrap quick-search">
-            <input type="text" id="transfers-search" class="form-input" placeholder="Search transfers…" aria-label="Search transfers…" autocomplete="off">
-            <button type="button" id="transfers-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+        <div class="tab-toolbar">
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="transfers-search" class="form-input" placeholder="Search transfers…" aria-label="Search transfers…" autocomplete="off">
+                <button type="button" id="transfers-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
+            <div id="transfers-export-bar" class="table-export-actions"></div>
         </div>
         {{if .Permissions.ManageRecruiting}}
         <div class="action-bar" style="margin-bottom: 20px;">
@@ -62,9 +65,12 @@
 
     <!-- Prospects Tab -->
     <div id="tab-prospects" class="tab-content">
-        <div class="filter-search-wrap quick-search">
-            <input type="text" id="prospects-search" class="form-input" placeholder="Search prospects…" aria-label="Search prospects…" autocomplete="off">
-            <button type="button" id="prospects-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+        <div class="tab-toolbar">
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="prospects-search" class="form-input" placeholder="Search prospects…" aria-label="Search prospects…" autocomplete="off">
+                <button type="button" id="prospects-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
+            <div id="prospects-export-bar" class="table-export-actions"></div>
         </div>
         {{if .Permissions.ManageRecruiting}}
         <div class="action-bar" style="margin-bottom: 20px;">
@@ -98,9 +104,12 @@
                 Use <strong>Reactivate</strong> to restore them with an active rank.
             </p>
         </div>
-        <div class="filter-search-wrap quick-search">
-            <input type="text" id="former-search" class="form-input" placeholder="Search former members…" aria-label="Search former members…" autocomplete="off">
-            <button type="button" id="former-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+        <div class="tab-toolbar">
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="former-search" class="form-input" placeholder="Search former members…" aria-label="Search former members…" autocomplete="off">
+                <button type="button" id="former-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
+            <div id="former-export-bar" class="table-export-actions"></div>
         </div>
         <div id="former-members-list">
             <p class="loading-msg">Loading former members...</p>
@@ -346,6 +355,7 @@
      data-is-admin="{{if .IsAdmin}}true{{else}}false{{end}}"
      data-has-former-tab="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
      hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <script src="{{asset "/job-progress.js"}}"></script>
 <script src="{{asset "/recruiting.js"}}"></script>
 {{end}}
