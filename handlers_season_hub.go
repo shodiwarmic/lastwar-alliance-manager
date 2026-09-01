@@ -34,16 +34,50 @@ type Season struct {
 	KeyEventRequired int               `json:"key_event_required"`
 	TierActiveMinPct int               `json:"tier_active_min_pct"`
 	TierAtRiskMinPct int               `json:"tier_at_risk_min_pct"`
-	TierCountLeader  int               `json:"tier_count_leader"`
-	TierCountCore    int               `json:"tier_count_core"`
-	TierCountElite   int               `json:"tier_count_elite"`
-	TierCountValued  int               `json:"tier_count_valued"`
 	IsActive         bool              `json:"is_active"`
 	ArchivedAt       string            `json:"archived_at"`
 	CreatedAt        string            `json:"created_at"`
 	ScoreLevels      []ScoreLevel      `json:"score_levels"`
 	Trackables       []SeasonTrackable `json:"trackables"`
+	// RewardTiers is the season's configurable reward tier list, replacing the
+	// four fixed tier_count_* columns dropped in migration 068. Carried on the
+	// season so every page that already has one can render tier badges, populate
+	// the assign-reward dropdown and count slot usage without a second fetch.
+	RewardTiers []SeasonRewardTier `json:"reward_tiers"`
 }
+
+// SeasonRewardTier is one configurable reward tier. Key is the stable
+// identifier stored in season_rewards.reward_tier; Label is the display name
+// and may be renamed freely — renames flow through to every reward already
+// assigned in that season, which is safe because the tier list is per-season.
+type SeasonRewardTier struct {
+	ID        int    `json:"id"`
+	SeasonID  int    `json:"season_id"`
+	Key       string `json:"key"`
+	Label     string `json:"label"`
+	SlotCount int    `json:"slot_count"`
+	Color     string `json:"color"`
+	SortOrder int    `json:"sort_order"`
+}
+
+// validTierColors are the palette slots a reward tier may use. Each maps to a
+// --color-*-bg / --color-* token pair via .tier-badge.tone-* in season-hub.css.
+var validTierColors = map[string]bool{
+	"purple":  true,
+	"info":    true,
+	"success": true,
+	"warning": true,
+	"danger":  true,
+	"neutral": true,
+}
+
+// defaultRewardTiersJSON is the fallback tier list used when
+// settings.season_reward_tiers_default is missing or unparseable. Mirrors the
+// column default set in migration 068.
+const defaultRewardTiersJSON = `[{"key":"alliance_leader","label":"Alliance Leader","slot_count":1,"color":"purple"},` +
+	`{"key":"core","label":"Core","slot_count":10,"color":"info"},` +
+	`{"key":"elite","label":"Elite","slot_count":20,"color":"success"},` +
+	`{"key":"valued","label":"Valued","slot_count":69,"color":"neutral"}]`
 
 type SeasonTrackable struct {
 	ID        int    `json:"id"`
@@ -177,7 +211,74 @@ func populateSeasonChildren(s *Season) error {
 		}
 		s.Trackables = append(s.Trackables, t)
 	}
+	// Close before the next query — db.SetMaxOpenConns(1) means an open cursor
+	// holds the only connection and any further query deadlocks the process.
+	tRows.Close()
+
+	rtRows, err := db.Query(`SELECT id, season_id, key, label, slot_count, color, sort_order
+		FROM season_reward_tiers WHERE season_id = ? ORDER BY sort_order ASC`, s.ID)
+	if err != nil {
+		return err
+	}
+	defer rtRows.Close()
+	for rtRows.Next() {
+		var rt SeasonRewardTier
+		if err := rtRows.Scan(&rt.ID, &rt.SeasonID, &rt.Key, &rt.Label, &rt.SlotCount, &rt.Color, &rt.SortOrder); err != nil {
+			continue
+		}
+		s.RewardTiers = append(s.RewardTiers, rt)
+	}
 	return nil
+}
+
+// loadDefaultRewardTiers reads the global default tier list from settings,
+// falling back to the built-in four if the column is empty or unparseable.
+// Applied when a season is created; changing it does not affect existing seasons.
+func loadDefaultRewardTiers() []SeasonRewardTier {
+	var raw string
+	db.QueryRow(`SELECT season_reward_tiers_default FROM settings WHERE id = 1`).Scan(&raw)
+
+	var tiers []SeasonRewardTier
+	if json.Unmarshal([]byte(raw), &tiers) != nil || len(tiers) == 0 {
+		json.Unmarshal([]byte(defaultRewardTiersJSON), &tiers)
+	}
+	for i := range tiers {
+		if !validTierColors[tiers[i].Color] {
+			tiers[i].Color = "neutral"
+		}
+	}
+	return tiers
+}
+
+// rewardTierExists reports whether key names a reward tier configured for this
+// season. This is what replaces the CHECK constraint dropped in migration 068 —
+// without it, season_rewards.reward_tier has no validation at all.
+func rewardTierExists(seasonID int, key string) (bool, error) {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM season_reward_tiers WHERE season_id = ? AND key = ?`,
+		seasonID, key).Scan(&n)
+	return n > 0, err
+}
+
+// validTierKey accepts lowercase snake_case identifiers only. Tier keys are
+// stored verbatim in season_rewards.reward_tier and are immutable once created,
+// so they are constrained more tightly than the free-form label.
+func validTierKey(key string) bool {
+	if key == "" || len(key) > 40 {
+		return false
+	}
+	for i, r := range key {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r == '_' || (r >= '0' && r <= '9'):
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // loadActiveSeason returns the active season with score levels and trackables.
@@ -189,13 +290,11 @@ func loadActiveSeason() (*Season, error) {
 		SELECT id, name, season_number, start_date, COALESCE(end_date,''), week_count,
 		       key_event_name, key_event_required,
 		       tier_active_min_pct, tier_at_risk_min_pct,
-		       tier_count_leader, tier_count_core, tier_count_elite, tier_count_valued,
 		       is_active, COALESCE(archived_at,''), created_at
 		FROM seasons WHERE is_active = 1 LIMIT 1`,
 	).Scan(&s.ID, &s.Name, &s.SeasonNumber, &s.StartDate, &endDate,
 		&s.WeekCount, &s.KeyEventName, &s.KeyEventRequired,
 		&s.TierActiveMinPct, &s.TierAtRiskMinPct,
-		&s.TierCountLeader, &s.TierCountCore, &s.TierCountElite, &s.TierCountValued,
 		&s.IsActive, &archivedAt, &s.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -223,13 +322,11 @@ func loadSeasonByID(id int) (*Season, error) {
 		SELECT id, name, season_number, start_date, COALESCE(end_date,''), week_count,
 		       key_event_name, key_event_required,
 		       tier_active_min_pct, tier_at_risk_min_pct,
-		       tier_count_leader, tier_count_core, tier_count_elite, tier_count_valued,
 		       is_active, COALESCE(archived_at,''), created_at
 		FROM seasons WHERE id = ?`, id,
 	).Scan(&s.ID, &s.Name, &s.SeasonNumber, &s.StartDate, &endDate,
 		&s.WeekCount, &s.KeyEventName, &s.KeyEventRequired,
 		&s.TierActiveMinPct, &s.TierAtRiskMinPct,
-		&s.TierCountLeader, &s.TierCountCore, &s.TierCountElite, &s.TierCountValued,
 		&s.IsActive, &archivedAt, &s.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -373,10 +470,6 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		StartDate        string `json:"start_date"`
 		TierActiveMinPct int    `json:"tier_active_min_pct"`
 		TierAtRiskMinPct int    `json:"tier_at_risk_min_pct"`
-		TierCountLeader  int    `json:"tier_count_leader"`
-		TierCountCore    int    `json:"tier_count_core"`
-		TierCountElite   int    `json:"tier_count_elite"`
-		TierCountValued  int    `json:"tier_count_valued"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -438,6 +531,11 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Reward tiers are seeded from the global default, same as score levels.
+	// Adjustments happen afterwards in the Edit Season modal, which is where the
+	// per-row CRUD lives (it needs a season id, which doesn't exist yet here).
+	tierDefs := loadDefaultRewardTiers()
+
 	// Parse trackables and events from template
 	type tkDef struct {
 		Key       string `json:"key"`
@@ -489,24 +587,12 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Apply tier defaults
+	// Apply participation threshold defaults
 	if body.TierActiveMinPct == 0 {
 		body.TierActiveMinPct = 70
 	}
 	if body.TierAtRiskMinPct == 0 {
 		body.TierAtRiskMinPct = 60
-	}
-	if body.TierCountLeader == 0 {
-		body.TierCountLeader = 1
-	}
-	if body.TierCountCore == 0 {
-		body.TierCountCore = 10
-	}
-	if body.TierCountElite == 0 {
-		body.TierCountElite = 20
-	}
-	if body.TierCountValued == 0 {
-		body.TierCountValued = 69
 	}
 
 	// Block duplicate season numbers before starting the transaction
@@ -552,13 +638,11 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := tx.Exec(`
 		INSERT INTO seasons (name, season_number, start_date, week_count, key_event_name, key_event_required,
-		    tier_active_min_pct, tier_at_risk_min_pct,
-		    tier_count_leader, tier_count_core, tier_count_elite, tier_count_valued, is_active)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		    tier_active_min_pct, tier_at_risk_min_pct, is_active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		tmpl.TemplateName, tmpl.SeasonNumber, body.StartDate, defs.WeekCount,
 		defs.KeyEventName, defs.KeyEventRequired,
 		body.TierActiveMinPct, body.TierAtRiskMinPct,
-		body.TierCountLeader, body.TierCountCore, body.TierCountElite, body.TierCountValued,
 		newIsActive,
 	)
 	if err != nil {
@@ -572,6 +656,16 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.Exec(`INSERT INTO season_score_levels (season_id, key, label, points, sort_order) VALUES (?, ?, ?, ?, ?)`,
 			seasonID, sl.Key, sl.Label, sl.Points, i); err != nil {
 			slog.Error("handleSeasonCreate: insert score level", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	for i, rt := range tierDefs {
+		if _, err := tx.Exec(`INSERT INTO season_reward_tiers (season_id, key, label, slot_count, color, sort_order)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			seasonID, rt.Key, rt.Label, rt.SlotCount, rt.Color, i); err != nil {
+			slog.Error("handleSeasonCreate: insert reward tier", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
@@ -707,10 +801,6 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 		KeyEventRequired int    `json:"key_event_required"`
 		TierActiveMinPct int    `json:"tier_active_min_pct"`
 		TierAtRiskMinPct int    `json:"tier_at_risk_min_pct"`
-		TierCountLeader  int    `json:"tier_count_leader"`
-		TierCountCore    int    `json:"tier_count_core"`
-		TierCountElite   int    `json:"tier_count_elite"`
-		TierCountValued  int    `json:"tier_count_valued"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -731,13 +821,11 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 	if _, err := db.Exec(`
 		UPDATE seasons SET name=?, season_number=?, start_date=?, week_count=?,
 		    key_event_name=?, key_event_required=?,
-		    tier_active_min_pct=?, tier_at_risk_min_pct=?,
-		    tier_count_leader=?, tier_count_core=?, tier_count_elite=?, tier_count_valued=?
+		    tier_active_min_pct=?, tier_at_risk_min_pct=?
 		WHERE id=?`,
 		body.Name, body.SeasonNumber, body.StartDate, body.WeekCount,
 		body.KeyEventName, body.KeyEventRequired,
 		body.TierActiveMinPct, body.TierAtRiskMinPct,
-		body.TierCountLeader, body.TierCountCore, body.TierCountElite, body.TierCountValued,
 		id,
 	); err != nil {
 		slog.Error("handleSeasonUpdate: update", "error", err)
@@ -856,9 +944,9 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// season_trackables, season_member_records, season_events cascade via ON DELETE CASCADE.
-	// season_rewards, season_participation, season_score_levels do not — delete explicitly.
-	for _, tbl := range []string{"season_participation", "season_score_levels", "season_rewards"} {
+	// foreign_keys is off app-wide, so the schema's ON DELETE CASCADE never fires —
+	// every child table has to be deleted explicitly.
+	for _, tbl := range []string{"season_participation", "season_score_levels", "season_rewards", "season_reward_tiers"} {
 		if _, err := tx.Exec(`DELETE FROM `+tbl+` WHERE season_id = ?`, id); err != nil {
 			slog.Error("handleSeasonDelete: delete children", "table", tbl, "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1808,14 +1896,11 @@ func handleRewardsGet(w http.ResponseWriter, r *http.Request) {
 		FROM season_rewards sr
 		JOIN members m ON m.id = sr.member_id
 		JOIN users u ON u.id = sr.logged_by
+		LEFT JOIN season_reward_tiers t
+		       ON t.season_id = sr.season_id AND t.key = sr.reward_tier
 		WHERE sr.season_id = ?
 		ORDER BY
-		  CASE sr.reward_tier
-		    WHEN 'alliance_leader' THEN 1
-		    WHEN 'core' THEN 2
-		    WHEN 'elite' THEN 3
-		    WHEN 'valued' THEN 4
-		  END ASC,
+		  COALESCE(t.sort_order, 999999) ASC,
 		  sr.participation_pct DESC`, season.ID)
 	if err != nil {
 		slog.Error("handleRewardsGet: query", "error", err)
@@ -1871,6 +1956,19 @@ func handleRewardSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.ArchivedAt != "" {
 		http.Error(w, "Season is archived and cannot be modified", http.StatusConflict)
+		return
+	}
+
+	// Replaces the CHECK constraint dropped in migration 068 — the only thing
+	// keeping reward_tier from holding an arbitrary string.
+	ok, err := rewardTierExists(body.SeasonID, body.RewardTier)
+	if err != nil {
+		slog.Error("handleRewardSave: verify tier", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "reward_tier is not a configured tier for this season", http.StatusBadRequest)
 		return
 	}
 
@@ -1943,6 +2041,19 @@ func handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
 	s, _ := loadSeasonByID(seasonID)
 	if s != nil && s.ArchivedAt != "" {
 		http.Error(w, "Season is archived and cannot be modified", http.StatusConflict)
+		return
+	}
+
+	// Same post-068 validation as handleRewardSave — an update can set the tier
+	// too, so skipping it here would leave the same hole the CHECK used to close.
+	tierOK, err := rewardTierExists(seasonID, body.RewardTier)
+	if err != nil {
+		slog.Error("handleRewardUpdate: verify tier", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if !tierOK {
+		http.Error(w, "reward_tier is not a configured tier for this season", http.StatusBadRequest)
 		return
 	}
 
@@ -2149,6 +2260,324 @@ func handleSeasonTrackableDelete(w http.ResponseWriter, r *http.Request) {
 	logActivity(user.ID, user.Username, "deleted", "season_trackable", label, false)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Deleted"})
+}
+
+// ---------------------------------------------------------------------------
+// Season reward tiers
+//
+// Per-row REST modelled on the trackables handlers above. Two rules carried
+// over: the key is immutable once created (it is the value stored in
+// season_rewards.reward_tier), and a tier that has rewards assigned cannot be
+// deleted. Gated on manage_season_rewards (R5) rather than manage_season_hub —
+// tier counts were previously edited inside the R5-only Edit Season modal, and
+// using the trackables gate would silently widen access to R4.
+// ---------------------------------------------------------------------------
+
+func handleSeasonRewardTierList(w http.ResponseWriter, r *http.Request) {
+	seasonID, _ := strconv.Atoi(r.URL.Query().Get("season_id"))
+	if seasonID == 0 {
+		http.Error(w, "season_id is required", http.StatusBadRequest)
+		return
+	}
+	rows, err := db.Query(`SELECT id, season_id, key, label, slot_count, color, sort_order
+		FROM season_reward_tiers WHERE season_id = ? ORDER BY sort_order ASC`, seasonID)
+	if err != nil {
+		slog.Error("handleSeasonRewardTierList: query", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	tiers := []SeasonRewardTier{}
+	for rows.Next() {
+		var t SeasonRewardTier
+		if err := rows.Scan(&t.ID, &t.SeasonID, &t.Key, &t.Label, &t.SlotCount, &t.Color, &t.SortOrder); err != nil {
+			continue
+		}
+		tiers = append(tiers, t)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"reward_tiers": tiers})
+}
+
+// seasonAcceptsTierEdits reports whether the season exists and is still open to
+// tier changes. An archived season is frozen, matching handleRewardSave.
+func seasonAcceptsTierEdits(seasonID int) (bool, string) {
+	var archivedAt sql.NullString
+	err := db.QueryRow(`SELECT archived_at FROM seasons WHERE id = ?`, seasonID).Scan(&archivedAt)
+	if err == sql.ErrNoRows {
+		return false, "Season not found"
+	}
+	if err != nil {
+		slog.Error("seasonAcceptsTierEdits: load", "error", err)
+		return false, "Database error"
+	}
+	if archivedAt.Valid && archivedAt.String != "" {
+		return false, "Season is archived and cannot be modified"
+	}
+	return true, ""
+}
+
+func handleSeasonRewardTierCreate(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+
+	var body SeasonRewardTier
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.SeasonID == 0 || body.Key == "" || body.Label == "" {
+		http.Error(w, "season_id, key, and label are required", http.StatusBadRequest)
+		return
+	}
+	if !validTierKey(body.Key) {
+		http.Error(w, "key must be lowercase letters, digits and underscores, starting with a letter", http.StatusBadRequest)
+		return
+	}
+	if body.Color == "" {
+		body.Color = "neutral"
+	}
+	if !validTierColors[body.Color] {
+		http.Error(w, "color is not a recognised palette slot", http.StatusBadRequest)
+		return
+	}
+	if body.SlotCount < 0 {
+		http.Error(w, "slot_count cannot be negative", http.StatusBadRequest)
+		return
+	}
+	if ok, msg := seasonAcceptsTierEdits(body.SeasonID); !ok {
+		status := http.StatusConflict
+		if msg == "Season not found" {
+			status = http.StatusNotFound
+		} else if msg == "Database error" {
+			status = http.StatusInternalServerError
+		}
+		http.Error(w, msg, status)
+		return
+	}
+
+	var existing int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM season_reward_tiers WHERE season_id = ? AND key = ?`,
+		body.SeasonID, body.Key).Scan(&existing); err != nil {
+		slog.Error("handleSeasonRewardTierCreate: dup check", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if existing > 0 {
+		http.Error(w, "A reward tier with that key already exists for this season", http.StatusConflict)
+		return
+	}
+	res, err := db.Exec(`INSERT INTO season_reward_tiers (season_id, key, label, slot_count, color, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		body.SeasonID, body.Key, body.Label, body.SlotCount, body.Color, body.SortOrder)
+	if err != nil {
+		slog.Error("handleSeasonRewardTierCreate: insert", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	id, _ := res.LastInsertId()
+	logActivity(user.ID, user.Username, "created", "season_reward_tier", body.Label, false)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"id": id})
+}
+
+func handleSeasonRewardTierUpdate(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		http.Error(w, "Invalid reward tier ID", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Label     string `json:"label"`
+		SlotCount int    `json:"slot_count"`
+		Color     string `json:"color"`
+		SortOrder int    `json:"sort_order"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.Label == "" {
+		http.Error(w, "label is required", http.StatusBadRequest)
+		return
+	}
+	if body.Color == "" {
+		body.Color = "neutral"
+	}
+	if !validTierColors[body.Color] {
+		http.Error(w, "color is not a recognised palette slot", http.StatusBadRequest)
+		return
+	}
+	if body.SlotCount < 0 {
+		http.Error(w, "slot_count cannot be negative", http.StatusBadRequest)
+		return
+	}
+
+	var seasonID, oldSlotCount, oldSortOrder int
+	var oldLabel, oldColor string
+	if err := db.QueryRow(`SELECT season_id, label, slot_count, color, sort_order
+		FROM season_reward_tiers WHERE id = ?`, id).
+		Scan(&seasonID, &oldLabel, &oldSlotCount, &oldColor, &oldSortOrder); err == sql.ErrNoRows {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		slog.Error("handleSeasonRewardTierUpdate: load old", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if ok, msg := seasonAcceptsTierEdits(seasonID); !ok {
+		status := http.StatusConflict
+		if msg == "Database error" {
+			status = http.StatusInternalServerError
+		}
+		http.Error(w, msg, status)
+		return
+	}
+
+	// The key is deliberately not updatable — it is the value already stored on
+	// every season_rewards row for this tier. Renaming the label is the supported
+	// operation and flows through to those rewards automatically.
+	if _, err := db.Exec(`UPDATE season_reward_tiers SET label = ?, slot_count = ?, color = ?, sort_order = ? WHERE id = ?`,
+		body.Label, body.SlotCount, body.Color, body.SortOrder, id); err != nil {
+		slog.Error("handleSeasonRewardTierUpdate: update", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	var changes []string
+	if oldLabel != body.Label {
+		changes = append(changes, "label: "+oldLabel+" → "+body.Label)
+	}
+	if oldSlotCount != body.SlotCount {
+		changes = append(changes, fmt.Sprintf("slot_count: %d → %d", oldSlotCount, body.SlotCount))
+	}
+	if oldColor != body.Color {
+		changes = append(changes, "color: "+oldColor+" → "+body.Color)
+	}
+	if oldSortOrder != body.SortOrder {
+		changes = append(changes, fmt.Sprintf("sort_order: %d → %d", oldSortOrder, body.SortOrder))
+	}
+	logActivity(user.ID, user.Username, "updated", "season_reward_tier", body.Label, false,
+		strings.Join(changes, "; "))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Updated"})
+}
+
+func handleSeasonRewardTierDelete(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		http.Error(w, "Invalid reward tier ID", http.StatusBadRequest)
+		return
+	}
+	var seasonID int
+	var key, label string
+	if err := db.QueryRow(`SELECT season_id, key, label FROM season_reward_tiers WHERE id = ?`, id).
+		Scan(&seasonID, &key, &label); err == sql.ErrNoRows {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		slog.Error("handleSeasonRewardTierDelete: load", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if ok, msg := seasonAcceptsTierEdits(seasonID); !ok {
+		status := http.StatusConflict
+		if msg == "Database error" {
+			status = http.StatusInternalServerError
+		}
+		http.Error(w, msg, status)
+		return
+	}
+
+	// Same guard as trackables: deleting a tier that has rewards assigned would
+	// orphan those rows against a tier that no longer exists.
+	var rewardCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM season_rewards WHERE season_id = ? AND reward_tier = ?`,
+		seasonID, key).Scan(&rewardCount); err != nil {
+		slog.Error("handleSeasonRewardTierDelete: reward count", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if rewardCount > 0 {
+		http.Error(w, "Cannot delete a reward tier that has rewards assigned", http.StatusConflict)
+		return
+	}
+	if _, err := db.Exec(`DELETE FROM season_reward_tiers WHERE id = ?`, id); err != nil {
+		slog.Error("handleSeasonRewardTierDelete: delete", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	logActivity(user.ID, user.Username, "deleted", "season_reward_tier", label, false)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Deleted"})
+}
+
+func handleSeasonRewardTiersDefaultGet(w http.ResponseWriter, r *http.Request) {
+	tiers := loadDefaultRewardTiers()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"reward_tiers": tiers})
+}
+
+func handleSeasonRewardTiersDefaultPut(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	var body struct {
+		RewardTiers []SeasonRewardTier `json:"reward_tiers"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if len(body.RewardTiers) == 0 {
+		http.Error(w, "At least one reward tier is required", http.StatusBadRequest)
+		return
+	}
+	seen := map[string]bool{}
+	clean := make([]SeasonRewardTier, 0, len(body.RewardTiers))
+	for _, t := range body.RewardTiers {
+		if !validTierKey(t.Key) {
+			http.Error(w, "key must be lowercase letters, digits and underscores, starting with a letter", http.StatusBadRequest)
+			return
+		}
+		if t.Label == "" {
+			http.Error(w, "label is required for every tier", http.StatusBadRequest)
+			return
+		}
+		if t.Color == "" {
+			t.Color = "neutral"
+		}
+		if !validTierColors[t.Color] {
+			http.Error(w, "color is not a recognised palette slot", http.StatusBadRequest)
+			return
+		}
+		if t.SlotCount < 0 {
+			http.Error(w, "slot_count cannot be negative", http.StatusBadRequest)
+			return
+		}
+		if seen[t.Key] {
+			http.Error(w, "duplicate tier key: "+t.Key, http.StatusBadRequest)
+			return
+		}
+		seen[t.Key] = true
+		clean = append(clean, SeasonRewardTier{Key: t.Key, Label: t.Label, SlotCount: t.SlotCount, Color: t.Color})
+	}
+
+	encoded, err := json.Marshal(clean)
+	if err != nil {
+		slog.Error("handleSeasonRewardTiersDefaultPut: marshal", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := db.Exec(`UPDATE settings SET season_reward_tiers_default = ? WHERE id = 1`, string(encoded)); err != nil {
+		slog.Error("handleSeasonRewardTiersDefaultPut: update", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	logActivity(user.ID, user.Username, "updated", "settings", "season reward tiers default", true)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Saved"})
 }
 
 // ---------------------------------------------------------------------------
