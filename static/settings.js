@@ -416,6 +416,109 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadScoreLevels();
 })();
 
+// ── Season Hub — Default Reward Tiers ───────────────────────────────────────
+// Same bulk-edit shape as the score levels editor above: load the whole list,
+// edit rows in place, one PUT sends the array. These are the tiers a NEW season
+// is seeded with; per-season edits live in Season Hub → Edit Season.
+(function () {
+    const tbody = document.getElementById('reward-tiers-tbody');
+    const btnSave = document.getElementById('btn-save-reward-tiers');
+    const btnAdd = document.getElementById('btn-add-reward-tier');
+    if (!tbody) return;
+
+    function buildRewardTierRow(key, label, slotCount, color) {
+        const tr = document.createElement('tr');
+
+        const tdKey = document.createElement('td');
+        const inKey = document.createElement('input');
+        inKey.type = 'text'; inKey.className = 'form-input rt-key'; inKey.value = key || '';
+        inKey.placeholder = 'e.g. vanguard';
+        tdKey.appendChild(inKey); tr.appendChild(tdKey);
+
+        const tdLabel = document.createElement('td');
+        const inLabel = document.createElement('input');
+        inLabel.type = 'text'; inLabel.className = 'form-input rt-label'; inLabel.value = label || '';
+        inLabel.placeholder = 'e.g. Vanguard';
+        tdLabel.appendChild(inLabel); tr.appendChild(tdLabel);
+
+        const tdSlots = document.createElement('td');
+        const inSlots = document.createElement('input');
+        inSlots.type = 'number'; inSlots.className = 'form-input rt-slots';
+        inSlots.min = '0'; inSlots.value = slotCount != null ? slotCount : 0;
+        tdSlots.appendChild(inSlots); tr.appendChild(tdSlots);
+
+        const tdColor = document.createElement('td');
+        const selColor = ColorPicker.buildSelect(color, 'form-input rt-color');
+        tdColor.appendChild(selColor); tr.appendChild(tdColor);
+
+        // Order here is the order a new season is seeded in, so it is edited the
+        // same way as the per-season list: buttons, not a sort_order field.
+        const tdAct = document.createElement('td');
+        tdAct.style.cssText = 'white-space:nowrap;';
+        tdAct.appendChild(buildOrderButtons(tr, () => refreshOrderButtons(tbody)));
+
+        const btnDel = document.createElement('button');
+        btnDel.type = 'button'; btnDel.className = 'btn btn-danger btn-sm';
+        btnDel.style.marginLeft = '4px';
+        btnDel.setAttribute('aria-label', 'Delete'); btnDel.appendChild(svgIcon('x'));
+        btnDel.addEventListener('click', () => {
+            ColorPicker.destroyIn(tr, '.rt-color');
+            tr.remove();
+            refreshOrderButtons(tbody);
+        });
+        tdAct.appendChild(btnDel); tr.appendChild(tdAct);
+
+        return tr;
+    }
+
+    // Called after any structural change. The colour preview needs Choices and
+    // the reorder end-stops do not, so they are refreshed independently —
+    // ColorPicker.upgradeAll is a no-op when Choices is absent.
+    function refreshTierEditor() {
+        ColorPicker.upgradeAll(tbody, '.rt-color', 'tier-color-choices');
+        refreshOrderButtons(tbody);
+    }
+
+    function loadRewardTiers() {
+        fetch('/api/season-hub/reward-tiers-default')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d || !Array.isArray(d.reward_tiers)) return;
+                tbody.replaceChildren(...d.reward_tiers.map(t =>
+                    buildRewardTierRow(t.key, t.label, t.slot_count, t.color)));
+                refreshTierEditor();
+            })
+            .catch(() => {});
+    }
+
+    function saveRewardTiers() {
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const tiers = rows.map(row => ({
+            key: row.querySelector('.rt-key').value.trim(),
+            label: row.querySelector('.rt-label').value.trim(),
+            slot_count: parseInt(row.querySelector('.rt-slots').value, 10) || 0,
+            color: row.querySelector('.rt-color').value,
+        })).filter(t => t.key && t.label);
+
+        fetch('/api/season-hub/reward-tiers-default', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reward_tiers: tiers }),
+        })
+            .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
+            .then(() => showToast('Reward tiers saved.'))
+            .catch(err => showToast(err.message || 'Save failed.', 'error'));
+    }
+
+    if (btnSave) btnSave.addEventListener('click', saveRewardTiers);
+    if (btnAdd) btnAdd.addEventListener('click', () => {
+        tbody.appendChild(buildRewardTierRow('', '', 0, 'neutral'));
+        refreshTierEditor();
+    });
+
+    loadRewardTiers();
+})();
+
 // ── Season Hub — Templates ──────────────────────────────────────────────────
 
 (function () {

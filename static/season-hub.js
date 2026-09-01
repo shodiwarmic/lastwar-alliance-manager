@@ -18,6 +18,8 @@
     let scoreLevels = [];          // ScoreLevel[] for active season
     let allMembers = [];           // SeasonMember[] — filtered server-side already
     let allRewards = [];           // SeasonReward[]
+    let rewardTiers = [];          // SeasonRewardTier[] for active season, in sort order
+    let tierByKey = {};            // key → SeasonRewardTier, rebuilt on every data load
     let allMailItems = [];         // SeasonMailItem[]
     let contribPreviewData = null; // pending import data from preview
     let editingRewardId = null;    // id being edited, or null for create
@@ -95,6 +97,7 @@
                 activeSeason = data.season || null;
                 scoreLevels = (data.season && data.season.score_levels) || [];
                 allMembers = data.members || [];
+                setRewardTiers((data.season && data.season.reward_tiers) || []);
 
                 updateSeasonHeader();
                 renderRankingsTable();
@@ -227,7 +230,7 @@
                 case 'contribution_pct':  va = a.contribution_pct;     vb = b.contribution_pct;        break;
                 case 'key_event_attendance': va = a.key_event_attendance; vb = b.key_event_attendance; break;
                 case 'class_tag':         va = a.class_tag;             vb = b.class_tag;               break;
-                case 'reward_tier':       va = a.reward_tier || '';     vb = b.reward_tier || '';       break;
+                case 'reward_tier':       va = tierSortIndex(a.reward_tier); vb = tierSortIndex(b.reward_tier); break;
                 default:                  va = 0; vb = 0;
             }
             if (va < vb) return rankingsSortAsc ? -1 : 1;
@@ -398,14 +401,27 @@
         return span;
     }
 
+    // Reward tiers are per-season and configurable, so badges are driven by the
+    // season's tier list rather than a fixed set of names. A key with no matching
+    // tier (one removed after the reward was assigned) still renders, showing the
+    // raw key — visible rather than blank.
+    function setRewardTiers(tiers) {
+        rewardTiers = tiers || [];
+        tierByKey = {};
+        rewardTiers.forEach(t => { tierByKey[t.key] = t; });
+    }
+
+    function tierSortIndex(key) {
+        const t = tierByKey[key];
+        return t ? t.sort_order : Number.MAX_SAFE_INTEGER;
+    }
+
     function makeTierBadge(tier) {
         const span = document.createElement('span');
         span.className = 'tier-badge';
-        if (tier === 'alliance_leader') { span.classList.add('alliance-leader'); span.textContent = 'Alliance Leader'; }
-        else if (tier === 'core') { span.classList.add('core'); span.textContent = 'Core'; }
-        else if (tier === 'elite') { span.classList.add('elite'); span.textContent = 'Elite'; }
-        else if (tier === 'valued') { span.classList.add('valued'); span.textContent = 'Valued'; }
-        else span.textContent = tier;
+        const def = tierByKey[tier];
+        span.classList.add('tone-' + ((def && def.color) || 'neutral'));
+        span.textContent = def ? def.label : (tier || '');
         return span;
     }
 
@@ -1018,9 +1034,42 @@
             .catch(() => showToast('Failed to load rewards.', 'error'));
     }
 
+    // One chip per configured tier showing how many of its slots are used.
+    // slot_count 0 means "no cap set" and renders as a bare count.
+    function renderTierSlots() {
+        const wrap = document.getElementById('rewards-tier-slots');
+        if (!wrap) return;
+
+        if (!activeSeason || rewardTiers.length === 0) {
+            wrap.replaceChildren();
+            return;
+        }
+
+        const used = {};
+        allRewards.forEach(rw => { used[rw.reward_tier] = (used[rw.reward_tier] || 0) + 1; });
+
+        wrap.replaceChildren(...rewardTiers.map(t => {
+            const n = used[t.key] || 0;
+            const chip = document.createElement('span');
+            chip.className = 'tier-slot-chip';
+            if (t.slot_count > 0 && n > t.slot_count) chip.classList.add('over-capacity');
+
+            chip.appendChild(makeTierBadge(t.key));
+
+            const count = document.createElement('span');
+            count.className = 'tier-slot-count';
+            count.textContent = t.slot_count > 0 ? n + '/' + t.slot_count : String(n);
+            chip.appendChild(count);
+
+            return chip;
+        }));
+    }
+
     function renderRewardsTable() {
         const tbody = document.getElementById('rewards-tbody');
         if (!tbody) return;
+
+        renderTierSlots();
 
         if (!activeSeason || allRewards.length === 0) {
             const tr = document.createElement('tr');
@@ -1104,13 +1153,31 @@
             );
         }
 
+        // The tier list is per-season and configurable, so the options are built
+        // here rather than being static markup in the template.
+        tierSel.replaceChildren(...rewardTiers.map(t => {
+            const opt = document.createElement('option');
+            opt.value = t.key;
+            opt.textContent = t.label;
+            return opt;
+        }));
+
         if (rw) {
+            // A reward whose tier was removed keeps its key; surface it rather
+            // than silently snapping the dropdown to some other tier.
+            if (rw.reward_tier && !tierByKey[rw.reward_tier]) {
+                const orphan = document.createElement('option');
+                orphan.value = rw.reward_tier;
+                orphan.textContent = rw.reward_tier + ' (removed)';
+                tierSel.appendChild(orphan);
+            }
             tierSel.value = rw.reward_tier;
             partPct.value = rw.participation_pct;
             contribPct.value = rw.contribution_pct != null ? rw.contribution_pct : '';
             noteEl.value = rw.note || '';
         } else {
-            tierSel.value = 'valued';
+            // Default to the lowest tier — the broadest, most commonly assigned one.
+            tierSel.value = rewardTiers.length ? rewardTiers[rewardTiers.length - 1].key : '';
             partPct.value = '';
             contribPct.value = '';
             noteEl.value = '';
@@ -1517,10 +1584,6 @@
             start_date: document.getElementById('cs-start-date').value,
             tier_active_min_pct: parseInt(document.getElementById('cs-tier-active').value, 10) || 70,
             tier_at_risk_min_pct: parseInt(document.getElementById('cs-tier-at-risk').value, 10) || 60,
-            tier_count_leader: parseInt(document.getElementById('cs-tier-leader').value, 10) || 1,
-            tier_count_core: parseInt(document.getElementById('cs-tier-core').value, 10) || 10,
-            tier_count_elite: parseInt(document.getElementById('cs-tier-elite').value, 10) || 20,
-            tier_count_valued: parseInt(document.getElementById('cs-tier-valued').value, 10) || 69,
         };
 
         if (!body.template_id) {
@@ -1577,6 +1640,192 @@
     }
 
     // ── Edit season — per-row trackable/event builders ────────────────────────
+
+    // Per-row REST, same shape as buildEsTrackableRow. The key is an input on a
+    // new row and plain text once saved — it is the value stored on every
+    // season_rewards row for this tier, so it cannot change afterwards.
+    //
+    // Order is set by the up/down buttons, not by a sort_order field: the number
+    // itself means nothing to an officer, only the resulting ladder does. A move
+    // persists immediately for every already-saved row, so the badge order on the
+    // page behind the modal matches what is on screen.
+    function buildEsRewardTierRow(rt, seasonId) {
+        rt = rt || {};
+        const tr = document.createElement('tr');
+        tr.dataset.id = rt.id || '';
+        if (rt.sort_order != null) tr.dataset.sortOrder = rt.sort_order;
+
+        const tdKey = document.createElement('td');
+        if (rt.id) {
+            tdKey.textContent = rt.key;
+        } else {
+            const inp = document.createElement('input');
+            inp.type = 'text'; inp.className = 'form-input rt-key'; inp.placeholder = 'key (e.g. vanguard)';
+            tdKey.appendChild(inp);
+        }
+        tr.appendChild(tdKey);
+
+        const tdLabel = document.createElement('td');
+        const inpLabel = document.createElement('input');
+        inpLabel.type = 'text'; inpLabel.className = 'form-input rt-label';
+        inpLabel.value = rt.label || ''; inpLabel.placeholder = 'Label';
+        tdLabel.appendChild(inpLabel);
+        tr.appendChild(tdLabel);
+
+        const tdSlots = document.createElement('td');
+        const inpSlots = document.createElement('input');
+        inpSlots.type = 'number'; inpSlots.className = 'form-input rt-slots';
+        inpSlots.min = '0'; inpSlots.value = rt.slot_count != null ? rt.slot_count : 0;
+        tdSlots.appendChild(inpSlots);
+        tr.appendChild(tdSlots);
+
+        const tdColor = document.createElement('td');
+        const selColor = ColorPicker.buildSelect(rt.color, 'form-input rt-color');
+        tdColor.appendChild(selColor);
+        tr.appendChild(tdColor);
+        // The Choices upgrade happens in refreshTierEditor() once the tbody is
+        // populated — Choices wraps the element in place, so it needs a parent.
+
+        const tdAct = document.createElement('td');
+        tdAct.style.cssText = 'white-space:nowrap;';
+        tdAct.appendChild(buildOrderButtons(tr, persistTierOrder));
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button'; saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Save';
+        saveBtn.style.marginLeft = '4px';
+        saveBtn.addEventListener('click', () => {
+            const label = inpLabel.value.trim();
+            if (!label) { showToast('Label required.', 'error'); return; }
+            const payload = {
+                label,
+                slot_count: parseInt(inpSlots.value, 10) || 0,
+                color: selColor.value,
+                sort_order: rowPosition(tr),
+            };
+            if (rt.id) {
+                fetch('/api/season-hub/reward-tiers/' + rt.id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(r => r.ok ? r : r.text().then(t => { throw new Error(t); }))
+                  .then(() => { rt.label = label; showToast('Reward tier saved.'); reloadActiveSeasonTiers(); })
+                  .catch(err => showToast(err.message || 'Save failed.', 'error'));
+            } else {
+                const keyEl = tdKey.querySelector('.rt-key');
+                const key = keyEl ? keyEl.value.trim() : '';
+                if (!key) { showToast('Key required.', 'error'); return; }
+                fetch('/api/season-hub/reward-tiers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(Object.assign({ season_id: seasonId, key }, payload))
+                }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
+                  .then(d => {
+                      tr.dataset.id = d.id; rt.id = d.id; rt.key = key;
+                      tr.dataset.sortOrder = payload.sort_order;
+                      tdKey.replaceChildren(document.createTextNode(key));
+                      showToast('Reward tier created.');
+                      reloadActiveSeasonTiers();
+                  })
+                  .catch(err => showToast(err.message || 'Create failed.', 'error'));
+            }
+        });
+        tdAct.appendChild(saveBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button'; delBtn.className = 'btn btn-danger btn-sm';
+        delBtn.setAttribute('aria-label', 'Delete'); delBtn.appendChild(svgIcon('x'));
+        delBtn.style.marginLeft = '4px';
+        delBtn.addEventListener('click', () => {
+            if (!rt.id) { destroyTierRow(tr); return; }
+            delBtn.style.display = 'none';
+            const cs = document.createElement('span');
+            cs.style.cssText = 'display:inline-flex;gap:4px;align-items:center;margin-left:4px;';
+            const yBtn = document.createElement('button');
+            yBtn.type = 'button'; yBtn.className = 'btn btn-danger btn-sm'; yBtn.textContent = 'Delete';
+            yBtn.addEventListener('click', () => {
+                fetch('/api/season-hub/reward-tiers/' + rt.id, { method: 'DELETE' })
+                    .then(r => r.ok ? r : r.text().then(t => { throw new Error(t); }))
+                    .then(() => { destroyTierRow(tr); showToast('Reward tier deleted.'); reloadActiveSeasonTiers(); })
+                    .catch(err => { cs.remove(); delBtn.style.display = ''; showToast(err.message || 'Delete failed.', 'error'); });
+            });
+            const nBtn = document.createElement('button');
+            nBtn.type = 'button'; nBtn.className = 'btn btn-secondary btn-sm'; nBtn.textContent = 'No';
+            nBtn.addEventListener('click', () => { cs.remove(); delBtn.style.display = ''; });
+            cs.append(yBtn, nBtn);
+            tdAct.appendChild(cs);
+        });
+        tdAct.appendChild(delBtn);
+        tr.appendChild(tdAct);
+        return tr;
+    }
+
+    // Called after any structural change to the tier editor. The two halves are
+    // deliberately independent: the colour preview needs Choices, the reorder
+    // end-stops do not, so a missing Choices tag must not take the buttons with
+    // it. ColorPicker.upgradeAll is itself a no-op without Choices.
+    function refreshTierEditor() {
+        const tbody = document.getElementById('es-reward-tiers-tbody');
+        if (!tbody) return;
+        ColorPicker.upgradeAll(tbody, '.rt-color', 'tier-color-choices');
+        refreshOrderButtons(tbody);
+    }
+
+    // Choices leaves its wrapper behind if the row is removed without this.
+    function destroyTierRow(tr) {
+        ColorPicker.destroyIn(tr, '.rt-color');
+        const tbody = tr.parentNode;
+        tr.remove();
+        if (tbody) refreshOrderButtons(tbody);
+    }
+
+    // A move is only meaningful once every row has an id, so unsaved new rows are
+    // skipped — they pick up their position when they are first saved. Sends one
+    // PUT per row whose position actually changed.
+    function persistTierOrder() {
+        const tbody = document.getElementById('es-reward-tiers-tbody');
+        if (!tbody) return;
+        const rows = Array.from(tbody.children);
+        const writes = rows.map((tr, i) => {
+            const id = tr.dataset.id;
+            if (!id) return null;
+            if (String(tr.dataset.sortOrder) === String(i)) return null;
+            const label = tr.querySelector('.rt-label').value.trim();
+            if (!label) return null;
+            tr.dataset.sortOrder = i;
+            return fetch('/api/season-hub/reward-tiers/' + id, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    label,
+                    slot_count: parseInt(tr.querySelector('.rt-slots').value, 10) || 0,
+                    color: tr.querySelector('.rt-color').value,
+                    sort_order: i,
+                }),
+            }).then(r => r.ok ? r : r.text().then(t => { throw new Error(t); }));
+        }).filter(Boolean);
+
+        if (writes.length === 0) return;
+        Promise.all(writes)
+            .then(() => reloadActiveSeasonTiers())
+            .catch(err => showToast(err.message || 'Reorder failed.', 'error'));
+    }
+
+    // Tier edits are saved per row while the modal is open, so the badges and
+    // slot chips already on the page behind it would otherwise show stale
+    // labels, colours and caps until the next full reload.
+    function reloadActiveSeasonTiers() {
+        if (!activeSeason) return;
+        fetch('/api/season-hub/reward-tiers?season_id=' + activeSeason.id)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d) return;
+                setRewardTiers(d.reward_tiers || []);
+                if (activeSeason) activeSeason.reward_tiers = rewardTiers;
+                renderRankingsTable();
+                if (CAN_MANAGE) renderRewardsTable();
+            })
+            .catch(() => {});
+    }
 
     function buildEsTrackableRow(tk, seasonId) {
         tk = tk || {};
@@ -1818,10 +2067,6 @@
             document.getElementById('es-key-event-required').value = s.key_event_required;
             document.getElementById('es-tier-active').value = s.tier_active_min_pct;
             document.getElementById('es-tier-at-risk').value = s.tier_at_risk_min_pct;
-            document.getElementById('es-tier-leader').value = s.tier_count_leader;
-            document.getElementById('es-tier-core').value = s.tier_count_core;
-            document.getElementById('es-tier-elite').value = s.tier_count_elite;
-            document.getElementById('es-tier-valued').value = s.tier_count_valued;
             const errEl = document.getElementById('es-error');
             if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
 
@@ -1830,11 +2075,17 @@
                 Promise.all([
                     fetch('/api/season-hub/trackables?season_id=' + s.id).then(r => r.json()),
                     fetch('/api/season-hub/season-events?season_id=' + s.id).then(r => r.json()),
-                ]).then(([tkData, evData]) => {
+                    fetch('/api/season-hub/reward-tiers?season_id=' + s.id).then(r => r.json()),
+                ]).then(([tkData, evData, rtData]) => {
                     const tkBody = document.getElementById('es-trackables-tbody');
                     if (tkBody) tkBody.replaceChildren(...(tkData.trackables || []).map(t => buildEsTrackableRow(t, s.id)));
                     const evBody = document.getElementById('es-events-tbody');
                     if (evBody) evBody.replaceChildren(...(evData.events || []).map(ev => buildEsEventRow(ev, s.id)));
+                    const rtBody = document.getElementById('es-reward-tiers-tbody');
+                    if (rtBody) {
+                        rtBody.replaceChildren(...(rtData.reward_tiers || []).map(t => buildEsRewardTierRow(t, s.id)));
+                        refreshTierEditor();
+                    }
                 }).catch(() => {});
                 const modal = document.getElementById('modal-edit-season');
                 if (modal) modal.style.display = 'flex';
@@ -1846,6 +2097,17 @@
         btnCancelEditSeason.addEventListener('click', () => {
             const modal = document.getElementById('modal-edit-season');
             if (modal) modal.style.display = '';
+        });
+    }
+
+    const btnEsAddRewardTier = document.getElementById('btn-es-add-reward-tier');
+    if (btnEsAddRewardTier) {
+        btnEsAddRewardTier.addEventListener('click', () => {
+            const tb = document.getElementById('es-reward-tiers-tbody');
+            if (tb && activeSeason) {
+                tb.appendChild(buildEsRewardTierRow({}, activeSeason.id));
+                refreshTierEditor();
+            }
         });
     }
 
@@ -1908,10 +2170,6 @@
                 key_event_required: parseInt(document.getElementById('es-key-event-required').value, 10) || 0,
                 tier_active_min_pct: parseInt(document.getElementById('es-tier-active').value, 10) || 70,
                 tier_at_risk_min_pct: parseInt(document.getElementById('es-tier-at-risk').value, 10) || 60,
-                tier_count_leader: parseInt(document.getElementById('es-tier-leader').value, 10) || 1,
-                tier_count_core: parseInt(document.getElementById('es-tier-core').value, 10) || 10,
-                tier_count_elite: parseInt(document.getElementById('es-tier-elite').value, 10) || 20,
-                tier_count_valued: parseInt(document.getElementById('es-tier-valued').value, 10) || 69,
             };
             setButtonLoading(submitBtn);
             fetch('/api/season-hub/seasons/' + activeSeason.id, {

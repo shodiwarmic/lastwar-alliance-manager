@@ -233,26 +233,8 @@
 .choices__list--dropdown .choices__item--selectable.is-highlighted.tag-pill--danger   { background: var(--color-danger-bg);  color: var(--color-danger); }
 .choices__list--dropdown .choices__item--selectable.is-highlighted.tag-pill--purple   { background: var(--color-purple-bg);  color: var(--color-purple); }
 
-/* ── Color dropdown swatches ──────────────────────────────────────────────
-   The tag color <select>s are upgraded to Choices and tagged .color-choices, so
-   each option (and the selected value) shows a colored dot. Keyed on the option
-   value that Choices copies onto data-value. Scoped to .color-choices so it never
-   touches the tag pickers (whose item values are numeric ids). */
-.color-choices .choices__item[data-value]::before {
-    content: "";
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    margin-right: 8px;
-    vertical-align: middle;
-    background: var(--color-text-mid); /* neutral */
-}
-.color-choices .choices__item[data-value="info"]::before    { background: var(--color-info); }
-.color-choices .choices__item[data-value="success"]::before { background: var(--color-success); }
-.color-choices .choices__item[data-value="warning"]::before { background: var(--color-warning); }
-.color-choices .choices__item[data-value="danger"]::before  { background: var(--color-danger); }
-.color-choices .choices__item[data-value="purple"]::before  { background: var(--color-purple); }
+/* The .color-choices swatch rules moved to styles.css — the same picker is used
+   by the Season Hub reward tier editors, which don't load this file. */
 
 /* ── Manage Tags modal ────────────────────────────────────────────────────*/
 .tag-modal-head {

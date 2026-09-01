@@ -57,7 +57,7 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 > whom" — add the entity type to `neverBatched` rather than accepting the merge.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -1009,6 +1009,86 @@ bottom-tabs / off-canvas nav exists — e.g. the `--table-vh-buffer`, the mobile
 sticky first table column, capping a drag pool's height) belongs **inside the
 existing `≤768px` block**, not in a new breakpoint. Avoid coupling JS to a width
 via `matchMedia`; prefer CSS. If you must, key it to `768px` so CSS and JS agree.
+
+### Season reward tiers are per-season rows, and `reward_tier` has no CHECK
+
+Reward tiers were four fixed columns on `seasons` (`tier_count_leader`/`core`/
+`elite`/`valued`) plus a `CHECK(reward_tier IN (...))` on `season_rewards`.
+Migration `068` replaced both with `season_reward_tiers` — a per-season list
+keyed `(season_id, key)`, modelled on `season_trackables`.
+
+**Dropping the CHECK required rebuilding `season_rewards`** (SQLite cannot ALTER
+a CHECK away — same create-copy-drop-rename as `030_season_mail_text.sql`). That
+CHECK was the *only* validation on `reward_tier`, so it is now enforced in Go by
+`rewardTierExists`, called from **both** `handleRewardSave` and
+`handleRewardUpdate`. Any new path that writes `season_rewards.reward_tier` must
+call it too — without it the column accepts arbitrary strings.
+
+Three more rules:
+
+1. **A tier's `key` is immutable; its `label` is not.** The key is the value
+   stored on every `season_rewards` row. Renaming the label deliberately flows
+   through to rewards already assigned — safe because the tier list is
+   per-season, so past seasons keep their own rows.
+2. **A tier with rewards assigned cannot be deleted** (409), exactly as a
+   trackable with recorded data cannot. Renders of an orphaned key still fall
+   back to showing the raw key rather than blanking.
+3. **Tier CRUD is gated on `manage_season_rewards` (R5), not
+   `manage_season_hub`.** Tier counts were previously edited inside the R5-only
+   Edit Season modal; reusing the trackables gate would silently widen access to
+   R4.
+
+The global default list lives in `settings.season_reward_tiers_default` (mirroring
+`season_score_levels_default`) and is copied into a season at creation.
+**Do not move it into `season_templates.defaults`** — `buildDefaultsEditor`'s
+`getJSON()` (`static/settings.js`) re-emits a fixed three-key object, so anything
+else in that blob is silently destroyed on the next template save.
+
+Badge colours are palette slots (`purple`/`info`/`success`/`warning`/`danger`/
+`neutral`) validated against `validTierColors` in Go and rendered as
+`.tier-badge.tone-*` in **`styles.css`** (global — the Settings page previews
+them and does not load `season-hub.css`). There are exactly **two** lists to keep
+in sync: `validTierColors` (Go) and `PALETTE_COLORS` (`color-picker.js`).
+
+**Colour pickers live in `color-picker.js`, NOT `global.js`.** The `ColorPicker`
+namespace (`PALETTE` / `buildSelect` / `make` / `setValue` / `upgradeAll` /
+`destroyIn`) drives both the file-tag editor and the two reward-tier editors, with
+its preview CSS in `color-picker.css`. Pass `'tier-color-choices'` as `extraClass`
+to render each option as the badge it produces instead of a swatch dot.
+
+> **Why not `global.js`:** the upgrade needs Choices.js, a per-template CDN
+> script, while `global.js` loads on every page — so a helper there implies an
+> availability it cannot promise. `exportTableToXLSX` is the cautionary tale in
+> the other direction (see "XLSX export needs the SheetJS tag"): it sits in
+> `global.js`, depends on the per-template SheetJS tag, and shipped as a dead
+> button on the Members page. Keep a CDN-dependent helper beside its dependency.
+>
+> `build-check.yml`'s **"Colour picker dependency check"** enforces it, failing a
+> template that loads `color-picker.js` without Choices or without
+> `color-picker.css`, and one whose page JS calls `ColorPicker.*` without loading
+> the module at all.
+
+Every entry point degrades to a plain, working `<select>` when Choices is absent —
+a missed tag costs the preview, never the feature. **Keep the Choices-dependent
+half separate from anything that isn't**: an early `if (!window.Choices) return`
+that also guards unrelated work silently disables it. That exact bug existed here
+in review — `refreshOrderButtons` sat behind the Choices guard, so a page without
+the lib would have lost its reorder end-stops too.
+
+> The badge variant has to out-specify `choices-theme.css`, which paints the
+> highlighted row accent-on-white at specificity **0-4-0**. Left alone it renders
+> every option's text white on its own pale background — unreadable, and it
+> defeats the preview. The per-tone `is-highlighted[data-value]` rules restate the
+> tone at 0-5-0 and turn hover into a ring instead of a fill. Any new
+> `.color-choices` variant needs the same treatment.
+
+**User-ordered lists use buttons, not a `sort_order` field.** `buildOrderButtons(tr,
+onMove)` / `refreshOrderButtons(tbody)` / `rowPosition(tr)` (`global.js`) move a row
+among its siblings and disable the direction it can't go. `rowPosition` is
+deliberately not `tr.rowIndex`, which counts header rows. In the per-season editor a
+move persists immediately (one PUT per row whose position actually changed) so the
+badges behind the modal stay in step; unsaved new rows are skipped and pick up their
+position when first saved.
 
 ### Former/archived members have rank `'EX'`, not `'Former'`
 Members removed from the alliance are stored with `rank = 'EX'`. Any query or JS filter that needs only active members must exclude this rank explicitly. Filtering by `'Former'` silently does nothing — that string does not exist in the data.
