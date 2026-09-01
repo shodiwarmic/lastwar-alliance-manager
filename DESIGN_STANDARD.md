@@ -471,6 +471,35 @@ the only one for new work.
 }
 ```
 
+**Reward tier badges** (`.tier-badge` in `season-hub.css`) — a user-configurable
+list, so the colour cannot be keyed on the tier's name. Each tier stores a
+**palette slot** and renders as `.tier-badge.tone-<slot>`:
+
+| Slot | Tokens |
+|---|---|
+| `purple` | `--color-purple-bg` / `--color-purple` |
+| `info` | `--color-info-bg` / `--color-info` |
+| `success` | `--color-success-bg` / `--color-success` |
+| `warning` | `--color-warning-bg` / `--color-warning` |
+| `danger` | `--color-danger-bg` / `--color-danger` |
+| `neutral` | `--color-card` / `--color-text-mid` |
+
+These live in `styles.css`, not a page file — the colour picker previews them on
+the Settings page too. The slot list exists in exactly two places that must stay
+in sync: `validTierColors` (`handlers_season_hub.go`) and `PALETTE_COLORS`
+(`color-picker.js`). Use this pattern for any other list whose members are defined
+by the user rather than by the code.
+
+**Colour pickers** — `ColorPicker.make(target, extraClass)` (`color-picker.js`)
+upgrades a colour `<select>` to a Choices dropdown and tags the wrapper
+`.color-choices`, which paints a swatch dot per option. Pass `extraClass:
+'tier-color-choices'` to preview each option as the full badge instead. Used by the
+file-tag editor and both reward-tier editors — don't hand-roll a third.
+
+The module is a separate file, not part of `global.js`, because it depends on the
+per-template Choices CDN script; a page using it must load `color-picker.css`,
+Choices, then `color-picker.js`, in that order. CI enforces this.
+
 **Chip borders** — use `--color-accent-border` (or the equivalent `color-mix` approach for semantic colours), not the full-strength `--color-*` text token:
 
 ```css
