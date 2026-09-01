@@ -5682,6 +5682,34 @@ html.theme-dark .numInputWrapper span.arrowDown::after {
     white-space: normal;
 }
 
+/* ── Colour palette badges & pickers ──────────────────────────────────────
+   Six palette slots shared by every user-configurable colour in the app
+   (file tags, Season Hub reward tiers). Each slot is a --color-*-bg /
+   --color-* token pair, so they adapt to the theme automatically.
+   Keep in sync with PALETTE_COLORS (global.js) and validTierColors
+   (handlers_season_hub.go). */
+
+.tier-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.tier-badge.tone-purple  { background: var(--color-purple-bg);  color: var(--color-purple); }
+.tier-badge.tone-info    { background: var(--color-info-bg);    color: var(--color-info); }
+.tier-badge.tone-success { background: var(--color-success-bg); color: var(--color-success); }
+.tier-badge.tone-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.tier-badge.tone-danger  { background: var(--color-danger-bg);  color: var(--color-danger); }
+.tier-badge.tone-neutral { background: var(--color-card);       color: var(--color-text-mid); }
+
+/* The .color-choices / .tier-color-choices picker rules live in
+   color-picker.css, loaded only by pages that also load Choices.js. The
+   .tier-badge tones above stay here — tables render them with no picker
+   involved. */
+
 /* Reorder controls for user-ordered lists (reward tiers). Small, icon-only,
    and disabled at the ends so the boundary is visible rather than silent. */
 .order-btns {

@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="{{asset "/season-hub.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
 <link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
+<link rel="stylesheet" href="{{asset "/color-picker.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <link rel="stylesheet" href="{{asset "/assignment.css"}}">
@@ -163,6 +164,7 @@
             </div>
             {{if .Permissions.ManageSeasonRewards}}<button class="btn btn-primary btn-sm" id="btn-assign-reward">+ Assign Reward</button>{{end}}
         </div>
+        <div class="tier-slots" id="rewards-tier-slots"></div>
         <div class="table-scroll">
             <table class="data-table" id="rewards-table" data-export-csv="rewards.csv" translate="no">
                 <thead>
@@ -207,6 +209,7 @@
     data-member-id="{{.MemberID}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
+<script src="{{asset "/color-picker.js"}}"></script>
 <script src="{{asset "/mail.js"}}"></script>
 <script src="{{asset "/season-hub.js"}}"></script>
 {{end}}
@@ -240,25 +243,7 @@
                     <input type="number" id="cs-tier-at-risk" class="form-input" value="60" min="0" max="100">
                 </div>
             </div>
-            <h4 class="modal-subhead">Reward Tier Slots</h4>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="cs-tier-leader">Alliance Leader</label>
-                    <input type="number" id="cs-tier-leader" class="form-input" value="1" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="cs-tier-core">Core</label>
-                    <input type="number" id="cs-tier-core" class="form-input" value="10" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="cs-tier-elite">Elite</label>
-                    <input type="number" id="cs-tier-elite" class="form-input" value="20" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="cs-tier-valued">Valued</label>
-                    <input type="number" id="cs-tier-valued" class="form-input" value="69" min="0">
-                </div>
-            </div>
+            <p class="cs-tier-note">Reward tiers are seeded from the default list in Settings &rarr; Season Hub. Adjust them for this season after it is created, via Edit Season.</p>
             <div id="cs-archive-warning" class="field-warning" style="display:none"></div>
             <div id="cs-error" class="field-error" style="display:none"></div>
             <div class="modal-actions">
@@ -315,25 +300,12 @@
                     <input type="number" id="es-tier-at-risk" class="form-input" min="0" max="100">
                 </div>
             </div>
-            <h4 class="modal-subhead">Reward Tier Slots</h4>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="es-tier-leader">Alliance Leader</label>
-                    <input type="number" id="es-tier-leader" class="form-input" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="es-tier-core">Core</label>
-                    <input type="number" id="es-tier-core" class="form-input" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="es-tier-elite">Elite</label>
-                    <input type="number" id="es-tier-elite" class="form-input" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="es-tier-valued">Valued</label>
-                    <input type="number" id="es-tier-valued" class="form-input" min="0">
-                </div>
-            </div>
+            <h4 class="modal-subhead">Reward Tiers</h4>
+            <table class="data-table" id="es-reward-tiers-table">
+                <thead><tr><th>Key</th><th>Label</th><th>Slots</th><th>Colour</th><th>Order</th></tr></thead>
+                <tbody id="es-reward-tiers-tbody"></tbody>
+            </table>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-reward-tier">+ Add Tier</button>
             <h4 class="modal-subhead">Trackables</h4>
             <table class="data-table" id="es-trackables-table">
                 <thead><tr><th>Key</th><th>Label</th><th></th></tr></thead>
@@ -390,12 +362,7 @@
             </div>
             <div class="form-group">
                 <label for="reward-tier">Reward Tier</label>
-                <select id="reward-tier" class="form-input" required>
-                    <option value="alliance_leader">Alliance Leader</option>
-                    <option value="core">Core</option>
-                    <option value="elite">Elite</option>
-                    <option value="valued">Valued</option>
-                </select>
+                <select id="reward-tier" class="form-input" required></select>
             </div>
             <div class="form-row">
                 <div class="form-group">

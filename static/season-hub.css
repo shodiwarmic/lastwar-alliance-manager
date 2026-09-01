@@ -182,35 +182,52 @@
     color: var(--color-danger);
 }
 
-/* Reward tier badges */
-.tier-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 0.75rem;
+/* .tier-badge and its .tone-* palette live in styles.css — the tier colour
+   picker previews them on the Settings page too, which does not load this file. */
+
+/* Slot usage chips above the Rewards table */
+.tier-slots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.tier-slot-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    font-size: 0.78rem;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+.tier-slot-chip .tier-slot-count {
     font-weight: 600;
-    white-space: nowrap;
+    color: var(--text-primary);
 }
 
-.tier-badge.alliance-leader {
-    background: var(--color-purple-bg);
-    color: var(--color-purple);
+.tier-slot-chip.over-capacity {
+    border-color: var(--color-danger);
+    background: var(--color-danger-bg);
 }
 
-.tier-badge.core {
-    background: var(--color-info-bg);
-    color: var(--color-info);
+.tier-slot-chip.over-capacity .tier-slot-count {
+    color: var(--color-danger);
 }
 
-.tier-badge.elite {
-    background: var(--color-success-bg);
-    color: var(--color-success);
+.cs-tier-note {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 4px 0 12px;
 }
 
-.tier-badge.valued {
-    background: var(--color-card);
-    color: var(--color-text-mid);
-}
+/* Reward tier editor rows in the Edit Season modal */
+#es-reward-tiers-table .rt-label { min-width: 120px; }
+#es-reward-tiers-table .rt-slots { width: 80px; }
 
 /* Key event eligibility */
 .key-event-eligible {
