@@ -15,21 +15,9 @@ let newTagReturnChoices = null; // which tag picker to drop the new tag back int
 let newTagReturnModal = null;   // which modal to return focus to on close
 let newTagColorChoices = null;  // color dropdown in the tag editor modal
 
-// Turn a color <select> into a Choices dropdown that shows a swatch per option.
-// The swatch is pure CSS (files.css) keyed on the option value; we just tag the
-// Choices wrapper with .color-choices to scope it. Returns null if Choices is absent.
-function makeColorChoices(selector) {
-    if (!window.Choices) return null;
-    const c = new Choices(selector, { searchEnabled: false, shouldSort: false, itemSelectText: '', allowHTML: false });
-    document.querySelector(selector)?.closest('.choices')?.classList.add('color-choices');
-    return c;
-}
-
-// Set a color dropdown's value through Choices when present, else the native select.
-function setColorValue(choices, selectId, value) {
-    if (choices) choices.setChoiceByValue(value);
-    else document.getElementById(selectId).value = value;
-}
+// makeColorChoices / setColorValue now live in color-picker.js (loaded from
+// files.html beside the Choices tag they need) — the same picker drives the
+// Season Hub reward tier editors.
 
 const RANK_ORDER = { R1: 1, R2: 2, R3: 3, R4: 4, R5: 5 };
 const SORT_LABELS = { name: 'Name', updated: 'Updated', uploaded: 'Uploaded', owner: 'Owner', type: 'Type' };
@@ -54,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .forEach(id => colorizeTagPicker(document.getElementById(id)));
 
         // Color dropdown with visible swatches (tag editor modal).
-        newTagColorChoices = makeColorChoices('#new-tag-color');
+        newTagColorChoices = ColorPicker.make('#new-tag-color');
     }
 
     document.getElementById('upload-file-btn')?.addEventListener('click', showUploadModal);
@@ -744,7 +732,7 @@ function openTagEditor({ tag = null, returnChoices = null, returnSelectEl = null
     document.getElementById('new-tag-edit-id').value = tag ? String(tag.id) : '';
     document.getElementById('new-tag-name').value = tag ? tag.name : '';
     document.getElementById('new-tag-min-rank').value = tag ? tag.min_rank : 'R1';
-    setColorValue(newTagColorChoices, 'new-tag-color', tag ? tag.color : 'neutral');
+    ColorPicker.setValue(newTagColorChoices, 'new-tag-color', tag ? tag.color : 'neutral');
     document.getElementById('new-tag-sort-order').value = tag ? String(tag.sort_order) : '0';
     document.getElementById('new-tag-status').textContent = '';
     document.getElementById('new-tag-title').textContent = tag ? 'Edit Tag' : 'New Tag';

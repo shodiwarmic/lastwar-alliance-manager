@@ -1,0 +1,65 @@
+/* color-picker.css — previews for colour <select>s upgraded by color-picker.js.
+   Load alongside that script; the .tier-badge tones themselves live in
+   styles.css, since tables render them without any picker. */
+
+/* Colour dropdown swatches. A colour <select> upgraded via makeColorChoices
+   (color-picker.js) is tagged .color-choices, so each option — and the selected
+   value — shows a coloured dot. Keyed on the option value that Choices copies
+   onto data-value. Scoped to .color-choices so it never touches pickers whose
+   item values are ids rather than colour names. */
+.color-choices .choices__item[data-value]::before {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+    background: var(--color-text-mid); /* neutral */
+}
+.color-choices .choices__item[data-value="info"]::before    { background: var(--color-info); }
+.color-choices .choices__item[data-value="success"]::before { background: var(--color-success); }
+.color-choices .choices__item[data-value="warning"]::before { background: var(--color-warning); }
+.color-choices .choices__item[data-value="danger"]::before  { background: var(--color-danger); }
+.color-choices .choices__item[data-value="purple"]::before  { background: var(--color-purple); }
+
+/* Badge-preview variant: instead of a dot, each option is painted as the badge
+   it produces, so an officer picking a reward tier colour sees the actual chip
+   rather than having to imagine it. Drops the dot the base rules add. */
+.tier-color-choices .choices__item[data-value]::before { content: none; }
+
+.tier-color-choices .choices__item[data-value] {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--color-card);
+    color: var(--color-text-mid);
+}
+.tier-color-choices .choices__item[data-value="info"]    { background: var(--color-info-bg);    color: var(--color-info); }
+.tier-color-choices .choices__item[data-value="success"] { background: var(--color-success-bg); color: var(--color-success); }
+.tier-color-choices .choices__item[data-value="warning"] { background: var(--color-warning-bg); color: var(--color-warning); }
+.tier-color-choices .choices__item[data-value="danger"]  { background: var(--color-danger-bg);  color: var(--color-danger); }
+.tier-color-choices .choices__item[data-value="purple"]  { background: var(--color-purple-bg);  color: var(--color-purple); }
+
+/* choices-theme.css paints the highlighted row accent-on-white at specificity
+   0-4-0, which would beat the tone rules above and render every option's text
+   white on its own pale background — unreadable, and it defeats the preview.
+   These restate the tone at 0-5-0 so the badge keeps its colours, and the hover
+   affordance becomes a ring instead of a fill. */
+.tier-color-choices .choices__list--dropdown .choices__item--selectable.is-highlighted[data-value] {
+    background: var(--color-card);
+    color: var(--color-text-mid);
+    box-shadow: 0 0 0 2px var(--color-accent);
+}
+.tier-color-choices .choices__list--dropdown .choices__item--selectable.is-highlighted[data-value="info"]    { background: var(--color-info-bg);    color: var(--color-info); }
+.tier-color-choices .choices__list--dropdown .choices__item--selectable.is-highlighted[data-value="success"] { background: var(--color-success-bg); color: var(--color-success); }
+.tier-color-choices .choices__list--dropdown .choices__item--selectable.is-highlighted[data-value="warning"] { background: var(--color-warning-bg); color: var(--color-warning); }
+.tier-color-choices .choices__list--dropdown .choices__item--selectable.is-highlighted[data-value="danger"]  { background: var(--color-danger-bg);  color: var(--color-danger); }
+.tier-color-choices .choices__list--dropdown .choices__item--selectable.is-highlighted[data-value="purple"]  { background: var(--color-purple-bg);  color: var(--color-purple); }
+
+/* Each option is an inline badge rather than a full-width row, so give the list
+   items room to breathe and stop the badge stretching edge to edge. */
+.tier-color-choices .choices__list--dropdown .choices__list { padding: 4px; }
+.tier-color-choices .choices__list--dropdown .choices__item { margin: 2px 0; }

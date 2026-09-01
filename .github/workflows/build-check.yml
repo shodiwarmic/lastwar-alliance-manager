@@ -151,6 +151,71 @@ jobs:
           print('XLSX export dependency check passed.')
           EOF
 
+      # color-picker.js upgrades a colour <select> to a Choices dropdown. Choices
+      # is a per-template CDN script, so a page that loads the module (or whose
+      # JS calls ColorPicker.*) without the lib silently loses every preview.
+      # Same failure shape as the XLSX check above.
+      - name: Colour picker dependency check
+        run: |
+          python3 - <<'EOF'
+          import pathlib, re, sys
+
+          USES = re.compile(r'\bColorPicker\s*\.')
+          LOADS_JS = re.compile(r'\{\{\s*asset\s+"([^"]+\.js)"\s*\}\}')
+          LOADS_CSS = re.compile(r'\{\{\s*asset\s+"([^"]+\.css)"\s*\}\}')
+          HAS_LIB = re.compile(r'<script[^>]+src="[^"]*\bchoices[^"]*\.js"')
+          BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.S)
+          LINE_COMMENT = re.compile(r'(?<!:)//.*$', re.M)
+
+          MODULE = 'color-picker.js'
+          MODULE_CSS = 'color-picker.css'
+
+          def uses_picker(js_path):
+              p = pathlib.Path('static') / js_path.lstrip('/')
+              if not p.is_file():
+                  return False   # the versioned-asset check reports missing files
+              src = p.read_text(encoding='utf-8')
+              src = LINE_COMMENT.sub('', BLOCK_COMMENT.sub('', src))
+              return bool(USES.search(src))
+
+          fails = []
+          for path in sorted(pathlib.Path('templates').rglob('*.html')):
+              html = path.read_text(encoding='utf-8')
+              js_assets = LOADS_JS.findall(html)
+              names = {pathlib.Path(j).name for j in js_assets}
+
+              consumers = [j for j in js_assets
+                           if pathlib.Path(j).name != MODULE and uses_picker(j)]
+
+              # A page whose JS calls ColorPicker.* must load the module itself.
+              if consumers and MODULE not in names:
+                  fails.append(f'{path}: loads {", ".join(consumers)}, which uses '
+                               f'ColorPicker, but does not load /{MODULE}')
+                  continue
+
+              if MODULE not in names:
+                  continue
+
+              # The module is loaded -- it needs both Choices and its own CSS.
+              if not HAS_LIB.search(html):
+                  fails.append(f'{path}: loads /{MODULE} but not Choices.js')
+              css_names = {pathlib.Path(c).name for c in LOADS_CSS.findall(html)}
+              if MODULE_CSS not in css_names:
+                  fails.append(f'{path}: loads /{MODULE} but not /{MODULE_CSS}, '
+                               f'so the previews render unstyled')
+
+          if fails:
+              print('Colour picker dependency check failed:\n')
+              for f in fails:
+                  print('  ' + f)
+              print('\nA page using ColorPicker needs all three, in this order:')
+              print('  <link rel="stylesheet" href="{{asset "/color-picker.css"}}">')
+              print('  <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>')
+              print('  <script src="{{asset "/color-picker.js"}}"></script>')
+              sys.exit(1)
+          print('Colour picker dependency check passed.')
+          EOF
+
       # Browser translation rewrites text nodes in place, so anything read back
       # out of the DOM is whatever the translator put there.
       # See CLAUDE.md -> Known gotchas -> "Browser translation".
