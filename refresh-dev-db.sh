@@ -7,8 +7,9 @@
 #   1. Online-snapshots the prod SQLite DB over SSH (no prod downtime) and pulls it down.
 #   2. (optional) Tars prod ./uploads and ./data/ocr-archive and pulls them down.
 #   3. Stops the dev container.
-#   4. Backs up dev's `credentials` table (AES-GCM encrypted external API keys).
-#   5. Replaces dev's DB with the prod snapshot; restores dev's `credentials` over prod's.
+#   4. Backs up dev's `credentials` table (AES-GCM encrypted external API keys) and dev's
+#      scheduled-retrieval toggles.
+#   5. Replaces dev's DB with the prod snapshot; restores both of those over prod's values.
 #   6. Mirrors the prod files into dev (so the DB's file references resolve).
 #   7. Starts dev (the app runs `goose up` migrations on boot).
 #
@@ -22,6 +23,18 @@
 # Files model:
 #   - `credentials` is preserved from dev. `./uploads` (Files feature) and `./data/ocr-archive`
 #     are the opposite: the swapped DB references PROD's files, so we pull prod's to match.
+#
+# Scheduler model:
+#   - The scheduled-retrieval toggles are preserved from dev, for the same reason as
+#     `credentials`: they describe THIS environment, not the data. Prod normally runs the
+#     scheduler; copying that flag in would make dev a second, uninvited client of the
+#     volunteer-run lastrank.fun API — two environments sharing one 1-req/sec politeness
+#     budget, re-fetching the same roster — and would fill dev's LastRank review queue with
+#     the same rank changes, renames and departures already being actioned in prod.
+#   - Preserved, not forced off: if you deliberately enabled the scheduler in dev to test it,
+#     a refresh keeps it on. The normal dev value is off, so the normal result is off.
+#   - Only the on/off flags are preserved. The tuning values (hour, interval, enrich max age)
+#     come from prod, so a dev run you *do* enable exercises prod's real cadence.
 #
 # Requirements: docker + ssh + scp locally; docker on the prod host. All SQLite/tar/file work
 # runs inside a throwaway alpine container as root, so neither host needs sqlite3 installed and
@@ -115,17 +128,34 @@ pull_from_prod "apk add -q --no-cache sqlite && sqlite3 /proj/data/$DB_NAME \".b
 log "Stopping dev service '$DEV_SERVICE'…"
 ( cd "$DEV_DIR" && docker compose stop "$DEV_SERVICE" )
 
-# ─── 4+5. Back up dev credentials, swap DB, restore credentials (root, via /work) ─
-log "Backing up dev credentials, swapping DB, restoring credentials…"
+# ─── 4+5. Back up dev credentials + scheduler flags, swap DB, restore them (root, via /work) ─
+log "Backing up dev credentials + scheduler flags, swapping DB, restoring them…"
 docker run --rm -v "$DEV_DIR/data":/data -v "$WORK":/work "$IMG" sh -c '
   set -e
   apk add -q --no-cache sqlite
-  sqlite3 /data/'"$DB_NAME"' ".dump credentials" > /work/dev_credentials.sql   # BLOBs as X'"'"'..'"'"' hex
-  rm -f /data/'"$DB_NAME"' /data/'"$DB_NAME"'-wal /data/'"$DB_NAME"'-shm
-  cp /work/prod_snapshot.db /data/'"$DB_NAME"'
-  sqlite3 /data/'"$DB_NAME"' "DROP TABLE IF EXISTS credentials;"
-  sqlite3 /data/'"$DB_NAME"' < /work/dev_credentials.sql
-  chown '"$APP_UID"':'"$APP_UID"' /data/'"$DB_NAME"'
+  DB=/data/'"$DB_NAME"'
+  sqlite3 "$DB" ".dump credentials" > /work/dev_credentials.sql   # BLOBs as X'"'"'..'"'"' hex
+
+  # Scheduled-retrieval toggles: keep DEVs, not prods (see "Scheduler model" above).
+  # A value we cannot read — dev DB predating migration 065, or no settings row yet — means
+  # dev was not running that scheduler, so it resolves to 0. Never fall back to prods value:
+  # that is the one outcome this whole block exists to prevent.
+  for col in lastrank_auto_sync_enabled nap_auto_refresh_enabled prospect_auto_refresh_enabled; do
+    val=$(sqlite3 "$DB" "SELECT $col FROM settings WHERE id = 1;" 2>/dev/null) || val=
+    [ -n "$val" ] || val=0
+    echo "UPDATE settings SET $col = $val WHERE id = 1;" >> /work/dev_schedule.sql
+  done
+
+  rm -f "$DB" "$DB"-wal "$DB"-shm
+  cp /work/prod_snapshot.db "$DB"
+  sqlite3 "$DB" "DROP TABLE IF EXISTS credentials;"
+  sqlite3 "$DB" < /work/dev_credentials.sql
+  # Tolerated, not required: if prods snapshot predates migration 065 the column does not
+  # exist yet, and goose will create it default-off on boot — the same safe outcome.
+  if [ -s /work/dev_schedule.sql ]; then
+    sqlite3 "$DB" < /work/dev_schedule.sql 2>/dev/null || true
+  fi
+  chown '"$APP_UID"':'"$APP_UID"' "$DB"
 '
 
 # ─── 6. Mirror prod files into dev ──────────────────────────────────────────────
@@ -141,7 +171,10 @@ log "Recent migration / startup lines:"
 
 cat <<EOF
 
-✓ Dev refreshed from prod. Preserved: dev .env secrets + dev credentials. Pulled: prod DB$([ "$SYNC_UPLOADS" = 1 ] && echo " + uploads")$([ "$SYNC_OCR_ARCHIVE" = 1 ] && echo " + ocr-archive").
+✓ Dev refreshed from prod. Preserved: dev .env secrets + dev credentials + dev scheduler flags.
+  Pulled: prod DB$([ "$SYNC_UPLOADS" = 1 ] && echo " + uploads")$([ "$SYNC_OCR_ARCHIVE" = 1 ] && echo " + ocr-archive").
   • OCR/Vision uses dev's restored credentials; add a dev key in Settings if dev had none.
+  • Scheduled LastRank/NAP/prospect retrieval kept dev's on/off values, so dev won't start
+    re-fetching prod's roster or refilling the review queue. Re-enable in Settings to test it.
   • goose only migrates up — keep this checkout at/ahead of prod's schema (your normal case).
 EOF
