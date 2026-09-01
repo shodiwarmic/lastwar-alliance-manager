@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/pressly/goose/v3"
-	_ "modernc.org/sqlite"
 	"golang.org/x/crypto/bcrypt"
+	_ "modernc.org/sqlite"
 )
 
 func initDB() error {
@@ -40,20 +40,33 @@ func initDB() error {
 		return fmt.Errorf("failed to run database migrations: %v", err)
 	}
 
-	// Ensure a default admin account exists on first startup.
-	var adminCount int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE username = 'admin'`).Scan(&adminCount); err != nil {
-		return fmt.Errorf("failed to check for default admin user: %w", err)
+	// Seed the initial admin, but ONLY when the install has no users at all -- i.e. a
+	// genuine first startup. Deliberately not keyed on the "admin" username, and not on
+	// "no admins exist":
+	//
+	// Renaming the admin account is a supported operation (updateUser), so a username
+	// check recreates a second admin -- with the password README publishes -- on the
+	// next restart of an install the operator thought they had hardened. "No active
+	// admin" is no better: that state is reachable on a populated install, and it is
+	// deliberately NOT self-healing (see the last-admin guards in handlers_admin.go;
+	// recovery is by hand, by design). Only an empty users table is unambiguously
+	// first-run, and it cannot recur once anybody has signed in.
+	var userCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&userCount); err != nil {
+		return fmt.Errorf("failed to count existing users: %w", err)
 	}
 
-	if adminCount == 0 {
+	if userCount == 0 {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
 		if err != nil {
 			return fmt.Errorf("failed to hash default admin password: %w", err)
 		}
 
+		// OR IGNORE: username is UNIQUE and the check above is not atomic with this
+		// write. A single app container makes that unreachable today, but losing the
+		// race should not be a boot failure.
 		if _, err := db.Exec(`
-			INSERT INTO users (username, password, is_admin, force_password_change)
+			INSERT OR IGNORE INTO users (username, password, is_admin, force_password_change)
 			VALUES (?, ?, 1, 1)
 		`, "admin", string(hashedPassword)); err != nil {
 			return fmt.Errorf("failed to create default admin user: %w", err)
