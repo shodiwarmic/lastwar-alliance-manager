@@ -5681,3 +5681,36 @@ html.theme-dark .numInputWrapper span.arrowDown::after {
     font-size: 0.75rem;
     white-space: normal;
 }
+
+/* Reorder controls for user-ordered lists (reward tiers). Small, icon-only,
+   and disabled at the ends so the boundary is visible rather than silent. */
+.order-btns {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 1px;
+    vertical-align: middle;
+}
+
+.order-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 15px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.order-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.order-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
