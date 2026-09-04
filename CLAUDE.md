@@ -225,8 +225,12 @@ It still reuses `job-progress.css`, and pacing is enforced server-side by `lastR
 client cannot outrun the politeness budget however fast it iterates. Don't "fix" it into a job.
 
 **Fetch strategy** (`lastrank_client.go`): `GET /v1/players/{id}` is the cheap
-cached read; `POST /v1/players/{id}/enrich` forces a slow live game re-pull
-(separate 25s-timeout client). Bulk paths use `lastRankPlayerBulk` (GET, upgrade
+cached read; `POST /v1/players/{id}/enrich` re-derives the player from LastRank's
+most recent scan — **it does not query the live game** — and is slow enough to need
+a separate 25s-timeout client. The freshness ceiling is therefore LastRank's scan
+cadence, not our polling rate: enriching more often than they scan returns the same
+reading, so tightening `lastRankEnrichMaxAge` buys nothing. The enrich response is
+also **not** a superset of the GET — it nulls `origin_server_id` and `power_detail`. Bulk paths use `lastRankPlayerBulk` (GET, upgrade
 to enrich only if `last_enriched_at` older than `lastRankEnrichMaxAge`=24h);
 single prospect lookups use `lastRankPlayerFresh` (always enrich + GET fallback).
 Never bulk-enrich the whole roster — it's slow and abusive to the volunteer service.
@@ -307,7 +311,9 @@ chips stay hidden beforehand rather than matching nothing.
 > 99 members (`cur_member` 91 — it includes recently-departed players), while `Clts`
 > (`cur_member` 67) returned **0** and `WARK` (24) returned **1**. `member_limit` does not
 > change this, and `GET /v1/global/players?alliance_abbr=` agrees (0 rows for `Clts`), so
-> there is no alternative endpoint to switch to — and no alliance-level enrich exists.
+> there is no alternative endpoint to switch to. `POST /v1/alliances/{id}/enrich` does exist,
+> but it returns only the alliance *profile* (`gift_level`, `create_time`, `engagement_point`)
+> and no `members[]` — verified live 2026-09-03 — so it is no answer to this either.
 > The UI states this explicitly rather than rendering an empty table, because an unexplained
 > empty result reads as a broken lookup and invites pointless retries. Don't "fix" it by
 > hunting for another endpoint; do preserve the empty-state explanation.
@@ -325,8 +331,10 @@ opponent an officer is looking for is usually *not* on our server — filtering 
 exactly the alliance they want. The two upstreams also rank differently: `/v1/global/alliances`
 substring-matches names sorted by power, so searching `cROw` surfaces "Crowned Vengeance" and
 "NeCROWmancers" above the real tag match, while `/v1/search` returns the tag hits the site's
-own search box shows. `/v1/search` carries no power — that's why `Power` stays a nil pointer
-rather than 0, and why a picked hit resolves its details on the follow-up by-id fetch.
+own search box shows. `/v1/search` returns `power` as **null on every hit** (verified live
+2026-09-03, 20 of 20) — that's why `Power` stays a nil pointer rather than 0, and why a picked
+hit resolves its details on the follow-up by-id fetch. `/v1/search/suggest`, which the site's own
+dropdown uses, *does* populate `power` and `member_count`; switching to it is tracked, not done.
 
 Because a tag search routinely returns the same tag on 20 different servers (verified live:
 `cROw` → 20 hits, 20 distinct servers), **the server number is the only disambiguator** — keep
@@ -1219,29 +1227,17 @@ Even when cascades handle children, wrap category/parent deletes in a transactio
 
 **For success/error feedback** — show an inline status message near the triggering action (e.g. a `<p class="status-msg">` that you set `textContent` on and clear after a few seconds), or a non-blocking toast element.
 
-**For destructive confirmations** — use the inline button-swap pattern: hide the Delete button, append a `"Sure?" [Yes] [No]` span in its place, and restore the original button if the user picks No. Never use `confirm()`. Example from `train.js`:
+**For destructive confirmations** — use `await showConfirm(...)` from `static/global.js`. See
+"UI feedback — never use browser dialogs" below for the full helper set.
 
 ```javascript
-delBtn.addEventListener('click', () => {
-    delBtn.style.display = 'none';
-    const confirmSpan = document.createElement('span');
-    confirmSpan.style.cssText = 'display:inline-flex;gap:4px;align-items:center;';
-    const label = document.createElement('span');
-    label.textContent = 'Sure?';
-    label.style.fontSize = '0.85rem';
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'btn btn-danger btn-sm';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', () => doDelete(item.id));
-    const noBtn = document.createElement('button');
-    noBtn.className = 'btn btn-secondary btn-sm';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => { confirmSpan.remove(); delBtn.style.display = ''; });
-    confirmSpan.append(label, yesBtn, noBtn);
-    actionsContainer.appendChild(confirmSpan);
-});
+if (!await showConfirm('Delete this entry?', 'Delete')) return;
+```
 
-Note: many existing files still use `alert()` — do not add more, and replace them when touching those files.
+> The older inline button-swap pattern — hide the Delete button, append a `"Sure?" [Yes] [No]`
+> span in its place, restore it on No — is **retired**. It was temperamental and inconsistent.
+> No page uses it any more and neither `alert()` nor `confirm()` appears anywhere in `static/`;
+> don't reintroduce either.
 
 ### Validate required CSV columns before the row loop — never silently skip
 After building a `colMap` from CSV headers, check that all required columns are present **before** entering the row loop. A missing column causes every row to hit a `continue`, returning an empty result with no error — a silent failure that's very hard to debug.
@@ -1309,11 +1305,12 @@ so nothing else needs touching.
 > friends predate the JSON blob and are no longer the write path — do not add
 > new ones.
 
-## Frontend JS hardening
+## Frontend JS hardening — build DOM, never HTML strings
 
-All JS files are being migrated away from `innerHTML` string injection to safe DOM construction. Work is tracked on the `js-hardening` branch, one file per session.
+Every file in `static/` has been migrated off `innerHTML` string injection to safe DOM
+construction. **Keep it that way**: new code builds nodes, it does not concatenate markup.
 
-**Target pattern** — use `createElement` + `textContent`, never build HTML strings:
+**Target pattern** — `createElement` + `textContent`, never HTML strings:
 ```javascript
 // Safe
 const card = document.createElement('div');
@@ -1325,48 +1322,20 @@ container.appendChild(card);
 container.replaceChildren(...items);  // or replaceChildren(singleNode)
 ```
 
-**Event handling** — wire via `addEventListener`, never inline `onclick` in JS-generated markup:
+**Event handling** — wire via `addEventListener`, never inline `onclick` in generated markup:
 ```javascript
 btn.addEventListener('click', () => editMember(member.id));
 ```
 
-**`escapeHtml()`** — remove at the injection point when converting to `textContent`. Do not leave orphaned calls.
+**`escapeHtml()`** — there is no injection point left that needs it. If you find yourself
+reaching for it, you are building a string where you should be building a node.
 
-**Modal open/close check** — the global `.modal` class uses `display: flex` for centering. Always open modals with `modal.style.display = 'flex'` (never `'block'`) and close with `modal.style.display = ''`. Never add `class="hidden"` to a `.modal` element — see gotcha above. Verify open/close on every file during hardening.
+**Modals** — the global `.modal` class centres with `display: flex`. Open with
+`modal.style.display = 'flex'` (never `'block'`), close with `modal.style.display = ''`, and
+never add `class="hidden"` to a `.modal` — see the gotcha above for why that breaks opening.
 
-**Progress**:
-| File | Status |
-|------|--------|
-| `static/members.js` | ✅ Done |
-| `static/storm.js` | ✅ Done |
-| `static/rankings.js` | ✅ Done |
-| `static/vs.js` | ✅ Done |
-| `static/dyno.js` | ✅ Done |
-| `static/admin.js` | ✅ Done |
-| `static/settings.js` | ✅ Done |
-| `static/profile.js` | ✅ Done |
-| `static/schedule.js` | ✅ Done |
-| `static/upload.js` | ✅ Done |
-| `static/files.js` | ✅ Done |
-| `static/recruiting.js` | ✅ Done (written with safe patterns from the start) |
-| `static/login.js` | ✅ Done (same password-rules pattern as profile.js; fixed during final sweep) |
-| `static/invite.js` | ✅ Done (same password-rules pattern as login.js) |
-| `static/accountability.js` | ✅ Done (uses safe DOM patterns throughout) |
-| `static/accountability_profile.js` | ✅ Done |
-| `static/accountability_report.js` | ✅ Done |
-| `static/activity.js` | ✅ Done |
-| `static/allies.js` | ✅ Done |
-| `static/comms.js` | ✅ Done |
-| `static/polls.js` | ✅ Done (written with safe patterns from the start) |
-| `static/dashboard.js` | ✅ Done (reference implementation of the `el()` helper pattern) |
-| `static/season-hub.js` | ✅ Done |
-| `static/train.js` | ✅ Done |
-| `static/mail.js` | ✅ Done (2 `.onclick` property assignments on global modal buttons — safe, not markup injection) |
-| `static/officer_command.js` | ✅ Done (skip — already used correct patterns) |
-| `static/global.js` | ✅ Done (utility — no DOM injection) |
-| `static/theme.js` | ✅ Done (utility — no DOM injection) |
-| `static/csrf.js` | ✅ Done (utility — no DOM injection) |
-| `static/modal-focus.js` | ✅ Done (utility — keyboard focus trap only) |
+`static/dashboard.js`'s `el()` helper (documented below) is the reference implementation for any
+new file that builds significant DOM.
 
 ## JS DOM standards — colors and styles
 
