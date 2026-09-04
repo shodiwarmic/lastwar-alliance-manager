@@ -182,6 +182,14 @@ func generateMemberResetLink(w http.ResponseWriter, r *http.Request) {
 
 // GET /reset-password/{token} — render the reset page (unauthenticated).
 func showResetPasswordPage(w http.ResponseWriter, r *http.Request) {
+	// Same oracle as the invite page: this reports whether a reset token is valid, without
+	// the bcrypt cost the POST pays. Throttling only the POST would leave the cheap path open.
+	if !getLoginLimiter(getClientIP(r)).Allow() {
+		slog.Warn("password reset page rate limit exceeded", "ip", getClientIP(r))
+		http.Error(w, "Too many attempts. Please try again later.", http.StatusTooManyRequests)
+		return
+	}
+
 	token := mux.Vars(r)["token"]
 
 	data := ResetPageData{CSRFToken: csrf.TemplateField(r)}
