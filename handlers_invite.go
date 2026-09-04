@@ -103,6 +103,15 @@ func generateInvite(w http.ResponseWriter, r *http.Request) {
 
 // GET /invite/{token} — render the invite acceptance page (unauthenticated).
 func showInvitePage(w http.ResponseWriter, r *http.Request) {
+	// Unauthenticated and token-bearing: this page reports whether a token is valid (it
+	// renders the member's name, or an "expired" notice), so it is a guessing oracle and is
+	// CHEAPER to attack than the POST below — no bcrypt, no body. Throttle it the same way.
+	if !getLoginLimiter(getClientIP(r)).Allow() {
+		slog.Warn("invite page rate limit exceeded", "ip", getClientIP(r))
+		http.Error(w, "Too many attempts. Please try again later.", http.StatusTooManyRequests)
+		return
+	}
+
 	token := mux.Vars(r)["token"]
 
 	data := InvitePageData{
@@ -144,6 +153,13 @@ func showInvitePage(w http.ResponseWriter, r *http.Request) {
 
 // POST /invite/{token} — claim the invite and create the user account (unauthenticated).
 func claimInvite(w http.ResponseWriter, r *http.Request) {
+	// Unauthenticated endpoint guarding a guessable token — same per-IP throttle as login.
+	if !getLoginLimiter(getClientIP(r)).Allow() {
+		slog.Warn("invite claim rate limit exceeded", "ip", getClientIP(r))
+		http.Error(w, "Too many attempts. Please try again later.", http.StatusTooManyRequests)
+		return
+	}
+
 	token := mux.Vars(r)["token"]
 
 	var req struct {

@@ -21,7 +21,14 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// Per-IP login rate limiter: 5 attempts per minute, burst of 5.
+// Per-IP throttle shared by every unauthenticated endpoint that guards a secret: login,
+// and the invite / password-reset pages and claims. Refills one token every 12s with a
+// burst of 5, so a person fumbling a password is unaffected while a script is not.
+const (
+	loginLimiterInterval = 12 * time.Second
+	loginLimiterBurst    = 5
+)
+
 var (
 	loginLimiters sync.Map
 )
@@ -30,7 +37,7 @@ func getLoginLimiter(ip string) *rate.Limiter {
 	if l, ok := loginLimiters.Load(ip); ok {
 		return l.(*rate.Limiter)
 	}
-	l := rate.NewLimiter(rate.Every(12*time.Second), 5)
+	l := rate.NewLimiter(rate.Every(loginLimiterInterval), loginLimiterBurst)
 	loginLimiters.Store(ip, l)
 	return l
 }
