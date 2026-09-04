@@ -35,8 +35,9 @@ var lastRankLimiter = rate.NewLimiter(rate.Every(time.Second), 1)
 
 var lastRankHTTP = &http.Client{Timeout: 10 * time.Second}
 
-// enrich forces a live game re-pull server-side, so it's much slower than a
-// cached GET — give it a longer ceiling. Used only for single on-demand lookups.
+// enrich re-derives the player from LastRank's most recent scan (NOT a live game
+// query) and is much slower than a cached GET — give it a longer ceiling. Used
+// only for single on-demand lookups.
 var lastRankEnrichHTTP = &http.Client{Timeout: 25 * time.Second}
 
 // --- Raw wire structs (never leave this file) ---
@@ -346,8 +347,8 @@ func searchLastRankPlayers(ctx context.Context, query string, server *int, limit
 }
 
 // getLastRankPlayer reads the cached player record (fast). Used by the bulk
-// extended sync — enriching the whole roster would mean ~100 live game pulls,
-// which is slow and abusive to the volunteer service.
+// extended sync — enriching the whole roster would mean ~100 slow enrich calls,
+// which is abusive to the volunteer service and buys nothing between their scans.
 func getLastRankPlayer(ctx context.Context, publicID int) (*lastrankPlayerResp, error) {
 	var p lastrankPlayerResp
 	if err := lastRankDo(ctx, http.MethodGet, "/v1/players/"+strconv.Itoa(publicID), &p); err != nil {
@@ -356,10 +357,16 @@ func getLastRankPlayer(ctx context.Context, publicID int) (*lastrankPlayerResp, 
 	return &p, nil
 }
 
-// enrichLastRankPlayer POSTs to the per-player /enrich endpoint, which forces
-// lastrank to re-pull the player from the game CDN and returns the freshest
-// record (the plain GET can serve a stale cached copy). Slow — reserve for
+// enrichLastRankPlayer POSTs to the per-player /enrich endpoint, which asks
+// lastrank to re-derive the player from its own most recent scan. It does NOT
+// query the live game, so it cannot return anything newer than that scan — the
+// freshness ceiling is their scan cadence, not how often we ask. Still worth it
+// over the plain GET, which can serve an older cached copy. Slow — reserve for
 // single on-demand lookups, not bulk.
+//
+// The response is NOT a superset of the GET: it returns null for origin_server_id
+// and power_detail even though the stored record keeps them (verified live
+// 2026-09-03). Read those from a GET, never from this response.
 func enrichLastRankPlayer(ctx context.Context, publicID int) (*lastrankPlayerResp, error) {
 	var p lastrankPlayerResp
 	if err := lastRankDo(ctx, http.MethodPost, "/v1/players/"+strconv.Itoa(publicID)+"/enrich", &p); err != nil {

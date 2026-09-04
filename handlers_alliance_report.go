@@ -115,9 +115,10 @@ func allianceReport(w http.ResponseWriter, r *http.Request) {
 // allianceReportPlayer is the extended report's per-member step: one member, nothing written.
 //
 // Uses lastRankPlayerBulk — the shared bulk strategy — so a record LastRank hasn't refreshed
-// within lastRankEnrichMaxAge gets a live re-pull rather than handing back numbers that may be
-// weeks old. Scouting an opponent on stale figures is worse than useless: it invites planning
-// against a version of the alliance that no longer exists.
+// within lastRankEnrichMaxAge is re-derived from their latest scan rather than handing back
+// numbers that may be weeks old. Scouting an opponent on stale figures is worse than useless:
+// it invites planning against a version of the alliance that no longer exists. Note the ceiling
+// is LastRank's scan cadence — an enrich cannot conjure data newer than their last scan.
 //
 // The cost is real and variable: a well-known alliance is nearly all cheap cached GETs, while
 // one nobody has looked at can need an enrich per member (up to 25s each, on top of the 1/sec
@@ -132,8 +133,9 @@ func allianceReportPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// An enrich is a live game re-pull behind a 25s client, and the shared limiter can add a
-	// second on top — so this needs a longer ceiling than the roster fetch.
+	// An enrich re-derives from lastrank's latest scan behind a 25s client — not a live game
+	// query, but slow all the same — and the shared limiter can add a second on top, so this
+	// needs a longer ceiling than the roster fetch.
 	ctx, cancel := context.WithTimeout(r.Context(), allianceReportEnrichTimeout)
 	defer cancel()
 	p, err := lastRankPlayerBulk(ctx, publicID)

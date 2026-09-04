@@ -1,25 +1,21 @@
-- [x] Verify that the copilot-instructions.md file in the .github directory is created.
+# Copilot instructions
 
-- [x] Clarify Project Requirements
-	Node.js web application for Last War: Survival alliance management with member and rank tracking.
+**The project guide is [`CLAUDE.md`](../CLAUDE.md) in the repository root.** Read it before
+suggesting changes — it is written for AI coding assistants generally, not for one vendor, and it
+carries the conventions and the non-obvious traps that this codebase will otherwise lead you into.
 
-- [x] Scaffold the Project
-	Created Node.js backend with Express, SQLite database, and HTML/CSS/JS frontend.
+Quick orientation, because the details below are the ones most often guessed wrong:
 
-- [x] Customize the Project
-	Implemented member and rank management features with full CRUD operations.
+- **Go backend** (gorilla/mux, gorilla/sessions, `modernc.org/sqlite` — pure Go, `CGO_ENABLED=0`),
+  Goose migrations, `html/template` server-rendered pages. **There is no Node toolchain and no
+  build step**; the frontend is vanilla JS and CSS served straight from `static/`.
+- **One database connection** (`db.SetMaxOpenConns(1)`). Any query issued while another cursor is
+  open deadlocks the whole process, silently. Read everything you need before opening a cursor.
+- **No inline `<script>` in templates** — the production CSP is `script-src 'self'`, so an inline
+  block is silently blocked. Pass configuration via `data-*` attributes instead.
+- **No `alert()`, `confirm()` or `prompt()`** — use `showToast` / `showConfirm` from
+  `static/global.js`.
+- **Never build DOM from HTML strings** — `createElement` + `textContent`.
 
-- [x] Install Required Extensions
-	No extensions required.
-
-- [x] Compile the Project
-	Node.js must be installed. Run `npm install` to install dependencies.
-
-- [x] Create and Run Task
-	Run `npm start` to start the server on http://localhost:3000
-
-- [x] Launch the Project
-	Access the application at http://localhost:3000 after starting the server.
-
-- [x] Ensure Documentation is Complete
-	README.md contains all project information and setup instructions.
+`CLAUDE.md` explains each of these properly, along with the migration, permission, activity-log
+and asset-versioning conventions a new feature has to follow.
