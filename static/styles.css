@@ -5570,7 +5570,7 @@ html.theme-dark .numInputWrapper span.arrowDown::after {
    .ext-find-* / .vsl-find-* blocks those pages still carry; migrating them is a
    pending follow-up, but only their mechanics — their tokens are already fine.
 
-   Written on the canonical --color-* tokens (DESIGN_STANDARD.md → Design Tokens).
+   Written on the canonical --color-* tokens (docs/DESIGN_STANDARD.md → Design Tokens).
    The hover states use --color-accent-bg rather than a surface token: the literal
    legacy mapping (--bg-secondary → --color-surface) resolves to #ffffff in light
    mode, identical to the dropdown's own --color-card, so the hover would vanish.

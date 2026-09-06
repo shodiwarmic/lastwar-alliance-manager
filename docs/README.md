@@ -8,6 +8,12 @@ belongs in `static/` or `templates/` instead.
 
 ## Tracked
 
+- `DEPLOYMENT.md` — production deployment guide (Docker, Caddy, environment).
+- `QUICKSTART.md` — the short path from a fresh host to a running install.
+- `IMAGE_RECOGNITION.md` — the OCR pipeline: cloud (Cloud Vision) vs local (PaddleOCR),
+  and the optional GCS archival setup.
+- `DESIGN_STANDARD.md` / `DESIGN_STANDARD.html` — the UI design standard (tokens,
+  components, icon system) and its rendered form.
 - `vs-league-mockup.html` — design reference for the VS Duel League UI. Standalone;
   pulls in `/styles.css` when opened against a running dev server, but nothing in the
   app links to it. It previously lived in `static/`, where the catch-all file handler

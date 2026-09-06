@@ -1,3 +1,11 @@
+# deploy/Caddyfile — REFERENCE TEMPLATE ONLY.
+#
+# Nothing reads this file at runtime. The live reverse-proxy config on a deployed host is
+# /etc/caddy/Caddyfile, which scripts/install.sh writes on first install and
+# scripts/update.sh patches on upgrade (e.g. adding the LastRank avatar CDN hosts to the
+# CSP img-src). Editing this file changes nothing on a running host — change the script
+# that generates it, or edit /etc/caddy/Caddyfile there and reload Caddy.
+
 your-domain.com {
     # Reverse proxy to Go application (handles all routing including 404s)
     reverse_proxy localhost:8080

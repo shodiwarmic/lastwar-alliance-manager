@@ -52,15 +52,25 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # ─── Config ─────────────────────────────────────────────────────────────────────
-# Local values live in refresh-dev-db.conf (gitignored). Copy refresh-dev-db.conf.example
-# to refresh-dev-db.conf and edit it. This script (the logic) stays version-controlled.
+# Local values live in scripts/refresh-dev-db.conf (gitignored). Copy
+# scripts/refresh-dev-db.conf.example to scripts/refresh-dev-db.conf and edit it. This
+# script (the logic) stays version-controlled.
 # A value set in the .conf — or exported in the environment — overrides the default below.
 # shellcheck disable=SC1091
 [ -f "$HERE/refresh-dev-db.conf" ] && . "$HERE/refresh-dev-db.conf"
 
+# The script (and its conf) moved from the repo root into scripts/. A conf left behind at
+# the old location would be silently ignored, and the run would then fail on "set PROD_SSH"
+# as if it had never been configured — so say what actually happened.
+if [ ! -f "$HERE/refresh-dev-db.conf" ] && [ -f "$HERE/../refresh-dev-db.conf" ]; then
+  printf '\033[1;31m✗ %s\033[0m\n' \
+    "found refresh-dev-db.conf at the old root location — move it to scripts/" >&2
+  exit 1
+fi
+
 PROD_SSH="${PROD_SSH:-}"                          # REQUIRED: ssh target, e.g. user@prod-host
 PROD_DIR="${PROD_DIR:-}"                          # REQUIRED: compose project dir on prod (has ./data, ./uploads)
-DEV_DIR="${DEV_DIR:-$HERE}"                       # this repo (default: script's dir)
+DEV_DIR="${DEV_DIR:-$(cd "$HERE/.." && pwd)}"     # this repo (default: the repo root, one up from scripts/)
 DB_NAME="${DB_NAME:-alliance.db}"                # DB filename inside ./data (matches DATABASE_PATH)
 DEV_SERVICE="${DEV_SERVICE:-alliance-manager}"   # compose service to stop/start
 APP_UID="${APP_UID:-1001}"                        # in-container app user that must own the files
@@ -73,7 +83,7 @@ log() { printf '\033[1;36m▶ %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
 [ -n "$PROD_SSH" ] && [ -n "$PROD_DIR" ] || \
-  die "Set PROD_SSH and PROD_DIR — copy refresh-dev-db.conf.example to refresh-dev-db.conf and edit it."
+  die "Set PROD_SSH and PROD_DIR — copy scripts/refresh-dev-db.conf.example to scripts/refresh-dev-db.conf and edit it."
 
 printf '\033[1;33mThis REPLACES the local dev DB%s with production data.\033[0m\n' \
   "$([ "$SYNC_UPLOADS" = 1 ] && echo ' + uploaded files')"

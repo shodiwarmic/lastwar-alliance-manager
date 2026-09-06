@@ -1,3 +1,9 @@
+# Dev overrides for the compose stack. Compose never reads a ".example" file, and it
+# resolves relative volume paths against the compose file's own directory — so copy this
+# to the repo ROOT as docker-compose.override.yml, where Compose picks it up automatically:
+#
+#     cp deploy/docker-compose.override.yml.example docker-compose.override.yml
+
 services:
   alliance-manager:
     build: .
