@@ -21,7 +21,7 @@ The easiest way to deploy the application on a fresh Debian or Ubuntu server is 
 ```bash
 git clone https://github.com/shodiwarmic/lastwar-alliance-manager.git /opt/lastwar
 cd /opt/lastwar
-./install.sh
+./scripts/install.sh
 ```
 
 ---
@@ -235,11 +235,11 @@ For **local-disk** archival:
 
 ## 6. Update Procedure
 
-We strongly recommend using the included `update.sh` script. It automatically pulls the latest code, safely downloads the newest pre-built images, and checks your proxy configurations for security compliance.
+We strongly recommend using the included `scripts/update.sh` script. It automatically pulls the latest code, safely downloads the newest pre-built images, and checks your proxy configurations for security compliance.
 
 ```bash
 cd /opt/lastwar
-./update.sh
+./scripts/update.sh
 ```
 
 If updating manually:

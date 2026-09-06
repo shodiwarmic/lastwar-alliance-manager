@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# The script lives in scripts/ but every path below — .env, the compose files, the
+# backup tarball, `git pull`, APP_DIR — is relative to the repo root. Do this before
+# anything computes a path, so the script works from any working directory.
+cd "$(dirname "$0")/.." || exit 1
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -276,7 +281,7 @@ else
         ENABLE_ARCHIVE="N"
     fi
     if [[ "$ENABLE_ARCHIVE" =~ ^[Yy]$ ]]; then
-        echo "  See the GCS archival setup (bucket + IAM) in IMAGE_RECOGNITION.md, then set the"
+        echo "  See the GCS archival setup (bucket + IAM) in docs/IMAGE_RECOGNITION.md, then set the"
         echo "  bucket name and mode in Admin → Security."
     fi
 fi

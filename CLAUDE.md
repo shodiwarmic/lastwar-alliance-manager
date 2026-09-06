@@ -15,7 +15,7 @@
 4. **Handler file** — one file per feature, e.g. `handlers_feature.go`.
 5. **Template** — `templates/feature.html`. Define `header_text` (page-specific title, not the app title), `head_tags`, `content`, `scripts`, and `modals` blocks. All modals go in `{{define "modals"}}` — not inside `{{define "content"}}`.
 6. **CSS** — `static/feature.css`, linked via `{{define "head_tags"}}` as `<link rel="stylesheet" href="{{asset "/feature.css"}}">`. The `{{asset}}` wrapper is required — see "Static asset cache busting". Never embed `<style>` blocks in templates.
-6a. **Global utility check** — before adding any CSS to your page file, check if `styles.css` already provides what you need: `.card`/`.card-header`, `.data-table`, `.filter-chip`, `.tab-toolbar`, `.status-msg`, `.badge-*`, `.btn`, `.form-input`, `.tab-bar`, `.tab-btn`. For metric tiles use a grid of `.card`s (see DESIGN_STANDARD.md → Cards), not a bespoke `.stat-card`. Page CSS is for page-specific layout only.
+6a. **Global utility check** — before adding any CSS to your page file, check if `styles.css` already provides what you need: `.card`/`.card-header`, `.data-table`, `.filter-chip`, `.tab-toolbar`, `.status-msg`, `.badge-*`, `.btn`, `.form-input`, `.tab-bar`, `.tab-btn`. For metric tiles use a grid of `.card`s (see docs/DESIGN_STANDARD.md → Cards), not a bespoke `.stat-card`. Page CSS is for page-specific layout only.
 7. **JS** — `static/feature.js`, loaded in `{{define "scripts"}}` as `<script src="{{asset "/feature.js"}}"></script>`. The `{{asset}}` wrapper is required — see "Static asset cache busting".
 8. **Activity log** — call `logActivity` for every write operation (see section below).
 
@@ -72,7 +72,7 @@ templates via `PageData.OCRBackendMode`.
 | `cloud` (default) | Hosted deployment | Auto-detects | GCP credentials in DB + Vision API enabled |
 | `local` | Self-hosted, no Cloud Vision | User picks per batch | The `lastwar-ocr-service:local` Docker image (PaddleOCR sidecar) |
 
-`install.sh` and `update.sh` prompt the operator to opt in to local mode
+`scripts/install.sh` and `scripts/update.sh` prompt the operator to opt in to local mode
 on first install (or once on update for pre-existing installs). When
 local is selected, both scripts:
 1. Append `OCR_BACKEND_MODE=local` and `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml` to `.env`.
@@ -379,7 +379,7 @@ turn a miss into a match but never change an existing match.
 **Avatars** are hotlinked from the game CDN (`lastwar-cdn.akamaized.net` /
 `lastwar-cdn.lastwarapp.net`) — built via `buildLastRankAvatar()` in `global.js`
 with host failover. These hosts MUST be in the reverse-proxy CSP `img-src`
-(`install.sh` for new installs; `update.sh` auto-patches the Caddyfile on
+(`scripts/install.sh` for new installs; `scripts/update.sh` auto-patches the Caddyfile on
 existing ones, keyed on the CDN host being absent). Without them avatars are
 blocked in production (they work in dev because there's no proxy CSP) and fall
 back to initials.
@@ -761,7 +761,7 @@ Parse with `lastRankParseTime`, which handles both shapes, and compare as `time.
 never as strings.
 
 ### CSP — no inline scripts allowed (`script-src 'self'` only)
-`install.sh` sets `script-src 'self' https://cdn.jsdelivr.net` — **`'unsafe-inline'` is not in `script-src`**. Any inline `<script>` block in a template will be silently blocked in production (and on Android, this is immediately visible as a broken feature).
+`scripts/install.sh` sets `script-src 'self' https://cdn.jsdelivr.net` — **`'unsafe-inline'` is not in `script-src`**. Any inline `<script>` block in a template will be silently blocked in production (and on Android, this is immediately visible as a broken feature).
 
 All template config vars have been migrated to `data-*` attributes. **Never add a bare `<script>` block to a template.** Use `data-*` on a container element instead:
 
@@ -1558,7 +1558,7 @@ burst of upstream calls.
 > canonical and defined in `:root` and both `[data-theme]` blocks. An earlier
 > version of this note claimed that token was undefined and told you to "fix" it
 > to `--text-muted` / `--text-primary` / `--bg-primary`; that is backwards — those
-> are the deprecated names (DESIGN_STANDARD.md → Legacy tokens). Migrate *to* the
+> are the deprecated names (docs/DESIGN_STANDARD.md → Legacy tokens). Migrate *to* the
 > `--color-*` names, never away from them.
 
 ## Session Key Requirement
@@ -1657,7 +1657,7 @@ When a feature needs an icon, pick the semantically correct one from the **full*
 library (~5,900 icons, <https://tabler.io/icons>) and add its `<symbol>` to the sprite in the
 existing format; don't reuse an approximate icon just because it's already there. Reference by
 `<use href="/icons.svg#icon-{slug}">` in templates or `svgIcon('{slug}')` in JS. Full details:
-DESIGN_STANDARD.md → Icon System.
+docs/DESIGN_STANDARD.md → Icon System.
 
 ## Running locally
 

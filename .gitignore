@@ -24,8 +24,8 @@ lastwar-alliance.exe
 .env.local
 .env.production
 
-# Local config for refresh-dev-db.sh (copy from refresh-dev-db.conf.example)
-refresh-dev-db.conf
+# Local config for scripts/refresh-dev-db.sh (copy from scripts/refresh-dev-db.conf.example)
+scripts/refresh-dev-db.conf
 
 # IDE
 .vscode/

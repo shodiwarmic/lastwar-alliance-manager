@@ -47,5 +47,5 @@ Two steps matter more than anything else, and both are on the operator:
    silently logs every user out on each restart.
 
 Beyond that: put the app behind the provided Caddy reverse proxy so it is served over HTTPS with
-the security headers and CSP that `install.sh` configures, and keep the container image current —
+the security headers and CSP that `scripts/install.sh` configures, and keep the container image current —
 Dependabot keeps dependencies moving on `main`.

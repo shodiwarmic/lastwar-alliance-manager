@@ -6,7 +6,7 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.local-ocr.yml up -d
 #
-# (install.sh / update.sh write a marker into .env so the alliance-manager
+# (scripts/install.sh / scripts/update.sh write a marker into .env so the alliance-manager
 # entrypoint knows to use this combined invocation automatically.)
 #
 # Trade-offs vs the default cloud (Google Cloud Vision) backend:
@@ -21,7 +21,7 @@ services:
     environment:
       # Tells the alliance-manager UI to render manual-mode pickers and
       # disable auto-detect.  Settings.ocr_backend_mode in the database
-      # is the persistent source of truth — install.sh sets it on first
+      # is the persistent source of truth — scripts/install.sh sets it on first
       # provision.  The env var is a hint for templates that render
       # before the database is queried (e.g. the missing-credentials
       # banner on the upload page).

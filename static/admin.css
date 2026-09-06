@@ -125,7 +125,7 @@
    the two dropdowns look vertically offset from each other.
 
    min-width: room to breathe on wider screens without a new width breakpoint
-   (DESIGN_STANDARD allows exactly one, for the nav chrome swap). The user filter holds
+   (docs/DESIGN_STANDARD.md allows exactly one, for the nav chrome swap). The user filter holds
    names so it gets the larger share; the limit only ever shows "Last N". */
 .filter-controls .choices {
     margin-bottom: 0;
@@ -136,7 +136,7 @@
     min-width: clamp(120px, 10vw, 170px);
 }
 
-/* Metric tiles above the login table — a grid of .card, per DESIGN_STANDARD
+/* Metric tiles above the login table — a grid of .card, per docs/DESIGN_STANDARD.md
    (no bespoke .stat-card).
 
    The 130px floor is what makes this 2x2 on a phone: two tracks need ~270px,
@@ -313,7 +313,7 @@
     font-size: 0.85em;
 }
 
-/* Mobile: the nav chrome swap breakpoint — see DESIGN_STANDARD.md */
+/* Mobile: the nav chrome swap breakpoint — see docs/DESIGN_STANDARD.md */
 @media (max-width: 768px) {
     /* Buttons collapse to icon-only here (global .action-label rule), so all four
        fit on one line. nowrap + auto width instead of the old flex:1 stretch, which

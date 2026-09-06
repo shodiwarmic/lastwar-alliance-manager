@@ -33,7 +33,7 @@ COPY migrations/ ./migrations/
 # Ensure the app user owns the working directory and runtime data paths
 RUN mkdir -p /app/data /app/uploads && chown -R appuser:appuser /app
 
-COPY entrypoint.sh /app/entrypoint.sh
+COPY deploy/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Container starts as root so entrypoint can fix bind-mount ownership,
