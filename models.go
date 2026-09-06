@@ -3,7 +3,6 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
 	"html/template"
 	"reflect"
@@ -14,7 +13,7 @@ import (
 )
 
 // Global Variables
-var db *sql.DB
+var db *guardedDB
 var store *sessions.CookieStore
 
 // --- Database Models ---

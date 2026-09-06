@@ -671,8 +671,34 @@ first.
 
 `database.go` sets `db.SetMaxOpenConns(1)`. `db.Query` holds that single connection until
 `rows.Close()`, so **any** `db.Query` / `db.QueryRow` / `db.Exec` issued while a rows cursor is
-still open waits forever for a connection that will never be free. This hangs the whole process,
-not just the request — and it is silent: no error, no log, no panic.
+still open waits forever for a connection that will never be free.
+
+**The guard (`dbguard.go`) makes that failure loud, it does not make it legal.** `db` is a
+`*guardedDB` — a `*sql.DB` with a **statement ceiling** (`dbAcquireCeiling`: 10s in production,
+5s otherwise) on every call that enters the pool. The ceiling bounds the wait for the single
+connection *plus* the execution of that one statement, and is disarmed the moment the call
+returns, so a long-lived cursor or transaction is never killed by it. A call that blocks past
+the ceiling returns an error wrapping `errDBAcquireTimeout`, the handler's deferred
+`rows.Close()` / `tx.Rollback()` frees the connection, and the request 500s: one log line
+instead of a dead process. **The rule below still stands** — the guard is a smoke alarm, not a
+sprinkler.
+
+Reading the log line: it is written at `Error` level at the moment the ceiling fires and names
+the ceiling, the first line of the SQL, the calling `file:line`, and a full stack. The cursor
+or transaction still holding the connection is on the **same goroutine**, so that one stack
+names both ends of the deadlock.
+
+Two behaviours worth knowing:
+- **`QueryRow` cannot carry the error.** `sql.Row` has no public constructor, and the
+  `*sql.Row` return type is what lets `*sql.Tx` satisfy the same `rowQuerier` /
+  `historyQuerier` / `mobileRosterQuerier` interfaces. When the ceiling fires there, `Scan`
+  returns `context.Canceled` — never `sql.ErrNoRows`, so the caller takes its ordinary
+  unexpected-error path — and the log line is the diagnostic.
+- **`tx.*` calls are not wrapped**, and migrations run on the raw `db.DB`: a transaction
+  already owns the connection and cannot self-deadlock at the pool, and a schema change
+  legitimately outlasts the ceiling.
+
+Tests shrink `dbAcquireCeiling` via `withCeiling(t, …)` (`dbguard_test.go`).
 
 ```go
 // WRONG — deadlocks the server

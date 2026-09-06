@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/pressly/goose/v3"
 	"golang.org/x/crypto/bcrypt"
@@ -12,17 +13,22 @@ import (
 )
 
 func initDB() error {
-	var err error
-
 	dbPath := os.Getenv("DATABASE_PATH")
 	if dbPath == "" {
 		dbPath = "./alliance.db"
 	}
 
-	db, err = sql.Open("sqlite", dbPath)
+	conn, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
 	}
+	// Every db.-level call goes through the statement ceiling from here on; see
+	// dbguard.go. Outside production the ceiling is halved — a self-deadlock should
+	// surface quickly in development, where nothing is waiting on a real user.
+	if !isProduction() {
+		dbAcquireCeiling = 5 * time.Second
+	}
+	db = &guardedDB{DB: conn}
 
 	// WAL mode for concurrency — QueryRow lets us verify the mode was actually applied.
 	var journalMode string
@@ -36,7 +42,9 @@ func initDB() error {
 
 	// Run Goose Migrations
 	goose.SetDialect("sqlite3")
-	if err := goose.Up(db, "migrations"); err != nil {
+	// Migrations run on the raw handle, before any request-serving goroutine exists:
+	// a schema change legitimately outlasts the statement ceiling.
+	if err := goose.Up(db.DB, "migrations"); err != nil {
 		return fmt.Errorf("failed to run database migrations: %v", err)
 	}
 
