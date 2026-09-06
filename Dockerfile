@@ -11,7 +11,7 @@ RUN go mod download
 COPY . .
 
 # modernc.org/sqlite is pure-Go — no CGO required.
-RUN CGO_ENABLED=0 GOOS=linux go build -o alliance-manager .
+RUN CGO_ENABLED=0 GOOS=linux go build -o alliance-manager ./cmd/server
 
 # --- Final Stage ---
 FROM debian:bookworm-slim

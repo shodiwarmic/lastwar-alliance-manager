@@ -1,0 +1,97 @@
+package app
+
+import (
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"os"
+	"time"
+
+	"github.com/pressly/goose/v3"
+	"golang.org/x/crypto/bcrypt"
+	_ "modernc.org/sqlite"
+)
+
+func initDB() error {
+	dbPath := os.Getenv("DATABASE_PATH")
+	if dbPath == "" {
+		dbPath = "./alliance.db"
+	}
+
+	conn, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return err
+	}
+	// Every db.-level call goes through the statement ceiling from here on; see
+	// dbguard.go. Outside production the ceiling is halved — a self-deadlock should
+	// surface quickly in development, where nothing is waiting on a real user.
+	if !isProduction() {
+		dbAcquireCeiling = 5 * time.Second
+	}
+	db = &guardedDB{DB: conn}
+
+	// WAL mode for concurrency — QueryRow lets us verify the mode was actually applied.
+	var journalMode string
+	if err = db.QueryRow("PRAGMA journal_mode=WAL;").Scan(&journalMode); err != nil {
+		return fmt.Errorf("failed to configure WAL mode: %w", err)
+	}
+	if journalMode != "wal" {
+		slog.Warn("WAL mode not enabled; performance may be degraded", "journal_mode", journalMode)
+	}
+	db.SetMaxOpenConns(1)
+
+	// Run Goose Migrations
+	goose.SetDialect("sqlite3")
+	// Migrations run on the raw handle, before any request-serving goroutine exists:
+	// a schema change legitimately outlasts the statement ceiling.
+	if err := goose.Up(db.DB, "migrations"); err != nil {
+		return fmt.Errorf("failed to run database migrations: %v", err)
+	}
+
+	// Seed the initial admin, but ONLY when the install has no users at all -- i.e. a
+	// genuine first startup. Deliberately not keyed on the "admin" username, and not on
+	// "no admins exist":
+	//
+	// Renaming the admin account is a supported operation (updateUser), so a username
+	// check recreates a second admin -- with the password README publishes -- on the
+	// next restart of an install the operator thought they had hardened. "No active
+	// admin" is no better: that state is reachable on a populated install, and it is
+	// deliberately NOT self-healing (see the last-admin guards in handlers_admin.go;
+	// recovery is by hand, by design). Only an empty users table is unambiguously
+	// first-run, and it cannot recur once anybody has signed in.
+	var userCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&userCount); err != nil {
+		return fmt.Errorf("failed to count existing users: %w", err)
+	}
+
+	if userCount == 0 {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("failed to hash default admin password: %w", err)
+		}
+
+		// OR IGNORE: username is UNIQUE and the check above is not atomic with this
+		// write. A single app container makes that unreachable today, but losing the
+		// race should not be a boot failure.
+		if _, err := db.Exec(`
+			INSERT OR IGNORE INTO users (username, password, is_admin, force_password_change)
+			VALUES (?, ?, 1, 1)
+		`, "admin", string(hashedPassword)); err != nil {
+			return fmt.Errorf("failed to create default admin user: %w", err)
+		}
+
+		slog.Info("Created default admin account")
+	}
+
+	// Add is_sub to storm_assignments if missing
+	var colExists int
+	db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('storm_assignments') WHERE name='is_sub'`).Scan(&colExists)
+	if colExists == 0 {
+		db.Exec(`ALTER TABLE storm_assignments ADD COLUMN is_sub INTEGER NOT NULL DEFAULT 0`)
+	}
+
+	// Ensure physical file directory exists
+	os.MkdirAll(getStoragePath(), 0755)
+
+	return nil
+}

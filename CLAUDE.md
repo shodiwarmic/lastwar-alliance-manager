@@ -6,6 +6,12 @@
 - **Migrations**: Goose (`-- +goose Up` / `-- +goose StatementBegin` headers required)
 - **Frontend**: Vanilla JS, no build step. CSS custom properties (`var(--name)`) throughout.
 - **Templates**: Go `html/template`, parsed as `layout.html` + page template pairs
+- **Layout**: one `package app` in `internal/app/` (every `.go` file lives there); the binary is
+  `cmd/server`, a four-line `main()` calling `app.Main()`. `migrations/`, `templates/` and
+  `static/` stay at the repository root and are resolved **relative to the working directory**,
+  so run the app from the root (`go run ./cmd/server`). Tests are chdir'd there by `TestMain`
+  (`internal/app/main_test.go`). Deployment lives in `deploy/`, operator scripts in `scripts/`,
+  long-form docs in `docs/`.
 
 ## Adding a new feature — checklist
 
@@ -1662,7 +1668,7 @@ docs/DESIGN_STANDARD.md → Icon System.
 ## Running locally
 
 ```bash
-go run .
+go run ./cmd/server
 ```
 
 Migrations run automatically on startup via `initDB()`.
@@ -1672,13 +1678,13 @@ Migrations run automatically on startup via `initDB()`.
 without stale-cache issues. In production those files are content-hashed and cached
 far-future instead — see "Static asset cache busting". Templates and `static/` are served from
 disk (dev volume mounts), so `.html`/`.css`/`.js`/`.svg` edits show on refresh with no rebuild;
-Go changes still need `docker compose up -d --build` (or restart `go run .`).
+Go changes still need `docker compose up -d --build` (or restart `go run ./cmd/server`).
 
 Because dev deliberately disables caching, **cache behaviour cannot be tested in dev**. To
 exercise the real production headers locally, run with `PRODUCTION=true` against a scratch DB
 on a spare port:
 
 ```bash
-PORT=8099 PRODUCTION=true SESSION_KEY=<32+ chars> DATABASE_PATH=/tmp/scratch.db go run .
+PORT=8099 PRODUCTION=true SESSION_KEY=<32+ chars> DATABASE_PATH=/tmp/scratch.db go run ./cmd/server
 curl -sI localhost:8099/styles.css   # inspect Cache-Control / ETag
 ```
