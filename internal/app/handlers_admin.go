@@ -1,0 +1,1224 @@
+// handlers_admin.go - Admin dashboard handlers for permissions and user management
+
+package app
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gorilla/mux"
+	"golang.org/x/crypto/bcrypt"
+)
+
+// --- PERMISSIONS MANAGEMENT ---
+
+func getRankPermissions(rank string) RankPermissions {
+	var p RankPermissions
+	var blob string
+	db.QueryRow(`SELECT permissions FROM rank_permissions WHERE rank = ?`, rank).Scan(&blob)
+	json.Unmarshal([]byte(blob), &p)
+	p.Rank = rank
+	return p
+}
+
+func getPermissionsMatrix(w http.ResponseWriter, r *http.Request) {
+	ranks := []string{"R5", "R4", "R3", "R2", "R1"}
+	var matrix []RankPermissions
+	for _, rank := range ranks {
+		matrix = append(matrix, getRankPermissions(rank))
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(matrix)
+}
+
+func updatePermissionsMatrix(w http.ResponseWriter, r *http.Request) {
+	var matrix []RankPermissions
+	if err := json.NewDecoder(r.Body).Decode(&matrix); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(`UPDATE rank_permissions SET permissions = ? WHERE rank = ?`)
+	if err != nil {
+		slog.Error("failed to prepare permissions update", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	for _, p := range matrix {
+		blob, err := json.Marshal(p)
+		if err != nil {
+			slog.Error("failed to marshal permissions", "rank", p.Rank, "error", err)
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+		stmt.Exec(string(blob), p.Rank)
+	}
+	tx.Commit()
+
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "updated", "permissions", "rank permissions matrix", true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Permissions updated"})
+}
+
+func getPermissionsSchema(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(PermissionGroups)
+}
+
+// --- ADMIN USER MANAGEMENT ---
+
+// Admin: Get all users with login information (DEADLOCK FIXED)
+func getAdminUsers(w http.ResponseWriter, r *http.Request) {
+	query := `
+		SELECT u.id, u.username, u.member_id, u.is_admin, u.is_active, u.force_password_change,
+		   m.name as member_name,
+		   (SELECT login_time FROM login_sessions WHERE user_id = u.id AND success = 1 ORDER BY login_time DESC LIMIT 1) as last_login,
+		   (SELECT COUNT(*) FROM login_sessions WHERE user_id = u.id AND success = 1) as login_count
+		FROM users u
+		LEFT JOIN members m ON u.member_id = m.id
+		ORDER BY u.is_active DESC, u.is_admin DESC, u.username ASC
+	`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		http.Error(w, "Failed to fetch users", http.StatusInternalServerError)
+		return
+	}
+
+	users := []AdminUserResponse{}
+
+	// Phase 1: Fetch all users into memory first
+	for rows.Next() {
+		var user AdminUserResponse
+		var memberID sql.NullInt64
+		var memberName sql.NullString
+		var lastLogin sql.NullString
+
+		err := rows.Scan(&user.ID, &user.Username, &memberID, &user.IsAdmin, &user.IsActive, &user.ForcePasswordChange,
+			&memberName, &lastLogin, &user.LoginCount)
+		if err != nil {
+			continue
+		}
+
+		if memberID.Valid {
+			mid := int(memberID.Int64)
+			user.MemberID = &mid
+		}
+		if memberName.Valid {
+			user.MemberName = &memberName.String
+		}
+		if lastLogin.Valid {
+			user.LastLogin = &lastLogin.String
+		}
+
+		users = append(users, user)
+	}
+	// CRITICAL: Close the rows here to release the DB connection back to the pool!
+	rows.Close()
+
+	// Phase 2: Now that the connection is free, loop through the slice and fetch recent logins
+	for i := range users {
+		loginRows, err := db.Query(`
+			SELECT id, user_id, username, ip_address, user_agent, country, city, isp, login_time, success
+			FROM login_sessions
+			WHERE user_id = ? AND success = 1
+			ORDER BY login_time DESC
+			LIMIT 5
+		`, users[i].ID)
+
+		if err == nil {
+			recentLogins := []LoginSession{}
+			for loginRows.Next() {
+				var login LoginSession
+				var ipAddr, userAgent, country, city, isp sql.NullString
+
+				loginRows.Scan(&login.ID, &login.UserID, &login.Username,
+					&ipAddr, &userAgent, &country, &city, &isp,
+					&login.LoginTime, &login.Success)
+
+				if ipAddr.Valid {
+					login.IPAddress = &ipAddr.String
+				}
+				if userAgent.Valid {
+					login.UserAgent = &userAgent.String
+				}
+				if country.Valid {
+					login.Country = &country.String
+				}
+				if city.Valid {
+					login.City = &city.String
+				}
+				if isp.Valid {
+					login.ISP = &isp.String
+				}
+
+				recentLogins = append(recentLogins, login)
+			}
+			loginRows.Close()
+			users[i].RecentLogins = recentLogins
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}
+
+// Admin: Create new user
+func createAdminUser(w http.ResponseWriter, r *http.Request) {
+	var req AdminUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Username == "" || req.Password == "" {
+		http.Error(w, "Username and password are required", http.StatusBadRequest)
+		return
+	}
+
+	if err := validatePasswordPolicy(req.Password, 0); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var existingID int
+	err := db.QueryRow("SELECT id FROM users WHERE username = ?", req.Username).Scan(&existingID)
+	if err == nil {
+		http.Error(w, "Username already exists", http.StatusConflict)
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+		return
+	}
+
+	result, err := db.Exec("INSERT INTO users (username, password, member_id, is_admin, force_password_change) VALUES (?, ?, ?, ?, ?)",
+		req.Username, string(hashedPassword), req.MemberID, req.IsAdmin, req.ForcePasswordChange)
+	if err != nil {
+		slog.Error("failed to create user", "error", err)
+		http.Error(w, "Failed to create user", http.StatusInternalServerError)
+		return
+	}
+
+	id, _ := result.LastInsertId()
+	db.Exec("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)", id, string(hashedPassword))
+
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "created", "user", req.Username, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "User created successfully",
+		"id":      id,
+	})
+}
+
+// Admin: Update user
+func updateAdminUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req AdminUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Guard and write share one transaction. With SetMaxOpenConns(1) that serializes
+	// them, so two concurrent demotions of the last two admins can't both pass the
+	// count before either UPDATE lands.
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("failed to begin user update transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	var existingUsername string
+	var oldIsAdmin, oldIsActive bool
+	err = tx.QueryRow(
+		"SELECT username, is_admin, is_active FROM users WHERE id = ?", userID,
+	).Scan(&existingUsername, &oldIsAdmin, &oldIsActive)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	if req.Username != "" && req.Username != existingUsername {
+		var otherID int
+		err = tx.QueryRow("SELECT id FROM users WHERE username = ? AND id != ?", req.Username, userID).Scan(&otherID)
+		if err == nil {
+			http.Error(w, "Username already exists", http.StatusConflict)
+			return
+		}
+	}
+
+	// Removing admin from the last active admin locks everyone out of /admin, and this
+	// app has no bootstrap or self-service recovery — the only way back is editing the
+	// database by hand. Same lockout the deactivate and delete guards prevent, reachable
+	// here just by clearing a checkbox in the edit modal.
+	//
+	// Only fires when the target is currently an ACTIVE admin: demoting an already
+	// deactivated admin cannot reduce the number of admins who can actually log in.
+	if oldIsAdmin && oldIsActive && !req.IsAdmin {
+		var remaining int
+		if err := tx.QueryRow(
+			"SELECT COUNT(*) FROM users WHERE is_admin = 1 AND is_active = 1 AND id != ?", userID,
+		).Scan(&remaining); err != nil {
+			slog.Error("failed to count active admins", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if remaining == 0 {
+			http.Error(w, "Cannot remove admin access from the last active admin account", http.StatusConflict)
+			return
+		}
+	}
+
+	if req.Username != "" {
+		_, err = tx.Exec("UPDATE users SET username = ?, member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
+			req.Username, req.MemberID, req.IsAdmin, req.ForcePasswordChange, userID)
+	} else {
+		_, err = tx.Exec("UPDATE users SET member_id = ?, is_admin = ?, force_password_change = ? WHERE id = ?",
+			req.MemberID, req.IsAdmin, req.ForcePasswordChange, userID)
+	}
+
+	if err != nil {
+		slog.Error("failed to update user", "error", err, "userID", userID)
+		http.Error(w, "Failed to update user", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("failed to commit user update transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	targetUsername := existingUsername
+	if req.Username != "" {
+		targetUsername = req.Username
+	}
+	var userChanges []string
+	if req.Username != "" && req.Username != existingUsername {
+		userChanges = append(userChanges, "username: "+existingUsername+" → "+req.Username)
+	}
+	if oldIsAdmin != req.IsAdmin {
+		was, now := "standard", "standard"
+		if oldIsAdmin {
+			was = "admin"
+		}
+		if req.IsAdmin {
+			now = "admin"
+		}
+		userChanges = append(userChanges, "role: "+was+" → "+now)
+	}
+	logActivity(actor.ID, actor.Username, "updated", "user", targetUsername, true, strings.Join(userChanges, "; "))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "User updated successfully"})
+}
+
+// Admin: Delete user
+func deleteAdminUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var deletedUsername string
+	var isActive bool
+	if err := db.QueryRow(
+		"SELECT username, is_active FROM users WHERE id = ?", userID,
+	).Scan(&deletedUsername, &isActive); err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Deletion is the second step of a two-stage flow: deactivate, then delete. Making
+	// the destructive path deliberate matters more here than elsewhere because deleting
+	// a user discards their login history, activity attribution and file ownership,
+	// which is exactly what deactivation exists to preserve.
+	//
+	// This also subsumes the old last-active-admin guard. deactivateUser already refuses
+	// to deactivate the last active admin (and refuses self-deactivation), so any
+	// account that reaches this point is inactive and therefore not the last active
+	// admin — and removing an inactive row cannot reduce the active-admin count. Keeping
+	// the old count here would have been actively wrong: with two admins, deactivating
+	// one left adminCount = 1, which then blocked deleting that same inactive admin.
+	if isActive {
+		http.Error(w, "Deactivate this account before deleting it. Deactivation preserves the account's history; deletion does not.", http.StatusConflict)
+		return
+	}
+
+	// Explicit — the table's ON DELETE CASCADE never fires, since foreign_keys is off
+	// app-wide. Without this the tokens outlive the user row.
+	if _, err := db.Exec("DELETE FROM password_reset_tokens WHERE user_id = ?", userID); err != nil {
+		slog.Error("failed to clear reset tokens on delete", "error", err, "userID", userID)
+		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
+		return
+	}
+
+	_, err = db.Exec("DELETE FROM users WHERE id = ?", userID)
+	if err != nil {
+		slog.Error("failed to delete user", "error", err, "userID", userID)
+		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
+	logActivity(actorID, actorName, "deleted", "user", deletedUsername, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "User deleted successfully"})
+}
+
+// Admin: Deactivate a user account.
+//
+// The guard and the write share one transaction. With SetMaxOpenConns(1) that fully
+// serializes them — otherwise two concurrent requests could both pass the last-admin
+// count before either UPDATE ran, deactivating every admin.
+func deactivateUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	actor := getAuthUser(r)
+
+	// The last-admin guard doesn't cover a multi-admin setup where an admin locks
+	// themselves out mid-session, so refuse self-deactivation outright.
+	if userID == actor.ID {
+		http.Error(w, "You cannot deactivate your own account", http.StatusConflict)
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("failed to begin deactivate transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	var username string
+	var isAdmin, isActive bool
+	err = tx.QueryRow("SELECT username, is_admin, is_active FROM users WHERE id = ?", userID).
+		Scan(&username, &isAdmin, &isActive)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+	if !isActive {
+		http.Error(w, "This account is already deactivated", http.StatusConflict)
+		return
+	}
+
+	if isAdmin {
+		var remaining int
+		if err := tx.QueryRow(
+			"SELECT COUNT(*) FROM users WHERE is_admin = 1 AND is_active = 1 AND id != ?", userID,
+		).Scan(&remaining); err != nil {
+			slog.Error("failed to count active admins", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if remaining == 0 {
+			http.Error(w, "Cannot deactivate the last active admin account", http.StatusConflict)
+			return
+		}
+	}
+
+	if _, err := tx.Exec("UPDATE users SET is_active = 0 WHERE id = ?", userID); err != nil {
+		slog.Error("failed to deactivate user", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// A pending reset link must not outlive the account it unlocks. Explicit because
+	// the table's ON DELETE CASCADE never fires — foreign_keys is off app-wide.
+	if _, err := tx.Exec(
+		"DELETE FROM password_reset_tokens WHERE user_id = ? AND used_at IS NULL", userID,
+	); err != nil {
+		slog.Error("failed to clear reset tokens on deactivate", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("failed to commit deactivate transaction", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	logActivity(actor.ID, actor.Username, "deactivated", "user", username, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "User deactivated"})
+}
+
+// Admin: Reactivate a user account. No guard needed — reactivation can only add an
+// active admin, never remove the last one.
+func reactivateUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var username string
+	if err := db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username); err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	if _, err := db.Exec("UPDATE users SET is_active = 1 WHERE id = ?", userID); err != nil {
+		slog.Error("failed to reactivate user", "error", err, "userID", userID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "reactivated", "user", username, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "User reactivated"})
+}
+
+// Admin: Get login history
+func getLoginHistory(w http.ResponseWriter, r *http.Request) {
+	userIDParam := r.URL.Query().Get("user_id")
+	limit := r.URL.Query().Get("limit")
+	if limit == "" {
+		limit = "100"
+	}
+
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil || limitInt < 1 || limitInt > 10000 {
+		limitInt = 100
+	}
+
+	var rows *sql.Rows
+	if userIDParam != "" {
+		userID, err := strconv.Atoi(userIDParam)
+		if err != nil {
+			http.Error(w, "Invalid user_id parameter", http.StatusBadRequest)
+			return
+		}
+		rows, err = db.Query(`
+			SELECT ls.id, ls.user_id, ls.username, ls.ip_address, ls.user_agent,
+			       ls.country, ls.city, ls.isp, ls.login_time, ls.success
+			FROM login_sessions ls
+			WHERE ls.user_id = ?
+			ORDER BY ls.login_time DESC LIMIT ?`, userID, limitInt)
+	} else {
+		rows, err = db.Query(`
+			SELECT ls.id, ls.user_id, ls.username, ls.ip_address, ls.user_agent,
+			       ls.country, ls.city, ls.isp, ls.login_time, ls.success
+			FROM login_sessions ls
+			ORDER BY ls.login_time DESC LIMIT ?`, limitInt)
+	}
+	if err != nil {
+		http.Error(w, "Failed to fetch login history", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	history := []LoginSession{}
+	for rows.Next() {
+		var login LoginSession
+		var ipAddr, userAgent, country, city, isp sql.NullString
+
+		err := rows.Scan(&login.ID, &login.UserID, &login.Username,
+			&ipAddr, &userAgent, &country, &city, &isp,
+			&login.LoginTime, &login.Success)
+		if err != nil {
+			continue
+		}
+
+		if ipAddr.Valid {
+			login.IPAddress = &ipAddr.String
+		}
+		if userAgent.Valid {
+			login.UserAgent = &userAgent.String
+		}
+		if country.Valid {
+			login.Country = &country.String
+		}
+		if city.Valid {
+			login.City = &city.String
+		}
+		if isp.Valid {
+			login.ISP = &isp.String
+		}
+
+		history = append(history, login)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(history)
+}
+
+// --- SETTINGS MANAGEMENT ---
+
+func getSettings(w http.ResponseWriter, r *http.Request) {
+	var s Settings
+
+	err := db.QueryRow(`SELECT
+        id, schedule_message_template, COALESCE(daily_message_template, ''), power_tracking_enabled,
+        COALESCE(storm_timezones, ''), COALESCE(storm_respect_dst, 0), COALESCE(login_message, ''), COALESCE(max_hq_level, 35),
+        COALESCE(pwd_min_length, 12), COALESCE(pwd_require_special, 0),
+        COALESCE(pwd_require_upper, 0), COALESCE(pwd_require_lower, 0),
+        COALESCE(pwd_require_number, 0), COALESCE(pwd_history_count, 4),
+        COALESCE(pwd_validity_days, 180), COALESCE(squad_tracking_enabled, 0),
+        COALESCE(cv_worker_url, ''),
+        COALESCE(ocr_archive_mode, 'none'), COALESCE(ocr_archive_bucket, ''),
+        COALESCE(train_free_daily_limit, 1), COALESCE(train_purchased_daily_limit, 2),
+        COALESCE(alliance_max_members, 100), COALESCE(join_requirements, ''),
+        COALESCE(vs_minimum_points, 2500000),
+        COALESCE(vs_flag_days_threshold, 2),
+        COALESCE(strike_needs_improvement_threshold, 1), COALESCE(strike_at_risk_threshold, 3),
+        COALESCE(mg_baseline, 11), COALESCE(zs_baseline, 7),
+        COALESCE(mg_default_time, '00:30'), COALESCE(zs_default_time, '23:00'),
+        COALESCE(mg_anchor_date, ''), COALESCE(zs_schedule_mode, 'weekdays'),
+        COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00'),
+        COALESCE(season_score_levels_default, '[{"key":"full","label":"FULL","points":10},{"key":"partial","label":"PARTIAL","points":5},{"key":"absent","label":"ABSENT","points":0}]'),
+        COALESCE(alliance_name, ''), COALESCE(alliance_tag, ''),
+        COALESCE(lastrank_alliance_id, ''),
+        COALESCE(our_server_id, 0), COALESCE(nap_size, 10), COALESCE(nap_import_limit, 15),
+        COALESCE(lastrank_auto_sync_enabled, 0), COALESCE(lastrank_auto_sync_hour, 4),
+        COALESCE(lastrank_auto_sync_interval_hours, 6), COALESCE(lastrank_enrich_max_age_hours, 21),
+        COALESCE(nap_auto_refresh_enabled, 0), COALESCE(prospect_auto_refresh_enabled, 0),
+        COALESCE(translation_backend_mode, 'ondevice'), COALESCE(translation_monthly_char_cap, 400000)
+        FROM settings WHERE id = 1`).Scan(
+		&s.ID, &s.ScheduleMessageTemplate,
+		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
+		&s.StormTimezones, &s.StormRespectDST, &s.LoginMessage, &s.MaxHQLevel,
+		&s.PwdMinLength, &s.PwdRequireSpecial, &s.PwdRequireUpper,
+		&s.PwdRequireLower, &s.PwdRequireNumber, &s.PwdHistoryCount, &s.PwdValidityDays,
+		&s.SquadTrackingEnabled,
+		&s.CVWorkerURL,
+		&s.OCRArchiveMode, &s.OCRArchiveBucket,
+		&s.TrainFreeDailyLimit, &s.TrainPurchasedDailyLimit,
+		&s.AllianceMaxMembers, &s.JoinRequirements,
+		&s.VSMinimumPoints,
+		&s.VsFlagDaysThreshold,
+		&s.StrikeNeedsImprovementThreshold, &s.StrikeAtRiskThreshold,
+		&s.MGBaseline, &s.ZSBaseline,
+		&s.MGDefaultTime, &s.ZSDefaultTime,
+		&s.MGAnchorDate, &s.ZSScheduleMode,
+		&s.ZSWeekdays, &s.ZSAnchorDate, &s.ZSAnchorTime,
+		&s.SeasonScoreLevelsDefault,
+		&s.AllianceName, &s.AllianceTag,
+		&s.LastRankAllianceID,
+		&s.OurServerID, &s.NAPSize, &s.NAPImportLimit,
+		&s.LastRankAutoSyncEnabled, &s.LastRankAutoSyncHour,
+		&s.LastRankAutoSyncIntervalHours, &s.LastRankEnrichMaxAgeHours,
+		&s.NAPAutoRefreshEnabled, &s.ProspectAutoRefreshEnabled,
+		&s.TranslationBackendMode, &s.TranslationMonthlyCharCap,
+	)
+
+	if err != nil {
+		// Logged, not returned: the SELECT and Scan lists are positional and ~49
+		// entries long, so a mismatch here is the likeliest cause and is otherwise
+		// invisible.
+		slog.Error("failed to load settings", "error", err)
+		http.Error(w, "Failed to load settings", http.StatusInternalServerError)
+		return
+	}
+
+	// Season fields are owned by the seasons table (Season Hub).
+	// Use the most recently started season whose start_date has passed — this keeps
+	// the schedule day counter incrementing through the off-season without resetting.
+	var seasonNum sql.NullInt64
+	var seasonStart sql.NullString
+	db.QueryRow(`SELECT season_number, start_date FROM seasons WHERE start_date <= date('now') ORDER BY start_date DESC LIMIT 1`).Scan(&seasonNum, &seasonStart)
+	if seasonNum.Valid {
+		v := int(seasonNum.Int64)
+		s.CurrentSeason = &v
+	}
+	if seasonStart.Valid {
+		s.SeasonStartDate = seasonStart.String
+	}
+
+	// Check if the GCP Vision credentials physically exist in the database
+	var hasGCPKey bool
+	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCPKey)
+
+	// Archive status snapshot (for the admin "archiving is failing" banner).
+	archErr, archErrAt, archOK := getArchiveStatus()
+	fmtTime := func(t time.Time) string {
+		if t.IsZero() {
+			return ""
+		}
+		return t.Format(time.RFC3339)
+	}
+
+	// Wrap the standard settings struct with our status booleans
+	type extendedSettings struct {
+		Settings               // Embeds your existing struct fields automatically
+		HasGCPCredentials bool `json:"has_gcp_credentials"`
+		OCRPipelineReady  bool `json:"ocr_pipeline_ready"`
+		// Archive availability gating for the UI: gcp option needs creds (bucket is
+		// validated separately at save), local option needs OCR_ARCHIVE_DIR set.
+		ArchiveGCSAvailable   bool   `json:"archive_gcs_available"`
+		ArchiveLocalAvailable bool   `json:"archive_local_available"`
+		ArchiveLastError      string `json:"archive_last_error"`
+		ArchiveLastErrorAt    string `json:"archive_last_error_at"`
+		ArchiveLastSuccessAt  string `json:"archive_last_success_at"`
+	}
+
+	response := extendedSettings{
+		Settings:              s,
+		HasGCPCredentials:     hasGCPKey,
+		OCRPipelineReady:      hasGCPKey && s.CVWorkerURL != "", // Requires BOTH to be true
+		ArchiveGCSAvailable:   hasGCPKey,
+		ArchiveLocalAvailable: os.Getenv("OCR_ARCHIVE_DIR") != "",
+		ArchiveLastError:      archErr,
+		ArchiveLastErrorAt:    fmtTime(archErrAt),
+		ArchiveLastSuccessAt:  fmtTime(archOK),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func updateSettings(w http.ResponseWriter, r *http.Request) {
+	var settings Settings
+	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	actor := getAuthUser(r)
+
+	// VS flag-days threshold must be 1–6 (a member can fall below the daily minimum on
+	// at most the 6 VS days). Reject out-of-range rather than silently clamping.
+	if settings.VsFlagDaysThreshold < 1 || settings.VsFlagDaysThreshold > 6 {
+		http.Error(w, "VS flag days threshold must be between 1 and 6", http.StatusBadRequest)
+		return
+	}
+
+	// Scheduled LastRank retrieval. The interval must divide the day, or slots drift
+	// across midnight and "the 04:00 run" stops meaning anything.
+	if settings.LastRankAutoSyncIntervalHours != 0 && !validScheduleInterval(settings.LastRankAutoSyncIntervalHours) {
+		http.Error(w, "Sync interval must be one of 1, 2, 3, 4, 6, 8, 12 or 24 hours", http.StatusBadRequest)
+		return
+	}
+	if settings.LastRankAutoSyncHour < 0 || settings.LastRankAutoSyncHour > 23 {
+		http.Error(w, "Sync hour must be between 0 and 23", http.StatusBadRequest)
+		return
+	}
+	// The enrich max age's legal band DEPENDS on the interval — computed here rather
+	// than hard-coded. Below the low bound an extra tick per day clears the
+	// threshold (more enriches than intended, for data the game hasn't changed);
+	// above the high bound a long run's own duration can push a member past the next
+	// day's slot and revive an alternate-day silent skip.
+	if settings.LastRankEnrichMaxAgeHours != 0 {
+		interval := settings.LastRankAutoSyncIntervalHours
+		if interval == 0 {
+			interval = 6
+		}
+		low, high := enrichMaxAgeBand(interval)
+		if settings.LastRankEnrichMaxAgeHours <= low || settings.LastRankEnrichMaxAgeHours > high {
+			http.Error(w, fmt.Sprintf(
+				"With a %dh interval, the enrich window must be between %dh and %dh — otherwise members re-enrich more often than intended, or skip a day entirely.",
+				interval, low+1, high), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// NAP sizing. A zero means "not supplied" (a field-omitting PUT decodes to 0) and is preserved
+	// by the COALESCE(NULLIF(...)) in the UPDATE below — never clamped up to 1, which would
+	// silently reduce the pact to a single alliance. Any other out-of-range value is rejected,
+	// matching the vs_flag_days_threshold precedent above.
+	if settings.NAPSize < 0 || settings.NAPSize > 50 {
+		http.Error(w, "NAP size must be between 1 and 50", http.StatusBadRequest)
+		return
+	}
+	if settings.NAPImportLimit < 0 || settings.NAPImportLimit > 50 {
+		http.Error(w, "NAP import limit must be between 1 and 50", http.StatusBadRequest)
+		return
+	}
+	// Compare EFFECTIVE values: a payload that updates only one of the two must still be checked
+	// against the stored other, or an import limit could end up below the pact size.
+	effSize, effLimit := settings.NAPSize, settings.NAPImportLimit
+	if effSize == 0 || effLimit == 0 {
+		var curSize, curLimit int
+		db.QueryRow(`SELECT COALESCE(nap_size, 10), COALESCE(nap_import_limit, 15) FROM settings WHERE id = 1`).
+			Scan(&curSize, &curLimit)
+		if effSize == 0 {
+			effSize = curSize
+		}
+		if effLimit == 0 {
+			effLimit = curLimit
+		}
+	}
+	if effLimit < effSize {
+		http.Error(w, "NAP import limit must be at least the NAP size", http.StatusBadRequest)
+		return
+	}
+
+	// Accept either a bare 32-hex id or a pasted /a/<id> URL for the LastRank id.
+	allianceID := strings.TrimSpace(settings.LastRankAllianceID)
+	if parsed, ok := parseLastRankAllianceID(allianceID); ok {
+		allianceID = parsed
+	}
+
+	// Read the id we're replacing, so a *change* of alliance identity can re-assert Rule 2 below.
+	var prevAllianceID string
+	db.QueryRow(`SELECT COALESCE(lastrank_alliance_id, '') FROM settings WHERE id = 1`).Scan(&prevAllianceID)
+
+	// Note: current_season and season_start_date are no longer editable here —
+	// they are derived from the seasons table (owned by Season Hub).
+	_, err := db.Exec(`UPDATE settings SET
+		schedule_message_template = ?,
+		daily_message_template = ?, power_tracking_enabled = ?, storm_timezones = ?,
+		storm_respect_dst = ?, login_message = ?, max_hq_level = ?, squad_tracking_enabled = ?,
+		train_free_daily_limit = ?, train_purchased_daily_limit = ?,
+		alliance_max_members = ?, join_requirements = ?,
+		vs_minimum_points = ?,
+		strike_needs_improvement_threshold = ?, strike_at_risk_threshold = ?,
+		mg_baseline = ?, zs_baseline = ?,
+		mg_default_time = ?, zs_default_time = ?,
+		mg_anchor_date = ?, zs_schedule_mode = ?,
+		zs_weekdays = ?, zs_anchor_date = ?, zs_anchor_time = ?,
+		season_score_levels_default = ?,
+		alliance_name = ?, alliance_tag = ?,
+		lastrank_alliance_id = ?,
+		vs_flag_days_threshold = ?,
+		our_server_id = NULLIF(?, 0),
+		nap_size = COALESCE(NULLIF(?, 0), nap_size),
+		nap_import_limit = COALESCE(NULLIF(?, 0), nap_import_limit),
+		lastrank_auto_sync_enabled = ?,
+		lastrank_auto_sync_hour = ?,
+		lastrank_auto_sync_interval_hours = ?,
+		lastrank_enrich_max_age_hours = ?,
+		nap_auto_refresh_enabled = ?,
+		prospect_auto_refresh_enabled = ?
+		WHERE id = 1`,
+		settings.ScheduleMessageTemplate,
+		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
+		settings.StormRespectDST, settings.LoginMessage, settings.MaxHQLevel, settings.SquadTrackingEnabled,
+		settings.TrainFreeDailyLimit, settings.TrainPurchasedDailyLimit,
+		settings.AllianceMaxMembers, settings.JoinRequirements,
+		settings.VSMinimumPoints,
+		settings.StrikeNeedsImprovementThreshold, settings.StrikeAtRiskThreshold,
+		settings.MGBaseline, settings.ZSBaseline,
+		settings.MGDefaultTime, settings.ZSDefaultTime,
+		settings.MGAnchorDate, settings.ZSScheduleMode,
+		settings.ZSWeekdays, settings.ZSAnchorDate, settings.ZSAnchorTime,
+		settings.SeasonScoreLevelsDefault,
+		settings.AllianceName, settings.AllianceTag,
+		allianceID,
+		settings.VsFlagDaysThreshold,
+		// 0 CLEARS the server number (unconfigured is a real state the form must express), but
+		// 0 KEEPS the NAP sizes (see the NULLIF/COALESCE asymmetry in the SET clause above).
+		settings.OurServerID,
+		settings.NAPSize, settings.NAPImportLimit,
+		settings.LastRankAutoSyncEnabled, settings.LastRankAutoSyncHour,
+		settings.LastRankAutoSyncIntervalHours, settings.LastRankEnrichMaxAgeHours,
+		settings.NAPAutoRefreshEnabled, settings.ProspectAutoRefreshEnabled,
+	)
+	if err != nil {
+		slog.Error("failed to update settings", "error", err)
+		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+		return
+	}
+
+	// The scheduler reads its config through a short-TTL cache; drop it so a
+	// changed cadence takes effect now rather than up to a minute later.
+	invalidateLastRankScheduleCache()
+
+	if actor.IsAdmin && settings.PwdMinLength >= 6 {
+		_, err = db.Exec(`UPDATE settings SET 
+			pwd_min_length = ?, pwd_require_special = ?, pwd_require_upper = ?, 
+			pwd_require_lower = ?, pwd_require_number = ?, pwd_history_count = ?, pwd_validity_days = ? 
+			WHERE id = 1`,
+			settings.PwdMinLength, settings.PwdRequireSpecial, settings.PwdRequireUpper,
+			settings.PwdRequireLower, settings.PwdRequireNumber, settings.PwdHistoryCount, settings.PwdValidityDays,
+		)
+		if err != nil {
+			slog.Error("failed to update password settings", "error", err)
+			http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Our alliance must never sit in the external_alliances registry (it feeds the VS opponent
+	// picker). If the operator just pointed us at a *different* LastRank alliance, that alliance
+	// may already be cached there from back when it was somebody else — and it would stay pickable
+	// until the next manual NAP refresh. Re-assert the invariant now.
+	//
+	// Deliberately id-only: an id typo matches nothing and is harmless, but scrubbing by *tag* on a
+	// settings save would let a tag typo delete an innocent alliance's registry row. A tag-matched
+	// leftover waits for the refresh scrub instead.
+	if allianceID != "" && !strings.EqualFold(allianceID, prevAllianceID) {
+		if n, serr := scrubOwnAllianceFromRegistry(allianceID, "", 0); serr != nil {
+			slog.Error("updateSettings: registry self-scrub failed", "error", serr)
+		} else if n > 0 {
+			logActivity(actor.ID, actor.Username, "deleted", "external_alliance", "our own alliance", false,
+				"removed from the external alliance registry after the LastRank alliance ID changed")
+		}
+	}
+
+	logActivity(actor.ID, actor.Username, "updated", "settings", "alliance settings", true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Settings updated successfully"})
+}
+
+// --- USER FILE SAFEGUARDS ---
+
+func getUserFileCount(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM files WHERE owner_user_id = ?", userID).Scan(&count)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"count": count})
+}
+
+func transferUserFiles(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	oldOwnerID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		NewOwnerID int `json:"new_owner_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.NewOwnerID == 0 {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	_, err = db.Exec("UPDATE files SET owner_user_id = ? WHERE owner_user_id = ?", req.NewOwnerID, oldOwnerID)
+	if err != nil {
+		http.Error(w, "Failed to transfer files", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Files transferred successfully"})
+}
+
+// Admin: Partially update the settings table with only Password Policy data
+func updatePasswordPolicy(w http.ResponseWriter, r *http.Request) {
+	var p struct {
+		MinLength      int  `json:"pwd_min_length"`
+		HistoryCount   int  `json:"pwd_history_count"`
+		ValidityDays   int  `json:"pwd_validity_days"`
+		RequireSpecial bool `json:"pwd_require_special"`
+		RequireUpper   bool `json:"pwd_require_upper"`
+		RequireLower   bool `json:"pwd_require_lower"`
+		RequireNumber  bool `json:"pwd_require_number"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if p.MinLength < 6 {
+		http.Error(w, "Minimum password length must be at least 6", http.StatusBadRequest)
+		return
+	}
+
+	_, err := db.Exec(`UPDATE settings SET 
+		pwd_min_length = ?, pwd_history_count = ?, pwd_validity_days = ?, 
+		pwd_require_special = ?, pwd_require_upper = ?, pwd_require_lower = ?, pwd_require_number = ? 
+		WHERE id = 1`,
+		p.MinLength, p.HistoryCount, p.ValidityDays,
+		p.RequireSpecial, p.RequireUpper, p.RequireLower, p.RequireNumber)
+
+	if err != nil {
+		http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "updated", "settings", "password policy", true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Password policy updated successfully"})
+}
+
+func updateCVWorkerURL(w http.ResponseWriter, r *http.Request) {
+	var p struct {
+		CVWorkerURL string `json:"cv_worker_url"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Clean up the URL to prevent trailing slash routing issues
+	cleanURL := strings.TrimSpace(p.CVWorkerURL)
+	cleanURL = strings.TrimRight(cleanURL, "/")
+
+	_, err := db.Exec("UPDATE settings SET cv_worker_url = ? WHERE id = 1", cleanURL)
+
+	if err != nil {
+		slog.Error("failed to update CV worker URL", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
+	logActivity(actorID, actorName, "updated", "settings", "CV worker URL", true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Microservice routing updated successfully"})
+}
+
+// updateOCRArchiveSettings persists the OCR archival destination + bucket. These
+// columns are written ONLY here — deliberately kept out of the mass updateSettings
+// UPDATE so a general Settings save can't blank them.
+func updateOCRArchiveSettings(w http.ResponseWriter, r *http.Request) {
+	var p struct {
+		OCRArchiveMode   string `json:"ocr_archive_mode"`
+		OCRArchiveBucket string `json:"ocr_archive_bucket"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	mode := strings.TrimSpace(p.OCRArchiveMode)
+	bucket := strings.TrimSpace(p.OCRArchiveBucket)
+
+	switch mode {
+	case "none", "gcp", "local", "both":
+	default:
+		http.Error(w, "Invalid archive mode (must be none, gcp, local, or both)", http.StatusBadRequest)
+		return
+	}
+
+	// Re-validate prerequisites server-side (the UI gates these too, but never trust
+	// the client).
+	if mode == "gcp" || mode == "both" {
+		if bucket == "" {
+			http.Error(w, "A GCS bucket name is required for the selected mode", http.StatusBadRequest)
+			return
+		}
+		var hasGCPKey bool
+		db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCPKey)
+		if !hasGCPKey {
+			http.Error(w, "GCS archival requires Google Cloud Vision credentials to be configured first", http.StatusBadRequest)
+			return
+		}
+	}
+	if mode == "local" || mode == "both" {
+		if os.Getenv("OCR_ARCHIVE_DIR") == "" {
+			http.Error(w, "Local archival requires OCR_ARCHIVE_DIR to be set in the server environment", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if _, err := db.Exec("UPDATE settings SET ocr_archive_mode = ?, ocr_archive_bucket = ? WHERE id = 1", mode, bucket); err != nil {
+		slog.Error("failed to update OCR archive settings", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	logActivity(actor.ID, actor.Username, "updated", "settings", "OCR archival", true, "mode: "+mode)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "OCR archival settings updated successfully"})
+}
+
+// Admin: Delete an external API credential
+func deleteExternalCredential(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	serviceName := vars["service"]
+
+	_, err := db.Exec("DELETE FROM credentials WHERE service_name = ?", serviceName)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
+	logActivity(actorID, actorName, "deleted", "credentials", serviceName, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Credential deleted successfully"})
+}
+
+// Admin: Update external credentials (Write-Only)
+func updateExternalCredentials(w http.ResponseWriter, r *http.Request) {
+	var req CredentialUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.ServiceName == "" || req.Secret == "" {
+		http.Error(w, "Service name and secret are required", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the encryption key from the environment
+	hexKey := os.Getenv("CREDENTIAL_ENCRYPTION_KEY")
+	if hexKey == "" {
+		http.Error(w, "Server encryption key is not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Convert string to byte slice so it can be zeroed out in the helper
+	plaintext := []byte(req.Secret)
+
+	// Encrypt the secret (the helper automatically zeroes 'plaintext' upon return)
+	ciphertext, nonce, err := Encrypt(plaintext, hexKey)
+	if err != nil {
+		slog.Error("Encryption failed", "service", req.ServiceName, "error", err)
+		http.Error(w, "Internal encryption error", http.StatusInternalServerError)
+		return
+	}
+
+	// Upsert the credential into the database
+	query := `
+		INSERT INTO credentials (service_name, encrypted_blob, nonce, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(service_name) DO UPDATE SET
+			encrypted_blob = excluded.encrypted_blob,
+			nonce = excluded.nonce,
+			updated_at = CURRENT_TIMESTAMP;
+	`
+
+	_, err = db.Exec(query, req.ServiceName, ciphertext, nonce)
+	if err != nil {
+		slog.Error("Database insertion failed for credential", "service", req.ServiceName, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
+	logActivity(actorID, actorName, "updated", "credentials", req.ServiceName, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Credential updated successfully"})
+}
+
+// --- ADVANCED SETTINGS: STORM SLOT TIMES ---
+
+// getAdvancedStormSlots returns all 3 storm slot time definitions.
+// Available to all authenticated users (schedule page needs it).
+func getAdvancedStormSlots(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query(`SELECT slot, label, time_st FROM storm_slot_times ORDER BY slot`)
+	if err != nil {
+		slog.Error("getAdvancedStormSlots query", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	slots := []StormSlotTime{}
+	for rows.Next() {
+		var s StormSlotTime
+		if err := rows.Scan(&s.Slot, &s.Label, &s.TimeST); err != nil {
+			slog.Error("getAdvancedStormSlots scan", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		slots = append(slots, s)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(slots)
+}
+
+// putAdvancedStormSlots updates all 3 storm slot time definitions. Admin only.
+func putAdvancedStormSlots(w http.ResponseWriter, r *http.Request) {
+	var slots []StormSlotTime
+	if err := json.NewDecoder(r.Body).Decode(&slots); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	for _, s := range slots {
+		if s.Slot < 1 || s.Slot > 3 {
+			http.Error(w, "slot must be 1, 2, or 3", http.StatusBadRequest)
+			return
+		}
+		if !reHHMM.MatchString(s.TimeST) {
+			http.Error(w, "time_st must be HH:MM", http.StatusBadRequest)
+			return
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("putAdvancedStormSlots begin tx", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	for _, s := range slots {
+		if _, err := tx.Exec(`UPDATE storm_slot_times SET label=?, time_st=? WHERE slot=?`,
+			s.Label, s.TimeST, s.Slot); err != nil {
+			slog.Error("putAdvancedStormSlots update", "error", err, "slot", s.Slot)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("putAdvancedStormSlots commit", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	actor := getAuthUser(r)
+	actorID, actorName := actor.ID, actor.Username
+	logActivity(actorID, actorName, "updated", "settings", "storm slot times", true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Storm slot times updated"})
+}
