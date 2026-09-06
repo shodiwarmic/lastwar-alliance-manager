@@ -6,7 +6,8 @@
 - **Migrations**: Goose (`-- +goose Up` / `-- +goose StatementBegin` headers required)
 - **Frontend**: Vanilla JS, no build step. CSS custom properties (`var(--name)`) throughout.
 - **Templates**: Go `html/template`, parsed as `layout.html` + page template pairs
-- **Layout**: one `package app` in `internal/app/` (every `.go` file lives there); the binary is
+- **Layout**: `package app` in `internal/app/` (every handler, model and job lives there) plus
+  `internal/lastrank`, the only package allowed to talk to `lastrank.fun`; the binary is
   `cmd/server`, a four-line `main()` calling `app.Main()`. `migrations/`, `templates/` and
   `static/` stay at the repository root and are resolved **relative to the working directory**,
   so run the app from the root (`go run ./cmd/server`). Tests are chdir'd there by `TestMain`
@@ -182,13 +183,25 @@ The server is authoritative on `week_date`. `mobileCommit` snaps every submitted
 ## LastRank integration (`/api/lastrank/*`)
 
 Enrichment from the unofficial `lastrank.fun` `/v1/` API. All upstream calls go
-through `lastrank_client.go`, which owns a single package-level
+through the **`internal/lastrank` package**, which owns a single package-level
 `rate.NewLimiter(1/sec)` (shared across all callers — the volunteer-run service
-must never see more than 1 req/sec) and a 10s-timeout client. Wire structs there
-use pointers for every nullable field and never leave the file; handlers in
-`handlers_lastrank.go` translate to the app-facing payloads in `models.go`.
-Never return a raw upstream error to the client — log with `slogLastRank` and
-return a generic message.
+must never see more than 1 req/sec) and a 10s-timeout client.
+
+**The base URL, both HTTP clients and the limiter are unexported**, and every
+exported fetch goes through the package's `do`. That is the point of it being a
+package rather than a file: in one `package main` the limiter was a var any of
+eighty files could sidestep. Nothing outside can now issue a request that skips
+the politeness budget, and there is no reason to add an escape hatch. CI's
+**"LastRank host isolation check"** greps for the host outside the package as a
+cheap early warning; the compiler-enforced boundary and the package tests
+(`client_test.go` — request counts per strategy, limiter pacing) are what actually
+carry the invariant.
+
+Wire structs use pointers for every nullable field and are the package's exported
+return types; `internal/app/lastrank_map.go` is the only place that turns one into
+an app-facing payload from `models.go`. The boundary is one-directional —
+`internal/lastrank` must never import the app. Never return a raw upstream error to
+the client: log with `slogLastRank` and return a generic message.
 
 Two phases, both manual-trigger only:
 - **Phase 1** (`/preview` → `/commit`): one `fetchLastRankAlliance` GET, matched
@@ -227,19 +240,34 @@ reasons that don't apply to any other flow:
 2. `background_job_items.label` persists one row per item, which would write every opponent player's
    name into the database — exactly the data the report exists to *not* store.
 
-It still reuses `job-progress.css`, and pacing is enforced server-side by `lastRankLimiter`, so the
+It still reuses `job-progress.css`, and pacing is enforced server-side by `internal/lastrank`'s shared limiter, so the
 client cannot outrun the politeness budget however fast it iterates. Don't "fix" it into a job.
 
-**Fetch strategy** (`lastrank_client.go`): `GET /v1/players/{id}` is the cheap
+**Fetch strategy** (`internal/lastrank/client.go`): `GET /v1/players/{id}` is the cheap
 cached read; `POST /v1/players/{id}/enrich` re-derives the player from LastRank's
 most recent scan — **it does not query the live game** — and is slow enough to need
 a separate 25s-timeout client. The freshness ceiling is therefore LastRank's scan
 cadence, not our polling rate: enriching more often than they scan returns the same
 reading, so tightening `lastRankEnrichMaxAge` buys nothing. The enrich response is
-also **not** a superset of the GET — it nulls `origin_server_id` and `power_detail`. Bulk paths use `lastRankPlayerBulk` (GET, upgrade
-to enrich only if `last_enriched_at` older than `lastRankEnrichMaxAge`=24h);
-single prospect lookups use `lastRankPlayerFresh` (always enrich + GET fallback).
-Never bulk-enrich the whole roster — it's slow and abusive to the volunteer service.
+also **not** a superset of the GET — it nulls `origin_server_id` and `power_detail`.
+
+Bulk paths use `lastrank.PlayerBulk(ctx, id, maxAge)` (GET, upgraded to enrich only
+if `last_enriched_at` is older than `maxAge`); the app wrapper `lastRankPlayerBulk`
+supplies `lastRankEnrichMaxAge()`. **The package clamps `maxAge` to at least
+`lastrank.MinEnrichAge` (1h)** — a caller passing zero cannot turn a roster sweep
+into an enrich per member, which is a constraint the package owns rather than one
+every call site must remember. `getPlayer` / `enrichPlayer` are unexported, so
+`PlayerBulk` and `PlayerFresh` are the only two strategies.
+
+Single prospect lookups use `lastrank.PlayerFresh` (always enrich + GET fallback) —
+that is its documented purpose, and it is why it must never be used over a roster.
+Never bulk-enrich the whole roster: it's slow and abusive to the volunteer service.
+
+`lastrank.EnrichTimeout` (25s) is exported so a handler wrapping a bulk fetch can
+assert at **compile time** that its own ceiling clears it —
+`handlers_alliance_report.go` does exactly that with a `const _ = uint(...)`, so
+lowering `allianceReportEnrichTimeout` below enrich + the limiter's one-second slack
+fails the build instead of silently cancelling the re-pull it asked for.
 
 **Adding a global alias** uses `addGlobalAliasOverwritingOCR` (member_aliases has
 no unique index): it deletes any same-named OCR/global alias first so global wins
@@ -265,7 +293,7 @@ that seems to want one.
 1. **The roster fetch is POST, not GET** — it writes (registry stats, a history datapoint, an
    activity row), and gorilla/csrf only covers POST/PUT/DELETE. The per-player step is a pure
    read and stays GET.
-2. **The extended pass uses `lastRankPlayerBulk`** — the shared bulk strategy: cheap cached
+2. **The extended pass uses `lastRankPlayerBulk`** (`lastrank.PlayerBulk`) — the shared bulk strategy: cheap cached
    GET, upgraded to a live enrich only when the record is older than `lastRankEnrichMaxAge`.
    Scouting on stale figures is worse than useless, because it invites planning against a
    version of the alliance that no longer exists.
@@ -275,7 +303,7 @@ that seems to want one.
    the 1/sec limiter). That is contained by the pass being opt-in, cancellable mid-run, and
    reporting `enrich_status` per row so a 20-second row reads as "refreshed live" rather than
    as a hang. The handler ceiling is `allianceReportEnrichTimeout` (30s) — it must stay above
-   `lastRankEnrichHTTP`'s 25s, or it would cancel the very re-pull it asked for.
+   `lastrank.EnrichTimeout`'s 25s, or it would cancel the very re-pull it asked for.
 
    This is the one bulk path over players we do **not** own, so it is also the one most
    exposed to the volunteer service. Don't widen it — no auto-run, no scheduled variant, and
@@ -300,7 +328,7 @@ changed** — a report on unchanged numbers is a pure read.
 >
 > The report column is therefore labelled **"Scanned"**, and there is deliberately **no
 > "last active" filter** — one would let an officer write off a live player as dormant on the
-> strength of scan scheduling. The `// game-side "last active"` comment in `lastrank_client.go`
+> strength of scan scheduling. The `// game-side "last active"` comment in the client
 > that seeded this misreading has been corrected; don't reintroduce that framing. If a genuine
 > activity signal ever appears upstream, that is what such a filter should key on.
 
@@ -753,7 +781,7 @@ INSERT INTO password_reset_tokens (..., expires_at) VALUES (..., datetime('now',
 ```
 
 When Go genuinely must supply the value, format with `sqliteTimeLayout`
-(`lastrank_client.go:405`) — never `time.RFC3339`.
+(`internal/app/timeparse.go`) — never `time.RFC3339`.
 
 **Reading — a column DECLARED `TIMESTAMP`/`DATETIME`/`DATE` does not come back as you
 wrote it.** The driver parses those declared types into a `time.Time`, and `database/sql`

@@ -1,8 +1,8 @@
-package app
+package lastrank
 
 import "testing"
 
-func TestParseLastRankAllianceStrict(t *testing.T) {
+func TestParseAllianceIDStrict(t *testing.T) {
 	const hex = "7dd57e38b63d4a3989a0f603156398b3"
 	cases := []struct {
 		in     string
@@ -21,9 +21,9 @@ func TestParseLastRankAllianceStrict(t *testing.T) {
 		{"", "", false},
 	}
 	for _, c := range cases {
-		id, ok := parseLastRankAllianceStrict(c.in)
+		id, ok := ParseAllianceIDStrict(c.in)
 		if ok != c.wantOK || id != c.wantID {
-			t.Errorf("parseLastRankAllianceStrict(%q) = (%q,%v), want (%q,%v)", c.in, id, ok, c.wantID, c.wantOK)
+			t.Errorf("ParseAllianceIDStrict(%q) = (%q,%v), want (%q,%v)", c.in, id, ok, c.wantID, c.wantOK)
 		}
 	}
 }

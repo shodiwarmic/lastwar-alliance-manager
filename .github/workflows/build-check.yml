@@ -276,6 +276,59 @@ jobs:
           print('Translation-safety check passed.')
           EOF
 
+      # The lastrank.fun host, its HTTP clients and the shared 1 req/sec limiter live
+      # in internal/lastrank and are unexported, so no other package can reach the
+      # volunteer-run upstream outside the politeness budget. This is a LEXICAL
+      # guardrail on top of that compiler-enforced boundary -- it catches a
+      # hard-coded host, not one built by concatenation -- so the package tests
+      # (request counts, limiter pacing) are what actually carry the invariant.
+      # Runs as a step of this job rather than its own job: the required status
+      # checks in branch protection are pinned to job names, and a new job would
+      # silently not gate until those are updated.
+      - name: LastRank host isolation check
+        run: |
+          python3 - <<'EOF'
+          import pathlib, re, sys
+
+          PKG = pathlib.Path('internal/lastrank')
+          # A URL to the host, or the bare host as an exact string literal. User-facing
+          # prose such as "paste a lastrank.fun/a/<id> link" matches neither form and
+          # stays legal.
+          PATTERNS = [
+              re.compile(r'https?://(?:www\.)?lastrank\.fun'),
+              re.compile(r'"(?:www\.)?lastrank\.fun"'),
+          ]
+
+          fails = []
+          defined_in_pkg = 0
+          for path in sorted(pathlib.Path('.').rglob('*.go')):
+              in_pkg = PKG in path.parents
+              for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                  for p in PATTERNS:
+                      if p.search(line):
+                          if in_pkg:
+                              defined_in_pkg += 1
+                          else:
+                              fails.append(f'{path}:{n}: lastrank.fun host outside internal/lastrank')
+
+          # Self-check: if the package ever moves or is renamed, this check must fail
+          # loudly rather than quietly scan nothing (same idea as the asset check
+          # verifying the files it names exist).
+          if defined_in_pkg == 0:
+              print('LastRank host isolation check failed:\n')
+              print(f'  no lastrank.fun host found in {PKG} -- did the package move?')
+              sys.exit(1)
+
+          if fails:
+              print('LastRank host isolation check failed:\n')
+              for f in fails:
+                  print('  ' + f)
+              print('\nAll upstream calls must go through internal/lastrank, which owns the')
+              print('shared 1 req/sec limiter. See CLAUDE.md -> "LastRank integration".')
+              sys.exit(1)
+          print(f'LastRank host isolation check passed ({defined_in_pkg} reference(s), all inside {PKG}).')
+          EOF
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:

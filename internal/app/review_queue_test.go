@@ -61,7 +61,7 @@ func seedQueueMember(t *testing.T, name, rank string) int {
 	return int(id)
 }
 
-// The collision the subject_key exists to prevent. lastrankAllianceMember.PublicID
+// The collision the subject_key exists to prevent. lastrank.AllianceMember.PublicID
 // is a non-pointer int, so a missing upstream public_id decodes to 0 — a naive
 // (kind, member_id, public_id) key would put both of these on ('unmatched', 0, 0)
 // and the second would clobber the first.

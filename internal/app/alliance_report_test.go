@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 func setupReportTestDB(t *testing.T) {
@@ -23,8 +25,8 @@ func setupReportTestDB(t *testing.T) {
 	})
 }
 
-func reportResp(lastrankID, tag string) *lastrankAllianceResp {
-	return &lastrankAllianceResp{
+func reportResp(lastrankID, tag string) *lastrank.Alliance {
+	return &lastrank.Alliance{
 		AllianceID: lastrankID,
 		Abbr:       tag,
 		Name:       "Test Alliance",
@@ -238,10 +240,10 @@ func TestSearchHitMappingDropsNonAlliancesAndIdlessRows(t *testing.T) {
 	str := func(s string) *string { return &s }
 	num := func(n int) *int { return &n }
 
-	hits := []lastrankSearchHit{
+	hits := []lastrank.SearchHit{
 		{Kind: "alliance", ID: "aaaa", Abbr: str("cROw"), Name: str("Black Crow Legion"), ServerID: num(1713)},
-		{Kind: "player", ID: "9999", Name: str("SomePlayer")},         // wrong kind
-		{Kind: "alliance", ID: "   ", Abbr: str("BAD")},               // no usable id
+		{Kind: "player", ID: "9999", Name: str("SomePlayer")}, // wrong kind
+		{Kind: "alliance", ID: "   ", Abbr: str("BAD")},       // no usable id
 		{Kind: "alliance", ID: "bbbb", Abbr: str("CROW"), ServerID: num(915)},
 	}
 
@@ -265,9 +267,9 @@ func TestSearchHitMappingDropsNonAlliancesAndIdlessRows(t *testing.T) {
 }
 
 func TestSearchHitMappingRespectsLimit(t *testing.T) {
-	hits := make([]lastrankSearchHit, 30)
+	hits := make([]lastrank.SearchHit, 30)
 	for i := range hits {
-		hits[i] = lastrankSearchHit{Kind: "alliance", ID: string(rune('a' + i%26))}
+		hits[i] = lastrank.SearchHit{Kind: "alliance", ID: string(rune('a' + i%26))}
 	}
 	if got := mapLastRankSearchHits(hits, 5); len(got) != 5 {
 		t.Errorf("limit ignored: got %d, want 5", len(got))
