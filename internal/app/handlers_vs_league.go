@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 // handlers_vs_league.go — VS Duel League tracker.
@@ -1306,7 +1308,7 @@ func vsLeagueOpponentLookup(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	snap, err := fetchLastRankOpponentSnapshot(ctx, body.URL)
 	if err != nil {
-		if errors.Is(err, errLastRankBadInput) {
+		if errors.Is(err, lastrank.ErrBadInput) {
 			badRequest(w, "That doesn't look like a lastrank.fun alliance link or id")
 			return
 		}
@@ -1335,7 +1337,7 @@ func vsLeagueOpponentRoster(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	roster, err := fetchLastRankOpponentRoster(ctx, idOrURL)
 	if err != nil {
-		if errors.Is(err, errLastRankBadInput) {
+		if errors.Is(err, lastrank.ErrBadInput) {
 			badRequest(w, "That doesn't look like a lastrank.fun alliance id")
 			return
 		}
@@ -1729,7 +1731,7 @@ func refreshExternalAlliance(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, context.DeadlineExceeded):
 			slogLastRank("refreshExternalAlliance failed", err)
 			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
-		case errors.Is(err, errLastRankUpstream):
+		case errors.Is(err, lastrank.ErrUpstream):
 			slogLastRank("refreshExternalAlliance failed", err)
 			http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
 		default:
@@ -1791,7 +1793,7 @@ func lookupExternalAlliance(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	snap, err := fetchLastRankOpponentSnapshot(ctx, body.URL)
 	if err != nil {
-		if errors.Is(err, errLastRankBadInput) {
+		if errors.Is(err, lastrank.ErrBadInput) {
 			badRequest(w, "That doesn't look like a lastrank.fun alliance link or id")
 			return
 		}
@@ -1841,9 +1843,9 @@ func searchExternalAlliancesLastRank(w http.ResponseWriter, r *http.Request) {
 	var results []VSLeagueAllianceSearchResult
 	var err error
 	if strings.TrimSpace(r.URL.Query().Get("scope")) == "any" {
-		results, err = searchLastRankAllianceHits(ctx, q, 20)
+		results, err = lastRankSearchAllianceHits(ctx, q, 20)
 	} else {
-		results, err = searchLastRankAlliances(ctx, q, server, 20)
+		results, err = lastRankSearchAlliances(ctx, q, server, 20)
 	}
 	if err != nil {
 		slogLastRank("searchExternalAlliancesLastRank failed", err)
@@ -1873,7 +1875,7 @@ func sanitizeLastRankIDPtr(s *string) (*string, bool) {
 	if s == nil || strings.TrimSpace(*s) == "" {
 		return nil, true
 	}
-	if id, ok := parseLastRankAllianceStrict(*s); ok {
+	if id, ok := lastrank.ParseAllianceIDStrict(*s); ok {
 		return &id, true
 	}
 	return nil, false

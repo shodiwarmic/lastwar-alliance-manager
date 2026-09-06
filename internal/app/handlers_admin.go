@@ -15,6 +15,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 // --- PERMISSIONS MANAGEMENT ---
@@ -792,7 +794,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 
 	// Accept either a bare 32-hex id or a pasted /a/<id> URL for the LastRank id.
 	allianceID := strings.TrimSpace(settings.LastRankAllianceID)
-	if parsed, ok := parseLastRankAllianceID(allianceID); ok {
+	if parsed, ok := lastrank.ParseAllianceID(allianceID); ok {
 		allianceID = parsed
 	}
 

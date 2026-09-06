@@ -17,7 +17,7 @@ package app
 // That asymmetry is also why the extended pass is a browser-driven loop rather than a
 // background job: jobKind.New takes no per-run target (jobs.go), and background_job_items
 // would persist one opponent player's name per row — exactly the data that must not land
-// in the database. Pacing is still enforced server-side by the shared lastRankLimiter, so
+// in the database. Pacing is still enforced server-side by internal/lastrank's shared limiter, so
 // the loop cannot outrun the 1 req/sec politeness budget no matter what the client does.
 
 import (
@@ -30,17 +30,24 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 // allianceReportTimeout bounds each upstream call. Matches refreshOneExternalAlliance:
-// lastRankHTTP already caps at 10s and the shared limiter can add up to a second on top,
-// so 15s is the envelope rather than a second, independent deadline.
+// the package's plain client already caps at 10s and the shared limiter can add up to a
+// second on top, so 15s is the envelope rather than a second, independent deadline.
 const allianceReportTimeout = 15 * time.Second
 
 // allianceReportEnrichTimeout bounds a per-member fetch, which may upgrade to a live enrich.
-// lastRankEnrichHTTP caps that at 25s and the shared limiter can add a second, so the handler
-// ceiling has to sit above both or it would cancel the very re-pull it asked for.
+// lastrank.EnrichTimeout caps that at 25s and the shared limiter can add a second, so the
+// handler ceiling has to sit above both or it would cancel the very re-pull it asked for.
 const allianceReportEnrichTimeout = 30 * time.Second
+
+// Enforce that at COMPILE TIME rather than in a comment nobody re-reads: a negative
+// constant cannot convert to uint, so lowering allianceReportEnrichTimeout below the
+// enrich ceiling plus the limiter's one-second slack fails the build.
+const _ = uint(allianceReportEnrichTimeout - lastrank.EnrichTimeout - time.Second)
 
 // allianceReport is the basic report: ONE GET /v1/alliances/{id}, which already carries
 // every member's name, power, hero power, alliance rank and HQ level.
@@ -63,7 +70,7 @@ func allianceReport(w http.ResponseWriter, r *http.Request) {
 	// The strict parser, not the lax parseLastRankAllianceID: this value comes straight
 	// from an officer pasting something, and a URL from an unrelated site that merely
 	// contains /a/<hex> should not be followed.
-	id, ok := parseLastRankAllianceStrict(body.LastRankID)
+	id, ok := lastrank.ParseAllianceIDStrict(body.LastRankID)
 	if !ok {
 		badRequest(w, "That doesn't look like a lastrank.fun alliance link or id")
 		return
@@ -72,7 +79,7 @@ func allianceReport(w http.ResponseWriter, r *http.Request) {
 	// Single DB connection: the ENTIRE upstream call completes before any query runs.
 	ctx, cancel := context.WithTimeout(r.Context(), allianceReportTimeout)
 	defer cancel()
-	a, err := fetchLastRankAlliance(ctx, id)
+	a, err := lastrank.FetchAlliance(ctx, id)
 	if err != nil {
 		slogLastRank("alliance scout report fetch failed", err)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -114,7 +121,7 @@ func allianceReport(w http.ResponseWriter, r *http.Request) {
 
 // allianceReportPlayer is the extended report's per-member step: one member, nothing written.
 //
-// Uses lastRankPlayerBulk — the shared bulk strategy — so a record LastRank hasn't refreshed
+// Uses lastRankPlayerBulk (lastrank.PlayerBulk) — the shared bulk strategy — so a record LastRank hasn't refreshed
 // within lastRankEnrichMaxAge is re-derived from their latest scan rather than handing back
 // numbers that may be weeks old. Scouting an opponent on stale figures is worse than useless:
 // it invites planning against a version of the alliance that no longer exists. Note the ceiling
@@ -193,7 +200,7 @@ func nullableStr(s string) *string {
 //
 // Best-effort throughout — a report is a read operation from the officer's point of view,
 // so a failed bookkeeping write must never fail the report itself.
-func saveReportAllianceStats(user *AuthUser, a *lastrankAllianceResp) AllianceReportRegistry {
+func saveReportAllianceStats(user *AuthUser, a *lastrank.Alliance) AllianceReportRegistry {
 	out := AllianceReportRegistry{}
 
 	d := napDetailSnapshot{

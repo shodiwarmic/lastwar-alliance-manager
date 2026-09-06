@@ -41,7 +41,7 @@ type lastRankScheduleConfig struct {
 	ProspectEnabled   bool
 }
 
-// Cached because lastRankNeedsEnrich consults the max age once per member: a
+// Cached because the bulk fetch consults the max age once per member: a
 // 100-member sweep would otherwise issue 100 settings reads on the single
 // connection. Short TTL so a settings change takes effect without a restart, plus
 // an explicit invalidation on save.
@@ -105,6 +105,11 @@ func loadLastRankScheduleConfig() lastRankScheduleConfig {
 
 // lastRankEnrichMaxAge is the operator-set freshness window for upgrading a cached
 // GET to a live enrich.
+// lastRankDefaultEnrichMaxAge is the fallback when settings are unreadable. The live
+// value comes from settings.lastrank_enrich_max_age_hours; the legal band depends on the
+// tick interval — see enrichMaxAgeBand.
+const lastRankDefaultEnrichMaxAge = 21 * time.Hour
+
 func lastRankEnrichMaxAge() time.Duration {
 	h := loadLastRankScheduleConfig().EnrichMaxAgeHours
 	if h <= 0 {

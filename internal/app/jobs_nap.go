@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 func init() {
@@ -106,7 +108,7 @@ func (j *napMembersJob) Step(ctx context.Context, it jobItem) (jobStep, error) {
 	// Bounded per item so one unresponsive alliance cannot stall the whole sweep.
 	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	a, err := fetchLastRankAlliance(fetchCtx, target.LastRankID)
+	a, err := lastrank.FetchAlliance(fetchCtx, target.LastRankID)
 	if err != nil {
 		return jobStep{}, err
 	}

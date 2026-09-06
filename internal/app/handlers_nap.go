@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 // unrankedSentinel stands in for a NULL power_rank so the value can live in a plain int through
@@ -331,7 +333,7 @@ func refreshNAP(w http.ResponseWriter, r *http.Request) {
 	// upstream request would stall every other user.
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	rowsIn, err := searchLastRankAlliances(ctx, "", &cfg.server, cfg.importLimit)
+	rowsIn, err := lastRankSearchAlliances(ctx, "", &cfg.server, cfg.importLimit)
 	if err != nil {
 		slogLastRank("refreshNAP failed", err)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -444,7 +446,7 @@ func napMemberCount(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	a, err := fetchLastRankAlliance(ctx, req.LastRankID)
+	a, err := lastrank.FetchAlliance(ctx, req.LastRankID)
 	if err != nil {
 		slogLastRank("napMemberCount: lookup failed", err)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

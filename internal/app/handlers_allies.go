@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 // parseServerNumber extracts a server number from officer-entered free text:
@@ -54,7 +56,7 @@ func ourAllianceIdentity() (lastrankID, tag string) {
 	var rawID, rawTag string
 	db.QueryRow(`SELECT COALESCE(lastrank_alliance_id, ''), COALESCE(alliance_tag, '') FROM settings WHERE id = 1`).
 		Scan(&rawID, &rawTag)
-	if parsed, ok := parseLastRankAllianceID(strings.TrimSpace(rawID)); ok {
+	if parsed, ok := lastrank.ParseAllianceID(strings.TrimSpace(rawID)); ok {
 		lastrankID = parsed
 	}
 	return lastrankID, strings.TrimSpace(rawTag)

@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 // rowQuerier is satisfied by both *sql.DB and *sql.Tx.
@@ -166,7 +168,7 @@ func lastRankPlayerSearch(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	results, err := searchLastRankPlayers(ctx, q, server, 20)
+	results, err := lastRankSearchPlayers(ctx, q, server, 20)
 	if err != nil {
 		slogLastRank("lastRankPlayerSearch failed", err)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -192,7 +194,7 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch BEFORE opening the transaction — holding a database handle across the
 	// wire deadlocks the single connection (see jobs.go).
-	alliance, err := fetchLastRankAlliance(r.Context(), allianceID)
+	alliance, err := lastrank.FetchAlliance(r.Context(), allianceID)
 	if err != nil {
 		slogLastRank("lastrank alliance fetch failed", err)
 		http.Error(w, "Couldn't reach LastRank. Try again later.", http.StatusBadGateway)
@@ -236,7 +238,7 @@ func lastRankPreview(w http.ResponseWriter, r *http.Request) {
 // path is the one nobody watches.
 //
 // Pure read: it writes nothing. The caller decides what to do with the result.
-func lastRankBuildPreview(tx *sql.Tx, alliance *lastrankAllianceResp, userID int) LastRankSyncPreviewResponse {
+func lastRankBuildPreview(tx *sql.Tx, alliance *lastrank.Alliance, userID int) LastRankSyncPreviewResponse {
 	resp := LastRankSyncPreviewResponse{
 		Alliance: LastRankAllianceMeta{
 			AllianceID: alliance.AllianceID,
@@ -602,7 +604,7 @@ func lastRankSyncPlayer(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Member not found", http.StatusNotFound)
 			return
 		}
-		if errors.Is(err, errLastRankUpstream) {
+		if errors.Is(err, lastrank.ErrUpstream) {
 			slogLastRank("lastrank player fetch failed", err)
 			http.Error(w, "Couldn't reach LastRank for this player.", http.StatusBadGateway)
 			return
@@ -736,12 +738,12 @@ func syncOneMember(ctx context.Context, memberID int) (LastRankPlayerSyncRespons
 func refreshOneProspect(ctx context.Context, prospectID, pubID int, bulk bool) (LastRankProspectLookupResponse, error) {
 	out := LastRankProspectLookupResponse{ProspectID: prospectID, LastRankPublicID: pubID}
 
-	var player *lastrankPlayerResp
+	var player *lastrank.Player
 	var err error
 	if bulk {
 		player, err = lastRankPlayerBulk(ctx, pubID)
 	} else {
-		player, err = lastRankPlayerFresh(ctx, pubID)
+		player, err = lastrank.PlayerFresh(ctx, pubID)
 	}
 	if err != nil {
 		return out, err
@@ -855,7 +857,7 @@ func lastRankProspectLookup(w http.ResponseWriter, r *http.Request) {
 	// Resolve the public_id: from a freshly-pasted URL/id, else the stored one.
 	var pubID int
 	if strings.TrimSpace(req.LastRankInput) != "" {
-		id, ok := parseLastRankPlayerID(req.LastRankInput)
+		id, ok := lastrank.ParsePlayerID(req.LastRankInput)
 		if !ok {
 			http.Error(w, "Couldn't read a LastRank player ID or URL.", http.StatusBadRequest)
 			return

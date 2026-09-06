@@ -15,6 +15,8 @@ package app
 import (
 	"context"
 	"strconv"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 func init() {
@@ -50,7 +52,7 @@ func (j *lastRankAllianceJob) Step(ctx context.Context, it jobItem) (jobStep, er
 	}
 
 	// Fetch with no database handle held — the transaction opens after.
-	alliance, err := fetchLastRankAlliance(ctx, allianceID)
+	alliance, err := lastrank.FetchAlliance(ctx, allianceID)
 	if err != nil {
 		return jobStep{}, err
 	}

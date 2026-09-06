@@ -756,11 +756,11 @@ type AllianceReportPlayer struct {
 // and the UI can offer to add it. IsOwn means the caller reported on our own alliance,
 // which by Rule 2 has no registry row at all — its stats land in the is_own history series.
 type AllianceReportRegistry struct {
-	InRegistry         bool  `json:"in_registry"`
-	IsOwn              bool  `json:"is_own"`
-	ExternalAllianceID *int  `json:"external_alliance_id"`
-	StatsApplied       bool  `json:"stats_applied"`
-	HistoryAdded       bool  `json:"history_added"`
+	InRegistry         bool `json:"in_registry"`
+	IsOwn              bool `json:"is_own"`
+	ExternalAllianceID *int `json:"external_alliance_id"`
+	StatsApplied       bool `json:"stats_applied"`
+	HistoryAdded       bool `json:"history_added"`
 }
 
 // AllianceReport is the basic-report response: one upstream request's worth of data.
@@ -1517,7 +1517,8 @@ type Ally struct {
 // --- LastRank Payloads ---
 //
 // These are the app-facing shapes exchanged with the frontend. The raw
-// lastrank.fun wire structs live in lastrank_client.go and never leave it.
+// lastrank.fun wire structs live in internal/lastrank; the app-facing shapes below are
+// built from them by internal/app/lastrank_map.go.
 
 // LastRankAllianceMeta is the alliance-level summary shown above the Phase-1 review.
 type LastRankAllianceMeta struct {
