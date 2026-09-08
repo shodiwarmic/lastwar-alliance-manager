@@ -1282,23 +1282,6 @@ No string-formatted SQL for user input. All DB writes should use `?` placeholder
 ### Wrap deletes in a transaction
 Even when cascades handle children, wrap category/parent deletes in a transaction — consistent with existing handlers.
 
-### Never use browser `alert()` or `confirm()`
-`alert()` and `confirm()` block the main thread, look out of place, and vary wildly across browsers/OS. Do not add new calls to either.
-
-**For success/error feedback** — show an inline status message near the triggering action (e.g. a `<p class="status-msg">` that you set `textContent` on and clear after a few seconds), or a non-blocking toast element.
-
-**For destructive confirmations** — use `await showConfirm(...)` from `static/global.js`. See
-"UI feedback — never use browser dialogs" below for the full helper set.
-
-```javascript
-if (!await showConfirm('Delete this entry?', 'Delete')) return;
-```
-
-> The older inline button-swap pattern — hide the Delete button, append a `"Sure?" [Yes] [No]`
-> span in its place, restore it on No — is **retired**. It was temperamental and inconsistent.
-> No page uses it any more and neither `alert()` nor `confirm()` appears anywhere in `static/`;
-> don't reintroduce either.
-
 ### Validate required CSV columns before the row loop — never silently skip
 After building a `colMap` from CSV headers, check that all required columns are present **before** entering the row loop. A missing column causes every row to hit a `continue`, returning an empty result with no error — a silent failure that's very hard to debug.
 
@@ -1451,7 +1434,7 @@ function el(tag, props, ...children) {
 
 ## UI feedback — never use browser dialogs
 
-All user-facing feedback must go through the helpers in `static/global.js`. Browser-native `alert()`, `confirm()`, and `prompt()` are banned — they block the thread, ignore theming, and break automated tests.
+All user-facing feedback must go through the helpers in `static/global.js`. Browser-native `alert()`, `confirm()`, and `prompt()` are banned — they block the main thread, ignore theming, look out of place, vary wildly across browsers and operating systems, and break automated tests.
 
 | Need | Use |
 |------|-----|
@@ -1473,6 +1456,14 @@ setFieldError(document.getElementById('name-input'), 'Name is required.');
 ```
 
 `showConfirm` supports a `title` parameter (third arg) for cases where the heading should differ from the body, e.g. displaying newly-created credentials.
+
+For feedback tied to one control rather than to the page, an inline `<p class="status-msg">` beside
+the triggering action is also fine — set its `textContent` and clear it after a few seconds.
+
+> The older inline button-swap pattern — hide the Delete button, append a `"Sure?" [Yes] [No]`
+> span in its place, restore it on No — is **retired**. It was temperamental and inconsistent.
+> No page uses it any more and neither `alert()` nor `confirm()` appears anywhere in `static/`;
+> don't reintroduce either.
 
 ## CSS variables — always use tokens, never hardcode colors
 
