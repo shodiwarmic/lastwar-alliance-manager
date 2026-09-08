@@ -54,55 +54,68 @@ func validateSystemEventRules(q rowQuerier, short, date, tm string, excludeID in
 			return "MG must start by 21:59 ST", nil
 		}
 	case "ZS":
-		nextEligible, err := validateZSCooldown(q, excludeID, date, tm)
-		if err != nil {
-			return "", err
-		}
-		if !nextEligible.IsZero() {
-			return "ZS cooldown not elapsed — next eligible: " + nextEligible.Format("2006-01-02 15:04") + " ST", nil
-		}
+		return validateZSGap(q, excludeID, date)
 	}
 	return "", nil
 }
 
-// validateZSCooldown checks whether placing a ZS event at newDate/newTime violates the
-// 71.5-hour cooldown from the most recent existing ZS event (excluding excludeID).
-// Returns the next eligible game-time datetime if cooldown not met, or zero time if OK.
-func validateZSCooldown(q rowQuerier, excludeID int, newDate, newTime string) (time.Time, error) {
-	var lastDate, lastTime string
-	err := q.QueryRow(`
-		SELECT se.event_date, se.event_time
+// zsGapDays is the ZS cadence: a siege may not fall within two clear game days
+// of another siege, in either direction — the next one unlocks at the 00:00
+// reset on D+3.
+//
+// This is a rule on DATES. The start time plays no part in it. The 71.5-hour
+// figure it replaces was a single observation from a 00:30 start, generalised
+// into an interval, and it was wrong in both directions: it let a 23:00 Monday
+// siege be followed by one at 23:00 on the Thursday *and* on the Wednesday two
+// days later if the times drifted far enough apart. An all-day ZS stores
+// event_time '00:00' and needs no special case here — the date is the date.
+const zsGapDays = 3
+
+// validateZSGap rejects a ZS on date when another siege falls within
+// zsGapDays-1 clear days of it, in EITHER direction: under a date rule a siege
+// placed one day before an existing one is exactly as illegal as one placed the
+// day after, and the old backwards-only check silently allowed the former. The
+// window includes the date itself: two sieges on one day is the same rule
+// broken harder, not a special case.
+//
+// The message names the rule and the date it compared against, so an officer who
+// believes the game disagrees can see precisely what the app decided and report
+// it. That is the alternative adopted instead of making the gap configurable —
+// a wrong setting is worse than a wrong constant, because nobody can tell
+// whether the app or the game is wrong.
+func validateZSGap(q rowQuerier, excludeID int, date string) (string, error) {
+	d, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return "", err
+	}
+	// AddDate is calendar arithmetic on y/m/d, and time.Parse of a bare date
+	// yields UTC, so no timezone or DST transition can shift these bounds.
+	lo := d.AddDate(0, 0, -(zsGapDays - 1)).Format("2006-01-02")
+	hi := d.AddDate(0, 0, zsGapDays-1).Format("2006-01-02")
+
+	var conflict string
+	err = q.QueryRow(`
+		SELECT se.event_date
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
 		WHERE t.short_name = 'ZS' AND se.id != ?
-		  AND (se.event_date < ? OR (se.event_date = ? AND se.event_time < ?))
-		ORDER BY se.event_date DESC, se.event_time DESC
-		LIMIT 1`, excludeID, newDate, newDate, newTime).Scan(&lastDate, &lastTime)
+		  AND se.event_date >= ? AND se.event_date <= ?
+		ORDER BY abs(julianday(se.event_date) - julianday(?)) ASC
+		LIMIT 1`, excludeID, lo, hi, date).Scan(&conflict)
 	if err == sql.ErrNoRows {
-		return time.Time{}, nil
+		return "", nil
 	}
 	if err != nil {
-		return time.Time{}, err
+		return "", err
 	}
 
-	lastTime = strings.TrimSpace(lastTime)
-	if !reHHMM.MatchString(lastTime) {
-		lastTime = "00:00"
-	}
-	lastDT, err := time.Parse("2006-01-02 15:04", lastDate+" "+lastTime)
+	c, err := time.Parse("2006-01-02", conflict)
 	if err != nil {
-		return time.Time{}, err
+		return "", err
 	}
-	newDT, err := time.Parse("2006-01-02 15:04", newDate+" "+newTime)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	const cooldown = 71*time.Hour + 30*time.Minute
-	if newDT.Sub(lastDT) < cooldown {
-		return lastDT.Add(cooldown), nil
-	}
-	return time.Time{}, nil
+	next := c.AddDate(0, 0, zsGapDays).Format("2006-01-02")
+	return fmt.Sprintf("ZS needs two clear days between sieges — conflicts with the ZS on %s (next eligible date %s)",
+		conflict, next), nil
 }
 
 // getSystemBaseline returns the baseline level for MG or ZS from the settings singleton.
@@ -702,11 +715,13 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var s Settings
+	// zs_anchor_time is deliberately not read: under a date rule the ASAP chain is
+	// pure date arithmetic and every insert uses zs_default_time anyway.
 	err := db.QueryRow(`SELECT mg_baseline, zs_baseline, mg_default_time, zs_default_time,
 		COALESCE(mg_anchor_date,''), zs_schedule_mode, zs_weekdays,
-		COALESCE(zs_anchor_date,''), zs_anchor_time FROM settings WHERE id=1`).
+		COALESCE(zs_anchor_date,'') FROM settings WHERE id=1`).
 		Scan(&s.MGBaseline, &s.ZSBaseline, &s.MGDefaultTime, &s.ZSDefaultTime,
-			&s.MGAnchorDate, &s.ZSScheduleMode, &s.ZSWeekdays, &s.ZSAnchorDate, &s.ZSAnchorTime)
+			&s.MGAnchorDate, &s.ZSScheduleMode, &s.ZSWeekdays, &s.ZSAnchorDate)
 	if err != nil {
 		slog.Error("generateScheduleEvents settings", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -814,27 +829,23 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 
 		case "asap":
 			if s.ZSAnchorDate != "" {
-				const zsCooldown = 71*time.Hour + 30*time.Minute
-				anchorDT, err := time.Parse("2006-01-02 15:04", s.ZSAnchorDate+" "+s.ZSAnchorTime)
+				anchorT, err := time.Parse("2006-01-02", s.ZSAnchorDate)
 				if err == nil {
-					// Advance to first occurrence on or after fromT
-					cur := anchorDT
-					if fromT.After(anchorDT) {
-						steps := int64(fromT.Sub(anchorDT) / zsCooldown)
-						cur = anchorDT.Add(time.Duration(steps) * zsCooldown)
-						if cur.Before(fromT) {
-							cur = cur.Add(zsCooldown)
+					// Pure date stepping. The old chain advanced by 71.5 hours and
+					// so drifted through the day, eventually proposing links two
+					// days apart while every row was written at zs_default_time
+					// regardless. Stepping whole days cannot drift, and a chain
+					// spaced zsGapDays apart can never violate its own rule.
+					cur := anchorT
+					if fromT.After(anchorT) {
+						steps := int(fromT.Sub(anchorT).Hours()/24) / zsGapDays
+						cur = anchorT.AddDate(0, 0, steps*zsGapDays)
+						for cur.Before(fromT) {
+							cur = cur.AddDate(0, 0, zsGapDays)
 						}
 					}
-					for ; ; cur = cur.Add(zsCooldown) {
-						dateStr := cur.Format("2006-01-02")
-						if dateStr > req.To {
-							break
-						}
-						if dateStr < req.From {
-							continue
-						}
-						if tryCreate(zsTypeID, "ZS", dateStr, s.ZSDefaultTime, s.ZSBaseline) {
+					for ; !cur.After(toT); cur = cur.AddDate(0, 0, zsGapDays) {
+						if tryCreate(zsTypeID, "ZS", cur.Format("2006-01-02"), s.ZSDefaultTime, s.ZSBaseline) {
 							zsCreated++
 						}
 					}
