@@ -94,7 +94,9 @@ func (j *prospectRefreshJob) Step(ctx context.Context, it jobItem) (jobStep, err
 		return jobStep{State: "skip", Detail: "no LastRank id"}, nil
 	}
 	// bulk=true: the cheap GET, upgraded to an enrich only when the record is
-	// stale. A sweep must not force a live game pull per prospect.
+	// stale. An enrich re-derives the prospect from LastRank's most recent scan
+	// rather than querying the game, so forcing one per prospect spends ~25s each
+	// against a volunteer-run service to be told what the GET already said.
 	out, err := refreshOneProspect(ctx, it.RefID, pubID, true)
 	if err != nil {
 		return jobStep{}, err
