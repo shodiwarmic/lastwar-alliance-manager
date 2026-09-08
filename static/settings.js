@@ -31,6 +31,8 @@ async function loadSettings() {
         document.getElementById('nap-import-limit').value = settings.nap_import_limit ?? 15;
         syncNapImportMin();
         document.getElementById('max-hq-level').value = settings.max_hq_level || 35;
+        document.getElementById('max-mg-level').value = settings.max_mg_level || 1;
+        document.getElementById('max-zs-level').value = settings.max_zs_level || 1;
         document.getElementById('settings-login-message').value = settings.login_message || '';
         document.getElementById('train-free-limit').value = settings.train_free_daily_limit ?? 1;
         document.getElementById('train-purchased-limit').value = settings.train_purchased_daily_limit ?? 2;
@@ -278,6 +280,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 nap_import_limit: parseInt(document.getElementById('nap-import-limit').value, 10) || 15,
                 login_message: document.getElementById('settings-login-message').value,
                 max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
+                max_mg_level: parseInt(document.getElementById('max-mg-level').value, 10) || 1,
+                max_zs_level: parseInt(document.getElementById('max-zs-level').value, 10) || 1,
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
                 squad_tracking_enabled: document.getElementById('squad-tracking-enabled').checked,
                 storm_timezones: selectedZones,
