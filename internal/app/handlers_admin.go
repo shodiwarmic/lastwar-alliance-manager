@@ -612,6 +612,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(vs_flag_days_threshold, 2),
         COALESCE(strike_needs_improvement_threshold, 1), COALESCE(strike_at_risk_threshold, 3),
         COALESCE(mg_baseline, 1), COALESCE(zs_baseline, 1),
+        COALESCE(max_mg_level, 1), COALESCE(max_zs_level, 1),
         COALESCE(mg_default_time, '00:30'), COALESCE(zs_default_time, '23:00'),
         COALESCE(mg_anchor_date, ''), COALESCE(zs_schedule_mode, 'weekdays'),
         COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00'),
@@ -638,6 +639,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.VsFlagDaysThreshold,
 		&s.StrikeNeedsImprovementThreshold, &s.StrikeAtRiskThreshold,
 		&s.MGBaseline, &s.ZSBaseline,
+		&s.MaxMGLevel, &s.MaxZSLevel,
 		&s.MGDefaultTime, &s.ZSDefaultTime,
 		&s.MGAnchorDate, &s.ZSScheduleMode,
 		&s.ZSWeekdays, &s.ZSAnchorDate, &s.ZSAnchorTime,
@@ -792,6 +794,57 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Event level ceilings and the baselines they bound. Merge the payload over the
+	// stored row, validate the MERGED result, then write that -- do not copy the NAP
+	// pair's COALESCE(NULLIF(?, 0), col) shape above, which solves the same problem in
+	// the UPDATE instead. Mixing the two is how one of them ends up half-applied.
+	//
+	// Settings uses primitive ints, so a field omitted from the payload unmarshals to 0.
+	// Zero is not a legal value for any of these four, so it is unambiguously "not
+	// supplied". Both browser callers merge over a fresh GET and always send the full
+	// object, but the handler must not depend on that: today an omitted field is written
+	// as 0 raw, which is a silent data loss this merge also closes.
+	mgBaseline, zsBaseline := settings.MGBaseline, settings.ZSBaseline
+	maxMGLevel, maxZSLevel := settings.MaxMGLevel, settings.MaxZSLevel
+	if mgBaseline == 0 || zsBaseline == 0 || maxMGLevel == 0 || maxZSLevel == 0 {
+		var curMG, curZS, curMaxMG, curMaxZS int
+		if err := db.QueryRow(`SELECT COALESCE(mg_baseline, 1), COALESCE(zs_baseline, 1),
+			COALESCE(max_mg_level, 1), COALESCE(max_zs_level, 1) FROM settings WHERE id = 1`).
+			Scan(&curMG, &curZS, &curMaxMG, &curMaxZS); err != nil {
+			slog.Error("updateSettings read level limits", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if mgBaseline == 0 {
+			mgBaseline = curMG
+		}
+		if zsBaseline == 0 {
+			zsBaseline = curZS
+		}
+		if maxMGLevel == 0 {
+			maxMGLevel = curMaxMG
+		}
+		if maxZSLevel == 0 {
+			maxZSLevel = curMaxZS
+		}
+	}
+	if maxMGLevel < 1 || maxMGLevel > maxEventLevelCeiling {
+		http.Error(w, fmt.Sprintf("Maximum MG level must be between 1 and %d", maxEventLevelCeiling), http.StatusBadRequest)
+		return
+	}
+	if maxZSLevel < 1 || maxZSLevel > maxEventLevelCeiling {
+		http.Error(w, fmt.Sprintf("Maximum ZS level must be between 1 and %d", maxEventLevelCeiling), http.StatusBadRequest)
+		return
+	}
+	if mgBaseline < 1 || mgBaseline > maxMGLevel {
+		http.Error(w, fmt.Sprintf("MG baseline level must be between 1 and %d", maxMGLevel), http.StatusBadRequest)
+		return
+	}
+	if zsBaseline < 1 || zsBaseline > maxZSLevel {
+		http.Error(w, fmt.Sprintf("ZS baseline level must be between 1 and %d", maxZSLevel), http.StatusBadRequest)
+		return
+	}
+
 	// Accept either a bare 32-hex id or a pasted /a/<id> URL for the LastRank id.
 	allianceID := strings.TrimSpace(settings.LastRankAllianceID)
 	if parsed, ok := lastrank.ParseAllianceID(allianceID); ok {
@@ -813,6 +866,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		vs_minimum_points = ?,
 		strike_needs_improvement_threshold = ?, strike_at_risk_threshold = ?,
 		mg_baseline = ?, zs_baseline = ?,
+		max_mg_level = ?, max_zs_level = ?,
 		mg_default_time = ?, zs_default_time = ?,
 		mg_anchor_date = ?, zs_schedule_mode = ?,
 		zs_weekdays = ?, zs_anchor_date = ?, zs_anchor_time = ?,
@@ -837,7 +891,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.AllianceMaxMembers, settings.JoinRequirements,
 		settings.VSMinimumPoints,
 		settings.StrikeNeedsImprovementThreshold, settings.StrikeAtRiskThreshold,
-		settings.MGBaseline, settings.ZSBaseline,
+		mgBaseline, zsBaseline,
+		maxMGLevel, maxZSLevel,
 		settings.MGDefaultTime, settings.ZSDefaultTime,
 		settings.MGAnchorDate, settings.ZSScheduleMode,
 		settings.ZSWeekdays, settings.ZSAnchorDate, settings.ZSAnchorTime,

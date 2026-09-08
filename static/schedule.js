@@ -509,12 +509,28 @@ function updateEventModalForType() {
         hint.textContent = 'Must start by 21:59 ST. Every-other-day rule applies.';
         // Update level placeholder with baseline
         document.getElementById('event-level-input').placeholder = settings.mg_baseline ?? '';
+        setEventLevelMax(settings.max_mg_level);
     } else if (et.short_name === 'ZS') {
         hint.textContent = 'Cooldown: 71.5h from last ZS start time.';
         document.getElementById('event-level-input').placeholder = settings.zs_baseline ?? '';
+        setEventLevelMax(settings.max_zs_level);
     } else {
         hint.textContent = '';
     }
+}
+
+// Set the event level input's ceiling, never below the value already in the box.
+//
+// The input lives inside event-form, so a `max` under the current value fails NATIVE
+// constraint validation: the browser blocks submit, saveEvent never runs, and the
+// officer cannot edit that event's notes or time either -- with only a native bubble
+// to explain it. Widening for the stored value lets the request reach the server,
+// which grandfathers an unchanged level and still rejects a newly typed bad one.
+function setEventLevelMax(ceiling) {
+    const input = document.getElementById('event-level-input');
+    if (!ceiling) { input.removeAttribute('max'); return; }
+    const current = parseInt(input.value, 10);
+    input.max = Number.isFinite(current) ? Math.max(ceiling, current) : ceiling;
 }
 
 async function saveEvent(e) {
@@ -895,6 +911,9 @@ async function saveServerEvent(e) {
 function populateSettingsForm() {
     document.getElementById('set-mg-baseline').value   = settings.mg_baseline ?? '';
     document.getElementById('set-zs-baseline').value   = settings.zs_baseline ?? '';
+    // Ceilings come from Settings -> Game Limits; these inputs only bound to them.
+    if (settings.max_mg_level) document.getElementById('set-mg-baseline').max = settings.max_mg_level;
+    if (settings.max_zs_level) document.getElementById('set-zs-baseline').max = settings.max_zs_level;
     document.getElementById('set-mg-time').value       = settings.mg_default_time ?? '';
     document.getElementById('set-zs-time').value       = settings.zs_default_time ?? '';
     // Generation rule settings
