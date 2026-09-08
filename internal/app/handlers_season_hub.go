@@ -2879,6 +2879,12 @@ type pushResult struct {
 	Skipped            int `json:"skipped"`
 	SkippedUnscheduled int `json:"skipped_unscheduled"`
 	SkippedNoType      int `json:"skipped_no_type"`
+	// SkippedInvalid counts events the schedule's own game rules refused. The
+	// push is one of the four write paths into schedule_events and used to apply
+	// none of them, so a template MG at 22:30 landed on the calendar in a state
+	// the same officer would have been refused by hand.
+	SkippedInvalid int                     `json:"skipped_invalid"`
+	Invalid        []invalidGeneratedEvent `json:"invalid"`
 }
 
 // pushSeasonEventsToSchedule materialises every season_event row for the given
@@ -2949,6 +2955,10 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 		events = append(events, ev)
 	}
 	rows.Close()
+
+	// shortNames caches schedule_event_types.short_name per id, so the rule check
+	// below costs one lookup per distinct type rather than one per created row.
+	shortNames := map[int]string{}
 
 	// Resolve event_type_id from type_name for events that were seeded before types were synced.
 	typeIDCache := map[string]int{}
@@ -3058,6 +3068,41 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 			if err != sql.ErrNoRows {
 				return result, err
 			}
+
+			// Apply the schedule's game rules, exactly as a manual create would.
+			// Custom types carry no rules, so in practice this only bites MG/ZS-
+			// typed template events. Skip-and-count rather than abort: one illegal
+			// template row must not sink the rest of the push, which is the same
+			// semantics the existing duplicate check already has.
+			short := shortNames[ev.eventTypeID]
+			if short == "" {
+				var sn string
+				db.QueryRow(`SELECT short_name FROM schedule_event_types WHERE id = ?`, ev.eventTypeID).Scan(&sn)
+				short = sn
+				shortNames[ev.eventTypeID] = sn
+			}
+			if short == "MG" || short == "ZS" {
+				msg, err := validateSystemEventRules(db, short, dateStr, ev.eventTime, 0)
+				if err != nil {
+					return result, err
+				}
+				if msg == "" && ev.level != nil {
+					msg, err = validateSystemLevel(short, ev.level)
+					if err != nil {
+						return result, err
+					}
+				}
+				if msg != "" {
+					result.SkippedInvalid++
+					if len(result.Invalid) < 20 {
+						result.Invalid = append(result.Invalid, invalidGeneratedEvent{
+							Date: dateStr, Type: short, Reason: msg,
+						})
+					}
+					continue
+				}
+			}
+
 			if _, err := db.Exec(`
 				INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by)
 				VALUES (?, ?, ?, ?, ?, ?, ?)`,

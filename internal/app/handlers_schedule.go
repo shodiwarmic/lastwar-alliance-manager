@@ -18,12 +18,59 @@ var reHHMM = regexp.MustCompile(`^\d{2}:\d{2}$`)
 
 // --- Shared helpers ---
 
+// invalidGeneratedEvent is one date the generator declined, reported back so the
+// officer can see which dates the app refused and why rather than reading a
+// smaller number than they expected and guessing.
+type invalidGeneratedEvent struct {
+	Date   string `json:"date"`
+	Type   string `json:"type"`
+	Reason string `json:"reason"`
+}
+
+// validateSystemEventRules applies every date/time rule for an MG/ZS candidate
+// against what is in the database. q is db or a tx (rowQuerier,
+// handlers_lastrank.go:23); excludeID skips the row being edited, and is 0 for a
+// new one. Returns a user-facing message naming the rule it broke, or "" when
+// the candidate is legal.
+//
+// This is the ONE place the date/time rules live. schedule_events has four write
+// paths — manual create, manual update, bulk generate and the Season Hub push —
+// and until this existed only the two manual ones applied any rule at all, so a
+// generated or pushed event could sit on the calendar in a state the same
+// officer would have been refused by hand.
+//
+// Bulk callers validate and INSERT one row at a time, in date order. Each
+// accepted row is in the database before the next candidate is checked, so a
+// generated chain is validated against itself with no separate bookkeeping.
+// Never plan a batch and insert it afterwards without re-validating.
+//
+// The level rule stays in validateSystemLevel: its call timing is
+// caller-specific, because the update path deliberately grandfathers a level the
+// officer did not touch.
+func validateSystemEventRules(q rowQuerier, short, date, tm string, excludeID int) (string, error) {
+	switch short {
+	case "MG":
+		if tm >= "22:00" {
+			return "MG must start by 21:59 ST", nil
+		}
+	case "ZS":
+		nextEligible, err := validateZSCooldown(q, excludeID, date, tm)
+		if err != nil {
+			return "", err
+		}
+		if !nextEligible.IsZero() {
+			return "ZS cooldown not elapsed — next eligible: " + nextEligible.Format("2006-01-02 15:04") + " ST", nil
+		}
+	}
+	return "", nil
+}
+
 // validateZSCooldown checks whether placing a ZS event at newDate/newTime violates the
 // 71.5-hour cooldown from the most recent existing ZS event (excluding excludeID).
 // Returns the next eligible game-time datetime if cooldown not met, or zero time if OK.
-func validateZSCooldown(excludeID int, newDate, newTime string) (time.Time, error) {
+func validateZSCooldown(q rowQuerier, excludeID int, newDate, newTime string) (time.Time, error) {
 	var lastDate, lastTime string
-	err := db.QueryRow(`
+	err := q.QueryRow(`
 		SELECT se.event_date, se.event_time
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
@@ -417,21 +464,13 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isSystem == 1 {
-		if typeShort == "MG" && req.EventTime >= "22:00" {
-			http.Error(w, "MG must start by 21:59 ST", http.StatusBadRequest)
+		if msg, err := validateSystemEventRules(db, typeShort, req.EventDate, req.EventTime, 0); err != nil {
+			slog.Error("createScheduleEvent validateSystemEventRules", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
-		}
-		if typeShort == "ZS" {
-			nextEligible, err := validateZSCooldown(0, req.EventDate, req.EventTime)
-			if err != nil {
-				slog.Error("createScheduleEvent validateZSCooldown", "error", err)
-				http.Error(w, "Database error", http.StatusInternalServerError)
-				return
-			}
-			if !nextEligible.IsZero() {
-				http.Error(w, "ZS cooldown not elapsed — next eligible: "+nextEligible.Format("2006-01-02 15:04")+" ST", http.StatusBadRequest)
-				return
-			}
+		} else if msg != "" {
+			http.Error(w, msg, http.StatusBadRequest)
+			return
 		}
 		if req.Level == nil {
 			baseline, err := getSystemBaseline(typeShort)
@@ -542,21 +581,13 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if newIsSystem == 1 {
-		if typeShort == "MG" && req.EventTime >= "22:00" {
-			http.Error(w, "MG must start by 21:59 ST", http.StatusBadRequest)
+		if msg, err := validateSystemEventRules(db, typeShort, req.EventDate, req.EventTime, id); err != nil {
+			slog.Error("updateScheduleEvent validateSystemEventRules", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
-		}
-		if typeShort == "ZS" {
-			nextEligible, err := validateZSCooldown(id, req.EventDate, req.EventTime)
-			if err != nil {
-				slog.Error("updateScheduleEvent validateZSCooldown", "error", err)
-				http.Error(w, "Database error", http.StatusInternalServerError)
-				return
-			}
-			if !nextEligible.IsZero() {
-				http.Error(w, "ZS cooldown not elapsed — next eligible: "+nextEligible.Format("2006-01-02 15:04")+" ST", http.StatusBadRequest)
-				return
-			}
+		} else if msg != "" {
+			http.Error(w, msg, http.StatusBadRequest)
+			return
 		}
 		// Keep existing level when not provided
 		if req.Level == nil {
@@ -696,6 +727,47 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 
 	mgCreated := 0
 	zsCreated := 0
+	skippedExisting := 0
+	skippedInvalid := 0
+	invalid := []invalidGeneratedEvent{}
+
+	// tryCreate applies the same rules a manual create applies, then inserts.
+	//
+	// Validating and inserting ONE ROW AT A TIME, in date order, is what makes a
+	// generated run check against itself: every accepted row is already in the
+	// database when the next candidate is examined, so no separate list of
+	// pending rows has to be kept in step. Do not turn this into plan-then-bulk-
+	// insert — the batch would only be checked against what existed before it.
+	tryCreate := func(typeID int, short, dateStr, tm string, level int) bool {
+		var exists int
+		db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id=? AND event_date=?`, typeID, dateStr).Scan(&exists)
+		if exists > 0 {
+			skippedExisting++
+			return false
+		}
+		msg, err := validateSystemEventRules(db, short, dateStr, tm, 0)
+		if err != nil {
+			slog.Error("generateScheduleEvents validate", "error", err, "date", dateStr, "type", short)
+			return false
+		}
+		if msg != "" {
+			skippedInvalid++
+			// Capped: the officer needs to see WHICH dates were declined and why,
+			// not every one of them in a 90-day run.
+			if len(invalid) < 20 {
+				invalid = append(invalid, invalidGeneratedEvent{Date: dateStr, Type: short, Reason: msg})
+			}
+			return false
+		}
+		if _, err := db.Exec(`
+			INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by, created_at, updated_at)
+			VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
+			dateStr, typeID, tm, level, user.ID, now, now); err != nil {
+			slog.Error("generateScheduleEvents insert", "error", err, "date", dateStr, "type", short)
+			return false
+		}
+		return true
+	}
 
 	// --- MG generation: every other day from anchor ---
 	if genTypes["mg"] && mgTypeID > 0 && s.MGAnchorDate != "" {
@@ -709,20 +781,9 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 				firstDate = fromT.AddDate(0, 0, 1)
 			}
 			for d := firstDate; !d.After(toT); d = d.AddDate(0, 0, 2) {
-				dateStr := d.Format("2006-01-02")
-				var exists int
-				db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id=? AND event_date=?`, mgTypeID, dateStr).Scan(&exists)
-				if exists > 0 {
-					continue
+				if tryCreate(mgTypeID, "MG", d.Format("2006-01-02"), s.MGDefaultTime, s.MGBaseline) {
+					mgCreated++
 				}
-				if _, err := db.Exec(`
-					INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by, created_at, updated_at)
-					VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
-					dateStr, mgTypeID, s.MGDefaultTime, s.MGBaseline, user.ID, now, now); err != nil {
-					slog.Error("generateScheduleEvents MG insert", "error", err, "date", dateStr)
-					continue
-				}
-				mgCreated++
 			}
 		}
 	}
@@ -746,20 +807,9 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 				if !wdSet[planWD] {
 					continue
 				}
-				dateStr := d.Format("2006-01-02")
-				var exists int
-				db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id=? AND event_date=?`, zsTypeID, dateStr).Scan(&exists)
-				if exists > 0 {
-					continue
+				if tryCreate(zsTypeID, "ZS", d.Format("2006-01-02"), s.ZSDefaultTime, s.ZSBaseline) {
+					zsCreated++
 				}
-				if _, err := db.Exec(`
-					INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by, created_at, updated_at)
-					VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
-					dateStr, zsTypeID, s.ZSDefaultTime, s.ZSBaseline, user.ID, now, now); err != nil {
-					slog.Error("generateScheduleEvents ZS weekday insert", "error", err, "date", dateStr)
-					continue
-				}
-				zsCreated++
 			}
 
 		case "asap":
@@ -784,19 +834,9 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 						if dateStr < req.From {
 							continue
 						}
-						var exists int
-						db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id=? AND event_date=?`, zsTypeID, dateStr).Scan(&exists)
-						if exists > 0 {
-							continue
+						if tryCreate(zsTypeID, "ZS", dateStr, s.ZSDefaultTime, s.ZSBaseline) {
+							zsCreated++
 						}
-						if _, err := db.Exec(`
-							INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by, created_at, updated_at)
-							VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
-							dateStr, zsTypeID, s.ZSDefaultTime, s.ZSBaseline, user.ID, now, now); err != nil {
-							slog.Error("generateScheduleEvents ZS asap insert", "error", err, "date", dateStr)
-							continue
-						}
-						zsCreated++
 					}
 				}
 			}
@@ -811,8 +851,11 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"mg_created": mgCreated,
-		"zs_created": zsCreated,
+		"mg_created":       mgCreated,
+		"zs_created":       zsCreated,
+		"skipped_existing": skippedExisting,
+		"skipped_invalid":  skippedInvalid,
+		"invalid":          invalid,
 	})
 }
 

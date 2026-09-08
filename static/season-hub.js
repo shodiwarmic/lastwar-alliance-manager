@@ -2150,8 +2150,18 @@
                     if (d.skipped > 0) msg += ', ' + d.skipped + ' already existed';
                     if (d.skipped_unscheduled > 0) msg += ', ' + d.skipped_unscheduled + ' skipped (no day set)';
                     if (d.skipped_no_type > 0) msg += ', ' + d.skipped_no_type + ' skipped (no event type — set it in Edit Season)';
-                    if (statusEl) { statusEl.textContent = msg; statusEl.style.color = 'var(--color-success)'; }
-                    showToast(msg, d.skipped_no_type > 0 ? 'info' : 'success');
+                    if (d.skipped_invalid > 0) {
+                        msg += ', ' + d.skipped_invalid + ' skipped as invalid';
+                        const shown = (d.invalid || []).slice(0, 3)
+                            .map(iv => iv.date + ' (' + iv.reason + ')').join('; ');
+                        if (shown) msg += ': ' + shown;
+                    }
+                    const incomplete = d.skipped_no_type > 0 || d.skipped_invalid > 0;
+                    if (statusEl) {
+                        statusEl.textContent = msg;
+                        statusEl.style.color = incomplete ? 'var(--color-warning)' : 'var(--color-success)';
+                    }
+                    showToast(msg, incomplete ? 'info' : 'success');
                 })
                 .catch(err => {
                     if (statusEl) { statusEl.textContent = err.message || 'Push failed.'; statusEl.style.color = 'var(--color-danger)'; }
