@@ -729,9 +729,11 @@ func syncOneMember(ctx context.Context, memberID int) (LastRankPlayerSyncRespons
 // power and avatar. Shared by the on-demand lookup handler and the bulk job.
 //
 // bulk picks the fetch strategy: a single on-demand lookup forces a fresh enrich
-// (the recruiter is waiting and wants live numbers), while a bulk refresh uses the
-// gentle GET-then-enrich-if-stale hybrid so a recruiter with many linked prospects
-// doesn't trigger a live game pull for each one.
+// (the recruiter is waiting and wants the freshest reading LastRank holds), while a
+// bulk refresh uses the gentle GET-then-enrich-if-stale hybrid so a recruiter with
+// many linked prospects doesn't pay for an enrich per prospect. An enrich re-derives
+// the player from LastRank's most recent scan — it does not query the live game — so
+// over a record that is already fresh it costs ~25s to return the GET's own answer.
 //
 // Shaped for db.SetMaxOpenConns(1): the caller has already resolved pubID and
 // closed its cursor, the fetch holds no database handle, and the writes follow.

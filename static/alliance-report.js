@@ -81,7 +81,8 @@
     const rankLabel = r => (r >= 1 && r <= 5) ? 'R' + r : '—';
     const dateOnly = s => (s || '').slice(0, 10) || '—';
 
-    // What LastRank did for this member. "fetched" is the slow case — a live game re-pull —
+    // What LastRank did for this member. "fetched" is the slow case — an enrich, which
+    // re-derives the player from LastRank's most recent scan rather than querying the game —
     // so naming it turns an unexplained 20-second row into an understood one.
     const ENRICH_LABEL = {
         fetched: 'refreshed live',
