@@ -2646,10 +2646,45 @@ func handleSeasonEventList(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"events": events})
 }
 
+// seasonEventRequest is the create/update body for a season event. It
+// deliberately carries no type_name: the server derives that from
+// event_type_id. The client used to send both, and because the modal's type
+// dropdown was empty it sent event_type_id:null with no type_name at all —
+// every Save silently blanked the row's type, after which Push to Schedule had
+// nothing to materialise.
+type seasonEventRequest struct {
+	SeasonID      int    `json:"season_id"`
+	Label         string `json:"label"`
+	EventTypeID   *int   `json:"event_type_id"`
+	DayOffset     *int   `json:"day_offset"`
+	EventTime     string `json:"event_time"`
+	AllDay        bool   `json:"all_day"`
+	Level         *int   `json:"level"`
+	WeekStart     int    `json:"week_start"`
+	WeekEnd       int    `json:"week_end"`
+	Notes         string `json:"notes"`
+	IsServerEvent bool   `json:"is_server_event"`
+	DurationDays  int    `json:"duration_days"`
+}
+
+// resolveEventTypeName returns schedule_event_types.name for id. ok is false
+// when no such type exists, which the callers turn into a 400 rather than
+// storing a name that resolves to nothing.
+func resolveEventTypeName(id int) (name string, ok bool, err error) {
+	err = db.QueryRow(`SELECT name FROM schedule_event_types WHERE id = ?`, id).Scan(&name)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return name, true, nil
+}
+
 func handleSeasonEventCreate(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
 
-	var body SeasonEvent
+	var body seasonEventRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -2666,10 +2701,24 @@ func handleSeasonEventCreate(w http.ResponseWriter, r *http.Request) {
 	if durationDays < 1 {
 		durationDays = 1
 	}
+	var typeName string
+	if body.EventTypeID != nil {
+		name, ok, err := resolveEventTypeName(*body.EventTypeID)
+		if err != nil {
+			slog.Error("handleSeasonEventCreate: resolve type", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, "Unknown event type", http.StatusBadRequest)
+			return
+		}
+		typeName = name
+	}
 	res, err := db.Exec(`
 		INSERT INTO season_events (season_id, label, event_type_id, type_name, day_offset, event_time, all_day, level, week_start, week_end, notes, is_server_event, duration_days)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		body.SeasonID, body.Label, body.EventTypeID, body.TypeName, body.DayOffset,
+		body.SeasonID, body.Label, body.EventTypeID, typeName, body.DayOffset,
 		body.EventTime, body.AllDay, body.Level,
 		body.WeekStart, body.WeekEnd, body.Notes,
 		boolToInt(body.IsServerEvent), durationDays)
@@ -2692,7 +2741,7 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid event ID", http.StatusBadRequest)
 		return
 	}
-	var body SeasonEvent
+	var body seasonEventRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -2728,11 +2777,28 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	// Derive type_name from the id. With no id the OLD name is preserved rather
+	// than blanked, so a row whose type was cleared by an older client can still
+	// be re-linked by Sync Event Types, which matches on type_name.
+	typeName := old.TypeName
+	if body.EventTypeID != nil {
+		name, ok, err := resolveEventTypeName(*body.EventTypeID)
+		if err != nil {
+			slog.Error("handleSeasonEventUpdate: resolve type", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, "Unknown event type", http.StatusBadRequest)
+			return
+		}
+		typeName = name
+	}
 	if _, err := db.Exec(`
 		UPDATE season_events SET label=?, event_type_id=?, type_name=?, day_offset=?, event_time=?,
 		  all_day=?, level=?, week_start=?, week_end=?, notes=?, is_server_event=?, duration_days=?
 		WHERE id=?`,
-		body.Label, body.EventTypeID, body.TypeName, body.DayOffset, body.EventTime,
+		body.Label, body.EventTypeID, typeName, body.DayOffset, body.EventTime,
 		body.AllDay, body.Level, body.WeekStart, body.WeekEnd, body.Notes,
 		boolToInt(body.IsServerEvent), updateDuration, id); err != nil {
 		slog.Error("handleSeasonEventUpdate: update", "error", err)
@@ -2743,8 +2809,8 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 	if old.Label != body.Label {
 		changes = append(changes, "label: "+old.Label+" → "+body.Label)
 	}
-	if old.TypeName != body.TypeName {
-		changes = append(changes, "type: "+old.TypeName+" → "+body.TypeName)
+	if old.TypeName != typeName {
+		changes = append(changes, "type: "+old.TypeName+" → "+typeName)
 	}
 	newDay := 0
 	if body.DayOffset != nil {

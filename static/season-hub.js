@@ -1478,9 +1478,13 @@
 
     function fetchEventTypes() {
         if (csEventTypes.length > 0) return Promise.resolve(csEventTypes);
+        // GET /api/schedule/event-types returns a BARE ARRAY, not {event_types:[]}.
+        // Reading the wrapper left the cache permanently empty, so every type
+        // dropdown in the Edit Season modal held only "— none —" and saving a row
+        // blanked its type.
         return fetch('/api/schedule/event-types')
-            .then(r => r.ok ? r.json() : { event_types: [] })
-            .then(d => { csEventTypes = d.event_types || []; return csEventTypes; })
+            .then(r => r.ok ? r.json() : [])
+            .then(d => { csEventTypes = Array.isArray(d) ? d : []; return csEventTypes; })
             .catch(() => []);
     }
 
@@ -1609,7 +1613,8 @@
                 const p = d && d.pushed;
                 if (p && (p.created || p.skipped_no_type || p.skipped_unscheduled)) {
                     msg += ' Pushed ' + (p.created || 0) + ' event' + ((p.created || 0) === 1 ? '' : 's') + ' to schedule';
-                    if (p.skipped_no_type) msg += ', ' + p.skipped_no_type + ' skipped (no event type — run Sync Event Types in Settings)';
+                    if (p.skipped_unscheduled) msg += ', ' + p.skipped_unscheduled + ' skipped (no day set)';
+                    if (p.skipped_no_type) msg += ', ' + p.skipped_no_type + ' skipped (no event type — set it in Edit Season)';
                     msg += '.';
                 }
                 showToast(msg);
@@ -2143,7 +2148,8 @@
                 .then(d => {
                     let msg = d.created + ' event' + (d.created !== 1 ? 's' : '') + ' created';
                     if (d.skipped > 0) msg += ', ' + d.skipped + ' already existed';
-                    if (d.skipped_no_type > 0) msg += ', ' + d.skipped_no_type + ' skipped (no event type — run Sync Event Types in Settings first)';
+                    if (d.skipped_unscheduled > 0) msg += ', ' + d.skipped_unscheduled + ' skipped (no day set)';
+                    if (d.skipped_no_type > 0) msg += ', ' + d.skipped_no_type + ' skipped (no event type — set it in Edit Season)';
                     if (statusEl) { statusEl.textContent = msg; statusEl.style.color = 'var(--color-success)'; }
                     showToast(msg, d.skipped_no_type > 0 ? 'info' : 'success');
                 })
