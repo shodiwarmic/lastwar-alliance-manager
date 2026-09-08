@@ -951,8 +951,8 @@ async function saveSettings() {
     const zsBaselineVal = document.getElementById('set-zs-baseline').value;
 
     const patch = {
-        mg_baseline:      mgBaselineVal !== '' ? parseInt(mgBaselineVal, 10) : (settings.mg_baseline ?? 11),
-        zs_baseline:      zsBaselineVal !== '' ? parseInt(zsBaselineVal, 10) : (settings.zs_baseline ?? 7),
+        mg_baseline:      mgBaselineVal !== '' ? parseInt(mgBaselineVal, 10) : (settings.mg_baseline ?? 1),
+        zs_baseline:      zsBaselineVal !== '' ? parseInt(zsBaselineVal, 10) : (settings.zs_baseline ?? 1),
         mg_default_time:  document.getElementById('set-mg-time').value || settings.mg_default_time || '00:30',
         zs_default_time:  document.getElementById('set-zs-time').value || settings.zs_default_time || '23:00',
         mg_anchor_date:   document.getElementById('gen-mg-anchor').value || null,

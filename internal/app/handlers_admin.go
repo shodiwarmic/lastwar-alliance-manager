@@ -611,7 +611,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(vs_minimum_points, 2500000),
         COALESCE(vs_flag_days_threshold, 2),
         COALESCE(strike_needs_improvement_threshold, 1), COALESCE(strike_at_risk_threshold, 3),
-        COALESCE(mg_baseline, 11), COALESCE(zs_baseline, 7),
+        COALESCE(mg_baseline, 1), COALESCE(zs_baseline, 1),
         COALESCE(mg_default_time, '00:30'), COALESCE(zs_default_time, '23:00'),
         COALESCE(mg_anchor_date, ''), COALESCE(zs_schedule_mode, 'weekdays'),
         COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00'),

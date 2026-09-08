@@ -71,9 +71,16 @@ INSERT INTO storm_slot_times (slot, label, time_st) VALUES (1, 'Slot 1', '00:00'
 INSERT INTO storm_slot_times (slot, label, time_st) VALUES (2, 'Slot 2', '00:00');
 INSERT INTO storm_slot_times (slot, label, time_st) VALUES (3, 'Slot 3', '00:00');
 
--- Schedule defaults and season tracking
-ALTER TABLE settings ADD COLUMN mg_baseline INTEGER NOT NULL DEFAULT 11;
-ALTER TABLE settings ADD COLUMN zs_baseline INTEGER NOT NULL DEFAULT 7;
+-- Schedule defaults and season tracking.
+-- The baselines are STARTING values, not our alliance's values: 1 is where every
+-- alliance begins in-game, and an operator raises them in Schedule -> Settings.
+-- They shipped as 11 / 7 (one alliance's live numbers), which made a fresh install
+-- come up claiming an MG level it had not unlocked. Editing this already-applied
+-- migration is deliberate and safe: goose tracks applied migrations by version
+-- number in goose_db_version and never re-reads or checksums the body, so existing
+-- databases keep whatever they hold and only fresh ones see 1.
+ALTER TABLE settings ADD COLUMN mg_baseline INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE settings ADD COLUMN zs_baseline INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE settings ADD COLUMN mg_default_time TEXT NOT NULL DEFAULT '00:30';
 ALTER TABLE settings ADD COLUMN zs_default_time TEXT NOT NULL DEFAULT '23:00';
 ALTER TABLE settings ADD COLUMN current_season INTEGER;
