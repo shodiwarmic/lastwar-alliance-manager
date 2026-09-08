@@ -8,6 +8,9 @@ belongs in `static/` or `templates/` instead.
 
 ## Tracked
 
+- `FEATURES.md` — the complete user-facing feature list, with the permission each feature
+  needs. Split out of `README.md`, which now carries one line per capability area and links
+  here. This is the file to update when a feature is added, changed or removed.
 - `DEPLOYMENT.md` — production deployment guide (Docker, Caddy, environment).
 - `QUICKSTART.md` — the short path from a fresh host to a running install.
 - `IMAGE_RECOGNITION.md` — the OCR pipeline: cloud (Cloud Vision) vs local (PaddleOCR),

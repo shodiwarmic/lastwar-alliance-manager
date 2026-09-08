@@ -1,221 +1,40 @@
-# Last War: Survival - Alliance Manager
+# Last War: Survival — Alliance Manager
 
-A comprehensive, self-hosted web application for managing your alliance in the online game Last War: Survival. Track member growth, monitor VS Duel activity, host alliance documents, and share feedback, all deployed seamlessly via Docker.
+A comprehensive, self-hosted web application for managing your alliance in the online game Last War: Survival. Track member growth, monitor VS Duel activity, plan Desert Storm, host alliance documents, and share feedback — all deployed via Docker.
 
-## Features
-
-### ⚙️ Core Management
-- **Advanced Authentication**: Secure login/logout with rolling session management to keep active users logged in while expiring idle sessions.
-- **Configurable Password Policies**: Admin-controlled password complexity requirements (minimum length, uppercase, lowercase, numbers, special characters).
-- **Password Security Lifecycle**: Enforce password expiration dates, track password history to prevent reuse, and trigger forced password resets.
-- **Customizable Login Banner**: Server-Side Rendered (SSR) login screen messaging configurable by Admins/R5s.
-- **Role-Based Permissions**: Granular access levels governed by a dynamic, admin-controlled permissions matrix (e.g., toggling who can manage the roster, view analytics, or see anonymous feedback authors).
-- **Categorized Alias Engine**: Assign personal nicknames or authoritative global aliases to commanders. The system utilizes a strict hierarchy (Exact -> Personal -> Global -> OCR) to resolve identities during imports. Background `ocr` aliases keep machine-read corrections hidden from standard user searches. The alias modal on the Members page lets officers browse, add, and delete aliases per member, with filter tabs (All / Global / Personal / OCR) for pruning stale auto-generated OCR aliases.
-- **Invite-Link Onboarding**: Officers with `manage_members` can generate a single-use, 48-hour invite link directly from the Members page. Following the link takes a new user to a self-registration page pre-linked to their in-game commander — no admin password-setting required.
-- **Password Reset Links**: Forgotten passwords are recovered with a single-use, 24-hour reset link rather than a temporary password. The user follows the link, sets their own password, and is signed straight in — no password is ever generated, displayed, or relayed through an officer. Officers with `manage_settings` issue links from the Members page for member-linked accounts; admins can issue them for any account from the Admin page. Generating a new link invalidates any previous unused one. **Resetting an administrator's password requires being an administrator** — an officer who tries is told to ask an admin. Reset links cannot be issued for deactivated accounts (reactivate first), and an account deactivated after a link was issued invalidates that link immediately.
-- **User Deactivation**: Admins can deactivate an account instead of deleting it, preserving its login history, activity attribution, and file ownership. A deactivated user is signed out everywhere and cannot log in on the web or in the mobile scanner app; existing mobile sessions stop working immediately rather than lasting until the token expires. Deactivated accounts appear dimmed with an "Inactive" badge on the Admin page and can be reactivated at any time. The last active admin account cannot be deactivated, and admins cannot deactivate themselves — keep a second admin account so nobody can be locked out, as there is no self-service admin recovery. Changing a password also immediately invalidates that user's existing mobile sessions, so a password reset is a real way to cut off a lost or stolen device.
-- **Deactivate Before Delete**: Deleting a user is a two-step flow — an account must be deactivated first, and the Delete button only appears once it is. Deactivation is reversible and keeps the account's history; deletion is permanent and discards it, so the destructive step is deliberate rather than one mis-tap away. Because the last active admin can never be deactivated, they can never be deleted either.
-- **Search Any Member List**: Every list of commanders in the app has a search box — rosters, leaderboards, participation and contribution grids, storm registration, prospects, strikes, and the import/review preview screens. Search ignores accents, so typing `Pacha` finds `Pàcha` and vice versa, and multi-word queries match across name and rank (`pacha r4`). Typing never discards anything you have entered into a grid, and saving while a search is active still saves every member, not just the visible ones.
-- **Filtered Exports**: When a search is narrowing a table, the CSV/XLSX download buttons show how many rows they will write and a "Filtered only" checkbox appears next to them — tick it for just the rows you can see, untick it for the whole table. Tables with no active search are unchanged.
-- **Self-Service Profiles**: Users securely linked to an in-game commander can update their own stats, HQ level, and squad power through a rule-enforced dashboard.
-- **Smart CSV Ingestion**: Upload VS Points or roster CSVs with dynamic column mapping. Features a backend-driven "Preview & Confirm" modal allowing administrators to validate data, calculate missing values (e.g., deducing Saturday from Weekly Totals), and manually map unresolved names before committing.
-- **Advanced Player Stats**: Track optional fields including Player Profession (and Profession Level), Squad Type, Squad Power, Total Hero Power, Lifetime Troop Kills, and Troop Levels (dynamically validated against configurable HQ Level caps). All stat badges on member cards adapt to light and dark mode. Members and officers with `manage_members` can record kills directly from the edit modal; self-linked users can update their kill count from My Profile.
-- **Member Join Dates**: Each member's join date drives an "in-alliance" badge on their roster card. A per-user toggle on the Members page switches the badge between **days in alliance** (the default — compact, matching the game's "joined N days ago") and the **calendar date**; the choice is remembered in the browser. The member's own profile shows a read-only "Member Since" line (date). Officers with `manage_members` set or correct a join date from the member edit modal using a linked **"Joined [N] days ago · [date]"** control — type the days the game shows or pick a date, and the other field updates automatically (clearing it sets the date back to unknown). New members added via CSV import or LastRank sync get the same linked control per row at confirmation time; CSV imports also auto-read an optional `Join`/`Member Since` column that accepts either a date or a days-ago number. Left blank, the date defaults to the current game-time date.
-- **Alliance Identity**: Configure a custom Alliance Name, Tag, and Server Number in Settings. The name replaces the generic "Alliance" label in the sidebar brand and mobile header; the tag (e.g. `[WARMC]`) appears in the subtitle beside "Alliance Manager". The server number powers the NAP tab on the Allies page and pre-fills the server filter when searching for external alliances. All fields are optional — leave blank to keep the defaults.
-- **Theme Switcher**: Each user can independently set the app theme to **Light**, **Dark**, or **Auto** (follows the OS preference). The selection persists across sessions via `localStorage`. Accessible from the gear icon in the sidebar user row or the More sheet on mobile.
-- **Unified Navigation Theme**: The Admin nav item uses a purple tint (token-based, dark-mode safe) instead of the primary gradient, reducing visual competition with the active page indicator.
-- **Sidebar Navigation**: On desktop (≥769 px) a persistent sidebar replaces the old top bar, providing always-visible navigation without a hamburger. On mobile a fixed bottom tab bar gives one-tap access to the five most-used pages; a "More" sheet slides up for the full nav.
-- **Rank Badges**: R4–R1 rank badges use semantic color tokens (danger/info/success/muted) that adapt to light and dark mode. R5 retains its gold "prestige" color.
-- **Consistent Member Badges**: HQ level, Troop tier, Profession, and Squad type badges on member cards use the design system's semantic color tokens and adapt correctly to light and dark mode.
-- **Filter Chips**: The Members page rank/profession/troop/squad filter chips are compact pill-shaped buttons with a clear active state.
-- **Members Search & Sort**: Live search on the Members page uses [Fuse.js](https://www.fusejs.io/) fuzzy matching so partial or misspelled commander names still surface the right result, and it ignores accents — typing `pacha` finds `Pàcha`. Results can be sorted by name, rank, HQ level, power, squad power, hero power, troop kills, profession level, troop level, or join order, with an ascending/descending toggle.
-- **Skill Tracking**: Officers (R4/R5 with `manage_members`) can record which members hold Engineer skills (currently: Medical Aid) via the member edit modal. Members can also self-report their skills from their profile page. Skills appear as badges on member cards and can be filtered via a chip on the Roster page.
-- **LastRank Sync** *(`manage_members`)*: Pull power, hero power, HQ level, rank, troop kills, and profile avatars from [lastrank.fun](https://lastrank.fun) (a community leaderboard site) to supplement manual entry. From the **Sync from LastRank** panel on the Members page, *Fetch Alliance Data* matches every LastRank member against your roster in one call — preferring each member's saved LastRank ID, so someone who changed their in-game name is still recognised instead of appearing as an unknown player — then falling back to name and alias matching, which **ignores accents** so a roster `Pàcha` still matches a LastRank `Pacha` instead of looking like two different players — and opens a review modal: stat increases apply automatically (and only when LastRank's data is newer than yours); rank changes and **name changes** (a member whose current in-game name differs from your roster) go to a **review queue** that survives closing the page — a **Review Queue** button on the panel shows how many decisions are waiting and opens them without contacting LastRank at all. Each item can be applied, deferred until a newer pull (*Not now*), or deferred until LastRank proposes something different (*Not until it changes*), so the same suggestion stops nagging you every sync. Applying re-checks first, so a change you already made by hand is reported as already up to date rather than applied twice. Officers with `manage_members` are told when decisions are waiting: a **LastRank Review** dashboard card breaks the queue down by type and links straight to it, the Members panel shows a live count, and a one-per-session toast flags a non-empty queue on first page load — which matters most when the scheduler is filling the queue from runs nobody watched. A name change can be applied as a rename or saved as a global alias; unmatched names can be mapped to a member (as a global alias), used to rename a member, or added as new; and members who appear to have **left the alliance** (absent from LastRank, or unranked there) are listed for optional archiving (default off). *Gather Extended Info* then refreshes kills, power, hero power, HQ, profession, profession level, and avatars per player (oldest-synced first, so an interrupted run resumes). **This runs on the server**, so you can start it and close the page — come back any time to watch the progress, from any device. A Stop button ends a run early and keeps everything already synced. Archived members are skipped. The alliance ID is configured once in **Settings → Alliance Identity**. **Scheduled sync** *(optional, off by default)*: **Settings → Scheduled LastRank Sync** can keep everything fresh automatically — pick an anchor hour and how often to check, and the server does the rest with no browser open. Stat updates apply automatically; rank changes, renames, unmatched names and possible departures always go to the review queue and are never applied unattended. Each player is re-pulled at most once a day, so most checks cost nothing at all; the settings page shows the valid range and explains it as you change it. Prospects and NAP member counts can be included with their own toggles. LastRank data is treated as enrichment, never overwriting fresher local data, and every datapoint records its origin (`lastrank`, `ocr`, `csv`, `mobile`, or `manual`).
-- **LastRank Avatars**: Member and prospect cards show the player's in-game avatar (hotlinked from the game CDN), and the logged-in user's own avatar fills the sidebar tile. For transfers, the seat color rings the avatar instead of a separate dot. Avatars fall back gracefully to initials / no-image if unavailable. *Operator note:* avatars need the game CDN hosts (`lastwar-cdn.akamaized.net`, `lastwar-cdn.lastwarapp.net`) in the reverse-proxy `img-src` CSP. `scripts/install.sh` sets this for new installs, and **`scripts/update.sh` auto-patches the Caddyfile** (backing it up first, then reloading Caddy) on existing installs — no manual step. If the hosts aren't present, avatars simply fall back to initials/no-image.
-
-### 🏠 Overview Dashboard
-- **Customizable Landing Page**: The default landing page is a per-user dashboard surfacing key alliance data at a glance without navigating between pages. Cards can be reordered via drag-and-drop and toggled on or off; preferences are saved per account.
-- **Alliance Health Card**: Active member count, total alliance power, and percentage of members currently eligible for train.
-- **VS Performance Card**: Current week total points, average per member, percentage meeting the configured minimum, and top/bottom 3 contributors. The minimum threshold is configurable in Settings.
-- **Schedule Card**: The next 3 upcoming events from the active alliance schedule.
-- **Diplomacy Card**: Active allies with their agreement type tags.
-- **Leader Flags Card** *(R4/R5 only)*: Members who fell below the **VS daily minimum** on N or more completed days this week (N is the configurable "Flag After N Days" setting), sorted by days missed. Only days that have finished and been imported are counted, so partial-week data doesn't cause false flags. Helps officers identify who needs follow-up without manually scanning the VS page.
-- **Members page** is still accessible via its own nav link at `/members`.
-
-### 📈 Analytics & Activity Dashboard
-- **Commander Growth Tracking**: Instantly calculate and visualize 7-day and 30-day overall power deltas for every member to easily identify top grinders and stagnant accounts.
-- **Total Hero Power Tracking**: Track each member's Total Hero Power alongside overall power, with full chronological history and 7-day / 30-day growth deltas shown on the Tracking page.
-- **Troop Kill Tracking**: Track each member's lifetime troop kill count with a full snapshot history. The Tracking page's dedicated Kills tab shows current kills, 7-day delta, and 30-day delta for every member who has a recorded entry. Kill counts can be entered manually from the member edit modal or My Profile, and are imported automatically when a Strength — Kills screenshot is processed through the OCR upload.
-- **HQ & Profession Level Tracking**: The Tracking page has dedicated **HQ Level** and **Profession Level** tabs, each a sortable, searchable, exportable leaderboard showing the current value plus 7-day and 30-day deltas for every member with a recorded entry. Both are kept as full snapshot histories (HQ level never regresses). Values are entered manually from the member edit modal (HQ Level and Profession Level fields) or My Profile, and are refreshed automatically by LastRank sync.
-- **VS Duel Leaderboards**: Track daily alliance duel contributions with massive, interactive stacked bar charts to see exactly where members excel (e.g., Radar vs. Tech day).
-- **Alliance Composition**: Premium `Chart.js` visualizations breaking down the alliance's Troop Tiers and Primary Squad focuses (Tank/Aircraft/Missile).
-- **Theme-Aware Charts**: Chart.js color defaults are read from the active CSS theme at initialization time, so axis labels and tooltips match the current light/dark mode rather than being hardcoded to a single palette.
-- **Historical Integrity**: Overall Power, Squad Power, and Total Hero Power are all tracked chronologically, preventing data loss and enabling long-term growth analysis.
-- **Audit / Activity Log**: A structured, chronological audit trail of all write operations across the app — member changes, recruits, allies, storm, OC, awards, files, imports, and more. Consecutive creates of the same entity type by the same user within 15 minutes are batched into a single entry. Update events include a field-level diff (e.g. `status: interested → pending`). Accessible to R4/R5 by default via a dedicated `/activity` page with user and limit filters. Sensitive events (user accounts, permissions, settings, credentials, invitations) are visible to admins only.
-
-### 🗡️ VS Duel League
-
-The **Duel League** tab of the VS Hub page tracks alliance-vs-alliance Duel League performance — the weekly matchup, not just individual member points — so leadership can understand *why* a week was won or lost, not only that it was.
-
-- **Match-point scoring**: Each day (Mon–Sat) the alliance with the higher raw Alliance Duel Score wins the day and banks **match points** (Day 1 = 1, Days 2–5 = 2, Day 6 / Enemy Buster = 4; 13-point pool). The alliance with more match points wins the week. Weekly match points, outcome, and the winnable status are always **computed from the daily results** — a deterministic *Clinched / Eliminated / Live* tracker that also shows **which day the week was decided** (a 7–0 clinched Thursday reads as a stronger week than a 7–6 on Saturday). Tied days award 0 to both and are handled automatically (a week can end in an overall tie).
-- **Its own season numbering**: The Duel League runs on its own season number (e.g. S34), independent of the game's named seasons and the app's Season Hub.
-- **Weekly matchup & strategy context**: Record the opponent (tag / name / server), a per-week **strategy label** (Push / Save / Normal / Test / Recovery) and **result** (Worked / Failed / Mixed), plus leadership **notes** — so a planned save-week loss never gets misread as a failed push. Strategy and notes are visible only to those with VS **manage** permission; scores and bracket are visible to anyone with VS **view**.
-- **Bracket, standings & prediction**: Capture the full 16-team bracket for a week (each pairing's alliances, servers, and match scores) and view every week as bracket columns alongside a standings ladder in the game's exact rank order. Ranks are computed automatically — matchups are always rank-adjacent (1v2, 3v4 …) — and **only reorder once a week is fully settled**: an in-play pairing that isn't yet mathematically decided (e.g. 4–3, still catchable) shows the leader as *leading*, not as a winner. The week after the current one is **predicted** from the results so far (winners re-pair with winners, losers with losers), showing decided slots by name and undecided ones as `W/L of [A] / [B]`. You set your **week-1 starting rank** (the game's random seed) on the week; every later week's rank follows from results.
-- **Frozen weekly snapshot**: Each week stores a point-in-time snapshot of **both** alliances' power, kills, member count (and server) — sourced from LastRank when configured, otherwise your summed roster or manual entry — so the historical "us vs them" picture for a week never drifts as live power changes. Optionally paste an opponent's LastRank link to fill their side automatically.
-- **Participation health**: Per-day active scorers, zero-score members, average score, and top-10 contribution %, derived live from the existing member VS Points data.
-- **Day-of-week analysis**: Across the season, which VS theme days the alliance wins and loses most — the "identify our weak days" view.
-- **All-Time**: Cross-season record (wins / losses / ties and win rate), average member points by theme day across every imported week, and a filterable list of past seasons.
-- **Permissions**: Reuses the existing `view_vs_points` / `manage_vs_points` keys (the Settings permission group is labelled **VS & Duel League**); no separate permission to configure.
-
-### 📢 Shoutouts & Feedback (Zero-Trust Feedback Engine)
-- **Semi-Anonymous by Default**: To encourage honest feedback, authors are strictly anonymous. The Go backend scrubs identifying data before the payload ever reaches the client.
-- **Targeted Visibility**: Authors can restrict their feedback to specific alliance ranks (e.g., R4 and above). The backend silently drops these records from the database query for unauthorized viewers.
-- **RBAC Anonymity Override**: Alliance leaders can configure specific ranks to possess the `view_anonymous_authors` permission via the Admin Settings matrix, allowing authorized moderators to see the true author for accountability.
-- **Creator Anonymity Bypass**: Authors can optionally toggle a "Make my author name public" checkbox, bypassing the anonymity filters to give public kudos.
-- **Creator Management**: Authors retain full control to edit or delete their own active shoutouts, while authorized moderators can curate the board.
-- **Auto-Expiring**: Shoutouts automatically expire after 7 days, keeping the feedback loop relevant to current events.
-
-### 🤝 Allies & Diplomacy
-- **Ally Directory**: Track all current and former allied alliances on a dedicated `/allies` page. Each entry stores the ally name, agreement type tags, and active/inactive status. Inactive allies are hidden by default and can be surfaced via toggle.
-- **Agreement Type Registry**: Manage a custom set of agreement types (e.g. NAP, Mutual Aid, Coalition) used to tag each relationship. Types can be created, renamed, and deleted from the Agreement Types tab (visible to `manage_allies`).
-- **Non-Aggression Pact (NAP) Tab**: A live view of the top alliances on your own server, power-ranked from LastRank, with your own alliance shown in place. Each row is flagged as an existing ally (with its agreement tags), as you, or as an alliance you have no agreement with — so the tab answers the question the ally list can't: *who is on our server that we haven't covered yet?* Any unallied alliance can be added straight from the tab. The pact size and how many alliances to import are both configurable in Settings; a divider marks the NAP line, and alliances just below it stay visible as context. Member counts are gathered per alliance **on the server**, so that slower pass no longer needs the page kept open — and each lookup refreshes that alliance's power and kills at no extra cost, since they arrive in the same response (a stale response never walks back fresher numbers). Those lookups also feed the alliance history series, recording a datapoint only when something actually changed — so the series tracks movement rather than filling up with identical readings. Viewing needs `view_allies`; refreshing from LastRank needs `manage_allies`.
-- **Alliance Stats History**: Every NAP refresh records a dated snapshot of the server ladder (power, kills, and rank per alliance), building a time series for later analysis of who is climbing and who is stalling.
-- **Scout Report**: A tab on the External Alliances page that turns any alliance — usually your next VS opponent — into a full member-by-member breakdown. Search your own registry or look the alliance up on LastRank **across every server** (VS Duel League opponents are usually not on yours, so the search never assumes your server; the same tag often exists on a dozen servers, so each result shows its server number). You can also paste a lastrank.fun alliance link straight in. The basic report arrives in about a second: every member with their rank, power, hero power, HQ level and country, plus summary tiles for roster totals, averages and the top power. Tick **Extended report** to also pull each member's kills, profession, career level, source server and scan date. Each member is looked up individually, and any record LastRank hasn't refreshed within the last day is re-pulled live from the game, so you're never scouting on week-old numbers — the progress list marks which members needed that refresh. A well-tracked alliance takes a couple of minutes; one nobody has scouted before takes longer, and a Stop button ends the run early and keeps whatever it already fetched. The tab has to stay open while it runs. The table sorts by any column, searches by name, and exports to CSV or Excel — exporting exactly the rows you're looking at. Filters cover rank and HQ band, and once an extended run has data, three more appear alongside them: profession, kills bracket, and whether each player is native to the server or transferred in. One column is worth reading carefully: **Scanned** is when LastRank last scanned that player from the game — it tells you how fresh the row is, *not* when the player last logged in. Members of the same alliance are scanned together, so their timestamps sit seconds apart and say nothing about who is dormant. **Member data is never stored**: it lives in the tab until you leave. Only the alliance's own power, kills and member count are saved, and only if that alliance is already in your External Alliances registry — looking someone up never adds them to it. Needs `manage_allies` or `manage_vs_points`.
-  > **How much you see depends on LastRank.** The per-member breakdown covers only players LastRank already holds a record for, which is a function of who has been looked up there — not of the alliance's real size. Your own alliance and well-known ones return a full roster; an alliance nobody has scouted yet can return few members or none at all, and the report says so plainly when that happens. The alliance-level power, kills, rank and member count are always current regardless, so an empty member list still gives you a usable opponent snapshot.
-- **Dashboard Integration**: The Overview Dashboard's Diplomacy Card surfaces active allies and their tags at a glance without navigating to the full page.
-- **Permission-Gated Access**: Separate `view_allies` (R4/R5 default) and `manage_allies` (R5 default) permissions control read vs. write access.
-
-### 🌩️ Desert Storm Planner
-- **Task Force Configuration**: Set up two Task Forces (A/B) with custom time slots for coordinated Storm events.
-- **Member Registration**: Members self-register for Storm participation; leaders get a live view of sign-ups by TF.
-- **Group & Building Management**: Organize registered members into groups, assign them to specific buildings, and track assignments in real time.
-- **Battle Mail Integration**: The Battle Mail tab fetches the "DS Battle Strategy Mail" template from the Comms hub, pre-fills task force, battle time, and group assignments automatically, then copies straight to clipboard. Edit the template on the Comms page and Storm picks it up immediately; if the template is deleted Storm falls back to a built-in mail gracefully.
-- **Permission-Gated Access**: Separate `view_storm` and `manage_storm` permissions let you control who can see vs. administer the planner.
-
-### 🗓️ Alliance Schedule
-- **Calendar-Based Events**: Schedule Marshal's Guard, Zombie Siege, and custom events on specific dates with exact server times. No more repeating templates — every event lives on a real calendar date.
-- **Event Types**: A managed registry of event types. MG and ZS are built-in system types; officers can add custom types (SVS, etc.) with a name, short name, and icon.
-- **All-Day Events**: Mark any event as all-day when no specific time applies; all-day events sort to the top of each day column.
-- **Smart Validation**: MG events are blocked from starting at or after 22:00 ST (hard game rule). ZS events enforce the 71.5-hour cooldown — the UI shows the next eligible time if the cooldown hasn't elapsed.
-- **Level Tracking**: MG and ZS events store a concrete level at creation time (defaults to the configured baseline). Updating the baseline never retroactively changes past events.
-- **Event Generation**: Bulk-generate MG events (every-other-day cycle from an anchor date) and ZS events (fixed weekdays or ASAP 71.5h chain) across a date range, skipping dates that already have an event.
-- **Server Events**: Repeating game-wide events (Ironclad Vehicle, Zombie Invasion, Rampage Bosses, General's Trial, Doomsday, and any custom entries) shown as banners at the top of each day column. Supports weekly, biweekly, and every-N-days recurrence.
-- **VS Alliance Duel Themes**: The fixed 7-theme weekly cycle (Radar Training → Alliance Star) is shown per day automatically — no configuration required.
-- **Season Tracking**: Each day column shows the current season day (e.g. S3 D47), derived automatically from the active season's start date. The day counter continues incrementing through archived seasons so historical weeks stay accurate.
-- **Week Grid**: 4+3 two-row layout (Mon–Thu on row 1, Fri–Sun on row 2) giving each day enough space for event cards and action buttons. Collapses to a single-day swipe view on mobile — the existing ← / → week nav buttons navigate days on small screens.
-- **Desert Storm Integration**: Friday columns automatically show the two active Task Force battle slots (pulled from the Storm page TF configuration and admin-configured slot times).
-- **Week Image**: Generate a canvas-rendered PNG of any week in the site's dark theme — suitable for sharing in Discord. Includes server banners, VS themes, event levels, season days, and storm pills.
-- **Day Card**: Generate a single-day PNG (Discord-friendly proportions) for any day in the currently viewed week.
-- **Text Output**: Plain-text block for each day, formatted for pasting into chat or Discord.
-- **Advanced Settings**: Storm battle slot times (Slot 1/2/3 → clock time) are configurable by admins via a dedicated section on the `/admin` page.
-- **Permission-Gated Access**: Separate `view_schedule` and `manage_schedule` permissions.
-
-### 🎖️ Officer Command
-- **Responsibility Directory**: A living org chart of standing alliance functions, grouped by domain (e.g. Membership, Relations, War). Not a task manager — no completion states or due dates.
-- **Category & Responsibility Management**: Admins can create, rename, and delete categories and responsibilities inline without leaving the page.
-- **Assignee Tracking**: Assign one or more members to each responsibility; chips display name and rank. Members can be added via a searchable picker and removed individually.
-- **Frequency Badges**: Each responsibility carries a Daily / Weekly / Seasonal frequency, displayed as colour-coded pill badges.
-- **Client-Side Filtering**: Filter the directory by assigned leader using a dropdown, or by frequency (All / Daily / Weekly / Seasonal) using pill-shaped filter chips — no round-trips to the server.
-- **Drag-to-Reorder**: Categories and responsibilities within a category can be reordered by drag-and-drop; order is persisted server-side.
-- **Permission-Gated Access**: Separate `view_officer_command` (R1–R5 default) and `manage_officer_command` (R4–R5 default) permissions control who can view vs. administer the directory.
-
-### 🎯 Recruiting
-- **Former Members**: Instead of deleting members and losing their history, officers can archive them (rank `EX`). Archived members remain in all historical records — train logs still show their name, VS point history is preserved. Officers with `manage_members` can view former members on the Members page ("Former" filter chip) and on the Recruiting page with stats: last known power, total train runs conducted, and last VS week active.
-- **Reactivate**: Former members can be restored to an active rank (R1–R5) from the Recruiting page, re-joining the roster immediately.
-- **Transfers & Prospects**: The recruiting pipeline is split into two tabs. **Transfers** tracks cross-server players awaiting a transfer window — includes server, seat color, and the full status set (Interested / Pending / Declined / Qualified for Transfer / Unqualified for Transfer). **Prospects** tracks same-server players waiting for an open roster spot — server and seat color fields are hidden since they're on your server, and transfer-specific statuses are not available. Both types share the same fields (power, Total Hero Power, rank in alliance, recruiter, first contact date, notes, R4 interest). Records can be moved between tabs at any time via the **Move to Transfers / Move to Prospects** button on each card; moving to Prospects automatically clears server and seat color.
-- **LastRank Prospect Lookup** *(`manage_recruiting`)*: Each prospect/transfer card has a **Look up on LastRank** action that searches [lastrank.fun](https://lastrank.fun) for the player **without leaving the app** — type a name, optionally narrow it to a server, and pick from the results showing each hit's server, alliance tag, power and hero power. Picking a result immediately fills in power and hero power. Already have the link? Pasting a LastRank profile URL or ID still works. The ID is saved either way, so a later **Refresh from LastRank** updates the record in one click — and a per-tab bulk button refreshes every prospect/transfer that has a saved ID at once. Bulk refreshes run **on the server** with a per-item progress list, so you can leave the page while they work (declined prospects are skipped). Lookups also pull the player's avatar.
-- **Officer Notes**: Each active member now has an internal notes field visible only to officers with `manage_members`. Notes are displayed in the member edit modal and never shown to standard members.
-- **Permission-Gated Access**: `manage_members` controls archive/reactivate and viewing former members. Separate `view_recruiting` and `manage_recruiting` permissions (R4–R5 default) gate the Recruiting page and prospect CRUD. Hard-deleting archived members is admin-only.
-
-### 🏆 Season Hub
-A season-scoped tracking and reward distribution system for structured in-game competition seasons.
-- **Season Management**: Create and archive seasons with configurable parameters — week count, key event name and attendance requirement, and participation tier thresholds. Future-dated seasons are created in an upcoming state and activate automatically when their start date arrives. R5-only: edit or delete any non-active season.
-- **Rankings Tab**: Sortable member standings showing participation percentage (with a per-week dot grid), contribution percentage (relative to the top contributor), key event attendance count, class tag (Active Member / At Risk / Dead Weight), and assigned reward tier. Visible to all members; R1–R3 see only their own row.
-- **Participation Tab** *(R4/R5)*: Log weekly scores per member using configurable score levels (e.g. FULL / PARTIAL / ABSENT) and a key event attendance counter. Scores are saved per week with bulk-save and week navigation.
-- **Attack & Defense Tracking** *(R4/R5)*: Every week carries both an attack action and a defense action, so each member's week has a separate **Attack Note** and **Defense Note** alongside the general note — a note no longer has to say which role it meant. Two checkboxes, **Attack Poll** and **Defense Poll**, record whether the member confirmed their response to the in-game poll for that role. The poll checkboxes are confirmed manually by an officer and are independent of the app's own Poll Tracker. All four fields save with the week's bulk save and are included in the tab's CSV/XLSX export.
-- **Contributions Tab** *(R4/R5)*: Manually enter season contribution totals across four categories (Mutual Assistance, Siege, Rare Soil War, Defeat) with week-level granularity. The season-end snapshot (week 0) is used as the canonical tie-breaker for rankings; weekly tracking is optional.
-- **Rewards Tab** *(R4/R5 view, R5 assign)*: Assign reward tiers to members with an audit trail of who assigned what and when. Slot usage is shown per tier, highlighting any tier assigned beyond its configured count.
-- **Configurable Reward Tiers** *(R5)*: Each season carries its own reward tier list — add, rename, reorder, recolour or set the slot count of any tier from Edit Season. Renaming a tier updates every reward already assigned under it in that season; a tier that has rewards assigned cannot be deleted. New seasons are seeded from the default tier list in Settings → Season Hub.
-- **Season Mail**: Season-specific mail templates are stored in the Comms hub and scoped to the season. Full create, edit, delete, and variable-fill copy work from Season Hub directly — no need to leave the page.
-- **Permission-Gated Access**: `view_season_hub` (R1–R5), `manage_season_hub` (R4–R5), `manage_season_rewards` (R5) — all configurable via the permissions matrix.
-
-### 📬 Alliance Communications
-A central hub for all alliance-wide mail templates, announcements, and reference resources.
-- **Mail & Announcement Templates**: Create reusable templates organised into free-form, collapsible categories (e.g. Desert Storm, Policy, Reminder). R4/R5 manage; R3 view and copy.
-- **Variable System**: Embed `{variable_name}` placeholders — you're prompted to fill them in when copying. Add a type prefix for a specific input: `{time:var}` (24h time picker), `{date:var}` (date picker), `{dayofweek:var}` (day-of-week dropdown), `{number:var}` (numeric field), `{multiline:var}` (text area), `{member:var}` (single-member picker), `{members:var}` (multi-member picker, output as a comma-separated list of names), `{assignment:skill_key}` (assignment builder). Member pickers list the active roster (searchable when the page provides it) and exclude former members. Use `{{` and `}}` for literal braces that won't be treated as variables.
-- **Assignment Variable**: Templates can include `{assignment:medical_aid}` (or any registered skill key). When an officer clicks "Copy", an assignment builder opens: engineers (skill holders) are each paired with one member, and the formatted assignment list is injected into the copied text. The line format is configurable (default: `• {engineer} → {member}`) so officers can reorder, change the separator, or adjust the bullet to match their mail style. Pairings and format persist across reopens within the same page session.
-- **System Variables**: Templates can declare variables pre-filled by integrations (e.g. the Storm page supplies `task_force`, `battle_time`, and `group_assignments` for the DS battle mail). Pre-filled variables are never shown in the fill-in modal.
-- **Unified Season Mail**: Season-specific templates are stored in the same table, scoped by season. They appear in Season Hub for in-context editing and in Comms under their season category — one system, two entry points.
-- **Resources Tab**: Store named external links (guides, spreadsheets, infographics) with optional descriptions for quick alliance-wide reference.
-- **Search & Browse**: Live search filters across titles and content. When no search is active, templates group into collapsible category sections with session-persistent open/closed state.
-- **Permission-Gated Access**: `view_comms` (R3–R5 default) and `manage_comms` (R4–R5 default), configurable via the permissions matrix.
-- **Poll Tracker**: Two dedicated tabs — Poll Templates and Polls — let officers track who has and hasn't responded to in-game polls. Define a reusable poll template (question, options, named or anonymous, single or multi-select), then launch discrete tracked instances per poll run. Named polls show a full per-member pending/responded split with inline mark-responded buttons, plus a **By option** view that groups respondents under each option in the order they signed up (mirroring the in-game results screen) with a searchable box to add members to an option by hand. Anonymous polls show option-count inputs only. Response progress (X/Y members responded) is shown on every poll card. Each poll card also offers one-click exports — **Export CSV**, **Export XLSX**, and **Copy Summary** — available to anyone who can view polls. Named-poll exports list one row per member-option pair (member, rank, option, responded-at), including non-responders, so they double as a follow-up list; anonymous-poll exports show per-option counts and percentages only, never voter identities. Copy Summary places a readable text recap on the clipboard ready to paste into chat. Permissions are independent: `view_polls` / `manage_polls` allow a user to access poll functionality without necessarily having access to the rest of the Comms page.
-
-### ⚖️ Member Accountability
-- **Tag System**: Each active member is automatically tagged as Reliable, Needs Improvement, or At Risk based on their current active strike count. The strike thresholds for each tag are configurable in Alliance Settings.
-- **Hybrid Strike System**: VS performance is auto-flagged against the configurable weekly minimum (set in Alliance Settings). Officers review flagged members and add strikes with one click — duplicate VS strikes for the same week are blocked. Storm no-shows and train no-shows are manually logged by officers post-event; all other strikes can be added with a free-form category, reason, and optional reference date. The three built-in categories (VS Below Threshold, Train No-Show, Storm No-Show) are always available; selecting Manual reveals a text field for any custom category (e.g. "Diplomacy Violation"). Custom categories persist in the database and appear in the dropdown for all officers on future visits.
-- **Train No-Show Tracking**: Officers can mark any train log entry as a no-show directly from the Train Tracker page. Doing so auto-creates an accountability strike; toggling it back removes the strike.
-- **Storm Attendance Logging**: Officers log post-event storm attendance from the Accountability page — select the storm date, then mark each member as attended, no-show, or excused with an optional reason.
-- **Member Profile**: Each member has a dedicated accountability profile showing their current tag and strike count, full strike history (with excuse/delete controls for officers), VS history for the last 8 weeks, storm attendance history, and train log.
-- **Weekly Report**: A summary page showing top VS performers, members below the VS daily minimum, top power growth, and a breakdown of members by tag.
-- **Dashboard Card**: An Accountability card on the dashboard surfaces the At Risk / Needs Improvement / Reliable counts and the three members with the most active strikes at a glance.
-- **Permission-Gated Access**: `view_accountability` and `manage_accountability` default to R4/R5. Members cannot view their own accountability profile.
-
-### 🚂 Train Tracker
-- **Eligibility Rule Engine**: Officers create and save named eligibility rules using flexible OR-group / AND-condition logic to define who qualifies to conduct a train. Conditions can filter on member rank, current/previous week VS points, individual VS day columns, and days since last FREE or any train conducted.
-- **Configurable Selection**: Each rule stores a selection method — Random, Greatest, or Least — applied to any tracked field (e.g. "prioritise members who have gone longest without conducting a FREE train").
-- **Conductor Log**: Every train run is recorded with a game date (UTC-2), train type (FREE or PURCHASED), conductor, optional VIP slot (Special Guest or Guardian Defender), and notes. All members can view the full history with date-range filtering.
-- **Soft Daily Limits**: Configurable per-type daily limits (default: 1 FREE, 2 PURCHASED). Exceeding the limit shows a warning — no hard block.
-- **Permission-Gated Access**: Separate `view_train` (R1–R5 default) and `manage_train` (R4–R5 default) permissions control who can view history vs. manage logs and rules.
-
-### 📁 Alliance Files & Document Management
-Powered by the WOPI protocol and an integrated **Collabora Online (CODE)** container, the app provides a Google Drive-like experience natively.
-- **Live Document Editing**: Full browser-based collaborative editing for spreadsheets (`.xlsx`, `.csv`), text documents (`.docx`), and presentations.
-- **Create New**: Alongside uploading, officers with the **Upload Files** permission can create a blank document (`.docx`) or spreadsheet (`.xlsx`) directly in the app — set its title, tags, and rank restrictions, and it opens straight into the editor for immediate collaborative editing.
-- **Native Image Hosting**: Fast, secure distribution of alliance cheat sheets, war infographics, and maps.
-- **Tags & Filtering**: Officers with the **Manage Files** permission can create colored tags (e.g. "Guides", "Rules", "Violations") and attach them to files at upload or via edit. A Members-style search box, sort options (Name / Updated / Uploaded / Owner / Type), and tag filter chips make a large library easy to navigate. Each tag has a **minimum rank**: a tag restricted to R4+ hides both the tag and any file carrying it from lower ranks entirely — a single control for keeping sensitive material (like violation screenshots) out of view, even if the file's own rank is left open.
-- **Edit Tracking**: Every document save through the editor records a "last updated" time and a throttled activity-log entry, so it's clear when a shared document was last changed.
-- **Docker-Bridged Security**: Document data flows over a private, internal Docker network (`lastwar-net`), completely bypassing external firewalls and NAT hairpinning limits.
-- **Theme Synchronization**: The document editor dynamically reads your application's state, matching your Light or Dark mode preference automatically.
-
-### 📸 Smart OCR Extraction (External Microservice)
-To maintain a lightweight core application, heavy image processing and Optical Character Recognition (OCR) are offloaded to a dedicated, containerized Python microservice. 
-**Repository:** [`shodiwarmic/lastwar-ocr-service`](https://github.com/shodiwarmic/lastwar-ocr-service)
-- **Automated Data Extraction**: Drag and drop up to 100 game screenshots at once to automatically extract VS Points or Power updates.
-- **Intelligent Pipeline**: The microservice automatically detects the screenshot type by analyzing colored UI tabs, groups them into buckets, and dynamically stitches them into vertical towers to bypass API limits and retain razor-sharp text.
-- **Hybrid State Machine Parsing**: Overcomes vertical text-flow layout issues natively by intelligently pairing player names with valid scores while filtering out UI noise.
-- **Validation UI & Machine Learning**: OCR results are held in a "Preview & Confirm" modal. Administrators can manually map unresolved scans to existing members and save the pairing as an `ocr` alias, teaching the Alias Engine to automatically correct that specific visual artifact in all future uploads.
-- **Two OCR Backends**: The app ships two backends, switchable in Admin Settings:
-  - **Cloud** (default): Sends images to Google Cloud Vision via an OIDC-authenticated Cloud Run worker. Fully automatic screen-type detection. Requires GCP credentials configured in Admin Settings.
-  - **Local**: Runs a [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) sidecar (`lastwar-ocr-service:local`) in Docker with no external dependencies. The user selects the image category manually per batch because PaddleOCR's English model cannot reliably detect Last War's stylised headers. Enable by selecting "Local" during `scripts/install.sh` / `scripts/update.sh`, or by setting `OCR_BACKEND_MODE=local` in `.env`.
-- **OCR Request Archival** (admin-only, off by default): Optionally retains a best-effort copy of each OCR request's uploaded screenshots, parsed response, and — when the OCR service supplies them — a `diagnostics.json` recording how each image was classified (screen type, confidence, and the method used). This makes diagnosing a misclassification instant instead of requiring a full local re-run. The destination is chosen in **Admin → Security → OCR Request Archival**: `none`, **Google Cloud Storage** (set a bucket name; reuses the same service-account key, which additionally needs the *Storage Object Creator* role on that bucket; retention via the bucket's own lifecycle rule), **local disk** (set `OCR_ARCHIVE_DIR`; auto-pruned after `OCR_ARCHIVE_RETENTION_DAYS`, default 7), or **both**. Archival never blocks or affects the OCR result. Works for either OCR backend.
-- **Scan Diagnostics in the Activity Log**: Every screenshot import logs a one-line OCR summary alongside the import entry on the Activity page — the engine used, image count, and a roll-up of how images were classified (e.g. `12×day_color_saturation@0.95, 2×day_text_fallback@0.75`), including any images that yielded no players. This surfaces extraction quality at a glance without enabling full archival. (Shown only when the OCR service reports diagnostics.)
-- See [IMAGE_RECOGNITION.md](docs/IMAGE_RECOGNITION.md) for detailed technical documentation.
-
-### 🌐 Inline Translation
-
-- **Translate a single note, not the whole page**: Alliances are rarely all one language. Where a member has written free text — a shoutout note, an alliance mail, a prospect or ally note, a schedule note, or a strike reason — a small **Translate** control appears next to it for readers whose language differs. One click swaps that block into your language; another click brings the original straight back. The rest of the page is untouched, and the stored text is never modified.
-- **Two ways to translate, chosen in Admin → Security**:
-  - **On-device only** (default): uses your browser's own built-in translator. Nothing is sent anywhere, there is no key to configure and no cost — but it exists only in recent desktop Chrome and Edge, so it never works on phones, and the first use of a language downloads a pack that can occasionally fail to start.
-  - **Google Cloud Translation**: translates on the server instead, so it works for **everyone — phones included** — in any browser, with no pack downloads. It reuses the same Google service account key already configured for screenshot OCR; there is no second key to manage. On that Google Cloud project, enable the **Cloud Translation API** and grant the service account the **Cloud Translation API User** role.
-- **Free in practice, and capped so it stays that way**: Google gives 500,000 characters every month at no charge, permanently. Each note is translated **once** and then cached and shared, so re-reading it — by you or anyone else — costs nothing at all. A monthly character limit (default 400,000) is enforced server-side, so a free allowance cannot quietly turn into a bill; Admin → Security shows the running total.
-- **Where it appears**: The control shows up only when there is something to do — prose already in your language gets none. With a server backend configured it works on any device. On-device translation additionally requires a trusted address: an `https://` site or `localhost`, so reaching a server directly by its LAN IP over plain `http://` falls back to the server backend. Where nothing is available, no control is shown and everything else works exactly as before.
-- **Exports always keep the original**: Translating a table cell on screen never changes what a CSV or XLSX export contains — exports always carry the text as it was written.
+Everything is permission-gated by in-game rank (R1–R5), so officers see what they need and members see what concerns them.
 
 ---
 
-## Infrastructure & Deployment
+## What it does
 
-The application utilizes a multi-container **Docker Compose** stack powered by pre-built images from the GitHub Container Registry. This means you **do not** need to install Go, heavy C++ OCR libraries, or SQLite on your host machine, and your server never has to waste resources compiling code. 
+| | |
+|---|---|
+| ⚙️ **Core Management** | Roster, ranks and aliases, with rank-based permissions, session security and configurable password policy |
+| 🏠 **Overview Dashboard** | A landing page each user arranges themselves, from cards for alliance health, VS performance and what needs attention |
+| 📈 **Analytics & Activity** | Power, hero power, troop kills and HQ level tracked over time, with a full audit log of who changed what |
+| 🗡️ **VS Duel League** | Match-point scoring, its own season numbering, weekly matchups and per-member contribution |
+| 📢 **Shoutouts & Feedback** | Semi-anonymous member feedback with targeted visibility and an audited anonymity override |
+| 🤝 **Allies & Diplomacy** | Ally directory, agreement-type registry, and a non-aggression pact ladder synced from LastRank |
+| 🌩️ **Desert Storm Planner** | Task-force setup, member registration, group and building assignment, and battle mail |
+| 🗓️ **Alliance Schedule** | Shared calendar of recurring and one-off alliance events |
+| 🎖️ **Officer Command** | Who is responsible for what, by category, with assignee tracking |
+| 🎯 **Recruiting** | Prospects and transfers, former-member reactivation, and LastRank player lookup |
+| 🏆 **Season Hub** | Season lifecycle, rankings, participation, contribution tracking and reward tiers |
+| 📬 **Alliance Communications** | Reusable mail and announcement templates with a variable system, plus polls |
+| ⚖️ **Member Accountability** | Tags, a hybrid strike system, excused absences and no-show tracking |
+| 🚂 **Train Tracker** | Eligibility rule engine, conductor log and rotation fairness |
+| 📁 **Alliance Files** | Live collaborative document editing, image hosting and tagged file storage |
+| 📸 **Smart OCR Extraction** | Read rankings straight from game screenshots — cloud (Cloud Vision) or a local, no-dependency backend |
+| 🌐 **Inline Translation** | Translate a single member-written note in place, without translating the whole page |
 
-### Prerequisites (Production)
-- A Linux Server (Debian or Ubuntu recommended).
-- **DNS Records**: You MUST have two domains pointing to your server's IP:
-  1. Main App: `app.yourdomain.com`
-  2. Document Server: `collabora.yourdomain.com`
+**→ [Full feature list](docs/FEATURES.md)** — every feature in detail, with the permission each one needs.
 
-### Quick Install (Debian/Ubuntu)
-We provide an automated script that installs Docker, generates secure secrets, configures the Caddy reverse proxy with SSL, and pulls the pre-built containers.
+---
+
+## Quick install
+
+Debian/Ubuntu. The script installs Docker, generates secrets, configures Caddy with SSL, and pulls the pre-built containers.
 
 ```bash
 git clone https://github.com/shodiwarmic/lastwar-alliance-manager.git
@@ -223,51 +42,26 @@ cd lastwar-alliance-manager
 ./scripts/install.sh
 ```
 
-### Manual Docker Deployment
-If you prefer to deploy manually or are updating an existing environment:
+You will need a Linux server and two DNS records pointing at it — one for the app, one for the document server. No Go, OCR libraries or SQLite on the host: the stack runs from pre-built images.
 
-1. Copy `.env.example` to `.env` and fill in your domains, a secure `SESSION_KEY`, and a `CREDENTIAL_ENCRYPTION_KEY`.
-2. Pull the latest images and start the stack:
-```bash
-docker compose pull
-docker compose up -d
-```
+## Documentation
 
-See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for comprehensive production setup details.
+| Guide | What's in it |
+|---|---|
+| [FEATURES.md](docs/FEATURES.md) | The complete feature list, with permissions |
+| [QUICKSTART.md](docs/QUICKSTART.md) | The short path from a fresh host to a running install, plus troubleshooting |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Full production setup — DNS, Docker, reverse proxy, environment variables, backups, updates |
+| [IMAGE_RECOGNITION.md](docs/IMAGE_RECOGNITION.md) | The OCR pipeline, both backends, and optional request archival |
+| [DESIGN_STANDARD.md](docs/DESIGN_STANDARD.md) | UI design standard — tokens, components, icon system |
 
----
+Configuration is via a `.env` file — copy `.env.example` and fill it in. Every variable is documented in [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-## Environment Variables
+## Default login credentials
 
-The application relies on a `.env` file in the root directory:
-- `DATABASE_PATH` - Path to SQLite database file (Default: `/app/data/alliance.db`)
-- `STORAGE_PATH` - Path to uploaded files (Default: `/app/uploads`)
-- `SESSION_KEY` - 64-character hex string for session/CSRF encryption.
-- `CREDENTIAL_ENCRYPTION_KEY` - 64-character hex string for AES-GCM encryption of external API credentials.
-- `PRODUCTION` - Set to `true` to enforce secure cookies.
-- `HTTPS` - Set to `true` when behind an SSL proxy.
-- `APP_DOMAIN` - Your main domain (e.g., `app.example.com`).
-- `COLLABORA_DOMAIN` - Your document domain (e.g., `collabora.example.com`).
-- `TRUSTED_ORIGINS` - Comma-separated list of trusted IPs/Domains for CSRF validation.
-- `OCR_BACKEND_MODE` - Set to `local` to use the PaddleOCR sidecar instead of Google Cloud Vision. Defaults to `cloud`. Also requires `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml`.
-
-## Default Login Credentials
 - **Username**: `admin`
 - **Password**: `admin123`
 
-⚠️ **Important**: The system will force you to change this immediately upon first login!
-
----
-
-## License
-
-Released under the [MIT License](LICENSE). This project inherits its licence from the upstream repository it was forked from, whose copyright notice is retained in the `LICENSE` file alongside one for the divergent work.
-
----
-
-## Credits & Acknowledgements
-
-This project originated as a fork of [`vervelak/lastwar-alliance-manager`](https://github.com/vervelak/lastwar-alliance-manager). The original repository provided the foundation that this project was built upon, and we are grateful to its author for starting it. The codebases have since diverged significantly — features, architecture, and deployment have all evolved independently — but the original work deserves full credit for getting this started.
+⚠️ **Important**: The system forces you to change this immediately upon first login.
 
 ---
 
@@ -281,14 +75,14 @@ This project originated as a fork of [`vervelak/lastwar-alliance-manager`](https
 - **WOPI JWT**: Document editing sessions are secured with short-lived JSON Web Tokens.
 - **Volume Persistence**: Databases and uploads are stored in persistent Docker volumes, surviving container rebuilds while remaining inaccessible to the public web root.
 
-### Enabling the OCR Microservice
-To enable the Smart OCR Extraction features, you must deploy the [`lastwar-ocr-service`](https://github.com/shodiwarmic/lastwar-ocr-service) and configure your Go backend to communicate with it securely:
+---
 
-1. Generate a 32-byte hex string to serve as your server's cryptographic vault key:
-```bash
-openssl rand -hex 32
-```
-2. Set the output as the `CREDENTIAL_ENCRYPTION_KEY` in your `.env` file and start the Go server.
-3. Log in as an Admin and navigate to the **Settings** dashboard.
-4. Provide the deployed URL of your Python CV Worker.
-5. Upload your Google Cloud Service Account JSON key. The key needs the **Cloud Run Invoker** role (to invoke the private OCR worker) and, *only if* you enable GCS request archival, **Storage Object Creator** on the archive bucket. The Go backend will encrypt this at rest and use it to securely invoke the private Cloud Run endpoint via OIDC tokens. See [IMAGE_RECOGNITION.md](docs/IMAGE_RECOGNITION.md) for the optional OCR-archival GCS bucket setup.
+## License
+
+Released under the [MIT License](LICENSE). This project inherits its licence from the upstream repository it was forked from, whose copyright notice is retained in the `LICENSE` file alongside one for the divergent work.
+
+---
+
+## Credits & Acknowledgements
+
+This project originated as a fork of [`vervelak/lastwar-alliance-manager`](https://github.com/vervelak/lastwar-alliance-manager). The original repository provided the foundation that this project was built upon, and we are grateful to its author for starting it. The codebases have since diverged significantly — features, architecture, and deployment have all evolved independently — but the original work deserves full credit for getting this started.

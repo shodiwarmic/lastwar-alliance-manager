@@ -63,6 +63,19 @@ COLLABORA_DOMAIN=collabora.yourdomain.com
 TRUSTED_ORIGINS=localhost:8080, 127.0.0.1:8080
 ```
 
+#### Optional variables
+
+These have working defaults and are absent from `.env.example`; set them only if you need them.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `8080` | Port the Go application listens on inside its container. Change it only if you also change the published port in `docker-compose.yml`. |
+| `COLLABORA_PORT` | *(unset)* | Explicit port for the Collabora document server, appended to `COLLABORA_DOMAIN` when building WOPI URLs. Needed only when Collabora is reached on a non-standard port rather than through the reverse proxy. |
+| `OCR_BACKEND_MODE` | `cloud` | Set to `local` to use the bundled PaddleOCR sidecar instead of Google Cloud Vision. Also requires `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml`. `scripts/install.sh` and `scripts/update.sh` set both for you if you opt in. See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md). |
+
+Two further optional variables, `OCR_ARCHIVE_DIR` and `OCR_ARCHIVE_RETENTION_DAYS`, configure
+local-disk OCR archival and are documented under [OCR Request Archival](#ocr-request-archival-optional) below.
+
 ### Step C: Pull and Start the Stack
 ```bash
 docker compose pull

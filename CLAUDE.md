@@ -1608,7 +1608,17 @@ before enabling `PRODUCTION=true`.
 
 ## Documentation
 
-Keep `README.md` up to date whenever a user-facing feature is added, changed, or removed. Each feature should have an entry under the appropriate `###` section in the Features block, written in the same style as existing entries (bullet points, bolded lead phrase, plain-English description of what it does and its permission model). Do not document internal implementation details — README is for end users and operators.
+**`docs/FEATURES.md` is the feature log.** Keep it up to date whenever a user-facing feature is
+added, changed, or removed: add or amend an entry under the appropriate `###` section, in the same
+style as the existing ones (bullet, bolded lead phrase, plain-English description of what it does and
+its permission model). Do not document internal implementation details — it is written for end users
+and operators, not for us.
+
+**`README.md` is the front page, not the feature list.** It carries one line per capability area and
+links to `docs/FEATURES.md` for the detail. Touch it only when a whole capability area appears or
+disappears — never for an individual feature. This deliberately trades a front page that goes slowly
+stale for one that does not grow a bullet per feature: the previous rule mandated a README bullet per
+user-facing feature, was followed faithfully, and produced 149 of them across 17 sections.
 
 ### `docs/` — design references and API specs
 
@@ -1618,9 +1628,11 @@ design mockup or reference document in `static/`**: the catch-all handler in
 served unauthenticated to anyone who guesses the URL, and `buildAssetHashes()`
 SHA-256s it at every boot for nothing.
 
-Third-party API references (e.g. the LastRank API notes) are kept in `docs/` but
-**gitignored** — they are not ours to publish and this repo is public. See
-`docs/README.md`.
+Third-party API references (e.g. the LastRank API notes) are **not kept in this repo at all** —
+they are not ours to publish and this repo is public. They live in the private
+`lastwar-private-docs` repo as `reference-*.md`, where they are actually version-controlled and
+backed up. The `.gitignore` entry for the old `docs/` path is retained deliberately, as a guard
+against one being re-added here. See `docs/README.md`.
 
 ## Static asset cache busting
 
