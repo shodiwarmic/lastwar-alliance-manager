@@ -59,6 +59,46 @@ func validateZSCooldown(excludeID int, newDate, newTime string) (time.Time, erro
 }
 
 // getSystemBaseline returns the baseline level for MG or ZS from the settings singleton.
+// maxEventLevelCeiling bounds the configurable ceiling itself. It is a sanity
+// bound on operator input, not a statement about the game -- the whole point of
+// migration 069 is that the app never has to know the game's real values.
+const maxEventLevelCeiling = 999
+
+// getSystemLevelCeiling returns the operator-configured max level for a system
+// event type. Mirrors getSystemBaseline's column switch.
+func getSystemLevelCeiling(shortName string) (int, error) {
+	col := "max_mg_level"
+	if shortName == "ZS" {
+		col = "max_zs_level"
+	}
+	var ceiling int
+	// #nosec G202 — col is only ever "max_mg_level" or "max_zs_level", not user input
+	err := db.QueryRow("SELECT COALESCE(" + col + ", 1) FROM settings WHERE id=1").Scan(&ceiling)
+	return ceiling, err
+}
+
+// validateSystemLevel checks a submitted MG/ZS event level against that type's
+// configured ceiling, returning a user-facing message when it is out of range.
+//
+// Shared by createScheduleEvent and updateScheduleEvent so the two cannot drift.
+// Out-of-range is REJECTED rather than clamped: a schedule entry is read by the
+// whole alliance, so silently storing a level the officer did not choose is worse
+// than an error. Callers decide WHEN to call this -- the update path deliberately
+// skips it for an unchanged level (see its call site).
+func validateSystemLevel(shortName string, level *int) (string, error) {
+	if level == nil {
+		return "", nil
+	}
+	ceiling, err := getSystemLevelCeiling(shortName)
+	if err != nil {
+		return "", err
+	}
+	if *level < 1 || *level > ceiling {
+		return fmt.Sprintf("%s level must be between 1 and %d", shortName, ceiling), nil
+	}
+	return "", nil
+}
+
 func getSystemBaseline(shortName string) (int, error) {
 	col := "mg_baseline"
 	if shortName == "ZS" {
@@ -402,6 +442,15 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 			}
 			req.Level = &baseline
 		}
+		// After the substitution, so a stale baseline is caught too.
+		if msg, err := validateSystemLevel(typeShort, req.Level); err != nil {
+			slog.Error("createScheduleEvent validateSystemLevel", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		} else if msg != "" {
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
 	}
 
 	user := getAuthUser(r)
@@ -512,6 +561,22 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		// Keep existing level when not provided
 		if req.Level == nil {
 			req.Level = old.Level
+		}
+		// Validate only a level the officer actually CHANGED. An event stored above a
+		// ceiling the operator has since lowered must stay editable: the level input is
+		// inside event-form, so rejecting an untouched legacy value would block edits to
+		// that event's notes or time as well, for a value nobody chose in this request.
+		// Typing a new out-of-range level is still rejected.
+		levelChanged := req.Level != nil && (old.Level == nil || *req.Level != *old.Level)
+		if levelChanged {
+			if msg, err := validateSystemLevel(typeShort, req.Level); err != nil {
+				slog.Error("updateScheduleEvent validateSystemLevel", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			} else if msg != "" {
+				http.Error(w, msg, http.StatusBadRequest)
+				return
+			}
 		}
 	}
 

@@ -343,8 +343,15 @@ type Settings struct {
 	StrikeNeedsImprovementThreshold int    `json:"strike_needs_improvement_threshold"`
 	StrikeAtRiskThreshold           int    `json:"strike_at_risk_threshold"`
 	// Schedule defaults
-	MGBaseline      int    `json:"mg_baseline"`
-	ZSBaseline      int    `json:"zs_baseline"`
+	MGBaseline int `json:"mg_baseline"`
+	ZSBaseline int `json:"zs_baseline"`
+	// MaxMGLevel / MaxZSLevel are the operator-configured event level ceilings,
+	// edited in Settings -> Game Limits beside MaxHQLevel. They replaced a
+	// hardcoded max="30" in templates/schedule.html; see migration 069. Zero is
+	// not a legal value, which is what lets updateSettings treat a zero here as
+	// "field omitted from the payload" rather than as a request to set 0.
+	MaxMGLevel      int    `json:"max_mg_level"`
+	MaxZSLevel      int    `json:"max_zs_level"`
 	MGDefaultTime   string `json:"mg_default_time"`
 	ZSDefaultTime   string `json:"zs_default_time"`
 	CurrentSeason   *int   `json:"current_season"`
