@@ -1028,8 +1028,19 @@ async function generateEvents() {
             return;
         }
         const data = await res.json();
-        showStatus(statusEl,
-            'Created ' + data.mg_created + ' MG, ' + data.zs_created + ' ZS events.', false);
+        let msg = 'Created ' + data.mg_created + ' MG, ' + data.zs_created + ' ZS events.';
+        if (data.skipped_existing > 0) msg += ' ' + data.skipped_existing + ' already existed.';
+        if (data.skipped_invalid > 0) {
+            // Name the dates the app declined and why. A smaller number than the
+            // officer expected, with no explanation, reads as a broken generator.
+            msg += ' ' + data.skipped_invalid + ' skipped as invalid';
+            const shown = (data.invalid || []).slice(0, 3)
+                .map(iv => iv.date + ' (' + iv.reason + ')').join('; ');
+            if (shown) msg += ': ' + shown;
+            if ((data.invalid || []).length > 3) msg += '; …';
+            msg += '.';
+        }
+        showStatus(statusEl, msg, false, data.skipped_invalid > 0 ? 0 : undefined);
         await loadWeek();
     } catch {
         showStatus(statusEl, 'Network error', true);

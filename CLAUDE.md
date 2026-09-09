@@ -699,6 +699,41 @@ first.
 - **Scheduled runs** use `jobActor{UserID: 0, Scheduled: true}`; `logActivity` maps a
   non-positive id to `NULL` rather than a dangling `users(id)` reference.
 
+## Schedule game rules live in one validator
+
+`schedule_events` has **four** write paths — manual create, manual update, bulk
+generate (`generateScheduleEvents`) and the Season Hub push
+(`pushSeasonEventsToSchedule`) — and until Project 5 only the two manual ones applied
+any game rule. A generated or pushed event could therefore sit on the calendar in a
+state the same officer would have been refused by hand, which is worse than no
+validation: the schedule is read by the whole alliance as if it were checked.
+
+**Any new write into `schedule_events` for a system type (MG/ZS) calls
+`validateSystemEventRules` and `validateSystemLevel`** (`handlers_schedule.go`). The
+date/time rules live in the first and nowhere else; the level rule stays separate
+because its call timing is caller-specific — the update path deliberately
+grandfathers a level the officer did not touch.
+
+**A bulk caller validates and INSERTs one row at a time, in date order**, so each
+accepted row is in the database before the next candidate is checked and the batch is
+validated against itself. Do not plan a batch and insert it afterwards: the batch
+would only ever be checked against what existed before it started. There is
+deliberately no in-memory "pending" list either — it would be a second copy of rows
+the database already holds, and a second thing to keep in step.
+`TestGeneratorValidatesAgainstItsOwnBatch` (`schedule_rules_test.go`) pins this by
+generating a self-conflicting weekday pair over an empty schedule.
+
+**Bulk paths skip and count; they never abort.** One illegal template row must not
+sink the rest of a push or a 90-day generate, which is the semantics the duplicate
+check already had. Both report `skipped_invalid` plus a capped `invalid[]` list of
+`{date, type, reason}` — a smaller number than the officer expected, with no
+explanation, reads as a broken generator.
+
+The per-candidate queries are not an N+1 worth removing: a generate is bounded at 90
+days, i.e. ≤ ~75 candidates × 3 indexed point queries against an in-process SQLite
+file, measured at ~10 ms for 300 such statements. A pre-fetch would reintroduce
+exactly the in-memory bookkeeping the paragraph above rules out.
+
 ## Known gotchas
 
 ### One DB connection — a query issued while a cursor is open DEADLOCKS
