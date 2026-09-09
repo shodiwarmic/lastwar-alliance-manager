@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // schedule_events has four write paths — manual create, manual update, bulk
@@ -273,8 +274,167 @@ func TestCreateAndUpdateStillRejectWhatTheyRejectedBefore(t *testing.T) {
 	if rr := create(zsTypeID, "2026-09-07", "23:00"); rr.Code != http.StatusCreated {
 		t.Fatalf("first ZS: %d %q", rr.Code, rr.Body.String())
 	}
+	// The ZS rule itself changed with the move to a date gap; what is pinned here
+	// is that the manual path still refuses, and names the date it compared with.
 	if rr := create(zsTypeID, "2026-09-09", "23:00"); rr.Code != http.StatusBadRequest ||
-		!strings.Contains(rr.Body.String(), "ZS cooldown not elapsed") {
-		t.Errorf("ZS inside the cooldown: %d %q", rr.Code, rr.Body.String())
+		!strings.Contains(rr.Body.String(), "two clear days") ||
+		!strings.Contains(rr.Body.String(), "2026-09-07") {
+		t.Errorf("ZS inside the gap: %d %q", rr.Code, rr.Body.String())
+	}
+}
+
+// --- ZS: two clear days between sieges (issue #74) --------------------------
+//
+// The rule is on DATES. The 71.5-hour figure it replaces was one observation
+// from a 00:30 start generalised into an interval, so these cases sweep the
+// start time across the day and assert it changes nothing.
+
+func seedZS(t *testing.T, date, tm string) int {
+	t.Helper()
+	_, zsTypeID := systemTypeIDs(t)
+	res, err := db.Exec(`INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by)
+	      VALUES (?, ?, ?, 1, '', 1)`, date, zsTypeID, tm)
+	if err != nil {
+		t.Fatalf("seed ZS %s: %v", date, err)
+	}
+	id, _ := res.LastInsertId()
+	return int(id)
+}
+
+func TestZSGapIsAboutDatesNotHours(t *testing.T) {
+	// Last ZS is Monday 2026-09-07. Tuesday and Wednesday are refused whatever
+	// the times; Thursday is fine, including at 00:00 — under the old 71.5h rule
+	// a Monday 23:00 siege pushed the next eligible moment to Thursday 22:30,
+	// which refused a Thursday the game allows.
+	for _, lastTime := range []string{"00:00", "00:30", "08:00", "20:00", "23:00"} {
+		t.Run("last_at_"+lastTime, func(t *testing.T) {
+			setupSettingsTestDB(t)
+			seedZS(t, "2026-09-07", lastTime)
+
+			for _, c := range []struct {
+				date, tm string
+				wantOK   bool
+			}{
+				{"2026-09-08", "00:00", false},
+				{"2026-09-08", "23:00", false},
+				{"2026-09-09", "00:00", false},
+				{"2026-09-09", "23:59", false},
+				{"2026-09-10", "00:00", true},
+				{"2026-09-10", "23:00", true},
+			} {
+				msg, err := validateSystemEventRules(db, "ZS", c.date, c.tm, 0)
+				if err != nil {
+					t.Fatalf("validate %s %s: %v", c.date, c.tm, err)
+				}
+				if c.wantOK && msg != "" {
+					t.Errorf("%s %s rejected: %s", c.date, c.tm, msg)
+				}
+				if !c.wantOK {
+					if msg == "" {
+						t.Errorf("%s %s accepted, want rejected", c.date, c.tm)
+					} else if !strings.Contains(msg, "2026-09-07") {
+						t.Errorf("%s %s: message must name the conflicting date, got %q", c.date, c.tm, msg)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestZSGapLooksBothWays(t *testing.T) {
+	setupSettingsTestDB(t)
+	// An existing Thursday siege. A new one on the Tuesday or the Wednesday
+	// BEFORE it is exactly as illegal as one after — the old backwards-only
+	// check accepted both.
+	seedZS(t, "2026-09-10", "23:00")
+
+	for _, date := range []string{"2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12"} {
+		msg, err := validateSystemEventRules(db, "ZS", date, "23:00", 0)
+		if err != nil {
+			t.Fatalf("validate %s: %v", date, err)
+		}
+		if msg == "" {
+			t.Errorf("%s accepted, want rejected as within two clear days of 2026-09-10", date)
+		}
+	}
+	for _, date := range []string{"2026-09-07", "2026-09-13"} {
+		msg, err := validateSystemEventRules(db, "ZS", date, "23:00", 0)
+		if err != nil {
+			t.Fatalf("validate %s: %v", date, err)
+		}
+		if msg != "" {
+			t.Errorf("%s rejected: %s", date, msg)
+		}
+	}
+}
+
+func TestZSGapExcludesTheRowBeingEdited(t *testing.T) {
+	setupSettingsTestDB(t)
+	id := seedZS(t, "2026-09-07", "23:00")
+
+	// Moving the only siege one day along must be accepted: it cannot conflict
+	// with itself.
+	msg, err := validateSystemEventRules(db, "ZS", "2026-09-08", "23:00", id)
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if msg != "" {
+		t.Errorf("moving the only ZS was rejected: %s", msg)
+	}
+	// Without the exclusion it is a conflict with itself.
+	if msg, _ := validateSystemEventRules(db, "ZS", "2026-09-08", "23:00", 0); msg == "" {
+		t.Error("excludeID 0 should still see the existing row")
+	}
+}
+
+func TestZSAllDayEventNeedsNoSpecialCase(t *testing.T) {
+	setupSettingsTestDB(t)
+	// An all-day ZS stores event_time '00:00'. The date is the date.
+	seedZS(t, "2026-09-07", "00:00")
+	if msg, _ := validateSystemEventRules(db, "ZS", "2026-09-09", "00:00", 0); msg == "" {
+		t.Error("all-day ZS two days later accepted, want rejected")
+	}
+	if msg, _ := validateSystemEventRules(db, "ZS", "2026-09-10", "00:00", 0); msg != "" {
+		t.Errorf("all-day ZS on D+3 rejected: %s", msg)
+	}
+}
+
+func TestASAPChainStepsWholeDaysWithoutDrift(t *testing.T) {
+	setupSettingsTestDB(t)
+	if _, err := db.Exec(`UPDATE settings SET zs_schedule_mode='asap', zs_anchor_date='2026-09-07',
+	      zs_default_time='23:00' WHERE id=1`); err != nil {
+		t.Fatalf("settings: %v", err)
+	}
+
+	out := runGenerate(t, "2026-09-07", "2026-10-07", "zs")
+	if out.SkippedInvalid != 0 {
+		t.Errorf("a date-stepped chain cannot violate its own rule, got %+v", out)
+	}
+
+	rows, err := db.Query(`SELECT e.event_date FROM schedule_events e
+	      JOIN schedule_event_types t ON t.id = e.event_type_id
+	      WHERE t.short_name='ZS' ORDER BY e.event_date`)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	var dates []string
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		dates = append(dates, d)
+	}
+	rows.Close()
+
+	if len(dates) < 8 {
+		t.Fatalf("got %d dates over 30 days, want at least 8: %v", len(dates), dates)
+	}
+	for i := 1; i < len(dates); i++ {
+		prev, _ := time.Parse("2006-01-02", dates[i-1])
+		cur, _ := time.Parse("2006-01-02", dates[i])
+		if gap := int(cur.Sub(prev).Hours() / 24); gap != zsGapDays {
+			t.Errorf("gap %s → %s is %d days, want %d", dates[i-1], dates[i], gap, zsGapDays)
+		}
 	}
 }

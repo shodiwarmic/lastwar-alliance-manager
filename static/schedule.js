@@ -511,7 +511,7 @@ function updateEventModalForType() {
         document.getElementById('event-level-input').placeholder = settings.mg_baseline ?? '';
         setEventLevelMax(settings.max_mg_level);
     } else if (et.short_name === 'ZS') {
-        hint.textContent = 'Cooldown: 71.5h from last ZS start time.';
+        hint.textContent = 'Two clear days between sieges (next ZS on D+3 or later, any time).';
         document.getElementById('event-level-input').placeholder = settings.zs_baseline ?? '';
         setEventLevelMax(settings.max_zs_level);
     } else {
@@ -929,8 +929,7 @@ function populateSettingsForm() {
         cb.checked = wds.includes(parseInt(cb.value, 10));
     });
 
-    document.getElementById('gen-zs-anchor').value      = settings.zs_anchor_date ?? '';
-    document.getElementById('gen-zs-anchor-time').value = settings.zs_anchor_time ?? '';
+    document.getElementById('gen-zs-anchor').value = settings.zs_anchor_date ?? '';
 
     // Default generate range: today → today+28
     const today = todayGameDate();
@@ -978,7 +977,6 @@ async function saveSettings() {
         zs_schedule_mode: document.querySelector('input[name="zs-mode"]:checked')?.value || 'weekdays',
         zs_weekdays:      Array.from(document.querySelectorAll('input[name="zs-wd"]:checked')).map(cb => cb.value).join(',') || '1,4',
         zs_anchor_date:   document.getElementById('gen-zs-anchor').value || null,
-        zs_anchor_time:   document.getElementById('gen-zs-anchor-time').value || '23:00',
     };
 
     try {
@@ -1012,7 +1010,6 @@ async function generateEvents() {
         zs_schedule_mode: document.querySelector('input[name="zs-mode"]:checked')?.value || 'weekdays',
         zs_weekdays:      Array.from(document.querySelectorAll('input[name="zs-wd"]:checked')).map(cb => cb.value).join(',') || '1,4',
         zs_anchor_date:   document.getElementById('gen-zs-anchor').value || null,
-        zs_anchor_time:   document.getElementById('gen-zs-anchor-time').value || '23:00',
     };
     try { await patchSettings(savePatch); } catch { /* non-fatal; generate will use whatever's in DB */ }
 
@@ -1733,8 +1730,8 @@ function bindEvents() {
         if (e.target.checked) { timeFp.clear(); }
     });
 
-    // Flatpickr: time pickers for settings default times + ZS anchor time
-    ['#set-mg-time', '#set-zs-time', '#gen-zs-anchor-time'].forEach(sel => {
+    // Flatpickr: time pickers for the settings default times
+    ['#set-mg-time', '#set-zs-time'].forEach(sel => {
         flatpickr(sel, {
             enableTime: true,
             noCalendar: true,

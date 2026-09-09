@@ -723,6 +723,22 @@ the database already holds, and a second thing to keep in step.
 `TestGeneratorValidatesAgainstItsOwnBatch` (`schedule_rules_test.go`) pins this by
 generating a self-conflicting weekday pair over an empty schedule.
 
+**The ZS rule is a gap between DATES, not an interval in hours.** `zsGapDays = 3`:
+two clear game days between sieges, checked in **both** directions, because a siege
+placed the day before an existing one is as illegal as one placed the day after. The
+71.5-hour figure it replaced was a single observation from a 00:30 start generalised
+into an interval, and it was wrong both ways round. Start time plays no part — an
+all-day ZS stores `00:00` and needs no special case. Dates are stepped with
+`time.AddDate` (calendar arithmetic on y/m/d over `time.Parse` values, which are UTC),
+never by adding a `Duration`, which is what let the old chain drift across a day
+boundary. `settings.zs_anchor_time` is retired from the UI; the column survives as
+dead schema for a future settings cleanup.
+
+**The rules are constants, not Game Limits** — see `standing-decisions.md`. The
+compensation is that **every rejection names the rule and the date it compared
+against**, so a disagreement with the game is visible the day it happens. Keep that
+property in any new message.
+
 **Bulk paths skip and count; they never abort.** One illegal template row must not
 sink the rest of a push or a 90-day generate, which is the semantics the duplicate
 check already had. Both report `skipped_invalid` plus a capped `invalid[]` list of

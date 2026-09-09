@@ -440,7 +440,6 @@ span.flatpickr-weekday {
 #set-zs-baseline,
 #event-level-input,
 #se-interval { width: 80px; }
-#gen-zs-anchor-time { width: 90px; }
 #se-duration { width: 70px; }
 
 /* Event modal: time hint + notes textarea */
