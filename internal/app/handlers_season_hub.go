@@ -3012,11 +3012,27 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 				if icon == "" {
 					icon = "🌐"
 				}
+				// The suffix search must consider EVERY existing row, including one
+				// carrying this same name. server_events.short_name is UNIQUE
+				// (migration 039), and each occurrence of a season event is its own
+				// row — recurrence here is unbounded, so a multi-week event cannot
+				// be expressed as one repeating row without a banner that never
+				// stops. Excluding same-named rows, as this loop used to, therefore
+				// skipped the suffix in precisely the case that collides: the second
+				// date of a multi-week server event, or any event already pushed
+				// under a different date. The INSERT then violated the index and
+				// aborted the WHOLE push, so nothing was created at all.
+				//
+				// Migration 039 assumed this loop guaranteed uniqueness and framed a
+				// rejection as a race made visible. It was not a race — it was this
+				// clause. short_name is a display label (banner text, week image,
+				// day card) and nothing joins on it, so a numeric suffix costs
+				// nothing but a slightly longer label.
 				shortName := deriveServerEventShortName(ev.label)
 				finalShort := shortName
 				for suffix := 2; ; suffix++ {
 					var n int
-					db.QueryRow(`SELECT COUNT(*) FROM server_events WHERE short_name = ? AND name != ?`, finalShort, ev.label).Scan(&n)
+					db.QueryRow(`SELECT COUNT(*) FROM server_events WHERE short_name = ?`, finalShort).Scan(&n)
 					if n == 0 {
 						break
 					}

@@ -267,3 +267,114 @@ func TestPushReportsEveryCounter(t *testing.T) {
 		t.Errorf("SkippedNoType = %d, want 1", res.SkippedNoType)
 	}
 }
+
+// TestPushHandlesRepeatedServerEventNames reproduces the 500 the push returned
+// on real data. server_events.short_name is UNIQUE (migration 039), each
+// occurrence of a season event is its own row, and the suffix loop used to
+// exclude same-named rows — so the second occurrence reused the first's short
+// name, violated the index, and aborted the entire push. Nothing was created,
+// including every alliance event that had nothing to do with it.
+func TestPushHandlesRepeatedServerEventNames(t *testing.T) {
+	setupSettingsTestDB(t)
+
+	if _, err := db.Exec(`INSERT INTO seasons (id, name, season_number, start_date, week_count,
+	      key_event_name, key_event_required, tier_active_min_pct, tier_at_risk_min_pct, is_active)
+	      VALUES (1, 'Golden Realm', 3, '2026-07-13', 8, 'Rare Soil War', 4, 70, 60, 1)`); err != nil {
+		t.Fatalf("seed season: %v", err)
+	}
+	// A server event spanning two weeks: one row per occurrence, same name.
+	if _, err := db.Exec(`INSERT INTO season_events (season_id, label, event_type_id, type_name,
+	      day_offset, event_time, week_start, week_end, notes, is_server_event, duration_days)
+	      VALUES (1, 'Digging Stronghold Clash', NULL, '', 1, '00:00', 1, 2, '', 1, 1)`); err != nil {
+		t.Fatalf("seed server event: %v", err)
+	}
+	// An alliance event that must survive the push regardless.
+	var mgTypeID int
+	if err := db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name = 'MG'`).Scan(&mgTypeID); err != nil {
+		t.Fatalf("resolve MG type: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO season_events (season_id, label, event_type_id, type_name,
+	      day_offset, event_time, week_start, week_end, notes)
+	      VALUES (1, 'Guard Duty', ?, 'Marshal''s Guard', 3, '20:00', 1, 1, '')`, mgTypeID); err != nil {
+		t.Fatalf("seed alliance event: %v", err)
+	}
+
+	s, err := loadSeasonByID(1)
+	if err != nil {
+		t.Fatalf("loadSeasonByID: %v", err)
+	}
+	if _, err := pushSeasonEventsToSchedule(s, 1, "tester"); err != nil {
+		t.Fatalf("push returned an error (this is the reported 500): %v", err)
+	}
+
+	rows, err := db.Query(`SELECT short_name, anchor_date FROM server_events
+	      WHERE name = 'Digging Stronghold Clash' ORDER BY anchor_date`)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	seen := map[string]string{}
+	for rows.Next() {
+		var short, anchor string
+		if err := rows.Scan(&short, &anchor); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		if prev, dup := seen[short]; dup {
+			t.Errorf("short_name %q reused for %s and %s", short, prev, anchor)
+		}
+		seen[short] = anchor
+	}
+	rows.Close()
+
+	if len(seen) != 2 {
+		t.Fatalf("got %d server_events rows, want one per week: %v", len(seen), seen)
+	}
+
+	// The alliance event was written too — one bad row must not sink the push.
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id = ?`, mgTypeID).Scan(&n)
+	if n != 1 {
+		t.Errorf("%d alliance events written, want 1", n)
+	}
+}
+
+// TestPushIsIdempotentAcrossServerEventOccurrences guards that the suffix
+// search does not mint a NEW row on every push: occurrences are matched by
+// (name, anchor_date), so a second push finds them and skips.
+func TestPushIsIdempotentAcrossServerEventOccurrences(t *testing.T) {
+	setupSettingsTestDB(t)
+	if _, err := db.Exec(`INSERT INTO seasons (id, name, season_number, start_date, week_count,
+	      key_event_name, key_event_required, tier_active_min_pct, tier_at_risk_min_pct, is_active)
+	      VALUES (1, 'Golden Realm', 3, '2026-07-13', 8, 'Rare Soil War', 4, 70, 60, 1)`); err != nil {
+		t.Fatalf("seed season: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO season_events (season_id, label, event_type_id, type_name,
+	      day_offset, event_time, week_start, week_end, notes, is_server_event, duration_days)
+	      VALUES (1, 'UR Hero Promotion — Scarlett', NULL, '', 1, '00:00', 3, 7, '', 1, 1)`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	s, err := loadSeasonByID(1)
+	if err != nil {
+		t.Fatalf("loadSeasonByID: %v", err)
+	}
+	first, err := pushSeasonEventsToSchedule(s, 1, "tester")
+	if err != nil {
+		t.Fatalf("first push: %v", err)
+	}
+	if first.Created != 5 {
+		t.Fatalf("Created = %d, want 5 (weeks 3–7)", first.Created)
+	}
+
+	second, err := pushSeasonEventsToSchedule(s, 1, "tester")
+	if err != nil {
+		t.Fatalf("second push: %v", err)
+	}
+	if second.Created != 0 || second.Skipped != 5 {
+		t.Errorf("second push created %d / skipped %d, want 0 / 5", second.Created, second.Skipped)
+	}
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM server_events WHERE name = 'UR Hero Promotion — Scarlett'`).Scan(&n)
+	if n != 5 {
+		t.Errorf("%d rows after two pushes, want 5", n)
+	}
+}
