@@ -438,3 +438,95 @@ func TestASAPChainStepsWholeDaysWithoutDrift(t *testing.T) {
 		}
 	}
 }
+
+// --- MG: never on consecutive days (issue #77) ------------------------------
+//
+// Advertised in the event-form hint since the schedule was rewritten and
+// enforced nowhere. The generator's every-other-day stepping happened to
+// satisfy it, so only a manual create or edit could break it — which is the
+// path officers actually use.
+
+func seedMG(t *testing.T, date, tm string) int {
+	t.Helper()
+	mgTypeID, _ := systemTypeIDs(t)
+	res, err := db.Exec(`INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by)
+	      VALUES (?, ?, ?, 1, '', 1)`, date, mgTypeID, tm)
+	if err != nil {
+		t.Fatalf("seed MG %s: %v", date, err)
+	}
+	id, _ := res.LastInsertId()
+	return int(id)
+}
+
+func TestMGRejectsConsecutiveDaysBothDirections(t *testing.T) {
+	setupSettingsTestDB(t)
+	seedMG(t, "2026-09-09", "20:00")
+
+	for _, date := range []string{"2026-09-08", "2026-09-09", "2026-09-10"} {
+		msg, err := validateSystemEventRules(db, "MG", date, "20:00", 0)
+		if err != nil {
+			t.Fatalf("validate %s: %v", date, err)
+		}
+		if msg == "" {
+			t.Errorf("%s accepted, want rejected as adjacent to 2026-09-09", date)
+		} else if !strings.Contains(msg, "2026-09-09") {
+			t.Errorf("%s: message must name the conflicting date, got %q", date, msg)
+		}
+	}
+	// Every other day is the cadence the UI has always advertised.
+	for _, date := range []string{"2026-09-07", "2026-09-11"} {
+		msg, err := validateSystemEventRules(db, "MG", date, "20:00", 0)
+		if err != nil {
+			t.Fatalf("validate %s: %v", date, err)
+		}
+		if msg != "" {
+			t.Errorf("%s rejected: %s", date, msg)
+		}
+	}
+}
+
+// TestMGCutoffAndGapDoNotInteract pins the reading this rule was written under:
+// the 21:59 cutoff is about the start time of one event, the gap is about the
+// dates of two. A late MG does not extend into the following day.
+func TestMGCutoffAndGapDoNotInteract(t *testing.T) {
+	setupSettingsTestDB(t)
+	seedMG(t, "2026-09-09", "21:59")
+
+	if msg, err := validateSystemEventRules(db, "MG", "2026-09-11", "00:30", 0); err != nil {
+		t.Fatalf("validate: %v", err)
+	} else if msg != "" {
+		t.Errorf("MG two days after a 21:59 MG rejected: %s", msg)
+	}
+	// The cutoff still applies on its own terms.
+	if msg, _ := validateSystemEventRules(db, "MG", "2026-09-13", "22:00", 0); msg != "MG must start by 21:59 ST" {
+		t.Errorf("cutoff message = %q", msg)
+	}
+}
+
+func TestMGGapExcludesTheRowBeingEdited(t *testing.T) {
+	setupSettingsTestDB(t)
+	id := seedMG(t, "2026-09-09", "20:00")
+
+	if msg, err := validateSystemEventRules(db, "MG", "2026-09-10", "20:00", id); err != nil {
+		t.Fatalf("validate: %v", err)
+	} else if msg != "" {
+		t.Errorf("moving the only MG one day along was rejected: %s", msg)
+	}
+}
+
+// TestGeneratedMGCadenceAlreadySatisfiesTheRule guards the claim that the
+// generator needed no change: its AddDate(0,0,2) stepping is exactly mgGapDays.
+func TestGeneratedMGCadenceAlreadySatisfiesTheRule(t *testing.T) {
+	setupSettingsTestDB(t)
+	if _, err := db.Exec(`UPDATE settings SET mg_anchor_date='2026-09-07', mg_default_time='20:00' WHERE id=1`); err != nil {
+		t.Fatalf("settings: %v", err)
+	}
+
+	out := runGenerate(t, "2026-09-07", "2026-10-07", "mg")
+	if out.MGCreated == 0 {
+		t.Fatalf("generated nothing: %+v", out)
+	}
+	if out.SkippedInvalid != 0 {
+		t.Errorf("the every-other-day cadence must satisfy mgGapDays, got %+v", out)
+	}
+}

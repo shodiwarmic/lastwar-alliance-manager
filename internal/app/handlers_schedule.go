@@ -53,10 +53,34 @@ func validateSystemEventRules(q rowQuerier, short, date, tm string, excludeID in
 		if tm >= "22:00" {
 			return "MG must start by 21:59 ST", nil
 		}
+		return validateMGGap(q, excludeID, date)
 	case "ZS":
 		return validateZSGap(q, excludeID, date)
 	}
 	return "", nil
+}
+
+// mgGapDays is the MG cadence: the game refuses a Marshal's Guard on the day
+// after another one, so consecutive dates are illegal and D+2 is the minimum.
+//
+// This is a rule on DATES and is INDEPENDENT of the 21:59 start-time cutoff:
+// the two never interact, so an MG that starts at 21:59 still permits one two
+// days later at 00:30. The every-other-day cadence has been advertised in the
+// event-form hint since the schedule was rewritten and was enforced nowhere;
+// the generator's stepping happened to satisfy it, so nothing but a manual
+// create or edit could break it — which is exactly the path officers use.
+const mgGapDays = 2
+
+// validateMGGap rejects an MG placed on the day before or the day after another
+// one. Like the ZS rule it looks both ways and includes the date itself, and it
+// names the date it compared against so a disagreement with the game is visible
+// rather than inferred.
+func validateMGGap(q rowQuerier, excludeID int, date string) (string, error) {
+	conflict, err := nearestSystemEventWithin(q, "MG", excludeID, date, mgGapDays-1)
+	if err != nil || conflict == "" {
+		return "", err
+	}
+	return fmt.Sprintf("MG cannot run on consecutive days — conflicts with the MG on %s", conflict), nil
 }
 
 // zsGapDays is the ZS cadence: a siege may not fall within two clear game days
@@ -84,31 +108,10 @@ const zsGapDays = 3
 // a wrong setting is worse than a wrong constant, because nobody can tell
 // whether the app or the game is wrong.
 func validateZSGap(q rowQuerier, excludeID int, date string) (string, error) {
-	d, err := time.Parse("2006-01-02", date)
-	if err != nil {
+	conflict, err := nearestSystemEventWithin(q, "ZS", excludeID, date, zsGapDays-1)
+	if err != nil || conflict == "" {
 		return "", err
 	}
-	// AddDate is calendar arithmetic on y/m/d, and time.Parse of a bare date
-	// yields UTC, so no timezone or DST transition can shift these bounds.
-	lo := d.AddDate(0, 0, -(zsGapDays - 1)).Format("2006-01-02")
-	hi := d.AddDate(0, 0, zsGapDays-1).Format("2006-01-02")
-
-	var conflict string
-	err = q.QueryRow(`
-		SELECT se.event_date
-		FROM schedule_events se
-		JOIN schedule_event_types t ON t.id = se.event_type_id
-		WHERE t.short_name = 'ZS' AND se.id != ?
-		  AND se.event_date >= ? AND se.event_date <= ?
-		ORDER BY abs(julianday(se.event_date) - julianday(?)) ASC
-		LIMIT 1`, excludeID, lo, hi, date).Scan(&conflict)
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-
 	c, err := time.Parse("2006-01-02", conflict)
 	if err != nil {
 		return "", err
@@ -116,6 +119,40 @@ func validateZSGap(q rowQuerier, excludeID int, date string) (string, error) {
 	next := c.AddDate(0, 0, zsGapDays).Format("2006-01-02")
 	return fmt.Sprintf("ZS needs two clear days between sieges — conflicts with the ZS on %s (next eligible date %s)",
 		conflict, next), nil
+}
+
+// nearestSystemEventWithin returns the event_date of the closest event of the
+// given system type lying within clearDays either side of date (inclusive of
+// date itself), or "" when there is none. excludeID skips the row being edited.
+//
+// Both date rules are the same query with a different radius, so they share it
+// rather than drifting apart. Dates are stepped with AddDate — calendar
+// arithmetic on y/m/d over time.Parse values, which are UTC, so neither the host
+// timezone nor a DST transition can move the bounds.
+func nearestSystemEventWithin(q rowQuerier, short string, excludeID int, date string, clearDays int) (string, error) {
+	d, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return "", err
+	}
+	lo := d.AddDate(0, 0, -clearDays).Format("2006-01-02")
+	hi := d.AddDate(0, 0, clearDays).Format("2006-01-02")
+
+	var conflict string
+	err = q.QueryRow(`
+		SELECT se.event_date
+		FROM schedule_events se
+		JOIN schedule_event_types t ON t.id = se.event_type_id
+		WHERE t.short_name = ? AND se.id != ?
+		  AND se.event_date >= ? AND se.event_date <= ?
+		ORDER BY abs(julianday(se.event_date) - julianday(?)) ASC
+		LIMIT 1`, short, excludeID, lo, hi, date).Scan(&conflict)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return conflict, nil
 }
 
 // getSystemBaseline returns the baseline level for MG or ZS from the settings singleton.

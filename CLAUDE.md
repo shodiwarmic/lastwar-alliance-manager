@@ -734,6 +734,15 @@ never by adding a `Duration`, which is what let the old chain drift across a day
 boundary. `settings.zs_anchor_time` is retired from the UI; the column survives as
 dead schema for a future settings cleanup.
 
+**MG has two independent rules.** `mgGapDays = 2` — the game refuses an MG on the day
+after another one — and the 21:59 start cutoff. They never interact: an MG starting at
+21:59 still permits one two days later at 00:30. The cadence was advertised in the
+event-form hint and enforced nowhere; the generator's `AddDate(0, 0, 2)` stepping
+happened to satisfy it, so only a manual create or edit could break it.
+
+Both date rules share `nearestSystemEventWithin` — the same query with a different
+radius — so they cannot drift apart.
+
 **The rules are constants, not Game Limits** — see `standing-decisions.md`. The
 compensation is that **every rejection names the rule and the date it compared
 against**, so a disagreement with the game is visible the day it happens. Keep that
