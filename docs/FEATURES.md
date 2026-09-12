@@ -115,13 +115,13 @@ The **Duel League** tab of the VS Hub page tracks alliance-vs-alliance Duel Leag
 - **Permission-Gated Access**: Separate `view_schedule` and `manage_schedule` permissions.
 
 ### 🎖️ Officer Command
-- **Responsibility Directory**: A living org chart of standing alliance functions, grouped by domain (e.g. Membership, Relations, War). Not a task manager — no completion states or due dates.
+- **Responsibility Directory**: A living org chart of standing alliance functions, grouped by domain (e.g. Membership, Relations, War), rendered as a responsive grid of cards — one per responsibility, reflowing from three columns to one as the screen narrows. Not a task manager — no completion states or due dates.
 - **View-First, Edit on Request**: The page opens read-only for everyone, including managers. A manager switches on **Edit Responsibilities** to reveal the editing controls; it is not sticky, so every page load starts read-only.
 - **Category & Responsibility Management**: In edit mode, admins can create, rename, and delete categories and responsibilities inline without leaving the page.
 - **Assignee Tracking**: Assign one or more members to each responsibility; chips display name and rank. Members can be added via a searchable picker and removed individually.
 - **Frequency Badges**: Each responsibility carries a Daily / Weekly / Seasonal frequency, displayed as colour-coded pill badges.
 - **Client-Side Filtering**: Filter the directory by assigned leader using a dropdown, or by frequency (All / Daily / Weekly / Seasonal) using pill-shaped filter chips — no round-trips to the server.
-- **Drag-to-Reorder**: Categories and responsibilities within a category can be reordered by drag-and-drop; order is persisted server-side.
+- **Reorder**: Categories and responsibilities move with up/down buttons in edit mode; order is saved server-side. The buttons are disabled at the ends of a list, and while a filter is active — moving past a hidden neighbour would be an invisible change.
 - **Permission-Gated Access**: Separate `view_officer_command` (R1–R5 default) and `manage_officer_command` (R4–R5 default) permissions control who can view vs. administer the directory.
 
 ### 🎯 Recruiting

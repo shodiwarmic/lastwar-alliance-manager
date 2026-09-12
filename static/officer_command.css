@@ -37,9 +37,6 @@
     margin-bottom: 1.25rem;
     overflow: hidden;
 }
-.oc-category.drag-over-cat {
-    outline: 2px dashed var(--color-accent);
-}
 .oc-category-header {
     display: flex;
     align-items: center;
@@ -67,39 +64,52 @@
     color: var(--color-text);
     min-width: 0;
 }
-.oc-drag-handle {
-    cursor: grab;
-    color: var(--color-text-mid);
-    font-size: 1.1rem;
-    padding: 0 0.25rem;
-    user-select: none;
+/* One grid per category. Column count is pure CSS — nothing in JS knows the
+   width. min(100%, 300px) keeps 300px as the desktop minimum while letting a
+   single column shrink below it, so a 320px viewport does not clip. */
+.oc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    gap: 12px;
+    padding: 12px;
 }
-.oc-drag-handle:active { cursor: grabbing; }
-/* uses global .data-table — page-specific overrides */
-.data-table.oc-table {
-    min-width: 480px;
+/* 1px, not the 2px of a top-level entity card: the category panel already
+   supplies the outer frame. Same precedent as .event-card inside .day-col. */
+.oc-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
-.data-table.oc-table thead th:last-child { width: 1%; white-space: nowrap; }
-.oc-row {
-    border-bottom: 1px solid var(--color-border);
-    transition: background 0.15s;
+.oc-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
 }
-.oc-row:last-child { border-bottom: none; }
-.oc-row.drag-over-row {
-    outline: 2px dashed var(--color-accent);
+.oc-card-name {
+    font-weight: 600;
+    line-height: 1.3;
 }
-.oc-row td {
-    padding: 0.6rem 1rem;
-    vertical-align: top;
-}
-.oc-row-name {
-    font-weight: 500;
-    margin-bottom: 0.2rem;
-}
-.oc-row-desc {
+.oc-card-desc {
     font-size: 0.85rem;
     color: var(--color-text-mid);
+    line-height: 1.4;
 }
+/* Pushes the chips to the bottom of the card, so they share a baseline across
+   a row. Default grid stretch gives the equal heights that makes possible. */
+.oc-card-people { margin-top: auto; }
+.oc-card-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding-top: 6px;
+    border-top: 1px solid var(--color-border);
+}
+.oc-card-actions .order-btns { margin-right: auto; }
 .freq-badge {
     display: inline-block;
     padding: 0.15rem 0.55rem;
@@ -139,6 +149,9 @@
 }
 .oc-chip-remove:hover { color: var(--color-danger, #dc2626); }
 .oc-add-assignee-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
     background: none;
     border: 1px dashed var(--color-border);
     border-radius: 999px;
@@ -148,12 +161,6 @@
     color: var(--color-text-mid);
 }
 .oc-add-assignee-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
-.oc-row-actions {
-    display: flex;
-    gap: 0.4rem;
-    white-space: nowrap;
-    align-items: flex-start;
-}
 .oc-empty {
     padding: 1.5rem 1rem;
     text-align: center;
@@ -190,7 +197,7 @@
     flex-wrap: wrap;
     align-items: center;
 }
-.oc-table-footer {
+.oc-category-footer {
     padding: 0.6rem 1rem;
     border-top: 1px solid var(--color-border);
     background: var(--color-surface);
