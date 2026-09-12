@@ -2,7 +2,13 @@
 
 const API = '/api/officer-command';
 const cfg = document.getElementById('page-config').dataset;
-const canManage = cfg.canManage === 'true';
+const canManage = cfg.canManage === 'true';   // permission — decides whether the toggle exists
+
+// Intent, not permission: the page opens read-only for everyone, and a manager
+// asks for the editing chrome. render() is a full rebuild, so flipping this and
+// re-rendering is the whole of the mode switch.
+let editing = false;
+const isEditing = () => canManage && editing;
 
 let categories = [];   // OCCategory[]
 let allMembers = [];   // {id, name, rank}[]
@@ -102,12 +108,18 @@ function render() {
     if (!categories.length) {
         const p = document.createElement('p');
         p.style.color = 'var(--color-text-mid)';
-        if (canManage) {
+        if (isEditing()) {
             p.appendChild(document.createTextNode('No categories yet. Use '));
             const strong = document.createElement('strong');
             strong.textContent = '+ Add Category';
             p.appendChild(strong);
             p.appendChild(document.createTextNode(' to get started.'));
+        } else if (canManage) {
+            p.appendChild(document.createTextNode('No responsibilities have been configured yet. Use '));
+            const strong = document.createElement('strong');
+            strong.textContent = 'Edit Responsibilities';
+            p.appendChild(strong);
+            p.appendChild(document.createTextNode(' to add one.'));
         } else {
             p.textContent = 'No responsibilities have been configured yet.';
         }
@@ -129,7 +141,7 @@ function render() {
         const catDiv = document.createElement('div');
         catDiv.className = 'oc-category';
         catDiv.dataset.catIdx = ci;
-        if (canManage) {
+        if (isEditing()) {
             catDiv.draggable = true;
             catDiv.dataset.dragCat = ci;
             catDiv.addEventListener('dragstart', e => {
@@ -162,7 +174,7 @@ function render() {
         const header = document.createElement('div');
         header.className = 'oc-category-header';
 
-        if (canManage) {
+        if (isEditing()) {
             const handle = document.createElement('span');
             handle.className = 'oc-drag-handle';
             handle.title = 'Drag to reorder category';
@@ -176,7 +188,7 @@ function render() {
         nameSpan.textContent = cat.name;
         header.appendChild(nameSpan);
 
-        if (canManage) {
+        if (isEditing()) {
             const renameBtn = document.createElement('button');
             renameBtn.className = 'btn btn-sm btn-secondary';
             renameBtn.title = 'Rename';
@@ -210,7 +222,7 @@ function render() {
 
             const thead = table.createTHead();
             const hr = thead.insertRow();
-            ['Responsibility', 'Frequency', 'Assigned To', ...(canManage ? [''] : [])].forEach(h => {
+            ['Responsibility', 'Frequency', 'Assigned To', ...(isEditing() ? [''] : [])].forEach(h => {
                 const th = document.createElement('th');
                 th.textContent = h;
                 hr.appendChild(th);
@@ -224,7 +236,7 @@ function render() {
                 const ri = cat.responsibilities.indexOf(rp);
                 const tr = tbody.insertRow();
                 tr.className = 'oc-row';
-                if (canManage) {
+                if (isEditing()) {
                     tr.draggable = true;
                     tr.dataset.dragRespCi = ci;
                     tr.dataset.dragRespRi = ri;
@@ -263,7 +275,7 @@ function render() {
 
                 // Cell 1: drag handle + name + optional description
                 const nameTd = tr.insertCell();
-                if (canManage) {
+                if (isEditing()) {
                     const handle = document.createElement('span');
                     handle.className = 'oc-drag-handle';
                     handle.title = 'Drag to reorder';
@@ -291,7 +303,7 @@ function render() {
                 const assigneesDiv = document.createElement('div');
                 assigneesDiv.className = 'oc-assignees';
                 (rp.assignees || []).forEach(a => assigneesDiv.appendChild(buildAssigneeChip(ci, ri, a)));
-                if (canManage) {
+                if (isEditing()) {
                     const addAssigneeBtn = document.createElement('button');
                     addAssigneeBtn.className = 'oc-add-assignee-btn';
                     addAssigneeBtn.textContent = '+ Add';
@@ -300,8 +312,8 @@ function render() {
                 }
                 assigneesTd.appendChild(assigneesDiv);
 
-                // Cell 4: row actions (canManage only)
-                if (canManage) {
+                // Cell 4: row actions (edit mode only)
+                if (isEditing()) {
                     const actionsTd = tr.insertCell();
                     const actionsDiv = document.createElement('div');
                     actionsDiv.className = 'oc-row-actions';
@@ -327,7 +339,7 @@ function render() {
             tableScroll.appendChild(table);
             catDiv.appendChild(tableScroll);
 
-            if (canManage) {
+            if (isEditing()) {
                 const footer = document.createElement('div');
                 footer.className = 'oc-table-footer';
                 const addRespBtn = document.createElement('button');
@@ -340,7 +352,7 @@ function render() {
         } else {
             const emptyDiv = document.createElement('div');
             emptyDiv.className = 'oc-empty';
-            if (canManage && !frequency && !leader) {
+            if (isEditing() && !frequency && !leader) {
                 emptyDiv.appendChild(document.createTextNode('No responsibilities yet — '));
                 const addLink = document.createElement('button');
                 addLink.className = 'oc-empty-add-link';
@@ -591,7 +603,7 @@ function buildAssigneeChip(ci, ri, a) {
     rankBadge.className = `member-rank rank-${a.rank}`;
     rankBadge.textContent = a.rank;
     chip.appendChild(rankBadge);
-    if (canManage) {
+    if (isEditing()) {
         const removeBtn = document.createElement('button');
         removeBtn.className = 'oc-chip-remove';
         removeBtn.title = 'Remove';
@@ -683,9 +695,24 @@ async function removeAssignee(ci, ri, memberID) {
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
 
-    // Add category button
+    // Add category button — edit chrome, so it is hidden until edit mode is on.
     const btnAddCat = document.getElementById('btn-add-category');
     if (btnAddCat) btnAddCat.addEventListener('click', addCategory);
+
+    // Edit-mode toggle. Only rendered for managers; fill and aria-pressed carry
+    // the state, and the chrome appearing is the cue, so the label never changes.
+    const btnEditMode = document.getElementById('btn-edit-mode');
+    if (btnEditMode) {
+        btnEditMode.addEventListener('click', () => {
+            editing = !editing;
+            btnEditMode.classList.toggle('active', editing);
+            btnEditMode.setAttribute('aria-pressed', editing ? 'true' : 'false');
+            // The global .hidden class, not the `hidden` attribute: .btn sets
+            // display:inline-flex, which beats the UA stylesheet's [hidden] rule.
+            if (btnAddCat) btnAddCat.classList.toggle('hidden', !editing);
+            render();
+        });
+    }
 
     // Add category modal
     document.getElementById('add-cat-save').addEventListener('click', saveAddCatModal);
