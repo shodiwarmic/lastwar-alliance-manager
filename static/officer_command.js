@@ -217,7 +217,11 @@ function render() {
             });
 
             const tbody = table.createTBody();
-            visibleResps.forEach((rp, ri) => {
+            visibleResps.forEach(rp => {
+                // The subset index is not the row's identity: every action below
+                // resolves `ri` against cat.responsibilities, the FULL array. Under
+                // a filter the two diverge and the actions hit the wrong row.
+                const ri = cat.responsibilities.indexOf(rp);
                 const tr = tbody.insertRow();
                 tr.className = 'oc-row';
                 if (canManage) {
