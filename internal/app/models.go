@@ -1137,6 +1137,9 @@ type OCResponsibility struct {
 	Frequency    string       `json:"frequency"`
 	DisplayOrder int          `json:"display_order"`
 	Assignees    []OCAssignee `json:"assignees"`
+	// Descriptive steps, in line order. Replaced wholesale on save, so a task
+	// carries no identity a client needs to name.
+	Tasks []string `json:"tasks"`
 }
 
 type OCCategory struct {

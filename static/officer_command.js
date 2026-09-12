@@ -17,6 +17,10 @@ let allMembers = [];   // {id, name, rank}[]
 // Ids, not indexes: a card's position is a property of the current filter.
 let respModalCatId = null;    // the category to create into
 let respModalRespId = null;   // null for create, the id for edit
+
+// Which cards have their Tasks open. Kept for the page load so filtering or
+// saving does not snap every open card shut; deliberately not persisted.
+const openTasks = new Set();
 let activePicker = null;   // the single open inline member picker (if any)
 let activeAddBtn = null;   // the "+ Add" button hidden while activePicker is open
 
@@ -310,6 +314,10 @@ function buildRespCard(cat, rp, filtering) {
         card.appendChild(descDiv);
     }
 
+    if ((rp.tasks || []).length) {
+        card.appendChild(buildTasksBlock(rp));
+    }
+
     const people = document.createElement('div');
     people.className = 'oc-assignees oc-card-people';
     (rp.assignees || []).forEach(a => people.appendChild(buildAssigneeChip(rp.id, a)));
@@ -344,6 +352,38 @@ function buildRespCard(cat, rp, filtering) {
     }
 
     return card;
+}
+
+// Native <details> gives the toggle, the keyboard handling and the disclosure
+// semantics in the accessibility tree. There is no literal aria-expanded
+// attribute on a <summary>, so anything testing this keys on details.open.
+function buildTasksBlock(rp) {
+    const details = document.createElement('details');
+    details.className = 'oc-tasks';
+    details.open = openTasks.has(rp.id);
+
+    const summary = document.createElement('summary');
+    summary.append(svgIcon('chevron-right', 12), document.createTextNode('Tasks'));
+    const count = document.createElement('span');
+    count.className = 'oc-task-count';
+    count.textContent = rp.tasks.length;
+    summary.appendChild(count);
+    details.appendChild(summary);
+
+    const list = document.createElement('ol');
+    list.className = 'oc-task-list';
+    rp.tasks.forEach(t => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        list.appendChild(li);
+    });
+    details.appendChild(list);
+
+    details.addEventListener('toggle', () => {
+        if (details.open) openTasks.add(rp.id);
+        else openTasks.delete(rp.id);
+    });
+    return details;
 }
 
 // ── add category modal ───────────────────────────────────────────
@@ -468,6 +508,7 @@ function openRespModal(catId, respId) {
     const isEdit = respId !== null;
     document.getElementById('resp-modal-title').textContent = isEdit ? 'Edit Responsibility' : 'Add Responsibility';
     document.getElementById('resp-name-error').style.display = 'none';
+    document.getElementById('resp-tasks-error').style.display = 'none';
 
     if (isEdit) {
         const found = findResp(respId);
@@ -476,10 +517,12 @@ function openRespModal(catId, respId) {
         document.getElementById('resp-name').value = rp.name;
         document.getElementById('resp-desc').value = rp.description;
         document.getElementById('resp-freq').value = rp.frequency;
+        document.getElementById('resp-tasks').value = (rp.tasks || []).join('\n');
     } else {
         document.getElementById('resp-name').value = '';
         document.getElementById('resp-desc').value = '';
         document.getElementById('resp-freq').value = 'Weekly';
+        document.getElementById('resp-tasks').value = '';
     }
 
     const respModal = document.getElementById('resp-modal');
@@ -492,6 +535,7 @@ function closeRespModal() {
     releaseFocus(respModal);
     respModal.style.display = '';
     document.getElementById('resp-name-error').style.display = 'none';
+    document.getElementById('resp-tasks-error').style.display = 'none';
     respModalCatId = null;
     respModalRespId = null;
 }
@@ -500,9 +544,15 @@ async function saveRespModal() {
     const name = document.getElementById('resp-name').value.trim();
     const description = document.getElementById('resp-desc').value.trim();
     const frequency = document.getElementById('resp-freq').value;
+    // One per line; blank lines are how a user spaces the box out, and the
+    // server drops them too.
+    const tasks = document.getElementById('resp-tasks').value
+        .split('\n').map(t => t.trim()).filter(Boolean);
     const nameErrorEl = document.getElementById('resp-name-error');
+    const tasksErrorEl = document.getElementById('resp-tasks-error');
 
     nameErrorEl.style.display = 'none';
+    tasksErrorEl.style.display = 'none';
 
     if (!name) {
         nameErrorEl.textContent = 'Name is required.';
@@ -521,12 +571,13 @@ async function saveRespModal() {
             const res = await fetch(`${API}/responsibilities/${rp.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, description, frequency }),
+                body: JSON.stringify({ name, description, frequency, tasks }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error((await res.text()).trim(), { cause: res.status });
             rp.name = name;
             rp.description = description;
             rp.frequency = frequency;
+            rp.tasks = tasks;
         } else {
             const found = findCat(respModalCatId);
             if (!found) throw new Error('That category no longer exists.');
@@ -534,9 +585,9 @@ async function saveRespModal() {
             const res = await fetch(`${API}/responsibilities`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ category_id: cat.id, name, description, frequency }),
+                body: JSON.stringify({ category_id: cat.id, name, description, frequency, tasks }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error((await res.text()).trim(), { cause: res.status });
             const rp = await res.json();
             cat.responsibilities.push(rp);
         }
@@ -544,6 +595,12 @@ async function saveRespModal() {
         render();
         closeRespModal();
     } catch (e) {
+        if (e.cause === 400) {
+            tasksErrorEl.textContent = e.message;
+            tasksErrorEl.style.display = '';
+            document.getElementById('resp-tasks').focus();
+            return;
+        }
         showError('Failed to save responsibility: ' + e.message);
     }
 }
