@@ -116,7 +116,8 @@ The **Duel League** tab of the VS Hub page tracks alliance-vs-alliance Duel Leag
 
 ### 🎖️ Officer Command
 - **Responsibility Directory**: A living org chart of standing alliance functions, grouped by domain (e.g. Membership, Relations, War). Not a task manager — no completion states or due dates.
-- **Category & Responsibility Management**: Admins can create, rename, and delete categories and responsibilities inline without leaving the page.
+- **View-First, Edit on Request**: The page opens read-only for everyone, including managers. A manager switches on **Edit Responsibilities** to reveal the editing controls; it is not sticky, so every page load starts read-only.
+- **Category & Responsibility Management**: In edit mode, admins can create, rename, and delete categories and responsibilities inline without leaving the page.
 - **Assignee Tracking**: Assign one or more members to each responsibility; chips display name and rank. Members can be added via a searchable picker and removed individually.
 - **Frequency Badges**: Each responsibility carries a Daily / Weekly / Seasonal frequency, displayed as colour-coded pill badges.
 - **Client-Side Filtering**: Filter the directory by assigned leader using a dropdown, or by frequency (All / Daily / Weekly / Seasonal) using pill-shaped filter chips — no round-trips to the server.
