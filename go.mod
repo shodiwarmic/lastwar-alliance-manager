@@ -11,7 +11,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/pressly/goose/v3 v3.28.0
 	golang.org/x/crypto v0.56.0
-	golang.org/x/text v0.41.0
+	golang.org/x/text v0.42.0
 	golang.org/x/time v0.15.0
 	google.golang.org/api v0.297.0
 	modernc.org/sqlite v1.58.0
@@ -58,7 +58,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
 	google.golang.org/genproto v0.0.0-20260715232425-e75dac1f907d // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260715232425-e75dac1f907d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260831171406-18b4a7587f8a // indirect
