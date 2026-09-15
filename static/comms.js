@@ -175,6 +175,11 @@ function renderTemplateCard(t) {
     title.className = 'template-card-title';
     title.textContent = t.title;
 
+    // A slugged template is fetched by name elsewhere in the app, so the server
+    // refuses to delete it (409). Say so here rather than offering a button that
+    // can only fail. It stays editable — only the Delete action is withheld.
+    const isSlugged = !!t.slug;
+
     const actions = document.createElement('div');
     actions.className = 'template-card-actions';
 
@@ -191,26 +196,37 @@ function renderTemplateCard(t) {
         editBtn.textContent = 'Edit';
         editBtn.addEventListener('click', () => openTemplateModal(t.type, t));
 
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn btn-danger btn-sm';
-        delBtn.textContent = 'Delete';
-        delBtn.addEventListener('click', async () => {
-            if (!await showConfirm('Delete this template?', 'Delete')) return;
-            const res = await fetch('/api/comms/templates/' + t.id, { method: 'DELETE' });
-            if (res.ok) {
-                delete cache[t.type];
-                loaded[t.type] = false;
-                loadTemplates(t.type);
-                showToast('Template deleted.');
-            } else {
-                showToast('Delete failed.', 'error');
-            }
-        });
+        actions.appendChild(editBtn);
 
-        actions.append(editBtn, delBtn);
+        if (!isSlugged) {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn btn-danger btn-sm';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', async () => {
+                if (!await showConfirm('Delete this template?', 'Delete')) return;
+                const res = await fetch('/api/comms/templates/' + t.id, { method: 'DELETE' });
+                if (res.ok) {
+                    delete cache[t.type];
+                    loaded[t.type] = false;
+                    loadTemplates(t.type);
+                    showToast('Template deleted.');
+                } else {
+                    showToast(await res.text() || 'Delete failed.', 'error');
+                }
+            });
+            actions.appendChild(delBtn);
+        }
     }
 
-    headerRow.append(title, actions);
+    headerRow.append(title);
+    if (isSlugged) {
+        const sysChip = document.createElement('span');
+        sysChip.className = 'status-badge active';
+        sysChip.textContent = 'System';
+        sysChip.title = 'The app fetches this template by name (' + t.slug + '), so it cannot be deleted. It is still fully editable.';
+        headerRow.appendChild(sysChip);
+    }
+    headerRow.appendChild(actions);
     card.appendChild(headerRow);
 
     // Variable chips

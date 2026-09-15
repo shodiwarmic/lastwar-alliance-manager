@@ -262,8 +262,9 @@ func handleCommsTemplateDelete(w http.ResponseWriter, r *http.Request) {
 
 	var title string
 	var seasonID *int
-	err = db.QueryRow(`SELECT title, season_id FROM comms_templates WHERE id = ?`, id).
-		Scan(&title, &seasonID)
+	var slug sql.NullString
+	err = db.QueryRow(`SELECT title, season_id, slug FROM comms_templates WHERE id = ?`, id).
+		Scan(&title, &seasonID, &slug)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -271,6 +272,24 @@ func handleCommsTemplateDelete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("handleCommsTemplateDelete: fetch", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// A slug means something in the app fetches this template BY NAME. Deleting it
+	// breaks that fetch with no way back through the UI: `slug` is seed-only, so a
+	// replacement template cannot be given one and only a migration can restore the
+	// row. Refuse, the way deleteExternalAlliance refuses rather than stranding a
+	// reference.
+	//
+	// The guard is on `slug`, deliberately not on a new is_system flag: a slugged
+	// template must stay fully editable — it is the alliance's own words, and the
+	// only special thing about it is that something looks it up. Borrowing
+	// schedule_event_types' is_system would import "cannot be renamed" semantics
+	// that are wrong here, and a second flag beside `slug` is one more thing to
+	// keep in step.
+	if slug.Valid && slug.String != "" {
+		http.Error(w, "This template is fetched by name (slug "+slug.String+") and cannot be deleted. Edit it instead.",
+			http.StatusConflict)
 		return
 	}
 
