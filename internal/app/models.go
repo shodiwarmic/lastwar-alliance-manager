@@ -354,6 +354,13 @@ type Settings struct {
 	MaxZSLevel      int    `json:"max_zs_level"`
 	MGDefaultTime   string `json:"mg_default_time"`
 	ZSDefaultTime   string `json:"zs_default_time"`
+	// CurrentSeason / SeasonStartDate are DERIVED in getSettings from the seasons
+	// table (owned by Season Hub) — the most recently started season whose
+	// start_date has passed. The same-named `settings` columns added by migration
+	// 025 are DEAD SCHEMA: nothing reads them and nothing has written them since
+	// Season Hub took ownership. They are kept for one future settings cleanup
+	// that drops every dead column together; see CLAUDE.md -> "Dead schema".
+	// The JSON fields stay — the schedule page reads them for its S#/D# label.
 	CurrentSeason   *int   `json:"current_season"`
 	SeasonStartDate string `json:"season_start_date"`
 	// Event generation rules

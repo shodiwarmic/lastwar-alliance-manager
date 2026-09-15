@@ -856,7 +856,9 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow(`SELECT COALESCE(lastrank_alliance_id, '') FROM settings WHERE id = 1`).Scan(&prevAllianceID)
 
 	// Note: current_season and season_start_date are no longer editable here —
-	// they are derived from the seasons table (owned by Season Hub).
+	// and never read either: see getSettings, which derives both from the seasons
+	// table (owned by Season Hub). The settings columns of those names are dead
+	// schema; see CLAUDE.md -> "Dead schema".
 	_, err := db.Exec(`UPDATE settings SET
 		schedule_message_template = ?,
 		daily_message_template = ?, power_tracking_enabled = ?, storm_timezones = ?,

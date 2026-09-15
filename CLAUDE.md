@@ -732,7 +732,23 @@ all-day ZS stores `00:00` and needs no special case. Dates are stepped with
 `time.AddDate` (calendar arithmetic on y/m/d over `time.Parse` values, which are UTC),
 never by adding a `Duration`, which is what let the old chain drift across a day
 boundary. `settings.zs_anchor_time` is retired from the UI; the column survives as
-dead schema for a future settings cleanup.
+dead schema — see below.
+
+### Dead schema on `settings`
+
+Columns nothing reads and nothing writes. They are **deliberately not dropped one at a
+time**: a SQLite column drop rewrites the table, and `getSettings` / `updateSettings`
+carry ~50-entry positional SELECT/Scan/UPDATE lists that one careless drop shifts
+silently. One future settings cleanup drops them together.
+
+| Column | Retired by | What replaced it |
+|---|---|---|
+| `current_season` | Season Hub | Derived in `getSettings` from `seasons` (latest started season). The `Settings` JSON fields of the same names stay — the schedule page reads them. |
+| `season_start_date` | Season Hub | As above. |
+| `zs_anchor_time` | Project 5 | The ZS rule is a gap between dates; every insert uses `zs_default_time`. |
+
+Do not add a reader for any of them. If one looks useful, the live value is somewhere
+else and the column is stale.
 
 **MG has two independent rules.** `mgGapDays = 2` — the game refuses an MG on the day
 after another one — and the 21:59 start cutoff. They never interact: an MG starting at
