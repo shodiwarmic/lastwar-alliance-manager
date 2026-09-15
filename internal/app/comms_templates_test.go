@@ -95,7 +95,7 @@ func TestUnsluggedTemplateStillDeletes(t *testing.T) {
 
 // goosePayload strips a migration's goose directives so the body can be replayed
 // against an already-migrated test DB. Running the shipped file is the point:
-// a test carrying its own copy of the INSERT would pass while the migration rots.
+// a test carrying its own copy of the SQL would pass while the migration rots.
 func goosePayload(t *testing.T, path string) string {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -103,6 +103,21 @@ func goosePayload(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return regexp.MustCompile(`(?m)^--.*$`).ReplaceAllString(string(raw), "")
+}
+
+// runMigrationBody replays a migration over data seeded after it first ran. Every
+// migration these tests replay is written to be idempotent, which is also what
+// makes it safe against a partially-upgraded install.
+func runMigrationBody(t *testing.T, path string) {
+	t.Helper()
+	for _, stmt := range strings.Split(goosePayload(t, path), ";") {
+		if strings.TrimSpace(stmt) == "" {
+			continue
+		}
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("%s: %v\n%s", path, err, stmt)
+		}
+	}
 }
 
 // The 409 guard stops the NEXT deletion; an install that already deleted the row

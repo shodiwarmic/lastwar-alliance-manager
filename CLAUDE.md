@@ -787,11 +787,42 @@ Four rules:
 Adding a system type is now a migration inserting a row with its own numbers — not a
 fourth column pair and a fourth branch.
 
-**MG has two independent rules.** `mgGapDays = 2` — the game refuses an MG on the day
-after another one — and the 21:59 start cutoff. They never interact: an MG starting at
-21:59 still permits one two days later at 00:30. The cadence was advertised in the
-event-form hint and enforced nowhere; the generator's `AddDate(0, 0, 2)` stepping
-happened to satisfy it, so only a manual create or edit could break it.
+### The Alliance Exercise is ONE slot with TWO events
+
+`allianceExerciseShorts = {"MG", "LS"}`. The every-other-day slot runs **Marshal's
+Guard** up to Season 3 day 57 and **Large Sandworm** from day 58, on different level
+scales (1–12 versus tens). Until migration 074 both were stored as `MG` against one
+ceiling, which is why the live database held MG rows at level 70 beside MG rows at
+level 12 — one column carrying two scales — and why the generator kept producing
+Marshal's Guards past the cutover (confirmed in production data: four rows written in
+one batch on 2026-08-31 at `mg_baseline`, dated 2026-09-21 to 09-27).
+
+Three consequences for any new code:
+
+- **The cutover is computed from `seasons`, never hardcoded.** `sandwormCutover(q)`
+  reads Season 3's `start_date` and adds `sandwormCutoverDays` (57). It returns an
+  `ok` flag, and **every caller must test it** — a Go string compare against `""` is
+  true for every date, so an unguarded `date >= cutover` would push the whole calendar
+  past a cutover that does not exist. `ok == false` means "no cutover", which is the
+  correct answer for a server that has not reached Season 3, not an error.
+- **The cadence spans the family.** `nearestSystemEventWithin` takes a SET of short
+  names for this reason: an MG on Monday blocks a Large Sandworm on Tuesday, because
+  the game has one slot. It returns the conflicting type's name so the rejection can
+  say which event it compared against.
+- **The variant rule is validation, in both directions**, not just a migration.
+  Without it the retyping is a one-off tidy-up that the next generate, push or manual
+  create undoes.
+
+The split is deliberately **not** expressed by renaming the stored type:
+`season_events.type_name` and `season_templates.events[].type_name` are stored strings
+that Sync Event Types re-links on, and migration 070 exists because those links broke
+once. The family is a Go constant.
+
+**The 21:59 start cutoff and the `mgGapDays = 2` date rule are independent.** They
+never interact: an Alliance Exercise starting at 21:59 still permits one two days
+later at 00:30. The cadence was advertised in the event-form hint and enforced
+nowhere; the generator's `AddDate(0, 0, 2)` stepping happened to satisfy it, so only a
+manual create or edit could break it.
 
 Both date rules share `nearestSystemEventWithin` — the same query with a different
 radius — so they cannot drift apart.

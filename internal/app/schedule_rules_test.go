@@ -264,7 +264,7 @@ func TestCreateAndUpdateStillRejectWhatTheyRejectedBefore(t *testing.T) {
 	}
 
 	if rr := create(mgTypeID, "2026-09-09", "22:00"); rr.Code != http.StatusBadRequest ||
-		!strings.Contains(rr.Body.String(), "MG must start by 21:59 ST") {
+		!strings.Contains(rr.Body.String(), "must start by 21:59 ST") {
 		t.Errorf("MG at 22:00: %d %q", rr.Code, rr.Body.String())
 	}
 	if rr := create(mgTypeID, "2026-09-09", "21:59"); rr.Code != http.StatusCreated {
@@ -498,7 +498,7 @@ func TestMGCutoffAndGapDoNotInteract(t *testing.T) {
 		t.Errorf("MG two days after a 21:59 MG rejected: %s", msg)
 	}
 	// The cutoff still applies on its own terms.
-	if msg, _ := validateSystemEventRules(db, "MG", "2026-09-13", "22:00", 0); msg != "MG must start by 21:59 ST" {
+	if msg, _ := validateSystemEventRules(db, "MG", "2026-09-13", "22:00", 0); msg != "Marshal's Guard must start by 21:59 ST" {
 		t.Errorf("cutoff message = %q", msg)
 	}
 }

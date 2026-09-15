@@ -79,6 +79,13 @@ INSERT INTO storm_slot_times (slot, label, time_st) VALUES (3, 'Slot 3', '00:00'
 -- migration is deliberate and safe: goose tracks applied migrations by version
 -- number in goose_db_version and never re-reads or checksums the body, so existing
 -- databases keep whatever they hold and only fresh ones see 1.
+--
+-- CORRECTION (migration 074): "mg_*" here means the ALLIANCE EXERCISE slot, not
+-- Marshal's Guard specifically. That slot runs Marshal's Guard up to Season 3 day
+-- 57 and Large Sandworm from day 58, on a different level scale — so these columns
+-- held two scales in one place, which is what produced level-70 rows sitting
+-- beside level-12 rows under the same type. 073 moved levels onto the type row and
+-- 074 split the type in two; these four columns are dead schema now.
 ALTER TABLE settings ADD COLUMN mg_baseline INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE settings ADD COLUMN zs_baseline INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE settings ADD COLUMN mg_default_time TEXT NOT NULL DEFAULT '00:30';

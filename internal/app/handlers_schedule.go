@@ -27,6 +27,17 @@ type invalidGeneratedEvent struct {
 	Reason string `json:"reason"`
 }
 
+// switchedGeneratedEvent is one date on which the generator produced a different
+// variant of the Alliance Exercise slot than the request's checkbox named. Same
+// reasoning as invalidGeneratedEvent: a result the officer did not ask for, with
+// no explanation attached, reads as a broken generator.
+type switchedGeneratedEvent struct {
+	Date   string `json:"date"`
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Reason string `json:"reason"`
+}
+
 // validateSystemEventRules applies every date/time rule for an MG/ZS candidate
 // against what is in the database. q is db or a tx (rowQuerier,
 // handlers_lastrank.go:23); excludeID skips the row being edited, and is 0 for a
@@ -49,15 +60,97 @@ type invalidGeneratedEvent struct {
 // officer did not touch.
 func validateSystemEventRules(q rowQuerier, short, date, tm string, excludeID int) (string, error) {
 	switch short {
-	case "MG":
-		if tm >= "22:00" {
-			return "MG must start by 21:59 ST", nil
+	case "MG", "LS":
+		if msg, err := validateAllianceExerciseVariant(q, short, date); err != nil || msg != "" {
+			return msg, err
 		}
-		return validateMGGap(q, excludeID, date)
+		if tm >= "22:00" {
+			return allianceExerciseName(short) + " must start by 21:59 ST", nil
+		}
+		return validateAllianceExerciseGap(q, excludeID, date)
 	case "ZS":
 		return validateZSGap(q, excludeID, date)
 	}
 	return "", nil
+}
+
+// allianceExerciseShorts are the two variants of the ONE Alliance Exercise slot:
+// Marshal's Guard up to Season 3 day 57, Large Sandworm from day 58.
+//
+// They are one slot in the game, so the cadence rule spans both — an MG on Monday
+// blocks an LS on Tuesday exactly as it blocks another MG. Keeping the family as a
+// Go constant rather than a column follows the same reasoning as the gap
+// constants themselves (see standing-decisions.md): the alternative is a setting
+// nobody can tell is wrong.
+//
+// Deliberately NOT expressed by renaming the stored type. `season_events.type_name`
+// and `season_templates.events[].type_name` are stored strings that Sync Event
+// Types re-links on, and migration 070 exists because those links broke once.
+var allianceExerciseShorts = []string{"MG", "LS"}
+
+func allianceExerciseName(short string) string {
+	if short == "LS" {
+		return "Large Sandworm"
+	}
+	return "Marshal's Guard"
+}
+
+// sandwormCutoverDays is Season 3 day 58 expressed as an offset from the season's
+// start date: day 1 is the start date itself, so day 58 is start + 57.
+const sandwormCutoverDays = 57
+
+// sandwormCutover returns the first date on which the Alliance Exercise slot runs
+// Large Sandworm instead of Marshal's Guard, derived from the seasons table.
+//
+// ok is false when there is no Season 3 row, and that is a real state, not an
+// error: a server that has not reached Season 3 keeps running Marshal's Guard and
+// no cutover applies. EVERY caller must test ok before comparing — a Go string
+// compare against "" is true for every date, so an unguarded `date >= cutover`
+// would push the whole calendar past a cutover that does not exist.
+func sandwormCutover(q rowQuerier) (string, bool, error) {
+	var cutover string
+	err := q.QueryRow(`SELECT date(start_date, ?) FROM seasons WHERE season_number = 3`,
+		fmt.Sprintf("+%d days", sandwormCutoverDays)).Scan(&cutover)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return cutover, cutover != "", nil
+}
+
+// validateAllianceExerciseVariant rejects the variant the game does not offer on
+// that date, in BOTH directions.
+//
+// This is what stops the generator, the Season Hub push and both manual paths
+// recreating the stranded rows migration 074 has just fixed. Without it the
+// migration is a one-off tidy-up that the next 90-day generate undoes.
+func validateAllianceExerciseVariant(q rowQuerier, short, date string) (string, error) {
+	cutover, ok, err := sandwormCutover(q)
+	if err != nil || !ok {
+		return "", err
+	}
+	if short == "MG" && date >= cutover {
+		return fmt.Sprintf("Marshal's Guard is not available from %s (Season 3 day %d) — schedule a Large Sandworm",
+			cutover, sandwormCutoverDays+1), nil
+	}
+	if short == "LS" && date < cutover {
+		return fmt.Sprintf("Large Sandworm does not start until %s (Season 3 day %d) — schedule a Marshal's Guard",
+			cutover, sandwormCutoverDays+1), nil
+	}
+	return "", nil
+}
+
+// validateAllianceExerciseGap rejects an Alliance Exercise placed on the day
+// before or the day after another one, of EITHER variant. The two share one slot
+// in the game, so the cadence is a property of the slot, not of the type.
+func validateAllianceExerciseGap(q rowQuerier, excludeID int, date string) (string, error) {
+	conflict, name, err := nearestSystemEventWithin(q, allianceExerciseShorts, excludeID, date, mgGapDays-1)
+	if err != nil || conflict == "" {
+		return "", err
+	}
+	return fmt.Sprintf("Alliance Exercise cannot run on consecutive days — conflicts with the %s on %s", name, conflict), nil
 }
 
 // mgGapDays is the MG cadence: the game refuses a Marshal's Guard on the day
@@ -71,17 +164,10 @@ func validateSystemEventRules(q rowQuerier, short, date, tm string, excludeID in
 // create or edit could break it — which is exactly the path officers use.
 const mgGapDays = 2
 
-// validateMGGap rejects an MG placed on the day before or the day after another
-// one. Like the ZS rule it looks both ways and includes the date itself, and it
-// names the date it compared against so a disagreement with the game is visible
-// rather than inferred.
-func validateMGGap(q rowQuerier, excludeID int, date string) (string, error) {
-	conflict, err := nearestSystemEventWithin(q, "MG", excludeID, date, mgGapDays-1)
-	if err != nil || conflict == "" {
-		return "", err
-	}
-	return fmt.Sprintf("MG cannot run on consecutive days — conflicts with the MG on %s", conflict), nil
-}
+// The Alliance Exercise cadence rule lives in validateAllianceExerciseGap, above:
+// it looks both ways, includes the date itself, spans both variants of the slot,
+// and names the event it compared against so a disagreement with the game is
+// visible rather than inferred.
 
 // zsGapDays is the ZS cadence: a siege may not fall within two clear game days
 // of another siege, in either direction — the next one unlocks at the 00:00
@@ -108,7 +194,7 @@ const zsGapDays = 3
 // a wrong setting is worse than a wrong constant, because nobody can tell
 // whether the app or the game is wrong.
 func validateZSGap(q rowQuerier, excludeID int, date string) (string, error) {
-	conflict, err := nearestSystemEventWithin(q, "ZS", excludeID, date, zsGapDays-1)
+	conflict, _, err := nearestSystemEventWithin(q, []string{"ZS"}, excludeID, date, zsGapDays-1)
 	if err != nil || conflict == "" {
 		return "", err
 	}
@@ -121,38 +207,56 @@ func validateZSGap(q rowQuerier, excludeID int, date string) (string, error) {
 		conflict, next), nil
 }
 
-// nearestSystemEventWithin returns the event_date of the closest event of the
-// given system type lying within clearDays either side of date (inclusive of
-// date itself), or "" when there is none. excludeID skips the row being edited.
+// nearestSystemEventWithin returns the event_date and the type NAME of the closest
+// event of any of the given system types lying within clearDays either side of
+// date (inclusive of date itself), or "" when there is none. excludeID skips the
+// row being edited.
+//
+// It takes a SET of short names because the Alliance Exercise slot has two
+// variants (see allianceExerciseShorts) and its cadence spans both: an MG on
+// Monday blocks a Large Sandworm on Tuesday. The name comes back so the rejection
+// can say which event it compared against rather than just "an MG" — an officer
+// who believes the game disagrees needs to see exactly what the app decided.
 //
 // Both date rules are the same query with a different radius, so they share it
 // rather than drifting apart. Dates are stepped with AddDate — calendar
 // arithmetic on y/m/d over time.Parse values, which are UTC, so neither the host
 // timezone nor a DST transition can move the bounds.
-func nearestSystemEventWithin(q rowQuerier, short string, excludeID int, date string, clearDays int) (string, error) {
+func nearestSystemEventWithin(q rowQuerier, shorts []string, excludeID int, date string, clearDays int) (string, string, error) {
+	if len(shorts) == 0 {
+		return "", "", nil
+	}
 	d, err := time.Parse("2006-01-02", date)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	lo := d.AddDate(0, 0, -clearDays).Format("2006-01-02")
 	hi := d.AddDate(0, 0, clearDays).Format("2006-01-02")
 
-	var conflict string
-	err = q.QueryRow(`
-		SELECT se.event_date
+	args := make([]any, 0, len(shorts)+4)
+	for _, s := range shorts {
+		args = append(args, s)
+	}
+	args = append(args, excludeID, lo, hi, date)
+	// #nosec G202 — the placeholder list is built from len(shorts), not from input.
+	query := `
+		SELECT se.event_date, t.name
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
-		WHERE t.short_name = ? AND se.id != ?
+		WHERE t.short_name IN (` + strings.TrimSuffix(strings.Repeat("?,", len(shorts)), ",") + `) AND se.id != ?
 		  AND se.event_date >= ? AND se.event_date <= ?
 		ORDER BY abs(julianday(se.event_date) - julianday(?)) ASC
-		LIMIT 1`, short, excludeID, lo, hi, date).Scan(&conflict)
+		LIMIT 1`
+
+	var conflict, name string
+	err = q.QueryRow(query, args...).Scan(&conflict, &name)
 	if err == sql.ErrNoRows {
-		return "", nil
+		return "", "", nil
 	}
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return conflict, nil
+	return conflict, name, nil
 }
 
 // maxEventLevelCeiling bounds the configurable ceiling itself. It is a sanity
@@ -1073,9 +1177,21 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	// the generate loop below inserts as it goes, and a read issued mid-loop would
 	// be a second statement on the single connection while nothing is open — legal,
 	// but pointlessly repeated once per candidate date.
-	var mgTypeID, zsTypeID int
+	var mgTypeID, lsTypeID, zsTypeID int
 	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='MG'`).Scan(&mgTypeID)
+	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='LS'`).Scan(&lsTypeID)
 	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='ZS'`).Scan(&zsTypeID)
+
+	// The Alliance Exercise slot switches variant at Season 3 day 58. ok is false
+	// on a server with no Season 3 row, and then the slot is simply Marshal's Guard
+	// throughout — every comparison below is guarded on it, because a Go string
+	// compare against "" is true for every date.
+	cutover, haveCutover, err := sandwormCutover(db)
+	if err != nil {
+		slog.Error("generateScheduleEvents cutover", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 
 	// A system type with no baseline is a data error, the same one the create path
 	// reports. Generating with a made-up number would write it onto every row of a
@@ -1096,6 +1212,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		return *tl.Baseline, true
 	}
 	mgBaseline, mgOK := baselineOf(mgTypeID, "MG")
+	lsBaseline, lsOK := baselineOf(lsTypeID, "LS")
 	zsBaseline, zsOK := baselineOf(zsTypeID, "ZS")
 
 	user := getAuthUser(r)
@@ -1107,10 +1224,13 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mgCreated := 0
+	lsCreated := 0
 	zsCreated := 0
 	skippedExisting := 0
 	skippedInvalid := 0
 	invalid := []invalidGeneratedEvent{}
+	switched := 0
+	switchedDetail := []switchedGeneratedEvent{}
 
 	// tryCreate applies the same rules a manual create applies, then inserts.
 	//
@@ -1150,8 +1270,13 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		return true
 	}
 
-	// --- MG generation: every other day from anchor ---
-	if genTypes["mg"] && mgOK && s.MGAnchorDate != "" {
+	// --- Alliance Exercise generation: every other day from anchor ---
+	//
+	// One loop, two variants. Past the cutover the slot is Large Sandworm, and the
+	// generator produces that rather than an MG the manual validator would now
+	// refuse. The request value stays "mg": it is the FAMILY selector, and the wire
+	// value is not worth breaking for a label change.
+	if genTypes["mg"] && s.MGAnchorDate != "" {
 		anchorT, err := time.Parse("2006-01-02", s.MGAnchorDate)
 		if err == nil {
 			// Find first valid date >= fromT in the every-other-day sequence from anchorT
@@ -1162,8 +1287,34 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 				firstDate = fromT.AddDate(0, 0, 1)
 			}
 			for d := firstDate; !d.After(toT); d = d.AddDate(0, 0, 2) {
-				if tryCreate(mgTypeID, "MG", d.Format("2006-01-02"), s.MGDefaultTime, mgBaseline) {
-					mgCreated++
+				dateStr := d.Format("2006-01-02")
+
+				typeID, short, baseline, ok := mgTypeID, "MG", mgBaseline, mgOK
+				isSandworm := haveCutover && dateStr >= cutover
+				if isSandworm {
+					typeID, short, baseline, ok = lsTypeID, "LS", lsBaseline, lsOK
+				}
+				if !ok {
+					continue
+				}
+				if tryCreate(typeID, short, dateStr, s.MGDefaultTime, baseline) {
+					if isSandworm {
+						lsCreated++
+						// Report the substitution rather than silently producing a
+						// different event than the checkbox named: an officer who
+						// ticked "Alliance Exercise" and got Large Sandworms needs
+						// to see the rule that decided it.
+						switched++
+						if len(switchedDetail) < 20 {
+							switchedDetail = append(switchedDetail, switchedGeneratedEvent{
+								Date: dateStr, From: "MG", To: "LS",
+								Reason: fmt.Sprintf("Alliance Exercise switched to Large Sandworm from %s (Season 3 day %d)",
+									cutover, sandwormCutoverDays+1),
+							})
+						}
+					} else {
+						mgCreated++
+					}
 				}
 			}
 		}
@@ -1220,19 +1371,23 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if mgCreated+zsCreated > 0 {
+	total := mgCreated + lsCreated + zsCreated
+	if total > 0 {
 		logActivity(user.ID, user.Username, "created", "schedule_event",
-			fmt.Sprintf("%d events generated", mgCreated+zsCreated), false,
-			fmt.Sprintf("MG: %d, ZS: %d", mgCreated, zsCreated))
+			fmt.Sprintf("%d events generated", total), false,
+			fmt.Sprintf("MG: %d, LS: %d, ZS: %d", mgCreated, lsCreated, zsCreated))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"mg_created":       mgCreated,
+		"ls_created":       lsCreated,
 		"zs_created":       zsCreated,
 		"skipped_existing": skippedExisting,
 		"skipped_invalid":  skippedInvalid,
 		"invalid":          invalid,
+		"switched":         switched,
+		"switched_detail":  switchedDetail,
 	})
 }
 

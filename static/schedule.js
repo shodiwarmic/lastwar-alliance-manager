@@ -537,8 +537,11 @@ function updateEventModalForType() {
         lvlInput.removeAttribute('max');
     }
 
-    if (et.short_name === 'MG') {
-        hint.textContent = 'Must start by 21:59 ST. Every-other-day rule applies.';
+    if (et.short_name === 'MG' || et.short_name === 'LS') {
+        // One slot, two variants: the cadence spans both, so an MG on Monday blocks
+        // a Large Sandworm on Tuesday. The server decides which variant a date may
+        // carry, from the Season 3 day 58 cutover.
+        hint.textContent = 'Must start by 21:59 ST. Alliance Exercise runs every other day — Marshal’s Guard and Large Sandworm share the slot.';
     } else if (et.short_name === 'ZS') {
         hint.textContent = 'Two clear days between sieges (next ZS on D+3 or later, any time).';
     } else {
@@ -1143,8 +1146,19 @@ async function generateEvents() {
             return;
         }
         const data = await res.json();
-        let msg = 'Created ' + data.mg_created + ' MG, ' + data.zs_created + ' ZS events.';
+        let msg = 'Created ' + data.mg_created + ' MG, ' + (data.ls_created || 0) + ' Large Sandworm, '
+            + data.zs_created + ' ZS events.';
         if (data.skipped_existing > 0) msg += ' ' + data.skipped_existing + ' already existed.';
+        if (data.switched > 0) {
+            // The officer ticked "Alliance Exercise" and got Large Sandworms. Name
+            // the rule that decided it, the same way a declined date is named.
+            msg += ' ' + data.switched + ' switched to Large Sandworm';
+            const sw = (data.switched_detail || []).slice(0, 3)
+                .map(s => s.date + ' (' + s.reason + ')').join('; ');
+            if (sw) msg += ': ' + sw;
+            if ((data.switched_detail || []).length > 3) msg += '; …';
+            msg += '.';
+        }
         if (data.skipped_invalid > 0) {
             // Name the dates the app declined and why. A smaller number than the
             // officer expected, with no explanation, reads as a broken generator.
@@ -1155,7 +1169,9 @@ async function generateEvents() {
             if ((data.invalid || []).length > 3) msg += '; …';
             msg += '.';
         }
-        showStatus(statusEl, msg, false, data.skipped_invalid > 0 ? 0 : undefined);
+        // Pinned open when there is something to read: a switch or a decline is a
+        // result the officer did not ask for and must not scroll past on a timer.
+        showStatus(statusEl, msg, false, (data.skipped_invalid > 0 || data.switched > 0) ? 0 : undefined);
         await loadWeek();
     } catch {
         showStatus(statusEl, 'Network error', true);
