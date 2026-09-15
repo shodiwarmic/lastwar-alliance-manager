@@ -349,6 +349,19 @@ function buildEventCard(evt, dateStr) {
         row.appendChild(lvl);
     }
 
+    // An encounter left outside its parent window — usually because the window's
+    // anchor moved after the event was saved. Flagged, never moved: the app does
+    // not know which of the two is wrong.
+    if (evt.outside_window) {
+        const warn = document.createElement('span');
+        warn.className = 'event-card-warn';
+        warn.textContent = '⚠ outside window';
+        warn.title = evt.parent_name
+            ? 'This date is not inside any ' + evt.parent_name + ' window.'
+            : 'This date is not inside its server event window.';
+        row.appendChild(warn);
+    }
+
     card.appendChild(row);
 
     if (evt.notes) {
@@ -492,10 +505,68 @@ function populateEventTypeSelect(selectedId) {
     updateEventModalForType();
 }
 
+// The next `count` windows a server event opens, on or after `fromStr`, as
+// ["23–25 Sep", …].
+//
+// getServerEventOccurrencesInWeek is indexed on dates[0]/dates[6], so it can only
+// be asked about one week at a time; this walks a quarter of them and stitches the
+// covered days back into runs. Reusing it rather than re-deriving the cadence is
+// the point — there is already a second implementation of this arithmetic in Go,
+// and a third would be one too many.
+function nextServerEventWindows(se, fromStr, count) {
+    const covered = new Set();
+    let cursor = fromStr;
+    for (let w = 0; w < 13; w++) {
+        const week = [];
+        for (let i = 0; i < 7; i++) week.push(addDays(cursor, i));
+        getServerEventOccurrencesInWeek(se, week).forEach(d => covered.add(d));
+        cursor = addDays(cursor, 7);
+    }
+    const days = Array.from(covered).sort();
+    const runs = [];
+    days.forEach(d => {
+        const last = runs[runs.length - 1];
+        if (last && addDays(last[last.length - 1], 1) === d) last.push(d);
+        else runs.push([d]);
+    });
+    const fmt = s => new Date(s + 'T12:00:00Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    return runs
+        .filter(r => r[r.length - 1] >= fromStr)
+        .slice(0, count)
+        .map(r => r.length === 1 ? fmt(r[0]) : fmt(r[0]) + ' – ' + fmt(r[r.length - 1]));
+}
+
+// A hint under the Date field naming the windows an encounter type may sit in.
+// Display only: the server validates the save, so a disagreement shows up as a
+// rejection rather than as a silently wrong calendar.
+function updateEventWindowHint(et) {
+    const hintEl = document.getElementById('event-window-hint');
+    if (!hintEl) return;
+    const parentId = et && et.server_event_id;
+    if (!parentId) { hintEl.textContent = ''; return; }
+    const se = serverEvents.find(s => s.id === parentId);
+    if (!se) { hintEl.textContent = ''; return; }
+    if (!se.active) {
+        hintEl.textContent = se.name + ' is not active, so no windows are shown. Reactivate it in Server Events.';
+        return;
+    }
+    if (!se.anchor_date) {
+        hintEl.textContent = se.name + ' has no anchor date set, so its windows cannot be worked out. Set one in Server Events.';
+        return;
+    }
+    const today = document.getElementById('event-date-input').value || todayGameDate();
+    const windows = nextServerEventWindows(se, today, 3);
+    hintEl.textContent = windows.length
+        ? se.name + ' windows: ' + windows.join(', ')
+        : se.name + ' has no upcoming windows.';
+}
+
 function updateEventModalForType() {
     const sel = document.getElementById('event-type-select');
     const typeId = parseInt(sel.value, 10);
     const et = eventTypes.find(e => e.id === typeId);
+
+    updateEventWindowHint(et);
 
     const lvlGroup = document.getElementById('event-level-group');
     const lvlInput = document.getElementById('event-level-input');
@@ -673,6 +744,10 @@ function renderEventTypes() {
                 ? 'Lv. ' + et.baseline_level + '/' + et.max_level
                 : 'Levelled');
         }
+        if (et.server_event_id != null) {
+            const parent = serverEvents.find(s => s.id === et.server_event_id);
+            tags.push('Inside ' + (parent ? parent.name : 'a server event window'));
+        }
         meta.textContent = tags.join(' · ') || 'Custom';
         info.appendChild(meta);
 
@@ -739,9 +814,29 @@ function openAddEventTypeModal() {
     document.getElementById('et-active').checked = true;
     document.getElementById('et-has-level').checked = false;
     document.getElementById('et-baseline').value = '';
+    populateParentWindowSelect(null);
     setEventTypeModalMode(null);
     document.getElementById('event-type-form-error').textContent = '';
     document.getElementById('event-type-modal').style.display = 'flex';
+}
+
+// The "inside server event window" picker. Offers every window, active or not —
+// an inactive one is still the right answer while the officer sorts it out, and
+// the save path says so rather than hiding the option.
+function populateParentWindowSelect(selectedId) {
+    const sel = document.getElementById('et-parent');
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'None';
+    const opts = [none];
+    serverEvents.forEach(se => {
+        const opt = document.createElement('option');
+        opt.value = se.id;
+        opt.textContent = se.icon + ' ' + se.name + (se.active ? '' : ' (inactive)');
+        opts.push(opt);
+    });
+    sel.replaceChildren(...opts);
+    sel.value = selectedId == null ? '' : String(selectedId);
 }
 
 function openEditEventTypeModal(et) {
@@ -753,6 +848,7 @@ function openEditEventTypeModal(et) {
     document.getElementById('et-active').checked = et.active;
     document.getElementById('et-has-level').checked = !!et.has_level;
     document.getElementById('et-baseline').value = et.baseline_level ?? '';
+    populateParentWindowSelect(et.server_event_id ?? null);
     setEventTypeModalMode(et);
     document.getElementById('event-type-form-error').textContent = '';
     document.getElementById('event-type-modal').style.display = 'flex';
@@ -779,6 +875,10 @@ async function saveEventType(e) {
         // is silently lost on create and looks like a broken checkbox.
         body.has_level = document.getElementById('et-has-level').checked;
     }
+    // Sent on both paths, and sent even when empty: a JSON null is how the PUT is
+    // told to CLEAR the link, and an absent key means "leave it alone".
+    const parent = document.getElementById('et-parent').value;
+    body.server_event_id = parent === '' ? null : parseInt(parent, 10);
 
     const url    = id ? '/api/schedule/event-types/' + id : '/api/schedule/event-types';
     const method = id ? 'PUT' : 'POST';
@@ -875,7 +975,13 @@ function renderServerEvents() {
             delBtn.textContent = 'Delete';
             delBtn.addEventListener('click', async () => {
                 if (!await showConfirm('Delete this server event?', 'Delete')) return;
-                await fetch('/api/schedule/server-events/' + evt.id, { method: 'DELETE' });
+                // A 409 here means an encounter type still points at this window.
+                // Swallowing it would look like a delete that silently did nothing.
+                const res = await fetch('/api/schedule/server-events/' + evt.id, { method: 'DELETE' });
+                if (!res.ok) {
+                    showToast(await res.text() || 'Could not delete that server event.', 'error', 8000);
+                    return;
+                }
                 await loadServerEvents();
                 await loadWeek();
             });
@@ -965,6 +1071,18 @@ async function saveServerEvent(e) {
         if (!res.ok) {
             errEl.textContent = await res.text() || 'Save failed';
             return;
+        }
+        // Moving a window can leave encounters outside it. The server lists them;
+        // it never moves them, so the officer is told rather than surprised.
+        const body = await res.json().catch(() => null);
+        const stranded = body && body.stranded;
+        if (stranded && stranded.length) {
+            const byType = {};
+            stranded.forEach(s => { (byType[s.type] = byType[s.type] || []).push(s.date); });
+            const parts = Object.entries(byType).map(([type, dates]) =>
+                dates.length + ' ' + type + ' event' + (dates.length === 1 ? '' : 's') +
+                ' now fall' + (dates.length === 1 ? 's' : '') + ' outside this window: ' + dates.join(', '));
+            showToast(parts.join(' · '), 'info', 8000);
         }
     } catch {
         errEl.textContent = 'Network error';

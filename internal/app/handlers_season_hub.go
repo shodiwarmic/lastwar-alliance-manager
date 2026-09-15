@@ -886,6 +886,7 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 	// have created and delete matching rows from schedule_events / server_events.
 	// This is best-effort — if the season has no start_date the loop is skipped.
 	purgedAlliance, purgedServer := 0, 0
+	unlinkedTypes := 0
 	if s.StartDate != "" {
 		if startDate, perr := time.Parse("2006-01-02", s.StartDate); perr == nil {
 			evRows, qerr := tx.Query(`
@@ -922,6 +923,19 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 						eventDate := weekStartDate.AddDate(0, 0, int(p.dayOffset.Int64)-1)
 						dateStr := eventDate.Format("2006-01-02")
 						if p.isServerEvent == 1 {
+							// Detach first: foreign_keys is off app-wide, so nothing
+							// else will clear an encounter type pointing at the window
+							// about to go. Refusing the season delete over such a link
+							// would be the wrong shape — the window is going, the type
+							// is not.
+							n, err := detachEncounterParentsByAnchor(tx, p.label, dateStr)
+							if err != nil {
+								slog.Error("handleSeasonDelete: detach encounter parents", "error", err)
+								http.Error(w, "Database error", http.StatusInternalServerError)
+								return
+							}
+							unlinkedTypes += n
+
 							res, _ := tx.Exec(`DELETE FROM server_events WHERE name = ? AND anchor_date = ?`,
 								p.label, dateStr)
 							if res != nil {
@@ -974,6 +988,9 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 	details := ""
 	if purgedAlliance > 0 || purgedServer > 0 {
 		details = fmt.Sprintf("purged %d alliance + %d server events", purgedAlliance, purgedServer)
+		if unlinkedTypes > 0 {
+			details += fmt.Sprintf("; %d encounter type(s) unlinked", unlinkedTypes)
+		}
 	}
 	logActivity(user.ID, user.Username, "deleted", "season_config", s.Name, false, details)
 
@@ -982,6 +999,7 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 		"message":         "Season deleted",
 		"purged_alliance": purgedAlliance,
 		"purged_server":   purgedServer,
+		"unlinked_types":  unlinkedTypes,
 	})
 }
 
@@ -2964,10 +2982,9 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 			return t
 		}
 		var t pushTypeRules
-		var isSystem int
-		db.QueryRow(`SELECT name, short_name, is_system FROM schedule_event_types WHERE id = ?`, id).
-			Scan(&t.Name, &t.Short, &isSystem)
-		t.IsSystem = isSystem == 1
+		if tr, err := loadScheduleTypeRules(db, id); err == nil {
+			t.Rules = tr
+		}
 		if tl, err := loadTypeLevels(db, id); err == nil {
 			t.Levels = tl
 		}
@@ -3095,27 +3112,23 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 			// this path unchecked. The level rule runs for every type that carries
 			// a level, so a template level on a type that does not is declined here
 			// rather than written past the validation the manual path applies.
-			tr := typeRulesFor(ev.eventTypeID)
-			var msg string
-			if tr.IsSystem {
-				var err error
-				msg, err = validateSystemEventRules(db, tr.Short, dateStr, ev.eventTime, 0)
-				if err != nil {
-					return result, err
-				}
+			pt := typeRulesFor(ev.eventTypeID)
+			msg, err := validateEventRules(db, pt.Rules, dateStr, ev.eventTime, 0)
+			if err != nil {
+				return result, err
 			}
 			if msg == "" && ev.level != nil {
-				if !tr.Levels.HasLevel {
-					msg = fmt.Sprintf("%s events do not carry a level", tr.Name)
+				if !pt.Levels.HasLevel {
+					msg = fmt.Sprintf("%s events do not carry a level", pt.Rules.Name)
 				} else {
-					msg = validateEventLevel(tr.Name, tr.Levels, ev.level)
+					msg = validateEventLevel(pt.Rules.Name, pt.Levels, ev.level)
 				}
 			}
 			if msg != "" {
 				result.SkippedInvalid++
 				if len(result.Invalid) < 20 {
 					result.Invalid = append(result.Invalid, invalidGeneratedEvent{
-						Date: dateStr, Type: tr.Short, Reason: msg,
+						Date: dateStr, Type: pt.Rules.Short, Reason: msg,
 					})
 				}
 				continue

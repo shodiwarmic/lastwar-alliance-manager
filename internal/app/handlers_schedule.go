@@ -58,6 +58,50 @@ type switchedGeneratedEvent struct {
 // The level rule stays in validateSystemLevel: its call timing is
 // caller-specific, because the update path deliberately grandfathers a level the
 // officer did not touch.
+// scheduleTypeRules is everything the validator needs to know about an event's
+// type. The caller loads it once; the VALIDATOR decides which rules apply.
+//
+// That division matters. The call sites used to gate on `is_system == 1` before
+// calling in at all, which was fine while every rule was a system-type rule. It
+// stopped being fine the moment a CUSTOM type could carry a parent window
+// (Glacieradon): a gate on is_system would have left the window rule bypassable on
+// create, on update and on the Season Hub push — three separate holes, one per
+// gate. The gates are gone; add a rule here, not a condition out there.
+type scheduleTypeRules struct {
+	Name          string
+	Short         string
+	IsSystem      bool
+	ServerEventID *int
+}
+
+// loadScheduleTypeRules reads one type's rule inputs. q is db or a tx.
+func loadScheduleTypeRules(q rowQuerier, typeID int) (scheduleTypeRules, error) {
+	var tr scheduleTypeRules
+	var isSystem int
+	err := q.QueryRow(`SELECT name, short_name, is_system, server_event_id FROM schedule_event_types WHERE id = ?`, typeID).
+		Scan(&tr.Name, &tr.Short, &isSystem, &tr.ServerEventID)
+	tr.IsSystem = isSystem == 1
+	return tr, err
+}
+
+// validateEventRules applies every date/time rule for a candidate event. It is the
+// single entry point for all four write paths into schedule_events.
+//
+// System-only rules (the Alliance Exercise family gap, the 21:59 cutoff, the
+// variant cutover, the ZS gap) run when the type is a system type. The window rule
+// runs whenever the type has a parent, system or not.
+func validateEventRules(q rowQuerier, tr scheduleTypeRules, date, tm string, excludeID int) (string, error) {
+	if tr.IsSystem {
+		if msg, err := validateSystemEventRules(q, tr.Short, date, tm, excludeID); err != nil || msg != "" {
+			return msg, err
+		}
+	}
+	if tr.ServerEventID != nil {
+		return validateEncounterWindow(q, tr.Name, *tr.ServerEventID, date)
+	}
+	return "", nil
+}
+
 func validateSystemEventRules(q rowQuerier, short, date, tm string, excludeID int) (string, error) {
 	switch short {
 	case "MG", "LS":
@@ -323,10 +367,8 @@ func validateEventLevel(typeName string, tl typeLevels, level *int) string {
 // apply the same rules a manual create applies. It exists so the push resolves a
 // type once per distinct id rather than once per created row.
 type pushTypeRules struct {
-	Name     string
-	Short    string
-	IsSystem bool
-	Levels   typeLevels
+	Rules  scheduleTypeRules
+	Levels typeLevels
 }
 
 // resolveEventLevel applies the level rules for a NEW event, substituting the
@@ -381,7 +423,7 @@ func getScheduleEventTypes(w http.ResponseWriter, r *http.Request) {
 	// payload instead of needing an endpoint of its own.
 	rows, err := db.Query(`
 		SELECT t.id, t.name, t.short_name, t.icon, t.is_system, t.active, t.sort_order, t.created_at,
-		       t.has_level, t.baseline_level, t.max_level,
+		       t.has_level, t.baseline_level, t.max_level, t.server_event_id,
 		       (SELECT e.level FROM schedule_events e
 		         WHERE e.event_type_id = t.id AND e.level IS NOT NULL
 		         ORDER BY e.event_date DESC LIMIT 1)
@@ -397,7 +439,7 @@ func getScheduleEventTypes(w http.ResponseWriter, r *http.Request) {
 		var t ScheduleEventType
 		var isSystem, active, hasLevel int
 		if err := rows.Scan(&t.ID, &t.Name, &t.ShortName, &t.Icon, &isSystem, &active, &t.SortOrder, &t.CreatedAt,
-			&hasLevel, &t.BaselineLevel, &t.MaxLevel, &t.LastLevel); err != nil {
+			&hasLevel, &t.BaselineLevel, &t.MaxLevel, &t.ServerEventID, &t.LastLevel); err != nil {
 			slog.Error("getScheduleEventTypes scan", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -539,6 +581,8 @@ func createScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		Icon      string `json:"icon"`
 		SortOrder int    `json:"sort_order"`
 		HasLevel  *bool  `json:"has_level"`
+		// Every field the modal carries is accepted here too — see the note above.
+		ServerEventID *int `json:"server_event_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -549,6 +593,14 @@ func createScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	if req.Name == "" || req.ShortName == "" {
 		http.Error(w, "name and short_name are required", http.StatusBadRequest)
 		return
+	}
+	if req.ServerEventID != nil {
+		var exists int
+		db.QueryRow(`SELECT COUNT(*) FROM server_events WHERE id = ?`, *req.ServerEventID).Scan(&exists)
+		if exists == 0 {
+			http.Error(w, "server_event_id not found", http.StatusBadRequest)
+			return
+		}
 	}
 	if req.Icon == "" {
 		req.Icon = "📅"
@@ -562,9 +614,9 @@ func createScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := db.Exec(`
-		INSERT INTO schedule_event_types (name, short_name, icon, is_system, active, sort_order, has_level)
-		VALUES (?, ?, ?, 0, 1, ?, ?)`,
-		req.Name, req.ShortName, req.Icon, req.SortOrder, hasLevel)
+		INSERT INTO schedule_event_types (name, short_name, icon, is_system, active, sort_order, has_level, server_event_id)
+		VALUES (?, ?, ?, 0, 1, ?, ?, ?)`,
+		req.Name, req.ShortName, req.Icon, req.SortOrder, hasLevel, req.ServerEventID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			http.Error(w, "An event type with that name or short name already exists", http.StatusConflict)
@@ -596,6 +648,11 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		// max_level is deliberately NOT here: it is manage_settings, and this
 		// endpoint is manage_schedule. See updateScheduleEventTypeCeiling.
 		BaselineLevel *int `json:"baseline_level"`
+		// ServerEventID is the window this type's events happen inside. Applies to
+		// ANY type, system or custom — Glacieradon is a custom encounter. A JSON
+		// null clears it; an absent key leaves it alone, which is why it is a
+		// **int.
+		ServerEventID **int `json:"server_event_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -605,9 +662,9 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	var old ScheduleEventType
 	var isSystem, active, oldHasLevel int
 	err := db.QueryRow(`SELECT name, short_name, icon, is_system, active, sort_order,
-		has_level, baseline_level, max_level FROM schedule_event_types WHERE id=?`, id).
+		has_level, baseline_level, max_level, server_event_id FROM schedule_event_types WHERE id=?`, id).
 		Scan(&old.Name, &old.ShortName, &old.Icon, &isSystem, &active, &old.SortOrder,
-			&oldHasLevel, &old.BaselineLevel, &old.MaxLevel)
+			&oldHasLevel, &old.BaselineLevel, &old.MaxLevel, &old.ServerEventID)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -706,14 +763,27 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	newParent := old.ServerEventID
+	if req.ServerEventID != nil {
+		newParent = *req.ServerEventID
+		if newParent != nil {
+			var exists int
+			db.QueryRow(`SELECT COUNT(*) FROM server_events WHERE id = ?`, *newParent).Scan(&exists)
+			if exists == 0 {
+				http.Error(w, "server_event_id not found", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+
 	hasLevelInt := 0
 	if newHasLevel {
 		hasLevelInt = 1
 	}
 	_, err = db.Exec(`
 		UPDATE schedule_event_types SET name=?, short_name=?, icon=?, active=?, sort_order=?,
-		       has_level=?, baseline_level=? WHERE id=?`,
-		req.Name, req.ShortName, req.Icon, activeInt, req.SortOrder, hasLevelInt, newBaseline, id)
+		       has_level=?, baseline_level=?, server_event_id=? WHERE id=?`,
+		req.Name, req.ShortName, req.Icon, activeInt, req.SortOrder, hasLevelInt, newBaseline, newParent, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			http.Error(w, "An event type with that name or short name already exists", http.StatusConflict)
@@ -739,6 +809,9 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	}
 	if nullableIntLabel(old.BaselineLevel) != nullableIntLabel(newBaseline) {
 		changes = append(changes, "baseline: "+nullableIntLabel(old.BaselineLevel)+" → "+nullableIntLabel(newBaseline))
+	}
+	if nullableIntLabel(old.ServerEventID) != nullableIntLabel(newParent) {
+		changes = append(changes, "server event window: "+nullableIntLabel(old.ServerEventID)+" → "+nullableIntLabel(newParent))
 	}
 
 	user := getAuthUser(r)
@@ -808,7 +881,7 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query(`
 		SELECT se.id, se.event_date, se.event_type_id,
-		       t.name, t.short_name, t.icon, t.is_system,
+		       t.name, t.short_name, t.icon, t.is_system, t.server_event_id,
 		       se.event_time, se.all_day, se.level, COALESCE(se.notes,''),
 		       se.created_by, se.created_at, se.updated_at
 		FROM schedule_events se
@@ -820,18 +893,20 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
 
 	events := []ScheduleEvent{}
+	parentIDs := map[int][]int{} // server_event_id -> indices into events
 	for rows.Next() {
 		var ev ScheduleEvent
 		var isSystem, allDay int
+		var parentID *int
 		if err := rows.Scan(
 			&ev.ID, &ev.EventDate, &ev.EventTypeID,
-			&ev.TypeName, &ev.TypeShort, &ev.TypeIcon, &isSystem,
+			&ev.TypeName, &ev.TypeShort, &ev.TypeIcon, &isSystem, &parentID,
 			&ev.EventTime, &allDay, &ev.Level, &ev.Notes,
 			&ev.CreatedBy, &ev.CreatedAt, &ev.UpdatedAt,
 		); err != nil {
+			rows.Close()
 			slog.Error("getScheduleEvents scan", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -839,7 +914,33 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		ev.IsSystem = isSystem == 1
 		ev.AllDay = allDay == 1
 		events = append(events, ev)
+		if parentID != nil {
+			parentIDs[*parentID] = append(parentIDs[*parentID], len(events)-1)
+		}
 	}
+	// Close the cursor BEFORE loading the parent windows: one connection, and a
+	// query issued while this is open waits forever.
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		slog.Error("getScheduleEvents rows", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Flag encounters sitting outside their parent's windows, so the calendar can
+	// say so on the card. Bounded work: at most 42 days of events and a handful of
+	// encounter types, one window read each.
+	for parentID, idxs := range parentIDs {
+		parent, err := loadServerEvent(db, parentID)
+		if err != nil {
+			continue
+		}
+		for _, i := range idxs {
+			events[i].OutsideWindow = serverEventOutsideWindow(parent, events[i].EventDate)
+			events[i].ParentName = parent.Name
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(events)
 }
@@ -872,10 +973,7 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var typeName, typeShort string
-	var isSystem int
-	err := db.QueryRow(`SELECT name, short_name, is_system FROM schedule_event_types WHERE id=?`, req.EventTypeID).
-		Scan(&typeName, &typeShort, &isSystem)
+	tr, err := loadScheduleTypeRules(db, req.EventTypeID)
 	if err == sql.ErrNoRows {
 		http.Error(w, "event_type_id not found", http.StatusBadRequest)
 		return
@@ -885,16 +983,20 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	typeName, isSystem := tr.Name, 0
+	if tr.IsSystem {
+		isSystem = 1
+	}
 
-	if isSystem == 1 {
-		if msg, err := validateSystemEventRules(db, typeShort, req.EventDate, req.EventTime, 0); err != nil {
-			slog.Error("createScheduleEvent validateSystemEventRules", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		} else if msg != "" {
-			http.Error(w, msg, http.StatusBadRequest)
-			return
-		}
+	// No is_system gate: the validator decides what applies. A custom type with a
+	// parent window has a rule too.
+	if msg, err := validateEventRules(db, tr, req.EventDate, req.EventTime, 0); err != nil {
+		slog.Error("createScheduleEvent validateEventRules", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	} else if msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
 	}
 
 	tl, err := loadTypeLevels(db, req.EventTypeID)
@@ -993,23 +1095,24 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		req.EventTypeID = old.EventTypeID
 	}
 
-	var typeName, typeShort string
-	var newIsSystem int
-	if err := db.QueryRow(`SELECT name, short_name, is_system FROM schedule_event_types WHERE id=?`, req.EventTypeID).
-		Scan(&typeName, &typeShort, &newIsSystem); err != nil {
+	tr, err := loadScheduleTypeRules(db, req.EventTypeID)
+	if err != nil {
 		http.Error(w, "event_type_id not found", http.StatusBadRequest)
 		return
 	}
+	typeName, newIsSystem := tr.Name, 0
+	if tr.IsSystem {
+		newIsSystem = 1
+	}
 
-	if newIsSystem == 1 {
-		if msg, err := validateSystemEventRules(db, typeShort, req.EventDate, req.EventTime, id); err != nil {
-			slog.Error("updateScheduleEvent validateSystemEventRules", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		} else if msg != "" {
-			http.Error(w, msg, http.StatusBadRequest)
-			return
-		}
+	// No is_system gate — see validateEventRules.
+	if msg, err := validateEventRules(db, tr, req.EventDate, req.EventTime, id); err != nil {
+		slog.Error("updateScheduleEvent validateEventRules", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	} else if msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
 	}
 
 	tl, err := loadTypeLevels(db, req.EventTypeID)
@@ -1574,7 +1677,75 @@ func updateServerEvent(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
 	logActivity(user.ID, user.Username, "updated", "server_event", req.Name, false, strings.Join(changes, "; "))
 
-	w.WriteHeader(http.StatusNoContent)
+	// Moving a window can leave encounters scheduled outside it. Report them; never
+	// move or delete them. The officer knows why they moved the window and what the
+	// encounters are for — the app does not, and silently relocating somebody's
+	// schedule is a worse failure than telling them.
+	stranded, err := strandedEncounters(db, id)
+	if err != nil {
+		// The save succeeded; a failure to compute the warning must not report it
+		// as failed.
+		slog.Error("updateServerEvent stranded encounters", "error", err, "server_event_id", id)
+		stranded = nil
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"stranded": stranded})
+}
+
+// strandedEncounter is one future encounter left outside its parent's windows.
+type strandedEncounter struct {
+	ID   int    `json:"id"`
+	Date string `json:"date"`
+	Type string `json:"type"`
+}
+
+// strandedEncounters lists TODAY-or-later events of types parented to this window
+// that no longer fall inside one of its occurrences.
+//
+// Deliberately future-only: a past event records what happened, and the window
+// having since moved says nothing about it.
+func strandedEncounters(q rowQueryer, serverEventID int) ([]strandedEncounter, error) {
+	parent, err := loadServerEvent(q, serverEventID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := q.Query(`
+		SELECT e.id, e.event_date, t.name
+		FROM schedule_events e
+		JOIN schedule_event_types t ON t.id = e.event_type_id
+		WHERE t.server_event_id = ? AND e.event_date >= ?
+		ORDER BY e.event_date`, serverEventID, gameDate())
+	if err != nil {
+		return nil, err
+	}
+	// Read everything before evaluating: the window arithmetic is pure Go, but
+	// keeping the cursor open across anything else is the one-connection trap.
+	var candidates []strandedEncounter
+	for rows.Next() {
+		var c strandedEncounter
+		if err := rows.Scan(&c.ID, &c.Date, &c.Type); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		candidates = append(candidates, c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Same rule as the calendar's badge: a window that cannot be computed strands
+	// nothing. Otherwise clearing an anchor — or deactivating a window — would
+	// report every future encounter as stranded, which is the opposite of true.
+	out := []strandedEncounter{}
+	for _, c := range candidates {
+		if serverEventOutsideWindow(parent, c.Date) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
 }
 
 func deleteServerEvent(w http.ResponseWriter, r *http.Request) {
@@ -1589,6 +1760,20 @@ func deleteServerEvent(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("deleteServerEvent fetch", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Refuse rather than strand the link. foreign_keys is off app-wide, so deleting
+	// the window would leave every encounter type pointing at a row that is gone —
+	// the deleteExternalAlliance shape. The season purge paths detach instead
+	// (detachEncounterParents): there the window is going whatever happens, and
+	// refusing would block an operation over a link nobody mentioned.
+	var encounters string
+	db.QueryRow(`SELECT COALESCE(group_concat(name, ', '), '') FROM schedule_event_types WHERE server_event_id = ?`, id).
+		Scan(&encounters)
+	if encounters != "" {
+		http.Error(w, "Cannot delete: "+encounters+" happen inside this window. Clear the link on those event types first.",
+			http.StatusConflict)
 		return
 	}
 

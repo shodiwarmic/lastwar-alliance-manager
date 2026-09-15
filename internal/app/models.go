@@ -1184,6 +1184,16 @@ type ScheduleEventType struct {
 	BaselineLevel *int `json:"baseline_level"`
 	MaxLevel      *int `json:"max_level"`
 
+	// ServerEventID is the server-event WINDOW this type's events happen inside —
+	// Sky Predator inside General's Trial, Glacieradon inside Zombie Invasion.
+	// Applies to any type, system or custom: the window rule is a property of the
+	// link, not of IsSystem, which is why the rule dispatch no longer gates on
+	// IsSystem at all (see validateEventRules).
+	//
+	// foreign_keys is off app-wide, so the REFERENCES clause is documentation:
+	// every path that deletes a server_events row must call detachEncounterParents.
+	ServerEventID *int `json:"server_event_id"`
+
 	// LastLevel is the level of this type's most recent levelled event, by
 	// event_date. Read-only; the event modal offers it as a custom type's
 	// placeholder, which the client cannot derive from the loaded week because the
@@ -1216,6 +1226,13 @@ type ScheduleEvent struct {
 	CreatedBy   int    `json:"created_by"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+
+	// OutsideWindow / ParentName are derived, not stored: set only for events of a
+	// type linked to a server-event window, when the date falls outside every
+	// occurrence of it. A window whose anchor moved can strand events that were
+	// legal when they were saved — the app reports them and never moves them.
+	OutsideWindow bool   `json:"outside_window,omitempty"`
+	ParentName    string `json:"parent_name,omitempty"`
 }
 
 type ServerEvent struct {

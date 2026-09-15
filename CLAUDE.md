@@ -813,6 +813,44 @@ Three consequences for any new code:
   Without it the retyping is a one-off tidy-up that the next generate, push or manual
   create undoes.
 
+### Encounters belong to a server-event WINDOW
+
+`server_events` describes a repeating window; the things that happen inside it are
+**encounters**. Migration 075 adds `schedule_event_types.server_event_id`, linking
+Sky Predator to General's Trial and Glacieradon to Zombie Invasion.
+
+- **The rule dispatch no longer gates on `is_system`.** `validateEventRules(q,
+  scheduleTypeRules, date, time, excludeID)` is the single entry point for all four
+  write paths; the *validator* decides what applies — system-only rules when
+  `IsSystem`, the window rule whenever `ServerEventID` is set. The old
+  `if isSystem == 1 { validate… }` gates at each call site would have left the
+  window rule bypassable for Glacieradon, a **custom** type with a parent, on create,
+  on update and on the push. Add a rule in the validator, never a condition at a
+  call site.
+- **The occurrence arithmetic exists twice, deliberately** — `encounters.go` in Go,
+  `getServerEventOccurrencesInWeek` in `schedule.js`. There is no shared language;
+  the Go side is table-tested against dates the JS is known to produce, and
+  **the server is right** if they ever disagree. The browser's copy is display only.
+- **An unanchored parent SKIPS the rule, it does not fail it.** Migration 025 seeds
+  the five windows with no `anchor_date`; 075 links Sky Predator on every install
+  regardless. Enforcing would make Sky Predator unschedulable for anyone who had not
+  set that anchor yet — and the rejection could name neither a window nor a date,
+  which every other schedule rejection does. The calendar draws no banner for an
+  unanchored window either, so "unknown" keeps the two consistent. The event modal
+  says so where the officer is standing.
+- **Every path that deletes a `server_events` row must clear the links it orphans.**
+  `foreign_keys` is off app-wide, so the `REFERENCES` clause is documentation.
+  `deleteServerEvent` **refuses** with 409 (a human is asking, and can be told);
+  the Season Hub's purge paths **detach** via `detachEncounterParents` /
+  `detachEncounterParentsByAnchor` in the same transaction and report the count —
+  there the window is going whatever happens, and refusing a season delete over a
+  link nobody mentioned would be the wrong shape.
+- **Moving a window never moves the events inside it.** `updateServerEvent` returns
+  `{stranded: [...]}` — today-or-later encounters now outside every occurrence — and
+  the client toasts them. `getScheduleEvents` flags the same condition per event as
+  `outside_window` + `parent_name`. The app does not know whether the window or the
+  event is the wrong one, so it reports and leaves both alone.
+
 The split is deliberately **not** expressed by renaming the stored type:
 `season_events.type_name` and `season_templates.events[].type_name` are stored strings
 that Sync Event Types re-links on, and migration 070 exists because those links broke

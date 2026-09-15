@@ -51,7 +51,8 @@ CREATE TABLE server_events (
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 INSERT INTO server_events (name, short_name, icon, duration_days, repeat_type, repeat_interval, sort_order)
-    VALUES ('Ironclad Vehicle', 'IC', '🚙', 2, 'every_n_days', 14, 1);
+    -- Renamed by the game; migration 075 renames it on existing installs.
+    VALUES ('Rally Challenge', 'RC', '🚙', 2, 'every_n_days', 14, 1);
 INSERT INTO server_events (name, short_name, icon, duration_days, repeat_type, repeat_interval, sort_order)
     VALUES ('Zombie Invasion', 'ZI', '☣️', 3, 'every_n_days', 14, 2);
 INSERT INTO server_events (name, short_name, icon, duration_days, repeat_type, repeat_interval, sort_order)

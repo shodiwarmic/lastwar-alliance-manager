@@ -249,7 +249,7 @@ func TestCustomTypeBlankLevelStaysBlank(t *testing.T) {
 func TestUnknownSystemTypeIsAnErrorNotMGsNumbers(t *testing.T) {
 	setupSettingsTestDB(t)
 	res, err := db.Exec(`INSERT INTO schedule_event_types (name, short_name, icon, is_system, active, sort_order, has_level)
-		VALUES ('Sky Predator','SP','🦅',1,1,50,1)`)
+		VALUES ('Probe Event','PRB','🛰️',1,1,50,1)`)
 	if err != nil {
 		t.Fatalf("seed system type: %v", err)
 	}

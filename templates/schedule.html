@@ -86,7 +86,9 @@
             <button class="btn btn-primary" id="btn-add-server-event">+ Add</button>
             {{end}}
         </div>
-        <p class="help-text">Repeating game-wide events displayed as banners on the calendar.</p>
+        <p class="help-text">Repeating game-wide events displayed as banners on the calendar. Encounters
+            (Sky Predator, Glacieradon, …) are event types linked to a window — set the link on the
+            event type, and the app keeps them inside it.</p>
         <div id="server-events-list">
             <p class="empty-state">Loading…</p>
         </div>
@@ -239,6 +241,9 @@
             <div class="form-group">
                 <label for="event-date-input">Date</label>
                 <input type="date" id="event-date-input" class="form-input" required>
+                <!-- Encounter types only: the next few windows their parent opens.
+                     Display only — the server is the authority on what may be saved. -->
+                <span id="event-window-hint" class="help-text"></span>
             </div>
 
             <div class="form-group">
@@ -314,6 +319,14 @@
                 <label for="et-baseline">Baseline level</label>
                 <input type="number" id="et-baseline" class="form-input" min="1">
                 <span class="help-text" id="et-baseline-help"></span>
+            </div>
+
+            <!-- Any type, system or custom: Sky Predator happens inside General's
+                 Trial, Glacieradon inside Zombie Invasion. -->
+            <div class="form-group" id="et-parent-group">
+                <label for="et-parent">Inside server event window</label>
+                <select id="et-parent" class="form-input"></select>
+                <span class="help-text">Events of this type must fall inside that window. Leave as “None” for a type that is not an encounter.</span>
             </div>
 
             <div class="modal-actions">

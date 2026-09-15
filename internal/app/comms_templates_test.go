@@ -105,9 +105,15 @@ func goosePayload(t *testing.T, path string) string {
 	return regexp.MustCompile(`(?m)^--.*$`).ReplaceAllString(string(raw), "")
 }
 
-// runMigrationBody replays a migration over data seeded after it first ran. Every
-// migration these tests replay is written to be idempotent, which is also what
-// makes it safe against a partially-upgraded install.
+// runMigrationBody replays a migration's DATA statements over rows seeded after it
+// first ran — the test DB arrives fully migrated, so a case that needs to see the
+// migration act on its own fixture has to run it again.
+//
+// `ALTER TABLE … ADD COLUMN` is the one statement that cannot be replayed, and
+// goose never would: it applies a migration once, by version number. A duplicate
+// column here therefore means "already applied", which is the state the test wants
+// anyway. Every other statement in these migrations is written to be idempotent,
+// which is also what makes them safe against a half-finished upgrade.
 func runMigrationBody(t *testing.T, path string) {
 	t.Helper()
 	for _, stmt := range strings.Split(goosePayload(t, path), ";") {
@@ -115,6 +121,9 @@ func runMigrationBody(t *testing.T, path string) {
 			continue
 		}
 		if _, err := db.Exec(stmt); err != nil {
+			if strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
 			t.Fatalf("%s: %v\n%s", path, err, stmt)
 		}
 	}

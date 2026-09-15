@@ -129,6 +129,17 @@
     font-weight: 700;
 }
 
+/* An encounter sitting outside its parent server-event window. */
+.event-card-warn {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .event-card-notes {
     font-size: 0.78rem;
     color: var(--color-text-muted);
