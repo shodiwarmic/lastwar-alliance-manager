@@ -155,64 +155,133 @@ func nearestSystemEventWithin(q rowQuerier, short string, excludeID int, date st
 	return conflict, nil
 }
 
-// getSystemBaseline returns the baseline level for MG or ZS from the settings singleton.
 // maxEventLevelCeiling bounds the configurable ceiling itself. It is a sanity
 // bound on operator input, not a statement about the game -- the whole point of
 // migration 069 is that the app never has to know the game's real values.
 const maxEventLevelCeiling = 999
 
-// getSystemLevelCeiling returns the operator-configured max level for a system
-// event type. Mirrors getSystemBaseline's column switch.
-func getSystemLevelCeiling(shortName string) (int, error) {
-	col := "max_mg_level"
-	if shortName == "ZS" {
-		col = "max_zs_level"
-	}
-	var ceiling int
-	// #nosec G202 — col is only ever "max_mg_level" or "max_zs_level", not user input
-	err := db.QueryRow("SELECT COALESCE(" + col + ", 1) FROM settings WHERE id=1").Scan(&ceiling)
-	return ceiling, err
+// typeLevels is one event type's level configuration, read from the type row.
+//
+// It replaced two settings-column lookups behind a string switch that defaulted
+// to MG's columns for anything that was not "ZS". That default was the hazard:
+// a new system type inherited Marshal's Guard's baseline and ceiling with nothing
+// configured for it and no sign that anything was wrong. Per-type columns make an
+// unconfigured system type an ERROR instead, because there is no longer another
+// type's numbers to silently borrow.
+type typeLevels struct {
+	HasLevel bool
+	Baseline *int
+	Max      *int
 }
 
-// validateSystemLevel checks a submitted MG/ZS event level against that type's
-// configured ceiling, returning a user-facing message when it is out of range.
+// loadTypeLevels reads a type's level configuration. q is db or a tx.
+//
+// A system type with has_level but a NULL baseline or ceiling is a DATA ERROR,
+// reported as such by the callers rather than papered over with a default: the
+// value would be one nobody chose, written onto a schedule the whole alliance
+// reads. Migration 073 fills both for every system type that has the flag, so
+// reaching this is a bug or hand-edited data, and the loud failure is how it gets
+// found.
+func loadTypeLevels(q rowQuerier, typeID int) (typeLevels, error) {
+	var tl typeLevels
+	var has int
+	err := q.QueryRow(`SELECT has_level, baseline_level, max_level FROM schedule_event_types WHERE id = ?`, typeID).
+		Scan(&has, &tl.Baseline, &tl.Max)
+	tl.HasLevel = has == 1
+	return tl, err
+}
+
+// validateEventLevel checks a submitted level against the type's own ceiling,
+// returning a user-facing message when it is out of range.
 //
 // Shared by createScheduleEvent and updateScheduleEvent so the two cannot drift.
 // Out-of-range is REJECTED rather than clamped: a schedule entry is read by the
 // whole alliance, so silently storing a level the officer did not choose is worse
 // than an error. Callers decide WHEN to call this -- the update path deliberately
 // skips it for an unchanged level (see its call site).
-func validateSystemLevel(shortName string, level *int) (string, error) {
+//
+// A custom type carrying a level has no ceiling (nothing in the app knows what
+// that scale runs to), so only the floor of 1 applies.
+func validateEventLevel(typeName string, tl typeLevels, level *int) string {
 	if level == nil {
-		return "", nil
+		return ""
 	}
-	ceiling, err := getSystemLevelCeiling(shortName)
-	if err != nil {
-		return "", err
+	if *level < 1 {
+		return fmt.Sprintf("%s level must be at least 1", typeName)
 	}
-	if *level < 1 || *level > ceiling {
-		return fmt.Sprintf("%s level must be between 1 and %d", shortName, ceiling), nil
+	if tl.Max != nil && *level > *tl.Max {
+		return fmt.Sprintf("%s level must be between 1 and %d", typeName, *tl.Max)
 	}
-	return "", nil
+	return ""
 }
 
-func getSystemBaseline(shortName string) (int, error) {
-	col := "mg_baseline"
-	if shortName == "ZS" {
-		col = "zs_baseline"
+// pushTypeRules is what the Season Hub push needs to know about one event type to
+// apply the same rules a manual create applies. It exists so the push resolves a
+// type once per distinct id rather than once per created row.
+type pushTypeRules struct {
+	Name     string
+	Short    string
+	IsSystem bool
+	Levels   typeLevels
+}
+
+// resolveEventLevel applies the level rules for a NEW event, substituting the
+// baseline where one is due, and returns a message plus the status to send.
+// It is the create path's half of the rules; the update path hand-rolls its own
+// because it deliberately grandfathers a level the officer did not touch.
+//
+// Three cases, and the first is the one #85 was filed about:
+//
+//   - has_level = 0: a level is REFUSED. Until now nothing checked, so a level
+//     could be carried onto a custom type simply by switching the modal's type
+//     dropdown — the field hid but kept its value, and the request was accepted.
+//   - has_level = 1, custom: the level is optional and there is no ceiling; a
+//     blank stays blank. Nothing in the app knows what a custom scale runs to,
+//     and inventing a baseline for it would be a number nobody chose.
+//   - has_level = 1, system: an omitted level takes the type's baseline, and the
+//     result is validated against the type's ceiling — after the substitution, so
+//     a baseline left above a lowered ceiling is caught too.
+func resolveEventLevel(level **int, typeName string, isSystem bool, tl typeLevels) (string, int) {
+	if !tl.HasLevel {
+		if *level != nil {
+			return fmt.Sprintf("%s events do not carry a level", typeName), http.StatusBadRequest
+		}
+		return "", 0
 	}
-	var baseline int
-	// #nosec G202 — col is only ever "mg_baseline" or "zs_baseline", not user input
-	err := db.QueryRow("SELECT " + col + " FROM settings WHERE id=1").Scan(&baseline)
-	return baseline, err
+	if isSystem {
+		if tl.Baseline == nil || tl.Max == nil {
+			return fmt.Sprintf("system event type %q has has_level set but a NULL baseline_level or max_level", typeName),
+				http.StatusInternalServerError
+		}
+		if *level == nil {
+			baseline := *tl.Baseline
+			*level = &baseline
+		}
+	}
+	if msg := validateEventLevel(typeName, tl, *level); msg != "" {
+		return msg, http.StatusBadRequest
+	}
+	return "", 0
 }
 
 // --- Event Type Handlers ---
 
 func getScheduleEventTypes(w http.ResponseWriter, r *http.Request) {
+	// last_level is the level of the most recent event of this type that carried
+	// one, keyed on event_date rather than created_at: the modal offers it as the
+	// placeholder for a custom type, and what an officer means by "the last one" is
+	// the last one on the calendar, not the last one they happened to type in.
+	//
+	// It cannot be derived client-side from the loaded week — the last levelled
+	// event of a type is routinely outside it — which is why it rides on the types
+	// payload instead of needing an endpoint of its own.
 	rows, err := db.Query(`
-		SELECT id, name, short_name, icon, is_system, active, sort_order, created_at
-		FROM schedule_event_types ORDER BY sort_order, id`)
+		SELECT t.id, t.name, t.short_name, t.icon, t.is_system, t.active, t.sort_order, t.created_at,
+		       t.has_level, t.baseline_level, t.max_level,
+		       (SELECT e.level FROM schedule_events e
+		         WHERE e.event_type_id = t.id AND e.level IS NOT NULL
+		         ORDER BY e.event_date DESC LIMIT 1)
+		FROM schedule_event_types t ORDER BY t.sort_order, t.id`)
 	if err != nil {
 		slog.Error("getScheduleEventTypes query", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -222,26 +291,150 @@ func getScheduleEventTypes(w http.ResponseWriter, r *http.Request) {
 	types := []ScheduleEventType{}
 	for rows.Next() {
 		var t ScheduleEventType
-		var isSystem, active int
-		if err := rows.Scan(&t.ID, &t.Name, &t.ShortName, &t.Icon, &isSystem, &active, &t.SortOrder, &t.CreatedAt); err != nil {
+		var isSystem, active, hasLevel int
+		if err := rows.Scan(&t.ID, &t.Name, &t.ShortName, &t.Icon, &isSystem, &active, &t.SortOrder, &t.CreatedAt,
+			&hasLevel, &t.BaselineLevel, &t.MaxLevel, &t.LastLevel); err != nil {
 			slog.Error("getScheduleEventTypes scan", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		t.IsSystem = isSystem == 1
 		t.Active = active == 1
+		t.HasLevel = hasLevel == 1
 		types = append(types, t)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(types)
 }
 
+// getScheduleEventTypeCeilings feeds Settings -> Game Limits, and is gated
+// manage_settings rather than view_schedule.
+//
+// It exists BECAUSE of that gate. The ceiling is the one level field that keeps
+// the manage_settings permission (see updateScheduleEventTypeCeiling), and
+// requirePermission takes a single key — so a user holding manage_settings
+// without view_schedule reading the general types endpoint would get a 403 and an
+// empty Game Limits section with nothing explaining it. The two permissions are
+// independent by design: manage_settings defaults to no rank at all.
+func getScheduleEventTypeCeilings(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query(`
+		SELECT id, name, baseline_level, max_level
+		FROM schedule_event_types
+		WHERE has_level = 1 AND is_system = 1
+		ORDER BY sort_order, id`)
+	if err != nil {
+		slog.Error("getScheduleEventTypeCeilings query", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	out := []ScheduleEventTypeCeiling{}
+	for rows.Next() {
+		var c ScheduleEventTypeCeiling
+		if err := rows.Scan(&c.ID, &c.Name, &c.BaselineLevel, &c.MaxLevel); err != nil {
+			slog.Error("getScheduleEventTypeCeilings scan", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		out = append(out, c)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(out)
+}
+
+// updateScheduleEventTypeCeiling is the ONLY writer of max_level, and it is gated
+// manage_settings while every other field on the type row is manage_schedule.
+//
+// That split is deliberate and predates this change: the ceiling used to live in
+// Settings -> Game Limits (manage_settings, granted to no rank by default) and the
+// baseline in Schedule -> Settings (manage_schedule, R4+R5). Moving both onto the
+// same row must not silently widen who can raise a ceiling, so the ceiling keeps
+// its own endpoint and its own permission.
+func updateScheduleEventTypeCeiling(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(mux.Vars(r)["id"])
+	var req struct {
+		MaxLevel *int `json:"max_level"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.MaxLevel == nil {
+		http.Error(w, "max_level is required", http.StatusBadRequest)
+		return
+	}
+
+	var name string
+	var hasLevel, isSystem int
+	var baseline, oldMax *int
+	err := db.QueryRow(`SELECT name, has_level, is_system, baseline_level, max_level FROM schedule_event_types WHERE id = ?`, id).
+		Scan(&name, &hasLevel, &isSystem, &baseline, &oldMax)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		slog.Error("updateScheduleEventTypeCeiling fetch", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	// Only levelled SYSTEM types have a ceiling. A custom type's level is whatever
+	// the officer types — the app has no idea what that scale runs to, and a bound
+	// it invented would be a rule it does not know.
+	if hasLevel != 1 {
+		http.Error(w, name+" does not carry a level, so it has no ceiling", http.StatusBadRequest)
+		return
+	}
+	if isSystem != 1 {
+		http.Error(w, name+" is a custom event type; only system types have a level ceiling", http.StatusBadRequest)
+		return
+	}
+	if *req.MaxLevel < 1 || *req.MaxLevel > maxEventLevelCeiling {
+		http.Error(w, fmt.Sprintf("Maximum %s level must be between 1 and %d", name, maxEventLevelCeiling),
+			http.StatusBadRequest)
+		return
+	}
+	// The baseline is edited on a different page under a different permission, so
+	// nothing in the UI stops one being walked past the other. Name the baseline so
+	// the operator knows which number to move first.
+	if baseline != nil && *req.MaxLevel < *baseline {
+		http.Error(w, fmt.Sprintf("Maximum %s level cannot be below its baseline of %d", name, *baseline),
+			http.StatusBadRequest)
+		return
+	}
+
+	if _, err := db.Exec(`UPDATE schedule_event_types SET max_level = ? WHERE id = ?`, *req.MaxLevel, id); err != nil {
+		slog.Error("updateScheduleEventTypeCeiling update", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	detail := fmt.Sprintf("ceiling: %s → %d", nullableIntLabel(oldMax), *req.MaxLevel)
+	user := getAuthUser(r)
+	logActivity(user.ID, user.Username, "updated", "schedule_event_type", name, false, detail)
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// nullableIntLabel renders an optional int for an activity-log diff.
+func nullableIntLabel(v *int) string {
+	if v == nil {
+		return "unset"
+	}
+	return strconv.Itoa(*v)
+}
+
+// EVERY field the event-type modal carries must be accepted by BOTH the POST and
+// the PUT. The modal creates new rows through this handler, so a field it sends
+// that only the update path decodes is silently lost until the next edit — which
+// looks exactly like the checkbox not working.
 func createScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name      string `json:"name"`
 		ShortName string `json:"short_name"`
 		Icon      string `json:"icon"`
 		SortOrder int    `json:"sort_order"`
+		HasLevel  *bool  `json:"has_level"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -256,11 +449,18 @@ func createScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	if req.Icon == "" {
 		req.Icon = "📅"
 	}
+	// A type created here is always custom, so it never gets baseline/ceiling
+	// numbers: those belong to system types, whose levels the app generates. A
+	// custom type's level is whatever the officer types, floor 1, no ceiling.
+	hasLevel := 0
+	if req.HasLevel != nil && *req.HasLevel {
+		hasLevel = 1
+	}
 
 	res, err := db.Exec(`
-		INSERT INTO schedule_event_types (name, short_name, icon, is_system, active, sort_order)
-		VALUES (?, ?, ?, 0, 1, ?)`,
-		req.Name, req.ShortName, req.Icon, req.SortOrder)
+		INSERT INTO schedule_event_types (name, short_name, icon, is_system, active, sort_order, has_level)
+		VALUES (?, ?, ?, 0, 1, ?, ?)`,
+		req.Name, req.ShortName, req.Icon, req.SortOrder, hasLevel)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			http.Error(w, "An event type with that name or short name already exists", http.StatusConflict)
@@ -288,6 +488,10 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		Icon      string `json:"icon"`
 		Active    *bool  `json:"active"`
 		SortOrder int    `json:"sort_order"`
+		HasLevel  *bool  `json:"has_level"`
+		// max_level is deliberately NOT here: it is manage_settings, and this
+		// endpoint is manage_schedule. See updateScheduleEventTypeCeiling.
+		BaselineLevel *int `json:"baseline_level"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -295,9 +499,11 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var old ScheduleEventType
-	var isSystem, active int
-	err := db.QueryRow(`SELECT name, short_name, icon, is_system, active, sort_order FROM schedule_event_types WHERE id=?`, id).
-		Scan(&old.Name, &old.ShortName, &old.Icon, &isSystem, &active, &old.SortOrder)
+	var isSystem, active, oldHasLevel int
+	err := db.QueryRow(`SELECT name, short_name, icon, is_system, active, sort_order,
+		has_level, baseline_level, max_level FROM schedule_event_types WHERE id=?`, id).
+		Scan(&old.Name, &old.ShortName, &old.Icon, &isSystem, &active, &old.SortOrder,
+			&oldHasLevel, &old.BaselineLevel, &old.MaxLevel)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -309,6 +515,7 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	}
 	old.IsSystem = isSystem == 1
 	old.Active = active == 1
+	old.HasLevel = oldHasLevel == 1
 
 	req.Name = strings.TrimSpace(req.Name)
 	req.ShortName = strings.TrimSpace(req.ShortName)
@@ -344,9 +551,65 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		activeInt = 1
 	}
 
+	// has_level is fixed ON for a system type: the app generates its events and
+	// needs a level for each one. Only a custom type's flag is editable.
+	newHasLevel := old.HasLevel
+	if req.HasLevel != nil && !old.IsSystem {
+		newHasLevel = *req.HasLevel
+	}
+	newBaseline := old.BaselineLevel
+	if req.BaselineLevel != nil {
+		if !old.IsSystem {
+			http.Error(w, "Only system event types have a baseline level", http.StatusBadRequest)
+			return
+		}
+		newBaseline = req.BaselineLevel
+	}
+
+	if newHasLevel && old.IsSystem {
+		if newBaseline == nil {
+			http.Error(w, "A system event type needs a baseline level", http.StatusBadRequest)
+			return
+		}
+		if *newBaseline < 1 {
+			http.Error(w, "Baseline level must be at least 1", http.StatusBadRequest)
+			return
+		}
+		// The ceiling is raised on a different page under a different permission, so
+		// name it rather than leaving the officer to guess which number is in the way.
+		if old.MaxLevel != nil && *newBaseline > *old.MaxLevel {
+			http.Error(w, fmt.Sprintf("%s baseline level must be between 1 and %d (its ceiling, set in Settings → Game Limits)",
+				old.Name, *old.MaxLevel), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Turning the flag OFF on a type whose events already carry levels would strand
+	// those values: they stay in the column, nothing renders them, and nothing can
+	// edit them. Say how many rather than silently doing it.
+	if old.HasLevel && !newHasLevel {
+		var levelled int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id = ? AND level IS NOT NULL`, id).
+			Scan(&levelled); err != nil {
+			slog.Error("updateScheduleEventType count levelled", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if levelled > 0 {
+			http.Error(w, fmt.Sprintf("%d %s event(s) already carry a level — clear those levels first",
+				levelled, old.Name), http.StatusConflict)
+			return
+		}
+	}
+
+	hasLevelInt := 0
+	if newHasLevel {
+		hasLevelInt = 1
+	}
 	_, err = db.Exec(`
-		UPDATE schedule_event_types SET name=?, short_name=?, icon=?, active=?, sort_order=? WHERE id=?`,
-		req.Name, req.ShortName, req.Icon, activeInt, req.SortOrder, id)
+		UPDATE schedule_event_types SET name=?, short_name=?, icon=?, active=?, sort_order=?,
+		       has_level=?, baseline_level=? WHERE id=?`,
+		req.Name, req.ShortName, req.Icon, activeInt, req.SortOrder, hasLevelInt, newBaseline, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			http.Error(w, "An event type with that name or short name already exists", http.StatusConflict)
@@ -366,6 +629,12 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	}
 	if old.Active != newActive {
 		changes = append(changes, fmt.Sprintf("active: %v → %v", old.Active, newActive))
+	}
+	if old.HasLevel != newHasLevel {
+		changes = append(changes, fmt.Sprintf("carries a level: %v → %v", old.HasLevel, newHasLevel))
+	}
+	if nullableIntLabel(old.BaselineLevel) != nullableIntLabel(newBaseline) {
+		changes = append(changes, "baseline: "+nullableIntLabel(old.BaselineLevel)+" → "+nullableIntLabel(newBaseline))
 	}
 
 	user := getAuthUser(r)
@@ -522,24 +791,22 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
-		if req.Level == nil {
-			baseline, err := getSystemBaseline(typeShort)
-			if err != nil {
-				slog.Error("createScheduleEvent getSystemBaseline", "error", err)
-				http.Error(w, "Database error", http.StatusInternalServerError)
-				return
-			}
-			req.Level = &baseline
-		}
-		// After the substitution, so a stale baseline is caught too.
-		if msg, err := validateSystemLevel(typeShort, req.Level); err != nil {
-			slog.Error("createScheduleEvent validateSystemLevel", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		} else if msg != "" {
-			http.Error(w, msg, http.StatusBadRequest)
+	}
+
+	tl, err := loadTypeLevels(db, req.EventTypeID)
+	if err != nil {
+		slog.Error("createScheduleEvent loadTypeLevels", "error", err, "type_id", req.EventTypeID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if msg, code := resolveEventLevel(&req.Level, typeName, isSystem == 1, tl); msg != "" {
+		if code == http.StatusInternalServerError {
+			slog.Error("createScheduleEvent level config", "type", typeName, "type_id", req.EventTypeID, "detail", msg)
+			http.Error(w, "Database error", code)
 			return
 		}
+		http.Error(w, msg, code)
+		return
 	}
 
 	user := getAuthUser(r)
@@ -639,22 +906,59 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
-		// Keep existing level when not provided
+	}
+
+	tl, err := loadTypeLevels(db, req.EventTypeID)
+	if err != nil {
+		slog.Error("updateScheduleEvent loadTypeLevels", "error", err, "type_id", req.EventTypeID)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	clientSentLevel := req.Level != nil
+	if !tl.HasLevel {
+		// The client must not ask for one...
+		if clientSentLevel {
+			http.Error(w, typeName+" events do not carry a level", http.StatusBadRequest)
+			return
+		}
+		// ...and a level carried over from the PREVIOUS type is dropped rather than
+		// kept. Retyping an MG event to a custom one is a request to make it that
+		// type, and the old type's level is not a property of the new one. This is
+		// the update-path half of the leak #85 describes: the modal hides the field
+		// on a type switch but does not clear it, so the old value used to ride
+		// along.
+		req.Level = nil
+	} else {
 		if req.Level == nil {
 			req.Level = old.Level
+		}
+		if newIsSystem == 1 {
+			if tl.Baseline == nil || tl.Max == nil {
+				slog.Error("updateScheduleEvent level config", "type", typeName, "type_id", req.EventTypeID,
+					"detail", "has_level set with a NULL baseline_level or max_level")
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+			if req.Level == nil {
+				baseline := *tl.Baseline
+				req.Level = &baseline
+			}
 		}
 		// Validate only a level the officer actually CHANGED. An event stored above a
 		// ceiling the operator has since lowered must stay editable: the level input is
 		// inside event-form, so rejecting an untouched legacy value would block edits to
 		// that event's notes or time as well, for a value nobody chose in this request.
 		// Typing a new out-of-range level is still rejected.
-		levelChanged := req.Level != nil && (old.Level == nil || *req.Level != *old.Level)
+		//
+		// A TYPE change counts as a change even when the number is identical: the
+		// grandfathering exists to protect a value against its own type's moved
+		// ceiling, and now that ceilings are per type, carrying 70 from a Large
+		// Sandworm onto a Zombie Siege capped at 12 is a new value for that type,
+		// not a legacy one.
+		typeChanged := req.EventTypeID != old.EventTypeID
+		levelChanged := req.Level != nil && (typeChanged || old.Level == nil || *req.Level != *old.Level)
 		if levelChanged {
-			if msg, err := validateSystemLevel(typeShort, req.Level); err != nil {
-				slog.Error("updateScheduleEvent validateSystemLevel", "error", err)
-				http.Error(w, "Database error", http.StatusInternalServerError)
-				return
-			} else if msg != "" {
+			if msg := validateEventLevel(typeName, tl, req.Level); msg != "" {
 				http.Error(w, msg, http.StatusBadRequest)
 				return
 			}
@@ -754,10 +1058,10 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	var s Settings
 	// zs_anchor_time is deliberately not read: under a date rule the ASAP chain is
 	// pure date arithmetic and every insert uses zs_default_time anyway.
-	err := db.QueryRow(`SELECT mg_baseline, zs_baseline, mg_default_time, zs_default_time,
+	err := db.QueryRow(`SELECT mg_default_time, zs_default_time,
 		COALESCE(mg_anchor_date,''), zs_schedule_mode, zs_weekdays,
 		COALESCE(zs_anchor_date,'') FROM settings WHERE id=1`).
-		Scan(&s.MGBaseline, &s.ZSBaseline, &s.MGDefaultTime, &s.ZSDefaultTime,
+		Scan(&s.MGDefaultTime, &s.ZSDefaultTime,
 			&s.MGAnchorDate, &s.ZSScheduleMode, &s.ZSWeekdays, &s.ZSAnchorDate)
 	if err != nil {
 		slog.Error("generateScheduleEvents settings", "error", err)
@@ -765,9 +1069,34 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Baselines come from the type row now, not from settings. Read both up front:
+	// the generate loop below inserts as it goes, and a read issued mid-loop would
+	// be a second statement on the single connection while nothing is open — legal,
+	// but pointlessly repeated once per candidate date.
 	var mgTypeID, zsTypeID int
 	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='MG'`).Scan(&mgTypeID)
 	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='ZS'`).Scan(&zsTypeID)
+
+	// A system type with no baseline is a data error, the same one the create path
+	// reports. Generating with a made-up number would write it onto every row of a
+	// 90-day run.
+	baselineOf := func(typeID int, short string) (int, bool) {
+		if typeID == 0 {
+			return 0, false
+		}
+		tl, err := loadTypeLevels(db, typeID)
+		if err != nil {
+			slog.Error("generateScheduleEvents loadTypeLevels", "error", err, "type", short)
+			return 0, false
+		}
+		if !tl.HasLevel || tl.Baseline == nil {
+			slog.Error("generateScheduleEvents missing baseline", "type", short, "type_id", typeID)
+			return 0, false
+		}
+		return *tl.Baseline, true
+	}
+	mgBaseline, mgOK := baselineOf(mgTypeID, "MG")
+	zsBaseline, zsOK := baselineOf(zsTypeID, "ZS")
 
 	user := getAuthUser(r)
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -822,7 +1151,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- MG generation: every other day from anchor ---
-	if genTypes["mg"] && mgTypeID > 0 && s.MGAnchorDate != "" {
+	if genTypes["mg"] && mgOK && s.MGAnchorDate != "" {
 		anchorT, err := time.Parse("2006-01-02", s.MGAnchorDate)
 		if err == nil {
 			// Find first valid date >= fromT in the every-other-day sequence from anchorT
@@ -833,7 +1162,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 				firstDate = fromT.AddDate(0, 0, 1)
 			}
 			for d := firstDate; !d.After(toT); d = d.AddDate(0, 0, 2) {
-				if tryCreate(mgTypeID, "MG", d.Format("2006-01-02"), s.MGDefaultTime, s.MGBaseline) {
+				if tryCreate(mgTypeID, "MG", d.Format("2006-01-02"), s.MGDefaultTime, mgBaseline) {
 					mgCreated++
 				}
 			}
@@ -841,7 +1170,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- ZS generation ---
-	if genTypes["zs"] && zsTypeID > 0 {
+	if genTypes["zs"] && zsOK {
 		switch s.ZSScheduleMode {
 		case "weekdays":
 			wdSet := map[int]bool{}
@@ -859,7 +1188,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 				if !wdSet[planWD] {
 					continue
 				}
-				if tryCreate(zsTypeID, "ZS", d.Format("2006-01-02"), s.ZSDefaultTime, s.ZSBaseline) {
+				if tryCreate(zsTypeID, "ZS", d.Format("2006-01-02"), s.ZSDefaultTime, zsBaseline) {
 					zsCreated++
 				}
 			}
@@ -882,7 +1211,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 					for ; !cur.After(toT); cur = cur.AddDate(0, 0, zsGapDays) {
-						if tryCreate(zsTypeID, "ZS", cur.Format("2006-01-02"), s.ZSDefaultTime, s.ZSBaseline) {
+						if tryCreate(zsTypeID, "ZS", cur.Format("2006-01-02"), s.ZSDefaultTime, zsBaseline) {
 							zsCreated++
 						}
 					}

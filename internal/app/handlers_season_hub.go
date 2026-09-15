@@ -2956,9 +2956,24 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 	}
 	rows.Close()
 
-	// shortNames caches schedule_event_types.short_name per id, so the rule check
-	// below costs one lookup per distinct type rather than one per created row.
-	shortNames := map[int]string{}
+	// pushTypes caches each event type's rule inputs per id, so the check below
+	// costs one lookup per distinct type rather than one per created row.
+	pushTypes := map[int]pushTypeRules{}
+	typeRulesFor := func(id int) pushTypeRules {
+		if t, ok := pushTypes[id]; ok {
+			return t
+		}
+		var t pushTypeRules
+		var isSystem int
+		db.QueryRow(`SELECT name, short_name, is_system FROM schedule_event_types WHERE id = ?`, id).
+			Scan(&t.Name, &t.Short, &isSystem)
+		t.IsSystem = isSystem == 1
+		if tl, err := loadTypeLevels(db, id); err == nil {
+			t.Levels = tl
+		}
+		pushTypes[id] = t
+		return t
+	}
 
 	// Resolve event_type_id from type_name for events that were seeded before types were synced.
 	typeIDCache := map[string]int{}
@@ -3070,37 +3085,40 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 			}
 
 			// Apply the schedule's game rules, exactly as a manual create would.
-			// Custom types carry no rules, so in practice this only bites MG/ZS-
-			// typed template events. Skip-and-count rather than abort: one illegal
-			// template row must not sink the rest of the push, which is the same
-			// semantics the existing duplicate check already has.
-			short := shortNames[ev.eventTypeID]
-			if short == "" {
-				var sn string
-				db.QueryRow(`SELECT short_name FROM schedule_event_types WHERE id = ?`, ev.eventTypeID).Scan(&sn)
-				short = sn
-				shortNames[ev.eventTypeID] = sn
-			}
-			if short == "MG" || short == "ZS" {
-				msg, err := validateSystemEventRules(db, short, dateStr, ev.eventTime, 0)
+			// Skip-and-count rather than abort: one illegal template row must not
+			// sink the rest of the push, which is the same semantics the existing
+			// duplicate check already has.
+			//
+			// The date/time rules run for EVERY system type, not just MG and ZS —
+			// the hardcoded pair was the same default-branch shape migration 073
+			// removed elsewhere, and it would have let the next system type through
+			// this path unchecked. The level rule runs for every type that carries
+			// a level, so a template level on a type that does not is declined here
+			// rather than written past the validation the manual path applies.
+			tr := typeRulesFor(ev.eventTypeID)
+			var msg string
+			if tr.IsSystem {
+				var err error
+				msg, err = validateSystemEventRules(db, tr.Short, dateStr, ev.eventTime, 0)
 				if err != nil {
 					return result, err
 				}
-				if msg == "" && ev.level != nil {
-					msg, err = validateSystemLevel(short, ev.level)
-					if err != nil {
-						return result, err
-					}
+			}
+			if msg == "" && ev.level != nil {
+				if !tr.Levels.HasLevel {
+					msg = fmt.Sprintf("%s events do not carry a level", tr.Name)
+				} else {
+					msg = validateEventLevel(tr.Name, tr.Levels, ev.level)
 				}
-				if msg != "" {
-					result.SkippedInvalid++
-					if len(result.Invalid) < 20 {
-						result.Invalid = append(result.Invalid, invalidGeneratedEvent{
-							Date: dateStr, Type: short, Reason: msg,
-						})
-					}
-					continue
+			}
+			if msg != "" {
+				result.SkippedInvalid++
+				if len(result.Invalid) < 20 {
+					result.Invalid = append(result.Invalid, invalidGeneratedEvent{
+						Date: dateStr, Type: tr.Short, Reason: msg,
+					})
 				}
+				continue
 			}
 
 			if _, err := db.Exec(`

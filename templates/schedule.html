@@ -100,7 +100,7 @@
             <button class="btn btn-primary" id="btn-add-event-type">+ Add</button>
             {{end}}
         </div>
-        <p class="help-text">System types (MG, ZS) cannot be deleted or renamed.</p>
+        <p class="help-text">System event types cannot be deleted or renamed. Their baseline level is set here; the ceiling that bounds it lives in Settings → Game Limits.</p>
         <div id="event-types-list">
             <p class="empty-state">Loading…</p>
         </div>
@@ -112,15 +112,13 @@
 
         <div class="form-section">
             <h3>Schedule Defaults</h3>
+            <!-- One baseline input per levelled system type, rendered from the types
+                 API. There used to be exactly two, hardcoded: adding a third type
+                 meant adding a third pair of settings columns. -->
+            <div class="form-row schedule-defaults-row" id="baseline-inputs"></div>
+            <p class="help-text">The baseline is the level a generated event gets when none is typed. Each type's ceiling is set in Settings → Game Limits.</p>
+
             <div class="form-row schedule-defaults-row">
-                <div class="form-group">
-                    <label for="set-mg-baseline">MG Baseline Level</label>
-                    <input type="number" id="set-mg-baseline" min="1">
-                </div>
-                <div class="form-group">
-                    <label for="set-zs-baseline">ZS Baseline Level</label>
-                    <input type="number" id="set-zs-baseline" min="1">
-                </div>
                 <div class="form-group">
                     <label for="set-mg-time">MG Default Time (ST)</label>
                     <input type="text" id="set-mg-time" placeholder="HH:MM" maxlength="5">
@@ -255,10 +253,12 @@
                 <span id="event-time-hint" class="help-text"></span>
             </div>
 
-            <!-- Level: shown for system types only -->
+            <!-- Level: shown for any type whose has_level is set. The label and the
+                 placeholder differ between a system type (blank = baseline) and a
+                 custom one (blank = no level at all); schedule.js sets both. -->
             <div class="form-group" id="event-level-group" style="display:none;">
-                <label for="event-level-input">Level Override
-                    <span class="help-text">(leave blank to use baseline)</span>
+                <label for="event-level-input"><span id="event-level-label">Level</span>
+                    <span class="help-text" id="event-level-help"></span>
                 </label>
                 <input type="number" id="event-level-input" class="form-input" min="1">
             </div>
@@ -301,6 +301,19 @@
 
             <div class="form-group">
                 <label><input type="checkbox" id="et-active" checked> Active</label>
+            </div>
+
+            <!-- Custom types only: a system type's flag is fixed on. -->
+            <div class="form-group" id="et-has-level-group">
+                <label><input type="checkbox" id="et-has-level"> Carries a level</label>
+                <span class="help-text">Events of this type get a level field. Leave off for types the game does not level.</span>
+            </div>
+
+            <!-- System types only: the ceiling that bounds this lives in Settings → Game Limits. -->
+            <div class="form-group" id="et-baseline-group" style="display:none;">
+                <label for="et-baseline">Baseline level</label>
+                <input type="number" id="et-baseline" class="form-input" min="1">
+                <span class="help-text" id="et-baseline-help"></span>
             </div>
 
             <div class="modal-actions">

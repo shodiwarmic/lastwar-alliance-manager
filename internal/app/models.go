@@ -342,18 +342,16 @@ type Settings struct {
 	VsFlagDaysThreshold             int    `json:"vs_flag_days_threshold"`
 	StrikeNeedsImprovementThreshold int    `json:"strike_needs_improvement_threshold"`
 	StrikeAtRiskThreshold           int    `json:"strike_at_risk_threshold"`
-	// Schedule defaults
-	MGBaseline int `json:"mg_baseline"`
-	ZSBaseline int `json:"zs_baseline"`
-	// MaxMGLevel / MaxZSLevel are the operator-configured event level ceilings,
-	// edited in Settings -> Game Limits beside MaxHQLevel. They replaced a
-	// hardcoded max="30" in templates/schedule.html; see migration 069. Zero is
-	// not a legal value, which is what lets updateSettings treat a zero here as
-	// "field omitted from the payload" rather than as a request to set 0.
-	MaxMGLevel      int    `json:"max_mg_level"`
-	MaxZSLevel      int    `json:"max_zs_level"`
-	MGDefaultTime   string `json:"mg_default_time"`
-	ZSDefaultTime   string `json:"zs_default_time"`
+	// Schedule defaults.
+	//
+	// The four level fields (mg_baseline / zs_baseline / max_mg_level /
+	// max_zs_level) were REMOVED here in migration 073: a level now belongs to its
+	// event type, not to the settings singleton. Their columns survive as dead
+	// schema — see CLAUDE.md "Dead schema on `settings`". Read levels through
+	// loadTypeLevels, and never re-add a settings field for one: the whole point is
+	// that a fourth type cannot be given a fourth hardcoded column pair.
+	MGDefaultTime string `json:"mg_default_time"`
+	ZSDefaultTime string `json:"zs_default_time"`
 	// CurrentSeason / SeasonStartDate are DERIVED in getSettings from the seasons
 	// table (owned by Season Hub) — the most recently started season whose
 	// start_date has passed. The same-named `settings` columns added by migration
@@ -1167,6 +1165,40 @@ type ScheduleEventType struct {
 	Active    bool   `json:"active"`
 	SortOrder int    `json:"sort_order"`
 	CreatedAt string `json:"created_at"`
+
+	// HasLevel / BaselineLevel / MaxLevel are this type's OWN level configuration
+	// (migration 073). They replaced two settings column pairs reached through a
+	// string switch that defaulted to MG's columns for anything that was not ZS —
+	// so a new system type inherited Marshal's Guard's numbers silently, and a
+	// custom type could not carry a level at all through the UI while the write
+	// path accepted one anyway.
+	//
+	// Baseline and Max are set for system types only. A custom type with HasLevel
+	// takes whatever the officer types (floor 1, no ceiling): nothing in the app
+	// knows what a custom scale runs to, so it does not pretend to.
+	//
+	// MaxLevel is written ONLY by PUT /api/schedule/event-types/{id}/ceiling, which
+	// is gated manage_settings while the rest of this row is manage_schedule. Do not
+	// add it to the general type PUT — that would widen who can raise a ceiling.
+	HasLevel      bool `json:"has_level"`
+	BaselineLevel *int `json:"baseline_level"`
+	MaxLevel      *int `json:"max_level"`
+
+	// LastLevel is the level of this type's most recent levelled event, by
+	// event_date. Read-only; the event modal offers it as a custom type's
+	// placeholder, which the client cannot derive from the loaded week because the
+	// last levelled event is routinely outside it.
+	LastLevel *int `json:"last_level"`
+}
+
+// ScheduleEventTypeCeiling is the Settings -> Game Limits payload: only what that
+// page needs, from an endpoint it is allowed to call. See
+// getScheduleEventTypeCeilings for why it is not the general types endpoint.
+type ScheduleEventTypeCeiling struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	BaselineLevel *int   `json:"baseline_level"`
+	MaxLevel      *int   `json:"max_level"`
 }
 
 type ScheduleEvent struct {

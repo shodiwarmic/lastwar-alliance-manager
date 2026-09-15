@@ -496,24 +496,51 @@ function updateEventModalForType() {
     const sel = document.getElementById('event-type-select');
     const typeId = parseInt(sel.value, 10);
     const et = eventTypes.find(e => e.id === typeId);
-    const isSystem = et && et.is_system;
 
     const lvlGroup = document.getElementById('event-level-group');
+    const lvlInput = document.getElementById('event-level-input');
+    const lvlLabel = document.getElementById('event-level-label');
+    const lvlHelp  = document.getElementById('event-level-help');
     const hint = document.getElementById('event-time-hint');
 
-    lvlGroup.style.display = isSystem ? '' : 'none';
+    const carriesLevel = !!(et && et.has_level);
+    lvlGroup.style.display = carriesLevel ? '' : 'none';
 
-    if (!et) { hint.textContent = ''; return; }
+    // Clearing the input is load-bearing, not tidiness. The group only HIDES, and
+    // saveEvent reads the input's value whether or not it is visible — so before
+    // this, switching an MG event to a custom type left "12" in the box and sent
+    // it, and the server accepted it. The server now refuses too; this stops the
+    // officer being shown an error for a value they never typed.
+    if (!carriesLevel) {
+        lvlInput.value = '';
+        lvlInput.placeholder = '';
+        lvlInput.removeAttribute('max');
+        hint.textContent = et ? '' : '';
+        return;
+    }
+
+    if (et.is_system) {
+        lvlLabel.textContent = 'Level Override';
+        lvlHelp.textContent = '(leave blank to use the baseline)';
+        lvlInput.placeholder = et.baseline_level ?? '';
+        setEventLevelMax(et.max_level);
+    } else {
+        lvlLabel.textContent = 'Level';
+        lvlHelp.textContent = '(optional)';
+        // A custom type has no baseline to fall back on, so the last level used is
+        // the only sensible hint — and a blank stays blank rather than being filled
+        // in with a number nobody chose.
+        lvlInput.placeholder = et.last_level ?? '';
+        lvlHelp.textContent = et.last_level != null
+            ? '(optional — last ' + et.name + ' was level ' + et.last_level + ')'
+            : '(optional)';
+        lvlInput.removeAttribute('max');
+    }
 
     if (et.short_name === 'MG') {
         hint.textContent = 'Must start by 21:59 ST. Every-other-day rule applies.';
-        // Update level placeholder with baseline
-        document.getElementById('event-level-input').placeholder = settings.mg_baseline ?? '';
-        setEventLevelMax(settings.max_mg_level);
     } else if (et.short_name === 'ZS') {
         hint.textContent = 'Two clear days between sieges (next ZS on D+3 or later, any time).';
-        document.getElementById('event-level-input').placeholder = settings.zs_baseline ?? '';
-        setEventLevelMax(settings.max_zs_level);
     } else {
         hint.textContent = '';
     }
@@ -604,6 +631,9 @@ async function loadEventTypes() {
         eventTypes = [];
     }
     renderEventTypes();
+    // The Schedule → Settings baselines are rendered from the same payload, so
+    // they are refreshed here rather than by each caller remembering to.
+    renderBaselineInputs();
 }
 
 function renderEventTypes() {
@@ -635,6 +665,11 @@ function renderEventTypes() {
         const tags = [];
         if (et.is_system) tags.push('System');
         if (!et.active) tags.push('Inactive');
+        if (et.has_level) {
+            tags.push(et.is_system && et.baseline_level != null && et.max_level != null
+                ? 'Lv. ' + et.baseline_level + '/' + et.max_level
+                : 'Levelled');
+        }
         meta.textContent = tags.join(' · ') || 'Custom';
         info.appendChild(meta);
 
@@ -644,13 +679,16 @@ function renderEventTypes() {
             const actions = document.createElement('div');
             actions.className = 'event-type-row-actions';
 
-            if (!et.is_system) {
-                const editBtn = document.createElement('button');
-                editBtn.className = 'btn btn-ghost btn-sm';
-                editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
-                editBtn.addEventListener('click', () => openEditEventTypeModal(et));
-                actions.appendChild(editBtn);
+            // System types are editable now — their baseline level lives on the row.
+            // Name and short name stay locked (the Season Hub relinks templates on
+            // the stored name); the modal disables those two fields.
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn btn-ghost btn-sm';
+            editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
+            editBtn.addEventListener('click', () => openEditEventTypeModal(et));
+            actions.appendChild(editBtn);
 
+            if (!et.is_system) {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'btn btn-danger btn-sm';
                 delBtn.textContent = 'Delete';
@@ -673,6 +711,22 @@ function renderEventTypes() {
     });
 }
 
+// Shape the type modal for a system or custom type. The two differ in which level
+// fields apply: a system type's has_level is fixed on and it carries a baseline,
+// a custom type's is a choice and it carries neither baseline nor ceiling.
+function setEventTypeModalMode(et) {
+    const isSystem = !!(et && et.is_system);
+    document.getElementById('et-name').disabled = isSystem;
+    document.getElementById('et-short').disabled = isSystem;
+    document.getElementById('et-has-level-group').style.display = isSystem ? 'none' : '';
+    document.getElementById('et-baseline-group').style.display = isSystem ? '' : 'none';
+
+    const help = document.getElementById('et-baseline-help');
+    help.textContent = isSystem && et.max_level != null
+        ? 'Between 1 and ' + et.max_level + '. Raise the ceiling in Settings → Game Limits first if you need more.'
+        : '';
+}
+
 function openAddEventTypeModal() {
     document.getElementById('event-type-modal-title').textContent = 'Add Event Type';
     document.getElementById('event-type-modal-id').value = '';
@@ -680,6 +734,9 @@ function openAddEventTypeModal() {
     document.getElementById('et-short').value = '';
     document.getElementById('et-icon').value = '📅';
     document.getElementById('et-active').checked = true;
+    document.getElementById('et-has-level').checked = false;
+    document.getElementById('et-baseline').value = '';
+    setEventTypeModalMode(null);
     document.getElementById('event-type-form-error').textContent = '';
     document.getElementById('event-type-modal').style.display = 'flex';
 }
@@ -691,6 +748,9 @@ function openEditEventTypeModal(et) {
     document.getElementById('et-short').value = et.short_name;
     document.getElementById('et-icon').value = et.icon;
     document.getElementById('et-active').checked = et.active;
+    document.getElementById('et-has-level').checked = !!et.has_level;
+    document.getElementById('et-baseline').value = et.baseline_level ?? '';
+    setEventTypeModalMode(et);
     document.getElementById('event-type-form-error').textContent = '';
     document.getElementById('event-type-modal').style.display = 'flex';
 }
@@ -701,12 +761,21 @@ async function saveEventType(e) {
     errEl.textContent = '';
 
     const id   = document.getElementById('event-type-modal-id').value;
+    const et   = id ? eventTypes.find(t => String(t.id) === String(id)) : null;
     const body = {
         name:       document.getElementById('et-name').value,
         short_name: document.getElementById('et-short').value,
         icon:       document.getElementById('et-icon').value || '📅',
         active:     document.getElementById('et-active').checked,
     };
+    if (et && et.is_system) {
+        const bl = document.getElementById('et-baseline').value;
+        if (bl !== '') body.baseline_level = parseInt(bl, 10);
+    } else {
+        // Sent on BOTH the POST and the PUT: a field only the update path accepts
+        // is silently lost on create and looks like a broken checkbox.
+        body.has_level = document.getElementById('et-has-level').checked;
+    }
 
     const url    = id ? '/api/schedule/event-types/' + id : '/api/schedule/event-types';
     const method = id ? 'PUT' : 'POST';
@@ -908,12 +977,39 @@ async function saveServerEvent(e) {
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
 
+// One baseline input per levelled system type, built from the types payload.
+// There used to be exactly two of these in the markup, wired to two settings
+// columns; a third type meant a third column pair and a third hardcoded input.
+function renderBaselineInputs() {
+    const wrap = document.getElementById('baseline-inputs');
+    if (!wrap) return;
+    wrap.replaceChildren();
+
+    eventTypes.filter(et => et.is_system && et.has_level).forEach(et => {
+        const group = document.createElement('div');
+        group.className = 'form-group';
+
+        const label = document.createElement('label');
+        label.htmlFor = 'baseline-' + et.id;
+        label.textContent = et.name + ' Baseline Level';
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.id = 'baseline-' + et.id;
+        input.min = '1';
+        input.dataset.typeId = et.id;
+        input.className = 'baseline-input';
+        input.value = et.baseline_level ?? '';
+        // Ceilings come from Settings -> Game Limits; this input only bounds to it.
+        if (et.max_level != null) input.max = et.max_level;
+
+        group.append(label, input);
+        wrap.appendChild(group);
+    });
+}
+
 function populateSettingsForm() {
-    document.getElementById('set-mg-baseline').value   = settings.mg_baseline ?? '';
-    document.getElementById('set-zs-baseline').value   = settings.zs_baseline ?? '';
-    // Ceilings come from Settings -> Game Limits; these inputs only bound to them.
-    if (settings.max_mg_level) document.getElementById('set-mg-baseline').max = settings.max_mg_level;
-    if (settings.max_zs_level) document.getElementById('set-zs-baseline').max = settings.max_zs_level;
+    renderBaselineInputs();
     document.getElementById('set-mg-time').value       = settings.mg_default_time ?? '';
     document.getElementById('set-zs-time').value       = settings.zs_default_time ?? '';
     // Generation rule settings
@@ -963,14 +1059,34 @@ async function patchSettings(patch) {
     if (r2.ok) settings = await r2.json();
 }
 
+// Baselines live on the event type row, so they are saved through the type PUT —
+// one request per CHANGED type, not one per type. The rest of this panel is still
+// settings columns and goes through patchSettings as before.
+async function saveChangedBaselines() {
+    const inputs = Array.from(document.querySelectorAll('#baseline-inputs .baseline-input'));
+    for (const input of inputs) {
+        const et = eventTypes.find(t => String(t.id) === input.dataset.typeId);
+        if (!et || input.value === '') continue;
+        const value = parseInt(input.value, 10);
+        if (!Number.isFinite(value) || value === et.baseline_level) continue;
+
+        const res = await fetch('/api/schedule/event-types/' + et.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: et.name, short_name: et.short_name, icon: et.icon,
+                active: et.active, sort_order: et.sort_order,
+                baseline_level: value,
+            }),
+        });
+        if (!res.ok) throw new Error(await res.text() || 'Could not save the ' + et.name + ' baseline');
+    }
+}
+
 async function saveSettings() {
     const statusEl = document.getElementById('settings-status');
-    const mgBaselineVal = document.getElementById('set-mg-baseline').value;
-    const zsBaselineVal = document.getElementById('set-zs-baseline').value;
 
     const patch = {
-        mg_baseline:      mgBaselineVal !== '' ? parseInt(mgBaselineVal, 10) : (settings.mg_baseline ?? 1),
-        zs_baseline:      zsBaselineVal !== '' ? parseInt(zsBaselineVal, 10) : (settings.zs_baseline ?? 1),
         mg_default_time:  document.getElementById('set-mg-time').value || settings.mg_default_time || '00:30',
         zs_default_time:  document.getElementById('set-zs-time').value || settings.zs_default_time || '23:00',
         mg_anchor_date:   document.getElementById('gen-mg-anchor').value || null,
@@ -980,7 +1096,9 @@ async function saveSettings() {
     };
 
     try {
+        await saveChangedBaselines();
         await patchSettings(patch);
+        await loadEventTypes();
         showStatus(statusEl, 'Saved', false);
         renderWeek(weekDates(currentWeekStart));
         updateSeasonSubtitle();

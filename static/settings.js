@@ -8,6 +8,91 @@ function fetchPermissions() {
     isR5OrAdmin = document.getElementById('page-config').dataset.canManage === 'true';
 }
 
+// ── Event level ceilings ───────────────────────────────────────────────────
+//
+// The ceiling that bounds each levelled system event type. It used to be two
+// hardcoded settings columns (max_mg_level / max_zs_level) and two hardcoded
+// inputs; it now lives on the event type row, so the section is rendered from
+// whatever levelled system types exist.
+//
+// The endpoint is /api/schedule/event-types/ceilings, NOT the general types list:
+// that one is gated view_schedule, and manage_settings defaults to no rank at all,
+// so an operator holding one without the other would see this section empty with
+// nothing saying why.
+
+let eventLevelCeilings = [];
+
+async function loadEventLevelCeilings() {
+    const wrap = document.getElementById('event-level-ceilings');
+    if (!wrap) return;
+    try {
+        const res = await fetch(`${API_BASE}/schedule/event-types/ceilings`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        eventLevelCeilings = await res.json();
+    } catch {
+        eventLevelCeilings = [];
+        wrap.replaceChildren();
+        const p = document.createElement('p');
+        p.className = 'help-text';
+        p.textContent = 'Could not load event level ceilings.';
+        wrap.appendChild(p);
+        return;
+    }
+    renderEventLevelCeilings();
+}
+
+function renderEventLevelCeilings() {
+    const wrap = document.getElementById('event-level-ceilings');
+    if (!wrap) return;
+    wrap.replaceChildren();
+
+    eventLevelCeilings.forEach(c => {
+        const group = document.createElement('div');
+        group.className = 'form-group';
+
+        const label = document.createElement('label');
+        label.htmlFor = 'ceiling-' + c.id;
+        label.textContent = 'Maximum ' + c.name + ' Level:';
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.id = 'ceiling-' + c.id;
+        input.className = 'form-input event-level-ceiling';
+        input.min = '1';
+        input.max = '999';
+        input.dataset.typeId = c.id;
+        input.value = c.max_level ?? 1;
+
+        const help = document.createElement('span');
+        help.className = 'help-text';
+        help.textContent = 'Caps the level that can be set on ' + c.name + ' events. Update this when the game unlocks a higher level.'
+            + (c.baseline_level != null ? ' Cannot be set below its baseline of ' + c.baseline_level + '.' : '');
+
+        group.append(label, input, help);
+        wrap.appendChild(group);
+    });
+}
+
+// One PUT per CHANGED ceiling. Separate from the settings save because the value
+// no longer lives on the settings row — but under the same permission, so the one
+// Save button still covers it.
+async function saveEventLevelCeilings() {
+    const inputs = Array.from(document.querySelectorAll('.event-level-ceiling'));
+    for (const input of inputs) {
+        const c = eventLevelCeilings.find(x => String(x.id) === input.dataset.typeId);
+        const value = parseInt(input.value, 10);
+        if (!c || !Number.isFinite(value) || value === c.max_level) continue;
+
+        const res = await fetch(`${API_BASE}/schedule/event-types/${c.id}/ceiling`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ max_level: value }),
+        });
+        if (!res.ok) throw new Error(await res.text() || ('Could not save the ' + c.name + ' ceiling'));
+    }
+    await loadEventLevelCeilings();
+}
+
 async function loadSettings() {
     try {
         const response = await fetch(SETTINGS_URL);
@@ -31,8 +116,7 @@ async function loadSettings() {
         document.getElementById('nap-import-limit').value = settings.nap_import_limit ?? 15;
         syncNapImportMin();
         document.getElementById('max-hq-level').value = settings.max_hq_level || 35;
-        document.getElementById('max-mg-level').value = settings.max_mg_level || 1;
-        document.getElementById('max-zs-level').value = settings.max_zs_level || 1;
+        loadEventLevelCeilings();
         document.getElementById('settings-login-message').value = settings.login_message || '';
         document.getElementById('train-free-limit').value = settings.train_free_daily_limit ?? 1;
         document.getElementById('train-purchased-limit').value = settings.train_purchased_daily_limit ?? 2;
@@ -280,8 +364,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 nap_import_limit: parseInt(document.getElementById('nap-import-limit').value, 10) || 15,
                 login_message: document.getElementById('settings-login-message').value,
                 max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
-                max_mg_level: parseInt(document.getElementById('max-mg-level').value, 10) || 1,
-                max_zs_level: parseInt(document.getElementById('max-zs-level').value, 10) || 1,
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
                 squad_tracking_enabled: document.getElementById('squad-tracking-enabled').checked,
                 storm_timezones: selectedZones,
@@ -333,6 +415,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
                 
                 if (!response.ok) throw new Error(await response.text());
+                // Event level ceilings live on the event type row and have their own
+                // endpoint under the same permission, so they save alongside rather
+                // than inside the settings payload.
+                await saveEventLevelCeilings();
                 showSettingsStatus('Settings saved successfully.', true);
             } catch (error) {
                 console.error('Error saving settings:', error);

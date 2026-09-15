@@ -746,9 +746,46 @@ silently. One future settings cleanup drops them together.
 | `current_season` | Season Hub | Derived in `getSettings` from `seasons` (latest started season). The `Settings` JSON fields of the same names stay — the schedule page reads them. |
 | `season_start_date` | Season Hub | As above. |
 | `zs_anchor_time` | Project 5 | The ZS rule is a gap between dates; every insert uses `zs_default_time`. |
+| `mg_baseline`, `zs_baseline`, `max_mg_level`, `max_zs_level` | Migration 073 | Levels live on `schedule_event_types` (`has_level` / `baseline_level` / `max_level`). See "Event levels live on the TYPE row" below. |
 
 Do not add a reader for any of them. If one looks useful, the live value is somewhere
 else and the column is stale.
+
+### Event levels live on the TYPE row, never on `settings`
+
+Migration 073 moved them. `schedule_event_types` carries `has_level`,
+`baseline_level` and `max_level`; `loadTypeLevels(q, typeID)` is the only reader.
+
+What it replaced was two settings column pairs behind a string switch that
+**defaulted to MG's columns for anything that was not `ZS`**. Two live consequences,
+both reproduced before the change: a level could be carried onto a custom type by
+switching the event modal's type dropdown (the field hides but keeps its value, and
+the write path only checked `is_system`), and a brand-new system type silently
+inherited Marshal's Guard's baseline and ceiling.
+
+Four rules:
+
+- **A system type with `has_level` and a NULL baseline or ceiling is a 500**, not a
+  fallback. There is deliberately no other type's numbers left to borrow — that
+  borrowing *was* the bug. Migration 073 fills both for every system type it flags.
+- **A custom type has no baseline and no ceiling.** A blank level stays blank
+  (nothing may invent a number the officer did not choose), and the only rule is the
+  floor of 1 — the app does not know what a custom scale runs to, so it does not
+  pretend to bound one.
+- **`max_level` is written ONLY by `PUT /api/schedule/event-types/{id}/ceiling`**,
+  gated `manage_settings`, while every other field on that row is `manage_schedule`.
+  The ceiling used to live in Settings → Game Limits; moving it onto the type row
+  must not widen who can raise it. Do not add it to the general type PUT.
+  Game Limits therefore reads `GET /api/schedule/event-types/ceilings`, its own
+  `manage_settings` endpoint — the general list is `view_schedule`, and
+  `requirePermission` takes one key, so a `manage_settings` holder without
+  `view_schedule` would see an empty section with nothing explaining it.
+- **Every field the event-type modal carries is accepted by BOTH the POST and the
+  PUT.** The modal creates rows through the POST, so a field only the PUT decodes is
+  lost on create and looks exactly like a broken checkbox.
+
+Adding a system type is now a migration inserting a row with its own numbers — not a
+fourth column pair and a fourth branch.
 
 **MG has two independent rules.** `mgGapDays = 2` — the game refuses an MG on the day
 after another one — and the 21:59 start cutoff. They never interact: an MG starting at
