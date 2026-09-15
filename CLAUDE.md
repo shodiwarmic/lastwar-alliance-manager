@@ -1659,13 +1659,6 @@ app refuse to start in production (`PRODUCTION=true`) without a valid
 **Operator action:** Confirm `SESSION_KEY` is set in all production deployments
 before enabling `PRODUCTION=true`.
 
-## Known technical debt
-
-- `handlers_season_hub.go` `handleSeasonArchive` derives the archived season's
-  `end_date` from `time.Now().UTC()`, not game-time (UTC−2). It was left out of
-  the game-time clock consolidation (season *create* uses `gameDate()`); revisit
-  in a future pass. Marked with a `TODO(game-time)` at the call site.
-
 ## Documentation
 
 **`docs/FEATURES.md` is the feature log.** Keep it up to date whenever a user-facing feature is
