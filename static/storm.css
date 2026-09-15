@@ -290,16 +290,6 @@
     margin: 0;
 }
 
-/* ── Battle mail output ───────────────────────────────────────────────────── */
-#mail-content {
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    padding: 12px;
-    border-radius: 6px;
-    overflow-x: auto;
-    white-space: pre-wrap;
-}
-
 /* ── Extracted page-layout styles (formerly inline) ───────────────────────── */
 
 /* Battle config: pseudo-label above the Task Force chip group */
@@ -324,13 +314,4 @@
 /* My Registration: Save button row spacing */
 .storm-save-row {
     margin-top: 12px;
-}
-
-/* Battle mail: output wrapper + copy button spacing (wrapper toggled via .hidden) */
-#mail-output {
-    margin-top: 12px;
-}
-
-#btn-copy-mail {
-    margin-bottom: 8px;
 }

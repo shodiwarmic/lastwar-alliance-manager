@@ -93,7 +93,7 @@ The **Duel League** tab of the VS Hub page tracks alliance-vs-alliance Duel Leag
 - **Task Force Configuration**: Set up two Task Forces (A/B) with custom time slots for coordinated Storm events.
 - **Member Registration**: Members self-register for Storm participation; leaders get a live view of sign-ups by TF.
 - **Group & Building Management**: Organize registered members into groups, assign them to specific buildings, and track assignments in real time.
-- **Battle Mail Integration**: The Battle Mail tab fetches the "DS Battle Strategy Mail" template from the Comms hub, pre-fills task force, battle time, and group assignments automatically, then copies straight to clipboard. Edit the template on the Comms page and Storm picks it up immediately; if the template is deleted Storm falls back to a built-in mail gracefully.
+- **Battle Mail Integration**: The Battle Mail tab fetches the "DS Battle Strategy Mail" template from the Comms hub, pre-fills task force, battle time, and group assignments automatically, then copies straight to clipboard. Edit the template on the Comms page and Storm picks it up immediately — it is the only source of the mail, so what you see in Comms is what gets sent. The template cannot be deleted (Comms marks it **System**), and if it cannot be fetched Storm says so rather than quietly sending different words.
 - **Permission-Gated Access**: Separate `view_storm` and `manage_storm` permissions let you control who can see vs. administer the planner.
 
 ### 🗓️ Alliance Schedule
