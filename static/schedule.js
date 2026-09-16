@@ -2286,6 +2286,13 @@ document.addEventListener('DOMContentLoaded', init);
 // reaches into the next game day — and hands back both the events and the ones it
 // left out. This function renders lines and fills a template.
 
+// The game caps an announcement at 500 characters. Going over does not fail
+// loudly — the tail is simply lost, and the tail is usually the starred server
+// list, which is both the longest line and the one nobody can reconstruct from
+// memory. So the length is checked and reported BEFORE the copy, while the
+// officer can still shorten it, rather than after it is on the clipboard.
+const ANNOUNCEMENT_MAX_CHARS = 500;
+
 function announcementLine(ev) {
     let line = '';
     if (ev.level != null) line += 'Lvl ' + ev.level + ' ';
@@ -2345,11 +2352,32 @@ async function runAnnouncement() {
     // All three are supplied whether or not the template uses them:
     // copyWithVariables skips a prefilled name whose placeholder is absent, so
     // offering all three gives "neither / today / tomorrow / both" for free.
-    await copyWithVariables(template.content, {
+    const vars = {
         events: events || 'Nothing scheduled.',
         starred_today: data.starred_today || '',
         starred_tomorrow: data.starred_tomorrow || '',
-    });
+    };
+
+    warnIfAnnouncementTooLong(applyTemplate(template.content, vars).length);
+
+    await copyWithVariables(template.content, vars);
+}
+
+// Any variable the officer still has to fill in is left as its placeholder by
+// applyTemplate, so a template with user variables is measured with those
+// unexpanded — the real post is normally longer, never shorter by much. The
+// message says the count rather than implying precision the check does not have.
+function warnIfAnnouncementTooLong(len) {
+    const el = document.getElementById('announce-status');
+    if (len <= ANNOUNCEMENT_MAX_CHARS) return;
+
+    const over = len - ANNOUNCEMENT_MAX_CHARS;
+    const msg = 'Too long for the game: ' + len + ' characters, limit is '
+        + ANNOUNCEMENT_MAX_CHARS + '. Trim about ' + over
+        + ' or the end will be cut off in-game.';
+
+    showToast(msg, 'error', 9000);
+    if (el) el.textContent = el.textContent ? el.textContent + ' — ' + msg : msg;
 }
 
 function initAnnouncement() {
