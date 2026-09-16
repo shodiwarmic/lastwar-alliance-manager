@@ -44,6 +44,9 @@ function getCanvasPalette() {
         stormBg:    t('--color-warning-bg'),
         stormText:  t('--color-warning'),
         stormBorder: t('--color-warning'),
+        grp1:       t('--color-info'),
+        grp2:       t('--color-success'),
+        grp3:       t('--color-warning'),
     };
 }
 
@@ -265,6 +268,21 @@ function starredServersIn(group) {
     return (starred.groups?.[String(group)] || []);
 }
 
+// The group's display label — a colour name, never a number and never a letter.
+//
+// A number sits beside four-digit server numbers and gets read as one more of
+// them. A/B/C is worse than a number: the game's own monthly image labels the
+// groups with letters that ROTATE month to month, so ours would agree with the
+// image one month and contradict it the next, which is exactly the false
+// correspondence starred.go refuses to store a mapping for. A colour carries no
+// implied correspondence with the game's labels, and is stable like the residue
+// it names.
+const STARRED_GROUP_NAMES = { 1: 'Blue', 2: 'Green', 3: 'Amber' };
+
+function starredGroupLabel(group) {
+    return (STARRED_GROUP_NAMES[group] || group) + ' Group';
+}
+
 // "1705, 1706, 1709" — or an explicit note when the group is empty, because a
 // blank line reads as "no starred mission today", which is never true.
 function starredServerList(group) {
@@ -280,10 +298,10 @@ function renderWeek(dates) {
     renderGrid(dates);
 }
 
-// The legend sits ABOVE the grid and lists each group once with the days it is
-// starred on — the layout the source infographics use and the alliance already
-// reads. Per-day columns then carry only the group number, which is what keeps a
-// 64-server list out of seven cells.
+// The legend lists each group once with its servers. It deliberately does NOT
+// repeat the dates: every day card carries its own group tag, so restating the
+// dates here is the same fact twice, and the second copy is the one that has to
+// be re-read against the grid to be useful.
 function renderStarredLegend(dates) {
     const wrap = document.getElementById('starred-legend');
     if (!wrap) return;
@@ -291,15 +309,15 @@ function renderStarredLegend(dates) {
     if (!starred.configured) return;
 
     for (let group = 1; group <= 3; group++) {
-        const days = dates.filter(d => starredGroupOn(d) === group).map(formatDateShort);
+        const days = dates.filter(d => starredGroupOn(d) === group);
         if (!days.length) continue;
 
         const row = document.createElement('div');
         row.className = 'starred-legend-row';
 
         const head = document.createElement('span');
-        head.className = 'starred-legend-head';
-        head.textContent = '⭐ Group ' + group + ' — ' + days.join(' · ') + ':';
+        head.className = 'starred-legend-head starred-grp-' + group;
+        head.textContent = '⭐ ' + starredGroupLabel(group) + ':';
         row.appendChild(head);
 
         const list = document.createElement('span');
@@ -377,12 +395,12 @@ function buildDayCol(dateStr, idx) {
     vsLabel.textContent = vs.icon + ' ' + vs.label;
     header.appendChild(vsLabel);
 
-    // Only the group number here; the legend above carries the server list.
+    // Only the group tag here; the legend carries the server list.
     const group = starredGroupOn(dateStr);
     if (group) {
         const starredLabel = document.createElement('div');
-        starredLabel.className = 'day-col-starred';
-        starredLabel.textContent = '⭐ Group ' + group;
+        starredLabel.className = 'day-col-starred starred-grp-' + group;
+        starredLabel.textContent = '⭐ ' + starredGroupLabel(group);
         starredLabel.title = 'Starred missions on: ' + starredServerList(group);
         header.appendChild(starredLabel);
     }
@@ -1493,7 +1511,7 @@ function buildTextOutput() {
 
         const starredGroupToday = starredGroupOn(d);
         if (starredGroupToday) {
-            lines.push('  ⭐ Starred missions: Group ' + starredGroupToday);
+            lines.push('  ⭐ Starred missions: ' + starredGroupLabel(starredGroupToday));
         }
 
         if (isDSRegMarkerDay(d)) {
@@ -1525,7 +1543,9 @@ function drawWeekImage() {
         : [[0,1,2,3], [4,5,6]];
     const colW  = 230;
     const padX  = 14;
-    const hdrH  = 62;
+    // The header grows by one line when starred missions are configured, so every
+    // day card can carry its own group tag instead of the legend restating dates.
+    const hdrH  = starred.configured ? 78 : 62;
     const rowH  = 24;
     const banLineH = 14;   // one line per server event in the banner strip
     const gap   = 8;
@@ -1557,17 +1577,32 @@ function drawWeekImage() {
     // Starred legend UNDER the grid, one line per group. The week image has no
     // room for a 64-server list in each of seven cells, so the same split the
     // page and the text export use applies here: the legend carries the servers,
-    // the day carries the group.
+    // the day carries the group. The dates are NOT repeated — each day card is
+    // tagged, so a second listing is the same fact in a form that has to be
+    // cross-referenced against the grid before it means anything.
+    //
+    // The server numbers WRAP rather than being squeezed into one line. Passing a
+    // maxWidth to fillText does not clip, it condenses the glyphs horizontally —
+    // and a 23-server list on a two-column image compresses to about a third of
+    // its natural width, which is unreadable for the one thing on the image an
+    // officer has to copy accurately.
+    const legendLineH = 18;
     const starredLegend = [];
     if (starred.configured) {
+        const measure = document.createElement('canvas').getContext('2d');
+        measure.font = '13px ' + font;
+        const listMaxW = totalW - gap * 2 - 14;
         for (let group = 1; group <= 3; group++) {
-            const days = dates.filter(x => starredGroupOn(x) === group).map(formatDateShort);
-            if (!days.length) continue;
-            starredLegend.push('⭐ Group ' + group + ' — ' + days.join(' · ') + ': ' + starredServerList(group));
+            if (!dates.some(x => starredGroupOn(x) === group)) continue;
+            starredLegend.push({
+                group,
+                lines: wrapNoteLines(measure, starredServerList(group), listMaxW),
+            });
         }
     }
-    const legendLineH = 18;
-    const legendH = starredLegend.length ? starredLegend.length * legendLineH + gap : 0;
+    // One line for the heading plus however many the list wrapped to.
+    const legendLines = starredLegend.reduce((n, e) => n + 1 + e.lines.length, 0);
+    const legendH = legendLines ? legendLines * legendLineH + gap : 0;
 
     const totalH = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + legendH + gap;
 
@@ -1654,15 +1689,24 @@ function drawWeekImage() {
             ctx.fillText('S' + settings.current_season + ' · D' + seDay, x + colW / 2, hdrY + 36, colW - 12);
         }
 
-        // VS theme (bottom of header)
+        // VS theme, then the starred group tag on the bottom line when there is one.
+        const grpToday = starredGroupOn(d);
         const vs = getVSTheme(d);
         ctx.fillStyle = 'rgba(255,255,255,0.80)';
         ctx.font = '11px ' + font;
-        const vsBaseY = hasSeasonInfo ? hdrY + hdrH - 10 : hdrY + hdrH - 8;
+        const vsBaseY = grpToday
+            ? hdrY + (hasSeasonInfo ? 52 : 44)
+            : (hasSeasonInfo ? hdrY + hdrH - 10 : hdrY + hdrH - 8);
         ctx.fillText(
             fitText(vs.icon + ' ' + vs.label, vs.icon + ' ' + vs.short, colW - 12),
             x + colW / 2, vsBaseY, colW - 12
         );
+
+        if (grpToday) {
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11px ' + font;
+            ctx.fillText('⭐ ' + starredGroupLabel(grpToday), x + colW / 2, hdrY + hdrH - 9, colW - 12);
+        }
 
         // Divider below header
         const divY = hdrY + hdrH + 4;
@@ -1721,13 +1765,22 @@ function drawWeekImage() {
     ROWS.forEach((row, rowIdx) => row.forEach((dayIdx, colIdx) => drawDayColumn(dates[dayIdx], colIdx, rowIdx)));
 
     if (starredLegend.length) {
-        ctx.fillStyle = C.evtTime;
-        ctx.font = '13px ' + font;
         ctx.textAlign = 'left';
         let ly = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + 14;
-        starredLegend.forEach(line => {
-            ctx.fillText(line, gap, ly, totalW - gap * 2);
+        const grpColor = { 1: C.grp1, 2: C.grp2, 3: C.grp3 };
+        starredLegend.forEach(entry => {
+            ctx.font = 'bold 13px ' + font;
+            ctx.fillStyle = grpColor[entry.group] || C.evtTime;
+            ctx.fillText('⭐ ' + starredGroupLabel(entry.group), gap, ly);
             ly += legendLineH;
+
+            // No maxWidth here — see the note where starredLegend is built.
+            ctx.font = '13px ' + font;
+            ctx.fillStyle = C.evtTime;
+            entry.lines.forEach(line => {
+                ctx.fillText(line, gap + 14, ly);
+                ly += legendLineH;
+            });
         });
     }
 }
@@ -1785,7 +1838,7 @@ function drawDayCard(dateStr) {
     // list wraps and the canvas height has to be known up front.
     const starredGroupToday = starredGroupOn(dateStr);
     const starredLines = starredGroupToday
-        ? wrapNoteLines(_tmpCtx, '⭐ Group ' + starredGroupToday + ' starred: ' + starredServerList(starredGroupToday), noteMaxW)
+        ? wrapNoteLines(_tmpCtx, '⭐ ' + starredGroupLabel(starredGroupToday) + ' starred: ' + starredServerList(starredGroupToday), noteMaxW)
         : [];
     const starredH = starredLines.length ? starredLines.length * noteLineH + 14 : 0;
 
