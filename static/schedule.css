@@ -472,38 +472,53 @@ span.flatpickr-weekday {
 .starred-legend:not(:empty) {
     margin-bottom: 12px;
     padding: 10px 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     font-size: 0.82rem;
     line-height: 1.5;
 }
 
 .starred-legend-row + .starred-legend-row {
-    margin-top: 4px;
+    margin-top: 8px;
 }
+
+/* Each group gets a tinted box, matching the week image. A list of bare numbers
+   needs to be tied to its colour by more than a heading at the start of it. */
+.starred-legend-row {
+    border: 1.5px solid var(--color-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.starred-legend-row.starred-grp-1 { border-color: var(--color-info);    background: var(--color-info-bg); }
+.starred-legend-row.starred-grp-2 { border-color: var(--color-success); background: var(--color-success-bg); }
+.starred-legend-row.starred-grp-3 { border-color: var(--color-warning); background: var(--color-warning-bg); }
 
 .starred-legend-head {
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
-/* The group colours. They carry no correspondence with the game's own monthly
-   A/B/C labels — see starredGroupLabel in schedule.js for why that is the point.
-   Only the legend is tinted: the day tag sits on the accent header, where a mid
-   tone would lose contrast, so it stays white there. */
+/* The group colours. They carry no correspondence with the letters on the
+   community-made calendar — see starredGroupLabel in schedule.js for why that is
+   the point. The week image draws its own tag on the accent gradient and picks
+   fixed tones there for contrast; this page's header is a plain card, so the
+   theme tokens are right here. */
 .starred-legend-head.starred-grp-1 { color: var(--color-info); }
 .starred-legend-head.starred-grp-2 { color: var(--color-success); }
 .starred-legend-head.starred-grp-3 { color: var(--color-warning); }
 
 /* The server numbers are identifiers pasted into the game, so they are given
-   their own element to keep the wrapping sane on a phone. */
+   their own element to keep the wrapping sane on a phone. Full-strength text,
+   not the secondary tone: this is the one thing on the block that gets copied,
+   so it is the last place to spend contrast. */
 .starred-legend-list {
-    color: var(--text-secondary);
+    color: var(--color-text);
 }
 
 .starred-legend-unknown {
-    color: var(--text-muted);
+    color: var(--color-text-muted);
     font-style: italic;
 }
 
@@ -513,7 +528,7 @@ span.flatpickr-weekday {
    canvas draws its own tag in white because there it sits on the accent. */
 .day-col-starred {
     font-size: 0.72rem;
-    color: var(--text-secondary);
+    color: var(--color-text-muted);
     font-weight: 600;
 }
 

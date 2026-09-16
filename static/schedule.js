@@ -47,8 +47,17 @@ function getCanvasPalette() {
         grp1:       t('--color-info'),
         grp2:       t('--color-success'),
         grp3:       t('--color-warning'),
+        grp1Bg:     t('--color-info-bg'),
+        grp2Bg:     t('--color-success-bg'),
+        grp3Bg:     t('--color-warning-bg'),
     };
 }
+
+// The day tag sits on the accent header, which is the SAME purple in light and
+// dark — so its colours are fixed rather than themed, for the same reason the
+// header's text is hardcoded white above. A white pill reads against that purple
+// in both themes, and these saturated tones read against the white pill.
+const STARRED_PILL_INK = { 1: '#1d4ed8', 2: '#15803d', 3: '#b45309' };
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -271,13 +280,19 @@ function starredServersIn(group) {
 // The group's display label — a colour name, never a number and never a letter.
 //
 // A number sits beside four-digit server numbers and gets read as one more of
-// them. A/B/C is worse than a number: the game's own monthly image labels the
-// groups with letters that ROTATE month to month, so ours would agree with the
-// image one month and contradict it the next, which is exactly the false
-// correspondence starred.go refuses to store a mapping for. A colour carries no
-// implied correspondence with the game's labels, and is stable like the residue
-// it names.
+// them. A/B/C is worse than a number rather than better: the lettered calendar
+// officers circulate is COMMUNITY-MADE, not an in-game artefact, and its letters
+// rotate month to month. So ours would agree with whichever copy someone is
+// holding one month and contradict it the next, while looking authoritative
+// either way — the false correspondence starred.go refuses to store a mapping
+// for. A colour implies no correspondence with those letters at all, and is
+// stable like the residue it names.
 const STARRED_GROUP_NAMES = { 1: 'Blue', 2: 'Green', 3: 'Amber' };
+
+// Shiny missions carry their OWN icon. The star is already the VS theme icon for
+// the Alliance Star day (global.js), so a day that was both showed two stars
+// meaning different things.
+const STARRED_ICON = '\u2728';
 
 function starredGroupLabel(group) {
     return (STARRED_GROUP_NAMES[group] || group) + ' Group';
@@ -313,11 +328,11 @@ function renderStarredLegend(dates) {
         if (!days.length) continue;
 
         const row = document.createElement('div');
-        row.className = 'starred-legend-row';
+        row.className = 'starred-legend-row starred-grp-' + group;
 
         const head = document.createElement('span');
         head.className = 'starred-legend-head starred-grp-' + group;
-        head.textContent = '⭐ ' + starredGroupLabel(group) + ':';
+        head.textContent = STARRED_ICON + ' ' + starredGroupLabel(group) + ':';
         row.appendChild(head);
 
         const list = document.createElement('span');
@@ -400,7 +415,7 @@ function buildDayCol(dateStr, idx) {
     if (group) {
         const starredLabel = document.createElement('div');
         starredLabel.className = 'day-col-starred starred-grp-' + group;
-        starredLabel.textContent = '⭐ ' + starredGroupLabel(group);
+        starredLabel.textContent = STARRED_ICON + ' ' + starredGroupLabel(group);
         starredLabel.title = 'Starred missions on: ' + starredServerList(group);
         header.appendChild(starredLabel);
     }
@@ -1459,12 +1474,12 @@ function buildTextOutput() {
     const lines = [];
 
     // Legend once at the top, pointer per day — the same shape as the page, and
-    // what keeps a 64-server list out of all seven day blocks.
+    // what keeps a 64-server list out of all seven day blocks. The dates are not
+    // restated: each day block below carries its own group.
     if (starred.configured) {
         for (let group = 1; group <= 3; group++) {
-            const days = dates.filter(x => starredGroupOn(x) === group).map(formatDateShort);
-            if (!days.length) continue;
-            lines.push('⭐ Group ' + group + ' — ' + days.join(' · ') + ': ' + starredServerList(group));
+            if (!dates.some(x => starredGroupOn(x) === group)) continue;
+            lines.push(STARRED_ICON + ' ' + starredGroupLabel(group) + ': ' + starredServerList(group));
         }
         if (lines.length) lines.push('');
     }
@@ -1511,7 +1526,7 @@ function buildTextOutput() {
 
         const starredGroupToday = starredGroupOn(d);
         if (starredGroupToday) {
-            lines.push('  ⭐ Starred missions: ' + starredGroupLabel(starredGroupToday));
+            lines.push('  ' + STARRED_ICON + ' Shiny missions: ' + starredGroupLabel(starredGroupToday));
         }
 
         if (isDSRegMarkerDay(d)) {
@@ -1600,9 +1615,14 @@ function drawWeekImage() {
             });
         }
     }
-    // One line for the heading plus however many the list wrapped to.
+    // One line for the heading plus however many the list wrapped to, and each
+    // group gets a tinted box of its own: 12px of padding and 8px of separation.
+    const legendBoxPad = 12;
+    const legendBoxGap = 8;
     const legendLines = starredLegend.reduce((n, e) => n + 1 + e.lines.length, 0);
-    const legendH = legendLines ? legendLines * legendLineH + gap : 0;
+    const legendH = legendLines
+        ? legendLines * legendLineH + starredLegend.length * (legendBoxPad + legendBoxGap) + gap
+        : 0;
 
     const totalH = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + legendH + gap;
 
@@ -1703,9 +1723,21 @@ function drawWeekImage() {
         );
 
         if (grpToday) {
-            ctx.fillStyle = '#ffffff';
+            // A white pill so the group reads as its colour on the accent header,
+            // where coloured text alone is legible in one theme and muddy in the
+            // other.
             ctx.font = 'bold 11px ' + font;
-            ctx.fillText('⭐ ' + starredGroupLabel(grpToday), x + colW / 2, hdrY + hdrH - 9, colW - 12);
+            const tagText = STARRED_ICON + ' ' + starredGroupLabel(grpToday);
+            const tagW  = Math.min(ctx.measureText(tagText).width, colW - 28);
+            const pillH = 16;
+            const pillW = tagW + 16;
+            const pillY = hdrY + hdrH - pillH - 3;
+            ctx.fillStyle = '#ffffff';
+            roundRect(ctx, x + (colW - pillW) / 2, pillY, pillW, pillH, pillH / 2);
+            ctx.fill();
+            ctx.fillStyle = STARRED_PILL_INK[grpToday] || '#333333';
+            ctx.textAlign = 'center';
+            ctx.fillText(tagText, x + colW / 2, pillY + 12, colW - 28);
         }
 
         // Divider below header
@@ -1766,21 +1798,41 @@ function drawWeekImage() {
 
     if (starredLegend.length) {
         ctx.textAlign = 'left';
-        let ly = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + 14;
         const grpColor = { 1: C.grp1, 2: C.grp2, 3: C.grp3 };
+        const grpBg    = { 1: C.grp1Bg, 2: C.grp2Bg, 3: C.grp3Bg };
+        let boxY = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap;
+
         starredLegend.forEach(entry => {
+            const boxH = (1 + entry.lines.length) * legendLineH + legendBoxPad;
+
+            // A tinted box per group, so a list of bare numbers is tied to its
+            // colour by more than a heading four lines up.
+            ctx.fillStyle = grpBg[entry.group] || C.cardBg;
+            roundRect(ctx, gap, boxY, totalW - gap * 2, boxH, 8);
+            ctx.fill();
+            ctx.strokeStyle = grpColor[entry.group] || C.divider;
+            ctx.lineWidth = 1.5;
+            roundRect(ctx, gap, boxY, totalW - gap * 2, boxH, 8);
+            ctx.stroke();
+
+            let ly = boxY + legendBoxPad / 2 + 13;
             ctx.font = 'bold 13px ' + font;
-            ctx.fillStyle = grpColor[entry.group] || C.evtTime;
-            ctx.fillText('⭐ ' + starredGroupLabel(entry.group), gap, ly);
+            ctx.fillStyle = grpColor[entry.group] || C.evtName;
+            ctx.fillText(STARRED_ICON + ' ' + starredGroupLabel(entry.group), gap + 10, ly);
             ly += legendLineH;
 
-            // No maxWidth here — see the note where starredLegend is built.
+            // Full-strength body text, not the muted tone: these numbers are the
+            // one thing on the image that gets copied, so they are the last place
+            // to spend contrast. No maxWidth either — see where starredLegend is
+            // built.
             ctx.font = '13px ' + font;
-            ctx.fillStyle = C.evtTime;
+            ctx.fillStyle = C.evtName;
             entry.lines.forEach(line => {
-                ctx.fillText(line, gap + 14, ly);
+                ctx.fillText(line, gap + 10, ly);
                 ly += legendLineH;
             });
+
+            boxY += boxH + legendBoxGap;
         });
     }
 }
@@ -1838,7 +1890,7 @@ function drawDayCard(dateStr) {
     // list wraps and the canvas height has to be known up front.
     const starredGroupToday = starredGroupOn(dateStr);
     const starredLines = starredGroupToday
-        ? wrapNoteLines(_tmpCtx, '⭐ ' + starredGroupLabel(starredGroupToday) + ' starred: ' + starredServerList(starredGroupToday), noteMaxW)
+        ? wrapNoteLines(_tmpCtx, STARRED_ICON + ' ' + starredGroupLabel(starredGroupToday) + ' shiny: ' + starredServerList(starredGroupToday), noteMaxW)
         : [];
     const starredH = starredLines.length ? starredLines.length * noteLineH + 14 : 0;
 
