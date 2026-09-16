@@ -8,11 +8,14 @@ package app
 //
 // Two things are deliberately NOT stored:
 //
-//   - The A/B/C letters. The game's monthly image labels the groups, and the
-//     letters rotate month to month. Storing them would bake in a mapping that
-//     expires. Groups here are 1/2/3 by residue and are stable forever; the
-//     Settings help text says so, because an officer holding this month's image
-//     will otherwise expect the letters to line up.
+//   - The A/B/C letters. The lettered calendar officers circulate is
+//     COMMUNITY-MADE, not an in-game artefact, and its letters rotate month to
+//     month. Storing them would bake in a mapping that expires — and would dress
+//     one player's chart up as authoritative. Groups here are 1/2/3 by residue
+//     and are stable forever; the Settings help text says so, because an officer
+//     holding this month's chart will otherwise expect the letters to line up.
+//     The UI labels them by COLOUR for the same reason — see starredGroupLabel
+//     in schedule.js.
 //   - The sector width. See Settings.SectorStart.
 //
 // The residue arithmetic lives in Go ONLY. The API hands the client an explicit

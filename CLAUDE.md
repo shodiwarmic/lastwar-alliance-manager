@@ -912,9 +912,16 @@ client an explicit `days` map (date → group) for the range it asked about. **D
 reimplement the residue in JavaScript.** One rule, one implementation; a browser
 copy would be free to drift out of step with the group lists it labels.
 
-- **The A/B/C letters are never stored.** The game's monthly image labels the groups
-  and the letters rotate month to month. Groups here are 1/2/3 by residue and are
-  stable forever. The regression fixture
+- **The A/B/C letters are never stored, and the UI labels groups by COLOUR.** The
+  lettered calendar officers circulate is **community-made, not an in-game artefact**,
+  and its letters rotate month to month — so a stored mapping would both expire and
+  lend one player's chart false authority. Groups are 1/2/3 by residue internally and
+  are stable forever; every surface renders them as Blue / Green / Amber
+  (`starredGroupLabel`, `schedule.js`), because a number reads as one more server
+  number beside a four-digit list and a letter would imply a correspondence with that
+  chart that does not hold. Shiny missions also carry their own icon rather than the
+  star, which is already the VS theme icon for the Alliance Star day. The regression
+  fixture
   (`internal/app/testdata/starred_sector_1701_1764.json`) is therefore used as an
   **equivalence relation** — servers sharing a letter share a group — not as a
   letter → number map, so it keeps testing the derivation after the next rotation.
