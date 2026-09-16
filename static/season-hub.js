@@ -1615,6 +1615,7 @@
                     msg += ' Pushed ' + (p.created || 0) + ' event' + ((p.created || 0) === 1 ? '' : 's') + ' to schedule';
                     if (p.skipped_unscheduled) msg += ', ' + p.skipped_unscheduled + ' skipped (no day set)';
                     if (p.skipped_no_type) msg += ', ' + p.skipped_no_type + ' skipped (no event type — set it in Edit Season)';
+                    if (p.drifted) msg += ', ' + p.drifted + ' drifted from the template date';
                     msg += '.';
                 }
                 showToast(msg);
@@ -2156,7 +2157,18 @@
                             .map(iv => iv.date + ' (' + iv.reason + ')').join('; ');
                         if (shown) msg += ': ' + shown;
                     }
-                    const incomplete = d.skipped_no_type > 0 || d.skipped_invalid > 0;
+                    // Rows sitting away from the date the template now computes —
+                    // almost always because the season's start_date moved after
+                    // they were pushed. Reported, never moved: the officer may
+                    // have placed one deliberately, and the app cannot tell.
+                    if (d.drifted > 0) {
+                        msg += ', ' + d.drifted + ' drifted from the template date';
+                        const shownDrift = (d.drifted_rows || []).slice(0, 3)
+                            .map(r => r.label + ' (week ' + r.week + ') expected ' + r.expected + ', is ' + r.actual)
+                            .join('; ');
+                        if (shownDrift) msg += ': ' + shownDrift;
+                    }
+                    const incomplete = d.skipped_no_type > 0 || d.skipped_invalid > 0 || d.drifted > 0;
                     if (statusEl) {
                         statusEl.textContent = msg;
                         statusEl.style.color = incomplete ? 'var(--color-warning)' : 'var(--color-success)';

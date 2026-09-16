@@ -851,6 +851,34 @@ Sky Predator to General's Trial and Glacieradon to Zombie Invasion.
   `outside_window` + `parent_name`. The app does not know whether the window or the
   event is the wrong one, so it reports and leaves both alone.
 
+### A pushed season event is identified by `(season_event_id, season_week)`
+
+Migration 078 stamps both `schedule_events` and `server_events`. Before it, a
+pushed event's only identity was the date it landed on — so moving a season's
+`start_date` by a day and pushing again duplicated everything, and deleting the
+season then purged **nothing**, because both queries recomputed a date that no
+longer matched. Six one-day-offset duplicates were reproduced against a copy of
+the live database.
+
+- **The identity is a DATABASE fact**, not a convention: a **partial** unique index
+  on each table (`WHERE season_event_id IS NOT NULL`, so the manual schedule's
+  unstamped rows are unaffected). The push is check-then-insert with no
+  transaction, so two simultaneous pushes could both see no match — the index makes
+  the loser fail, and `isUniqueViolation` maps that to `Skipped`, which is what it
+  is.
+- **The legacy match carries `AND season_event_id IS NULL`.** Back-stamping uses
+  exactly the `(date, type)` / `(name, anchor_date)` match the push already relied
+  on to skip a row, so it adds no new assumption — but a row already claimed by a
+  different `(event, week)` must never be re-stamped.
+- **Drift is REPORTED, never corrected.** A stamped row whose date disagrees with
+  the template counts as `drifted`. The app cannot tell whether the season moved or
+  the officer moved that one event, and silently dragging somebody's calendar back
+  is the worse mistake.
+- **Deleting a season purges by origin FIRST**, then runs the old recomputed-date
+  purge for rows pushed before 078. Deleting a season *event* clears the stamps but
+  keeps the calendar rows: changing the plan is not retracting what is already
+  scheduled.
+
 ### The announcement selects server-side
 
 `selectAnnouncementEvents(window, onD, onD1)` (`announcement.go`) is a **pure
