@@ -112,6 +112,8 @@ async function loadSettings() {
         updateEnrichBandHelp();
         // 0 means "not configured" — show it as blank, not as a literal 0.
         document.getElementById('our-server-id').value = settings.our_server_id || '';
+        document.getElementById('sector-start').value = settings.sector_start || '';
+        document.getElementById('sector-end').value = settings.sector_end || '';
         document.getElementById('nap-size').value = settings.nap_size ?? 10;
         document.getElementById('nap-import-limit').value = settings.nap_import_limit ?? 15;
         syncNapImportMin();
@@ -324,6 +326,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('lastrank-enrich-max-age')?.addEventListener('input', updateEnrichBandHelp);
 
         document.getElementById('nap-size')?.addEventListener('input', syncNapImportMin);
+        initStarredMissions();
 
         settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -362,6 +365,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 our_server_id: parseInt(document.getElementById('our-server-id').value, 10) || 0,
                 nap_size: parseInt(document.getElementById('nap-size').value, 10) || 10,
                 nap_import_limit: parseInt(document.getElementById('nap-import-limit').value, 10) || 15,
+                // Blank sends 0, which CLEARS the sector — "not configured" is a
+                // state this form has to be able to express, like the server number.
+                sector_start: parseInt(document.getElementById('sector-start').value, 10) || 0,
+                sector_end: parseInt(document.getElementById('sector-end').value, 10) || 0,
                 login_message: document.getElementById('settings-login-message').value,
                 max_hq_level: parseInt(document.getElementById('max-hq-level').value, 10),
                 power_tracking_enabled: document.getElementById('power-tracking-enabled').checked,
@@ -419,6 +426,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // endpoint under the same permission, so they save alongside rather
                 // than inside the settings payload.
                 await saveEventLevelCeilings();
+                // The sector may have moved, and the table is bounded by it.
+                await loadStarredServers();
                 showSettingsStatus('Settings saved successfully.', true);
             } catch (error) {
                 console.error('Error saving settings:', error);
@@ -1093,4 +1102,229 @@ function updateEnrichBandHelp() {
     const bad = age && (age < low || age > high);
     help.style.color = bad ? 'var(--color-danger)' : '';
     if (bad) help.textContent += ' Out of range — the server will reject this.';
+}
+
+
+// ── Starred missions (Secret Mobile Squad) ────────────────────────────────────
+//
+// The residue arithmetic is NOT here. The server owns it and hands this page a
+// group per server, so there is one implementation of the rule rather than a
+// second one drifting away from it. What lives here is the sector suggestion
+// (which is explicitly a suggestion, not a rule), the table and the sweep.
+
+let starredServers = [];
+
+// sector_start(id) = id − ((id − 37) mod 64), from the one tested boundary pair.
+//
+// Written with a EUCLIDEAN modulo and a floor of 1. JavaScript's % is a
+// remainder, not a modulo: for an id below 37 the naive form returns 37 and
+// excludes the very server the officer is standing on. The Euclidean form gives a
+// negative start for those same ids, hence the floor. Ids below 37 are outside
+// the tested grid anyway — this is a starting point the officer confirms in-game.
+function suggestSector(serverID) {
+    const start = Math.max(1, serverID - ((((serverID - 37) % 64) + 64) % 64));
+    return { start, end: start + 63 };
+}
+
+// The first run of ASCII digits, so "Server 1712", "#1712" and "1712" all work —
+// the same reading parseServerNumber applies server-side.
+function parseServerNumber(text) {
+    const m = String(text || '').match(/\d+/);
+    return m ? parseInt(m[0], 10) : 0;
+}
+
+async function loadStarredServers() {
+    const container = document.getElementById('starred-servers-table');
+    if (!container) return;
+    try {
+        const res = await fetch('/api/starred/servers');
+        if (!res.ok) throw new Error();
+        const body = await res.json();
+        starredServers = body.configured ? (body.servers || []) : [];
+    } catch {
+        starredServers = [];
+    }
+    renderStarredServers();
+}
+
+function renderStarredServers() {
+    const container = document.getElementById('starred-servers-table');
+    if (!container) return;
+    container.replaceChildren();
+
+    if (!starredServers.length) {
+        const p = document.createElement('p');
+        p.className = 'help-text';
+        p.textContent = 'Set a sector above to list its servers.';
+        container.appendChild(p);
+        return;
+    }
+
+    const unknown = starredServers.filter(s => s.source === 'unknown').length;
+    const summary = document.createElement('p');
+    summary.className = 'help-text';
+    summary.textContent = unknown
+        ? `${starredServers.length} servers in the sector · ${unknown} with no opening date yet.`
+        : `${starredServers.length} servers in the sector · all opening dates known.`;
+    container.appendChild(summary);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
+    const table = document.createElement('table');
+    table.className = 'data-table';
+
+    const thead = document.createElement('thead');
+    const hrow = document.createElement('tr');
+    ['Server', 'Opened', 'Group', 'Source', ''].forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        hrow.appendChild(th);
+    });
+    thead.appendChild(hrow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    starredServers.forEach(s => {
+        const tr = document.createElement('tr');
+        const cells = [
+            String(s.server_id),
+            s.open_date || '—',
+            s.group ? 'Group ' + s.group : '—',
+            s.source === 'unknown' ? 'not fetched' : s.source,
+        ];
+        cells.forEach(text => {
+            const td = document.createElement('td');
+            td.textContent = text;
+            tr.appendChild(td);
+        });
+
+        const actions = document.createElement('td');
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'btn btn-ghost btn-sm';
+        edit.textContent = s.open_date ? 'Edit' : 'Set';
+        edit.addEventListener('click', () => editStarredServer(s));
+        actions.appendChild(edit);
+
+        // Clearing is offered only for a manual row: it exists to undo a
+        // correction, and the next sweep then re-derives the date.
+        if (s.source === 'manual') {
+            const clear = document.createElement('button');
+            clear.type = 'button';
+            clear.className = 'btn btn-danger btn-sm';
+            clear.textContent = 'Clear';
+            clear.addEventListener('click', async () => {
+                if (!await showConfirm(`Clear the manual opening date for server ${s.server_id}?`, 'Clear')) return;
+                const res = await fetch('/api/starred/servers/' + s.server_id, { method: 'DELETE' });
+                if (!res.ok) { showToast(await res.text() || 'Could not clear that row.', 'error'); return; }
+                showToast(`Server ${s.server_id} cleared — the next sweep will re-fetch it.`);
+                await loadStarredServers();
+            });
+            actions.appendChild(clear);
+        }
+        tr.appendChild(actions);
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    container.appendChild(wrap);
+}
+
+// Browser dialogs are banned (CLAUDE.md), so the edit swaps an inline date field
+// into the panel rather than calling prompt().
+async function editStarredServer(s) {
+    const current = s.open_date || '';
+    const container = document.getElementById('starred-servers-table');
+    if (!container) return;
+
+    const box = document.createElement('div');
+    box.className = 'form-group';
+    const label = document.createElement('label');
+    label.textContent = `Opening date for server ${s.server_id} (game time, UTC−2)`;
+    const field = document.createElement('input');
+    field.type = 'date';
+    field.className = 'form-input';
+    field.value = current;
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'btn btn-primary btn-sm';
+    save.textContent = 'Save';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn btn-secondary btn-sm';
+    cancel.textContent = 'Cancel';
+
+    save.addEventListener('click', async () => {
+        if (!field.value) { showToast('Pick a date first.', 'error'); return; }
+        const res = await fetch('/api/starred/servers/' + s.server_id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ open_date: field.value }),
+        });
+        if (!res.ok) { showToast(await res.text() || 'Save failed', 'error'); return; }
+        const body = await res.json();
+        showToast(`Server ${s.server_id} set to ${body.open_date} — group ${body.group}.`);
+        await loadStarredServers();
+    });
+    cancel.addEventListener('click', () => loadStarredServers());
+
+    box.append(label, field, save, cancel);
+    container.replaceChildren(box);
+}
+
+// The "check a server" affordance, answering the question the sector boundaries
+// were originally verified with. Entirely client-side over the list already
+// fetched — it asks nothing new of the server or of LastRank.
+function checkStarredServer() {
+    const out = document.getElementById('starred-check-result');
+    const raw = document.getElementById('starred-check-input').value;
+    if (!out) return;
+    const id = parseServerNumber(raw);
+    if (!id) { out.textContent = ''; return; }
+
+    const hit = starredServers.find(s => s.server_id === id);
+    if (!hit) {
+        out.textContent = `Server ${id} — not in your sector.`;
+        return;
+    }
+    if (!hit.group) {
+        out.textContent = `Server ${id} is in your sector, but its opening date has not been fetched yet.`;
+        return;
+    }
+    out.textContent = `Server ${id} — in sector, Group ${hit.group} (opened ${hit.open_date}).`;
+}
+
+function initStarredMissions() {
+    const suggest = document.getElementById('btn-suggest-sector');
+    if (!suggest) return;
+
+    suggest.addEventListener('click', () => {
+        const ours = parseInt(document.getElementById('our-server-id').value, 10) || 0;
+        if (!ours) {
+            showToast('Set your server number above first — the suggestion is derived from it.', 'error');
+            return;
+        }
+        const { start, end } = suggestSector(ours);
+        document.getElementById('sector-start').value = start;
+        document.getElementById('sector-end').value = end;
+        showToast(`Suggested ${start}–${end}. Confirm both boundaries in-game before relying on it.`, 'info', 7000);
+    });
+
+    document.getElementById('starred-check-input')?.addEventListener('input', checkStarredServer);
+
+    const sweepBtn = document.getElementById('btn-sweep-open-dates');
+    const progress = document.getElementById('starred-sweep-progress');
+    if (sweepBtn && progress && window.JobProgress) {
+        window.JobProgress.attach({
+            kind: 'starred_open_dates',
+            startBtn: sweepBtn,
+            container: progress,
+            confirm: 'Fetch the opening date of every server in your sector that does not have one yet? '
+                + 'About one second per server on the server — you can leave this page, and a cancelled run resumes if you start it again.',
+            summarize: c => `Stored ${c.fetched || 0} opening date(s).`,
+            onDone: () => loadStarredServers(),
+        });
+    }
+
+    loadStarredServers();
 }

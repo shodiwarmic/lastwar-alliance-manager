@@ -232,13 +232,94 @@ async function loadWeek() {
         weekEvents = [];
     }
 
+    await loadStarred(from, to);
+
     renderWeek(dates);
+}
+
+// ── Starred missions ──────────────────────────────────────────────────────────
+//
+// `days` is a date → group map computed by the SERVER. The three-day residue is
+// deliberately not reimplemented here: one rule, one implementation, and a
+// browser copy would be free to drift out of step with the group lists it labels.
+
+let starred = { configured: false, groups: {}, days: {}, unknown: [] };
+
+async function loadStarred(from, to) {
+    try {
+        const res = await fetch('/api/schedule/starred?from=' + from + '&to=' + to);
+        if (!res.ok) throw new Error();
+        starred = await res.json();
+    } catch {
+        starred = { configured: false, groups: {}, days: {}, unknown: [] };
+    }
+}
+
+// The group starred on a date, or 0 when the sector is not configured.
+function starredGroupOn(dateStr) {
+    if (!starred.configured) return 0;
+    return starred.days?.[dateStr] || 0;
+}
+
+function starredServersIn(group) {
+    return (starred.groups?.[String(group)] || []);
+}
+
+// "1705, 1706, 1709" — or an explicit note when the group is empty, because a
+// blank line reads as "no starred mission today", which is never true.
+function starredServerList(group) {
+    const list = starredServersIn(group);
+    if (!list.length) return 'no servers known yet';
+    return list.join(', ');
 }
 
 // ── Week rendering ────────────────────────────────────────────────────────────
 
 function renderWeek(dates) {
+    renderStarredLegend(dates);
     renderGrid(dates);
+}
+
+// The legend sits ABOVE the grid and lists each group once with the days it is
+// starred on — the layout the source infographics use and the alliance already
+// reads. Per-day columns then carry only the group number, which is what keeps a
+// 64-server list out of seven cells.
+function renderStarredLegend(dates) {
+    const wrap = document.getElementById('starred-legend');
+    if (!wrap) return;
+    wrap.replaceChildren();
+    if (!starred.configured) return;
+
+    for (let group = 1; group <= 3; group++) {
+        const days = dates.filter(d => starredGroupOn(d) === group).map(formatDateShort);
+        if (!days.length) continue;
+
+        const row = document.createElement('div');
+        row.className = 'starred-legend-row';
+
+        const head = document.createElement('span');
+        head.className = 'starred-legend-head';
+        head.textContent = '⭐ Group ' + group + ' — ' + days.join(' · ') + ':';
+        row.appendChild(head);
+
+        const list = document.createElement('span');
+        list.className = 'starred-legend-list';
+        list.textContent = ' ' + starredServerList(group);
+        row.appendChild(list);
+
+        wrap.appendChild(row);
+    }
+
+    // Named rather than omitted: a group list that is quietly short is
+    // indistinguishable from a complete one, which is how the published images
+    // went wrong in both directions in the first place.
+    if (starred.unknown?.length) {
+        const note = document.createElement('div');
+        note.className = 'starred-legend-row starred-legend-unknown';
+        note.textContent = 'Opening date not yet fetched: ' + starred.unknown.join(', ')
+            + ' — run the sweep in Settings to place them.';
+        wrap.appendChild(note);
+    }
 }
 
 
@@ -295,6 +376,16 @@ function buildDayCol(dateStr, idx) {
     vsLabel.className = 'day-col-vs';
     vsLabel.textContent = vs.icon + ' ' + vs.label;
     header.appendChild(vsLabel);
+
+    // Only the group number here; the legend above carries the server list.
+    const group = starredGroupOn(dateStr);
+    if (group) {
+        const starredLabel = document.createElement('div');
+        starredLabel.className = 'day-col-starred';
+        starredLabel.textContent = '⭐ Group ' + group;
+        starredLabel.title = 'Starred missions on: ' + starredServerList(group);
+        header.appendChild(starredLabel);
+    }
 
     col.appendChild(header);
 
@@ -1318,6 +1409,17 @@ function buildTextOutput() {
     const dates = weekDates(currentWeekStart);
     const lines = [];
 
+    // Legend once at the top, pointer per day — the same shape as the page, and
+    // what keeps a 64-server list out of all seven day blocks.
+    if (starred.configured) {
+        for (let group = 1; group <= 3; group++) {
+            const days = dates.filter(x => starredGroupOn(x) === group).map(formatDateShort);
+            if (!days.length) continue;
+            lines.push('⭐ Group ' + group + ' — ' + days.join(' · ') + ': ' + starredServerList(group));
+        }
+        if (lines.length) lines.push('');
+    }
+
     dates.forEach(d => {
         const vs = getVSTheme(d);
         const seDay = dayOfSeason(d);
@@ -1357,6 +1459,11 @@ function buildTextOutput() {
         seBanners.forEach(evt => {
             lines.push('  ' + evt.icon + ' ' + evt.name);
         });
+
+        const starredGroupToday = starredGroupOn(d);
+        if (starredGroupToday) {
+            lines.push('  ⭐ Starred missions: Group ' + starredGroupToday);
+        }
 
         lines.push('');
     });
@@ -1411,7 +1518,23 @@ function drawWeekImage() {
 
     const colH   = banH + gap + hdrH + gap + Math.max(maxEvts, 1) * rowH + gap * 2;
     const totalW = numCols * colW + (numCols + 1) * gap;
-    const totalH = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + gap;
+
+    // Starred legend UNDER the grid, one line per group. The week image has no
+    // room for a 64-server list in each of seven cells, so the same split the
+    // page and the text export use applies here: the legend carries the servers,
+    // the day carries the group.
+    const starredLegend = [];
+    if (starred.configured) {
+        for (let group = 1; group <= 3; group++) {
+            const days = dates.filter(x => starredGroupOn(x) === group).map(formatDateShort);
+            if (!days.length) continue;
+            starredLegend.push('⭐ Group ' + group + ' — ' + days.join(' · ') + ': ' + starredServerList(group));
+        }
+    }
+    const legendLineH = 18;
+    const legendH = starredLegend.length ? starredLegend.length * legendLineH + gap : 0;
+
+    const totalH = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + legendH + gap;
 
     const canvas = document.getElementById('schedule-canvas');
     canvas.width  = totalW;
@@ -1561,6 +1684,17 @@ function drawWeekImage() {
     }
 
     ROWS.forEach((row, rowIdx) => row.forEach((dayIdx, colIdx) => drawDayColumn(dates[dayIdx], colIdx, rowIdx)));
+
+    if (starredLegend.length) {
+        ctx.fillStyle = C.evtTime;
+        ctx.font = '13px ' + font;
+        ctx.textAlign = 'left';
+        let ly = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + 14;
+        starredLegend.forEach(line => {
+            ctx.fillText(line, gap, ly, totalW - gap * 2);
+            ly += legendLineH;
+        });
+    }
 }
 
 // ── Canvas: Day Card ──────────────────────────────────────────────────────────
@@ -1610,7 +1744,17 @@ function drawDayCard(dateStr) {
 
     let eventsH = dayEvts.reduce((s, e) => s + evtRowH + countNoteLines(e) * noteLineH, 0);
     if (!dayEvts.length) eventsH = evtRowH; // "No events" placeholder
-    const H = 16 + hdrH + 12 + eventsH + banH + 24;
+
+    // The day card gets the FULL server list — it is one day on a big canvas, so
+    // it has room the week image does not. Measured before drawing, because the
+    // list wraps and the canvas height has to be known up front.
+    const starredGroupToday = starredGroupOn(dateStr);
+    const starredLines = starredGroupToday
+        ? wrapNoteLines(_tmpCtx, '⭐ Group ' + starredGroupToday + ' starred: ' + starredServerList(starredGroupToday), noteMaxW)
+        : [];
+    const starredH = starredLines.length ? starredLines.length * noteLineH + 14 : 0;
+
+    const H = 16 + hdrH + 12 + eventsH + starredH + banH + 24;
     const canvas = document.getElementById('schedule-canvas');
     canvas.width  = W;
     canvas.height = Math.max(H, 220);
@@ -1731,6 +1875,17 @@ function drawDayCard(dateStr) {
 
         y += evtRowH;
     });
+
+    // ── Starred missions ───────────────────────────────────────────────────
+    if (starredLines.length) {
+        ctx.fillStyle = C.notesText;
+        ctx.font = '11px ' + font;
+        ctx.textAlign = 'left';
+        starredLines.forEach((line, li) => {
+            ctx.fillText(line, pad, y + 6 + li * noteLineH);
+        });
+        y += starredH;
+    }
 
     // ── Server event banner (bottom) ───────────────────────────────────────
     if (seBanners.length) {

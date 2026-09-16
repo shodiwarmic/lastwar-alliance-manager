@@ -396,6 +396,14 @@ func Main() {
 	router.HandleFunc("/api/schedule/server-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", updateServerEvent))).Methods("PUT")
 	router.HandleFunc("/api/schedule/server-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", deleteServerEvent))).Methods("DELETE")
 
+	// Starred missions. The calendar's read is view_schedule; configuring the
+	// sector and correcting an opening date is manage_settings, the same gate as
+	// the sweep job that fills the table.
+	router.HandleFunc("/api/schedule/starred", authMiddleware(requirePermission("view_schedule", getStarredSchedule))).Methods("GET")
+	router.HandleFunc("/api/starred/servers", authMiddleware(requirePermission("manage_settings", getStarredServers))).Methods("GET")
+	router.HandleFunc("/api/starred/servers/{id:[0-9]+}", authMiddleware(requirePermission("manage_settings", updateStarredServer))).Methods("PUT")
+	router.HandleFunc("/api/starred/servers/{id:[0-9]+}", authMiddleware(requirePermission("manage_settings", deleteStarredServer))).Methods("DELETE")
+
 	// Storm slot times (read: all authenticated; write: admin only)
 	router.HandleFunc("/api/storm/slot-times", authMiddleware(getAdvancedStormSlots)).Methods("GET")
 	router.HandleFunc("/api/admin/advanced/storm-slots", authMiddleware(adminMiddleware(putAdvancedStormSlots))).Methods("PUT")

@@ -384,6 +384,16 @@ type Settings struct {
 	ProspectAutoRefreshEnabled    bool `json:"prospect_auto_refresh_enabled"`
 	// OurServerID is the game server we play on. 0 = not configured.
 	OurServerID int `json:"our_server_id"`
+
+	// SectorStart / SectorEnd bound the block of servers the starred missions
+	// (the Secret Mobile Squad) rotate across. 0 = not configured, the
+	// OurServerID convention; both are set together or neither is.
+	//
+	// Two editable numbers rather than a width constant on purpose: the 64-wide
+	// grid rests on a single tested boundary pair, and sources claim 128 after
+	// Season 4. A hardcoded size would be the app asserting a rule it does not know.
+	SectorStart int `json:"sector_start"`
+	SectorEnd   int `json:"sector_end"`
 	// NAPSize is how many top alliances on our server the Non-Aggression Pact covers,
 	// INCLUDING us — a size of 10 means us plus nine partners.
 	NAPSize int `json:"nap_size"`

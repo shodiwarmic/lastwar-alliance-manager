@@ -464,3 +464,44 @@ span.flatpickr-weekday {
 #event-form-error,
 #event-type-form-error,
 #server-event-form-error { margin-top: 8px; }
+
+/* ── Starred missions ────────────────────────────────────────────────────── */
+
+/* Legend above the grid: one row per group, with the servers in it. Empty when
+   no sector is configured, so it costs nothing on an install that never sets one. */
+.starred-legend:not(:empty) {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+.starred-legend-row + .starred-legend-row {
+    margin-top: 4px;
+}
+
+.starred-legend-head {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* The server numbers are identifiers pasted into the game, so they are given
+   their own element to keep the wrapping sane on a phone. */
+.starred-legend-list {
+    color: var(--text-secondary);
+}
+
+.starred-legend-unknown {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Day column marker — group number only; the legend carries the list. */
+.day-col-starred {
+    font-size: 0.72rem;
+    color: var(--color-warning);
+    font-weight: 600;
+}

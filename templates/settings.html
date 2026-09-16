@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
 <link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
 <link rel="stylesheet" href="{{asset "/color-picker.css"}}">
+<link rel="stylesheet" href="{{asset "/job-progress.css"}}">
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
 <script src="{{asset "/color-picker.js"}}"></script>
 {{end}}
@@ -119,6 +120,44 @@
                             <input type="number" id="nap-import-limit" class="form-input" min="1" max="50">
                             <span class="help-text">How many alliances to pull from LastRank, starting from the top. Set this a little above the NAP size to see who is sitting just below the line. Servers have 50+ alliances — importing them all adds clutter with no benefit.</span>
                         </div>
+                    </div>
+
+                    <div class="settings-group">
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-star"/></svg> Starred missions (Secret Mobile Squad)</h4>
+                        <p class="help-text">A starred mission appears on a third of your sector's servers each day, on a three-day cycle.
+                            The game calls the block of servers you may plunder the <strong>sector</strong>. Groups are numbered 1/2/3 here and
+                            stay put — the game's own A/B/C labels rotate month to month, so they deliberately will not line up with this
+                            month's image.</p>
+                        <div class="starred-sector-row">
+                            <div class="form-group">
+                                <label for="sector-start">Sector start:</label>
+                                <input type="number" id="sector-start" class="form-input" min="1" placeholder="e.g. 1701">
+                            </div>
+                            <div class="form-group">
+                                <label for="sector-end">Sector end:</label>
+                                <input type="number" id="sector-end" class="form-input" min="1" placeholder="e.g. 1764">
+                            </div>
+                            <button type="button" class="btn btn-secondary" id="btn-suggest-sector">Suggest</button>
+                        </div>
+                        <span class="help-text">Leave both blank to turn the feature off. The suggestion is arithmetic from your server
+                            number and is a starting point, not a fact — confirm the boundaries in-game, and <strong>re-check after a season
+                            change: sector sizes are reported to change.</strong> A sector change that goes unnoticed shows the wrong servers
+                            in the list.</span>
+
+                        <div class="form-group" style="margin-top:14px;">
+                            <button type="button" class="btn btn-primary" id="btn-sweep-open-dates">Fetch server opening dates</button>
+                            <span class="help-text">Each server's opening date decides its group. About one second per server, and only
+                                servers with no stored date are fetched — cancel and re-run at any time.</span>
+                            <div id="starred-sweep-progress"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="starred-check-input">Check a server:</label>
+                            <input type="text" id="starred-check-input" class="form-input" placeholder="e.g. 1712 or Server 1712">
+                            <span class="help-text" id="starred-check-result"></span>
+                        </div>
+
+                        <div id="starred-servers-table"></div>
                     </div>
 
                     <div class="settings-group">
@@ -351,5 +390,6 @@
 <div id="page-config"
     data-can-manage="{{if .Permissions.ManageSettings}}true{{else}}false{{end}}"
     hidden></div>
+<script src="{{asset "/job-progress.js"}}"></script>
 <script src="{{asset "/settings.js"}}"></script>
 {{end}}

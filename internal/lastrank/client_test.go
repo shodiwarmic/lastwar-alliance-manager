@@ -211,8 +211,61 @@ func TestEveryRequestPathIsPaced(t *testing.T) {
 	if _, err := SearchAllianceHits(context.Background(), "x"); err != nil { // 1 search
 		t.Fatalf("SearchAllianceHits: %v", err)
 	}
-	if elapsed := time.Since(start); elapsed < 100*time.Millisecond {
-		t.Errorf("three requests took %v — at one per 50ms they cannot be under 100ms, so something bypassed the limiter", elapsed)
+	// The server-health path. It is swept 64 times in a row by the starred-mission
+	// job, so it is the one path where bypassing the limiter would be a burst
+	// rather than a stray request.
+	if _, err := FetchServerHealth(context.Background(), 1712); err != nil {
+		t.Fatalf("FetchServerHealth: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 150*time.Millisecond {
+		t.Errorf("four requests took %v — at one per 50ms they cannot be under 150ms, so something bypassed the limiter", elapsed)
+	}
+}
+
+// The wire tags are load-bearing: encoding/json never matches an untagged field
+// across an underscore, so an untagged ServerHealth would decode every response
+// into a zero ServerID and a nil OpenTime — a silent, total failure that no other
+// test in this package would catch. Fed the recorded 2026-09-13 response for
+// server 1712.
+func TestServerHealthDecodesTheRecordedResponse(t *testing.T) {
+	withFastLimiter(t)
+	withServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/servers/1712/health" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Write([]byte(`{"server_id":1712,"region":null,"season_id":3,
+			"open_time":"2025-07-18T15:40:02+02:00",
+			"health_score":73.80591,"pdi":0.8877713,"alliance_count":49}`))
+	}))
+
+	h, err := FetchServerHealth(context.Background(), 1712)
+	if err != nil {
+		t.Fatalf("FetchServerHealth: %v", err)
+	}
+	if h.ServerID != 1712 {
+		t.Errorf("ServerID = %d, want 1712 — the json tag is missing or wrong", h.ServerID)
+	}
+	if h.OpenTime == nil || *h.OpenTime != "2025-07-18T15:40:02+02:00" {
+		t.Errorf("OpenTime = %v, want the recorded timestamp", h.OpenTime)
+	}
+	if h.SeasonID == nil || *h.SeasonID != 3 {
+		t.Errorf("SeasonID = %v, want 3", h.SeasonID)
+	}
+}
+
+// A server LastRank holds no opening record for decodes to a nil OpenTime, which
+// the sweep treats as a skip rather than an error.
+func TestServerHealthToleratesANullOpenTime(t *testing.T) {
+	withFastLimiter(t)
+	withServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"server_id":1799,"open_time":null,"season_id":null}`))
+	}))
+	h, err := FetchServerHealth(context.Background(), 1799)
+	if err != nil {
+		t.Fatalf("a null open_time must not be an error: %v", err)
+	}
+	if h.OpenTime != nil {
+		t.Errorf("OpenTime = %v, want nil", h.OpenTime)
 	}
 }
 

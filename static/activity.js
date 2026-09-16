@@ -7,6 +7,8 @@ const IS_ADMIN = cfg.isAdmin === 'true';
 let userFilterChoices = null;
 
 const ENTITY_LABELS = {
+    starred_server:   'starred-mission server',
+    starred_servers:  'starred-mission servers',
     member:           'member',
     alias:            'alias',
     user:             'user',

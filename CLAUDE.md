@@ -851,6 +851,33 @@ Sky Predator to General's Trial and Glacieradon to Zombie Invasion.
   `outside_window` + `parent_name`. The app does not know whether the window or the
   event is the wrong one, so it reports and leaves both alone.
 
+### Starred missions: the residue lives in Go, and only in Go
+
+`starredGroup(date)` (`starred.go`) is the three-day cycle, and the API hands the
+client an explicit `days` map (date → group) for the range it asked about. **Do not
+reimplement the residue in JavaScript.** One rule, one implementation; a browser
+copy would be free to drift out of step with the group lists it labels.
+
+- **The A/B/C letters are never stored.** The game's monthly image labels the groups
+  and the letters rotate month to month. Groups here are 1/2/3 by residue and are
+  stable forever. The regression fixture
+  (`internal/app/testdata/starred_sector_1701_1764.json`) is therefore used as an
+  **equivalence relation** — servers sharing a letter share a group — not as a
+  letter → number map, so it keeps testing the derivation after the next rotation.
+- **`gameDateOf` is the load-bearing step.** A server opening in the small hours UTC
+  belongs to the previous game day (UTC−2), which moves roughly one server in nine
+  into a different group. Taking the date off the raw timestamp is wrong.
+- **The sector is two editable settings, not a width constant.** The 64-wide grid
+  rests on a single tested boundary pair and sources claim 128 after Season 4.
+  `maxSectorWidth` (128) is an *operational* cap — the sweep costs one paced request
+  per server and holds the single job slot — not a game rule.
+- **Out-of-sector servers fail closed**, bounded in SQL in `loadSectorOpenDates`
+  rather than trusted from the table, so a sector correction takes effect at once.
+- **The sweep is a one-off, not a refresh.** An opening date is a fact about the past,
+  so `Plan` lists only servers with **no** row. That is what makes a manual
+  correction permanent, makes a cancelled run resume by being re-run, and makes a
+  second run over a complete sector free. Do not add an age-based re-fetch.
+
 The split is deliberately **not** expressed by renaming the stored type:
 `season_events.type_name` and `season_templates.events[].type_name` are stored strings
 that Sync Event Types re-links on, and migration 070 exists because those links broke

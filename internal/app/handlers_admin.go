@@ -621,7 +621,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(lastrank_auto_sync_enabled, 0), COALESCE(lastrank_auto_sync_hour, 4),
         COALESCE(lastrank_auto_sync_interval_hours, 6), COALESCE(lastrank_enrich_max_age_hours, 21),
         COALESCE(nap_auto_refresh_enabled, 0), COALESCE(prospect_auto_refresh_enabled, 0),
-        COALESCE(translation_backend_mode, 'ondevice'), COALESCE(translation_monthly_char_cap, 400000)
+        COALESCE(translation_backend_mode, 'ondevice'), COALESCE(translation_monthly_char_cap, 400000),
+        COALESCE(sector_start, 0), COALESCE(sector_end, 0)
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -647,6 +648,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.LastRankAutoSyncIntervalHours, &s.LastRankEnrichMaxAgeHours,
 		&s.NAPAutoRefreshEnabled, &s.ProspectAutoRefreshEnabled,
 		&s.TranslationBackendMode, &s.TranslationMonthlyCharCap,
+		&s.SectorStart, &s.SectorEnd,
 	)
 
 	if err != nil {
@@ -790,6 +792,29 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The starred-mission sector. Two numbers, both set or both clear — half a
+	// sector is not a weaker configuration, it is one the group list cannot be
+	// built from at all, and storing it would put the app in a state its own
+	// reader has to special-case.
+	if (settings.SectorStart == 0) != (settings.SectorEnd == 0) {
+		http.Error(w, "Set both the sector start and end, or neither", http.StatusBadRequest)
+		return
+	}
+	if settings.SectorStart != 0 {
+		if settings.SectorEnd < settings.SectorStart {
+			http.Error(w, "The sector end must not be below the sector start", http.StatusBadRequest)
+			return
+		}
+		// Operational, not a game rule: 64 is the width actually measured and 128
+		// the largest any source claims. The cap is here because the open-date
+		// sweep costs one paced request per server and holds the process's single
+		// job slot while it runs, so 128 bounds a first run at about two minutes.
+		if settings.SectorEnd-settings.SectorStart+1 > maxSectorWidth {
+			http.Error(w, fmt.Sprintf("A sector cannot be wider than %d servers", maxSectorWidth), http.StatusBadRequest)
+			return
+		}
+	}
+
 	// Event level baselines and ceilings are NOT here any more. They live on the
 	// event type row as of migration 073 and are written by the type PUT
 	// (manage_schedule) and the ceiling PUT (manage_settings) respectively — see
@@ -834,7 +859,9 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		lastrank_auto_sync_interval_hours = ?,
 		lastrank_enrich_max_age_hours = ?,
 		nap_auto_refresh_enabled = ?,
-		prospect_auto_refresh_enabled = ?
+		prospect_auto_refresh_enabled = ?,
+		sector_start = NULLIF(?, 0),
+		sector_end   = NULLIF(?, 0)
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -857,6 +884,11 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.LastRankAutoSyncEnabled, settings.LastRankAutoSyncHour,
 		settings.LastRankAutoSyncIntervalHours, settings.LastRankEnrichMaxAgeHours,
 		settings.NAPAutoRefreshEnabled, settings.ProspectAutoRefreshEnabled,
+		// Both 0 CLEARS the sector, the our_server_id convention: "not configured"
+		// is a state the form has to be able to express. Safe because both browser
+		// callers merge over a fresh GET and send the whole object, so an omitted
+		// field cannot arrive here as an accidental 0.
+		settings.SectorStart, settings.SectorEnd,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)
