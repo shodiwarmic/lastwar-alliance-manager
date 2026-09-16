@@ -1446,3 +1446,64 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 });
+
+
+// ── Registration window ───────────────────────────────────────────────────────
+//
+// Desert Storm registration opens Monday 00:00 ST and closes Thursday 00:00 ST;
+// opponents are announced Thursday and the battle is Friday. The app knew none of
+// this, so an officer chasing sign-ups had to remember the deadline themselves.
+//
+// Constants, not settings — the same call standing-decisions.md records for the
+// schedule's game rules. The compensation is that the line always NAMES the
+// instant it is counting to, so a disagreement with the game is visible the day
+// it happens rather than silently wrong.
+const DS_REG_OPENS  = { weekday: 0, time: '00:00' }; // Mon=0
+const DS_REG_CLOSES = { weekday: 3, time: '00:00' }; // Mon=0, so 3 = Thursday
+
+// Minutes from the current game instant forward to the next occurrence of a
+// weekday + time. Always strictly positive: if we are exactly on it, the answer
+// is a week away, which is the next one.
+function minutesUntilGameMoment(clock, target) {
+    const [th, tm] = target.time.split(':').map(Number);
+    const nowMin = clock.weekday * 1440 + clock.hh * 60 + clock.mm;
+    const tgtMin = target.weekday * 1440 + th * 60 + tm;
+    let delta = tgtMin - nowMin;
+    if (delta <= 0) delta += 7 * 1440;
+    return delta;
+}
+
+function formatCountdown(minutes) {
+    const d = Math.floor(minutes / 1440);
+    const h = Math.floor((minutes % 1440) / 60);
+    const m = minutes % 60;
+    if (d > 0) return d + 'd ' + h + 'h';
+    if (h > 0) return h + 'h ' + m + 'm';
+    return m + 'm';
+}
+
+function renderRegistrationWindow() {
+    const el = document.getElementById('storm-reg-window');
+    if (!el || typeof gameClock !== 'function') return;
+
+    const clock = gameClock();
+    // Open from Mon 00:00 up to (not including) Thu 00:00 — weekdays 0, 1, 2.
+    const open = clock.weekday < DS_REG_CLOSES.weekday;
+
+    if (open) {
+        el.textContent = 'Registration open — closes Thu 00:00 ST (in '
+            + formatCountdown(minutesUntilGameMoment(clock, DS_REG_CLOSES)) + ').';
+        el.style.color = '';
+    } else {
+        el.textContent = 'Registration closed — opponents announced Thursday, battle Friday. Reopens Mon 00:00 ST (in '
+            + formatCountdown(minutesUntilGameMoment(clock, DS_REG_OPENS)) + ').';
+        el.style.color = 'var(--color-text-muted)';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    renderRegistrationWindow();
+    // Re-rendered every minute: a countdown that is only right at page load is
+    // worse than none, because it looks live.
+    setInterval(renderRegistrationWindow, 60000);
+});

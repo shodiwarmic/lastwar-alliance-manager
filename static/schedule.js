@@ -403,6 +403,13 @@ function buildDayCol(dateStr, idx) {
         col.appendChild(entry._isStorm ? buildStormCard(entry) : buildEventCard(entry, dateStr));
     });
 
+    if (isDSRegMarkerDay(dateStr)) {
+        const marker = document.createElement('div');
+        marker.className = 'ds-reg-marker';
+        marker.textContent = DS_REG_MARKER_TEXT;
+        col.appendChild(marker);
+    }
+
     // Add Event button
     if (CAN_MANAGE) {
         const addBtn = document.createElement('button');
@@ -413,6 +420,21 @@ function buildDayCol(dateStr, idx) {
     }
 
     return col;
+}
+
+
+// ── Desert Storm registration marker ──────────────────────────────────────────
+//
+// Registration closes Thu 00:00 ST. The marker sits on WEDNESDAY — the last day
+// an officer can still act on it — and names the instant rather than the day, so
+// nobody reads "closes Wednesday" and signs up on Thursday morning.
+//
+// A constant, matching the pair in storm.js and the schedule's other game rules.
+const DS_REG_MARKER_WEEKDAY = 2;  // Mon=0, so 2 = Wednesday
+const DS_REG_MARKER_TEXT = '⚡ DS registration closes Thu 00:00 ST';
+
+function isDSRegMarkerDay(dateStr) {
+    return (new Date(dateStr + 'T12:00:00Z').getUTCDay() + 6) % 7 === DS_REG_MARKER_WEEKDAY;
 }
 
 function buildEventCard(evt, dateStr) {
@@ -1474,6 +1496,10 @@ function buildTextOutput() {
             lines.push('  ⭐ Starred missions: Group ' + starredGroupToday);
         }
 
+        if (isDSRegMarkerDay(d)) {
+            lines.push('  ' + DS_REG_MARKER_TEXT);
+        }
+
         lines.push('');
     });
 
@@ -1763,7 +1789,13 @@ function drawDayCard(dateStr) {
         : [];
     const starredH = starredLines.length ? starredLines.length * noteLineH + 14 : 0;
 
-    const H = 16 + hdrH + 12 + eventsH + starredH + banH + 24;
+    // Not in the WEEK image: seven columns already carry the storm entries, and a
+    // line repeated under one of them is noise at that size. The day card has the
+    // room, and is the export an officer sends on the day it matters.
+    const showRegMarker = isDSRegMarkerDay(dateStr);
+    const regMarkerH = showRegMarker ? noteLineH + 10 : 0;
+
+    const H = 16 + hdrH + 12 + eventsH + starredH + regMarkerH + banH + 24;
     const canvas = document.getElementById('schedule-canvas');
     canvas.width  = W;
     canvas.height = Math.max(H, 220);
@@ -1884,6 +1916,15 @@ function drawDayCard(dateStr) {
 
         y += evtRowH;
     });
+
+    // ── Desert Storm registration marker ───────────────────────────────────
+    if (showRegMarker) {
+        ctx.fillStyle = C.stormText;
+        ctx.font = '600 12px ' + font;
+        ctx.textAlign = 'left';
+        ctx.fillText(DS_REG_MARKER_TEXT, pad, y + 4, W - pad * 2);
+        y += regMarkerH;
+    }
 
     // ── Starred missions ───────────────────────────────────────────────────
     if (starredLines.length) {

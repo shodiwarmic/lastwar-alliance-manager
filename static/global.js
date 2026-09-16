@@ -15,6 +15,22 @@
         d.setUTCDate(d.getUTCDate() - window.gameWeekday());
         return d.toISOString().slice(0, 10);
     };
+    // gameClock bundles the whole instant for callers doing weekday+time
+    // arithmetic — a countdown to "Thursday 00:00 ST", say.
+    //
+    // `weekday` is gameWeekday()'s own Mon=0…Sun=6, CALLED rather than re-derived,
+    // so the two cannot disagree. Raw getUTCDay() is Sunday-first and the app
+    // never exposes that numbering; anything reading these fields against it will
+    // be off by one in a way that only shows up on one day of the week.
+    window.gameClock = () => {
+        const d = gt();
+        return {
+            date: d.toISOString().slice(0, 10),
+            weekday: window.gameWeekday(),
+            hh: d.getUTCHours(),
+            mm: d.getUTCMinutes(),
+        };
+    };
 })();
 
 // ---- Identifier surfaces: opt out of browser translation ----

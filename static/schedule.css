@@ -505,3 +505,16 @@ span.flatpickr-weekday {
     color: var(--color-warning);
     font-weight: 600;
 }
+
+/* Desert Storm registration deadline, on the Wednesday column. Amber like the
+   storm entries it belongs with, but quieter — it is a reminder, not an event. */
+.ds-reg-marker {
+    margin-top: 6px;
+    padding: 4px 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-warning);
+    background: var(--color-warning-bg);
+    border-radius: 4px;
+    line-height: 1.3;
+}
