@@ -1565,6 +1565,10 @@ function drawWeekImage() {
     const banLineH = 14;   // one line per server event in the banner strip
     const gap   = 8;
     const rowGap = 14;
+    // Outer margin, deliberately larger than the inter-card gap. The image is
+    // read on a phone, where a camera cutout eats into the top of a fullscreen
+    // view — anything drawn hard against the edge loses a slice of itself.
+    const edge  = 20;
     const font  = 'Segoe UI, Tahoma, Verdana, sans-serif';
 
     // Size rows by the busiest column
@@ -1587,7 +1591,7 @@ function drawWeekImage() {
     const banH = Math.max(1, maxSeLines) * banLineH + 8;
 
     const colH   = banH + gap + hdrH + gap + Math.max(maxEvts, 1) * rowH + gap * 2;
-    const totalW = numCols * colW + (numCols + 1) * gap;
+    const totalW = numCols * colW + (numCols - 1) * gap + edge * 2;
 
     // Starred legend UNDER the grid, one line per group. The week image has no
     // room for a 64-server list in each of seven cells, so the same split the
@@ -1606,7 +1610,7 @@ function drawWeekImage() {
     if (starred.configured) {
         const measure = document.createElement('canvas').getContext('2d');
         measure.font = '13px ' + font;
-        const listMaxW = totalW - gap * 2 - 14;
+        const listMaxW = totalW - edge * 2 - 20;
         for (let group = 1; group <= 3; group++) {
             if (!dates.some(x => starredGroupOn(x) === group)) continue;
             starredLegend.push({
@@ -1624,7 +1628,8 @@ function drawWeekImage() {
         ? legendLines * legendLineH + starredLegend.length * (legendBoxPad + legendBoxGap) + gap
         : 0;
 
-    const totalH = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + legendH + gap;
+    const gridH  = ROWS.length * colH + (ROWS.length - 1) * rowGap;
+    const totalH = edge + gridH + (legendH ? rowGap + legendH : 0) + edge;
 
     const canvas = document.getElementById('schedule-canvas');
     canvas.width  = totalW;
@@ -1650,8 +1655,8 @@ function drawWeekImage() {
         const rowLen = ROWS[rowIdx].length;
         const missingCols = numCols - rowLen;
         const xOff = missingCols > 0 ? Math.round(missingCols * (colW + gap) / 2) : 0;
-        const x = gap + colIdx * (colW + gap) + xOff;
-        const y = gap + rowIdx * (colH + rowGap);
+        const x = edge + colIdx * (colW + gap) + xOff;
+        const y = edge + rowIdx * (colH + rowGap);
 
         // Card body
         ctx.fillStyle = C.cardBg;
@@ -1800,7 +1805,7 @@ function drawWeekImage() {
         ctx.textAlign = 'left';
         const grpColor = { 1: C.grp1, 2: C.grp2, 3: C.grp3 };
         const grpBg    = { 1: C.grp1Bg, 2: C.grp2Bg, 3: C.grp3Bg };
-        let boxY = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap;
+        let boxY = edge + gridH + rowGap;
 
         starredLegend.forEach(entry => {
             const boxH = (1 + entry.lines.length) * legendLineH + legendBoxPad;
@@ -1808,17 +1813,17 @@ function drawWeekImage() {
             // A tinted box per group, so a list of bare numbers is tied to its
             // colour by more than a heading four lines up.
             ctx.fillStyle = grpBg[entry.group] || C.cardBg;
-            roundRect(ctx, gap, boxY, totalW - gap * 2, boxH, 8);
+            roundRect(ctx, edge, boxY, totalW - edge * 2, boxH, 8);
             ctx.fill();
             ctx.strokeStyle = grpColor[entry.group] || C.divider;
             ctx.lineWidth = 1.5;
-            roundRect(ctx, gap, boxY, totalW - gap * 2, boxH, 8);
+            roundRect(ctx, edge, boxY, totalW - edge * 2, boxH, 8);
             ctx.stroke();
 
             let ly = boxY + legendBoxPad / 2 + 13;
             ctx.font = 'bold 13px ' + font;
             ctx.fillStyle = grpColor[entry.group] || C.evtName;
-            ctx.fillText(STARRED_ICON + ' ' + starredGroupLabel(entry.group), gap + 10, ly);
+            ctx.fillText(STARRED_ICON + ' ' + starredGroupLabel(entry.group), edge + 10, ly);
             ly += legendLineH;
 
             // Full-strength body text, not the muted tone: these numbers are the
@@ -1828,7 +1833,7 @@ function drawWeekImage() {
             ctx.font = '13px ' + font;
             ctx.fillStyle = C.evtName;
             entry.lines.forEach(line => {
-                ctx.fillText(line, gap + 10, ly);
+                ctx.fillText(line, edge + 10, ly);
                 ly += legendLineH;
             });
 
