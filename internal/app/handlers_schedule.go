@@ -16,6 +16,29 @@ import (
 
 var reHHMM = regexp.MustCompile(`^\d{2}:\d{2}$`)
 
+// yesNo renders a flag for the activity log's change list.
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
+
+// validHHMM is the shape check AND the range check.
+//
+// reHHMM alone accepts "29:99": it only says four digits with a colon. That was
+// tolerable while such a value merely looked odd on a card, but times are now
+// compared as strings to decide what goes into an alliance-wide announcement,
+// and a nonsense bound would take part in those comparisons silently — sorting
+// after every real time and quietly emptying a window. Parse it as well.
+func validHHMM(s string) bool {
+	if !reHHMM.MatchString(s) {
+		return false
+	}
+	_, err := time.Parse("15:04", s)
+	return err == nil
+}
+
 // --- Shared helpers ---
 
 // invalidGeneratedEvent is one date the generator declined, reported back so the
@@ -423,7 +446,7 @@ func getScheduleEventTypes(w http.ResponseWriter, r *http.Request) {
 	// payload instead of needing an endpoint of its own.
 	rows, err := db.Query(`
 		SELECT t.id, t.name, t.short_name, t.icon, t.is_system, t.active, t.sort_order, t.created_at,
-		       t.has_level, t.baseline_level, t.max_level, t.server_event_id,
+		       t.has_level, t.baseline_level, t.max_level, t.server_event_id, t.announce,
 		       (SELECT e.level FROM schedule_events e
 		         WHERE e.event_type_id = t.id AND e.level IS NOT NULL
 		         ORDER BY e.event_date DESC LIMIT 1)
@@ -437,9 +460,9 @@ func getScheduleEventTypes(w http.ResponseWriter, r *http.Request) {
 	types := []ScheduleEventType{}
 	for rows.Next() {
 		var t ScheduleEventType
-		var isSystem, active, hasLevel int
+		var isSystem, active, hasLevel, announce int
 		if err := rows.Scan(&t.ID, &t.Name, &t.ShortName, &t.Icon, &isSystem, &active, &t.SortOrder, &t.CreatedAt,
-			&hasLevel, &t.BaselineLevel, &t.MaxLevel, &t.ServerEventID, &t.LastLevel); err != nil {
+			&hasLevel, &t.BaselineLevel, &t.MaxLevel, &t.ServerEventID, &announce, &t.LastLevel); err != nil {
 			slog.Error("getScheduleEventTypes scan", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -447,6 +470,7 @@ func getScheduleEventTypes(w http.ResponseWriter, r *http.Request) {
 		t.IsSystem = isSystem == 1
 		t.Active = active == 1
 		t.HasLevel = hasLevel == 1
+		t.Announce = announce == 1
 		types = append(types, t)
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -582,7 +606,8 @@ func createScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		SortOrder int    `json:"sort_order"`
 		HasLevel  *bool  `json:"has_level"`
 		// Every field the modal carries is accepted here too — see the note above.
-		ServerEventID *int `json:"server_event_id"`
+		ServerEventID *int  `json:"server_event_id"`
+		Announce      *bool `json:"announce"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -613,10 +638,17 @@ func createScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		hasLevel = 1
 	}
 
+	// Absent means ON. A new type joins the announcement unless someone says
+	// otherwise — see the column's note in migration 077.
+	announce := 1
+	if req.Announce != nil && !*req.Announce {
+		announce = 0
+	}
+
 	res, err := db.Exec(`
-		INSERT INTO schedule_event_types (name, short_name, icon, is_system, active, sort_order, has_level, server_event_id)
-		VALUES (?, ?, ?, 0, 1, ?, ?, ?)`,
-		req.Name, req.ShortName, req.Icon, req.SortOrder, hasLevel, req.ServerEventID)
+		INSERT INTO schedule_event_types (name, short_name, icon, is_system, active, sort_order, has_level, server_event_id, announce)
+		VALUES (?, ?, ?, 0, 1, ?, ?, ?, ?)`,
+		req.Name, req.ShortName, req.Icon, req.SortOrder, hasLevel, req.ServerEventID, announce)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			http.Error(w, "An event type with that name or short name already exists", http.StatusConflict)
@@ -653,6 +685,9 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 		// null clears it; an absent key leaves it alone, which is why it is a
 		// **int.
 		ServerEventID **int `json:"server_event_id"`
+		// Announce is a *bool for the same reason has_level is: an absent key must
+		// leave the stored value alone, and `false` is a real value.
+		Announce *bool `json:"announce"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -660,11 +695,11 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var old ScheduleEventType
-	var isSystem, active, oldHasLevel int
+	var isSystem, active, oldHasLevel, oldAnnounce int
 	err := db.QueryRow(`SELECT name, short_name, icon, is_system, active, sort_order,
-		has_level, baseline_level, max_level, server_event_id FROM schedule_event_types WHERE id=?`, id).
+		has_level, baseline_level, max_level, server_event_id, announce FROM schedule_event_types WHERE id=?`, id).
 		Scan(&old.Name, &old.ShortName, &old.Icon, &isSystem, &active, &old.SortOrder,
-			&oldHasLevel, &old.BaselineLevel, &old.MaxLevel, &old.ServerEventID)
+			&oldHasLevel, &old.BaselineLevel, &old.MaxLevel, &old.ServerEventID, &oldAnnounce)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -780,10 +815,18 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	if newHasLevel {
 		hasLevelInt = 1
 	}
+	newAnnounce := oldAnnounce
+	if req.Announce != nil {
+		newAnnounce = 0
+		if *req.Announce {
+			newAnnounce = 1
+		}
+	}
+
 	_, err = db.Exec(`
 		UPDATE schedule_event_types SET name=?, short_name=?, icon=?, active=?, sort_order=?,
-		       has_level=?, baseline_level=?, server_event_id=? WHERE id=?`,
-		req.Name, req.ShortName, req.Icon, activeInt, req.SortOrder, hasLevelInt, newBaseline, newParent, id)
+		       has_level=?, baseline_level=?, server_event_id=?, announce=? WHERE id=?`,
+		req.Name, req.ShortName, req.Icon, activeInt, req.SortOrder, hasLevelInt, newBaseline, newParent, newAnnounce, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			http.Error(w, "An event type with that name or short name already exists", http.StatusConflict)
@@ -812,6 +855,9 @@ func updateScheduleEventType(w http.ResponseWriter, r *http.Request) {
 	}
 	if nullableIntLabel(old.ServerEventID) != nullableIntLabel(newParent) {
 		changes = append(changes, "server event window: "+nullableIntLabel(old.ServerEventID)+" → "+nullableIntLabel(newParent))
+	}
+	if oldAnnounce != newAnnounce {
+		changes = append(changes, "announce: "+yesNo(oldAnnounce == 1)+" → "+yesNo(newAnnounce == 1))
 	}
 
 	user := getAuthUser(r)
@@ -964,8 +1010,8 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AllDay {
 		req.EventTime = "00:00"
-	} else if !reHHMM.MatchString(req.EventTime) {
-		http.Error(w, "event_time must be HH:MM", http.StatusBadRequest)
+	} else if !validHHMM(req.EventTime) {
+		http.Error(w, "event_time must be a real time in HH:MM", http.StatusBadRequest)
 		return
 	}
 	if req.EventTypeID == 0 {
@@ -1087,8 +1133,8 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		req.EventTime = "00:00"
 	} else if req.EventTime == "" {
 		req.EventTime = old.EventTime
-	} else if !reHHMM.MatchString(req.EventTime) {
-		http.Error(w, "event_time must be HH:MM", http.StatusBadRequest)
+	} else if !validHHMM(req.EventTime) {
+		http.Error(w, "event_time must be a real time in HH:MM", http.StatusBadRequest)
 		return
 	}
 	if req.EventTypeID == 0 {

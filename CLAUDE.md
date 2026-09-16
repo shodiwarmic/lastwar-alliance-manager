@@ -851,6 +851,32 @@ Sky Predator to General's Trial and Glacieradon to Zombie Invasion.
   `outside_window` + `parent_name`. The app does not know whether the window or the
   event is the wrong one, so it reports and leaves both alone.
 
+### The announcement selects server-side
+
+`selectAnnouncementEvents(window, onD, onD1)` (`announcement.go`) is a **pure
+function**, and the browser renders lines from its output rather than deciding
+anything. It is the one piece of arithmetic in the feature that can misfire — a
+window with `end <= start` wraps past midnight and has to reach into the next game
+day — so it belongs somewhere CI can exercise it.
+
+- **Both bounds are inclusive.** The default end is `23:59`; an exclusive end would
+  silently drop a 23:59 event on every install that never touched the setting.
+- **All-day events attach to the DATE**, never to a time, so one dated D is always
+  in and one dated D+1 never is, whatever the window does.
+- **An excluded event is REPORTED, not omitted.** `dropped[]` carries a reason
+  (`type not flagged`, or one naming the window) and the page prints it. A post
+  quietly missing an event reads exactly like a correct one.
+- **`announce` defaults to 1** for every existing and new type — a forgotten tick is
+  an invisible failure, opting out is a visible choice.
+- **`validHHMM`, not `reHHMM`.** The bare regex accepts `29:99`; these values take
+  part in the string comparisons above, where a nonsense bound would silently empty
+  a window. It now guards the event write paths too.
+- **`slugPrefilledVars` is authoritative, `required_vars` is not.** The comms
+  handler lets an officer edit `required_vars`, so it cannot also be the source of
+  truth about what the generator supplies. Only the `required` half feeds
+  `missing_vars`: warning about the optional starred variables on every untouched
+  save would teach officers to dismiss the warning that matters.
+
 ### Starred missions: the residue lives in Go, and only in Go
 
 `starredGroup(date)` (`starred.go`) is the three-day cycle, and the API hands the

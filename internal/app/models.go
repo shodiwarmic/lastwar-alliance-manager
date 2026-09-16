@@ -394,6 +394,12 @@ type Settings struct {
 	// Season 4. A hardcoded size would be the app asserting a rule it does not know.
 	SectorStart int `json:"sector_start"`
 	SectorEnd   int `json:"sector_end"`
+
+	// AnnounceWindowStart / AnnounceWindowEnd bound the span of server time the
+	// nightly announcement covers. `end <= start` is legal and means the window
+	// wraps past midnight — an alliance posting at 18:00 for the night ahead.
+	AnnounceWindowStart string `json:"announce_window_start"`
+	AnnounceWindowEnd   string `json:"announce_window_end"`
 	// NAPSize is how many top alliances on our server the Non-Aggression Pact covers,
 	// INCLUDING us — a size of 10 means us plus nine partners.
 	NAPSize int `json:"nap_size"`
@@ -1203,6 +1209,14 @@ type ScheduleEventType struct {
 	// foreign_keys is off app-wide, so the REFERENCES clause is documentation:
 	// every path that deletes a server_events row must call detachEncounterParents.
 	ServerEventID *int `json:"server_event_id"`
+
+	// Announce is whether this type appears in the nightly announcement.
+	//
+	// Defaults to TRUE for every existing type and every new one. A forgotten tick
+	// means an event silently missing from an alliance-wide post — a failure
+	// nobody sees until after it has happened — whereas opting out is a visible
+	// choice. The dropped-event line under the button covers the other direction.
+	Announce bool `json:"announce"`
 
 	// LastLevel is the level of this type's most recent levelled event, by
 	// event_date. Read-only; the event modal offers it as a custom type's

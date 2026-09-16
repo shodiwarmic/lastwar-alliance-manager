@@ -396,6 +396,8 @@ func Main() {
 	router.HandleFunc("/api/schedule/server-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", updateServerEvent))).Methods("PUT")
 	router.HandleFunc("/api/schedule/server-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", deleteServerEvent))).Methods("DELETE")
 
+	router.HandleFunc("/api/schedule/announcement", authMiddleware(requirePermission("view_schedule", getAnnouncement))).Methods("GET")
+
 	// Starred missions. The calendar's read is view_schedule; configuring the
 	// sector and correcting an opening date is manage_settings, the same gate as
 	// the sweep job that fills the table.

@@ -449,6 +449,19 @@ async function saveTemplate() {
             statusEl.textContent = msg || 'Save failed.';
             return;
         }
+        // Some templates are filled in by the app before they are copied. If the
+        // saved content no longer uses one of those variables, say so — the save
+        // still succeeded, and the officer may have meant it, but the generator
+        // now has a value with nowhere to put it. The NAMES come from the server;
+        // hardcoding them here would be a second list to keep in step.
+        const saved = await res.json().catch(() => null);
+        const missing = saved && saved.missing_vars;
+        if (missing && missing.length) {
+            showToast('This template no longer uses '
+                + missing.map(n => '{' + n + '}').join(', ')
+                + ', which the app fills in automatically.', 'info', 8000);
+        }
+
         document.getElementById('modal-template').style.display = '';
         delete cache[type];
         loaded[type] = false;

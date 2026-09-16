@@ -904,6 +904,7 @@ function openAddEventTypeModal() {
     document.getElementById('et-icon').value = '📅';
     document.getElementById('et-active').checked = true;
     document.getElementById('et-has-level').checked = false;
+    document.getElementById('et-announce').checked = true;
     document.getElementById('et-baseline').value = '';
     populateParentWindowSelect(null);
     setEventTypeModalMode(null);
@@ -938,6 +939,7 @@ function openEditEventTypeModal(et) {
     document.getElementById('et-icon').value = et.icon;
     document.getElementById('et-active').checked = et.active;
     document.getElementById('et-has-level').checked = !!et.has_level;
+    document.getElementById('et-announce').checked = et.announce !== false;
     document.getElementById('et-baseline').value = et.baseline_level ?? '';
     populateParentWindowSelect(et.server_event_id ?? null);
     setEventTypeModalMode(et);
@@ -970,6 +972,7 @@ async function saveEventType(e) {
     // told to CLEAR the link, and an absent key means "leave it alone".
     const parent = document.getElementById('et-parent').value;
     body.server_event_id = parent === '' ? null : parseInt(parent, 10);
+    body.announce = document.getElementById('et-announce').checked;
 
     const url    = id ? '/api/schedule/event-types/' + id : '/api/schedule/event-types';
     const method = id ? 'PUT' : 'POST';
@@ -1223,6 +1226,8 @@ function renderBaselineInputs() {
 function populateSettingsForm() {
     renderBaselineInputs();
     document.getElementById('set-mg-time').value       = settings.mg_default_time ?? '';
+    document.getElementById('set-announce-start').value = settings.announce_window_start ?? '00:00';
+    document.getElementById('set-announce-end').value   = settings.announce_window_end ?? '23:59';
     document.getElementById('set-zs-time').value       = settings.zs_default_time ?? '';
     // Generation rule settings
     document.getElementById('gen-mg-anchor').value     = settings.mg_anchor_date ?? '';
@@ -1300,6 +1305,10 @@ async function saveSettings() {
 
     const patch = {
         mg_default_time:  document.getElementById('set-mg-time').value || settings.mg_default_time || '00:30',
+        // Falls back to the stored value, then the default — an empty field must
+        // not send "" into a NOT NULL column.
+        announce_window_start: document.getElementById('set-announce-start').value || settings.announce_window_start || '00:00',
+        announce_window_end:   document.getElementById('set-announce-end').value   || settings.announce_window_end   || '23:59',
         zs_default_time:  document.getElementById('set-zs-time').value || settings.zs_default_time || '23:00',
         mg_anchor_date:   document.getElementById('gen-mg-anchor').value || null,
         zs_schedule_mode: document.querySelector('input[name="zs-mode"]:checked')?.value || 'weekdays',
@@ -2061,6 +2070,8 @@ function bindEvents() {
         }
     });
 
+    initAnnouncement();
+
     document.getElementById('btn-day-card').addEventListener('click', () => {
         const dateStr = document.getElementById('day-card-picker').value;
         const sec = document.getElementById('canvas-section');
@@ -2138,7 +2149,7 @@ function bindEvents() {
     });
 
     // Flatpickr: time pickers for the settings default times
-    ['#set-mg-time', '#set-zs-time'].forEach(sel => {
+    ['#set-mg-time', '#set-zs-time', '#set-announce-start', '#set-announce-end'].forEach(sel => {
         flatpickr(sel, {
             enableTime: true,
             noCalendar: true,
@@ -2169,3 +2180,88 @@ function bindEvents() {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
+
+
+// ── Announcement ──────────────────────────────────────────────────────────────
+//
+// One button that prints what the schedule already knows, instead of an officer
+// reading the grid and retyping it.
+//
+// The SELECTION is not done here. The server decides which events fall in the
+// window — including the awkward case where the window wraps past midnight and
+// reaches into the next game day — and hands back both the events and the ones it
+// left out. This function renders lines and fills a template.
+
+function announcementLine(ev) {
+    let line = '';
+    if (ev.level != null) line += 'Lvl ' + ev.level + ' ';
+    line += ev.type_name;
+    line += ev.all_day ? ' — all day' : ' @ ' + formatTime(ev.time) + ' ST';
+    return line;
+}
+
+// Says which events were left out and why. A post that is quietly missing an
+// event is indistinguishable from a correct one, and re-reading the grid to check
+// is the work this button exists to remove.
+function renderAnnounceDropped(dropped) {
+    const el = document.getElementById('announce-status');
+    if (!el) return;
+    if (!dropped || !dropped.length) { el.textContent = ''; return; }
+    el.textContent = 'Not announced: ' + dropped
+        .map(d => d.type_name + ' ' + formatTime(d.time) + ' (' + d.reason + ')')
+        .join('; ');
+}
+
+async function runAnnouncement() {
+    const dateEl = document.getElementById('announce-date');
+    const date = (dateEl && dateEl.value) || todayGameDate();
+    document.getElementById('announce-status').textContent = '';
+
+    let data;
+    try {
+        const res = await fetch('/api/schedule/announcement?date=' + encodeURIComponent(date));
+        if (!res.ok) throw new Error();
+        data = await res.json();
+    } catch {
+        showToast('Could not work out the announcement for that day.', 'error');
+        return;
+    }
+
+    // The template lives in Comms and its fetch is gated on view_comms, which is a
+    // different permission from the one that got the officer onto this page. A
+    // 403 here is therefore a real and likely case, and it must not be reported as
+    // a missing template — that would send someone hunting for a row that is there.
+    let template;
+    try {
+        const res = await fetch('/api/comms/templates/slug/nightly_events');
+        if (res.status === 403) {
+            showToast('Announcing needs permission to view Comms templates — ask an admin.', 'error', 8000);
+            return;
+        }
+        if (!res.ok) throw new Error();
+        template = await res.json();
+    } catch {
+        showToast('The "Daily events" template is missing — check Comms → Templates.', 'error');
+        return;
+    }
+
+    renderAnnounceDropped(data.dropped);
+
+    const events = (data.events || []).map(announcementLine).join('\n');
+    // All three are supplied whether or not the template uses them:
+    // copyWithVariables skips a prefilled name whose placeholder is absent, so
+    // offering all three gives "neither / today / tomorrow / both" for free.
+    await copyWithVariables(template.content, {
+        events: events || 'Nothing scheduled.',
+        starred_today: data.starred_today || '',
+        starred_tomorrow: data.starred_tomorrow || '',
+    });
+}
+
+function initAnnouncement() {
+    const btn = document.getElementById('btn-announce');
+    if (!btn) return;
+    const dateEl = document.getElementById('announce-date');
+    if (dateEl && !dateEl.value) dateEl.value = todayGameDate();
+    btn.addEventListener('click', runAnnouncement);
+}

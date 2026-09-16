@@ -56,7 +56,14 @@
                 <button class="btn btn-secondary btn-sm" id="btn-day-card"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Day Card</button>
                 <select id="day-card-picker" class="day-card-picker" title="Select day for card"></select>
             </span>
+            <span class="output-btn-group">
+                <button class="btn btn-primary btn-sm" id="btn-announce"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-speakerphone"/></svg> Announce</button>
+                <input type="date" id="announce-date" class="form-input" title="Day to announce">
+            </span>
         </div>
+        <!-- Which events the last Announce click left out, and why. A post that is
+             quietly missing an event reads exactly like a correct one. -->
+        <p id="announce-status" class="help-text"></p>
 
         <!-- Text output area -->
         <div id="text-output-section" class="form-section hidden">
@@ -134,6 +141,20 @@
                     <input type="text" id="set-zs-time" placeholder="HH:MM" maxlength="5">
                 </div>
             </div>
+
+            <div class="form-row schedule-defaults-row">
+                <div class="form-group">
+                    <label for="set-announce-start">Announcement window start (ST)</label>
+                    <input type="text" id="set-announce-start" placeholder="HH:MM" maxlength="5">
+                </div>
+                <div class="form-group">
+                    <label for="set-announce-end">Announcement window end (ST)</label>
+                    <input type="text" id="set-announce-end" placeholder="HH:MM" maxlength="5">
+                </div>
+            </div>
+            <p class="help-text">Which of the day's events the Announce button picks up. Both ends are included.
+                Set the end <strong>at or before</strong> the start to make the window wrap past midnight — 18:00 to 06:00
+                announces this evening and the early hours that follow it. The default, 00:00 to 23:59, is the whole game day.</p>
 
             <div class="modal-actions" style="margin-top:16px;">
                 <button class="btn btn-primary" id="btn-save-settings"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Settings</button>
@@ -225,6 +246,9 @@
     data-can-manage="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<!-- copyWithVariables + the global #vars-modal in layout.html. storm.html is the
+     model: the announcement fills some variables in and prompts for the rest. -->
+<script src="{{asset "/mail.js"}}"></script>
 <script src="{{asset "/schedule.js"}}"></script>
 {{end}}
 
@@ -323,6 +347,11 @@
                 <label for="et-baseline">Baseline level</label>
                 <input type="number" id="et-baseline" class="form-input" min="1">
                 <span class="help-text" id="et-baseline-help"></span>
+            </div>
+
+            <div class="form-group">
+                <label><input type="checkbox" id="et-announce" checked> Include in announcements</label>
+                <span class="help-text">On by default. Turn it off for a type the alliance does not need telling about.</span>
             </div>
 
             <!-- Any type, system or custom: Sky Predator happens inside General's

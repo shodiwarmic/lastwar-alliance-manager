@@ -622,7 +622,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(lastrank_auto_sync_interval_hours, 6), COALESCE(lastrank_enrich_max_age_hours, 21),
         COALESCE(nap_auto_refresh_enabled, 0), COALESCE(prospect_auto_refresh_enabled, 0),
         COALESCE(translation_backend_mode, 'ondevice'), COALESCE(translation_monthly_char_cap, 400000),
-        COALESCE(sector_start, 0), COALESCE(sector_end, 0)
+        COALESCE(sector_start, 0), COALESCE(sector_end, 0),
+        COALESCE(announce_window_start, '00:00'), COALESCE(announce_window_end, '23:59')
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -649,6 +650,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.NAPAutoRefreshEnabled, &s.ProspectAutoRefreshEnabled,
 		&s.TranslationBackendMode, &s.TranslationMonthlyCharCap,
 		&s.SectorStart, &s.SectorEnd,
+		&s.AnnounceWindowStart, &s.AnnounceWindowEnd,
 	)
 
 	if err != nil {
@@ -792,6 +794,22 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The announcement window. Blank means "leave it at the default" — both
+	// browser callers merge over a fresh GET, so a blank here is a payload that
+	// predates this field rather than an officer clearing it.
+	if settings.AnnounceWindowStart == "" {
+		settings.AnnounceWindowStart = "00:00"
+	}
+	if settings.AnnounceWindowEnd == "" {
+		settings.AnnounceWindowEnd = "23:59"
+	}
+	// validHHMM, not reHHMM: these two take part in string comparisons that decide
+	// what goes into an alliance-wide post, so "29:99" must not reach the column.
+	if !validHHMM(settings.AnnounceWindowStart) || !validHHMM(settings.AnnounceWindowEnd) {
+		http.Error(w, "The announcement window times must be real times in HH:MM", http.StatusBadRequest)
+		return
+	}
+
 	// The starred-mission sector. Two numbers, both set or both clear — half a
 	// sector is not a weaker configuration, it is one the group list cannot be
 	// built from at all, and storing it would put the app in a state its own
@@ -861,7 +879,9 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		nap_auto_refresh_enabled = ?,
 		prospect_auto_refresh_enabled = ?,
 		sector_start = NULLIF(?, 0),
-		sector_end   = NULLIF(?, 0)
+		sector_end   = NULLIF(?, 0),
+		announce_window_start = ?,
+		announce_window_end   = ?
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -889,6 +909,7 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		// callers merge over a fresh GET and send the whole object, so an omitted
 		// field cannot arrive here as an accidental 0.
 		settings.SectorStart, settings.SectorEnd,
+		settings.AnnounceWindowStart, settings.AnnounceWindowEnd,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)

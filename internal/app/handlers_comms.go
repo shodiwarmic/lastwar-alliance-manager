@@ -200,11 +200,14 @@ func handleCommsTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch old record for diff and archived check
+	// Fetch old record for diff and archived check. The slug comes along so the
+	// save can report variables the app fills in that the new content no longer
+	// uses — see missingPrefilledVars.
 	var old CommsTemplate
+	var slug sql.NullString
 	err = db.QueryRow(
-		`SELECT title, category, content, required_vars, season_id FROM comms_templates WHERE id = ?`, id).
-		Scan(&old.Title, &old.Category, &old.Content, &old.RequiredVars, &old.SeasonID)
+		`SELECT title, category, content, required_vars, season_id, slug FROM comms_templates WHERE id = ?`, id).
+		Scan(&old.Title, &old.Category, &old.Content, &old.RequiredVars, &old.SeasonID, &slug)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -247,8 +250,15 @@ func handleCommsTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	logActivity(user.ID, user.Username, "updated", "comms_template", body.Title, false, strings.Join(changes, "; "))
 
+	// The save SUCCEEDS either way — an officer may genuinely want a template
+	// without one of these — but they are told which the app was going to fill in
+	// and can no longer place. Compared against the authoritative Go map, NOT
+	// against required_vars: this same handler lets that column be edited, so it
+	// cannot also be the source of truth about what the generator supplies.
+	missing := missingPrefilledVars(slug.String, body.Content)
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Updated"})
+	json.NewEncoder(w).Encode(map[string]any{"message": "Updated", "missing_vars": missing})
 }
 
 func handleCommsTemplateDelete(w http.ResponseWriter, r *http.Request) {
