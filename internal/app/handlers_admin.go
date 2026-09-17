@@ -611,8 +611,6 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(vs_minimum_points, 2500000),
         COALESCE(vs_flag_days_threshold, 2),
         COALESCE(strike_needs_improvement_threshold, 1), COALESCE(strike_at_risk_threshold, 3),
-        COALESCE(mg_baseline, 1), COALESCE(zs_baseline, 1),
-        COALESCE(max_mg_level, 1), COALESCE(max_zs_level, 1),
         COALESCE(mg_default_time, '00:30'), COALESCE(zs_default_time, '23:00'),
         COALESCE(mg_anchor_date, ''), COALESCE(zs_schedule_mode, 'weekdays'),
         COALESCE(zs_weekdays, '1,4'), COALESCE(zs_anchor_date, ''), COALESCE(zs_anchor_time, '23:00'),
@@ -623,7 +621,9 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(lastrank_auto_sync_enabled, 0), COALESCE(lastrank_auto_sync_hour, 4),
         COALESCE(lastrank_auto_sync_interval_hours, 6), COALESCE(lastrank_enrich_max_age_hours, 21),
         COALESCE(nap_auto_refresh_enabled, 0), COALESCE(prospect_auto_refresh_enabled, 0),
-        COALESCE(translation_backend_mode, 'ondevice'), COALESCE(translation_monthly_char_cap, 400000)
+        COALESCE(translation_backend_mode, 'ondevice'), COALESCE(translation_monthly_char_cap, 400000),
+        COALESCE(sector_start, 0), COALESCE(sector_end, 0),
+        COALESCE(announce_window_start, '00:00'), COALESCE(announce_window_end, '23:59')
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -638,8 +638,6 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.VSMinimumPoints,
 		&s.VsFlagDaysThreshold,
 		&s.StrikeNeedsImprovementThreshold, &s.StrikeAtRiskThreshold,
-		&s.MGBaseline, &s.ZSBaseline,
-		&s.MaxMGLevel, &s.MaxZSLevel,
 		&s.MGDefaultTime, &s.ZSDefaultTime,
 		&s.MGAnchorDate, &s.ZSScheduleMode,
 		&s.ZSWeekdays, &s.ZSAnchorDate, &s.ZSAnchorTime,
@@ -651,6 +649,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.LastRankAutoSyncIntervalHours, &s.LastRankEnrichMaxAgeHours,
 		&s.NAPAutoRefreshEnabled, &s.ProspectAutoRefreshEnabled,
 		&s.TranslationBackendMode, &s.TranslationMonthlyCharCap,
+		&s.SectorStart, &s.SectorEnd,
+		&s.AnnounceWindowStart, &s.AnnounceWindowEnd,
 	)
 
 	if err != nil {
@@ -794,56 +794,51 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Event level ceilings and the baselines they bound. Merge the payload over the
-	// stored row, validate the MERGED result, then write that -- do not copy the NAP
-	// pair's COALESCE(NULLIF(?, 0), col) shape above, which solves the same problem in
-	// the UPDATE instead. Mixing the two is how one of them ends up half-applied.
-	//
-	// Settings uses primitive ints, so a field omitted from the payload unmarshals to 0.
-	// Zero is not a legal value for any of these four, so it is unambiguously "not
-	// supplied". Both browser callers merge over a fresh GET and always send the full
-	// object, but the handler must not depend on that: today an omitted field is written
-	// as 0 raw, which is a silent data loss this merge also closes.
-	mgBaseline, zsBaseline := settings.MGBaseline, settings.ZSBaseline
-	maxMGLevel, maxZSLevel := settings.MaxMGLevel, settings.MaxZSLevel
-	if mgBaseline == 0 || zsBaseline == 0 || maxMGLevel == 0 || maxZSLevel == 0 {
-		var curMG, curZS, curMaxMG, curMaxZS int
-		if err := db.QueryRow(`SELECT COALESCE(mg_baseline, 1), COALESCE(zs_baseline, 1),
-			COALESCE(max_mg_level, 1), COALESCE(max_zs_level, 1) FROM settings WHERE id = 1`).
-			Scan(&curMG, &curZS, &curMaxMG, &curMaxZS); err != nil {
-			slog.Error("updateSettings read level limits", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
+	// The announcement window. Blank means "leave it at the default" — both
+	// browser callers merge over a fresh GET, so a blank here is a payload that
+	// predates this field rather than an officer clearing it.
+	if settings.AnnounceWindowStart == "" {
+		settings.AnnounceWindowStart = "00:00"
+	}
+	if settings.AnnounceWindowEnd == "" {
+		settings.AnnounceWindowEnd = "23:59"
+	}
+	// validHHMM, not reHHMM: these two take part in string comparisons that decide
+	// what goes into an alliance-wide post, so "29:99" must not reach the column.
+	if !validHHMM(settings.AnnounceWindowStart) || !validHHMM(settings.AnnounceWindowEnd) {
+		http.Error(w, "The announcement window times must be real times in HH:MM", http.StatusBadRequest)
+		return
+	}
+
+	// The starred-mission sector. Two numbers, both set or both clear — half a
+	// sector is not a weaker configuration, it is one the group list cannot be
+	// built from at all, and storing it would put the app in a state its own
+	// reader has to special-case.
+	if (settings.SectorStart == 0) != (settings.SectorEnd == 0) {
+		http.Error(w, "Set both the sector start and end, or neither", http.StatusBadRequest)
+		return
+	}
+	if settings.SectorStart != 0 {
+		if settings.SectorEnd < settings.SectorStart {
+			http.Error(w, "The sector end must not be below the sector start", http.StatusBadRequest)
 			return
 		}
-		if mgBaseline == 0 {
-			mgBaseline = curMG
-		}
-		if zsBaseline == 0 {
-			zsBaseline = curZS
-		}
-		if maxMGLevel == 0 {
-			maxMGLevel = curMaxMG
-		}
-		if maxZSLevel == 0 {
-			maxZSLevel = curMaxZS
+		// Operational, not a game rule: 64 is the width actually measured and 128
+		// the largest any source claims. The cap is here because the open-date
+		// sweep costs one paced request per server and holds the process's single
+		// job slot while it runs, so 128 bounds a first run at about two minutes.
+		if settings.SectorEnd-settings.SectorStart+1 > maxSectorWidth {
+			http.Error(w, fmt.Sprintf("A sector cannot be wider than %d servers", maxSectorWidth), http.StatusBadRequest)
+			return
 		}
 	}
-	if maxMGLevel < 1 || maxMGLevel > maxEventLevelCeiling {
-		http.Error(w, fmt.Sprintf("Maximum MG level must be between 1 and %d", maxEventLevelCeiling), http.StatusBadRequest)
-		return
-	}
-	if maxZSLevel < 1 || maxZSLevel > maxEventLevelCeiling {
-		http.Error(w, fmt.Sprintf("Maximum ZS level must be between 1 and %d", maxEventLevelCeiling), http.StatusBadRequest)
-		return
-	}
-	if mgBaseline < 1 || mgBaseline > maxMGLevel {
-		http.Error(w, fmt.Sprintf("MG baseline level must be between 1 and %d", maxMGLevel), http.StatusBadRequest)
-		return
-	}
-	if zsBaseline < 1 || zsBaseline > maxZSLevel {
-		http.Error(w, fmt.Sprintf("ZS baseline level must be between 1 and %d", maxZSLevel), http.StatusBadRequest)
-		return
-	}
+
+	// Event level baselines and ceilings are NOT here any more. They live on the
+	// event type row as of migration 073 and are written by the type PUT
+	// (manage_schedule) and the ceiling PUT (manage_settings) respectively — see
+	// handlers_schedule.go. Do not reintroduce a settings field for a level: the
+	// pattern this replaced needed a hardcoded column pair per type and defaulted
+	// anything it did not recognise to Marshal's Guard's numbers.
 
 	// Accept either a bare 32-hex id or a pasted /a/<id> URL for the LastRank id.
 	allianceID := strings.TrimSpace(settings.LastRankAllianceID)
@@ -856,7 +851,9 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow(`SELECT COALESCE(lastrank_alliance_id, '') FROM settings WHERE id = 1`).Scan(&prevAllianceID)
 
 	// Note: current_season and season_start_date are no longer editable here —
-	// they are derived from the seasons table (owned by Season Hub).
+	// and never read either: see getSettings, which derives both from the seasons
+	// table (owned by Season Hub). The settings columns of those names are dead
+	// schema; see CLAUDE.md -> "Dead schema".
 	_, err := db.Exec(`UPDATE settings SET
 		schedule_message_template = ?,
 		daily_message_template = ?, power_tracking_enabled = ?, storm_timezones = ?,
@@ -865,8 +862,6 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		alliance_max_members = ?, join_requirements = ?,
 		vs_minimum_points = ?,
 		strike_needs_improvement_threshold = ?, strike_at_risk_threshold = ?,
-		mg_baseline = ?, zs_baseline = ?,
-		max_mg_level = ?, max_zs_level = ?,
 		mg_default_time = ?, zs_default_time = ?,
 		mg_anchor_date = ?, zs_schedule_mode = ?,
 		zs_weekdays = ?, zs_anchor_date = ?, zs_anchor_time = ?,
@@ -882,7 +877,11 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		lastrank_auto_sync_interval_hours = ?,
 		lastrank_enrich_max_age_hours = ?,
 		nap_auto_refresh_enabled = ?,
-		prospect_auto_refresh_enabled = ?
+		prospect_auto_refresh_enabled = ?,
+		sector_start = NULLIF(?, 0),
+		sector_end   = NULLIF(?, 0),
+		announce_window_start = ?,
+		announce_window_end   = ?
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -891,8 +890,6 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.AllianceMaxMembers, settings.JoinRequirements,
 		settings.VSMinimumPoints,
 		settings.StrikeNeedsImprovementThreshold, settings.StrikeAtRiskThreshold,
-		mgBaseline, zsBaseline,
-		maxMGLevel, maxZSLevel,
 		settings.MGDefaultTime, settings.ZSDefaultTime,
 		settings.MGAnchorDate, settings.ZSScheduleMode,
 		settings.ZSWeekdays, settings.ZSAnchorDate, settings.ZSAnchorTime,
@@ -907,6 +904,12 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.LastRankAutoSyncEnabled, settings.LastRankAutoSyncHour,
 		settings.LastRankAutoSyncIntervalHours, settings.LastRankEnrichMaxAgeHours,
 		settings.NAPAutoRefreshEnabled, settings.ProspectAutoRefreshEnabled,
+		// Both 0 CLEARS the sector, the our_server_id convention: "not configured"
+		// is a state the form has to be able to express. Safe because both browser
+		// callers merge over a fresh GET and send the whole object, so an omitted
+		// field cannot arrive here as an accidental 0.
+		settings.SectorStart, settings.SectorEnd,
+		settings.AnnounceWindowStart, settings.AnnounceWindowEnd,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)

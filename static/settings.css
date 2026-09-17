@@ -84,3 +84,22 @@
 .perm-row-last-in-group {
     border-bottom: 2px solid var(--color-border);
 }
+
+/* Starred missions: the sector is a pair of numbers plus the Suggest button,
+   which reads as one control rather than three stacked form groups. Wraps on
+   its own — no width breakpoint. */
+.starred-sector-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.starred-sector-row .form-group {
+    flex: 1 1 140px;
+    margin-bottom: 0;
+}
+
+.starred-sector-row .btn {
+    flex: 0 0 auto;
+}

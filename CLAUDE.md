@@ -732,13 +732,223 @@ all-day ZS stores `00:00` and needs no special case. Dates are stepped with
 `time.AddDate` (calendar arithmetic on y/m/d over `time.Parse` values, which are UTC),
 never by adding a `Duration`, which is what let the old chain drift across a day
 boundary. `settings.zs_anchor_time` is retired from the UI; the column survives as
-dead schema for a future settings cleanup.
+dead schema — see below.
 
-**MG has two independent rules.** `mgGapDays = 2` — the game refuses an MG on the day
-after another one — and the 21:59 start cutoff. They never interact: an MG starting at
-21:59 still permits one two days later at 00:30. The cadence was advertised in the
-event-form hint and enforced nowhere; the generator's `AddDate(0, 0, 2)` stepping
-happened to satisfy it, so only a manual create or edit could break it.
+### Dead schema on `settings`
+
+Columns nothing reads and nothing writes. They are **deliberately not dropped one at a
+time**: a SQLite column drop rewrites the table, and `getSettings` / `updateSettings`
+carry ~50-entry positional SELECT/Scan/UPDATE lists that one careless drop shifts
+silently. One future settings cleanup drops them together.
+
+| Column | Retired by | What replaced it |
+|---|---|---|
+| `current_season` | Season Hub | Derived in `getSettings` from `seasons` (latest started season). The `Settings` JSON fields of the same names stay — the schedule page reads them. |
+| `season_start_date` | Season Hub | As above. |
+| `zs_anchor_time` | Project 5 | The ZS rule is a gap between dates; every insert uses `zs_default_time`. |
+| `mg_baseline`, `zs_baseline`, `max_mg_level`, `max_zs_level` | Migration 073 | Levels live on `schedule_event_types` (`has_level` / `baseline_level` / `max_level`). See "Event levels live on the TYPE row" below. |
+
+Do not add a reader for any of them. If one looks useful, the live value is somewhere
+else and the column is stale.
+
+### Event levels live on the TYPE row, never on `settings`
+
+Migration 073 moved them. `schedule_event_types` carries `has_level`,
+`baseline_level` and `max_level`; `loadTypeLevels(q, typeID)` is the only reader.
+
+What it replaced was two settings column pairs behind a string switch that
+**defaulted to MG's columns for anything that was not `ZS`**. Two live consequences,
+both reproduced before the change: a level could be carried onto a custom type by
+switching the event modal's type dropdown (the field hides but keeps its value, and
+the write path only checked `is_system`), and a brand-new system type silently
+inherited Marshal's Guard's baseline and ceiling.
+
+Four rules:
+
+- **A system type with `has_level` and a NULL baseline or ceiling is a 500**, not a
+  fallback. There is deliberately no other type's numbers left to borrow — that
+  borrowing *was* the bug. Migration 073 fills both for every system type it flags.
+- **A custom type has no baseline and no ceiling.** A blank level stays blank
+  (nothing may invent a number the officer did not choose), and the only rule is the
+  floor of 1 — the app does not know what a custom scale runs to, so it does not
+  pretend to bound one.
+- **`max_level` is written ONLY by `PUT /api/schedule/event-types/{id}/ceiling`**,
+  gated `manage_settings`, while every other field on that row is `manage_schedule`.
+  The ceiling used to live in Settings → Game Limits; moving it onto the type row
+  must not widen who can raise it. Do not add it to the general type PUT.
+  Game Limits therefore reads `GET /api/schedule/event-types/ceilings`, its own
+  `manage_settings` endpoint — the general list is `view_schedule`, and
+  `requirePermission` takes one key, so a `manage_settings` holder without
+  `view_schedule` would see an empty section with nothing explaining it.
+- **Every field the event-type modal carries is accepted by BOTH the POST and the
+  PUT.** The modal creates rows through the POST, so a field only the PUT decodes is
+  lost on create and looks exactly like a broken checkbox.
+
+Adding a system type is now a migration inserting a row with its own numbers — not a
+fourth column pair and a fourth branch.
+
+### The Alliance Exercise is ONE slot with TWO events
+
+`allianceExerciseShorts = {"MG", "LS"}`. The every-other-day slot runs **Marshal's
+Guard** up to Season 3 day 57 and **Large Sandworm** from day 58, on different level
+scales (1–12 versus tens). Until migration 074 both were stored as `MG` against one
+ceiling, which is why the live database held MG rows at level 70 beside MG rows at
+level 12 — one column carrying two scales — and why the generator kept producing
+Marshal's Guards past the cutover (confirmed in production data: four rows written in
+one batch on 2026-08-31 at `mg_baseline`, dated 2026-09-21 to 09-27).
+
+Three consequences for any new code:
+
+- **The cutover is computed from `seasons`, never hardcoded.** `sandwormCutover(q)`
+  reads Season 3's `start_date` and adds `sandwormCutoverDays` (57). It returns an
+  `ok` flag, and **every caller must test it** — a Go string compare against `""` is
+  true for every date, so an unguarded `date >= cutover` would push the whole calendar
+  past a cutover that does not exist. `ok == false` means "no cutover", which is the
+  correct answer for a server that has not reached Season 3, not an error.
+- **The cadence spans the family.** `nearestSystemEventWithin` takes a SET of short
+  names for this reason: an MG on Monday blocks a Large Sandworm on Tuesday, because
+  the game has one slot. It returns the conflicting type's name so the rejection can
+  say which event it compared against.
+- **The variant rule is validation, in both directions**, not just a migration.
+  Without it the retyping is a one-off tidy-up that the next generate, push or manual
+  create undoes.
+
+### Encounters belong to a server-event WINDOW
+
+`server_events` describes a repeating window; the things that happen inside it are
+**encounters**. Migration 075 adds `schedule_event_types.server_event_id`, linking
+Sky Predator to General's Trial and Glacieradon to Zombie Invasion.
+
+- **The rule dispatch no longer gates on `is_system`.** `validateEventRules(q,
+  scheduleTypeRules, date, time, excludeID)` is the single entry point for all four
+  write paths; the *validator* decides what applies — system-only rules when
+  `IsSystem`, the window rule whenever `ServerEventID` is set. The old
+  `if isSystem == 1 { validate… }` gates at each call site would have left the
+  window rule bypassable for Glacieradon, a **custom** type with a parent, on create,
+  on update and on the push. Add a rule in the validator, never a condition at a
+  call site.
+- **The occurrence arithmetic exists twice, deliberately** — `encounters.go` in Go,
+  `getServerEventOccurrencesInWeek` in `schedule.js`. There is no shared language;
+  the Go side is table-tested against dates the JS is known to produce, and
+  **the server is right** if they ever disagree. The browser's copy is display only.
+- **An unanchored parent SKIPS the rule, it does not fail it.** Migration 025 seeds
+  the five windows with no `anchor_date`; 075 links Sky Predator on every install
+  regardless. Enforcing would make Sky Predator unschedulable for anyone who had not
+  set that anchor yet — and the rejection could name neither a window nor a date,
+  which every other schedule rejection does. The calendar draws no banner for an
+  unanchored window either, so "unknown" keeps the two consistent. The event modal
+  says so where the officer is standing.
+- **Every path that deletes a `server_events` row must clear the links it orphans.**
+  `foreign_keys` is off app-wide, so the `REFERENCES` clause is documentation.
+  `deleteServerEvent` **refuses** with 409 (a human is asking, and can be told);
+  the Season Hub's purge paths **detach** via `detachEncounterParents` /
+  `detachEncounterParentsByAnchor` in the same transaction and report the count —
+  there the window is going whatever happens, and refusing a season delete over a
+  link nobody mentioned would be the wrong shape.
+- **Moving a window never moves the events inside it.** `updateServerEvent` returns
+  `{stranded: [...]}` — today-or-later encounters now outside every occurrence — and
+  the client toasts them. `getScheduleEvents` flags the same condition per event as
+  `outside_window` + `parent_name`. The app does not know whether the window or the
+  event is the wrong one, so it reports and leaves both alone.
+
+### A pushed season event is identified by `(season_event_id, season_week)`
+
+Migration 078 stamps both `schedule_events` and `server_events`. Before it, a
+pushed event's only identity was the date it landed on — so moving a season's
+`start_date` by a day and pushing again duplicated everything, and deleting the
+season then purged **nothing**, because both queries recomputed a date that no
+longer matched. Six one-day-offset duplicates were reproduced against a copy of
+the live database.
+
+- **The identity is a DATABASE fact**, not a convention: a **partial** unique index
+  on each table (`WHERE season_event_id IS NOT NULL`, so the manual schedule's
+  unstamped rows are unaffected). The push is check-then-insert with no
+  transaction, so two simultaneous pushes could both see no match — the index makes
+  the loser fail, and `isUniqueViolation` maps that to `Skipped`, which is what it
+  is.
+- **The legacy match carries `AND season_event_id IS NULL`.** Back-stamping uses
+  exactly the `(date, type)` / `(name, anchor_date)` match the push already relied
+  on to skip a row, so it adds no new assumption — but a row already claimed by a
+  different `(event, week)` must never be re-stamped.
+- **Drift is REPORTED, never corrected.** A stamped row whose date disagrees with
+  the template counts as `drifted`. The app cannot tell whether the season moved or
+  the officer moved that one event, and silently dragging somebody's calendar back
+  is the worse mistake.
+- **Deleting a season purges by origin FIRST**, then runs the old recomputed-date
+  purge for rows pushed before 078. Deleting a season *event* clears the stamps but
+  keeps the calendar rows: changing the plan is not retracting what is already
+  scheduled.
+
+### The announcement selects server-side
+
+`selectAnnouncementEvents(window, onD, onD1)` (`announcement.go`) is a **pure
+function**, and the browser renders lines from its output rather than deciding
+anything. It is the one piece of arithmetic in the feature that can misfire — a
+window with `end <= start` wraps past midnight and has to reach into the next game
+day — so it belongs somewhere CI can exercise it.
+
+- **Both bounds are inclusive.** The default end is `23:59`; an exclusive end would
+  silently drop a 23:59 event on every install that never touched the setting.
+- **All-day events attach to the DATE**, never to a time, so one dated D is always
+  in and one dated D+1 never is, whatever the window does.
+- **An excluded event is REPORTED, not omitted.** `dropped[]` carries a reason
+  (`type not flagged`, or one naming the window) and the page prints it. A post
+  quietly missing an event reads exactly like a correct one.
+- **`announce` defaults to 1** for every existing and new type — a forgotten tick is
+  an invisible failure, opting out is a visible choice.
+- **`validHHMM`, not `reHHMM`.** The bare regex accepts `29:99`; these values take
+  part in the string comparisons above, where a nonsense bound would silently empty
+  a window. It now guards the event write paths too.
+- **`slugPrefilledVars` is authoritative, `required_vars` is not.** The comms
+  handler lets an officer edit `required_vars`, so it cannot also be the source of
+  truth about what the generator supplies. Only the `required` half feeds
+  `missing_vars`: warning about the optional starred variables on every untouched
+  save would teach officers to dismiss the warning that matters.
+
+### Starred missions: the residue lives in Go, and only in Go
+
+`starredGroup(date)` (`starred.go`) is the three-day cycle, and the API hands the
+client an explicit `days` map (date → group) for the range it asked about. **Do not
+reimplement the residue in JavaScript.** One rule, one implementation; a browser
+copy would be free to drift out of step with the group lists it labels.
+
+- **The A/B/C letters are never stored, and the UI labels groups by COLOUR.** The
+  lettered calendar officers circulate is **community-made, not an in-game artefact**,
+  and its letters rotate month to month — so a stored mapping would both expire and
+  lend one player's chart false authority. Groups are 1/2/3 by residue internally and
+  are stable forever; every surface renders them as Blue / Green / Amber
+  (`starredGroupLabel`, `schedule.js`), because a number reads as one more server
+  number beside a four-digit list and a letter would imply a correspondence with that
+  chart that does not hold. Shiny missions also carry their own icon rather than the
+  star, which is already the VS theme icon for the Alliance Star day. The regression
+  fixture
+  (`internal/app/testdata/starred_sector_1701_1764.json`) is therefore used as an
+  **equivalence relation** — servers sharing a letter share a group — not as a
+  letter → number map, so it keeps testing the derivation after the next rotation.
+- **`gameDateOf` is the load-bearing step.** A server opening in the small hours UTC
+  belongs to the previous game day (UTC−2), which moves roughly one server in nine
+  into a different group. Taking the date off the raw timestamp is wrong.
+- **The sector is two editable settings, not a width constant.** The 64-wide grid
+  rests on a single tested boundary pair and sources claim 128 after Season 4.
+  `maxSectorWidth` (128) is an *operational* cap — the sweep costs one paced request
+  per server and holds the single job slot — not a game rule.
+- **Out-of-sector servers fail closed**, bounded in SQL in `loadSectorOpenDates`
+  rather than trusted from the table, so a sector correction takes effect at once.
+- **The sweep is a one-off, not a refresh.** An opening date is a fact about the past,
+  so `Plan` lists only servers with **no** row. That is what makes a manual
+  correction permanent, makes a cancelled run resume by being re-run, and makes a
+  second run over a complete sector free. Do not add an age-based re-fetch.
+
+The split is deliberately **not** expressed by renaming the stored type:
+`season_events.type_name` and `season_templates.events[].type_name` are stored strings
+that Sync Event Types re-links on, and migration 070 exists because those links broke
+once. The family is a Go constant.
+
+**The 21:59 start cutoff and the `mgGapDays = 2` date rule are independent.** They
+never interact: an Alliance Exercise starting at 21:59 still permits one two days
+later at 00:30. The cadence was advertised in the event-form hint and enforced
+nowhere; the generator's `AddDate(0, 0, 2)` stepping happened to satisfy it, so only a
+manual create or edit could break it.
 
 Both date rules share `nearestSystemEventWithin` — the same query with a different
 radius — so they cannot drift apart.
@@ -1658,13 +1868,6 @@ app refuse to start in production (`PRODUCTION=true`) without a valid
 
 **Operator action:** Confirm `SESSION_KEY` is set in all production deployments
 before enabling `PRODUCTION=true`.
-
-## Known technical debt
-
-- `handlers_season_hub.go` `handleSeasonArchive` derives the archived season's
-  `end_date` from `time.Now().UTC()`, not game-time (UTC−2). It was left out of
-  the game-time clock consolidation (season *create* uses `gameDate()`); revisit
-  in a future pass. Marked with a `TODO(game-time)` at the call site.
 
 ## Documentation
 

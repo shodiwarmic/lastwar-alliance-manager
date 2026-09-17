@@ -36,6 +36,10 @@
         </div>
 
         <!-- Week grid -->
+        <!-- Starred missions: groups listed once above the grid, each day column
+             then carrying only its group number. Built by JS; empty and invisible
+             until a sector is configured. -->
+        <div id="starred-legend" class="starred-legend"></div>
         <div id="week-grid" class="week-grid"></div>
 
         <!-- Output buttons -->
@@ -52,7 +56,14 @@
                 <button class="btn btn-secondary btn-sm" id="btn-day-card"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Day Card</button>
                 <select id="day-card-picker" class="day-card-picker" title="Select day for card"></select>
             </span>
+            <span class="output-btn-group">
+                <button class="btn btn-secondary btn-sm" id="btn-announce"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-speakerphone"/></svg> Announce</button>
+                <input type="date" id="announce-date" class="day-card-picker" title="Day to announce">
+            </span>
         </div>
+        <!-- Which events the last Announce click left out, and why. A post that is
+             quietly missing an event reads exactly like a correct one. -->
+        <p id="announce-status" class="help-text"></p>
 
         <!-- Text output area -->
         <div id="text-output-section" class="form-section hidden">
@@ -86,7 +97,9 @@
             <button class="btn btn-primary" id="btn-add-server-event">+ Add</button>
             {{end}}
         </div>
-        <p class="help-text">Repeating game-wide events displayed as banners on the calendar.</p>
+        <p class="help-text">Repeating game-wide events displayed as banners on the calendar. Encounters
+            (Sky Predator, Glacieradon, …) are event types linked to a window — set the link on the
+            event type, and the app keeps them inside it.</p>
         <div id="server-events-list">
             <p class="empty-state">Loading…</p>
         </div>
@@ -100,7 +113,7 @@
             <button class="btn btn-primary" id="btn-add-event-type">+ Add</button>
             {{end}}
         </div>
-        <p class="help-text">System types (MG, ZS) cannot be deleted or renamed.</p>
+        <p class="help-text">System event types cannot be deleted or renamed. Their baseline level is set here; the ceiling that bounds it lives in Settings → Game Limits.</p>
         <div id="event-types-list">
             <p class="empty-state">Loading…</p>
         </div>
@@ -112,15 +125,13 @@
 
         <div class="form-section">
             <h3>Schedule Defaults</h3>
+            <!-- One baseline input per levelled system type, rendered from the types
+                 API. There used to be exactly two, hardcoded: adding a third type
+                 meant adding a third pair of settings columns. -->
+            <div class="form-row schedule-defaults-row" id="baseline-inputs"></div>
+            <p class="help-text">The baseline is the level a generated event gets when none is typed. Each type's ceiling is set in Settings → Game Limits.</p>
+
             <div class="form-row schedule-defaults-row">
-                <div class="form-group">
-                    <label for="set-mg-baseline">MG Baseline Level</label>
-                    <input type="number" id="set-mg-baseline" min="1">
-                </div>
-                <div class="form-group">
-                    <label for="set-zs-baseline">ZS Baseline Level</label>
-                    <input type="number" id="set-zs-baseline" min="1">
-                </div>
                 <div class="form-group">
                     <label for="set-mg-time">MG Default Time (ST)</label>
                     <input type="text" id="set-mg-time" placeholder="HH:MM" maxlength="5">
@@ -130,6 +141,20 @@
                     <input type="text" id="set-zs-time" placeholder="HH:MM" maxlength="5">
                 </div>
             </div>
+
+            <div class="form-row schedule-defaults-row">
+                <div class="form-group">
+                    <label for="set-announce-start">Announcement window start (ST)</label>
+                    <input type="text" id="set-announce-start" placeholder="HH:MM" maxlength="5">
+                </div>
+                <div class="form-group">
+                    <label for="set-announce-end">Announcement window end (ST)</label>
+                    <input type="text" id="set-announce-end" placeholder="HH:MM" maxlength="5">
+                </div>
+            </div>
+            <p class="help-text">Which of the day's events the Announce button picks up. Both ends are included.
+                Set the end <strong>at or before</strong> the start to make the window wrap past midnight — 18:00 to 06:00
+                announces this evening and the early hours that follow it. The default, 00:00 to 23:59, is the whole game day.</p>
 
             <div class="modal-actions" style="margin-top:16px;">
                 <button class="btn btn-primary" id="btn-save-settings"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save Settings</button>
@@ -143,10 +168,10 @@
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-bolt"/></svg> Generate Events</h3>
 
             <div class="generate-section">
-                <h4>MG Rules</h4>
+                <h4>Alliance Exercise Rules</h4>
                 <div class="form-group">
                     <label for="gen-mg-anchor">Anchor Date
-                        <span class="help-text">(reference point for every-other-day cycle)</span>
+                        <span class="help-text">(reference point for every-other-day cycle; the variant — Marshal's Guard or Large Sandworm — follows the Season 3 day 58 cutover)</span>
                     </label>
                     <input type="date" id="gen-mg-anchor">
                 </div>
@@ -195,7 +220,7 @@
                     </div>
                 </div>
                 <div class="gen-toggle-row">
-                    <label><input type="checkbox" id="gen-mg" checked> Generate MG</label>
+                    <label><input type="checkbox" id="gen-mg" checked> Generate Alliance Exercise (MG / Large Sandworm)</label>
                     <label><input type="checkbox" id="gen-zs" checked> Generate ZS</label>
                 </div>
                 <div class="modal-actions" style="margin-top:12px;">
@@ -221,6 +246,9 @@
     data-can-manage="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<!-- copyWithVariables + the global #vars-modal in layout.html. storm.html is the
+     model: the announcement fills some variables in and prompts for the rest. -->
+<script src="{{asset "/mail.js"}}"></script>
 <script src="{{asset "/schedule.js"}}"></script>
 {{end}}
 
@@ -241,6 +269,9 @@
             <div class="form-group">
                 <label for="event-date-input">Date</label>
                 <input type="date" id="event-date-input" class="form-input" required>
+                <!-- Encounter types only: the next few windows their parent opens.
+                     Display only — the server is the authority on what may be saved. -->
+                <span id="event-window-hint" class="help-text"></span>
             </div>
 
             <div class="form-group">
@@ -255,10 +286,12 @@
                 <span id="event-time-hint" class="help-text"></span>
             </div>
 
-            <!-- Level: shown for system types only -->
+            <!-- Level: shown for any type whose has_level is set. The label and the
+                 placeholder differ between a system type (blank = baseline) and a
+                 custom one (blank = no level at all); schedule.js sets both. -->
             <div class="form-group" id="event-level-group" style="display:none;">
-                <label for="event-level-input">Level Override
-                    <span class="help-text">(leave blank to use baseline)</span>
+                <label for="event-level-input"><span id="event-level-label">Level</span>
+                    <span class="help-text" id="event-level-help"></span>
                 </label>
                 <input type="number" id="event-level-input" class="form-input" min="1">
             </div>
@@ -301,6 +334,32 @@
 
             <div class="form-group">
                 <label><input type="checkbox" id="et-active" checked> Active</label>
+            </div>
+
+            <!-- Custom types only: a system type's flag is fixed on. -->
+            <div class="form-group" id="et-has-level-group">
+                <label><input type="checkbox" id="et-has-level"> Carries a level</label>
+                <span class="help-text">Events of this type get a level field. Leave off for types the game does not level.</span>
+            </div>
+
+            <!-- System types only: the ceiling that bounds this lives in Settings → Game Limits. -->
+            <div class="form-group" id="et-baseline-group" style="display:none;">
+                <label for="et-baseline">Baseline level</label>
+                <input type="number" id="et-baseline" class="form-input" min="1">
+                <span class="help-text" id="et-baseline-help"></span>
+            </div>
+
+            <div class="form-group">
+                <label><input type="checkbox" id="et-announce" checked> Include in announcements</label>
+                <span class="help-text">On by default. Turn it off for a type the alliance does not need telling about.</span>
+            </div>
+
+            <!-- Any type, system or custom: Sky Predator happens inside General's
+                 Trial, Glacieradon inside Zombie Invasion. -->
+            <div class="form-group" id="et-parent-group">
+                <label for="et-parent">Inside server event window</label>
+                <select id="et-parent" class="form-input"></select>
+                <span class="help-text">Events of this type must fall inside that window. Leave as “None” for a type that is not an encounter.</span>
             </div>
 
             <div class="modal-actions">

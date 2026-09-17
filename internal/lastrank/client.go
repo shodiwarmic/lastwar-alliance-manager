@@ -208,6 +208,23 @@ type playerPage struct {
 	Rows []PlayerRow `json:"rows"`
 }
 
+// ServerHealth is the subset of /v1/servers/{id}/health this app uses.
+//
+// OpenTime is when the server opened, as an RFC3339 timestamp with an offset. It
+// is nil for servers LastRank has no opening record for; the caller treats that as
+// "unknown", never as an error.
+//
+// The tags are not decoration. encoding/json matches an untagged field
+// case-insensitively but never across an underscore, so `server_id` would leave
+// ServerID at 0 and `open_time` would leave OpenTime nil on every single fetch —
+// a silent, total failure. Every wire struct in this package carries tags for that
+// reason.
+type ServerHealth struct {
+	ServerID int     `json:"server_id"`
+	SeasonID *int    `json:"season_id"`
+	OpenTime *string `json:"open_time"`
+}
+
 // --- Transport ---
 
 // do performs a throttled request against the lastrank API and decodes the JSON
@@ -260,6 +277,21 @@ func FetchAlliance(ctx context.Context, allianceID string) (*Alliance, error) {
 		return nil, err
 	}
 	return &a, nil
+}
+
+// --- Servers ---
+
+// FetchServerHealth reads one game server's record, for its opening date.
+//
+// A server's opening date never changes, so a caller that has stored one never
+// needs to ask again — which is what keeps the starred-mission sweep a one-off
+// rather than a recurring cost against the volunteer service.
+func FetchServerHealth(ctx context.Context, serverID int) (*ServerHealth, error) {
+	var h ServerHealth
+	if err := do(ctx, http.MethodGet, "/v1/servers/"+strconv.Itoa(serverID)+"/health", &h); err != nil {
+		return nil, err
+	}
+	return &h, nil
 }
 
 // SearchAllianceHits runs the site's own search across all servers and returns the raw

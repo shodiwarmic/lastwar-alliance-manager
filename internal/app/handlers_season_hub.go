@@ -756,10 +756,10 @@ func handleSeasonArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO(game-time): uses UTC, not game-time (UTC-2). Left out of the
-	// game-time clock consolidation (season create at ~L529 uses gameDate()) —
-	// revisit in a future pass so an archived season's end_date matches game day.
-	today := time.Now().UTC().Format("2006-01-02")
+	// Game time (UTC-2), the same clock season create uses — between 00:00 and
+	// 02:00 UTC the game day is still the previous one, so a UTC date here stamped
+	// an end_date a day after the season actually ended.
+	today := gameDate()
 	if _, err := db.Exec(`UPDATE seasons SET is_active=0, archived_at=CURRENT_TIMESTAMP, end_date=? WHERE id=?`, today, id); err != nil {
 		slog.Error("handleSeasonArchive: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -886,6 +886,44 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 	// have created and delete matching rows from schedule_events / server_events.
 	// This is best-effort — if the season has no start_date the loop is skipped.
 	purgedAlliance, purgedServer := 0, 0
+	unlinkedTypes := 0
+
+	// STAMPED rows first, by origin. This is the case the recomputed-date loop
+	// below cannot reach: once a season's start_date has moved, every date it
+	// recomputes is the wrong one, so that loop purges NOTHING and the whole
+	// season's materialised events are left behind. The stamp survives the move.
+	//
+	// The server-event windows go before their rows do, so any encounter type
+	// pointing at one is detached first — foreign_keys is off app-wide, and a type
+	// left pointing at a deleted window has a rule the app cannot evaluate.
+	// Refusing the season delete over such a link would be the wrong shape: the
+	// window is going whatever happens, the type is not.
+	stampedWindowIDs, sErr := stampedServerEventIDs(tx, id)
+	if sErr != nil {
+		slog.Error("handleSeasonDelete: stamped windows", "error", sErr)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if n, derr := detachEncounterParents(tx, stampedWindowIDs); derr != nil {
+		slog.Error("handleSeasonDelete: detach stamped parents", "error", derr)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	} else {
+		unlinkedTypes += n
+	}
+	if res, derr := tx.Exec(`DELETE FROM schedule_events
+		WHERE season_event_id IN (SELECT id FROM season_events WHERE season_id = ?)`, id); derr == nil && res != nil {
+		n, _ := res.RowsAffected()
+		purgedAlliance += int(n)
+	}
+	if res, derr := tx.Exec(`DELETE FROM server_events
+		WHERE season_event_id IN (SELECT id FROM season_events WHERE season_id = ?)`, id); derr == nil && res != nil {
+		n, _ := res.RowsAffected()
+		purgedServer += int(n)
+	}
+
+	// Then the legacy recomputed-date purge, for rows pushed before origins
+	// existed and never re-pushed since. Best-effort — skipped with no start_date.
 	if s.StartDate != "" {
 		if startDate, perr := time.Parse("2006-01-02", s.StartDate); perr == nil {
 			evRows, qerr := tx.Query(`
@@ -922,6 +960,19 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 						eventDate := weekStartDate.AddDate(0, 0, int(p.dayOffset.Int64)-1)
 						dateStr := eventDate.Format("2006-01-02")
 						if p.isServerEvent == 1 {
+							// Detach first: foreign_keys is off app-wide, so nothing
+							// else will clear an encounter type pointing at the window
+							// about to go. Refusing the season delete over such a link
+							// would be the wrong shape — the window is going, the type
+							// is not.
+							n, err := detachEncounterParentsByAnchor(tx, p.label, dateStr)
+							if err != nil {
+								slog.Error("handleSeasonDelete: detach encounter parents", "error", err)
+								http.Error(w, "Database error", http.StatusInternalServerError)
+								return
+							}
+							unlinkedTypes += n
+
 							res, _ := tx.Exec(`DELETE FROM server_events WHERE name = ? AND anchor_date = ?`,
 								p.label, dateStr)
 							if res != nil {
@@ -974,6 +1025,9 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 	details := ""
 	if purgedAlliance > 0 || purgedServer > 0 {
 		details = fmt.Sprintf("purged %d alliance + %d server events", purgedAlliance, purgedServer)
+		if unlinkedTypes > 0 {
+			details += fmt.Sprintf("; %d encounter type(s) unlinked", unlinkedTypes)
+		}
 	}
 	logActivity(user.ID, user.Username, "deleted", "season_config", s.Name, false, details)
 
@@ -982,6 +1036,7 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 		"message":         "Season deleted",
 		"purged_alliance": purgedAlliance,
 		"purged_server":   purgedServer,
+		"unlinked_types":  unlinkedTypes,
 	})
 }
 
@@ -2860,6 +2915,14 @@ func handleSeasonEventDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	// Clear the stamps BEFORE the template row goes. foreign_keys is off app-wide,
+	// so nothing else would, and a materialised row pointing at a deleted
+	// season_events id could be matched by a later push against a reused id.
+	// The materialised events themselves stay: deleting a template row is a change
+	// to the plan, not a retraction of what is already on the calendar.
+	db.Exec(`UPDATE schedule_events SET season_event_id = NULL, season_week = NULL WHERE season_event_id = ?`, id)
+	db.Exec(`UPDATE server_events SET season_event_id = NULL, season_week = NULL WHERE season_event_id = ?`, id)
+
 	if _, err := db.Exec(`DELETE FROM season_events WHERE id = ?`, id); err != nil {
 		slog.Error("handleSeasonEventDelete: delete", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -2885,6 +2948,23 @@ type pushResult struct {
 	// the same officer would have been refused by hand.
 	SkippedInvalid int                     `json:"skipped_invalid"`
 	Invalid        []invalidGeneratedEvent `json:"invalid"`
+
+	// Drifted counts rows whose stored date no longer matches the date the
+	// template now computes — the season's start_date moved after they were
+	// pushed. They are REPORTED and never touched: the officer may have moved the
+	// row on purpose, and silently dragging somebody's calendar back is a worse
+	// failure than telling them it disagrees.
+	Drifted     int                `json:"drifted"`
+	DriftedRows []driftedSeasonRow `json:"drifted_rows"`
+}
+
+// driftedSeasonRow is one materialised row sitting away from its template date.
+type driftedSeasonRow struct {
+	ID       int    `json:"id"`
+	Label    string `json:"label"`
+	Week     int    `json:"week"`
+	Expected string `json:"expected"`
+	Actual   string `json:"actual"`
 }
 
 // pushSeasonEventsToSchedule materialises every season_event row for the given
@@ -2956,9 +3036,23 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 	}
 	rows.Close()
 
-	// shortNames caches schedule_event_types.short_name per id, so the rule check
-	// below costs one lookup per distinct type rather than one per created row.
-	shortNames := map[int]string{}
+	// pushTypes caches each event type's rule inputs per id, so the check below
+	// costs one lookup per distinct type rather than one per created row.
+	pushTypes := map[int]pushTypeRules{}
+	typeRulesFor := func(id int) pushTypeRules {
+		if t, ok := pushTypes[id]; ok {
+			return t
+		}
+		var t pushTypeRules
+		if tr, err := loadScheduleTypeRules(db, id); err == nil {
+			t.Rules = tr
+		}
+		if tl, err := loadTypeLevels(db, id); err == nil {
+			t.Levels = tl
+		}
+		pushTypes[id] = t
+		return t
+	}
 
 	// Resolve event_type_id from type_name for events that were seeded before types were synced.
 	typeIDCache := map[string]int{}
@@ -3004,10 +3098,36 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 			dateStr := eventDate.Format("2006-01-02")
 
 			if ev.isServerEvent {
+				// STAMPED match first: this (season_event, week) has already been
+				// materialised, wherever it currently sits.
+				var stampedID int
+				var stampedDate string
+				err := db.QueryRow(`SELECT id, COALESCE(anchor_date,'') FROM server_events
+					WHERE season_event_id = ? AND season_week = ?`, ev.id, week).Scan(&stampedID, &stampedDate)
+				if err == nil {
+					result.Skipped++
+					if stampedDate != dateStr {
+						recordDrift(&result, stampedID, ev.label, week, dateStr, stampedDate)
+					}
+					continue
+				}
+				if err != sql.ErrNoRows {
+					return result, err
+				}
+
+				// LEGACY match: a row pushed before origins existed, found the way
+				// the push has always found it. `season_event_id IS NULL` keeps a
+				// row already claimed by a different (event, week) from being
+				// re-stamped.
 				var existingID int
-				err := db.QueryRow(`SELECT id FROM server_events WHERE name = ? AND anchor_date = ?`,
+				err = db.QueryRow(`SELECT id FROM server_events
+					WHERE name = ? AND anchor_date = ? AND season_event_id IS NULL`,
 					ev.label, dateStr).Scan(&existingID)
 				if err == nil {
+					if _, uerr := db.Exec(`UPDATE server_events SET season_event_id = ?, season_week = ? WHERE id = ?`,
+						ev.id, week, existingID); uerr != nil && !isUniqueViolation(uerr) {
+						return result, uerr
+					}
 					result.Skipped++
 					continue
 				}
@@ -3049,19 +3169,51 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 					finalShort = fmt.Sprintf("%s%d", shortName, suffix)
 				}
 				if _, err := db.Exec(`
-					INSERT INTO server_events (name, short_name, icon, duration_days, repeat_type, anchor_date, active, sort_order)
-					VALUES (?, ?, ?, ?, 'none', ?, 1, 0)`,
-					ev.label, finalShort, icon, ev.durationDays, dateStr); err != nil {
+					INSERT INTO server_events (name, short_name, icon, duration_days, repeat_type, anchor_date, active, sort_order, season_event_id, season_week)
+					VALUES (?, ?, ?, ?, 'none', ?, 1, 0, ?, ?)`,
+					ev.label, finalShort, icon, ev.durationDays, dateStr, ev.id, week); err != nil {
+					// The partial unique index fired: another push materialised
+					// this (event, week) between our check and our insert. That is
+					// "already there", not a failure.
+					if isUniqueViolation(err) {
+						result.Skipped++
+						continue
+					}
 					return result, err
 				}
 				result.Created++
 				continue
 			}
 
+			// STAMPED match first — see the server-event branch above.
+			var stampedID int
+			var stampedDate string
+			err := db.QueryRow(`SELECT id, event_date FROM schedule_events
+				WHERE season_event_id = ? AND season_week = ?`, ev.id, week).Scan(&stampedID, &stampedDate)
+			if err == nil {
+				result.Skipped++
+				if stampedDate != dateStr {
+					label := ev.label
+					if label == "" {
+						label = ev.typeName
+					}
+					recordDrift(&result, stampedID, label, week, dateStr, stampedDate)
+				}
+				continue
+			}
+			if err != sql.ErrNoRows {
+				return result, err
+			}
+
 			var existingID int
-			err := db.QueryRow(`SELECT id FROM schedule_events WHERE event_date = ? AND event_type_id = ?`,
+			err = db.QueryRow(`SELECT id FROM schedule_events
+				WHERE event_date = ? AND event_type_id = ? AND season_event_id IS NULL`,
 				dateStr, ev.eventTypeID).Scan(&existingID)
 			if err == nil {
+				if _, uerr := db.Exec(`UPDATE schedule_events SET season_event_id = ?, season_week = ? WHERE id = ?`,
+					ev.id, week, existingID); uerr != nil && !isUniqueViolation(uerr) {
+					return result, uerr
+				}
 				result.Skipped++
 				continue
 			}
@@ -3070,43 +3222,46 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 			}
 
 			// Apply the schedule's game rules, exactly as a manual create would.
-			// Custom types carry no rules, so in practice this only bites MG/ZS-
-			// typed template events. Skip-and-count rather than abort: one illegal
-			// template row must not sink the rest of the push, which is the same
-			// semantics the existing duplicate check already has.
-			short := shortNames[ev.eventTypeID]
-			if short == "" {
-				var sn string
-				db.QueryRow(`SELECT short_name FROM schedule_event_types WHERE id = ?`, ev.eventTypeID).Scan(&sn)
-				short = sn
-				shortNames[ev.eventTypeID] = sn
+			// Skip-and-count rather than abort: one illegal template row must not
+			// sink the rest of the push, which is the same semantics the existing
+			// duplicate check already has.
+			//
+			// The date/time rules run for EVERY system type, not just MG and ZS —
+			// the hardcoded pair was the same default-branch shape migration 073
+			// removed elsewhere, and it would have let the next system type through
+			// this path unchecked. The level rule runs for every type that carries
+			// a level, so a template level on a type that does not is declined here
+			// rather than written past the validation the manual path applies.
+			pt := typeRulesFor(ev.eventTypeID)
+			msg, err := validateEventRules(db, pt.Rules, dateStr, ev.eventTime, 0)
+			if err != nil {
+				return result, err
 			}
-			if short == "MG" || short == "ZS" {
-				msg, err := validateSystemEventRules(db, short, dateStr, ev.eventTime, 0)
-				if err != nil {
-					return result, err
+			if msg == "" && ev.level != nil {
+				if !pt.Levels.HasLevel {
+					msg = fmt.Sprintf("%s events do not carry a level", pt.Rules.Name)
+				} else {
+					msg = validateEventLevel(pt.Rules.Name, pt.Levels, ev.level)
 				}
-				if msg == "" && ev.level != nil {
-					msg, err = validateSystemLevel(short, ev.level)
-					if err != nil {
-						return result, err
-					}
+			}
+			if msg != "" {
+				result.SkippedInvalid++
+				if len(result.Invalid) < 20 {
+					result.Invalid = append(result.Invalid, invalidGeneratedEvent{
+						Date: dateStr, Type: pt.Rules.Short, Reason: msg,
+					})
 				}
-				if msg != "" {
-					result.SkippedInvalid++
-					if len(result.Invalid) < 20 {
-						result.Invalid = append(result.Invalid, invalidGeneratedEvent{
-							Date: dateStr, Type: short, Reason: msg,
-						})
-					}
-					continue
-				}
+				continue
 			}
 
 			if _, err := db.Exec(`
-				INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by)
-				VALUES (?, ?, ?, ?, ?, ?, ?)`,
-				dateStr, ev.eventTypeID, ev.eventTime, ev.allDay, ev.level, ev.notes, userID); err != nil {
+				INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by, season_event_id, season_week)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				dateStr, ev.eventTypeID, ev.eventTime, ev.allDay, ev.level, ev.notes, userID, ev.id, week); err != nil {
+				if isUniqueViolation(err) {
+					result.Skipped++
+					continue
+				}
 				return result, err
 			}
 			result.Created++
@@ -3466,4 +3621,52 @@ func handleSeasonTemplateSyncEventTypes(w http.ResponseWriter, r *http.Request) 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"created": created})
+}
+
+// isUniqueViolation reports whether err is SQLite refusing a duplicate.
+//
+// The push is check-then-insert with no transaction, so two officers pushing at
+// the same moment can both see no match and both try to insert. Migration 078's
+// partial unique index makes the second one fail — and "this (season event, week)
+// is already materialised" is precisely what `Skipped` means, not an error to
+// abort the whole push over.
+func isUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint")
+}
+
+// recordDrift notes a materialised row whose date no longer matches the one its
+// template now computes, capped so a wholesale start_date shift cannot produce a
+// response the officer has to scroll past.
+//
+// Reported, never corrected. The app cannot tell whether the season moved or the
+// officer deliberately moved that one event, and quietly dragging somebody's
+// calendar back is the worse of the two mistakes.
+func recordDrift(result *pushResult, id int, label string, week int, expected, actual string) {
+	result.Drifted++
+	if len(result.DriftedRows) < 20 {
+		result.DriftedRows = append(result.DriftedRows, driftedSeasonRow{
+			ID: id, Label: label, Week: week, Expected: expected, Actual: actual,
+		})
+	}
+}
+
+// stampedServerEventIDs lists the server_events windows a season materialised.
+// Read fully and the cursor closed before the caller writes — one connection.
+func stampedServerEventIDs(tx *sql.Tx, seasonID int) ([]int, error) {
+	rows, err := tx.Query(`SELECT id FROM server_events
+		WHERE season_event_id IN (SELECT id FROM season_events WHERE season_id = ?)`, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	return ids, rows.Err()
 }

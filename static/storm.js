@@ -108,9 +108,6 @@ let dragSourceGroupId = null;
 let dragSourceBuildingId = null;
 let dragSourceIsDirect = false;
 let slotPickers = [];   // inline member-pickers mounted in the current render
-// Source of truth for the generated battle mail. The <pre> that displays it is a
-// translatable text node, so the copy handler must read from here, never from the DOM.
-let generatedMailText = '';
 
 // ── Error display ─────────────────────────────────────────────────
 function showError(msg) {
@@ -1231,121 +1228,6 @@ function buildGroupAssignmentsText() {
     return text;
 }
 
-// ── Generate mail ─────────────────────────────────────────────────
-function generateMail() {
-    const isA = currentTF === 'A';
-    const selId = isA ? 'storm-time-select-a' : 'storm-time-select-b';
-    const timeSelect = document.getElementById(selId);
-    let timeText = '';
-    if (timeSelect && timeSelect.value) {
-        // Mail includes the full per-zone breakdown (broadcast text, not UI).
-        const slot = STORM_SLOTS.find(s => String(s.id) === timeSelect.value);
-        if (slot) timeText = slotZoneLabel(slot);
-    }
-
-    let mail = `🏜️ DESERT STORM - TASK FORCE ${currentTF}\n`;
-    mail += `═══════════════════════════════════════\n\n`;
-
-    if (timeText) {
-        mail += `⏰ BATTLE TIME:\n${timeText}\n\n`;
-    }
-
-    mail += `BATTLE STRATEGY:\n\n`;
-    mail += `STAGE 1 (Start - 10 min):\n`;
-    mail += `1. Field Hospitals (all 4) - CRITICAL for troop healing!\n`;
-    mail += `2. Oil Refineries I & II (100/s total) - HIGH PRIORITY\n`;
-    mail += `3. Science Hub - Faster teleports (1min cooldown)\n`;
-    mail += `4. Info Center - +10% all points (low priority)\n\n`;
-
-    mail += `STAGE 2 (10-30 min):\n`;
-    mail += `1. Nuclear Silo (80/s) - CRITICAL! 3 STRONGEST CAPTURE!\n`;
-    mail += `2. Maintain Field Hospitals for continuous healing\n`;
-    mail += `3. Hold and defend Nuclear Silo at all costs\n`;
-    mail += `4. After 20min: Oil Rigs appear - collect for bonus points\n`;
-    mail += `5. Arsenal & Mercenary Factory - Secure these for buffs\n\n`;
-
-    mail += `TACTICAL TIPS:\n\n`;
-    mail += `STARTING THE BATTLE:\n`;
-    mail += `- Enter game IMMEDIATELY when battle starts\n`;
-    mail += `- TELEPORT to your assigned location (don't walk!)\n`;
-    mail += `- Port cooldown: 2min normally, 1min with Science Hub\n\n`;
-
-    mail += `SQUAD MANAGEMENT (CRITICAL!):\n`;
-    mail += `- WEAKEST squad = Defend buildings\n`;
-    mail += `- STRONGEST squad(s) = Attack enemies\n`;
-    mail += `- This protects your main force and maximizes combat power\n\n`;
-
-    mail += `HOSPITALS:\n`;
-    mail += `- CRITICAL for gathering troops back\n`;
-    mail += `- Collect regularly using the House+ icon (left side)\n`;
-    mail += `- Your survival depends on healing!\n\n`;
-
-    mail += `DEFENSE STRATEGY:\n`;
-    mail += `- If attacked by MUCH STRONGER opponent:\n`;
-    mail += `  - Remove all troops from wall, OR\n`;
-    mail += `  - Teleport to safety immediately\n`;
-    mail += `- Don't sacrifice troops unnecessarily!\n\n`;
-
-    mail += `COMBAT & POINTS:\n`;
-    mail += `- Collect supply drops IMMEDIATELY before opponents\n`;
-    mail += `- Buildings generate points after 60 seconds\n`;
-    mail += `- After 20min: and if you are low on troops focus on Oil Rigs for extra points\n\n`;
-
-    mail += `TEAMWORK:\n`;
-    mail += `- Once your building is secure, check map (top-right)\n`;
-    mail += `- Relocate to help teammates or capture new buildings\n`;
-    mail += `- BACK UP teammates under attack\n`;
-    mail += `- Attack together - coordinate on same target\n`;
-    mail += `- Watch opponent movements - exploit vulnerabilities!\n\n`;
-
-    mail += `═══════════════════════════════════════\n`;
-    mail += `ATTENTION SUBSTITUTES:\n`;
-    mail += `Hey team! We really need you to be online and ready at battle time.\n`;
-    mail += `There's a very high chance someone from the main roster will miss it,\n`;
-    mail += `so your participation is crucial for our success!\n\n`;
-    mail += `- Be online 2-3 minutes before battle starts\n`;
-    mail += `- Watch alliance chat for updates\n`;
-    mail += `- Jump in immediately if someone doesn't show\n\n`;
-    mail += `Your flexibility and readiness make all the difference! 💪\n\n`;
-    mail += `═══════════════════════════════════════\n`;
-    mail += `GROUP ASSIGNMENTS:\n`;
-    mail += buildGroupAssignmentsText();
-    mail += `\n═══════════════════════════════════════\n`;
-    mail += `💪 LET'S WIN THIS!\n`;
-    mail += `═══════════════════════════════════════\n`;
-
-    generatedMailText = mail;
-
-    const mailContent = document.getElementById('mail-content');
-    const mailOutput = document.getElementById('mail-output');
-    if (mailContent && mailOutput) {
-        mailContent.textContent = mail;   // display only — never read back
-        mailOutput.classList.remove('hidden');
-        mailOutput.scrollIntoView({ behavior: 'smooth' });
-    }
-}
-
-async function copyMail() {
-    // Copy the generated source text, not #mail-content's textContent: on a
-    // translated page the rendered text node carries the browser's translation,
-    // which would put a translated battle mail into the game.
-    if (!generatedMailText) return;
-    const btn = document.getElementById('btn-copy-mail');
-    try {
-        await navigator.clipboard.writeText(generatedMailText);
-        if (btn) {
-            const label = btn.querySelector('.btn-copy-mail-label');
-            if (label) {
-                const orig = label.textContent;
-                label.textContent = 'Copied!';
-                setTimeout(() => { label.textContent = orig; }, 2000);
-            }
-        }
-    } catch {
-        showError('Copy failed — please select the text and copy manually.');
-    }
-}
-
 // ── Init ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     const root = document.getElementById('storm-root');
@@ -1540,28 +1422,88 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnSaveMyReg = document.getElementById('btn-save-my-reg');
     if (btnSaveMyReg) btnSaveMyReg.addEventListener('click', saveMyRegistration);
 
+    // The seeded ds_battle_mail template is the ONLY source of this mail. There is
+    // deliberately no fallback: the template cannot be deleted (the endpoint
+    // refuses with 409) and a migration re-seeds it where an earlier version of
+    // the app allowed it to be deleted, so a failed fetch means something is
+    // actually wrong — and the officer should be told, not handed silently
+    // different text than the one they edited in Comms.
     const btnGenerateMail = document.getElementById('btn-generate-mail');
     if (btnGenerateMail) {
         btnGenerateMail.addEventListener('click', async () => {
             try {
                 const res = await fetch('/api/comms/templates/slug/ds_battle_mail');
-                if (res.ok) {
-                    const template = await res.json();
-                    const prefilledValues = {
-                        task_force: `TF ${currentTF}`,
-                        battle_time: getBattleTimeText(),
-                        group_assignments: buildGroupAssignmentsText()
-                    };
-                    await copyWithVariables(template.content, prefilledValues);
-                    return;
-                }
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const template = await res.json();
+                await copyWithVariables(template.content, {
+                    task_force: `TF ${currentTF}`,
+                    battle_time: getBattleTimeText(),
+                    group_assignments: buildGroupAssignmentsText()
+                });
             } catch (e) {
-                // fall through to legacy generateMail
+                showToast('Could not load the battle mail template — check Comms → Desert Storm.', 'error');
             }
-            generateMail();
         });
     }
+});
 
-    const btnCopyMail = document.getElementById('btn-copy-mail');
-    if (btnCopyMail) btnCopyMail.addEventListener('click', copyMail);
+
+// ── Registration window ───────────────────────────────────────────────────────
+//
+// Desert Storm registration opens Monday 00:00 ST and closes Thursday 00:00 ST;
+// opponents are announced Thursday and the battle is Friday. The app knew none of
+// this, so an officer chasing sign-ups had to remember the deadline themselves.
+//
+// Constants, not settings — the same call standing-decisions.md records for the
+// schedule's game rules. The compensation is that the line always NAMES the
+// instant it is counting to, so a disagreement with the game is visible the day
+// it happens rather than silently wrong.
+const DS_REG_OPENS  = { weekday: 0, time: '00:00' }; // Mon=0
+const DS_REG_CLOSES = { weekday: 3, time: '00:00' }; // Mon=0, so 3 = Thursday
+
+// Minutes from the current game instant forward to the next occurrence of a
+// weekday + time. Always strictly positive: if we are exactly on it, the answer
+// is a week away, which is the next one.
+function minutesUntilGameMoment(clock, target) {
+    const [th, tm] = target.time.split(':').map(Number);
+    const nowMin = clock.weekday * 1440 + clock.hh * 60 + clock.mm;
+    const tgtMin = target.weekday * 1440 + th * 60 + tm;
+    let delta = tgtMin - nowMin;
+    if (delta <= 0) delta += 7 * 1440;
+    return delta;
+}
+
+function formatCountdown(minutes) {
+    const d = Math.floor(minutes / 1440);
+    const h = Math.floor((minutes % 1440) / 60);
+    const m = minutes % 60;
+    if (d > 0) return d + 'd ' + h + 'h';
+    if (h > 0) return h + 'h ' + m + 'm';
+    return m + 'm';
+}
+
+function renderRegistrationWindow() {
+    const el = document.getElementById('storm-reg-window');
+    if (!el || typeof gameClock !== 'function') return;
+
+    const clock = gameClock();
+    // Open from Mon 00:00 up to (not including) Thu 00:00 — weekdays 0, 1, 2.
+    const open = clock.weekday < DS_REG_CLOSES.weekday;
+
+    if (open) {
+        el.textContent = 'Registration open — closes Thu 00:00 ST (in '
+            + formatCountdown(minutesUntilGameMoment(clock, DS_REG_CLOSES)) + ').';
+        el.style.color = '';
+    } else {
+        el.textContent = 'Registration closed — opponents announced Thursday, battle Friday. Reopens Mon 00:00 ST (in '
+            + formatCountdown(minutesUntilGameMoment(clock, DS_REG_OPENS)) + ').';
+        el.style.color = 'var(--color-text-muted)';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    renderRegistrationWindow();
+    // Re-rendered every minute: a countdown that is only right at page load is
+    // worse than none, because it looks live.
+    setInterval(renderRegistrationWindow, 60000);
 });

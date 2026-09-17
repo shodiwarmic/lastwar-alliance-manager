@@ -365,7 +365,17 @@ func Main() {
 	wopiRouter.HandleFunc("/files/{id}", wopiAuthMiddleware(wopiActionHandler)).Methods("POST")
 	wopiRouter.HandleFunc("/files/{id}/contents", wopiAuthMiddleware(wopiPutFile)).Methods("POST")
 
-	// Schedule event types
+	// Schedule event types.
+	//
+	// The ceiling pair is gated manage_settings while everything else here is
+	// manage_schedule — the ceiling used to live in Settings → Game Limits and must
+	// not change hands by moving onto the type row. requirePermission takes one
+	// key, so Game Limits needs its OWN read endpoint: a manage_settings holder
+	// without view_schedule calling the general list would get a 403 and an
+	// unexplained empty section.
+	router.HandleFunc("/api/schedule/event-types/ceilings", authMiddleware(requirePermission("manage_settings", getScheduleEventTypeCeilings))).Methods("GET")
+	router.HandleFunc("/api/schedule/event-types/{id:[0-9]+}/ceiling", authMiddleware(requirePermission("manage_settings", updateScheduleEventTypeCeiling))).Methods("PUT")
+
 	router.HandleFunc("/api/schedule/event-types", authMiddleware(requirePermission("view_schedule", getScheduleEventTypes))).Methods("GET")
 	router.HandleFunc("/api/schedule/event-types", authMiddleware(requirePermission("manage_schedule", createScheduleEventType))).Methods("POST")
 	router.HandleFunc("/api/schedule/event-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", updateScheduleEventType))).Methods("PUT")
@@ -385,6 +395,16 @@ func Main() {
 	router.HandleFunc("/api/schedule/server-events", authMiddleware(requirePermission("manage_schedule", createServerEvent))).Methods("POST")
 	router.HandleFunc("/api/schedule/server-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", updateServerEvent))).Methods("PUT")
 	router.HandleFunc("/api/schedule/server-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", deleteServerEvent))).Methods("DELETE")
+
+	router.HandleFunc("/api/schedule/announcement", authMiddleware(requirePermission("view_schedule", getAnnouncement))).Methods("GET")
+
+	// Starred missions. The calendar's read is view_schedule; configuring the
+	// sector and correcting an opening date is manage_settings, the same gate as
+	// the sweep job that fills the table.
+	router.HandleFunc("/api/schedule/starred", authMiddleware(requirePermission("view_schedule", getStarredSchedule))).Methods("GET")
+	router.HandleFunc("/api/starred/servers", authMiddleware(requirePermission("manage_settings", getStarredServers))).Methods("GET")
+	router.HandleFunc("/api/starred/servers/{id:[0-9]+}", authMiddleware(requirePermission("manage_settings", updateStarredServer))).Methods("PUT")
+	router.HandleFunc("/api/starred/servers/{id:[0-9]+}", authMiddleware(requirePermission("manage_settings", deleteStarredServer))).Methods("DELETE")
 
 	// Storm slot times (read: all authenticated; write: admin only)
 	router.HandleFunc("/api/storm/slot-times", authMiddleware(getAdvancedStormSlots)).Methods("GET")

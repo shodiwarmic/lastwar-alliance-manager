@@ -17,6 +17,13 @@
 -- overlapping segments ({1..12} then tens), which no CHECK or step describes and
 -- which would make historical events uneditable; a slightly permissive range that
 -- accepts a level the game lacks is the deliberate trade.
+--
+-- CORRECTION (migration 074): that "two overlapping segments" scale was never one
+-- scale. {1..12} is Marshal's Guard and the tens are LARGE SANDWORM — two events
+-- sharing the Alliance Exercise slot and, until 074, sharing one event type and one
+-- ceiling. The permissive range was the right call for a scale nobody could
+-- describe; the reason nobody could describe it is that it was two. Each type now
+-- carries its own baseline and ceiling on its own row (migration 073).
 
 -- +goose StatementBegin
 ALTER TABLE settings ADD COLUMN max_mg_level INTEGER NOT NULL DEFAULT 1;

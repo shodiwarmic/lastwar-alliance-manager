@@ -44,8 +44,20 @@ function getCanvasPalette() {
         stormBg:    t('--color-warning-bg'),
         stormText:  t('--color-warning'),
         stormBorder: t('--color-warning'),
+        grp1:       t('--color-info'),
+        grp2:       t('--color-success'),
+        grp3:       t('--color-warning'),
+        grp1Bg:     t('--color-info-bg'),
+        grp2Bg:     t('--color-success-bg'),
+        grp3Bg:     t('--color-warning-bg'),
     };
 }
+
+// The day tag sits on the accent header, which is the SAME purple in light and
+// dark — so its colours are fixed rather than themed, for the same reason the
+// header's text is hardcoded white above. A white pill reads against that purple
+// in both themes, and these saturated tones read against the white pill.
+const STARRED_PILL_INK = { 1: '#1d4ed8', 2: '#15803d', 3: '#b45309' };
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -232,13 +244,115 @@ async function loadWeek() {
         weekEvents = [];
     }
 
+    await loadStarred(from, to);
+
     renderWeek(dates);
+}
+
+// ── Starred missions ──────────────────────────────────────────────────────────
+//
+// `days` is a date → group map computed by the SERVER. The three-day residue is
+// deliberately not reimplemented here: one rule, one implementation, and a
+// browser copy would be free to drift out of step with the group lists it labels.
+
+let starred = { configured: false, groups: {}, days: {}, unknown: [] };
+
+async function loadStarred(from, to) {
+    try {
+        const res = await fetch('/api/schedule/starred?from=' + from + '&to=' + to);
+        if (!res.ok) throw new Error();
+        starred = await res.json();
+    } catch {
+        starred = { configured: false, groups: {}, days: {}, unknown: [] };
+    }
+}
+
+// The group starred on a date, or 0 when the sector is not configured.
+function starredGroupOn(dateStr) {
+    if (!starred.configured) return 0;
+    return starred.days?.[dateStr] || 0;
+}
+
+function starredServersIn(group) {
+    return (starred.groups?.[String(group)] || []);
+}
+
+// The group's display label — a colour name, never a number and never a letter.
+//
+// A number sits beside four-digit server numbers and gets read as one more of
+// them. A/B/C is worse than a number rather than better: the lettered calendar
+// officers circulate is COMMUNITY-MADE, not an in-game artefact, and its letters
+// rotate month to month. So ours would agree with whichever copy someone is
+// holding one month and contradict it the next, while looking authoritative
+// either way — the false correspondence starred.go refuses to store a mapping
+// for. A colour implies no correspondence with those letters at all, and is
+// stable like the residue it names.
+const STARRED_GROUP_NAMES = { 1: 'Blue', 2: 'Green', 3: 'Amber' };
+
+// Shiny missions carry their OWN icon. The star is already the VS theme icon for
+// the Alliance Star day (global.js), so a day that was both showed two stars
+// meaning different things.
+const STARRED_ICON = '\u2728';
+
+function starredGroupLabel(group) {
+    return (STARRED_GROUP_NAMES[group] || group) + ' Group';
+}
+
+// "1705, 1706, 1709" — or an explicit note when the group is empty, because a
+// blank line reads as "no starred mission today", which is never true.
+function starredServerList(group) {
+    const list = starredServersIn(group);
+    if (!list.length) return 'no servers known yet';
+    return list.join(', ');
 }
 
 // ── Week rendering ────────────────────────────────────────────────────────────
 
 function renderWeek(dates) {
+    renderStarredLegend(dates);
     renderGrid(dates);
+}
+
+// The legend lists each group once with its servers. It deliberately does NOT
+// repeat the dates: every day card carries its own group tag, so restating the
+// dates here is the same fact twice, and the second copy is the one that has to
+// be re-read against the grid to be useful.
+function renderStarredLegend(dates) {
+    const wrap = document.getElementById('starred-legend');
+    if (!wrap) return;
+    wrap.replaceChildren();
+    if (!starred.configured) return;
+
+    for (let group = 1; group <= 3; group++) {
+        const days = dates.filter(d => starredGroupOn(d) === group);
+        if (!days.length) continue;
+
+        const row = document.createElement('div');
+        row.className = 'starred-legend-row starred-grp-' + group;
+
+        const head = document.createElement('span');
+        head.className = 'starred-legend-head starred-grp-' + group;
+        head.textContent = STARRED_ICON + ' ' + starredGroupLabel(group) + ':';
+        row.appendChild(head);
+
+        const list = document.createElement('span');
+        list.className = 'starred-legend-list';
+        list.textContent = ' ' + starredServerList(group);
+        row.appendChild(list);
+
+        wrap.appendChild(row);
+    }
+
+    // Named rather than omitted: a group list that is quietly short is
+    // indistinguishable from a complete one, which is how the published images
+    // went wrong in both directions in the first place.
+    if (starred.unknown?.length) {
+        const note = document.createElement('div');
+        note.className = 'starred-legend-row starred-legend-unknown';
+        note.textContent = 'Opening date not yet fetched: ' + starred.unknown.join(', ')
+            + ' — run the sweep in Settings to place them.';
+        wrap.appendChild(note);
+    }
 }
 
 
@@ -296,6 +410,16 @@ function buildDayCol(dateStr, idx) {
     vsLabel.textContent = vs.icon + ' ' + vs.label;
     header.appendChild(vsLabel);
 
+    // Only the group tag here; the legend carries the server list.
+    const group = starredGroupOn(dateStr);
+    if (group) {
+        const starredLabel = document.createElement('div');
+        starredLabel.className = 'day-col-starred starred-grp-' + group;
+        starredLabel.textContent = STARRED_ICON + ' ' + starredGroupLabel(group);
+        starredLabel.title = 'Starred missions on: ' + starredServerList(group);
+        header.appendChild(starredLabel);
+    }
+
     col.appendChild(header);
 
     // Merge regular events + storm entries (Fridays), sort by time (all-day first)
@@ -312,6 +436,13 @@ function buildDayCol(dateStr, idx) {
         col.appendChild(entry._isStorm ? buildStormCard(entry) : buildEventCard(entry, dateStr));
     });
 
+    if (isDSRegMarkerDay(dateStr)) {
+        const marker = document.createElement('div');
+        marker.className = 'ds-reg-marker';
+        marker.textContent = DS_REG_MARKER_TEXT;
+        col.appendChild(marker);
+    }
+
     // Add Event button
     if (CAN_MANAGE) {
         const addBtn = document.createElement('button');
@@ -322,6 +453,21 @@ function buildDayCol(dateStr, idx) {
     }
 
     return col;
+}
+
+
+// ── Desert Storm registration marker ──────────────────────────────────────────
+//
+// Registration closes Thu 00:00 ST. The marker sits on WEDNESDAY — the last day
+// an officer can still act on it — and names the instant rather than the day, so
+// nobody reads "closes Wednesday" and signs up on Thursday morning.
+//
+// A constant, matching the pair in storm.js and the schedule's other game rules.
+const DS_REG_MARKER_WEEKDAY = 2;  // Mon=0, so 2 = Wednesday
+const DS_REG_MARKER_TEXT = '⚡ DS registration closes Thu 00:00 ST';
+
+function isDSRegMarkerDay(dateStr) {
+    return (new Date(dateStr + 'T12:00:00Z').getUTCDay() + 6) % 7 === DS_REG_MARKER_WEEKDAY;
 }
 
 function buildEventCard(evt, dateStr) {
@@ -347,6 +493,19 @@ function buildEventCard(evt, dateStr) {
         lvl.className = 'event-card-level';
         lvl.textContent = 'Lv.' + evt.level;
         row.appendChild(lvl);
+    }
+
+    // An encounter left outside its parent window — usually because the window's
+    // anchor moved after the event was saved. Flagged, never moved: the app does
+    // not know which of the two is wrong.
+    if (evt.outside_window) {
+        const warn = document.createElement('span');
+        warn.className = 'event-card-warn';
+        warn.textContent = '⚠ outside window';
+        warn.title = evt.parent_name
+            ? 'This date is not inside any ' + evt.parent_name + ' window.'
+            : 'This date is not inside its server event window.';
+        row.appendChild(warn);
     }
 
     card.appendChild(row);
@@ -492,28 +651,116 @@ function populateEventTypeSelect(selectedId) {
     updateEventModalForType();
 }
 
+// The next `count` windows a server event opens, on or after `fromStr`, as
+// ["23–25 Sep", …].
+//
+// getServerEventOccurrencesInWeek is indexed on dates[0]/dates[6], so it can only
+// be asked about one week at a time; this walks a quarter of them and stitches the
+// covered days back into runs. Reusing it rather than re-deriving the cadence is
+// the point — there is already a second implementation of this arithmetic in Go,
+// and a third would be one too many.
+function nextServerEventWindows(se, fromStr, count) {
+    const covered = new Set();
+    let cursor = fromStr;
+    for (let w = 0; w < 13; w++) {
+        const week = [];
+        for (let i = 0; i < 7; i++) week.push(addDays(cursor, i));
+        getServerEventOccurrencesInWeek(se, week).forEach(d => covered.add(d));
+        cursor = addDays(cursor, 7);
+    }
+    const days = Array.from(covered).sort();
+    const runs = [];
+    days.forEach(d => {
+        const last = runs[runs.length - 1];
+        if (last && addDays(last[last.length - 1], 1) === d) last.push(d);
+        else runs.push([d]);
+    });
+    const fmt = s => new Date(s + 'T12:00:00Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    return runs
+        .filter(r => r[r.length - 1] >= fromStr)
+        .slice(0, count)
+        .map(r => r.length === 1 ? fmt(r[0]) : fmt(r[0]) + ' – ' + fmt(r[r.length - 1]));
+}
+
+// A hint under the Date field naming the windows an encounter type may sit in.
+// Display only: the server validates the save, so a disagreement shows up as a
+// rejection rather than as a silently wrong calendar.
+function updateEventWindowHint(et) {
+    const hintEl = document.getElementById('event-window-hint');
+    if (!hintEl) return;
+    const parentId = et && et.server_event_id;
+    if (!parentId) { hintEl.textContent = ''; return; }
+    const se = serverEvents.find(s => s.id === parentId);
+    if (!se) { hintEl.textContent = ''; return; }
+    if (!se.active) {
+        hintEl.textContent = se.name + ' is not active, so no windows are shown. Reactivate it in Server Events.';
+        return;
+    }
+    if (!se.anchor_date) {
+        hintEl.textContent = se.name + ' has no anchor date set, so its windows cannot be worked out. Set one in Server Events.';
+        return;
+    }
+    const today = document.getElementById('event-date-input').value || todayGameDate();
+    const windows = nextServerEventWindows(se, today, 3);
+    hintEl.textContent = windows.length
+        ? se.name + ' windows: ' + windows.join(', ')
+        : se.name + ' has no upcoming windows.';
+}
+
 function updateEventModalForType() {
     const sel = document.getElementById('event-type-select');
     const typeId = parseInt(sel.value, 10);
     const et = eventTypes.find(e => e.id === typeId);
-    const isSystem = et && et.is_system;
+
+    updateEventWindowHint(et);
 
     const lvlGroup = document.getElementById('event-level-group');
+    const lvlInput = document.getElementById('event-level-input');
+    const lvlLabel = document.getElementById('event-level-label');
+    const lvlHelp  = document.getElementById('event-level-help');
     const hint = document.getElementById('event-time-hint');
 
-    lvlGroup.style.display = isSystem ? '' : 'none';
+    const carriesLevel = !!(et && et.has_level);
+    lvlGroup.style.display = carriesLevel ? '' : 'none';
 
-    if (!et) { hint.textContent = ''; return; }
+    // Clearing the input is load-bearing, not tidiness. The group only HIDES, and
+    // saveEvent reads the input's value whether or not it is visible — so before
+    // this, switching an MG event to a custom type left "12" in the box and sent
+    // it, and the server accepted it. The server now refuses too; this stops the
+    // officer being shown an error for a value they never typed.
+    if (!carriesLevel) {
+        lvlInput.value = '';
+        lvlInput.placeholder = '';
+        lvlInput.removeAttribute('max');
+        hint.textContent = et ? '' : '';
+        return;
+    }
 
-    if (et.short_name === 'MG') {
-        hint.textContent = 'Must start by 21:59 ST. Every-other-day rule applies.';
-        // Update level placeholder with baseline
-        document.getElementById('event-level-input').placeholder = settings.mg_baseline ?? '';
-        setEventLevelMax(settings.max_mg_level);
+    if (et.is_system) {
+        lvlLabel.textContent = 'Level Override';
+        lvlHelp.textContent = '(leave blank to use the baseline)';
+        lvlInput.placeholder = et.baseline_level ?? '';
+        setEventLevelMax(et.max_level);
+    } else {
+        lvlLabel.textContent = 'Level';
+        lvlHelp.textContent = '(optional)';
+        // A custom type has no baseline to fall back on, so the last level used is
+        // the only sensible hint — and a blank stays blank rather than being filled
+        // in with a number nobody chose.
+        lvlInput.placeholder = et.last_level ?? '';
+        lvlHelp.textContent = et.last_level != null
+            ? '(optional — last ' + et.name + ' was level ' + et.last_level + ')'
+            : '(optional)';
+        lvlInput.removeAttribute('max');
+    }
+
+    if (et.short_name === 'MG' || et.short_name === 'LS') {
+        // One slot, two variants: the cadence spans both, so an MG on Monday blocks
+        // a Large Sandworm on Tuesday. The server decides which variant a date may
+        // carry, from the Season 3 day 58 cutover.
+        hint.textContent = 'Must start by 21:59 ST. Alliance Exercise runs every other day — Marshal’s Guard and Large Sandworm share the slot.';
     } else if (et.short_name === 'ZS') {
         hint.textContent = 'Two clear days between sieges (next ZS on D+3 or later, any time).';
-        document.getElementById('event-level-input').placeholder = settings.zs_baseline ?? '';
-        setEventLevelMax(settings.max_zs_level);
     } else {
         hint.textContent = '';
     }
@@ -604,6 +851,9 @@ async function loadEventTypes() {
         eventTypes = [];
     }
     renderEventTypes();
+    // The Schedule → Settings baselines are rendered from the same payload, so
+    // they are refreshed here rather than by each caller remembering to.
+    renderBaselineInputs();
 }
 
 function renderEventTypes() {
@@ -635,6 +885,15 @@ function renderEventTypes() {
         const tags = [];
         if (et.is_system) tags.push('System');
         if (!et.active) tags.push('Inactive');
+        if (et.has_level) {
+            tags.push(et.is_system && et.baseline_level != null && et.max_level != null
+                ? 'Lv. ' + et.baseline_level + '/' + et.max_level
+                : 'Levelled');
+        }
+        if (et.server_event_id != null) {
+            const parent = serverEvents.find(s => s.id === et.server_event_id);
+            tags.push('Inside ' + (parent ? parent.name : 'a server event window'));
+        }
         meta.textContent = tags.join(' · ') || 'Custom';
         info.appendChild(meta);
 
@@ -644,13 +903,16 @@ function renderEventTypes() {
             const actions = document.createElement('div');
             actions.className = 'event-type-row-actions';
 
-            if (!et.is_system) {
-                const editBtn = document.createElement('button');
-                editBtn.className = 'btn btn-ghost btn-sm';
-                editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
-                editBtn.addEventListener('click', () => openEditEventTypeModal(et));
-                actions.appendChild(editBtn);
+            // System types are editable now — their baseline level lives on the row.
+            // Name and short name stay locked (the Season Hub relinks templates on
+            // the stored name); the modal disables those two fields.
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn btn-ghost btn-sm';
+            editBtn.append(svgIcon('pencil'), document.createTextNode(' Edit'));
+            editBtn.addEventListener('click', () => openEditEventTypeModal(et));
+            actions.appendChild(editBtn);
 
+            if (!et.is_system) {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'btn btn-danger btn-sm';
                 delBtn.textContent = 'Delete';
@@ -673,6 +935,22 @@ function renderEventTypes() {
     });
 }
 
+// Shape the type modal for a system or custom type. The two differ in which level
+// fields apply: a system type's has_level is fixed on and it carries a baseline,
+// a custom type's is a choice and it carries neither baseline nor ceiling.
+function setEventTypeModalMode(et) {
+    const isSystem = !!(et && et.is_system);
+    document.getElementById('et-name').disabled = isSystem;
+    document.getElementById('et-short').disabled = isSystem;
+    document.getElementById('et-has-level-group').style.display = isSystem ? 'none' : '';
+    document.getElementById('et-baseline-group').style.display = isSystem ? '' : 'none';
+
+    const help = document.getElementById('et-baseline-help');
+    help.textContent = isSystem && et.max_level != null
+        ? 'Between 1 and ' + et.max_level + '. Raise the ceiling in Settings → Game Limits first if you need more.'
+        : '';
+}
+
 function openAddEventTypeModal() {
     document.getElementById('event-type-modal-title').textContent = 'Add Event Type';
     document.getElementById('event-type-modal-id').value = '';
@@ -680,8 +958,32 @@ function openAddEventTypeModal() {
     document.getElementById('et-short').value = '';
     document.getElementById('et-icon').value = '📅';
     document.getElementById('et-active').checked = true;
+    document.getElementById('et-has-level').checked = false;
+    document.getElementById('et-announce').checked = true;
+    document.getElementById('et-baseline').value = '';
+    populateParentWindowSelect(null);
+    setEventTypeModalMode(null);
     document.getElementById('event-type-form-error').textContent = '';
     document.getElementById('event-type-modal').style.display = 'flex';
+}
+
+// The "inside server event window" picker. Offers every window, active or not —
+// an inactive one is still the right answer while the officer sorts it out, and
+// the save path says so rather than hiding the option.
+function populateParentWindowSelect(selectedId) {
+    const sel = document.getElementById('et-parent');
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'None';
+    const opts = [none];
+    serverEvents.forEach(se => {
+        const opt = document.createElement('option');
+        opt.value = se.id;
+        opt.textContent = se.icon + ' ' + se.name + (se.active ? '' : ' (inactive)');
+        opts.push(opt);
+    });
+    sel.replaceChildren(...opts);
+    sel.value = selectedId == null ? '' : String(selectedId);
 }
 
 function openEditEventTypeModal(et) {
@@ -691,6 +993,11 @@ function openEditEventTypeModal(et) {
     document.getElementById('et-short').value = et.short_name;
     document.getElementById('et-icon').value = et.icon;
     document.getElementById('et-active').checked = et.active;
+    document.getElementById('et-has-level').checked = !!et.has_level;
+    document.getElementById('et-announce').checked = et.announce !== false;
+    document.getElementById('et-baseline').value = et.baseline_level ?? '';
+    populateParentWindowSelect(et.server_event_id ?? null);
+    setEventTypeModalMode(et);
     document.getElementById('event-type-form-error').textContent = '';
     document.getElementById('event-type-modal').style.display = 'flex';
 }
@@ -701,12 +1008,26 @@ async function saveEventType(e) {
     errEl.textContent = '';
 
     const id   = document.getElementById('event-type-modal-id').value;
+    const et   = id ? eventTypes.find(t => String(t.id) === String(id)) : null;
     const body = {
         name:       document.getElementById('et-name').value,
         short_name: document.getElementById('et-short').value,
         icon:       document.getElementById('et-icon').value || '📅',
         active:     document.getElementById('et-active').checked,
     };
+    if (et && et.is_system) {
+        const bl = document.getElementById('et-baseline').value;
+        if (bl !== '') body.baseline_level = parseInt(bl, 10);
+    } else {
+        // Sent on BOTH the POST and the PUT: a field only the update path accepts
+        // is silently lost on create and looks like a broken checkbox.
+        body.has_level = document.getElementById('et-has-level').checked;
+    }
+    // Sent on both paths, and sent even when empty: a JSON null is how the PUT is
+    // told to CLEAR the link, and an absent key means "leave it alone".
+    const parent = document.getElementById('et-parent').value;
+    body.server_event_id = parent === '' ? null : parseInt(parent, 10);
+    body.announce = document.getElementById('et-announce').checked;
 
     const url    = id ? '/api/schedule/event-types/' + id : '/api/schedule/event-types';
     const method = id ? 'PUT' : 'POST';
@@ -803,7 +1124,13 @@ function renderServerEvents() {
             delBtn.textContent = 'Delete';
             delBtn.addEventListener('click', async () => {
                 if (!await showConfirm('Delete this server event?', 'Delete')) return;
-                await fetch('/api/schedule/server-events/' + evt.id, { method: 'DELETE' });
+                // A 409 here means an encounter type still points at this window.
+                // Swallowing it would look like a delete that silently did nothing.
+                const res = await fetch('/api/schedule/server-events/' + evt.id, { method: 'DELETE' });
+                if (!res.ok) {
+                    showToast(await res.text() || 'Could not delete that server event.', 'error', 8000);
+                    return;
+                }
                 await loadServerEvents();
                 await loadWeek();
             });
@@ -894,6 +1221,18 @@ async function saveServerEvent(e) {
             errEl.textContent = await res.text() || 'Save failed';
             return;
         }
+        // Moving a window can leave encounters outside it. The server lists them;
+        // it never moves them, so the officer is told rather than surprised.
+        const body = await res.json().catch(() => null);
+        const stranded = body && body.stranded;
+        if (stranded && stranded.length) {
+            const byType = {};
+            stranded.forEach(s => { (byType[s.type] = byType[s.type] || []).push(s.date); });
+            const parts = Object.entries(byType).map(([type, dates]) =>
+                dates.length + ' ' + type + ' event' + (dates.length === 1 ? '' : 's') +
+                ' now fall' + (dates.length === 1 ? 's' : '') + ' outside this window: ' + dates.join(', '));
+            showToast(parts.join(' · '), 'info', 8000);
+        }
     } catch {
         errEl.textContent = 'Network error';
         return;
@@ -908,13 +1247,42 @@ async function saveServerEvent(e) {
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
 
+// One baseline input per levelled system type, built from the types payload.
+// There used to be exactly two of these in the markup, wired to two settings
+// columns; a third type meant a third column pair and a third hardcoded input.
+function renderBaselineInputs() {
+    const wrap = document.getElementById('baseline-inputs');
+    if (!wrap) return;
+    wrap.replaceChildren();
+
+    eventTypes.filter(et => et.is_system && et.has_level).forEach(et => {
+        const group = document.createElement('div');
+        group.className = 'form-group';
+
+        const label = document.createElement('label');
+        label.htmlFor = 'baseline-' + et.id;
+        label.textContent = et.name + ' Baseline Level';
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.id = 'baseline-' + et.id;
+        input.min = '1';
+        input.dataset.typeId = et.id;
+        input.className = 'baseline-input';
+        input.value = et.baseline_level ?? '';
+        // Ceilings come from Settings -> Game Limits; this input only bounds to it.
+        if (et.max_level != null) input.max = et.max_level;
+
+        group.append(label, input);
+        wrap.appendChild(group);
+    });
+}
+
 function populateSettingsForm() {
-    document.getElementById('set-mg-baseline').value   = settings.mg_baseline ?? '';
-    document.getElementById('set-zs-baseline').value   = settings.zs_baseline ?? '';
-    // Ceilings come from Settings -> Game Limits; these inputs only bound to them.
-    if (settings.max_mg_level) document.getElementById('set-mg-baseline').max = settings.max_mg_level;
-    if (settings.max_zs_level) document.getElementById('set-zs-baseline').max = settings.max_zs_level;
+    renderBaselineInputs();
     document.getElementById('set-mg-time').value       = settings.mg_default_time ?? '';
+    document.getElementById('set-announce-start').value = settings.announce_window_start ?? '00:00';
+    document.getElementById('set-announce-end').value   = settings.announce_window_end ?? '23:59';
     document.getElementById('set-zs-time').value       = settings.zs_default_time ?? '';
     // Generation rule settings
     document.getElementById('gen-mg-anchor').value     = settings.mg_anchor_date ?? '';
@@ -963,15 +1331,39 @@ async function patchSettings(patch) {
     if (r2.ok) settings = await r2.json();
 }
 
+// Baselines live on the event type row, so they are saved through the type PUT —
+// one request per CHANGED type, not one per type. The rest of this panel is still
+// settings columns and goes through patchSettings as before.
+async function saveChangedBaselines() {
+    const inputs = Array.from(document.querySelectorAll('#baseline-inputs .baseline-input'));
+    for (const input of inputs) {
+        const et = eventTypes.find(t => String(t.id) === input.dataset.typeId);
+        if (!et || input.value === '') continue;
+        const value = parseInt(input.value, 10);
+        if (!Number.isFinite(value) || value === et.baseline_level) continue;
+
+        const res = await fetch('/api/schedule/event-types/' + et.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: et.name, short_name: et.short_name, icon: et.icon,
+                active: et.active, sort_order: et.sort_order,
+                baseline_level: value,
+            }),
+        });
+        if (!res.ok) throw new Error(await res.text() || 'Could not save the ' + et.name + ' baseline');
+    }
+}
+
 async function saveSettings() {
     const statusEl = document.getElementById('settings-status');
-    const mgBaselineVal = document.getElementById('set-mg-baseline').value;
-    const zsBaselineVal = document.getElementById('set-zs-baseline').value;
 
     const patch = {
-        mg_baseline:      mgBaselineVal !== '' ? parseInt(mgBaselineVal, 10) : (settings.mg_baseline ?? 1),
-        zs_baseline:      zsBaselineVal !== '' ? parseInt(zsBaselineVal, 10) : (settings.zs_baseline ?? 1),
         mg_default_time:  document.getElementById('set-mg-time').value || settings.mg_default_time || '00:30',
+        // Falls back to the stored value, then the default — an empty field must
+        // not send "" into a NOT NULL column.
+        announce_window_start: document.getElementById('set-announce-start').value || settings.announce_window_start || '00:00',
+        announce_window_end:   document.getElementById('set-announce-end').value   || settings.announce_window_end   || '23:59',
         zs_default_time:  document.getElementById('set-zs-time').value || settings.zs_default_time || '23:00',
         mg_anchor_date:   document.getElementById('gen-mg-anchor').value || null,
         zs_schedule_mode: document.querySelector('input[name="zs-mode"]:checked')?.value || 'weekdays',
@@ -980,7 +1372,9 @@ async function saveSettings() {
     };
 
     try {
+        await saveChangedBaselines();
         await patchSettings(patch);
+        await loadEventTypes();
         showStatus(statusEl, 'Saved', false);
         renderWeek(weekDates(currentWeekStart));
         updateSeasonSubtitle();
@@ -1025,8 +1419,19 @@ async function generateEvents() {
             return;
         }
         const data = await res.json();
-        let msg = 'Created ' + data.mg_created + ' MG, ' + data.zs_created + ' ZS events.';
+        let msg = 'Created ' + data.mg_created + ' MG, ' + (data.ls_created || 0) + ' Large Sandworm, '
+            + data.zs_created + ' ZS events.';
         if (data.skipped_existing > 0) msg += ' ' + data.skipped_existing + ' already existed.';
+        if (data.switched > 0) {
+            // The officer ticked "Alliance Exercise" and got Large Sandworms. Name
+            // the rule that decided it, the same way a declined date is named.
+            msg += ' ' + data.switched + ' switched to Large Sandworm';
+            const sw = (data.switched_detail || []).slice(0, 3)
+                .map(s => s.date + ' (' + s.reason + ')').join('; ');
+            if (sw) msg += ': ' + sw;
+            if ((data.switched_detail || []).length > 3) msg += '; …';
+            msg += '.';
+        }
         if (data.skipped_invalid > 0) {
             // Name the dates the app declined and why. A smaller number than the
             // officer expected, with no explanation, reads as a broken generator.
@@ -1037,7 +1442,9 @@ async function generateEvents() {
             if ((data.invalid || []).length > 3) msg += '; …';
             msg += '.';
         }
-        showStatus(statusEl, msg, false, data.skipped_invalid > 0 ? 0 : undefined);
+        // Pinned open when there is something to read: a switch or a decline is a
+        // result the officer did not ask for and must not scroll past on a timer.
+        showStatus(statusEl, msg, false, (data.skipped_invalid > 0 || data.switched > 0) ? 0 : undefined);
         await loadWeek();
     } catch {
         showStatus(statusEl, 'Network error', true);
@@ -1065,6 +1472,17 @@ function updateSeasonSubtitle() {
 function buildTextOutput() {
     const dates = weekDates(currentWeekStart);
     const lines = [];
+
+    // Legend once at the top, pointer per day — the same shape as the page, and
+    // what keeps a 64-server list out of all seven day blocks. The dates are not
+    // restated: each day block below carries its own group.
+    if (starred.configured) {
+        for (let group = 1; group <= 3; group++) {
+            if (!dates.some(x => starredGroupOn(x) === group)) continue;
+            lines.push(STARRED_ICON + ' ' + starredGroupLabel(group) + ': ' + starredServerList(group));
+        }
+        if (lines.length) lines.push('');
+    }
 
     dates.forEach(d => {
         const vs = getVSTheme(d);
@@ -1106,6 +1524,15 @@ function buildTextOutput() {
             lines.push('  ' + evt.icon + ' ' + evt.name);
         });
 
+        const starredGroupToday = starredGroupOn(d);
+        if (starredGroupToday) {
+            lines.push('  ' + STARRED_ICON + ' Shiny missions: ' + starredGroupLabel(starredGroupToday));
+        }
+
+        if (isDSRegMarkerDay(d)) {
+            lines.push('  ' + DS_REG_MARKER_TEXT);
+        }
+
         lines.push('');
     });
 
@@ -1131,11 +1558,17 @@ function drawWeekImage() {
         : [[0,1,2,3], [4,5,6]];
     const colW  = 230;
     const padX  = 14;
-    const hdrH  = 62;
+    // The header grows by one line when starred missions are configured, so every
+    // day card can carry its own group tag instead of the legend restating dates.
+    const hdrH  = starred.configured ? 78 : 62;
     const rowH  = 24;
     const banLineH = 14;   // one line per server event in the banner strip
     const gap   = 8;
     const rowGap = 14;
+    // Outer margin, deliberately larger than the inter-card gap. The image is
+    // read on a phone, where a camera cutout eats into the top of a fullscreen
+    // view — anything drawn hard against the edge loses a slice of itself.
+    const edge  = 20;
     const font  = 'Segoe UI, Tahoma, Verdana, sans-serif';
 
     // Size rows by the busiest column
@@ -1158,8 +1591,45 @@ function drawWeekImage() {
     const banH = Math.max(1, maxSeLines) * banLineH + 8;
 
     const colH   = banH + gap + hdrH + gap + Math.max(maxEvts, 1) * rowH + gap * 2;
-    const totalW = numCols * colW + (numCols + 1) * gap;
-    const totalH = gap + ROWS.length * colH + (ROWS.length - 1) * rowGap + gap;
+    const totalW = numCols * colW + (numCols - 1) * gap + edge * 2;
+
+    // Starred legend UNDER the grid, one line per group. The week image has no
+    // room for a 64-server list in each of seven cells, so the same split the
+    // page and the text export use applies here: the legend carries the servers,
+    // the day carries the group. The dates are NOT repeated — each day card is
+    // tagged, so a second listing is the same fact in a form that has to be
+    // cross-referenced against the grid before it means anything.
+    //
+    // The server numbers WRAP rather than being squeezed into one line. Passing a
+    // maxWidth to fillText does not clip, it condenses the glyphs horizontally —
+    // and a 23-server list on a two-column image compresses to about a third of
+    // its natural width, which is unreadable for the one thing on the image an
+    // officer has to copy accurately.
+    const legendLineH = 18;
+    const starredLegend = [];
+    if (starred.configured) {
+        const measure = document.createElement('canvas').getContext('2d');
+        measure.font = '13px ' + font;
+        const listMaxW = totalW - edge * 2 - 20;
+        for (let group = 1; group <= 3; group++) {
+            if (!dates.some(x => starredGroupOn(x) === group)) continue;
+            starredLegend.push({
+                group,
+                lines: wrapNoteLines(measure, starredServerList(group), listMaxW),
+            });
+        }
+    }
+    // One line for the heading plus however many the list wrapped to, and each
+    // group gets a tinted box of its own: 12px of padding and 8px of separation.
+    const legendBoxPad = 12;
+    const legendBoxGap = 8;
+    const legendLines = starredLegend.reduce((n, e) => n + 1 + e.lines.length, 0);
+    const legendH = legendLines
+        ? legendLines * legendLineH + starredLegend.length * (legendBoxPad + legendBoxGap) + gap
+        : 0;
+
+    const gridH  = ROWS.length * colH + (ROWS.length - 1) * rowGap;
+    const totalH = edge + gridH + (legendH ? rowGap + legendH : 0) + edge;
 
     const canvas = document.getElementById('schedule-canvas');
     canvas.width  = totalW;
@@ -1185,8 +1655,8 @@ function drawWeekImage() {
         const rowLen = ROWS[rowIdx].length;
         const missingCols = numCols - rowLen;
         const xOff = missingCols > 0 ? Math.round(missingCols * (colW + gap) / 2) : 0;
-        const x = gap + colIdx * (colW + gap) + xOff;
-        const y = gap + rowIdx * (colH + rowGap);
+        const x = edge + colIdx * (colW + gap) + xOff;
+        const y = edge + rowIdx * (colH + rowGap);
 
         // Card body
         ctx.fillStyle = C.cardBg;
@@ -1244,15 +1714,36 @@ function drawWeekImage() {
             ctx.fillText('S' + settings.current_season + ' · D' + seDay, x + colW / 2, hdrY + 36, colW - 12);
         }
 
-        // VS theme (bottom of header)
+        // VS theme, then the starred group tag on the bottom line when there is one.
+        const grpToday = starredGroupOn(d);
         const vs = getVSTheme(d);
         ctx.fillStyle = 'rgba(255,255,255,0.80)';
         ctx.font = '11px ' + font;
-        const vsBaseY = hasSeasonInfo ? hdrY + hdrH - 10 : hdrY + hdrH - 8;
+        const vsBaseY = grpToday
+            ? hdrY + (hasSeasonInfo ? 52 : 44)
+            : (hasSeasonInfo ? hdrY + hdrH - 10 : hdrY + hdrH - 8);
         ctx.fillText(
             fitText(vs.icon + ' ' + vs.label, vs.icon + ' ' + vs.short, colW - 12),
             x + colW / 2, vsBaseY, colW - 12
         );
+
+        if (grpToday) {
+            // A white pill so the group reads as its colour on the accent header,
+            // where coloured text alone is legible in one theme and muddy in the
+            // other.
+            ctx.font = 'bold 11px ' + font;
+            const tagText = STARRED_ICON + ' ' + starredGroupLabel(grpToday);
+            const tagW  = Math.min(ctx.measureText(tagText).width, colW - 28);
+            const pillH = 16;
+            const pillW = tagW + 16;
+            const pillY = hdrY + hdrH - pillH - 3;
+            ctx.fillStyle = '#ffffff';
+            roundRect(ctx, x + (colW - pillW) / 2, pillY, pillW, pillH, pillH / 2);
+            ctx.fill();
+            ctx.fillStyle = STARRED_PILL_INK[grpToday] || '#333333';
+            ctx.textAlign = 'center';
+            ctx.fillText(tagText, x + colW / 2, pillY + 12, colW - 28);
+        }
 
         // Divider below header
         const divY = hdrY + hdrH + 4;
@@ -1309,6 +1800,46 @@ function drawWeekImage() {
     }
 
     ROWS.forEach((row, rowIdx) => row.forEach((dayIdx, colIdx) => drawDayColumn(dates[dayIdx], colIdx, rowIdx)));
+
+    if (starredLegend.length) {
+        ctx.textAlign = 'left';
+        const grpColor = { 1: C.grp1, 2: C.grp2, 3: C.grp3 };
+        const grpBg    = { 1: C.grp1Bg, 2: C.grp2Bg, 3: C.grp3Bg };
+        let boxY = edge + gridH + rowGap;
+
+        starredLegend.forEach(entry => {
+            const boxH = (1 + entry.lines.length) * legendLineH + legendBoxPad;
+
+            // A tinted box per group, so a list of bare numbers is tied to its
+            // colour by more than a heading four lines up.
+            ctx.fillStyle = grpBg[entry.group] || C.cardBg;
+            roundRect(ctx, edge, boxY, totalW - edge * 2, boxH, 8);
+            ctx.fill();
+            ctx.strokeStyle = grpColor[entry.group] || C.divider;
+            ctx.lineWidth = 1.5;
+            roundRect(ctx, edge, boxY, totalW - edge * 2, boxH, 8);
+            ctx.stroke();
+
+            let ly = boxY + legendBoxPad / 2 + 13;
+            ctx.font = 'bold 13px ' + font;
+            ctx.fillStyle = grpColor[entry.group] || C.evtName;
+            ctx.fillText(STARRED_ICON + ' ' + starredGroupLabel(entry.group), edge + 10, ly);
+            ly += legendLineH;
+
+            // Full-strength body text, not the muted tone: these numbers are the
+            // one thing on the image that gets copied, so they are the last place
+            // to spend contrast. No maxWidth either — see where starredLegend is
+            // built.
+            ctx.font = '13px ' + font;
+            ctx.fillStyle = C.evtName;
+            entry.lines.forEach(line => {
+                ctx.fillText(line, edge + 10, ly);
+                ly += legendLineH;
+            });
+
+            boxY += boxH + legendBoxGap;
+        });
+    }
 }
 
 // ── Canvas: Day Card ──────────────────────────────────────────────────────────
@@ -1358,7 +1889,23 @@ function drawDayCard(dateStr) {
 
     let eventsH = dayEvts.reduce((s, e) => s + evtRowH + countNoteLines(e) * noteLineH, 0);
     if (!dayEvts.length) eventsH = evtRowH; // "No events" placeholder
-    const H = 16 + hdrH + 12 + eventsH + banH + 24;
+
+    // The day card gets the FULL server list — it is one day on a big canvas, so
+    // it has room the week image does not. Measured before drawing, because the
+    // list wraps and the canvas height has to be known up front.
+    const starredGroupToday = starredGroupOn(dateStr);
+    const starredLines = starredGroupToday
+        ? wrapNoteLines(_tmpCtx, STARRED_ICON + ' ' + starredGroupLabel(starredGroupToday) + ' shiny: ' + starredServerList(starredGroupToday), noteMaxW)
+        : [];
+    const starredH = starredLines.length ? starredLines.length * noteLineH + 14 : 0;
+
+    // Not in the WEEK image: seven columns already carry the storm entries, and a
+    // line repeated under one of them is noise at that size. The day card has the
+    // room, and is the export an officer sends on the day it matters.
+    const showRegMarker = isDSRegMarkerDay(dateStr);
+    const regMarkerH = showRegMarker ? noteLineH + 10 : 0;
+
+    const H = 16 + hdrH + 12 + eventsH + starredH + regMarkerH + banH + 24;
     const canvas = document.getElementById('schedule-canvas');
     canvas.width  = W;
     canvas.height = Math.max(H, 220);
@@ -1479,6 +2026,26 @@ function drawDayCard(dateStr) {
 
         y += evtRowH;
     });
+
+    // ── Desert Storm registration marker ───────────────────────────────────
+    if (showRegMarker) {
+        ctx.fillStyle = C.stormText;
+        ctx.font = '600 12px ' + font;
+        ctx.textAlign = 'left';
+        ctx.fillText(DS_REG_MARKER_TEXT, pad, y + 4, W - pad * 2);
+        y += regMarkerH;
+    }
+
+    // ── Starred missions ───────────────────────────────────────────────────
+    if (starredLines.length) {
+        ctx.fillStyle = C.notesText;
+        ctx.font = '11px ' + font;
+        ctx.textAlign = 'left';
+        starredLines.forEach((line, li) => {
+            ctx.fillText(line, pad, y + 6 + li * noteLineH);
+        });
+        y += starredH;
+    }
 
     // ── Server event banner (bottom) ───────────────────────────────────────
     if (seBanners.length) {
@@ -1654,6 +2221,8 @@ function bindEvents() {
         }
     });
 
+    initAnnouncement();
+
     document.getElementById('btn-day-card').addEventListener('click', () => {
         const dateStr = document.getElementById('day-card-picker').value;
         const sec = document.getElementById('canvas-section');
@@ -1731,7 +2300,7 @@ function bindEvents() {
     });
 
     // Flatpickr: time pickers for the settings default times
-    ['#set-mg-time', '#set-zs-time'].forEach(sel => {
+    ['#set-mg-time', '#set-zs-time', '#set-announce-start', '#set-announce-end'].forEach(sel => {
         flatpickr(sel, {
             enableTime: true,
             noCalendar: true,
@@ -1762,3 +2331,116 @@ function bindEvents() {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
+
+
+// ── Announcement ──────────────────────────────────────────────────────────────
+//
+// One button that prints what the schedule already knows, instead of an officer
+// reading the grid and retyping it.
+//
+// The SELECTION is not done here. The server decides which events fall in the
+// window — including the awkward case where the window wraps past midnight and
+// reaches into the next game day — and hands back both the events and the ones it
+// left out. This function renders lines and fills a template.
+
+// The game caps an announcement at 500 characters. Going over does not fail
+// loudly — the tail is simply lost, and the tail is usually the starred server
+// list, which is both the longest line and the one nobody can reconstruct from
+// memory. So the length is checked and reported BEFORE the copy, while the
+// officer can still shorten it, rather than after it is on the clipboard.
+const ANNOUNCEMENT_MAX_CHARS = 500;
+
+function announcementLine(ev) {
+    let line = '';
+    if (ev.level != null) line += 'Lvl ' + ev.level + ' ';
+    line += ev.type_name;
+    line += ev.all_day ? ' — all day' : ' @ ' + formatTime(ev.time) + ' ST';
+    return line;
+}
+
+// Says which events were left out and why. A post that is quietly missing an
+// event is indistinguishable from a correct one, and re-reading the grid to check
+// is the work this button exists to remove.
+function renderAnnounceDropped(dropped) {
+    const el = document.getElementById('announce-status');
+    if (!el) return;
+    if (!dropped || !dropped.length) { el.textContent = ''; return; }
+    el.textContent = 'Not announced: ' + dropped
+        .map(d => d.type_name + ' ' + formatTime(d.time) + ' (' + d.reason + ')')
+        .join('; ');
+}
+
+async function runAnnouncement() {
+    const dateEl = document.getElementById('announce-date');
+    const date = (dateEl && dateEl.value) || todayGameDate();
+    document.getElementById('announce-status').textContent = '';
+
+    let data;
+    try {
+        const res = await fetch('/api/schedule/announcement?date=' + encodeURIComponent(date));
+        if (!res.ok) throw new Error();
+        data = await res.json();
+    } catch {
+        showToast('Could not work out the announcement for that day.', 'error');
+        return;
+    }
+
+    // The template lives in Comms and its fetch is gated on view_comms, which is a
+    // different permission from the one that got the officer onto this page. A
+    // 403 here is therefore a real and likely case, and it must not be reported as
+    // a missing template — that would send someone hunting for a row that is there.
+    let template;
+    try {
+        const res = await fetch('/api/comms/templates/slug/nightly_events');
+        if (res.status === 403) {
+            showToast('Announcing needs permission to view Comms templates — ask an admin.', 'error', 8000);
+            return;
+        }
+        if (!res.ok) throw new Error();
+        template = await res.json();
+    } catch {
+        showToast('The "Daily events" template is missing — check Comms → Templates.', 'error');
+        return;
+    }
+
+    renderAnnounceDropped(data.dropped);
+
+    const events = (data.events || []).map(announcementLine).join('\n');
+    // All three are supplied whether or not the template uses them:
+    // copyWithVariables skips a prefilled name whose placeholder is absent, so
+    // offering all three gives "neither / today / tomorrow / both" for free.
+    const vars = {
+        events: events || 'Nothing scheduled.',
+        starred_today: data.starred_today || '',
+        starred_tomorrow: data.starred_tomorrow || '',
+    };
+
+    warnIfAnnouncementTooLong(applyTemplate(template.content, vars).length);
+
+    await copyWithVariables(template.content, vars);
+}
+
+// Any variable the officer still has to fill in is left as its placeholder by
+// applyTemplate, so a template with user variables is measured with those
+// unexpanded — the real post is normally longer, never shorter by much. The
+// message says the count rather than implying precision the check does not have.
+function warnIfAnnouncementTooLong(len) {
+    const el = document.getElementById('announce-status');
+    if (len <= ANNOUNCEMENT_MAX_CHARS) return;
+
+    const over = len - ANNOUNCEMENT_MAX_CHARS;
+    const msg = 'Too long for the game: ' + len + ' characters, limit is '
+        + ANNOUNCEMENT_MAX_CHARS + '. Trim about ' + over
+        + ' or the end will be cut off in-game.';
+
+    showToast(msg, 'error', 9000);
+    if (el) el.textContent = el.textContent ? el.textContent + ' — ' + msg : msg;
+}
+
+function initAnnouncement() {
+    const btn = document.getElementById('btn-announce');
+    if (!btn) return;
+    const dateEl = document.getElementById('announce-date');
+    if (dateEl && !dateEl.value) dateEl.value = todayGameDate();
+    btn.addEventListener('click', runAnnouncement);
+}
