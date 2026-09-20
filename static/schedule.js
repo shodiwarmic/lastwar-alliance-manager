@@ -1223,8 +1223,8 @@ async function saveServerEvent(e) {
         }
         // Moving a window can leave encounters outside it. The server lists them;
         // it never moves them, so the officer is told rather than surprised.
-        const body = await res.json().catch(() => null);
-        const stranded = body && body.stranded;
+        const resBody = await res.json().catch(() => null);
+        const stranded = resBody && resBody.stranded;
         if (stranded && stranded.length) {
             const byType = {};
             stranded.forEach(s => { (byType[s.type] = byType[s.type] || []).push(s.date); });
