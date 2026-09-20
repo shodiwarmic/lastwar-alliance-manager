@@ -1,8 +1,20 @@
 name: Build and Publish Docker Image
 
+# Two publish paths, one job:
+#   push to main  -> :edge          (the development image; never :latest)
+#   push tag vX.Y.Z -> :vX.Y.Z, :vX.Y, :latest
+#
+# `latest` means "latest RELEASE", not "latest commit" — an operator who pulls
+# it expects a released thing. That is why main publishes :edge instead.
+# See docs/RELEASING.md for the procedure and what the levels promise.
+#
+# The tag must be pushed from a personal clone. A tag pushed by an action using
+# the default GITHUB_TOKEN triggers no workflow at all, so the release would
+# build nothing and fail silently.
 on:
   push:
     branches: ['main']
+    tags: ['v*']
 
 env:
   REGISTRY: ghcr.io
@@ -11,7 +23,7 @@ env:
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
-    
+
     # Moving the variable here and using string quotes ensures the runner reads it
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -31,15 +43,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # One spelling of the version everywhere — git tag, image tag,
+      # APP_VERSION, Admin page — so nothing ever has to translate between
+      # v1.2.3 and 1.2.3. `{{raw}}` is what keeps the pushed tag's leading "v";
+      # the moving vX.Y tag gives "track patches, never auto-take a minor".
+      # The default `latest=auto` flavor adds :latest on semver TAG events only
+      # — a branch push is untouched, so main still yields :edge alone.
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=edge,branch=main
+            type=semver,pattern={{raw}}
+            type=semver,pattern=v{{major}}.{{minor}}
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           # Stamps the binary so a running install can name its own build --
-          # see internal/app/version.go. The full 40-char SHA is passed as-is;
-          # shortCommit() abbreviates it for display.
+          # see internal/app/version.go. `meta.outputs.version` is the primary
+          # image tag ("edge", or "v1.2.3"), so the stamp cannot disagree with
+          # the tag the image was published under. The full 40-char SHA is
+          # passed as-is; shortCommit() abbreviates it for display.
           build-args: |
-            APP_VERSION=edge
+            APP_VERSION=${{ steps.meta.outputs.version }}
             APP_COMMIT=${{ github.sha }}
