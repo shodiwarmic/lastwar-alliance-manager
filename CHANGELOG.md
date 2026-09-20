@@ -1,0 +1,24 @@
+# Changelog
+
+Every released version of the Alliance Manager, newest first, each entry linking the pull request
+that carried it.
+
+How versions are chosen and cut is in [docs/RELEASING.md](docs/RELEASING.md); how to take one is
+in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#6-update-procedure). In short: a **patch** or **minor**
+needs only a new image (`docker compose pull`), while a **major** changes something outside the
+image and needs a terminal run of `scripts/update.sh`.
+
+## v1.0.0 — unreleased
+
+The first tagged release. It changes nothing about the application itself; it marks the point
+from which this install is versioned — published under tags that never move once released,
+pinnable and roll-back-able through `APP_VERSION` in `.env`, and able to tell you which build it
+is running.
+
+- **Releases and versioned installs** — version and commit stamped into the binary and shown on
+  the Admin page, tag-triggered publishing (`vX.Y.Z` / `vX.Y` / `latest`, with `main` publishing
+  `edge`), multi-architecture images for amd64 and arm64, a compose pin that install.sh and
+  update.sh maintain, and two CI guardrails: a release-level check that a patch or minor changes
+  nothing outside the image, and a check that every environment variable the app reads reaches
+  `.env.example`.
+  ([#95](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/95))
