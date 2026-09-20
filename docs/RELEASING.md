@@ -26,6 +26,13 @@ audits whether a feature "deserved" its minor. Choose between them by judgement 
 — getting it wrong costs nothing, whereas calling a host-affecting change a patch costs an
 operator a broken install.
 
+> **A release that changes `scripts/update.sh` has to be run twice**, and the release notes should
+> say so. `update.sh` pulls the repository and then keeps running — but the rest of that run is
+> the *old* copy of the script, so whatever the release changed about the update procedure does
+> not happen until the operator runs it a second time. Verified on the v1.0.0 install, where the
+> new `APP_VERSION` pin was written only on the second run. Until the script re-execs itself after
+> the pull, this is a documentation problem to be handled by whoever cuts such a release.
+
 ### Published image tags
 
 | Tag | Points at | Moves? |
@@ -64,12 +71,20 @@ accidents, not a proof system.
 The ordering matters — the release workflow refuses to build a tag whose commit is not on `main`
 or whose checks have not concluded successfully, and a tag placed too early fails on both counts.
 
-1. **Write the `CHANGELOG.md` entry** for the version, linking its PR.
-2. **Commit and push it to `main`.** The release is cut from a commit that exists upstream; a
-   local-only commit fails the ancestry assertion.
-3. **Wait for that commit's checks to go green** — both `Build & Test` and `Docker Build`. The
-   docker job alone takes about ten minutes. The release workflow treats a pending or absent
-   check as a failure, so this wait is not optional.
+The changelog entry travels with the change rather than being written at tag time. That keeps the
+release path free of any direct push to `main`, which today works only because admin enforcement
+on the branch protection happens to be switched off — turn that on and a tag-time changelog commit
+becomes impossible, discovered mid-release.
+
+1. **The `CHANGELOG.md` entry rides in the PR**, written by whoever raises it — they have the
+   context to say what changed and why, which a close-out reconstructing it from a diff does not.
+   Its heading names the version being cut.
+2. **Merge the PR.** The **merge commit** is what gets tagged, not the PR's head commit.
+3. **Wait for the merge commit's checks to go green** on `main` — both `Build & Test` and
+   `Docker Build`. The docker job alone takes a couple of minutes. This is a *different run* from
+   the one that passed on the PR: a squash merge creates a new commit, and the release workflow
+   asserts on the checks of the commit it is building. It treats pending or absent as failure, so
+   this wait is not optional.
 4. **Tag that exact commit and push the tag, from a personal clone:**
    ```bash
    git tag v1.2.3 <sha>
@@ -139,3 +154,11 @@ a fix gets its own patch release immediately or waits for the next project's.
 
 This is recorded as open rather than answered. Record the first real occurrence here; build
 nothing until it has been felt twice.
+
+**First occurrence, 2026-09-20.** A two-line fix to `static/schedule.js`: every server-event save
+failed as "Network error", because the response variable shadowed the request payload and put that
+payload in the temporal dead zone for the block using it. The bug had been live since the previous
+project merged, so it shipped inside v1.0.0. It was given its own patch release rather than held
+for the next project's — the failure was officer-visible, the fix was image-only, and waiting
+would have meant knowingly shipping a broken feature for however long the next board ran. One
+occurrence, not a rule.
