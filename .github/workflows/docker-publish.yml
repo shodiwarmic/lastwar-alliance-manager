@@ -31,10 +31,217 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Read-only access to the check runs on the tagged commit, asserted by the
+      # release-level check below. Unlisted scopes default to none, so without
+      # this line that read is a 403 even though the repository is public.
+      checks: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # The release-level check needs the full history: the previous version
+          # tag and the diff against it are unreachable from a shallow clone.
+          # This also fetches all branches, which is what makes origin/main
+          # resolvable while sitting on a tag ref.
+          fetch-depth: 0
+
+      # A patch or minor release promises the operator that nothing outside the
+      # image changed: they can take it by pulling a new image, without touching
+      # compose files, scripts or .env. A single edit to scripts/ inside a patch
+      # breaks that promise silently -- the install updates, and the thing that
+      # needed a host-side change simply does not work. This check is that
+      # promise, machine-verified, and it gates the artifact rather than the PR
+      # because no tag exists at PR time.
+      #
+      # A failure here leaves a tag with no image. The remedy is to delete the
+      # tag, fix, and re-tag -- nothing can have pulled a version that never
+      # published. See docs/RELEASING.md.
+      #
+      # It runs as a step rather than its own job for the same reason the checks
+      # in build-check.yml do: branch protection pins required contexts to job
+      # names.
+      - name: Release-level check
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, re, subprocess, sys, urllib.error, urllib.request
+
+          TAG   = os.environ['RELEASE_TAG']
+          SHA   = os.environ['GITHUB_SHA']
+          REPO  = os.environ['GITHUB_REPOSITORY']
+          TOKEN = os.environ['GH_TOKEN']
+          API   = os.environ.get('GITHUB_API_URL', 'https://api.github.com')
+
+          # Branch protection's required contexts, by job display name. Pending
+          # or absent counts as failure: the release procedure makes that a
+          # non-event by ordering the tag after the checks go green.
+          REQUIRED_CHECKS = ['Build & Test', 'Docker Build']
+
+          # What a path change means for the OPERATOR -- what they must receive
+          # or do for this release -- not how important it is.
+          #
+          # Built from a full `git ls-files` census of the repository root, so
+          # the unclassified branch below fires only for genuinely new paths,
+          # never for a known file somebody forgot to list. deploy/ is listed
+          # file by file on purpose: entrypoint.sh ships INSIDE the image, its
+          # siblings are host configuration.
+          IMAGE_DIRS  = ('cmd/', 'internal/', 'templates/', 'static/', 'migrations/')
+          IMAGE_FILES = ('go.mod', 'go.sum', 'Dockerfile', 'deploy/entrypoint.sh')
+
+          # docker-compose.yml is host-affecting because an operator edits and
+          # keeps it. If the third-party image pins ever move out of it into
+          # .env, that classification has to be re-decided rather than assumed.
+          HOST_DIRS   = ('scripts/',)
+          HOST_FILES  = ('docker-compose.yml', 'docker-compose.local-ocr.yml',
+                         'deploy/Caddyfile', 'deploy/docker-compose.override.yml.example',
+                         'update.sh',            # the one-release root shim
+                         '.env.example')
+
+          # .github/ is neutral deliberately. A workflow change asks nothing of
+          # any host: it is delivered by git, runs only in CI, and the operator
+          # pulls the same image either way. Provenance of the artifact is
+          # guarded by PR review, not by this classifier -- and calling the
+          # pipeline host-affecting would force a major release for every CI
+          # tweak, which is how a guardrail erodes by annoyance.
+          NEUTRAL_DIRS  = ('docs/', '.github/')
+          NEUTRAL_FILES = ('README.md', 'CLAUDE.md', 'SECURITY.md', 'LICENSE',
+                           'CHANGELOG.md', '.gitignore', '.dockerignore')
+
+          SEMVER = re.compile(r'^v(\d+)\.(\d+)\.(\d+)$')
+
+
+          def fail(msg, *extra):
+              print('Release-level check FAILED:\n')
+              print('  ' + msg)
+              for line in extra:
+                  print('  ' + line)
+              print('\nSee docs/RELEASING.md.')
+              sys.exit(1)
+
+
+          def git(*args):
+              return subprocess.run(('git',) + args, capture_output=True, text=True)
+
+
+          def version_of(tag):
+              m = SEMVER.match(tag)
+              return tuple(int(p) for p in m.groups()) if m else None
+
+
+          this = version_of(TAG)
+          if this is None:
+              fail(f'{TAG} is not a vX.Y.Z tag.',
+                   'Release tags are SemVer with the v kept: v1.2.3.')
+
+          # The whole check is worthless if it can silently compare nothing, so
+          # every input it relies on is asserted before it is used.
+          main = git('rev-parse', '--verify', 'origin/main')
+          if main.returncode != 0:
+              fail('origin/main is not resolvable in this checkout.',
+                   'The checkout step needs fetch-depth: 0 for this to work.')
+
+          # 1. Releases are cut from main. A tag on a side branch would publish
+          #    code that never passed review.
+          if git('merge-base', '--is-ancestor', SHA, main.stdout.strip()).returncode != 0:
+              fail(f'the tagged commit {SHA[:7]} is not an ancestor of origin/main.',
+                   'Tag a commit that is on main.')
+
+          # 2. That commit's own CI must have passed. Nothing else stops a tag
+          #    being placed on a commit whose checks failed or never ran.
+          req = urllib.request.Request(
+              f'{API}/repos/{REPO}/commits/{SHA}/check-runs?per_page=100',
+              headers={'Authorization': f'Bearer {TOKEN}',
+                       'Accept': 'application/vnd.github+json',
+                       'X-GitHub-Api-Version': '2022-11-28',
+                       'User-Agent': 'release-level-check'})
+          try:
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  check_runs = json.load(resp)['check_runs']
+          except (urllib.error.URLError, KeyError, ValueError) as exc:
+              fail(f'could not read the check runs for {SHA[:7]}: {exc}.',
+                   'The workflow needs checks: read permission.')
+
+          concluded = {}
+          for run in check_runs:
+              concluded.setdefault(run['name'], set()).add(run['conclusion'])
+          missing = [name for name in REQUIRED_CHECKS
+                     if 'success' not in concluded.get(name, set())]
+          if missing:
+              fail(f'{SHA[:7]} has no successful run of: ' + ', '.join(missing) + '.',
+                   'Wait for the checks on that commit to go green, then re-tag.')
+
+          # 3. The previous release, which everything below is measured against.
+          all_v_tags = [t for t in git('tag', '--list', 'v*').stdout.split() if t != TAG]
+          earlier = sorted(v for v in (version_of(t) for t in all_v_tags)
+                           if v is not None and v < this)
+
+          if not earlier:
+              # The first release has nothing to diff against. Exempt, but only
+              # explicitly: passing by default whenever a previous tag cannot be
+              # found is exactly the silent-nothing this check exists to prevent.
+              if all_v_tags or this != (1, 0, 0):
+                  fail(f'no release before {TAG} could be resolved.',
+                       'Only v1.0.0 as the repository\'s first tag is exempt from this.',
+                       'Other v* tags present: ' + (', '.join(sorted(all_v_tags)) or 'none'))
+              print(f'{TAG} is the first release -- level classification skipped.')
+              print('Ancestry and check-run assertions passed.')
+              sys.exit(0)
+
+          previous = earlier[-1]
+          prev_tag = 'v%d.%d.%d' % previous
+
+          # 4. The level is the delta, not a claim in the commit message.
+          if this[0] != previous[0]:
+              level = 'major'
+          elif this[1] != previous[1]:
+              level = 'minor'
+          else:
+              level = 'patch'
+
+          print(f'{prev_tag} -> {TAG}: {level} release.')
+
+          if level == 'major':
+              # A major promises nothing about paths -- it is the level that
+              # exists for changes reaching outside the image.
+              print('Major release: no path classification applies.')
+              sys.exit(0)
+
+          # 5. A patch or minor must be installable by pulling an image alone.
+          diff = git('diff', '--name-only', f'{prev_tag}..{TAG}')
+          if diff.returncode != 0:
+              fail(f'could not diff {prev_tag}..{TAG}: {diff.stderr.strip()}')
+
+          host, unclassified = [], []
+          for path in sorted(set(diff.stdout.split())):
+              if path.startswith(IMAGE_DIRS) or path in IMAGE_FILES:
+                  continue
+              if path.startswith(NEUTRAL_DIRS) or path in NEUTRAL_FILES:
+                  continue
+              if path.startswith(HOST_DIRS) or path in HOST_FILES:
+                  host.append(path)
+              else:
+                  unclassified.append(path)
+
+          if unclassified:
+              fail(f'these paths are not classified, so {TAG} cannot be levelled:',
+                   *unclassified,
+                   '',
+                   'Add each one to IMAGE, HOST or NEUTRAL in this step, deciding',
+                   'what it asks of an operator receiving the release.')
+
+          if host:
+              fail(f'{TAG} is a {level} release, but it changes files outside the image:',
+                   *host,
+                   '',
+                   'An operator cannot take this by pulling an image alone, which is',
+                   'what a patch or minor promises. Release it as a major instead.')
+
+          print(f'Release-level check passed: {TAG} changes the image only.')
+          EOF
 
       - name: Log in to the Container registry
         uses: docker/login-action@v4
