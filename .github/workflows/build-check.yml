@@ -361,5 +361,8 @@ jobs:
         with:
           context: .
           push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Scoped away from docker-publish.yml's cache: both workflows run on
+          # the same push to main, and sharing the gha backend's default scope
+          # lets two concurrent builds evict each other's entries.
+          cache-from: type=gha,scope=ci
+          cache-to: type=gha,mode=max,scope=ci

@@ -78,6 +78,13 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
+          # Explicit scopes: this workflow and build-check.yml both fire on the
+          # same push to main, and two concurrent builds writing the gha
+          # backend's shared default scope would evict each other's entries.
+          # Separate scopes trade a little cross-workflow reuse for
+          # deterministic behaviour.
+          cache-from: type=gha,scope=publish
+          cache-to: type=gha,mode=max,scope=publish
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Stamps the binary so a running install can name its own build --

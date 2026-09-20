@@ -8,8 +8,19 @@ FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS builder
 WORKDIR /app
 
 # Cache dependencies first for faster rebuilds
+#
+# The cache mounts below persist Go's module cache and build cache BETWEEN
+# builds, which the layer cache alone cannot do: `COPY . .` invalidates its
+# layer on any source change, so without them every rebuild recompiles all ~90
+# dependencies from scratch. They survive the layer being rebuilt, so a
+# one-line Go change recompiles only the packages that changed.
+#
+# Go's caches are content-addressed and safe to share between the two
+# concurrent per-architecture compiles of a multi-arch build. If that is ever
+# disproved, `sharing=locked` on the mounts is the fallback.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Copy the rest of the application
 COPY . .
@@ -28,7 +39,15 @@ ARG TARGETARCH
 
 # modernc.org/sqlite is pure-Go — no CGO required, so there is no cross
 # toolchain to install for the arm64 target.
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build \
+#
+# The cache mounts are what make a developer's `docker compose up -d --build`
+# fast; CI is a different machine every run and still pays the full compile
+# whenever the gha layer cache misses. That is a deliberate trade — the rebuild
+# a human waits on is the one worth optimising, and buildkit-cache-dance
+# machinery to carry these mounts across CI runs is not worth its complexity.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build \
     -ldflags "-X lastwar-alliance/internal/app.appVersion=${APP_VERSION} -X lastwar-alliance/internal/app.appCommit=${APP_COMMIT}" \
     -o alliance-manager ./cmd/server
 
