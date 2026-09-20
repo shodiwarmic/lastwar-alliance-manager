@@ -84,6 +84,18 @@ docker compose up -d
 ```
 This will download the latest images, compile the Go binary, create a private internal bridge network, start the Go application (exposing port `8080`), and start the Collabora document server (exposing port `9980`).
 
+#### Architecture support (x86-64 and ARM)
+
+The application image is published for both **linux/amd64** and **linux/arm64**, so it runs on
+an ARM server — AWS Graviton, Ampere, or a 64-bit Raspberry Pi — as well as on x86-64.
+`docker compose pull` selects the right one for your host automatically; there is nothing to
+configure. The pinned Collabora image is multi-arch too.
+
+One exception: the **local OCR backend is x86-64 only**. Its PaddleOCR sidecar image is not
+published for ARM, so on an ARM host use the default cloud backend (Google Cloud Vision) — see
+[IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md). Everything else works the same on either
+architecture.
+
 ---
 
 ## 4. Reverse Proxy Configuration

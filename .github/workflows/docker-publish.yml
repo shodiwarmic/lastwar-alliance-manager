@@ -59,11 +59,25 @@ jobs:
             type=semver,pattern={{raw}}
             type=semver,pattern=v{{major}}.{{minor}}
 
+      # Multi-arch is publish-only. PR CI (build-check.yml's "Docker Build" job)
+      # stays amd64: it has a 15-minute timeout and a cold amd64 build already
+      # measures ~10 minutes, so a second architecture would blow it on every
+      # cache-miss PR. The trade is that an arm64-only breakage surfaces at
+      # publish rather than at PR time -- tolerable, because a cross-compiled
+      # CGO_ENABLED=0 binary has no arch-specific code path and the emulated
+      # part of the build is two apt packages.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Stamps the binary so a running install can name its own build --

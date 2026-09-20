@@ -1,5 +1,9 @@
 # --- Build Stage ---
-FROM golang:1.27-bookworm AS builder
+# Pinned to the BUILD platform so the Go compile always runs natively, whatever
+# architecture is being targeted: a cross-compile costs nothing here, while an
+# emulated compile under QEMU would take multiples of the time. Only the final
+# stage's apt-get runs emulated when building for a foreign arch.
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS builder
 
 WORKDIR /app
 
@@ -18,8 +22,13 @@ COPY . .
 ARG APP_VERSION=dev
 ARG APP_COMMIT=unknown
 
-# modernc.org/sqlite is pure-Go — no CGO required.
-RUN CGO_ENABLED=0 GOOS=linux go build \
+# Supplied by BuildKit per target platform; empty on a plain `docker build`,
+# where Go's own default (the host's arch) is the right answer anyway.
+ARG TARGETARCH
+
+# modernc.org/sqlite is pure-Go — no CGO required, so there is no cross
+# toolchain to install for the arm64 target.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build \
     -ldflags "-X lastwar-alliance/internal/app.appVersion=${APP_VERSION} -X lastwar-alliance/internal/app.appCommit=${APP_COMMIT}" \
     -o alliance-manager ./cmd/server
 
