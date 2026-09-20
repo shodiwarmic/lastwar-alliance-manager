@@ -8,12 +8,16 @@ in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#6-update-procedure). In short: a **pa
 needs only a new image (`docker compose pull`), while a **major** changes something outside the
 image and needs a terminal run of `scripts/update.sh`.
 
-## v1.0.0 — unreleased
+## v1.0.0 — 2026-09-20
 
 The first tagged release. It changes nothing about the application itself; it marks the point
 from which this install is versioned — published under tags that never move once released,
 pinnable and roll-back-able through `APP_VERSION` in `.env`, and able to tell you which build it
 is running.
+
+Existing installs need do nothing: `scripts/update.sh` writes the pin on its next run. Taking
+this release by hand is `APP_VERSION=v1.0.0` in `.env`, then `docker compose pull && docker
+compose up -d`.
 
 - **Releases and versioned installs** — version and commit stamped into the binary and shown on
   the Admin page, tag-triggered publishing (`vX.Y.Z` / `vX.Y` / `latest`, with `main` publishing
