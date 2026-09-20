@@ -53,6 +53,10 @@ You will need a Linux server and two DNS records pointing at it — one for the 
 | [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Full production setup — DNS, Docker, reverse proxy, environment variables, backups, updates |
 | [IMAGE_RECOGNITION.md](docs/IMAGE_RECOGNITION.md) | The OCR pipeline, both backends, and optional request archival |
 | [DESIGN_STANDARD.md](docs/DESIGN_STANDARD.md) | UI design standard — tokens, components, icon system |
+| [RELEASING.md](docs/RELEASING.md) | How versions are numbered and cut, and what each release level promises an operator |
+
+Released versions and what changed in each are listed in [CHANGELOG.md](CHANGELOG.md). Installs
+run a pinned release (`APP_VERSION` in `.env`) and can be rolled back to an earlier one.
 
 Configuration is via a `.env` file — copy `.env.example` and fill it in. Every variable is documented in [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 

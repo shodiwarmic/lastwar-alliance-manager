@@ -1959,6 +1959,23 @@ existing format; don't reuse an approximate icon just because it's already there
 `<use href="/icons.svg#icon-{slug}">` in templates or `svgIcon('{slug}')` in JS. Full details:
 docs/DESIGN_STANDARD.md → Icon System.
 
+## Releases
+
+Versions are cut by hand at the close of a project, as SemVer tags that keep the `v`
+(`v1.2.3`). **The level is a promise to the operator, not a size estimate**: a patch or minor
+must be installable by pulling a new image alone, so anything reaching outside the image —
+`scripts/`, the compose files, `.env.example`, the Caddyfile — is a major, because the host has
+to change too. CI enforces exactly that on the tag by classifying every changed path, which
+means **a new top-level path in the repo needs adding to one of the three lists** in
+`docker-publish.yml`'s release-level check; an unclassified path fails the release.
+
+`main` publishes `:edge`; a version tag publishes `:vX.Y.Z`, `:vX.Y` and `:latest` (so `latest`
+means latest *release*). A deployed install pins itself with `APP_VERSION` in `.env`, and the
+running build is named on Admin → Security & API and in the startup log (`internal/app/version.go`).
+
+The cut procedure, the failure remedies and the **never-rebuild rule** are in
+`docs/RELEASING.md`. Read it before tagging anything.
+
 ## Running locally
 
 ```bash

@@ -37,6 +37,8 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	data := PageData{
 		Title:      title,
 		ActivePage: activePage,
+		AppVersion: appVersion,
+		AppCommit:  shortCommit(),
 	}
 
 	session, _ := store.Get(r, "session")
@@ -186,7 +188,11 @@ func Main() {
 	// 2. Set up Structured JSON Logging
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
-	slog.Info("Initializing Alliance Manager server")
+	// Version and commit ride the existing startup line rather than a second
+	// one: this is where an operator running `docker compose logs` already
+	// looks, and it is the only place outside the Admin page that names the
+	// build. See version.go.
+	slog.Info("Initializing Alliance Manager server", "version", appVersion, "commit", shortCommit())
 
 	// Hash static/ before anything can serve a request: assetHashes is written
 	// here and read-only afterwards, which is what makes it lock-free.

@@ -14,6 +14,11 @@
 // Dockerfile, docker-publish.yml and update.sh as a build-arg plus an -ldflags
 // -X variable, and it would still bust all 70 files for a docs-only commit.
 // Hashing the bytes at runtime needs none of that plumbing.
+//
+// That build-arg plumbing now exists anyway, for version.go's appVersion —
+// and this token deliberately still does not use it. The two answer different
+// questions: appVersion names the build for a human, while this has to change
+// if and only if one file's bytes do.
 
 package app
 

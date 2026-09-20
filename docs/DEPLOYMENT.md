@@ -69,6 +69,7 @@ These have working defaults and are absent from `.env.example`; set them only if
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `APP_VERSION` | `latest` | Which published image this install runs (`v1.2.3`, the moving `v1.2`, `latest`, or `edge`). `scripts/install.sh` and `scripts/update.sh` write the current release tag here for you; set it by hand only to pin to or roll back to a specific release. `latest` means the latest *release*; `edge` is built from `main`. See [RELEASING.md](RELEASING.md). |
 | `PORT` | `8080` | Port the Go application listens on inside its container. Change it only if you also change the published port in `docker-compose.yml`. |
 | `COLLABORA_PORT` | *(unset)* | Explicit port for the Collabora document server, appended to `COLLABORA_DOMAIN` when building WOPI URLs. Needed only when Collabora is reached on a non-standard port rather than through the reverse proxy. |
 | `OCR_BACKEND_MODE` | `cloud` | Set to `local` to use the bundled PaddleOCR sidecar instead of Google Cloud Vision. Also requires `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml`. `scripts/install.sh` and `scripts/update.sh` set both for you if you opt in. See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md). |
@@ -83,6 +84,18 @@ docker compose build
 docker compose up -d
 ```
 This will download the latest images, compile the Go binary, create a private internal bridge network, start the Go application (exposing port `8080`), and start the Collabora document server (exposing port `9980`).
+
+#### Architecture support (x86-64 and ARM)
+
+The application image is published for both **linux/amd64** and **linux/arm64**, so it runs on
+an ARM server — AWS Graviton, Ampere, or a 64-bit Raspberry Pi — as well as on x86-64.
+`docker compose pull` selects the right one for your host automatically; there is nothing to
+configure. The pinned Collabora image is multi-arch too.
+
+One exception: the **local OCR backend is x86-64 only**. Its PaddleOCR sidecar image is not
+published for ARM, so on an ARM host use the default cloud backend (Google Cloud Vision) — see
+[IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md). Everything else works the same on either
+architecture.
 
 ---
 
@@ -248,16 +261,54 @@ For **local-disk** archival:
 
 ## 6. Update Procedure
 
-We strongly recommend using the included `scripts/update.sh` script. It automatically pulls the latest code, safely downloads the newest pre-built images, and checks your proxy configurations for security compliance.
+We strongly recommend using the included `scripts/update.sh` script. It pulls the latest code,
+moves your `APP_VERSION` pin to the newest release, downloads that image, and checks your proxy
+configuration for security compliance.
 
 ```bash
 cd /opt/lastwar
 ./scripts/update.sh
 ```
 
-If updating manually:
+If the script cannot reach the GitHub releases API it leaves an existing pin exactly as it is
+rather than silently moving your install onto something else.
+
+### Updating manually
+
+An install runs the image named by `APP_VERSION` in `.env`, so a manual update is a change to
+that line followed by a pull:
+
 ```bash
-git pull
-docker compose build
+cd /opt/lastwar
+git pull                        # brings the compose file and scripts up to date
+nano .env                       # set APP_VERSION=v1.2.3 (or latest)
+docker compose pull
 docker compose up -d
+```
+
+> **There is nothing to build.** The production compose file has no `build:` key — the image is
+> pre-built and published for you, so `docker compose build` does nothing here. Building from
+> source is a development workflow and needs the dev override
+> (`deploy/docker-compose.override.yml.example`), which ignores `APP_VERSION` by design.
+
+### Pinning and rolling back
+
+The same mechanism covers both. To hold an install on a known-good release, or to go back to
+one after a bad update, set the tag and pull:
+
+```bash
+# Roll back to a specific release
+sed -i 's/^APP_VERSION=.*/APP_VERSION=v1.2.3/' .env
+docker compose pull && docker compose up -d
+```
+
+Published tags are `vX.Y.Z` (exact release), `vX.Y` (moves with its patches), `latest` (the
+newest release) and `edge` (built from `main` — development, not a release). What each release
+level promises about an update is set out in [RELEASING.md](RELEASING.md).
+
+Confirm which build is actually running afterwards on **Admin → Security & API → About this
+install**, or without logging in:
+
+```bash
+docker compose logs alliance-manager | head -n 1
 ```
