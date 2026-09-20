@@ -197,6 +197,12 @@
                             <span id="storm-slots-status" class="status-msg"></span>
                         </div>
                     </div>
+
+                    <div class="settings-group settings-group-divided-top">
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-info-circle"/></svg> About this install</h4>
+                        <p class="help-text">Which build this install is running &mdash; quote both when reporting a problem. The same pair is written to the startup log, so <code>docker compose logs alliance-manager</code> answers it without a login. <code>dev</code> means the image was built without a version stamp; <code>edge</code> means it was built from <code>main</code> rather than from a release.</p>
+                        <p class="help-text">Version: <code translate="no">{{.AppVersion}}</code> &mdash; commit: <code translate="no">{{.AppCommit}}</code></p>
+                    </div>
                 </div>
             </div>
         </div>

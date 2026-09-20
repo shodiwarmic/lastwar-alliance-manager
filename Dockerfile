@@ -10,8 +10,18 @@ RUN go mod download
 # Copy the rest of the application
 COPY . .
 
+# The build's identity, stamped into the binary and surfaced on the Admin page
+# and the startup log (internal/app/version.go). Declared here, beside the step
+# that consumes them, rather than at the top of the stage: a plain
+# `docker build` leaves these defaults, and .github/workflows/docker-publish.yml
+# passes the real values.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=unknown
+
 # modernc.org/sqlite is pure-Go — no CGO required.
-RUN CGO_ENABLED=0 GOOS=linux go build -o alliance-manager ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags "-X lastwar-alliance/internal/app.appVersion=${APP_VERSION} -X lastwar-alliance/internal/app.appCommit=${APP_COMMIT}" \
+    -o alliance-manager ./cmd/server
 
 # --- Final Stage ---
 FROM debian:bookworm-slim

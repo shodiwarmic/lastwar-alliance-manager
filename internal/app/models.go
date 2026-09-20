@@ -1437,6 +1437,11 @@ type PageData struct {
 	// sidebar user tile (falls back to initials when empty or blocked).
 	UserPhotoURL      string
 	UserPhotoFailover string
+	// AppVersion and AppCommit name the running build for the Admin page's
+	// "About this install" block. They are link-time constants (version.go),
+	// so carrying them on every page costs no query.
+	AppVersion string
+	AppCommit  string
 }
 
 // DashboardCard represents a single card in the dashboard with its visibility state.

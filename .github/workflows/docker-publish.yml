@@ -37,3 +37,9 @@ jobs:
           context: .
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          # Stamps the binary so a running install can name its own build --
+          # see internal/app/version.go. The full 40-char SHA is passed as-is;
+          # shortCommit() abbreviates it for display.
+          build-args: |
+            APP_VERSION=edge
+            APP_COMMIT=${{ github.sha }}
