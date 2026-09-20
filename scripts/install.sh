@@ -109,6 +109,33 @@ COLLABORA_DOMAIN=$COLLABORA_DOMAIN
 EOF
 fi
 
+# Pin this install to the current release. docker-compose.yml resolves
+# ${APP_VERSION:-latest}, so this line is what makes an install concretely
+# versioned instead of following whatever :latest points at on any given day.
+#
+# Deliberately its own block rather than part of the .env heredoc above: a
+# re-run of this script over an existing .env must still gain the pin, the same
+# shape as the OCR_BACKEND_MODE / OCR_ARCHIVE_ sentinel blocks below.
+if ! grep -q "^APP_VERSION=" .env; then
+    APP_VERSION_VALUE="latest"
+    # The call is guarded because `set -e` is on and `curl -f` exits 22 on the
+    # 404 the API returns while the repository has no release yet -- which is
+    # the COMMON path at first, not an edge case. jq is deliberately not a
+    # dependency of this script: one known key in a known payload is a sed away.
+    if RELEASE_JSON=$(curl -fsS "https://api.github.com/repos/shodiwarmic/lastwar-alliance-manager/releases/latest" 2>/dev/null); then
+        RESOLVED_TAG=$(printf '%s' "$RELEASE_JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+        if [ -n "$RESOLVED_TAG" ]; then
+            APP_VERSION_VALUE="$RESOLVED_TAG"
+        fi
+    fi
+    if [ "$APP_VERSION_VALUE" = "latest" ]; then
+        echo -e "${YELLOW}Could not resolve the latest release; using APP_VERSION=latest.${NC}"
+    else
+        echo -e "${GREEN}Pinning this install to release $APP_VERSION_VALUE.${NC}"
+    fi
+    echo "APP_VERSION=$APP_VERSION_VALUE" >> .env
+fi
+
 echo -e "${GREEN}[5/6] Configuring firewall and proxy...${NC}"
 sudo ufw --force enable
 sudo ufw allow 22/tcp comment 'SSH'

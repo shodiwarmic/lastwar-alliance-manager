@@ -1,6 +1,16 @@
 services:
   alliance-manager:
-    image: ghcr.io/shodiwarmic/lastwar-alliance-manager:latest
+    # Pinned to the release named by APP_VERSION in .env, which install.sh and
+    # update.sh write for you. Compose interpolates it here from .env; the
+    # `env_file:` below is a different mechanism (it passes variables INTO the
+    # container) and does not reach an `image:` line, so the two are not
+    # duplicates -- don't "deduplicate" them.
+    #
+    # The fallback is a sane default rather than a transition hack: `latest`
+    # means the latest RELEASE (main publishes `edge`). To pin or roll back by
+    # hand, set APP_VERSION in .env and run `docker compose pull && docker
+    # compose up -d`. See docs/RELEASING.md.
+    image: ghcr.io/shodiwarmic/lastwar-alliance-manager:${APP_VERSION:-latest}
     container_name: alliance-manager
     restart: unless-stopped
     # Allow graceful shutdown (25s server drain + up to 10s archive drain) to

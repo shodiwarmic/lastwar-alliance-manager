@@ -130,6 +130,46 @@ else
     fi
 fi
 
+# Move the install's pin to the current release. This is the "update" in
+# update.sh once releases exist: docker-compose.yml resolves
+# ${APP_VERSION:-latest}, so the tag written here decides which image the
+# compose pull below fetches.
+#
+# A resolution failure must NEVER destroy an existing pin -- a transient API
+# error would otherwise silently unpin an install that was deliberately held
+# back. So: move the pin when we resolved something, leave it alone when we
+# didn't, and write the 'latest' fallback only when there is no entry at all.
+#
+# `curl` is not guaranteed here (unlike install.sh, this script installs it only
+# inside the Docker-missing bootstrap branch), so its absence takes the same
+# keep-the-pin path as an API failure. The call itself is guarded because
+# `set -e` is on and `curl -f` exits 22 on the 404 the API returns while no
+# release exists. jq is deliberately not a dependency: one known key in a known
+# payload is a sed away. (`--setup-git` never reaches any of this; it exits
+# above, and is always followed by an ordinary update run.)
+APP_VERSION_RESOLVED=""
+if command -v curl >/dev/null 2>&1; then
+    if RELEASE_JSON=$(curl -fsS "https://api.github.com/repos/shodiwarmic/lastwar-alliance-manager/releases/latest" 2>/dev/null); then
+        APP_VERSION_RESOLVED=$(printf '%s' "$RELEASE_JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+    fi
+else
+    echo -e "${YELLOW}curl is not installed; cannot check for the latest release.${NC}"
+fi
+
+if [ -n "$APP_VERSION_RESOLVED" ]; then
+    if grep -q "^APP_VERSION=" .env; then
+        sed -i "s|^APP_VERSION=.*|APP_VERSION=$APP_VERSION_RESOLVED|" .env
+    else
+        echo "APP_VERSION=$APP_VERSION_RESOLVED" >> .env
+    fi
+    echo -e "${GREEN}Updating to release $APP_VERSION_RESOLVED.${NC}"
+elif grep -q "^APP_VERSION=" .env; then
+    echo -e "${YELLOW}Could not resolve the latest release; keeping the existing pin ($(grep -m1 '^APP_VERSION=' .env | cut -d'=' -f2-)).${NC}"
+else
+    echo "APP_VERSION=latest" >> .env
+    echo -e "${YELLOW}Could not resolve the latest release; using APP_VERSION=latest.${NC}"
+fi
+
 echo -e "${YELLOW}[3/5] Updating Docker...${NC}"
 if ! command -v docker &> /dev/null; then
     if [ -f /etc/os-release ]; then

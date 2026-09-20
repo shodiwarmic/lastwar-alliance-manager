@@ -6,6 +6,8 @@
 
 services:
   alliance-manager:
+    # Builds from source and names the result itself, so APP_VERSION in .env is
+    # ignored here — a dev stack is deliberately not pinned to a release.
     build: .
     image: lastwar-alliance-manager:dev
     environment:
