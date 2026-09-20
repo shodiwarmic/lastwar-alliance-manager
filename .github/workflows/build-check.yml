@@ -329,6 +329,82 @@ jobs:
           print(f'LastRank host isolation check passed ({defined_in_pkg} reference(s), all inside {PKG}).')
           EOF
 
+      # .env.example is the file an operator copies to make their .env, so a
+      # variable the app reads that never reaches it is a setting only the
+      # source tree knows about -- invisible to the person deploying, and
+      # findable only by grepping Go code. Two of thirteen were missing when
+      # this check was written.
+      # LIMITS, deliberately: it matches literal os.Getenv("KEY") calls only, so
+      # a key built by concatenation slips through (the same documented
+      # limitation as the LastRank isolation check above), and it checks
+      # .env.example alone -- docs/DEPLOYMENT.md is prose, and a prose check is
+      # brittle enough to be worse than none.
+      # Runs as a step of this job rather than its own job: the required status
+      # checks in branch protection are pinned to job names, and a new job would
+      # silently not gate until those are updated.
+      - name: Env var documentation check
+        run: |
+          python3 - <<'EOF'
+          import pathlib, re, sys
+
+          GETENV = re.compile(r'os\.Getenv\(\s*"([A-Z0-9_]+)"\s*\)')
+          ENTRY = re.compile(r'^\s*#?\s*([A-Z0-9_]+)\s*=')
+
+          # Keys deliberately absent from .env.example, each with the reason.
+          # docs/DEPLOYMENT.md's "Optional variables" table is the documented
+          # home for variables that have working defaults, and says in its own
+          # opening line that its members are absent from .env.example by
+          # design -- so this allowlist encodes an existing convention rather
+          # than excusing a gap.
+          ALLOWED = {
+              'PORT': 'documented in docs/DEPLOYMENT.md -> Optional variables',
+              'COLLABORA_PORT': 'documented in docs/DEPLOYMENT.md -> Optional variables',
+          }
+
+          read_at = {}
+          for root in ('cmd', 'internal'):
+              for path in sorted(pathlib.Path(root).rglob('*.go')):
+                  for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                      for m in GETENV.finditer(line):
+                          read_at.setdefault(m.group(1), f'{path}:{n}')
+
+          # Self-check: having scanned nothing must fail loudly rather than
+          # report a clean run (same idea as the LastRank isolation check).
+          if not read_at:
+              print('Env var documentation check failed:\n')
+              print('  no os.Getenv calls found in cmd/ or internal/ -- did the source move?')
+              sys.exit(1)
+
+          documented = set()
+          for line in pathlib.Path('.env.example').read_text(encoding='utf-8').splitlines():
+              m = ENTRY.match(line)
+              if m:
+                  documented.add(m.group(1))
+
+          fails = []
+          for key, where in sorted(read_at.items()):
+              if key in documented or key in ALLOWED:
+                  continue
+              fails.append(f'{where}: {key} is read by the app but is absent from .env.example')
+
+          # An allowlist entry for a key nothing reads any more is a claim
+          # nobody will think to re-check, so it has to rot loudly.
+          for key in sorted(ALLOWED):
+              if key not in read_at:
+                  fails.append(f'.github/workflows/build-check.yml: {key} is allowlisted '
+                               f'here but no longer read -- drop the entry')
+
+          if fails:
+              print('Env var documentation check failed:\n')
+              for f in fails:
+                  print('  ' + f)
+              print('\nAdd the variable to .env.example (commented out if it is optional),')
+              print('or allowlist it in this step with the reason it belongs elsewhere.')
+              sys.exit(1)
+          print(f'Env var documentation check passed ({len(read_at)} variables read, '
+                f'{len(ALLOWED)} allowlisted).')
+          EOF
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
