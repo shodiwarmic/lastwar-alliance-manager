@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -306,7 +307,11 @@ func upsertMemberRegistration(w http.ResponseWriter, r *http.Request) {
 
 func deleteMemberRegistration(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	db.Exec(`DELETE FROM storm_registrations WHERE member_id = ?`, vars["member_id"])
+	if _, err := db.Exec(`DELETE FROM storm_registrations WHERE member_id = ?`, vars["member_id"]); err != nil {
+		slog.Error("deleteMemberRegistration: delete failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -374,7 +379,14 @@ func getStormGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer bldgRows.Close()
-	bldgMap := map[int]*StormGroupBuilding{}
+	// Index a building by its group and position, never by a pointer into
+	// g.Buildings: a later append to the same group can move the backing array, and
+	// members attached through a stale pointer were silently lost on read.
+	type bldgRef struct {
+		group *StormGroup
+		index int
+	}
+	bldgMap := map[int]bldgRef{}
 	for bldgRows.Next() {
 		var b StormGroupBuilding
 		var groupID int
@@ -382,7 +394,7 @@ func getStormGroups(w http.ResponseWriter, r *http.Request) {
 		b.Members = []StormGroupMember{}
 		if g, ok := groupMap[groupID]; ok {
 			g.Buildings = append(g.Buildings, b)
-			bldgMap[b.ID] = &g.Buildings[len(g.Buildings)-1]
+			bldgMap[b.ID] = bldgRef{g, len(g.Buildings) - 1}
 		}
 	}
 
@@ -397,7 +409,8 @@ func getStormGroups(w http.ResponseWriter, r *http.Request) {
 		var gbID, isSub int
 		memRows.Scan(&m.ID, &gbID, &m.MemberID, &isSub, &m.Position)
 		m.IsSub = isSub == 1
-		if b, ok := bldgMap[gbID]; ok {
+		if ref, ok := bldgMap[gbID]; ok {
+			b := &ref.group.Buildings[ref.index]
 			b.Members = append(b.Members, m)
 		}
 	}
@@ -524,7 +537,12 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Remove current group's own members from the conflict check
-	curRows, _ := db.Query(`SELECT sgbm.member_id FROM storm_group_building_members sgbm JOIN storm_group_buildings sgb ON sgb.id=sgbm.group_building_id WHERE sgb.group_id=?`, groupID)
+	curRows, err := db.Query(`SELECT sgbm.member_id FROM storm_group_building_members sgbm JOIN storm_group_buildings sgb ON sgb.id=sgbm.group_building_id WHERE sgb.group_id=?`, groupID)
+	if err != nil {
+		slog.Error("saveGroupBuildings: read building members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer curRows.Close()
 	ownIDs := map[int]bool{}
 	for curRows.Next() {
@@ -532,7 +550,12 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 		curRows.Scan(&id)
 		ownIDs[id] = true
 	}
-	curRows2, _ := db.Query(`SELECT member_id FROM storm_group_members WHERE group_id=?`, groupID)
+	curRows2, err := db.Query(`SELECT member_id FROM storm_group_members WHERE group_id=?`, groupID)
+	if err != nil {
+		slog.Error("saveGroupBuildings: read direct members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer curRows2.Close()
 	for curRows2.Next() {
 		var id int
@@ -558,8 +581,16 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	tx.Exec(`DELETE FROM storm_group_building_members WHERE group_building_id IN (SELECT id FROM storm_group_buildings WHERE group_id=?)`, groupID)
-	tx.Exec(`DELETE FROM storm_group_buildings WHERE group_id=?`, groupID)
+	if _, err := tx.Exec(`DELETE FROM storm_group_building_members WHERE group_building_id IN (SELECT id FROM storm_group_buildings WHERE group_id=?)`, groupID); err != nil {
+		slog.Error("saveGroupBuildings: clear building members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM storm_group_buildings WHERE group_id=?`, groupID); err != nil {
+		slog.Error("saveGroupBuildings: clear buildings failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	for _, b := range buildings {
 		res, err := tx.Exec(`INSERT INTO storm_group_buildings (group_id,building_id,sort_order) VALUES (?,?,?)`, groupID, b.BuildingID, b.SortOrder)
 		if err != nil {
@@ -572,7 +603,11 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 			if m.IsSub {
 				isSub = 1
 			}
-			tx.Exec(`INSERT INTO storm_group_building_members (group_building_id,member_id,is_sub,position) VALUES (?,?,?,?)`, gbID, m.MemberID, isSub, m.Position)
+			if _, err := tx.Exec(`INSERT INTO storm_group_building_members (group_building_id,member_id,is_sub,position) VALUES (?,?,?,?)`, gbID, m.MemberID, isSub, m.Position); err != nil {
+				slog.Error("saveGroupBuildings: insert building member failed", "member_id", m.MemberID, "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -617,14 +652,24 @@ func saveGroupDirectMembers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	curRows, _ := db.Query(`SELECT member_id FROM storm_group_members WHERE group_id=?`, groupID)
+	curRows, err := db.Query(`SELECT member_id FROM storm_group_members WHERE group_id=?`, groupID)
+	if err != nil {
+		slog.Error("saveGroupDirectMembers: read direct members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer curRows.Close()
 	for curRows.Next() {
 		var id int
 		curRows.Scan(&id)
 		delete(assigned, id)
 	}
-	bldgRows, _ := db.Query(`SELECT sgbm.member_id FROM storm_group_building_members sgbm JOIN storm_group_buildings sgb ON sgb.id=sgbm.group_building_id WHERE sgb.group_id=?`, groupID)
+	bldgRows, err := db.Query(`SELECT sgbm.member_id FROM storm_group_building_members sgbm JOIN storm_group_buildings sgb ON sgb.id=sgbm.group_building_id WHERE sgb.group_id=?`, groupID)
+	if err != nil {
+		slog.Error("saveGroupDirectMembers: read building members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer bldgRows.Close()
 	for bldgRows.Next() {
 		var id int
@@ -641,19 +686,29 @@ func saveGroupDirectMembers(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := db.Begin()
 	if err != nil {
+		slog.Error("saveGroupDirectMembers: begin failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer tx.Rollback()
-	tx.Exec(`DELETE FROM storm_group_members WHERE group_id=?`, groupID)
+	if _, err := tx.Exec(`DELETE FROM storm_group_members WHERE group_id=?`, groupID); err != nil {
+		slog.Error("saveGroupDirectMembers: clear direct members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	for _, m := range members {
 		isSub := 0
 		if m.IsSub {
 			isSub = 1
 		}
-		tx.Exec(`INSERT INTO storm_group_members (group_id,member_id,is_sub,position) VALUES (?,?,?,?)`, groupID, m.MemberID, isSub, m.Position)
+		if _, err := tx.Exec(`INSERT INTO storm_group_members (group_id,member_id,is_sub,position) VALUES (?,?,?,?)`, groupID, m.MemberID, isSub, m.Position); err != nil {
+			slog.Error("saveGroupDirectMembers: insert direct member failed", "member_id", m.MemberID, "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
 	}
 	if err := tx.Commit(); err != nil {
+		slog.Error("saveGroupDirectMembers: commit failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
