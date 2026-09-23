@@ -99,11 +99,20 @@ function renderHeader(profile) {
         actions.className = 'acc-profile-actions';
         const addBtn = document.createElement('button');
         addBtn.className = 'btn btn-danger btn-sm';
-        addBtn.textContent = '+ Add Strike';
+        addBtn.append(svgIcon('plus'), document.createTextNode(' Add Strike'));
         addBtn.addEventListener('click', () => openStrikeModal(null));
         actions.appendChild(addBtn);
         header.appendChild(actions);
     }
+}
+
+// Each history table scrolls sideways inside its own wrapper, so on a phone the
+// Actions column stays reachable instead of running off the edge of the page.
+function appendScrollTable(container, table) {
+    const wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
+    wrap.appendChild(table);
+    container.appendChild(wrap);
 }
 
 function renderStrikes(strikes) {
@@ -159,26 +168,24 @@ function renderStrikes(strikes) {
 
         if (CAN_MANAGE) {
             const tdAct = document.createElement('td');
+            const actionWrap = document.createElement('div');
+            actionWrap.className = 'row-actions';
             if (s.status === 'active') {
-                const excuseBtn = document.createElement('button');
-                excuseBtn.className = 'btn btn-secondary btn-sm';
-                excuseBtn.textContent = 'Excuse';
-                excuseBtn.addEventListener('click', () => excuseStrike(s.id));
-                tdAct.appendChild(excuseBtn);
+                actionWrap.appendChild(
+                    rowActionBtn('btn btn-secondary btn-sm', 'check', 'Excuse', () => excuseStrike(s.id))
+                );
             }
-            const delBtn = document.createElement('button');
-            delBtn.className = 'btn btn-danger btn-sm';
-            delBtn.textContent = 'Delete';
-            delBtn.style.marginLeft = s.status === 'active' ? '6px' : '0';
-            delBtn.addEventListener('click', () => deleteStrike(s.id));
-            tdAct.appendChild(delBtn);
+            actionWrap.appendChild(
+                rowActionBtn('btn btn-danger btn-sm', 'trash', 'Delete', () => deleteStrike(s.id))
+            );
+            tdAct.appendChild(actionWrap);
             tr.appendChild(tdAct);
         }
 
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    container.appendChild(table);
+    appendScrollTable(container, table);
 }
 
 async function excuseStrike(strikeID) {
@@ -226,7 +233,7 @@ function renderVSHistory(vsHistory) {
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    container.appendChild(table);
+    appendScrollTable(container, table);
 }
 
 function renderStormHistory(stormHistory) {
@@ -266,7 +273,7 @@ function renderStormHistory(stormHistory) {
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    container.appendChild(table);
+    appendScrollTable(container, table);
 }
 
 function renderTrainHistory(trainHistory) {
@@ -301,7 +308,7 @@ function renderTrainHistory(trainHistory) {
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    container.appendChild(table);
+    appendScrollTable(container, table);
 }
 
 // --- Boot ---

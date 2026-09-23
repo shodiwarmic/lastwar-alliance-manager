@@ -29,10 +29,10 @@
 
         <!-- Week Navigator (also used as day navigator on mobile) -->
         <div class="week-nav">
-            <button class="btn btn-secondary btn-sm" id="btn-prev-week">← Prev</button>
+            <button class="btn btn-secondary btn-sm" id="btn-prev-week" title="Previous week" aria-label="Previous week"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chevron-left"/></svg> <span class="action-label">Prev</span></button>
             <span id="week-range-label" class="week-range-label"></span>
-            <button class="btn btn-secondary btn-sm" id="btn-next-week">Next →</button>
-            <button class="btn btn-ghost btn-sm" id="btn-today">Today</button>
+            <button class="btn btn-secondary btn-sm" id="btn-next-week" title="Next week" aria-label="Next week"><span class="action-label">Next</span> <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chevron-right"/></svg></button>
+            <button class="btn btn-ghost btn-sm" id="btn-today"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Today</button>
         </div>
 
         <!-- Week grid -->
@@ -70,7 +70,7 @@
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Discord / Chat Text</h3>
             <textarea id="text-output" rows="20" readonly></textarea>
             <div class="modal-actions">
-                <button class="btn btn-secondary" id="btn-copy-text">Copy to Clipboard</button>
+                <button class="btn btn-secondary" id="btn-copy-text"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-copy"/></svg> Copy to Clipboard</button>
                 <button class="btn btn-ghost btn-sm" id="btn-close-text"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Close</button>
             </div>
         </div>
@@ -94,7 +94,7 @@
         <div class="panel-header">
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-world"/></svg> Server Events</h3>
             {{if .Permissions.ManageSchedule}}
-            <button class="btn btn-primary" id="btn-add-server-event">+ Add</button>
+            <button class="btn btn-primary" id="btn-add-server-event"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
             {{end}}
         </div>
         <p class="help-text">Repeating game-wide events displayed as banners on the calendar. Encounters
@@ -110,7 +110,7 @@
         <div class="panel-header">
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tag"/></svg> Event Types</h3>
             {{if .Permissions.ManageSchedule}}
-            <button class="btn btn-primary" id="btn-add-event-type">+ Add</button>
+            <button class="btn btn-primary" id="btn-add-event-type"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
             {{end}}
         </div>
         <p class="help-text">System event types cannot be deleted or renamed. Their baseline level is set here; the ceiling that bounds it lives in Settings → Game Limits.</p>

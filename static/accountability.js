@@ -226,20 +226,25 @@ async function loadMembers() {
         tdVS.appendChild(vsSpan);
 
         const tdActions = document.createElement('td');
+        const actionWrap = document.createElement('div');
+        actionWrap.className = 'row-actions';
+        // A link, so not rowActionBtn — but the same icon + collapsing label.
         const viewBtn = document.createElement('a');
         viewBtn.href = '/accountability/' + m.id;
         viewBtn.className = 'btn btn-secondary btn-sm';
-        viewBtn.textContent = 'Profile';
-        tdActions.appendChild(viewBtn);
+        viewBtn.title = 'Profile';
+        viewBtn.setAttribute('aria-label', 'Profile');
+        const viewLabel = document.createElement('span');
+        viewLabel.className = 'action-label';
+        viewLabel.textContent = 'Profile';
+        viewBtn.append(svgIcon('user'), viewLabel);
+        actionWrap.appendChild(viewBtn);
 
         if (CAN_MANAGE) {
-            const strikeBtn = document.createElement('button');
-            strikeBtn.className = 'btn btn-danger btn-sm';
-            strikeBtn.textContent = '+ Strike';
-            strikeBtn.style.marginLeft = '6px';
-            strikeBtn.addEventListener('click', () => openStrikeModal(m.id, m.name, null));
-            tdActions.appendChild(strikeBtn);
+            actionWrap.appendChild(rowActionBtn('btn btn-danger btn-sm', 'plus', 'Strike',
+                () => openStrikeModal(m.id, m.name, null)));
         }
+        tdActions.appendChild(actionWrap);
 
         tr.append(tdName, tdRank, tdTag, tdStrikes, tdVS, tdActions);
         tbody.appendChild(tr);

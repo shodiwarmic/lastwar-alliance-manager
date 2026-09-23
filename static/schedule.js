@@ -426,7 +426,7 @@ function buildDayCol(dateStr, idx) {
     if (CAN_MANAGE) {
         const addBtn = document.createElement('button');
         addBtn.className = 'btn btn-ghost btn-sm btn-add-event-day';
-        addBtn.textContent = '+ Add Event';
+        addBtn.append(svgIcon('plus'), document.createTextNode(' Add Event'));
         addBtn.addEventListener('click', () => openAddEventModal(dateStr));
         col.appendChild(addBtn);
     }
@@ -894,7 +894,7 @@ function renderEventTypes() {
             if (!et.is_system) {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'btn btn-danger btn-sm';
-                delBtn.textContent = 'Delete';
+                delBtn.append(svgIcon('trash'), document.createTextNode(' Delete'));
                 delBtn.addEventListener('click', async () => {
                     if (!await showConfirm('Delete this event type?', 'Delete')) return;
                     const res = await fetch('/api/schedule/event-types/' + et.id, { method: 'DELETE' });
@@ -1100,7 +1100,7 @@ function renderServerEvents() {
 
             const delBtn = document.createElement('button');
             delBtn.className = 'btn btn-danger btn-sm';
-            delBtn.textContent = 'Delete';
+            delBtn.append(svgIcon('trash'), document.createTextNode(' Delete'));
             delBtn.addEventListener('click', async () => {
                 if (!await showConfirm('Delete this server event?', 'Delete')) return;
                 // A 409 here means an encounter type still points at this window.
