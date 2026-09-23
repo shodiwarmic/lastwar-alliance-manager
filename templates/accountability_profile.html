@@ -85,5 +85,6 @@
 
 {{define "scripts"}}
 <div id="page-config" data-member-id="{{.MemberID}}" data-can-manage="{{if .Permissions.ManageAccountability}}true{{else}}false{{end}}" hidden></div>
+<script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/accountability_profile.js"}}"></script>
 {{end}}

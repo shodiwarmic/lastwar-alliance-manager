@@ -2,10 +2,10 @@
 //
 // For pages using the dominant convention: a `.tab-bar` of `.tab-btn[data-tab]`
 // buttons and matching `#tab-<name>` `.tab-content` panels, toggled via
-// `style.display` (the CLAUDE.md canonical mechanism). Train consumes this today;
-// the other data-tab pages (accountability, schedule, accountability_profile,
-// season-hub, recruiting, allies, comms) still carry local copies and are tracked
-// to migrate here.
+// `style.display` (the CLAUDE.md canonical mechanism). Train, admin,
+// external-alliances, accountability, accountability_profile and schedule consume
+// this; the other data-tab pages (season-hub, recruiting, allies, comms) still carry
+// local copies and are tracked to migrate here.
 //
 // Provenance: the hash / permission-guard / replaceState logic is generalized from
 // vs-league.js showTab; the visibility mechanic is train's setupTabs (inline
@@ -57,7 +57,15 @@
         document.querySelectorAll(`${barSel} .tab-btn`).forEach(b =>
             b.addEventListener('click', () => show(b.dataset.tab)));
 
-        const hashName = () => decodeURIComponent((location.hash || '').slice(1));
+        // A malformed escape (`#%E0`) makes decodeURIComponent throw a URIError, which
+        // during init would leave the page with no tab shown — fall back instead.
+        const hashName = () => {
+            try {
+                return decodeURIComponent((location.hash || '').slice(1));
+            } catch {
+                return fallback();
+            }
+        };
         show(opts.hash && location.hash ? hashName() : fallback());
 
         if (opts.hash) {

@@ -130,27 +130,6 @@ function showStatus(el, msg, isError, durationMs) {
     }
 }
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
-
-function initTabs() {
-    // Show initial active tab
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) {
-        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
-        if (target) target.style.display = 'block';
-    }
-
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => { t.style.display = 'none'; });
-            btn.classList.add('active');
-            const target = document.getElementById('tab-' + btn.dataset.tab);
-            if (target) target.style.display = 'block';
-        });
-    });
-}
-
 // ── Server event recurrence ───────────────────────────────────────────────────
 
 function getServerEventOccurrencesInWeek(evt, dates) {
@@ -2122,7 +2101,9 @@ window.addEventListener('themechange', () => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
-    initTabs();
+    // Event Types and Settings are permission-gated in the template; a hash naming an
+    // absent tab falls back to Schedule (tabs.js's permission guard).
+    Tabs.init({ hash: true, defaultTab: 'schedule' });
 
     // Parallel fetches
     const [settingsRes, slotTimesRes, stormConfigRes, typesRes, serverEventsRes] = await Promise.all([

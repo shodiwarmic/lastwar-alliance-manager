@@ -41,26 +41,8 @@ function attendanceLabel(s) {
 
 // --- Tabs ---
 
-function setupTabs() {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(p => p.style.display = 'none');
-            btn.classList.add('active');
-            const panel = document.getElementById('tab-' + btn.dataset.tab);
-            if (panel) panel.style.display = 'block';
-            onTabActivated(btn.dataset.tab);
-        });
-    });
-
-    // CSS hides all .tab-content by default — show the initial active tab explicitly.
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) {
-        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
-        if (target) target.style.display = 'block';
-    }
-}
-
+// Tabs.init (tabs.js) calls this for the initial tab too, so a deep link such as
+// /accountability#report lazy-loads its panel exactly as a click would.
 let strikesLoaded = false;
 let reportLoaded  = false;
 
@@ -654,7 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     strikeRefDateFP = flatpickr('#strike-ref-date', { dateFormat: 'Y-m-d', allowInput: true });
 
-    setupTabs();
+    Tabs.init({ hash: true, defaultTab: 'members', onActivate: onTabActivated });
     applyVSWeekNotes();
     loadMembers();
 

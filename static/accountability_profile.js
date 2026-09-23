@@ -304,25 +304,6 @@ function renderTrainHistory(trainHistory) {
     container.appendChild(table);
 }
 
-// --- Tab switching ---
-
-function initTabs() {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            document.querySelectorAll('.tab-content').forEach(c => { c.style.display = 'none'; });
-            const target = document.getElementById('tab-' + btn.dataset.tab);
-            if (target) target.style.display = 'block';
-        });
-    });
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) {
-        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
-        if (target) target.style.display = 'block';
-    }
-}
-
 // --- Boot ---
 
 async function boot() {
@@ -346,7 +327,7 @@ async function boot() {
 document.addEventListener('DOMContentLoaded', () => {
     strikeRefDateFP = flatpickr('#strike-ref-date', { dateFormat: 'Y-m-d', allowInput: true });
 
-    initTabs();
+    Tabs.init({ hash: true, defaultTab: 'strikes' });
     boot();
     if (CAN_MANAGE) {
         document.getElementById('btn-strike-save').addEventListener('click', saveStrike);
