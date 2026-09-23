@@ -186,3 +186,56 @@ tr.acc-row--below-vs {
     color: var(--color-text);
 }
 
+
+/* --- Strike categories modal --- */
+.acc-modal-hint {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin: 0 0 12px 0;
+}
+.acc-types-table td {
+    vertical-align: middle;
+}
+.acc-types-table .acc-type-label {
+    min-width: 7rem;
+    width: 100%;
+}
+.acc-types-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+.acc-types-key {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
+    padding: 0;
+    overflow-wrap: anywhere;
+}
+.acc-type-system {
+    background: var(--color-purple-bg);
+    color: var(--color-purple);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.acc-types-used {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+.acc-types-add {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+.acc-types-add .form-input {
+    flex: 1 1 14rem;
+}

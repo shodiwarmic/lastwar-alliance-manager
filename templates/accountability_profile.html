@@ -57,12 +57,10 @@
             <input type="hidden" id="strike-member-id">
         </div>
         <div class="form-group">
-            <label for="strike-type">Type</label>
+            <label for="strike-type">Category</label>
+            <!-- Options come from the managed category list (strike-types.js). -->
             <select id="strike-type" class="form-input">
-                <option value="vs_below_threshold">VS Below Threshold</option>
-                <option value="train_no_show">Train No-Show</option>
-                <option value="storm_no_show">Storm No-Show</option>
-                <option value="manual">Manual</option>
+                <option value="">— select —</option>
             </select>
         </div>
         <div class="form-group">
@@ -86,5 +84,6 @@
 {{define "scripts"}}
 <div id="page-config" data-member-id="{{.MemberID}}" data-can-manage="{{if .Permissions.ManageAccountability}}true{{else}}false{{end}}" hidden></div>
 <script src="{{asset "/tabs.js"}}"></script>
+<script src="{{asset "/strike-types.js"}}"></script>
 <script src="{{asset "/accountability_profile.js"}}"></script>
 {{end}}

@@ -20,14 +20,12 @@ function tagClass(tag) {
 }
 
 function strikeTypeLabel(t) {
-    switch (t) {
-        case 'vs_below_threshold': return 'VS Below Min';
-        case 'train_no_show':      return 'Train No-Show';
-        case 'storm_no_show':      return 'Storm No-Show';
-        case 'manual':             return 'Manual';
-        default:                   return t;
-    }
+    return StrikeTypes.label(t);
 }
+
+// Resolves once the category list has loaded (or failed — labels then fall back to
+// the raw key). Anything that renders a strike's category awaits it.
+let strikeTypesReady = Promise.resolve();
 
 function attendanceLabel(s) {
     switch (s) {
@@ -70,8 +68,6 @@ function openStrikeModal(memberID, memberName, preType) {
     document.getElementById('strike-member-name').value = memberName;
     const typeSelect = document.getElementById('strike-type');
     typeSelect.value = preType || '';
-    document.getElementById('strike-type-custom').style.display = 'none';
-    document.getElementById('strike-type-custom').value = '';
     document.getElementById('strike-reason').value = '';
     strikeRefDateFP.clear(false);
     document.getElementById('strike-modal-status').textContent = '';
@@ -86,24 +82,9 @@ function closeStrikeModal() {
     strikeModal.style.display = '';
 }
 
-function registerCustomStrikeType(value) {
-    const select = document.getElementById('strike-type');
-    for (const opt of select.options) {
-        if (opt.value === value) return;
-    }
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = value;
-    select.insertBefore(opt, select.querySelector('option[value="__custom__"]'));
-}
-
 async function saveStrike() {
     const memberID   = parseInt(document.getElementById('strike-member-id').value, 10);
-    const typeSelect = document.getElementById('strike-type');
-    const isCustom   = typeSelect.value === '__custom__';
-    const strikeType = isCustom
-        ? document.getElementById('strike-type-custom').value.trim()
-        : typeSelect.value;
+    const strikeType = document.getElementById('strike-type').value;
     const reason   = document.getElementById('strike-reason').value.trim();
     const refDate  = document.getElementById('strike-ref-date').value;
     const status   = document.getElementById('strike-modal-status');
@@ -115,8 +96,10 @@ async function saveStrike() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ member_id: memberID, strike_type: strikeType, reason, ref_date: refDate }),
     });
-    if (!res.ok) { status.textContent = 'Failed to save strike.'; return; }
-    if (isCustom) registerCustomStrikeType(strikeType);
+    if (!res.ok) {
+        status.textContent = res.status === 400 ? (await res.text()).trim() : 'Failed to save strike.';
+        return;
+    }
     closeStrikeModal();
     loadMembers();
     strikesLoaded = false; // invalidate cache so next tab-switch refetches
@@ -322,6 +305,7 @@ async function addVSStrikesForBelow() {
 async function loadStrikes() {
     const container = document.getElementById('strikes-container');
     container.replaceChildren(Object.assign(document.createElement('p'), { className: 'loading-msg', textContent: 'Loading…' }));
+    await strikeTypesReady;
 
     const status = document.getElementById('strikes-status-filter').value;
     let url = '/api/accountability/strikes';
@@ -630,6 +614,198 @@ async function loadReport() {
     });
 }
 
+// --- Strike categories (manage_accountability) ---
+//
+// One row per category. Every change persists as it is made — a label on blur, the
+// Active box on change, a move as one PUT per row whose position changed — so the
+// strike form and the Strikes tab behind the modal never disagree with what is on
+// screen. Keys are shown, never edited: a key is the value stored on every strike.
+
+function strikeTypePayload(tr) {
+    return {
+        label: tr.querySelector('.acc-type-label').value.trim(),
+        active: tr.querySelector('.acc-type-active').checked,
+        sort_order: rowPosition(tr),
+    };
+}
+
+async function putStrikeType(tr) {
+    const payload = strikeTypePayload(tr);
+    if (!payload.label) { showToast('A category needs a label.', 'error'); return false; }
+    const res = await fetch('/api/accountability/strike-types/' + tr.dataset.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        showToast((await res.text()).trim() || 'Could not save that category.', 'error', 6000);
+        return false;
+    }
+    tr.dataset.sortOrder = payload.sort_order;
+    return true;
+}
+
+async function afterStrikeTypesChange() {
+    strikeTypesReady = StrikeTypes.load()
+        .then(() => StrikeTypes.fillSelect(document.getElementById('strike-type')))
+        .catch(err => console.error('StrikeTypes.load:', err));
+    await strikeTypesReady;
+    if (strikesLoaded) loadStrikes();
+}
+
+function buildStrikeTypeRow(t) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = t.id;
+    tr.dataset.sortOrder = t.sort_order;
+
+    const tdOrder = document.createElement('td');
+    tdOrder.appendChild(buildOrderButtons(tr, persistStrikeTypeOrder));
+
+    const tdLabel = document.createElement('td');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-input acc-type-label';
+    input.value = t.label;
+    input.maxLength = 60;
+    input.setAttribute('aria-label', 'Label');
+    let saved = t.label;
+    input.addEventListener('change', async () => {
+        if (await putStrikeType(tr)) {
+            saved = input.value.trim();
+            afterStrikeTypesChange();
+        } else {
+            input.value = saved;
+        }
+    });
+    // The key sits under the label as a caption: it is what strikes store, so it is
+    // worth seeing, but it is never edited.
+    const meta = document.createElement('div');
+    meta.className = 'acc-types-meta';
+    const key = document.createElement('code');
+    key.className = 'acc-types-key';
+    key.textContent = t.key;
+    meta.appendChild(noTranslate(key));
+    if (t.is_system) {
+        const badge = document.createElement('span');
+        badge.className = 'acc-type-system';
+        badge.textContent = 'System';
+        meta.appendChild(badge);
+    }
+    if (t.in_use) {
+        const used = document.createElement('span');
+        used.className = 'acc-types-used';
+        used.textContent = t.in_use + (t.in_use === 1 ? ' strike' : ' strikes');
+        meta.appendChild(used);
+    }
+    tdLabel.append(input, meta);
+
+    const tdActive = document.createElement('td');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'acc-type-active';
+    box.checked = t.active;
+    box.disabled = t.is_system;
+    box.setAttribute('aria-label', 'Active');
+    if (t.is_system) box.title = 'System categories are always active';
+    box.addEventListener('change', async () => {
+        if (await putStrikeType(tr)) afterStrikeTypesChange();
+        else box.checked = !box.checked;
+    });
+    tdActive.appendChild(box);
+
+    const tdAct = document.createElement('td');
+    if (!t.is_system && !t.in_use) {
+        tdAct.appendChild(rowActionBtn('btn btn-danger btn-sm', 'trash', 'Delete', async () => {
+            if (!await showConfirm(`Delete the category "${t.label}"?`, 'Delete')) return;
+            const res = await fetch('/api/accountability/strike-types/' + t.id, { method: 'DELETE' });
+            if (!res.ok) {
+                showToast((await res.text()).trim() || 'Could not delete that category.', 'error', 6000);
+                return;
+            }
+            const tbody = tr.parentNode;
+            tr.remove();
+            if (tbody) refreshOrderButtons(tbody);
+            showToast('Category deleted.');
+            afterStrikeTypesChange();
+        }));
+    }
+
+    tr.append(tdOrder, tdLabel, tdActive, tdAct);
+    return tr;
+}
+
+async function persistStrikeTypeOrder() {
+    const tbody = document.getElementById('strike-types-tbody');
+    const moved = Array.from(tbody.children).filter((tr, i) => String(tr.dataset.sortOrder) !== String(i));
+    let ok = true;
+    for (const tr of moved) ok = (await putStrikeType(tr)) && ok;
+    if (moved.length) afterStrikeTypesChange();
+    if (!ok) renderStrikeTypesTable();
+}
+
+async function renderStrikeTypesTable() {
+    const tbody = document.getElementById('strike-types-tbody');
+    await strikeTypesReady;
+    const types = StrikeTypes.all();
+    if (!types.length) {
+        const td = Object.assign(document.createElement('td'), { colSpan: 4, className: 'empty-state', textContent: 'No categories could be loaded.' });
+        const tr = document.createElement('tr');
+        tr.appendChild(td);
+        tbody.replaceChildren(tr);
+        return;
+    }
+    tbody.replaceChildren(...types.map(buildStrikeTypeRow));
+    refreshOrderButtons(tbody);
+}
+
+// Mirrors slugStrikeTypeKey (handlers_strike_types.go) so the preview shows the key
+// the server will mint; the server's answer is what is stored either way.
+function previewStrikeTypeKey(label) {
+    return foldSearch(label).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40).replace(/_+$/, '');
+}
+
+function initStrikeTypesModal() {
+    const modal = document.getElementById('strike-types-modal');
+    const open = async () => {
+        modal.style.display = 'flex';
+        trapFocus(modal);
+        await afterStrikeTypesChange();
+        renderStrikeTypesTable();
+    };
+    const close = () => { releaseFocus(modal); modal.style.display = ''; };
+    document.getElementById('btn-strike-types').addEventListener('click', open);
+    document.getElementById('btn-strike-types-close').addEventListener('click', close);
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+    const labelIn = document.getElementById('strike-type-new-label');
+    const keyOut = document.getElementById('strike-type-new-key');
+    labelIn.addEventListener('input', () => {
+        const k = previewStrikeTypeKey(labelIn.value);
+        keyOut.textContent = k ? 'key: ' + k : '';
+    });
+    const add = async () => {
+        const label = labelIn.value.trim();
+        if (!label) { setFieldError(labelIn, 'Enter a label.'); return; }
+        clearFieldError(labelIn);
+        const res = await fetch('/api/accountability/strike-types', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label }),
+        });
+        if (!res.ok) {
+            setFieldError(labelIn, (await res.text()).trim() || 'Could not add that category.');
+            return;
+        }
+        labelIn.value = '';
+        keyOut.textContent = '';
+        showToast('Category added.');
+        await afterStrikeTypesChange();
+        renderStrikeTypesTable();
+    };
+    document.getElementById('btn-strike-type-add').addEventListener('click', add);
+    labelIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+}
+
 // --- Boot ---
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -640,6 +816,11 @@ document.addEventListener('DOMContentLoaded', () => {
         locale: { firstDayOfWeek: 1 }
     });
     strikeRefDateFP = flatpickr('#strike-ref-date', { dateFormat: 'Y-m-d', allowInput: true });
+
+    // Before Tabs.init: a deep link to #strikes renders straight away and needs labels.
+    strikeTypesReady = StrikeTypes.load()
+        .then(() => { if (CAN_MANAGE) StrikeTypes.fillSelect(document.getElementById('strike-type')); })
+        .catch(err => console.error('StrikeTypes.load:', err));
 
     Tabs.init({ hash: true, defaultTab: 'members', onActivate: onTabActivated });
     applyVSWeekNotes();
@@ -663,16 +844,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (CAN_MANAGE) {
-        fetch('/api/accountability/strike-types')
-            .then(r => r.ok ? r.json() : [])
-            .then(types => types.forEach(t => registerCustomStrikeType(t)))
-            .catch(() => {});
-
-        document.getElementById('strike-type').addEventListener('change', function () {
-            const customInput = document.getElementById('strike-type-custom');
-            customInput.style.display = this.value === '__custom__' ? '' : 'none';
-            if (this.value === '__custom__') customInput.focus();
-        });
+        initStrikeTypesModal();
 
         document.getElementById('btn-strike-save').addEventListener('click', saveStrike);
         document.getElementById('btn-strike-cancel').addEventListener('click', closeStrikeModal);

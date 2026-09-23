@@ -253,6 +253,9 @@ func Main() {
 	router.HandleFunc("/api/accountability/strikes", authMiddleware(requirePermission("manage_accountability", handleStrikeCreate))).Methods("POST")
 	router.HandleFunc("/api/accountability/strikes/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeUpdate))).Methods("PUT")
 	router.HandleFunc("/api/accountability/strikes/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeDelete))).Methods("DELETE")
+	router.HandleFunc("/api/accountability/strike-types", authMiddleware(requirePermission("manage_accountability", handleStrikeTypeCreate))).Methods("POST")
+	router.HandleFunc("/api/accountability/strike-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeTypeUpdate))).Methods("PUT")
+	router.HandleFunc("/api/accountability/strike-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeTypeDelete))).Methods("DELETE")
 	router.HandleFunc("/api/accountability/storm-attendance", authMiddleware(requirePermission("manage_accountability", handleStormAttendanceUpsert))).Methods("POST")
 	router.HandleFunc("/api/train-logs/{id:[0-9]+}/showed-up", authMiddleware(requirePermission("manage_accountability", handleTrainNoShow))).Methods("PUT")
 

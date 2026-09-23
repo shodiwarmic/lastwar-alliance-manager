@@ -21,13 +21,10 @@ function tagClass(tag) {
     return 'acc-tag acc-tag--reliable';
 }
 
+// Labels come from the managed category list. The old switch here rendered every
+// custom category as "Manual"; an unknown key now shows as itself.
 function strikeTypeLabel(t) {
-    switch (t) {
-        case 'vs_below_threshold': return 'VS Below Min';
-        case 'train_no_show':      return 'Train No-Show';
-        case 'storm_no_show':      return 'Storm No-Show';
-        default:                   return 'Manual';
-    }
+    return StrikeTypes.label(t);
 }
 
 // --- Add Strike modal ---
@@ -35,7 +32,7 @@ function strikeTypeLabel(t) {
 function openStrikeModal(preType) {
     document.getElementById('strike-member-id').value = MEMBER_ID;
     document.getElementById('strike-member-name').value = window._profileName || '';
-    if (preType) document.getElementById('strike-type').value = preType;
+    document.getElementById('strike-type').value = preType || '';
     document.getElementById('strike-reason').value = '';
     strikeRefDateFP.clear(false);
     document.getElementById('strike-modal-status').textContent = '';
@@ -55,6 +52,7 @@ async function saveStrike() {
     const reason     = document.getElementById('strike-reason').value.trim();
     const refDate    = document.getElementById('strike-ref-date').value;
     const status     = document.getElementById('strike-modal-status');
+    if (!strikeType) { status.textContent = 'Category is required.'; return; }
     if (!reason) { status.textContent = 'Reason is required.'; return; }
 
     const res = await fetch('/api/accountability/strikes', {
@@ -62,7 +60,10 @@ async function saveStrike() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ member_id: MEMBER_ID, strike_type: strikeType, reason, ref_date: refDate }),
     });
-    if (!res.ok) { status.textContent = 'Failed to save.'; return; }
+    if (!res.ok) {
+        status.textContent = res.status === 400 ? (await res.text()).trim() : 'Failed to save.';
+        return;
+    }
     closeStrikeModal();
     boot();
 }
@@ -315,6 +316,13 @@ function renderTrainHistory(trainHistory) {
 
 async function boot() {
     if (!MEMBER_ID) return;
+    try {
+        await StrikeTypes.load();
+        if (CAN_MANAGE) StrikeTypes.fillSelect(document.getElementById('strike-type'));
+    } catch (err) {
+        // Labels fall back to the raw key; the page is still usable.
+        console.error('StrikeTypes.load:', err);
+    }
     let profile;
     try {
         const res = await fetch('/api/accountability/members/' + MEMBER_ID);
