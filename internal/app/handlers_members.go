@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -398,6 +399,58 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(m)
 }
 
+// clearUserReferences nulls the participation columns that point at a user who is
+// about to be deleted. The schema says ON DELETE SET NULL, but foreign_keys is off
+// app-wide so it never fires; readers already tolerate a dangling id, and this keeps
+// one from being written in the first place. q is a tx or db.
+func clearUserReferences(q interface {
+	Exec(string, ...any) (sql.Result, error)
+}, userWhere string, args ...any) error {
+	for _, tbl := range []string{"participation_boards", "participation_exceptions"} {
+		if _, err := q.Exec(`UPDATE `+tbl+` SET recorded_by = NULL WHERE recorded_by IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// deleteMemberTx removes a member and everything that hangs off them, in one
+// transaction the caller commits. foreign_keys is off app-wide, so every child is
+// deleted explicitly — participation rows first (values before their entries), then
+// the member history, the linked user (after clearing references to it), then the
+// member. The first failure returns and the caller rolls back: a member delete that
+// half-happens is worse than one that fails.
+func deleteMemberTx(tx *sql.Tx, id int) error {
+	steps := []struct {
+		what string
+		q    string
+	}{
+		{"participation values", `DELETE FROM participation_values WHERE entry_id IN (SELECT id FROM participation_entries WHERE member_id = ?)`},
+		{"participation entries", `DELETE FROM participation_entries WHERE member_id = ?`},
+		{"participation roles", `DELETE FROM participation_roles WHERE member_id = ?`},
+		{"participation exceptions", `DELETE FROM participation_exceptions WHERE member_id = ?`},
+		{"power history", `DELETE FROM power_history WHERE member_id = ?`},
+		{"squad power history", `DELETE FROM squad_power_history WHERE member_id = ?`},
+		{"hero power history", `DELETE FROM hero_power_history WHERE member_id = ?`},
+		{"kill history", `DELETE FROM kill_history WHERE member_id = ?`},
+	}
+	for _, s := range steps {
+		if _, err := tx.Exec(s.q, id); err != nil {
+			return fmt.Errorf("%s: %w", s.what, err)
+		}
+	}
+	if err := clearUserReferences(tx, "member_id = ?", id); err != nil {
+		return fmt.Errorf("clear user references: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM users WHERE member_id = ?`, id); err != nil {
+		return fmt.Errorf("linked user: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM members WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("member: %w", err)
+	}
+	return nil
+}
+
 func deleteMember(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
@@ -409,28 +462,20 @@ func deleteMember(w http.ResponseWriter, r *http.Request) {
 	var memberName string
 	db.QueryRow("SELECT name FROM members WHERE id = ?", id).Scan(&memberName)
 
-	if _, err = db.Exec("DELETE FROM users WHERE member_id = ?", id); err != nil {
-		slog.Error("Failed to delete linked user for member", "member_id", id, "error", err)
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("deleteMember: begin failed", "member_id", id, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
-
-	if _, err = db.Exec("DELETE FROM power_history WHERE member_id = ?", id); err != nil {
-		slog.Error("Failed to delete power history for member", "member_id", id, "error", err)
+	defer tx.Rollback()
+	if err := deleteMemberTx(tx, id); err != nil {
+		slog.Error("deleteMember: delete failed", "member_id", id, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
-
-	if _, err = db.Exec("DELETE FROM squad_power_history WHERE member_id = ?", id); err != nil {
-		slog.Error("Failed to delete squad power history for member", "member_id", id, "error", err)
-	}
-
-	if _, err = db.Exec("DELETE FROM hero_power_history WHERE member_id = ?", id); err != nil {
-		slog.Error("Failed to delete hero power history for member", "member_id", id, "error", err)
-	}
-
-	if _, err = db.Exec("DELETE FROM kill_history WHERE member_id = ?", id); err != nil {
-		slog.Error("Failed to delete kill history for member", "member_id", id, "error", err)
-	}
-
-	if _, err = db.Exec("DELETE FROM members WHERE id = ?", id); err != nil {
-		slog.Error("Failed to delete member", "member_id", id, "error", err)
+	if err := tx.Commit(); err != nil {
+		slog.Error("deleteMember: commit failed", "member_id", id, "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
@@ -912,13 +957,23 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(request.RemoveMemberIDs) > 0 {
+		// Same delete as the single-member path, one transaction per member: a member
+		// that fails is logged and left whole, and is not counted as removed.
 		for _, id := range request.RemoveMemberIDs {
-			db.Exec("DELETE FROM users WHERE member_id = ?", id)
-			db.Exec("DELETE FROM power_history WHERE member_id = ?", id)
-			db.Exec("DELETE FROM squad_power_history WHERE member_id = ?", id)
-			db.Exec("DELETE FROM hero_power_history WHERE member_id = ?", id)
-			db.Exec("DELETE FROM kill_history WHERE member_id = ?", id)
-			db.Exec("DELETE FROM members WHERE id = ?", id)
+			tx, err := db.Begin()
+			if err != nil {
+				slog.Error("import: remove member begin failed", "member_id", id, "error", err)
+				continue
+			}
+			if err := deleteMemberTx(tx, id); err != nil {
+				tx.Rollback()
+				slog.Error("import: remove member failed", "member_id", id, "error", err)
+				continue
+			}
+			if err := tx.Commit(); err != nil {
+				slog.Error("import: remove member commit failed", "member_id", id, "error", err)
+				continue
+			}
 			result.Removed++
 		}
 	}

@@ -64,7 +64,7 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 > whom" — add the entity type to `neverBatched` rather than accepting the merge.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -968,6 +968,73 @@ The per-candidate queries are not an N+1 worth removing: a generate is bounded a
 days, i.e. ≤ ~75 candidates × 3 indexed point queries against an in-process SQLite
 file, measured at ~10 ms for 300 such statements. A pre-fetch would reintroduce
 exactly the in-memory bookkeeping the paragraph above rules out.
+
+## Participation framework (`participation.go`, `handlers_participation.go`)
+
+Per-member results for the events that mail a ranked board after they finish, built
+**once over `schedule_events` occurrences** — not as a table pair per event, which is the
+mistake upstream made three times. It is `033_season_trackables.sql` re-scoped from a
+season to an event type: `participation_trackables` declares a type's measures and
+`participation_values` stores them (EAV). Rank is a column on the entry, not a trackable.
+
+**Recording is optional, and that shapes everything.** An occurrence with no board means
+nobody recorded it and says nothing about any member. Views list recorded boards only,
+nothing prompts for coverage, and a strike can only ever be suggested from within a board
+that exists. Do not add a "missing boards" view or count.
+
+**Status is derived, never stored.** A board stores what the mail said (entries +
+values), the roles for that battle, and the officer's judgements (exceptions).
+`deriveBoard` is the ONE function that turns those into present / zero / missed /
+excused under the type's declared `absence_rule` — nothing else decides status:
+
+| Rule | Types | Missed means |
+|---|---|---|
+| `absent` | Marshal's Guard, Large Sandworm | an eligible roster member with no entry (appearing means you attacked) |
+| `zero` | Zombie Siege | an entry whose primary value is **present and 0** — absence is blameless (the game picks who is attacked) |
+| `role` | Desert Storm | a **starter** with no entry — an absent sub is never counted |
+
+The rule is a declared property of the type (`participation_types`), because getting it
+wrong manufactures accusations automatically. A **missing value is not a zero**: the
+board PUT refuses an entry lacking a value for any of the type's trackables.
+
+**Suggestions are derived on every read and never stored**; a strike is created only by
+an explicit confirm. The confirm re-derives and checks for an existing strike of the
+type's `strike_type` on `ref_date = event_date` **inside one transaction** — with one
+connection that is the serialisation point, which `handleStrikeCreate`'s
+check-then-insert lacks. Dismissing (`dismissed`) and excusing (`excused` + reason +
+author) are stored per `(board, member)` so a re-save never resurfaces them.
+`missed` exceptions are written **only by migration 081** for legacy
+`storm_attendance` no-shows, which have no role to derive a miss from.
+
+**Reads gate on `canViewParticipation`** (`view_participation` OR
+`manage_participation`): `userHasPermission` reads one key and manage does not imply
+view, and the recording screen reads what it writes. `/api/participation/me` needs no
+permission; `/members/{id}` also accepts `view_accountability`, because the page it
+feeds is gated on that.
+
+**Every read is load → derive → write**, in a fixed number of queries whatever the board
+count (`loadBoards`). Never derive per row inside an open cursor.
+
+**`foreign_keys` is off, so every delete path clears participation rows explicitly:**
+- `deleteMemberTx` — values → entries → roles → exceptions → history → (clear
+  `recorded_by`) → linked user → member, in **one transaction** that rolls back on the
+  first failure. Used by the single delete and the import's bulk removal.
+- The board DELETE — values → entries → roles → exceptions → board.
+- The board PUT replaces values → entries → roles but **keeps exceptions**.
+- `deleteScheduleEvent` refuses (409) an event with a board; `updateScheduleEvent`
+  refuses a type change on one (date/time/level/notes stay editable).
+- The season delete **detaches** stamped rows that carry a board instead of deleting
+  them, and reports `kept_with_boards`.
+- Every user delete (`clearUserReferences`) nulls `recorded_by` on boards and
+  exceptions first; readers `LEFT JOIN users` and tolerate a dangling id anyway.
+
+**Creating an occurrence from the recording screen** (`POST /api/participation/occurrences`)
+goes through `insertScheduleEvent`, the same helper as the Schedule page's create, so
+it passes exactly the same rules and returns exactly the same messages. It needs
+`manage_participation`, not `manage_schedule`.
+
+`participation_board` and `participation_exception` are in `neverBatched`: two boards
+recorded in fifteen minutes are two events, and five excusals are five members.
 
 ## Known gotchas
 

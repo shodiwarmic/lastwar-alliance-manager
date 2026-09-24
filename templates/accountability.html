@@ -18,8 +18,8 @@
     <div class="tab-bar">
         <button class="tab-btn active" data-tab="members">Members</button>
         <button class="tab-btn" data-tab="strikes">Strikes</button>
-        {{if .Permissions.ManageAccountability}}
-        <button class="tab-btn" data-tab="storm">Storm Attendance</button>
+        {{if .Permissions.ViewParticipation}}
+        <button class="tab-btn" data-tab="participation">Participation</button>
         {{end}}
         <button class="tab-btn" data-tab="report">Report</button>
     </div>
@@ -88,28 +88,38 @@
         </div>
     </div>
 
-    <!-- ── Storm Attendance ──────────────────────────────────────────────── -->
-    {{if .Permissions.ManageAccountability}}
-    <div id="tab-storm" class="tab-content">
+    <!-- ── Participation ─────────────────────────────────────────────────── -->
+    {{if .Permissions.ViewParticipation}}
+    <div id="tab-participation" class="tab-content">
 
         <div class="acc-toolbar">
-            <div class="acc-toolbar-left">
-                <label for="storm-date-input" style="font-size:0.9rem;color:var(--color-text-muted);">Storm Date</label>
-                <input type="date" id="storm-date-input" class="form-input" style="width:180px;">
-                <button id="btn-storm-load" class="btn btn-secondary btn-sm">Load</button>
-                <div class="filter-search-wrap quick-search">
-                    <input type="text" id="storm-search" class="form-input" placeholder="Search members…" aria-label="Search members" autocomplete="off">
-                    <button type="button" id="storm-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
-                </div>
-            </div>
+            <div class="acc-toolbar-left" id="participation-chips"></div>
+            {{if .Permissions.ManageParticipation}}
             <div class="acc-toolbar-right">
-                <button id="btn-storm-save" class="btn btn-primary btn-sm" style="display:none;">Save Attendance</button>
-                <span id="storm-save-status" style="font-size:0.85rem;margin-left:8px;"></span>
+                <a href="/participation/new" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-clipboard-list"/></svg> Record board</a>
             </div>
+            {{end}}
         </div>
 
-        <div id="storm-member-list">
-            <p style="color:var(--color-text-muted);font-size:0.9rem;">Select a date and click Load to view or log attendance.</p>
+        <!-- Recorded boards only: an event nobody recorded says nothing about anyone. -->
+        <div class="table-wrapper">
+            <table class="data-table" id="participation-table" data-export-csv="participation-boards.csv" translate="no">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Event</th>
+                        <th>Rows</th>
+                        <th>Missed</th>
+                        <th>Excused</th>
+                        <th>Pending suggestions</th>
+                        <th>Recorded by</th>
+                        <th data-no-export></th>
+                    </tr>
+                </thead>
+                <tbody id="participation-tbody">
+                    <tr><td colspan="8" class="loading-msg">Loading…</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
     {{end}}

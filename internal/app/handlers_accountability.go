@@ -245,15 +245,6 @@ type AccountabilityStrike struct {
 	CreatedAt     string `json:"created_at"`
 }
 
-type StormAttendanceRecord struct {
-	ID           int    `json:"id"`
-	StormDate    string `json:"storm_date"`
-	Status       string `json:"status"`
-	ExcuseReason string `json:"excuse_reason"`
-	RecordedBy   string `json:"recorded_by"`
-	CreatedAt    string `json:"created_at"`
-}
-
 type TrainLogRecord struct {
 	ID        int    `json:"id"`
 	Date      string `json:"date"`
@@ -268,16 +259,15 @@ type VSWeekRecord struct {
 }
 
 type MemberProfileData struct {
-	ID            int                     `json:"id"`
-	Name          string                  `json:"name"`
-	Rank          string                  `json:"rank"`
-	Notes         string                  `json:"notes"`
-	ActiveStrikes int                     `json:"active_strikes"`
-	Tag           string                  `json:"tag"`
-	Strikes       []AccountabilityStrike  `json:"strikes"`
-	VSHistory     []VSWeekRecord          `json:"vs_history"`
-	StormHistory  []StormAttendanceRecord `json:"storm_history"`
-	TrainHistory  []TrainLogRecord        `json:"train_history"`
+	ID            int                    `json:"id"`
+	Name          string                 `json:"name"`
+	Rank          string                 `json:"rank"`
+	Notes         string                 `json:"notes"`
+	ActiveStrikes int                    `json:"active_strikes"`
+	Tag           string                 `json:"tag"`
+	Strikes       []AccountabilityStrike `json:"strikes"`
+	VSHistory     []VSWeekRecord         `json:"vs_history"`
+	TrainHistory  []TrainLogRecord       `json:"train_history"`
 }
 
 func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
@@ -361,34 +351,6 @@ func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		profile.VSHistory = append(profile.VSHistory, v)
-	}
-
-	// Storm attendance — last 10 entries
-	stormRows, err := db.Query(`
-		SELECT sa.id, sa.storm_date, sa.status, sa.excuse_reason,
-		       COALESCE(u.username,''), sa.created_at
-		FROM storm_attendance sa
-		LEFT JOIN users u ON u.id = sa.recorded_by
-		WHERE sa.member_id = ?
-		ORDER BY sa.storm_date DESC
-		LIMIT 10
-	`, id)
-	if err != nil {
-		slog.Error("handleAccountabilityMemberProfile: storm query failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	defer stormRows.Close()
-	profile.StormHistory = []StormAttendanceRecord{}
-	for stormRows.Next() {
-		var s StormAttendanceRecord
-		if err := stormRows.Scan(&s.ID, &s.StormDate, &s.Status, &s.ExcuseReason,
-			&s.RecordedBy, &s.CreatedAt); err != nil {
-			slog.Error("handleAccountabilityMemberProfile: storm scan failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-		profile.StormHistory = append(profile.StormHistory, s)
 	}
 
 	// Train history — last 10 entries as conductor
@@ -815,72 +777,6 @@ func handleStrikeDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- API: storm attendance ---
-
-func handleStormAttendanceUpsert(w http.ResponseWriter, r *http.Request) {
-	actor := getAuthUser(r)
-	userID, username := actor.ID, actor.Username
-
-	var body struct {
-		StormDate string `json:"storm_date"`
-		Records   []struct {
-			MemberID     int    `json:"member_id"`
-			Status       string `json:"status"`
-			ExcuseReason string `json:"excuse_reason"`
-		} `json:"records"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	if body.StormDate == "" || len(body.Records) == 0 {
-		http.Error(w, "storm_date and records are required", http.StatusBadRequest)
-		return
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	stmt, err := tx.Prepare(`
-		INSERT INTO storm_attendance (storm_date, member_id, status, excuse_reason, recorded_by)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(storm_date, member_id) DO UPDATE SET
-			status        = excluded.status,
-			excuse_reason = excluded.excuse_reason,
-			recorded_by   = excluded.recorded_by
-	`)
-	if err != nil {
-		slog.Error("handleStormAttendanceUpsert: prepare failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	defer stmt.Close()
-
-	for _, rec := range body.Records {
-		if _, err := stmt.Exec(body.StormDate, rec.MemberID, rec.Status, rec.ExcuseReason, userID); err != nil {
-			slog.Error("handleStormAttendanceUpsert: exec failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		slog.Error("handleStormAttendanceUpsert: commit failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	logActivity(userID, username, "created", "storm_attendance", body.StormDate, false,
-		strconv.Itoa(len(body.Records))+" records logged")
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Saved"})
-}
-
 // --- API: all strikes (for the Strikes tab) ---
 
 type StrikeWithMember struct {
@@ -947,69 +843,4 @@ func handleAllStrikes(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(strikes)
-}
-
-// --- API: storm attendance for a specific date ---
-
-type StormAttendanceMember struct {
-	MemberID     int    `json:"member_id"`
-	MemberName   string `json:"member_name"`
-	MemberRank   string `json:"member_rank"`
-	Status       string `json:"status"`
-	ExcuseReason string `json:"excuse_reason"`
-	RecordID     int    `json:"record_id"` // 0 if not yet logged
-}
-
-func handleStormAttendanceForDate(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated || !data.Permissions.ViewAccountability {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-	date := r.URL.Query().Get("date")
-	if date == "" {
-		http.Error(w, "date query parameter required", http.StatusBadRequest)
-		return
-	}
-
-	// All active members LEFT JOIN existing attendance for this date
-	rows, err := db.Query(`
-		SELECT m.id, m.name, m.rank,
-		       COALESCE(sa.status, 'not_enrolled'),
-		       COALESCE(sa.excuse_reason, ''),
-		       COALESCE(sa.id, 0)
-		FROM members m
-		LEFT JOIN storm_attendance sa ON sa.member_id = m.id AND sa.storm_date = ?
-		WHERE m.rank != 'EX'
-		ORDER BY
-			CASE COALESCE(sa.status,'not_enrolled')
-				WHEN 'attended'     THEN 1
-				WHEN 'no_show'      THEN 2
-				WHEN 'excused'      THEN 3
-				WHEN 'not_enrolled' THEN 4
-			END,
-			m.name ASC
-	`, date)
-	if err != nil {
-		slog.Error("handleStormAttendanceForDate: query failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	members := []StormAttendanceMember{}
-	for rows.Next() {
-		var m StormAttendanceMember
-		if err := rows.Scan(&m.MemberID, &m.MemberName, &m.MemberRank,
-			&m.Status, &m.ExcuseReason, &m.RecordID); err != nil {
-			slog.Error("handleStormAttendanceForDate: scan failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-		members = append(members, m)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(members)
 }

@@ -216,7 +216,41 @@ function checkPasswordRequirements() {
     submitBtn.disabled = !(allRulesMet && passwordsMatch && newPwd.length > 0);
 }
 
+// My Participation: the signed-in member's own record on every recorded board.
+// 404 means the account has no linked member — said in words, in the warning
+// colours #no-member-warning uses, because an empty table would be
+// indistinguishable from "you have no participation", a different and real answer.
+async function loadMyParticipation() {
+    const box = document.getElementById('my-participation');
+    if (!box) return;
+    let res;
+    try {
+        res = await fetch('/api/participation/me');
+    } catch (err) {
+        console.error('loadMyParticipation:', err);
+        box.replaceChildren(Object.assign(document.createElement('p'), { className: 'empty-state', textContent: 'Failed to load your participation.' }));
+        return;
+    }
+    if (res.status === 404) {
+        const card = document.createElement('div');
+        card.className = 'info-card';
+        card.style.cssText = 'background: var(--color-warning-bg); color: var(--color-warning); border-color: var(--color-warning);';
+        const p = document.createElement('p');
+        p.className = 'icon-label icon-label-top';
+        p.append(svgIcon('alert-triangle'), document.createTextNode(' Your account is not linked to an in-game commander profile, so participation cannot be shown. Contact an administrator to link your account.'));
+        card.appendChild(p);
+        box.replaceChildren(card);
+        return;
+    }
+    if (!res.ok) {
+        box.replaceChildren(Object.assign(document.createElement('p'), { className: 'empty-state', textContent: 'Failed to load your participation.' }));
+        return;
+    }
+    ParticipationHistory.render(box, await res.json(), { emptyText: 'No participation recorded for you yet.' });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+    loadMyParticipation();
     const passwordForm = document.getElementById('password-form');
     const statsForm = document.getElementById('game-stats-form');
     const newPwdInput = document.getElementById('new-password');

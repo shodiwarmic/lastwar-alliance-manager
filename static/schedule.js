@@ -8,6 +8,10 @@
 // ── State ─────────────────────────────────────────────────────────────────────
 const cfg = document.getElementById('page-config') ? document.getElementById('page-config').dataset : {};
 const CAN_MANAGE = cfg.canManage === 'true';
+// Participation (#13): recording is its own permission, independent of managing the
+// schedule, so a recorder who cannot edit events still gets the Record link.
+const CAN_RECORD = cfg.canRecord === 'true';
+const CAN_VIEW_PARTICIPATION = cfg.canViewParticipation === 'true';
 
 let currentWeekStart = '';   // "YYYY-MM-DD" of the Monday being shown
 
@@ -497,6 +501,9 @@ function buildEventCard(evt, dateStr) {
         card.appendChild(notes);
     }
 
+    const participation = buildParticipationLink(evt);
+    if (participation) card.appendChild(participation);
+
     if (CAN_MANAGE) {
         const actions = document.createElement('div');
         actions.className = 'event-card-actions';
@@ -530,6 +537,31 @@ function buildEventCard(evt, dateStr) {
     }
 
     return card;
+}
+
+// A tracked event gets a link to its participation board: "Board · N" once one is
+// recorded (for anyone who can read participation), "Record" on a past event with
+// none (for a recorder). Nothing on a future event, and no nagging about events
+// nobody recorded — recording is optional.
+function buildParticipationLink(evt) {
+    if (!evt.tracks_participation) return null;
+    const a = document.createElement('a');
+    a.href = '/participation/' + evt.id;
+    if (evt.has_board && (CAN_VIEW_PARTICIPATION || CAN_RECORD)) {
+        a.className = 'event-card-board';
+        a.title = 'Participation board: ' + evt.board_rows + ' row' + (evt.board_rows === 1 ? '' : 's');
+        a.append(svgIcon('clipboard-list', 12), document.createTextNode(' Board · ' + evt.board_rows));
+    } else if (!evt.has_board && CAN_RECORD && evt.event_date <= todayGameDate()) {
+        a.className = 'btn btn-ghost btn-sm event-card-record';
+        a.title = 'Record the participation board for this event';
+        a.append(svgIcon('clipboard-list'), document.createTextNode(' Record'));
+    } else {
+        return null;
+    }
+    const row = document.createElement('div');
+    row.className = 'event-card-participation';
+    row.appendChild(a);
+    return row;
 }
 
 // Returns synthetic storm event objects for sorting alongside real events.

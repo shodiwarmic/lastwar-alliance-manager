@@ -174,6 +174,30 @@
     }
 }
 
+/* Participation link on a tracked event card (#13). */
+.event-card-participation {
+    margin-top: 6px;
+}
+.event-card-board {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border-radius: 4px;
+    padding: 1px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+.event-card-board:hover {
+    text-decoration: underline;
+}
+.event-card-record {
+    width: 100%;
+    justify-content: center;
+}
+
 /* ── Storm pills ────────────────────────────────────────────────────────── */
 .storm-pill {
     background: var(--color-warning);

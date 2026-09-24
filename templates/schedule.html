@@ -244,6 +244,8 @@
 {{define "scripts"}}
 <div id="page-config"
     data-can-manage="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
+    data-can-record="{{if .Permissions.ManageParticipation}}true{{else}}false{{end}}"
+    data-can-view-participation="{{if or .Permissions.ViewParticipation .Permissions.ManageParticipation}}true{{else}}false{{end}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <!-- copyWithVariables + the global #vars-modal in layout.html. storm.html is the

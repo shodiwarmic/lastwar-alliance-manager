@@ -388,6 +388,12 @@ func deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := clearUserReferences(db, "id = ?", userID); err != nil {
+		slog.Error("failed to clear participation references on delete", "error", err, "userID", userID)
+		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
+		return
+	}
+
 	_, err = db.Exec("DELETE FROM users WHERE id = ?", userID)
 	if err != nil {
 		slog.Error("failed to delete user", "error", err, "userID", userID)

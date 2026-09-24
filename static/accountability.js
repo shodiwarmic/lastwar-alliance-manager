@@ -27,27 +27,23 @@ function strikeTypeLabel(t) {
 // the raw key). Anything that renders a strike's category awaits it.
 let strikeTypesReady = Promise.resolve();
 
-function attendanceLabel(s) {
-    switch (s) {
-        case 'attended':     return 'Attended';
-        case 'no_show':      return 'No-Show';
-        case 'excused':      return 'Excused';
-        case 'not_enrolled': return 'Not Enrolled';
-        default:             return s;
-    }
-}
-
 // --- Tabs ---
 
 // Tabs.init (tabs.js) calls this for the initial tab too, so a deep link such as
 // /accountability#report lazy-loads its panel exactly as a click would.
 let strikesLoaded = false;
 let reportLoaded  = false;
+let participationLoaded = false;
 
 function onTabActivated(tab) {
     if (tab === 'strikes' && !strikesLoaded) {
         strikesLoaded = true;
         loadStrikes();
+    }
+    if (tab === 'participation' && !participationLoaded) {
+        participationLoaded = true;
+        loadParticipationChips();
+        loadParticipation();
     }
     if (tab === 'report' && !reportLoaded) {
         reportLoaded = true;
@@ -60,7 +56,6 @@ function onTabActivated(tab) {
 let allMembers = [];
 
 // Flatpickr instances — initialised in DOMContentLoaded
-let stormDateFP = null;
 let strikeRefDateFP = null;
 
 function openStrikeModal(memberID, memberName, preType) {
@@ -412,103 +407,90 @@ async function deleteStrikeInline(strikeID) {
     if (res.ok) { strikesLoaded = false; loadStrikes(); loadMembers(); }
 }
 
-// --- Tab: Storm Attendance ---
+// --- Tab: Participation ---
+//
+// Recorded boards only, newest first. An event nobody recorded is not listed:
+// participation is optional, so a missing board says nothing about anyone.
 
-async function loadStormAttendance() {
-    const date = document.getElementById('storm-date-input').value;
-    if (!date) return;
+let participationType = 0;   // 0 = every tracked type
 
-    const container = document.getElementById('storm-member-list');
-    container.replaceChildren(Object.assign(document.createElement('p'), { className: 'loading-msg', textContent: 'Loading…' }));
-
-    let members;
+async function loadParticipationChips() {
+    const box = document.getElementById('participation-chips');
+    let types = [];
     try {
-        const res = await fetch('/api/accountability/storm-attendance?date=' + encodeURIComponent(date));
-        if (!res.ok) throw new Error();
-        members = await res.json();
-    } catch {
-        container.replaceChildren(Object.assign(document.createElement('p'), { textContent: 'Failed to load attendance.' }));
+        const res = await fetch('/api/participation/types');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        types = await res.json();
+    } catch (err) {
+        console.error('loadParticipationChips:', err);
         return;
     }
-
-    container.replaceChildren();
-
-    members.forEach(m => {
-        const row = document.createElement('div');
-        row.className = 'storm-member-row';
-        row.dataset.memberId = m.member_id;
-        row.dataset.search = m.member_name + ' ' + m.member_rank;
-
-        const nameSpan = noTranslate(document.createElement('span'));
-        nameSpan.className = 'storm-member-name';
-        nameSpan.textContent = m.member_name + ' ';
-        const stormRankChip = document.createElement('span');
-        stormRankChip.className = `member-rank rank-${m.member_rank}`;
-        stormRankChip.textContent = m.member_rank;
-        nameSpan.appendChild(stormRankChip);
-
-        const statusSel = document.createElement('select');
-        statusSel.className = 'form-input';
-        [
-            ['not_enrolled', 'Not Enrolled'],
-            ['attended',     'Attended'],
-            ['no_show',      'No-Show'],
-            ['excused',      'Excused'],
-        ].forEach(([val, lbl]) => {
-            const opt = document.createElement('option');
-            opt.value = val;
-            opt.textContent = lbl;
-            if (val === m.status) opt.selected = true;
-            statusSel.appendChild(opt);
+    const chip = (id, label) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'filter-chip' + (id === participationType ? ' active' : '');
+        b.textContent = label;
+        b.addEventListener('click', () => {
+            participationType = id;
+            box.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c === b));
+            loadParticipation();
         });
-
-        const excuseInput = document.createElement('input');
-        excuseInput.type = 'text';
-        excuseInput.className = 'form-input';
-        excuseInput.placeholder = 'Excuse reason';
-        excuseInput.value = m.excuse_reason || '';
-        excuseInput.style.display = m.status === 'excused' ? '' : 'none';
-
-        statusSel.addEventListener('change', () => {
-            excuseInput.style.display = statusSel.value === 'excused' ? '' : 'none';
-        });
-
-        row.append(nameSpan, statusSel, excuseInput);
-        container.appendChild(row);
-    });
-
-    QuickSearch.apply('storm-search');
-
-    document.getElementById('btn-storm-save').style.display = '';
-    document.getElementById('storm-save-status').textContent = '';
+        return b;
+    };
+    box.replaceChildren(chip(0, 'All'), ...types.map(t => chip(t.event_type_id, (t.icon ? t.icon + ' ' : '') + t.name)));
 }
 
-async function saveStormAttendance() {
-    const date = document.getElementById('storm-date-input').value;
-    const statusEl = document.getElementById('storm-save-status');
-    if (!date) { statusEl.textContent = 'Select a date first.'; return; }
-
-    const records = [];
-    document.querySelectorAll('.storm-member-row').forEach(row => {
-        const memberID    = parseInt(row.dataset.memberId, 10);
-        const statusSel   = row.querySelector('select');
-        const excuseInput = row.querySelector('input[type=text]');
-        records.push({
-            member_id:     memberID,
-            status:        statusSel.value,
-            excuse_reason: excuseInput.value.trim(),
-        });
-    });
-
-    const res = await fetch('/api/accountability/storm-attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storm_date: date, records }),
-    });
-
-    if (!res.ok) { statusEl.textContent = 'Save failed.'; return; }
-    statusEl.textContent = '✓ Saved';
-    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+async function loadParticipation() {
+    const tbody = document.getElementById('participation-tbody');
+    const loading = document.createElement('tr');
+    loading.appendChild(Object.assign(document.createElement('td'), { colSpan: 8, className: 'loading-msg', textContent: 'Loading…' }));
+    tbody.replaceChildren(loading);
+    let boards;
+    try {
+        const res = await fetch('/api/participation/boards' + (participationType ? '?type=' + participationType : ''));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        boards = await res.json();
+    } catch (err) {
+        console.error('loadParticipation:', err);
+        const tr = document.createElement('tr');
+        tr.appendChild(Object.assign(document.createElement('td'), { colSpan: 8, className: 'empty-state', textContent: 'Failed to load participation boards.' }));
+        tbody.replaceChildren(tr);
+        return;
+    }
+    if (!boards.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(Object.assign(document.createElement('td'), {
+            colSpan: 8, className: 'empty-state',
+            textContent: participationType ? 'No boards recorded for this event yet.' : 'No participation boards recorded yet.',
+        }));
+        tbody.replaceChildren(tr);
+        return;
+    }
+    tbody.replaceChildren(...boards.map(b => {
+        const tr = document.createElement('tr');
+        const td = text => Object.assign(document.createElement('td'), { textContent: text });
+        const open = document.createElement('a');
+        open.href = '/participation/' + b.event_id;
+        open.className = 'btn btn-secondary btn-sm';
+        open.title = 'Open';
+        open.setAttribute('aria-label', 'Open');
+        const label = Object.assign(document.createElement('span'), { className: 'action-label', textContent: 'Open' });
+        open.append(svgIcon('eye'), label);
+        const openTd = document.createElement('td');
+        openTd.appendChild(open);
+        const pending = td(String(b.pending));
+        if (b.pending) pending.className = 'acc-status--active';
+        tr.append(
+            td(b.event_date),
+            td((b.type_icon ? b.type_icon + ' ' : '') + b.type_name),
+            td(b.matched === b.rows ? String(b.rows) : `${b.rows} (${b.matched} matched)`),
+            td(String(b.missed)),
+            td(String(b.excused)),
+            pending,
+            td(b.recorded_by || '—'),
+            openTd);
+        return tr;
+    }));
 }
 
 // --- Tab: Report ---
@@ -809,12 +791,6 @@ function initStrikeTypesModal() {
 // --- Boot ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    stormDateFP    = flatpickr('#storm-date-input', {
-        dateFormat: 'Y-m-d',
-        allowInput: true,
-        disable: [date => date.getDay() !== 5],  // Fridays only (0=Sun … 5=Fri)
-        locale: { firstDayOfWeek: 1 }
-    });
     strikeRefDateFP = flatpickr('#strike-ref-date', { dateFormat: 'Y-m-d', allowInput: true });
 
     // Before Tabs.init: a deep link to #strikes renders straight away and needs labels.
@@ -837,12 +813,6 @@ document.addEventListener('DOMContentLoaded', () => {
         emptyText: 'No strikes match your search.',
     });
 
-    // Rows carry a status <select> and an excuse input — hide, never re-render.
-    QuickSearch.attach({
-        input: 'storm-search', container: 'storm-member-list', rows: '.storm-member-row',
-        emptyText: 'No members match your search.',
-    });
-
     if (CAN_MANAGE) {
         initStrikeTypesModal();
 
@@ -851,9 +821,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const addVSBtn = document.getElementById('btn-add-vs-strikes');
         if (addVSBtn) addVSBtn.addEventListener('click', addVSStrikesForBelow);
-
-        document.getElementById('btn-storm-load').addEventListener('click', loadStormAttendance);
-        document.getElementById('btn-storm-save').addEventListener('click', saveStormAttendance);
     }
 
     document.getElementById('strikes-status-filter').addEventListener('change', () => {

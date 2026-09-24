@@ -237,44 +237,23 @@ function renderVSHistory(vsHistory) {
     appendScrollTable(container, table);
 }
 
-function renderStormHistory(stormHistory) {
-    const container = document.getElementById('tab-storm');
-    container.replaceChildren();
-    if (!stormHistory.length) {
-        container.appendChild(Object.assign(document.createElement('p'), { textContent: 'No storm attendance logged.' }));
-        return;
+// Participation tab: every recorded board that concerns this member, derived by
+// the server under each event's own rule. Loaded separately from the profile so a
+// failure here leaves the other tabs working.
+async function loadParticipationHistory() {
+    const container = document.getElementById('tab-participation');
+    try {
+        const res = await fetch('/api/participation/members/' + MEMBER_ID);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        ParticipationHistory.render(container, await res.json(), {
+            counts: true,
+            linkBoards: true,
+            emptyText: 'No participation recorded for this member yet.',
+        });
+    } catch (err) {
+        console.error('loadParticipationHistory:', err);
+        container.replaceChildren(Object.assign(document.createElement('p'), { className: 'empty-state', textContent: 'Failed to load participation.' }));
     }
-    const table = document.createElement('table');
-    table.className = 'data-table';
-    const thead = document.createElement('thead');
-    const headerRow = document.createElement('tr');
-    ['Date', 'Status', 'Excuse', 'Logged By'].forEach(h => {
-        const th = document.createElement('th');
-        th.textContent = h;
-        headerRow.appendChild(th);
-    });
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
-    const tbody = document.createElement('tbody');
-    stormHistory.forEach(s => {
-        const tr = document.createElement('tr');
-        const tdDate = document.createElement('td');
-        tdDate.textContent = s.storm_date;
-        const tdStatus = document.createElement('td');
-        const statusSpan = document.createElement('span');
-        statusSpan.className = 'acc-attend--' + s.status.replace('_', '-');
-        statusSpan.textContent = s.status === 'no_show' ? 'No-Show' : s.status.charAt(0).toUpperCase() + s.status.slice(1);
-        tdStatus.appendChild(statusSpan);
-        const tdExcuse = document.createElement('td');
-        tdExcuse.textContent = s.excuse_reason || '—';
-        if (s.excuse_reason) TranslateBlock.attach(tdExcuse, s.excuse_reason);
-        const tdBy = document.createElement('td');
-        tdBy.textContent = s.recorded_by || '—';
-        tr.append(tdDate, tdStatus, tdExcuse, tdBy);
-        tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    appendScrollTable(container, table);
 }
 
 function renderTrainHistory(trainHistory) {
@@ -335,8 +314,8 @@ async function boot() {
     renderHeader(profile);
     renderStrikes(profile.strikes);
     renderVSHistory(profile.vs_history);
-    renderStormHistory(profile.storm_history);
     renderTrainHistory(profile.train_history);
+    loadParticipationHistory();
 }
 
 document.addEventListener('DOMContentLoaded', () => {

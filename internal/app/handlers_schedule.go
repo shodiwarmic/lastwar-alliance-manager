@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -929,9 +930,14 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		SELECT se.id, se.event_date, se.event_type_id,
 		       t.name, t.short_name, t.icon, t.is_system, t.server_event_id,
 		       se.event_time, se.all_day, se.level, COALESCE(se.notes,''),
-		       se.created_by, se.created_at, se.updated_at
+		       se.created_by, se.created_at, se.updated_at,
+		       pt.event_type_id IS NOT NULL, b.id IS NOT NULL,
+		       CASE WHEN b.id IS NULL THEN 0 ELSE
+		         (SELECT COUNT(*) FROM participation_entries e WHERE e.board_id = b.id) END
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
+		LEFT JOIN participation_types pt ON pt.event_type_id = se.event_type_id
+		LEFT JOIN participation_boards b ON b.schedule_event_id = se.id
 		WHERE se.event_date >= ? AND se.event_date <= ?
 		ORDER BY se.event_date, se.all_day DESC, se.event_time`, from, to)
 	if err != nil {
@@ -951,6 +957,7 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 			&ev.TypeName, &ev.TypeShort, &ev.TypeIcon, &isSystem, &parentID,
 			&ev.EventTime, &allDay, &ev.Level, &ev.Notes,
 			&ev.CreatedBy, &ev.CreatedAt, &ev.UpdatedAt,
+			&ev.TracksParticipation, &ev.HasBoard, &ev.BoardRows,
 		); err != nil {
 			rows.Close()
 			slog.Error("getScheduleEvents scan", "error", err)
@@ -991,79 +998,70 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(events)
 }
 
-func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		EventDate   string `json:"event_date"`
-		EventTypeID int    `json:"event_type_id"`
-		EventTime   string `json:"event_time"`
-		AllDay      bool   `json:"all_day"`
-		Level       *int   `json:"level"`
-		Notes       string `json:"notes"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	if _, err := time.Parse("2006-01-02", req.EventDate); err != nil {
-		http.Error(w, "event_date must be YYYY-MM-DD", http.StatusBadRequest)
-		return
+// scheduleEventCreate is the body of a manual create, from either the Schedule
+// page or the participation recording screen's "create the occurrence" path.
+type scheduleEventCreate struct {
+	EventDate   string `json:"event_date"`
+	EventTypeID int    `json:"event_type_id"`
+	EventTime   string `json:"event_time"`
+	AllDay      bool   `json:"all_day"`
+	Level       *int   `json:"level"`
+	Notes       string `json:"notes"`
+}
+
+// insertScheduleEvent validates and inserts one manually created event. It is
+// shared by createScheduleEvent and POST /api/participation/occurrences so that
+// an occurrence created from the recording screen passes exactly the rules — and
+// gets exactly the messages — a create on the Schedule page does (#13 Q7).
+//
+// userMsg/code carry a rejection meant for the officer; err is an internal failure
+// already logged, for which the caller answers 500.
+func insertScheduleEvent(actor *AuthUser, req scheduleEventCreate) (id int64, userMsg string, code int, err error) {
+	if _, perr := time.Parse("2006-01-02", req.EventDate); perr != nil {
+		return 0, "event_date must be YYYY-MM-DD", http.StatusBadRequest, nil
 	}
 	if req.AllDay {
 		req.EventTime = "00:00"
 	} else if !validHHMM(req.EventTime) {
-		http.Error(w, "event_time must be a real time in HH:MM", http.StatusBadRequest)
-		return
+		return 0, "event_time must be a real time in HH:MM", http.StatusBadRequest, nil
 	}
 	if req.EventTypeID == 0 {
-		http.Error(w, "event_type_id is required", http.StatusBadRequest)
-		return
+		return 0, "event_type_id is required", http.StatusBadRequest, nil
 	}
 
 	tr, err := loadScheduleTypeRules(db, req.EventTypeID)
 	if err == sql.ErrNoRows {
-		http.Error(w, "event_type_id not found", http.StatusBadRequest)
-		return
+		return 0, "event_type_id not found", http.StatusBadRequest, nil
 	}
 	if err != nil {
-		slog.Error("createScheduleEvent lookup type", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		slog.Error("insertScheduleEvent lookup type", "error", err)
+		return 0, "", 0, err
 	}
-	typeName, isSystem := tr.Name, 0
-	if tr.IsSystem {
-		isSystem = 1
-	}
+	typeName := tr.Name
 
 	// No is_system gate: the validator decides what applies. A custom type with a
 	// parent window has a rule too.
 	if msg, err := validateEventRules(db, tr, req.EventDate, req.EventTime, 0); err != nil {
-		slog.Error("createScheduleEvent validateEventRules", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		slog.Error("insertScheduleEvent validateEventRules", "error", err)
+		return 0, "", 0, err
 	} else if msg != "" {
-		http.Error(w, msg, http.StatusBadRequest)
-		return
+		return 0, msg, http.StatusBadRequest, nil
 	}
 
 	tl, err := loadTypeLevels(db, req.EventTypeID)
 	if err != nil {
-		slog.Error("createScheduleEvent loadTypeLevels", "error", err, "type_id", req.EventTypeID)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		slog.Error("insertScheduleEvent loadTypeLevels", "error", err, "type_id", req.EventTypeID)
+		return 0, "", 0, err
 	}
-	if msg, code := resolveEventLevel(&req.Level, typeName, isSystem == 1, tl); msg != "" {
+	if msg, code := resolveEventLevel(&req.Level, typeName, tr.IsSystem, tl); msg != "" {
 		if code == http.StatusInternalServerError {
-			slog.Error("createScheduleEvent level config", "type", typeName, "type_id", req.EventTypeID, "detail", msg)
-			http.Error(w, "Database error", code)
-			return
+			slog.Error("insertScheduleEvent level config", "type", typeName, "type_id", req.EventTypeID, "detail", msg)
+			return 0, "", 0, errors.New(msg)
 		}
-		http.Error(w, msg, code)
-		return
+		return 0, msg, code, nil
 	}
 
-	user := getAuthUser(r)
 	now := time.Now().UTC().Format(time.RFC3339)
-
 	allDayInt := 0
 	if req.AllDay {
 		allDayInt = 1
@@ -1071,16 +1069,32 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	res, err := db.Exec(`
 		INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		req.EventDate, req.EventTypeID, req.EventTime, allDayInt, req.Level, req.Notes, user.ID, now, now)
+		req.EventDate, req.EventTypeID, req.EventTime, allDayInt, req.Level, req.Notes, actor.ID, now, now)
 	if err != nil {
-		slog.Error("createScheduleEvent insert", "error", err)
+		slog.Error("insertScheduleEvent insert", "error", err)
+		return 0, "", 0, err
+	}
+	id, _ = res.LastInsertId()
+
+	logActivity(actor.ID, actor.Username, "created", "schedule_event", typeName+" "+req.EventDate, false)
+	return id, "", 0, nil
+}
+
+func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
+	var req scheduleEventCreate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	id, msg, code, err := insertScheduleEvent(getAuthUser(r), req)
+	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	id, _ := res.LastInsertId()
-
-	logActivity(user.ID, user.Username, "created", "schedule_event", typeName+" "+req.EventDate, false)
-
+	if msg != "" {
+		http.Error(w, msg, code)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{"id": id})
@@ -1139,6 +1153,22 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.EventTypeID == 0 {
 		req.EventTypeID = old.EventTypeID
+	}
+
+	// A board's values are keyed to its type's trackables, so an event with a
+	// recorded board keeps its type. Date, time, level and notes stay editable: a
+	// corrected date is the same occurrence, and the board should follow it.
+	if req.EventTypeID != old.EventTypeID {
+		var boards int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM participation_boards WHERE schedule_event_id = ?`, id).Scan(&boards); err != nil {
+			slog.Error("updateScheduleEvent board check", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if boards > 0 {
+			http.Error(w, "This event has a recorded participation board, so its type cannot change — delete the board first", http.StatusConflict)
+			return
+		}
 	}
 
 	tr, err := loadScheduleTypeRules(db, req.EventTypeID)
@@ -1266,6 +1296,21 @@ func deleteScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("deleteScheduleEvent fetch", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// A recorded board is history about members, so the occurrence it hangs off is
+	// not deleted underneath it — the same refusal deleteServerEvent gives for a
+	// window with encounters pointing at it. foreign_keys is off, so nothing else
+	// would stop the board being orphaned.
+	var boards int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM participation_boards WHERE schedule_event_id = ?`, id).Scan(&boards); err != nil {
+		slog.Error("deleteScheduleEvent board check", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if boards > 0 {
+		http.Error(w, "This event has a recorded participation board — delete the board first", http.StatusConflict)
 		return
 	}
 

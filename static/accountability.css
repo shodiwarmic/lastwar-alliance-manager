@@ -140,34 +140,6 @@ tr.acc-row--below-vs {
     text-decoration: line-through;
 }
 
-/* --- Storm attendance status --- */
-.acc-attend--attended  { color: var(--color-success); font-weight: 600; }
-.acc-attend--no-show   { color: var(--color-danger); font-weight: 600; }
-.acc-attend--excused   { color: var(--color-text-muted); }
-
-/* --- Storm attendance modal checklist --- */
-.storm-member-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 4px;
-    border-bottom: 1px solid var(--color-border);
-    flex-wrap: wrap;
-}
-.storm-member-row:last-child { border-bottom: none; }
-.storm-member-name {
-    flex: 1;
-    font-size: 0.9rem;
-    color: var(--color-text);
-}
-.storm-member-row select {
-    width: 130px;
-}
-.storm-member-row input[type=text] {
-    flex: 1;
-    min-width: 120px;
-}
-
 /* --- Report page --- */
 .acc-report-grid {
     display: grid;

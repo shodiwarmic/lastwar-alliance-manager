@@ -913,6 +913,8 @@ type RankPermissions struct {
 	ViewRankings         bool   `json:"view_rankings"`
 	ViewStorm            bool   `json:"view_storm"`
 	ManageStorm          bool   `json:"manage_storm"`
+	ViewParticipation    bool   `json:"view_participation"`
+	ManageParticipation  bool   `json:"manage_participation"`
 	ViewVSPoints         bool   `json:"view_vs_points"`
 	ManageVSPoints       bool   `json:"manage_vs_points"`
 	ViewUpload           bool   `json:"view_upload"`
@@ -983,6 +985,10 @@ var PermissionGroups = []PermissionGroup{
 	{Feature: "Desert Storm", Rows: []PermissionRow{
 		{Key: "view_storm", Label: "View"},
 		{Key: "manage_storm", Label: "Manage"},
+	}},
+	{Feature: "Participation", Rows: []PermissionRow{
+		{Key: "view_participation", Label: "View"},
+		{Key: "manage_participation", Label: "Manage"},
 	}},
 	{Feature: "VS & Duel League", Rows: []PermissionRow{
 		{Key: "view_vs_points", Label: "View"},
@@ -1257,6 +1263,13 @@ type ScheduleEvent struct {
 	// legal when they were saved — the app reports them and never moves them.
 	OutsideWindow bool   `json:"outside_window,omitempty"`
 	ParentName    string `json:"parent_name,omitempty"`
+
+	// Participation (#13), derived per read: whether the type tracks participation,
+	// whether this occurrence has a recorded board, and how many rows it holds. The
+	// card offers Record on a tracked past event and a board badge once recorded.
+	TracksParticipation bool `json:"tracks_participation"`
+	HasBoard            bool `json:"has_board"`
+	BoardRows           int  `json:"board_rows"`
 }
 
 type ServerEvent struct {

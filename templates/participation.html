@@ -1,0 +1,145 @@
+{{define "header_text"}}
+<h1>
+        <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-clipboard-list"/></svg>
+        Participation
+    </h1>
+    <h2>Record an event's ranked board</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/member-picker.css"}}">
+<link rel="stylesheet" href="{{asset "/participation.css"}}">
+{{end}}
+
+{{define "content"}}
+<div id="participation-page">
+
+    {{if .Permissions.ViewAccountability}}
+    <div class="pt-back-link">
+        <a href="/accountability#participation">← Participation boards</a>
+    </div>
+    {{end}}
+
+    <div id="pt-header" class="pt-header"><p class="loading-msg">Loading…</p></div>
+
+    <!-- Choose an occurrence (/participation/new) -->
+    <section id="pt-new" class="card pt-card" hidden>
+        <h3>Which event?</h3>
+        <div class="form-group">
+            <label for="pt-new-type">Event</label>
+            <select id="pt-new-type" class="form-input"></select>
+        </div>
+        <div id="pt-new-recent"></div>
+        {{if .Permissions.ManageParticipation}}
+        <p class="pt-section-title">Not on the schedule?</p>
+        <p class="pt-step-hint">Create the event here. It goes onto the schedule with the same checks as adding it on the Schedule page.</p>
+        <div class="pt-create-row">
+            <div class="form-group">
+                <label for="pt-new-date">Date</label>
+                <input type="date" id="pt-new-date" class="form-input">
+            </div>
+            <div class="form-group">
+                <label for="pt-new-time">Start (ST)</label>
+                <input type="time" id="pt-new-time" class="form-input" value="20:00">
+            </div>
+            <button type="button" id="pt-new-create" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Create event</button>
+        </div>
+        <p id="pt-new-status" class="status-msg"></p>
+        {{end}}
+    </section>
+
+    {{if .Permissions.ManageParticipation}}
+    <!-- Step 1 — Paste -->
+    <section id="pt-paste" class="card pt-card" hidden>
+        <h3>1 · Paste the ranked list</h3>
+        <p class="pt-step-hint">Copy the ranked list from the event mail — one player per line, as the mail shows it (rank, name, then the score). The alliance tag in front of a name is ignored.</p>
+        <!-- Populated by JS only, never server-rendered (browser translation). -->
+        <textarea id="pt-paste-input" class="form-input pt-paste-input" aria-label="Ranked list" placeholder="1  Name  81.20G&#10;2  Another Name  64.5G"></textarea>
+        <div class="pt-actions">
+            <button type="button" id="pt-parse" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-list-check"/></svg> Read list</button>
+            <button type="button" id="pt-add-row" class="btn btn-secondary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add row by hand</button>
+        </div>
+        <div id="pt-unparsed" class="pt-unparsed" hidden></div>
+    </section>
+
+    <!-- Step 2 — Check -->
+    <section id="pt-check" class="card pt-card" hidden>
+        <h3>2 · Check the board</h3>
+        <p id="pt-check-summary" class="pt-step-hint"></p>
+        <div class="table-scroll">
+            <table class="data-table pt-entries-table" translate="no">
+                <thead id="pt-entries-head"></thead>
+                <tbody id="pt-entries-body"></tbody>
+            </table>
+        </div>
+        <div id="pt-roles" hidden>
+            <p class="pt-section-title">Roles for this battle</p>
+            <p class="pt-step-hint">A starter who is not on the board missed the battle; a sub who is not on it is never counted against. Prefilled from the Desert Storm planner — correct anything that changed.</p>
+            <div class="table-scroll">
+                <table class="data-table pt-roles-table" translate="no">
+                    <thead><tr><th>Member</th><th>Role</th><th>Task force</th><th></th></tr></thead>
+                    <tbody id="pt-roles-body"></tbody>
+                </table>
+            </div>
+            <div id="pt-roles-add" class="pt-actions"></div>
+        </div>
+        <div class="form-group" style="margin-top:12px;">
+            <label for="pt-notes">Notes <span style="color:var(--color-text-muted);font-weight:400;">(optional)</span></label>
+            <textarea id="pt-notes" class="form-input" rows="2"></textarea>
+        </div>
+        <div class="pt-actions">
+            <button type="button" id="pt-save" class="btn btn-primary"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-device-floppy"/></svg> Save board</button>
+            <span id="pt-save-status" class="status-msg"></span>
+            <button type="button" id="pt-delete" class="btn btn-danger btn-sm pt-spacer" style="display:none"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-trash"/></svg> Delete board</button>
+        </div>
+    </section>
+    {{end}}
+
+    <!-- The recorded board, as derived -->
+    <section id="pt-board" class="card pt-card" hidden>
+        <h3 id="pt-board-title">The board</h3>
+        <div id="pt-board-counts" class="pt-counts"></div>
+        <div id="pt-board-body"></div>
+    </section>
+
+    {{if .Permissions.ManageParticipation}}
+    <!-- Step 3 — Suggested strikes -->
+    <section id="pt-suggest" class="card pt-card" hidden>
+        <h3>3 · Suggested strikes</h3>
+        <p class="pt-step-hint">Nothing is struck until you confirm it. Excuse a member with a reason, or dismiss a suggestion to stop it being offered again.</p>
+        <div class="pt-actions" style="margin: 0 0 8px 0;">
+            <button type="button" id="pt-strike-all" class="btn btn-danger btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-flag"/></svg> <span id="pt-strike-all-label">Strike all</span></button>
+        </div>
+        <ul id="pt-suggest-list" class="pt-suggest-list"></ul>
+    </section>
+    {{end}}
+</div>
+{{end}}
+
+{{define "modals"}}
+{{if .Permissions.ManageParticipation}}
+<div id="pt-excuse-modal" class="modal">
+    <div class="modal-content modal-sm">
+        <h2>Excuse <span id="pt-excuse-name" translate="no"></span></h2>
+        <div class="form-group">
+            <label for="pt-excuse-reason">Reason</label>
+            <input type="text" id="pt-excuse-reason" class="form-input" maxlength="300" autocomplete="off">
+        </div>
+        <p id="pt-excuse-status" class="status-msg"></p>
+        <div class="modal-actions">
+            <button type="button" id="pt-excuse-save" class="btn btn-primary">Excuse</button>
+            <button type="button" id="pt-excuse-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+{{end}}
+{{end}}
+
+{{define "scripts"}}
+<div id="page-config"
+     data-can-manage="{{if .Permissions.ManageParticipation}}true{{else}}false{{end}}"
+     data-can-view-accountability="{{if .Permissions.ViewAccountability}}true{{else}}false{{end}}" hidden></div>
+<script src="{{asset "/member-picker.js"}}"></script>
+<script src="{{asset "/participation-parse.js"}}"></script>
+<script src="{{asset "/participation.js"}}"></script>
+{{end}}
