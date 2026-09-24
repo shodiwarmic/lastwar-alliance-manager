@@ -307,7 +307,8 @@ async function boot() {
         const res = await fetch('/api/accountability/members/' + MEMBER_ID);
         if (!res.ok) throw new Error();
         profile = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('boot:', err);
         document.getElementById('profile-header').textContent = 'Failed to load profile.';
         return;
     }

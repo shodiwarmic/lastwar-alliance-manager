@@ -62,7 +62,8 @@
         const hashName = () => {
             try {
                 return decodeURIComponent((location.hash || '').slice(1));
-            } catch {
+            } catch (err) {
+                console.warn('tabs.js: unreadable hash, showing the default tab', err);
                 return fallback();
             }
         };

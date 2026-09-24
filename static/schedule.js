@@ -221,7 +221,8 @@ async function loadWeek() {
         const res = await fetch('/api/schedule/events?from=' + from + '&to=' + to);
         if (!res.ok) throw new Error('fetch failed');
         weekEvents = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('loadWeek:', err);
         weekEvents = [];
     }
 
@@ -243,7 +244,8 @@ async function loadStarred(from, to) {
         const res = await fetch('/api/schedule/starred?from=' + from + '&to=' + to);
         if (!res.ok) throw new Error();
         starred = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('loadStarred:', err);
         starred = { configured: false, groups: {}, days: {}, unknown: [] };
     }
 }
@@ -779,19 +781,23 @@ async function saveEvent(e) {
     const url    = id ? '/api/schedule/events/' + id : '/api/schedule/events';
     const method = id ? 'PUT' : 'POST';
 
+    // Only the request itself sits in the try, so a bug in the handling below is
+    // thrown as itself rather than reported as "Network error" (#133 hid that way).
+    let res;
     try {
-        const res = await fetch(url, {
+        res = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!res.ok) {
-            const msg = await res.text();
-            errEl.textContent = msg || 'Save failed';
-            return;
-        }
-    } catch {
+    } catch (err) {
+        console.error('saveEvent:', err);
         errEl.textContent = 'Network error';
+        return;
+    }
+    if (!res.ok) {
+        const msg = await res.text();
+        errEl.textContent = msg || 'Save failed';
         return;
     }
 
@@ -814,7 +820,7 @@ function setActionBtnContent(btn, icon, label) {
 async function deleteEvent(id) {
     try {
         await fetch('/api/schedule/events/' + id, { method: 'DELETE' });
-    } catch { /* ignore */ }
+    } catch (err) { console.error('deleteEvent:', err); }  // the reload below shows what is left
     await loadWeek();
 }
 
@@ -825,7 +831,8 @@ async function loadEventTypes() {
         const res = await fetch('/api/schedule/event-types');
         if (!res.ok) throw new Error();
         eventTypes = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('loadEventTypes:', err);
         eventTypes = [];
     }
     renderEventTypes();
@@ -1010,18 +1017,20 @@ async function saveEventType(e) {
     const url    = id ? '/api/schedule/event-types/' + id : '/api/schedule/event-types';
     const method = id ? 'PUT' : 'POST';
 
+    let res;
     try {
-        const res = await fetch(url, {
+        res = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!res.ok) {
-            errEl.textContent = await res.text() || 'Save failed';
-            return;
-        }
-    } catch {
+    } catch (err) {
+        console.error('saveEventType:', err);
         errEl.textContent = 'Network error';
+        return;
+    }
+    if (!res.ok) {
+        errEl.textContent = await res.text() || 'Save failed';
         return;
     }
 
@@ -1037,7 +1046,8 @@ async function loadServerEvents() {
         const res = await fetch('/api/schedule/server-events');
         if (!res.ok) throw new Error();
         serverEvents = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('loadServerEvents:', err);
         serverEvents = [];
     }
     renderServerEvents();
@@ -1189,31 +1199,35 @@ async function saveServerEvent(e) {
     const url    = id ? '/api/schedule/server-events/' + id : '/api/schedule/server-events';
     const method = id ? 'PUT' : 'POST';
 
+    // The #133 site: a bug in the code after the request was reported as "Network
+    // error". Only the request is in the try now.
+    let res;
     try {
-        const res = await fetch(url, {
+        res = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!res.ok) {
-            errEl.textContent = await res.text() || 'Save failed';
-            return;
-        }
-        // Moving a window can leave encounters outside it. The server lists them;
-        // it never moves them, so the officer is told rather than surprised.
-        const resBody = await res.json().catch(() => null);
-        const stranded = resBody && resBody.stranded;
-        if (stranded && stranded.length) {
-            const byType = {};
-            stranded.forEach(s => { (byType[s.type] = byType[s.type] || []).push(s.date); });
-            const parts = Object.entries(byType).map(([type, dates]) =>
-                dates.length + ' ' + type + ' event' + (dates.length === 1 ? '' : 's') +
-                ' now fall' + (dates.length === 1 ? 's' : '') + ' outside this window: ' + dates.join(', '));
-            showToast(parts.join(' · '), 'info', 8000);
-        }
-    } catch {
+    } catch (err) {
+        console.error('saveServerEvent:', err);
         errEl.textContent = 'Network error';
         return;
+    }
+    if (!res.ok) {
+        errEl.textContent = await res.text() || 'Save failed';
+        return;
+    }
+    // Moving a window can leave encounters outside it. The server lists them;
+    // it never moves them, so the officer is told rather than surprised.
+    const resBody = await res.json().catch(() => null);
+    const stranded = resBody && resBody.stranded;
+    if (stranded && stranded.length) {
+        const byType = {};
+        stranded.forEach(s => { (byType[s.type] = byType[s.type] || []).push(s.date); });
+        const parts = Object.entries(byType).map(([type, dates]) =>
+            dates.length + ' ' + type + ' event' + (dates.length === 1 ? '' : 's') +
+            ' now fall' + (dates.length === 1 ? 's' : '') + ' outside this window: ' + dates.join(', '));
+        showToast(parts.join(' · '), 'info', 8000);
     }
 
     document.getElementById('server-event-modal').style.display = '';
@@ -1384,51 +1398,54 @@ async function generateEvents() {
         zs_weekdays:      Array.from(document.querySelectorAll('input[name="zs-wd"]:checked')).map(cb => cb.value).join(',') || '1,4',
         zs_anchor_date:   document.getElementById('gen-zs-anchor').value || null,
     };
-    try { await patchSettings(savePatch); } catch { /* non-fatal; generate will use whatever's in DB */ }
+    try { await patchSettings(savePatch); } catch (err) { console.error('generateEvents: saving settings', err); /* non-fatal; generate uses what is in the DB */ }
 
+    showStatus(statusEl, 'Generating…', false, 0);
+    let res;
     try {
-        showStatus(statusEl, 'Generating…', false, 0);
-        const res = await fetch('/api/schedule/events/generate', {
+        res = await fetch('/api/schedule/events/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!res.ok) {
-            showStatus(statusEl, await res.text() || 'Generation failed', true);
-            return;
-        }
-        const data = await res.json();
-        let msg = 'Created ' + data.mg_created + ' MG, ' + (data.ls_created || 0) + ' Large Sandworm, '
-            + data.zs_created + ' ZS, ' + (data.ds_created || 0) + ' Desert Storm events.';
-        if (data.skipped_existing > 0) msg += ' ' + data.skipped_existing + ' already existed.';
-        if (data.skipped_error > 0) msg += ' ' + data.skipped_error + ' could not be checked and were skipped — see the server log.';
-        if (data.switched > 0) {
-            // The officer ticked "Alliance Exercise" and got Large Sandworms. Name
-            // the rule that decided it, the same way a declined date is named.
-            msg += ' ' + data.switched + ' switched to Large Sandworm';
-            const sw = (data.switched_detail || []).slice(0, 3)
-                .map(s => s.date + ' (' + s.reason + ')').join('; ');
-            if (sw) msg += ': ' + sw;
-            if ((data.switched_detail || []).length > 3) msg += '; …';
-            msg += '.';
-        }
-        if (data.skipped_invalid > 0) {
-            // Name the dates the app declined and why. A smaller number than the
-            // officer expected, with no explanation, reads as a broken generator.
-            msg += ' ' + data.skipped_invalid + ' skipped as invalid';
-            const shown = (data.invalid || []).slice(0, 3)
-                .map(iv => iv.date + ' (' + iv.reason + ')').join('; ');
-            if (shown) msg += ': ' + shown;
-            if ((data.invalid || []).length > 3) msg += '; …';
-            msg += '.';
-        }
-        // Pinned open when there is something to read: a switch or a decline is a
-        // result the officer did not ask for and must not scroll past on a timer.
-        showStatus(statusEl, msg, false, (data.skipped_invalid > 0 || data.switched > 0 || data.skipped_error > 0) ? 0 : undefined);
-        await loadWeek();
-    } catch {
+    } catch (err) {
+        console.error('generateEvents:', err);
         showStatus(statusEl, 'Network error', true);
+        return;
     }
+    if (!res.ok) {
+        showStatus(statusEl, await res.text() || 'Generation failed', true);
+        return;
+    }
+    const data = await res.json();
+    let msg = 'Created ' + data.mg_created + ' MG, ' + (data.ls_created || 0) + ' Large Sandworm, '
+        + data.zs_created + ' ZS, ' + (data.ds_created || 0) + ' Desert Storm events.';
+    if (data.skipped_existing > 0) msg += ' ' + data.skipped_existing + ' already existed.';
+    if (data.skipped_error > 0) msg += ' ' + data.skipped_error + ' could not be checked and were skipped — see the server log.';
+    if (data.switched > 0) {
+        // The officer ticked "Alliance Exercise" and got Large Sandworms. Name
+        // the rule that decided it, the same way a declined date is named.
+        msg += ' ' + data.switched + ' switched to Large Sandworm';
+        const sw = (data.switched_detail || []).slice(0, 3)
+            .map(s => s.date + ' (' + s.reason + ')').join('; ');
+        if (sw) msg += ': ' + sw;
+        if ((data.switched_detail || []).length > 3) msg += '; …';
+        msg += '.';
+    }
+    if (data.skipped_invalid > 0) {
+        // Name the dates the app declined and why. A smaller number than the
+        // officer expected, with no explanation, reads as a broken generator.
+        msg += ' ' + data.skipped_invalid + ' skipped as invalid';
+        const shown = (data.invalid || []).slice(0, 3)
+            .map(iv => iv.date + ' (' + iv.reason + ')').join('; ');
+        if (shown) msg += ': ' + shown;
+        if ((data.invalid || []).length > 3) msg += '; …';
+        msg += '.';
+    }
+    // Pinned open when there is something to read: a switch or a decline is a
+    // result the officer did not ask for and must not scroll past on a timer.
+    showStatus(statusEl, msg, false, (data.skipped_invalid > 0 || data.switched > 0 || data.skipped_error > 0) ? 0 : undefined);
+    await loadWeek();
 }
 
 // ── Season subtitle ───────────────────────────────────────────────────────────
@@ -2077,9 +2094,9 @@ async function init() {
         fetch('/api/schedule/server-events').catch(() => null),
     ]);
 
-    try { settings = settingsRes && settingsRes.ok ? await settingsRes.json() : {}; } catch { settings = {}; }
-    try { eventTypes     = typesRes && typesRes.ok ? await typesRes.json() : []; } catch { eventTypes = []; }
-    try { serverEvents   = serverEventsRes && serverEventsRes.ok ? await serverEventsRes.json() : []; } catch { serverEvents = []; }
+    try { settings = settingsRes && settingsRes.ok ? await settingsRes.json() : {}; } catch (err) { console.error('init:', err); settings = {}; }
+    try { eventTypes     = typesRes && typesRes.ok ? await typesRes.json() : []; } catch (err) { console.error('init:', err); eventTypes = []; }
+    try { serverEvents   = serverEventsRes && serverEventsRes.ok ? await serverEventsRes.json() : []; } catch (err) { console.error('init:', err); serverEvents = []; }
 
     renderEventTypes();
     renderServerEvents();
@@ -2314,7 +2331,8 @@ async function runAnnouncement() {
         const res = await fetch('/api/schedule/announcement?date=' + encodeURIComponent(date));
         if (!res.ok) throw new Error();
         data = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('runAnnouncement:', err);
         showToast('Could not work out the announcement for that day.', 'error');
         return;
     }
@@ -2332,7 +2350,8 @@ async function runAnnouncement() {
         }
         if (!res.ok) throw new Error();
         template = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('runAnnouncement:', err);
         showToast('The "Daily events" template is missing — check Comms → Templates.', 'error');
         return;
     }

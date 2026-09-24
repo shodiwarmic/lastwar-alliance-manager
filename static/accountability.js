@@ -140,7 +140,8 @@ async function loadMembers() {
         const res = await fetch('/api/accountability/members');
         if (!res.ok) throw new Error();
         members = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('loadMembers:', err);
         loadingCell.textContent = 'Failed to load members.';
         return;
     }
@@ -311,7 +312,8 @@ async function loadStrikes() {
         const res = await fetch(url);
         if (!res.ok) throw new Error();
         strikes = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('loadStrikes:', err);
         container.replaceChildren(Object.assign(document.createElement('p'), { textContent: 'Failed to load strikes.' }));
         return;
     }
@@ -540,7 +542,8 @@ async function loadReport() {
         const res = await fetch('/api/accountability/report-data');
         if (!res.ok) throw new Error();
         report = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('loadReport:', err);
         document.getElementById('report-stat-cards').replaceChildren(
             Object.assign(document.createElement('p'), { textContent: 'Failed to load report.' })
         );
