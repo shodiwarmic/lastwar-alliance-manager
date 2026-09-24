@@ -19,8 +19,6 @@ let eventTypes   = [];
 let serverEvents = [];
 let weekEvents   = [];
 let settings     = {};
-let stormSlotTimes = [];
-let stormTFConfig  = {};
 
 // Tracks the last canvas draw call so themechange can redraw it.
 let lastDraw = null;
@@ -353,8 +351,6 @@ function buildDayCol(dateStr, idx) {
     const today = todayGameDate();
     const vs    = getVSTheme(dateStr);
     const seDay = dayOfSeason(dateStr);
-    const dow   = (new Date(dateStr + 'T12:00:00Z').getUTCDay() + 6) % 7; // Mon=0
-    const isFriday = dow === 4;
 
     const col = document.createElement('div');
     col.className = 'day-col';
@@ -405,19 +401,10 @@ function buildDayCol(dateStr, idx) {
 
     col.appendChild(header);
 
-    // Merge regular events + storm entries (Fridays), sort by time (all-day first)
-    const dayEvents = weekEvents.filter(e => e.event_date === dateStr);
-    const stormEntries = isFriday ? buildStormEntries() : [];
-    const allEntries = [...dayEvents, ...stormEntries]
-        .sort((a, b) => {
-            if (a.all_day && !b.all_day) return -1;
-            if (!a.all_day && b.all_day) return 1;
-            return a.event_time.localeCompare(b.event_time);
-        });
-
-    allEntries.forEach(entry => {
-        col.appendChild(entry._isStorm ? buildStormCard(entry) : buildEventCard(entry, dateStr));
-    });
+    // Desert Storm battles are real occurrences now (#142), so they arrive with
+    // the day's events; the server already orders all-day first, then by time.
+    weekEvents.filter(e => e.event_date === dateStr)
+        .forEach(entry => col.appendChild(buildEventCard(entry, dateStr)));
 
     if (isDSRegMarkerDay(dateStr)) {
         const marker = document.createElement('div');
@@ -463,7 +450,8 @@ function buildEventCard(evt, dateStr) {
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'event-card-name';
-    nameSpan.textContent = evt.type_icon + ' ' + evt.type_short;
+    nameSpan.textContent = evt.type_icon + ' ' + evt.type_short + (evt.task_force ? ' TF ' + evt.task_force : '');
+    if (evt.task_force) nameSpan.title = evt.type_name + ' Task Force ' + evt.task_force;
     row.appendChild(nameSpan);
 
     const timeSpan = document.createElement('span');
@@ -564,53 +552,20 @@ function buildParticipationLink(evt) {
     return row;
 }
 
-// Returns synthetic storm event objects for sorting alongside real events.
-// Name fallback: "Desert Storm Task Force A" → "Desert Storm TF A" → "DS TF A"
-function buildStormEntries() {
-    const entries = [];
-    try {
-        ['A', 'B'].forEach(tf => {
-            const key = 'tf_' + tf.toLowerCase();
-            if (stormTFConfig[key + '_participating'] === 0) return;
-            const slotNum = stormTFConfig[key + '_slot'];
-            if (!slotNum) return;
-            const slotInfo = stormSlotTimes.find(s => s.slot === slotNum);
-            if (!slotInfo) return;
-            entries.push({
-                _isStorm:  true,
-                event_time: slotInfo.time_st,
-                all_day:   false,
-                nameFull:  'Desert Storm Task Force ' + tf,
-                nameMid:   'Desert Storm TF ' + tf,
-                nameShort: 'DS TF ' + tf,
-            });
-        });
-    } catch { /* graceful fallback */ }
-    return entries;
+// Names for an event on the exports. A Desert Storm battle carries its task force
+// — two can share a date — and the canvases draw it in the storm colours.
+function isStormEvent(evt) {
+    return evt.type_short === 'DS';
 }
 
-function buildStormCard(entry) {
-    const card = document.createElement('div');
-    card.className = 'event-card';
-
-    const row = document.createElement('div');
-    row.className = 'event-card-row';
-
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'event-card-name storm-name';
-    nameSpan.dataset.full  = entry.nameFull;
-    nameSpan.dataset.mid   = entry.nameMid;
-    nameSpan.dataset.short = entry.nameShort;
-    nameSpan.textContent   = '⚡ ' + entry.nameFull;
-    row.appendChild(nameSpan);
-
-    const timeSpan = document.createElement('span');
-    timeSpan.className = 'event-card-time';
-    timeSpan.textContent = formatTime(entry.event_time) + ' ST';
-    row.appendChild(timeSpan);
-
-    card.appendChild(row);
-    return card;
+function eventExportNames(evt) {
+    const tfShort = evt.task_force ? ' TF ' + evt.task_force : '';
+    const tfFull = evt.task_force ? ' Task Force ' + evt.task_force : '';
+    return {
+        full:  evt.type_icon + ' ' + evt.type_name + tfFull,
+        mid:   evt.type_icon + ' ' + evt.type_name + tfShort,
+        short: evt.type_icon + ' ' + evt.type_short + tfShort,
+    };
 }
 
 // ── Event CRUD ────────────────────────────────────────────────────────────────
@@ -629,6 +584,7 @@ function openAddEventModal(defaultDate) {
     document.getElementById('event-date-input').value = defaultDate || todayGameDate();
     document.getElementById('event-time-input').value = '';
     document.getElementById('event-level-input').value = '';
+    document.getElementById('event-tf-select').value = '';
     document.getElementById('event-notes-input').value = '';
     document.getElementById('event-form-error').textContent = '';
     setAllDayUI(false);
@@ -642,6 +598,7 @@ function openEditEventModal(evt) {
     document.getElementById('event-date-input').value = evt.event_date;
     document.getElementById('event-time-input').value = evt.event_time;
     document.getElementById('event-level-input').value = evt.level ?? '';
+    document.getElementById('event-tf-select').value = evt.task_force || '';
     document.getElementById('event-notes-input').value = evt.notes || '';
     document.getElementById('event-form-error').textContent = '';
     setAllDayUI(evt.all_day === true);
@@ -734,6 +691,12 @@ function updateEventModalForType() {
     const carriesLevel = !!(et && et.has_level);
     lvlGroup.style.display = carriesLevel ? '' : 'none';
 
+    // Task force: Desert Storm only. Cleared on a switch away, like the level, so a
+    // hidden value can never ride along onto another type.
+    const isDS = !!(et && et.short_name === 'DS');
+    document.getElementById('event-tf-group').style.display = isDS ? '' : 'none';
+    if (!isDS) document.getElementById('event-tf-select').value = '';
+
     // Clearing the input is load-bearing, not tidiness. The group only HIDES, and
     // saveEvent reads the input's value whether or not it is visible — so before
     // this, switching an MG event to a custom type left "12" in the box and sent
@@ -808,6 +771,10 @@ async function saveEvent(e) {
 
     const lvlVal = document.getElementById('event-level-input').value;
     if (lvlVal !== '') body.level = parseInt(lvlVal, 10);
+    // Omitted when blank: on a legacy Desert Storm row (no task force) that keeps
+    // it as it is; on a new one the server says a task force is needed.
+    const tfVal = document.getElementById('event-tf-select').value;
+    if (tfVal) body.task_force = tfVal;
 
     const url    = id ? '/api/schedule/events/' + id : '/api/schedule/events';
     const method = id ? 'PUT' : 'POST';
@@ -1403,6 +1370,7 @@ async function generateEvents() {
     };
     if (document.getElementById('gen-mg').checked) body.types.push('mg');
     if (document.getElementById('gen-zs').checked) body.types.push('zs');
+    if (document.getElementById('gen-ds').checked) body.types.push('ds');
 
     if (!body.types.length) {
         showStatus(statusEl, 'Select at least one type.', true);
@@ -1431,8 +1399,9 @@ async function generateEvents() {
         }
         const data = await res.json();
         let msg = 'Created ' + data.mg_created + ' MG, ' + (data.ls_created || 0) + ' Large Sandworm, '
-            + data.zs_created + ' ZS events.';
+            + data.zs_created + ' ZS, ' + (data.ds_created || 0) + ' Desert Storm events.';
         if (data.skipped_existing > 0) msg += ' ' + data.skipped_existing + ' already existed.';
+        if (data.skipped_error > 0) msg += ' ' + data.skipped_error + ' could not be checked and were skipped — see the server log.';
         if (data.switched > 0) {
             // The officer ticked "Alliance Exercise" and got Large Sandworms. Name
             // the rule that decided it, the same way a declined date is named.
@@ -1455,7 +1424,7 @@ async function generateEvents() {
         }
         // Pinned open when there is something to read: a switch or a decline is a
         // result the officer did not ask for and must not scroll past on a timer.
-        showStatus(statusEl, msg, false, (data.skipped_invalid > 0 || data.switched > 0) ? 0 : undefined);
+        showStatus(statusEl, msg, false, (data.skipped_invalid > 0 || data.switched > 0 || data.skipped_error > 0) ? 0 : undefined);
         await loadWeek();
     } catch {
         showStatus(statusEl, 'Network error', true);
@@ -1498,8 +1467,6 @@ function buildTextOutput() {
     dates.forEach(d => {
         const vs = getVSTheme(d);
         const seDay = dayOfSeason(d);
-        const dow = (new Date(d + 'T12:00:00Z').getUTCDay() + 6) % 7;
-        const isFriday = dow === 4;
 
         let header = formatDateShort(d) + ' · ' + vs.label + ' ' + vs.icon;
         if (seDay !== null && settings.current_season) {
@@ -1507,24 +1474,11 @@ function buildTextOutput() {
         }
         lines.push(header);
 
-        const dayEvts = weekEvents.filter(e => e.event_date === d);
-        const stormTxt = isFriday ? buildStormEntries() : [];
-        const allTxtEntries = [...dayEvts, ...stormTxt]
-            .sort((a, b) => {
-                if (a.all_day && !b.all_day) return -1;
-                if (!a.all_day && b.all_day) return 1;
-                return a.event_time.localeCompare(b.event_time);
-            });
-
-        allTxtEntries.forEach(entry => {
-            if (entry._isStorm) {
-                lines.push('  ⚡ ' + entry.nameFull + ' @ ' + formatTime(entry.event_time) + ' ST');
-            } else {
-                let line = '  ' + entry.type_icon + ' ' + entry.type_name + (entry.all_day ? ' — All Day' : ' @ ' + formatTime(entry.event_time) + ' ST');
-                if (entry.level != null) line += '  Lv.' + entry.level;
-                if (entry.notes) line += '  — ' + entry.notes;
-                lines.push(line);
-            }
+        weekEvents.filter(e => e.event_date === d).forEach(entry => {
+            let line = '  ' + eventExportNames(entry).full + (entry.all_day ? ' — All Day' : ' @ ' + formatTime(entry.event_time) + ' ST');
+            if (entry.level != null) line += '  Lv.' + entry.level;
+            if (entry.notes) line += '  — ' + entry.notes;
+            lines.push(line);
         });
 
         // Server event banners
@@ -1585,9 +1539,8 @@ function drawWeekImage() {
     // Size rows by the busiest column
     let maxEvts = 0;
     dates.forEach(d => {
-        let n = weekEvents.filter(e => e.event_date === d).length;
-        const dow = (new Date(d + 'T12:00:00Z').getUTCDay() + 6) % 7;
-        if (dow === 4) n += 2;
+        // Desert Storm battles are ordinary events now, so they are counted here.
+        const n = weekEvents.filter(e => e.event_date === d).length;
         if (n > maxEvts) maxEvts = n;
     });
 
@@ -1765,16 +1718,8 @@ function drawWeekImage() {
         ctx.lineTo(x + colW - 8, divY);
         ctx.stroke();
 
-        // Events + storm entries merged and sorted
-        const isFri = (new Date(d + 'T12:00:00Z').getUTCDay() + 6) % 7 === 4;
-        const dayEvts = weekEvents.filter(e => e.event_date === d);
-        const stormImgEntries = isFri ? buildStormEntries() : [];
-        const allImgEntries = [...dayEvts, ...stormImgEntries]
-            .sort((a, b) => {
-                if (a.all_day && !b.all_day) return -1;
-                if (!a.all_day && b.all_day) return 1;
-                return a.event_time.localeCompare(b.event_time);
-            });
+        // The day's events, Desert Storm battles among them (server order).
+        const allImgEntries = weekEvents.filter(e => e.event_date === d);
 
         ctx.font = '12px ' + font;
         const timeW      = Math.ceil(ctx.measureText('00:00').width) + 4;
@@ -1784,15 +1729,15 @@ function drawWeekImage() {
         allImgEntries.forEach(entry => {
             ctx.font = '12px ' + font;
 
-            if (entry._isStorm) {
-                // Storm entry — amber styling, same row layout
+            if (isStormEvent(entry)) {
+                // Desert Storm — amber styling, same row layout
+                const n = eventExportNames(entry);
                 ctx.fillStyle = C.stormText;
                 ctx.textAlign = 'left';
-                const sLabel = fitText('⚡ ' + entry.nameFull, fitText('⚡ ' + entry.nameMid, '⚡ ' + entry.nameShort, nameAvailW), nameAvailW);
-                ctx.fillText(sLabel, x + padX, evtY, nameAvailW);
+                ctx.fillText(fitText(n.full, fitText(n.mid, n.short, nameAvailW), nameAvailW), x + padX, evtY, nameAvailW);
                 ctx.fillStyle = C.stormText;
                 ctx.textAlign = 'right';
-                ctx.fillText(formatTime(entry.event_time), x + colW - padX, evtY);
+                ctx.fillText(entry.all_day ? 'All Day' : formatTime(entry.event_time), x + colW - padX, evtY);
             } else {
                 // Regular event
                 ctx.fillStyle = C.evtName;
@@ -1865,19 +1810,9 @@ function drawDayCard(dateStr) {
     const pad   = 32;  // horizontal padding inside card
     const vs    = getVSTheme(dateStr);
     const seDay = dayOfSeason(dateStr);
-    const dow   = (new Date(dateStr + 'T12:00:00Z').getUTCDay() + 6) % 7;
-    const isFri = dow === 4;
-
     const dates     = weekDates(currentWeekStart);
     const seBanners = serverEvents.filter(e => getServerEventOccurrencesInWeek(e, dates).has(dateStr));
-    const dayEvts = [
-        ...weekEvents.filter(e => e.event_date === dateStr),
-        ...(isFri ? buildStormEntries() : []),
-    ].sort((a, b) => {
-        if (a.all_day && !b.all_day) return -1;
-        if (!a.all_day && b.all_day) return 1;
-        return a.event_time.localeCompare(b.event_time);
-    });
+    const dayEvts = weekEvents.filter(e => e.event_date === dateStr);
 
     // ── Dynamic height ─────────────────────────────────────────────────────
     const hdrH    = 80;
@@ -1995,19 +1930,17 @@ function drawDayCard(dateStr) {
     dayEvts.forEach(entry => {
         ctx.font = '14px ' + font;
 
-        if (entry._isStorm) {
-            // Storm entry — amber text, same row layout as regular events
+        if (isStormEvent(entry)) {
+            // Desert Storm — amber text, same row layout as regular events
+            const n = eventExportNames(entry);
             ctx.fillStyle = C.stormText;
             ctx.textAlign = 'left';
-            const sLong  = '⚡ ' + entry.nameFull;
-            const sMid   = '⚡ ' + entry.nameMid;
-            const sShort = '⚡ ' + entry.nameShort;
-            const sLabel = ctx.measureText(sLong).width <= nameAvailW ? sLong
-                         : ctx.measureText(sMid).width  <= nameAvailW ? sMid : sShort;
+            const sLabel = ctx.measureText(n.full).width <= nameAvailW ? n.full
+                         : ctx.measureText(n.mid).width  <= nameAvailW ? n.mid : n.short;
             ctx.fillText(sLabel, pad, y, nameAvailW);
             ctx.font = '13px ' + font;
             ctx.textAlign = 'right';
-            ctx.fillText(formatTime(entry.event_time) + ' ST', W - pad, y);
+            ctx.fillText(entry.all_day ? 'All Day' : formatTime(entry.event_time) + ' ST', W - pad, y);
         } else {
             // Regular event
             ctx.fillStyle = C.evtName;
@@ -2138,27 +2071,13 @@ async function init() {
     Tabs.init({ hash: true, defaultTab: 'schedule' });
 
     // Parallel fetches
-    const [settingsRes, slotTimesRes, stormConfigRes, typesRes, serverEventsRes] = await Promise.all([
+    const [settingsRes, typesRes, serverEventsRes] = await Promise.all([
         fetch('/api/settings').catch(() => null),
-        fetch('/api/storm/slot-times').catch(() => null),
-        fetch('/api/storm/config').catch(() => null),
         fetch('/api/schedule/event-types').catch(() => null),
         fetch('/api/schedule/server-events').catch(() => null),
     ]);
 
     try { settings = settingsRes && settingsRes.ok ? await settingsRes.json() : {}; } catch { settings = {}; }
-    try { stormSlotTimes = slotTimesRes && slotTimesRes.ok ? await slotTimesRes.json() : []; } catch { stormSlotTimes = []; }
-    try {
-        const tfArr = stormConfigRes && stormConfigRes.ok ? await stormConfigRes.json() : [];
-        stormTFConfig = {};
-        if (Array.isArray(tfArr)) {
-            tfArr.forEach(c => {
-                const key = 'tf_' + c.task_force.toLowerCase();
-                stormTFConfig[key + '_slot'] = c.time_slot;
-                stormTFConfig[key + '_participating'] = c.participating ?? 1;
-            });
-        }
-    } catch { stormTFConfig = {}; }
     try { eventTypes     = typesRes && typesRes.ok ? await typesRes.json() : []; } catch { eventTypes = []; }
     try { serverEvents   = serverEventsRes && serverEventsRes.ok ? await serverEventsRes.json() : []; } catch { serverEvents = []; }
 
@@ -2367,6 +2286,8 @@ function announcementLine(ev) {
     let line = '';
     if (ev.level != null) line += 'Lvl ' + ev.level + ' ';
     line += ev.type_name;
+    // Two Desert Storm battles can share a date — one per task force.
+    if (ev.task_force) line += ' TF ' + ev.task_force;
     line += ev.all_day ? ' — all day' : ' @ ' + formatTime(ev.time) + ' ST';
     return line;
 }

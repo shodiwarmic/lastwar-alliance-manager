@@ -64,8 +64,9 @@ const ParticipationHistory = (() => {
                 date.textContent = r.event_date;
             }
             const event = document.createElement('td');
+            const tf = r.event_task_force || r.task_force;
             event.textContent = (r.type_icon ? r.type_icon + ' ' : '') + r.type_name
-                + (r.task_force ? ' · TF ' + r.task_force : '');
+                + (tf ? ' · TF ' + tf : '');
             const rank = document.createElement('td');
             rank.textContent = r.rank != null ? String(r.rank) : '—';
             const score = document.createElement('td');

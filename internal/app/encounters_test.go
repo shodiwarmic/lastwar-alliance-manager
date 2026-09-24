@@ -267,7 +267,7 @@ func TestEncounterRuleAppliesToCustomTypesWithAParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadScheduleTypeRules: %v", err)
 	}
-	if msg, err := validateEventRules(db, tr, "2026-09-20", "12:00", 0); err != nil || msg == "" {
+	if msg, err := validateEventRules(db, tr, eventCandidate{Date: "2026-09-20", Time: "12:00"}, 0); err != nil || msg == "" {
 		t.Errorf("push: validateEventRules allowed a custom encounter outside its window (msg=%q err=%v)", msg, err)
 	}
 }

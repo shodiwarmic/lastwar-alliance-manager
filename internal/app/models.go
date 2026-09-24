@@ -1261,6 +1261,10 @@ type ScheduleEvent struct {
 	// type linked to a server-event window, when the date falls outside every
 	// occurrence of it. A window whose anchor moved can strand events that were
 	// legal when they were saved — the app reports them and never moves them.
+	// TaskForce is set on Desert Storm occurrences only ("A"/"B"); NULL on every
+	// other type and on legacy DS rows migrated from storm_attendance (081).
+	TaskForce *string `json:"task_force"`
+
 	OutsideWindow bool   `json:"outside_window,omitempty"`
 	ParentName    string `json:"parent_name,omitempty"`
 

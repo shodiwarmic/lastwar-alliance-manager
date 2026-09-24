@@ -443,7 +443,7 @@ async function loadParticipationChips() {
 async function loadParticipation() {
     const tbody = document.getElementById('participation-tbody');
     const loading = document.createElement('tr');
-    loading.appendChild(Object.assign(document.createElement('td'), { colSpan: 8, className: 'loading-msg', textContent: 'Loading…' }));
+    loading.appendChild(Object.assign(document.createElement('td'), { colSpan: 9, className: 'loading-msg', textContent: 'Loading…' }));
     tbody.replaceChildren(loading);
     let boards;
     try {
@@ -453,14 +453,14 @@ async function loadParticipation() {
     } catch (err) {
         console.error('loadParticipation:', err);
         const tr = document.createElement('tr');
-        tr.appendChild(Object.assign(document.createElement('td'), { colSpan: 8, className: 'empty-state', textContent: 'Failed to load participation boards.' }));
+        tr.appendChild(Object.assign(document.createElement('td'), { colSpan: 9, className: 'empty-state', textContent: 'Failed to load participation boards.' }));
         tbody.replaceChildren(tr);
         return;
     }
     if (!boards.length) {
         const tr = document.createElement('tr');
         tr.appendChild(Object.assign(document.createElement('td'), {
-            colSpan: 8, className: 'empty-state',
+            colSpan: 9, className: 'empty-state',
             textContent: participationType ? 'No boards recorded for this event yet.' : 'No participation boards recorded yet.',
         }));
         tbody.replaceChildren(tr);
@@ -483,6 +483,7 @@ async function loadParticipation() {
         tr.append(
             td(b.event_date),
             td((b.type_icon ? b.type_icon + ' ' : '') + b.type_name),
+            td(b.task_force || '—'),
             td(b.matched === b.rows ? String(b.rows) : `${b.rows} (${b.matched} matched)`),
             td(String(b.missed)),
             td(String(b.excused)),

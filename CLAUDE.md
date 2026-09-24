@@ -708,11 +708,29 @@ any game rule. A generated or pushed event could therefore sit on the calendar i
 state the same officer would have been refused by hand, which is worse than no
 validation: the schedule is read by the whole alliance as if it were checked.
 
-**Any new write into `schedule_events` for a system type (MG/ZS) calls
-`validateSystemEventRules` and `validateSystemLevel`** (`handlers_schedule.go`). The
-date/time rules live in the first and nowhere else; the level rule stays separate
-because its call timing is caller-specific — the update path deliberately
-grandfathers a level the officer did not touch.
+**Any new write into `schedule_events` calls `validateEventRules(q, typeRules,
+eventCandidate{Date, Time, TaskForce}, excludeID)`** plus the level rule
+(`handlers_schedule.go`). The date/time rules live behind it and nowhere else; the
+level rule stays separate because its call timing is caller-specific — the update
+path deliberately grandfathers a level the officer did not touch. All four write
+paths go through `validateEventRules`, the generator included (it once called
+`validateSystemEventRules` directly, which silently skipped any rule not keyed on
+`is_system`). The candidate is a struct so a rule needing more than a date and a time
+lives in the validator, not at a call site.
+
+**Desert Storm is one type (`DS`) with a nullable `task_force`**, not two types (081).
+Each task force fights its own battle, so a new DS row must name `A` or `B`, and a
+task force has at most one battle per date — the validator names that rule, and a
+partial unique index `(event_date, event_type_id, task_force) WHERE task_force IS NOT
+NULL` is the race backstop. `NULL` occurs only on legacy battles migrated from
+`storm_attendance`, which never recorded a task force; `KeepMissingTaskForce`
+grandfathers those on update only. Any other type refuses a task force. The
+generator makes one battle per participating task force per Friday from
+`storm_tf_config` + `storm_slot_times`; its existence check binds `task_force IS ?`
+(`= NULL` is never true, and every non-DS candidate binds NULL). Changing the storm
+config never moves generated battles. The Season Hub push declines a DS template row
+(no task force) as invalid. The schedule's four renderers draw DS from these rows —
+there are no display-only storm entries any more.
 
 **A bulk caller validates and INSERTs one row at a time, in date order**, so each
 accepted row is in the database before the next candidate is checked and the batch is

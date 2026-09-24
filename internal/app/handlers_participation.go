@@ -37,23 +37,24 @@ func handleParticipationPage(w http.ResponseWriter, r *http.Request) {
 // --- Shared response shapes ------------------------------------------------------
 
 type ptBoardSummary struct {
-	EventID    int    `json:"event_id"`
-	BoardID    int    `json:"board_id"`
-	EventDate  string `json:"event_date"`
-	EventTime  string `json:"event_time"`
-	AllDay     bool   `json:"all_day"`
-	TypeID     int    `json:"event_type_id"`
-	TypeName   string `json:"type_name"`
-	TypeShort  string `json:"type_short"`
-	TypeIcon   string `json:"type_icon"`
-	Source     string `json:"source"`
-	RecordedBy string `json:"recorded_by"`
-	UpdatedAt  string `json:"updated_at"`
-	Rows       int    `json:"rows"`
-	Matched    int    `json:"matched"`
-	Missed     int    `json:"missed"`
-	Excused    int    `json:"excused"`
-	Pending    int    `json:"pending"`
+	EventID    int     `json:"event_id"`
+	BoardID    int     `json:"board_id"`
+	EventDate  string  `json:"event_date"`
+	EventTime  string  `json:"event_time"`
+	AllDay     bool    `json:"all_day"`
+	TypeID     int     `json:"event_type_id"`
+	TypeName   string  `json:"type_name"`
+	TypeShort  string  `json:"type_short"`
+	TypeIcon   string  `json:"type_icon"`
+	TaskForce  *string `json:"task_force"`
+	Source     string  `json:"source"`
+	RecordedBy string  `json:"recorded_by"`
+	UpdatedAt  string  `json:"updated_at"`
+	Rows       int     `json:"rows"`
+	Matched    int     `json:"matched"`
+	Missed     int     `json:"missed"`
+	Excused    int     `json:"excused"`
+	Pending    int     `json:"pending"`
 }
 
 type ptBoardDetail struct {
@@ -74,7 +75,7 @@ func summarizeBoard(bd *ptBoardData, statuses, suggestions []ptStatus) ptBoardSu
 	s := ptBoardSummary{
 		EventID: bd.Event.ID, EventDate: bd.Event.EventDate, EventTime: bd.Event.EventTime, AllDay: bd.Event.AllDay,
 		TypeID: bd.Event.EventTypeID, TypeName: bd.Event.TypeName, TypeShort: bd.Event.TypeShort, TypeIcon: bd.Event.TypeIcon,
-		Rows: len(bd.Entries), Pending: len(suggestions),
+		TaskForce: bd.Event.TaskForce, Rows: len(bd.Entries), Pending: len(suggestions),
 	}
 	if bd.Board != nil {
 		s.BoardID, s.Source, s.RecordedBy, s.UpdatedAt = bd.Board.ID, bd.Board.Source, bd.Board.RecordedBy, bd.Board.UpdatedAt
@@ -134,7 +135,13 @@ func buildBoardDetail(q rowQueryer, eventID int) (*ptBoardDetail, error) {
 		Roster: activeRoster(store.Roster), GameDate: gameDate(),
 	}
 	if bd.Type != nil && bd.Type.AbsenceRule == ruleRole && bd.Board == nil {
-		prefill, err := loadRolePrefill(q, "")
+		// A battle belongs to one task force, so only that task force's lineup is
+		// offered; a legacy battle with none gets the whole planner to choose from.
+		tf := ""
+		if bd.Event.TaskForce != nil {
+			tf = *bd.Event.TaskForce
+		}
+		prefill, err := loadRolePrefill(q, tf)
 		if err != nil {
 			return nil, err
 		}
@@ -262,12 +269,12 @@ func handleParticipationRecent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := db.Query(`
-		SELECT se.id, se.event_date, se.event_time, se.all_day, b.id IS NOT NULL,
+		SELECT se.id, se.event_date, se.event_time, se.all_day, se.task_force, b.id IS NOT NULL,
 		       CASE WHEN b.id IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM participation_entries e WHERE e.board_id = b.id) END
 		FROM schedule_events se
 		LEFT JOIN participation_boards b ON b.schedule_event_id = se.id
 		WHERE se.event_type_id = ? AND se.event_date <= ?
-		ORDER BY se.event_date DESC, se.event_time DESC LIMIT 10`, typeID, gameDate())
+		ORDER BY se.event_date DESC, se.event_time DESC, se.task_force LIMIT 10`, typeID, gameDate())
 	if err != nil {
 		slog.Error("handleParticipationRecent: query failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -275,17 +282,18 @@ func handleParticipationRecent(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	type recent struct {
-		EventID   int    `json:"event_id"`
-		EventDate string `json:"event_date"`
-		EventTime string `json:"event_time"`
-		AllDay    bool   `json:"all_day"`
-		HasBoard  bool   `json:"has_board"`
-		Rows      int    `json:"rows"`
+		EventID   int     `json:"event_id"`
+		EventDate string  `json:"event_date"`
+		EventTime string  `json:"event_time"`
+		AllDay    bool    `json:"all_day"`
+		TaskForce *string `json:"task_force"`
+		HasBoard  bool    `json:"has_board"`
+		Rows      int     `json:"rows"`
 	}
 	out := []recent{}
 	for rows.Next() {
 		var x recent
-		if err := rows.Scan(&x.EventID, &x.EventDate, &x.EventTime, &x.AllDay, &x.HasBoard, &x.Rows); err != nil {
+		if err := rows.Scan(&x.EventID, &x.EventDate, &x.EventTime, &x.AllDay, &x.TaskForce, &x.HasBoard, &x.Rows); err != nil {
 			slog.Error("handleParticipationRecent: scan failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -346,6 +354,7 @@ type ptMemberRow struct {
 	TypeName   string `json:"type_name"`
 	TypeShort  string `json:"type_short"`
 	TypeIcon   string `json:"type_icon"`
+	EventTF    string `json:"event_task_force"`
 	Rank       *int   `json:"rank"`
 	Score      *int64 `json:"score"`
 	ScoreLabel string `json:"score_label"`
@@ -389,6 +398,9 @@ func memberParticipation(memberID int) (*ptMemberHistory, error) {
 				EventID: bd.Event.ID, EventDate: bd.Event.EventDate,
 				TypeName: bd.Event.TypeName, TypeShort: bd.Event.TypeShort, TypeIcon: bd.Event.TypeIcon,
 				Rank: st.Rank, Status: st.Status, Role: st.Role, TaskForce: st.TaskForce, Reason: st.Reason,
+			}
+			if bd.Event.TaskForce != nil {
+				row.EventTF = *bd.Event.TaskForce
 			}
 			if key := bd.Type.primaryKey(); key != "" {
 				row.Score = st.Values[key]

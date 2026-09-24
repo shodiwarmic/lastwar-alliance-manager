@@ -111,7 +111,14 @@ async function initNew() {
     const wanted = new URLSearchParams(location.search).get('type');
     const pre = types.find(t => wanted && (t.short_name === wanted || String(t.event_type_id) === wanted));
     if (pre) select.value = String(pre.event_type_id);
-    select.addEventListener('change', loadRecent);
+    // A Desert Storm battle belongs to one task force, so creating one asks which.
+    const syncTF = () => {
+        const t = types.find(x => String(x.event_type_id) === select.value);
+        const g = document.getElementById('pt-new-tf-group');
+        if (g) g.hidden = !(t && t.absence_rule === 'role');
+    };
+    select.addEventListener('change', () => { syncTF(); loadRecent(); });
+    syncTF();
     if (!types.length) {
         document.getElementById('pt-new-recent').replaceChildren(el('p', { className: 'empty-state' }, 'No event type tracks participation yet.'));
         return;
@@ -146,7 +153,8 @@ async function loadRecent() {
     }
     box.replaceChildren(el('p', { className: 'pt-step-hint' }, 'Recent events on the schedule:'),
         el('ul', { className: 'pt-recent-list' }, ...recent.map(x => {
-            const when = fmtDate(x.event_date) + (x.all_day ? '' : ' · ' + x.event_time + ' ST');
+            const when = fmtDate(x.event_date) + (x.task_force ? ' · TF ' + x.task_force : '')
+                + (x.all_day ? '' : ' · ' + x.event_time + ' ST');
             const state = x.has_board
                 ? el('span', { className: 'pt-badge pt-badge--present' }, 'Recorded · ' + x.rows)
                 : el('span', { className: 'pt-badge pt-badge--muted' }, 'Not recorded');
@@ -164,6 +172,8 @@ async function createOccurrence() {
         event_date: document.getElementById('pt-new-date').value,
         event_time: document.getElementById('pt-new-time').value || '00:00',
     };
+    const tfGroup = document.getElementById('pt-new-tf-group');
+    if (tfGroup && !tfGroup.hidden) body.task_force = document.getElementById('pt-new-tf').value;
     if (!body.event_date) { status.textContent = 'Pick the date the event ran.'; return; }
     let res;
     try {
@@ -221,6 +231,7 @@ function renderHeader() {
     const ev = detail.event;
     const title = el('p', { className: 'pt-header-title' }, (ev.type_icon ? ev.type_icon + ' ' : '') + ev.type_name);
     const bits = [fmtDate(ev.event_date)];
+    if (ev.task_force) bits.push('Task Force ' + ev.task_force);
     if (!ev.all_day) bits.push(ev.event_time + ' ST');
     if (ev.level != null) bits.push('Lv.' + ev.level);
     const meta = el('span', { className: 'pt-header-meta' }, bits.join(' · '));

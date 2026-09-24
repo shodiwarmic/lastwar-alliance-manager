@@ -51,6 +51,13 @@
              which is a fixed game rule, so it is a constant in storm.js rather
              than configuration. -->
         <p id="storm-reg-window" class="help-text"></p>
+        {{if .Permissions.ManageParticipation}}
+        <!-- The planner is overwritten between battles, so a battle's result is
+             recorded against its own occurrence, prefilled from this lineup. -->
+        <p style="margin: 8px 0 0 0;">
+            <a href="/participation/new?type=DS" class="btn btn-secondary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-clipboard-list"/></svg> Record last battle</a>
+        </p>
+        {{end}}
     </section>
 
     <!-- Section 2: Inner Tab Bar -->

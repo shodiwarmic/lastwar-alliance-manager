@@ -222,6 +222,7 @@
                 <div class="gen-toggle-row">
                     <label><input type="checkbox" id="gen-mg" checked> Generate Alliance Exercise (MG / Large Sandworm)</label>
                     <label><input type="checkbox" id="gen-zs" checked> Generate ZS</label>
+                    <label title="One battle per participating task force, every Friday, at its slot time from the Desert Storm page. Changing that setup later does not move battles already generated."><input type="checkbox" id="gen-ds"> Generate Desert Storm</label>
                 </div>
                 <div class="modal-actions" style="margin-top:12px;">
                     <button class="btn btn-primary" id="btn-generate"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-bolt"/></svg> Generate Events</button>
@@ -297,6 +298,17 @@
                     <span class="help-text" id="event-level-help"></span>
                 </label>
                 <input type="number" id="event-level-input" class="form-input" min="1">
+            </div>
+
+            <!-- Task force: Desert Storm only — each task force fights its own
+                 battle, so a Desert Storm event names which. schedule.js shows it. -->
+            <div class="form-group" id="event-tf-group" style="display:none;">
+                <label for="event-tf-select">Task force</label>
+                <select id="event-tf-select" class="form-input">
+                    <option value="">— select —</option>
+                    <option value="A">Task Force A</option>
+                    <option value="B">Task Force B</option>
+                </select>
             </div>
 
             <div class="form-group">

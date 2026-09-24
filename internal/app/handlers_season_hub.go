@@ -3284,7 +3284,10 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 			// a level, so a template level on a type that does not is declined here
 			// rather than written past the validation the manual path applies.
 			pt := typeRulesFor(ev.eventTypeID)
-			msg, err := validateEventRules(db, pt.Rules, dateStr, ev.eventTime, 0)
+			// A season template carries no task force, so a Desert Storm row is
+			// declined here as invalid, with the validator's reason, rather than
+			// written as a NULL-task-force battle.
+			msg, err := validateEventRules(db, pt.Rules, eventCandidate{Date: dateStr, Time: ev.eventTime}, 0)
 			if err != nil {
 				return result, err
 			}

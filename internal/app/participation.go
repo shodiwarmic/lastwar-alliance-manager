@@ -64,15 +64,16 @@ func (t *ptType) trackableIDs() map[string]int {
 }
 
 type ptEvent struct {
-	ID          int    `json:"id"`
-	EventDate   string `json:"event_date"`
-	EventTime   string `json:"event_time"`
-	AllDay      bool   `json:"all_day"`
-	EventTypeID int    `json:"event_type_id"`
-	TypeName    string `json:"type_name"`
-	TypeShort   string `json:"type_short"`
-	TypeIcon    string `json:"type_icon"`
-	Level       *int   `json:"level"`
+	ID          int     `json:"id"`
+	EventDate   string  `json:"event_date"`
+	EventTime   string  `json:"event_time"`
+	AllDay      bool    `json:"all_day"`
+	EventTypeID int     `json:"event_type_id"`
+	TypeName    string  `json:"type_name"`
+	TypeShort   string  `json:"type_short"`
+	TypeIcon    string  `json:"type_icon"`
+	Level       *int    `json:"level"`
+	TaskForce   *string `json:"task_force"` // Desert Storm; NULL on legacy battles
 }
 
 type ptBoard struct {
@@ -460,7 +461,7 @@ func loadBoards(q rowQueryer, types map[int]*ptType, f boardFilter) ([]*ptBoardD
 	}
 	rows, err := q.Query(`
 		SELECT se.id, se.event_date, se.event_time, se.all_day, se.event_type_id,
-		       t.name, t.short_name, t.icon, se.level,
+		       t.name, t.short_name, t.icon, se.level, se.task_force,
 		       b.id, COALESCE(b.source,''), COALESCE(b.notes,''), COALESCE(b.result_json,'{}'),
 		       COALESCE(u.username,''), COALESCE(b.created_at,''), COALESCE(b.updated_at,'')
 		FROM schedule_events se
@@ -481,7 +482,7 @@ func loadBoards(q rowQueryer, types map[int]*ptType, f boardFilter) ([]*ptBoardD
 		var b ptBoard
 		var result string
 		if err := rows.Scan(&bd.Event.ID, &bd.Event.EventDate, &bd.Event.EventTime, &allDay, &bd.Event.EventTypeID,
-			&bd.Event.TypeName, &bd.Event.TypeShort, &bd.Event.TypeIcon, &bd.Event.Level,
+			&bd.Event.TypeName, &bd.Event.TypeShort, &bd.Event.TypeIcon, &bd.Event.Level, &bd.Event.TaskForce,
 			&boardID, &b.Source, &b.Notes, &result, &b.RecordedBy, &b.CreatedAt, &b.UpdatedAt); err != nil {
 			rows.Close()
 			return nil, err
