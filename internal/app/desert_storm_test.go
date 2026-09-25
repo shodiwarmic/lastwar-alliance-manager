@@ -63,7 +63,7 @@ func TestDesertStormTaskForceRule(t *testing.T) {
 
 	wed := with("A")
 	wed["event_date"] = "2026-09-23"
-	if rr := createEvent(t, wed); rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "always on a Friday — 2026-09-23 is a Wednesday") {
+	if rr := createEvent(t, wed); rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "Desert Storm runs on Fridays only — 2026-09-23 is a Wednesday (next eligible date 2026-09-25)") {
 		t.Errorf("DS on a Wednesday = %d %q", rr.Code, rr.Body.String())
 	}
 	if rr := createEvent(t, with("")); rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "needs a task force") {
@@ -104,7 +104,7 @@ func TestDesertStormTaskForceRule(t *testing.T) {
 	rr = httptest.NewRecorder()
 	updateScheduleEvent(rr, ptReq(http.MethodPut, "/", map[string]any{"event_type_id": ds, "event_date": "2026-09-24", "task_force": "A"},
 		map[string]string{"id": strconv.Itoa(idA)}, nil))
-	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "always on a Friday") {
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "2026-09-24 is a Thursday (next eligible date 2026-09-25)") {
 		t.Errorf("move DS to a Thursday = %d %q", rr.Code, rr.Body.String())
 	}
 

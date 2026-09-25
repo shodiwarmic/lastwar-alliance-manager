@@ -97,45 +97,21 @@ function formatDateShort(dateStr) {
     return days[d.getUTCDay()] + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCDate();
 }
 
-// Desert Storm is always fought on a game-day Friday, so its date is chosen from a
-// list of Fridays rather than typed. A picker that merely greys out other days does
-// not hold on a phone — flatpickr falls back to the native date input there.
-function fridayOfWeek(dateStr) {
-    return addDays(weekMonday(dateStr), 4);
-}
-
-function isFriday(dateStr) {
-    return new Date(dateStr + 'T12:00:00Z').getUTCDay() === 5;
-}
-
-// Shows the Friday list for Desert Storm and the plain date input otherwise. The
-// date input stays the single source of the value, so saving needs no special case.
-// A legacy row on another day keeps its own date as an option: the server leaves an
-// unchanged date alone, and the officer can still move it onto a Friday.
-function syncDesertStormDate(isDS) {
+// Desert Storm is fought on game-day Fridays only. On any other date Save is
+// disabled and the reason sits under the date field, in the same words the server
+// would reject it with (desertStormDayError, global.js). A legacy battle being edited
+// keeps its own date without complaint — the server leaves an unchanged date alone.
+function checkEventDayRule() {
     const input = document.getElementById('event-date-input');
-    const sel = document.getElementById('event-ds-date-select');
-    input.style.display = isDS ? 'none' : '';
-    input.required = !isDS;
-    sel.style.display = isDS ? '' : 'none';
-    if (!isDS) return;
-
-    const editing = !!document.getElementById('event-modal-id').value;
-    const cur = input.value || todayGameDate();
-    const pick = isFriday(cur) || editing ? cur : fridayOfWeek(cur);
-    const base = fridayOfWeek(cur);
-    const dates = [];
-    for (let i = -12; i <= 12; i++) dates.push(addDays(base, i * 7));
-    if (!dates.includes(pick)) dates.push(pick);
-    dates.sort();
-    sel.replaceChildren(...dates.map(d => {
-        const o = document.createElement('option');
-        o.value = d;
-        o.textContent = formatDateShort(d) + ', ' + d.slice(0, 4) + (isFriday(d) ? '' : ' (not a Friday)');
-        return o;
-    }));
-    sel.value = pick;
-    input.value = pick;
+    const saveBtn = document.querySelector('#event-form button[type="submit"]');
+    const et = eventTypes.find(e => e.id === parseInt(document.getElementById('event-type-select').value, 10));
+    const editing = document.getElementById('event-modal-id').value;
+    const unchangedLegacy = editing && input.value === input.dataset.originalDate;
+    const msg = et && et.short_name === 'DS' && !unchangedLegacy ? desertStormDayError(input.value) : '';
+    if (msg) setFieldError(input, msg);
+    else clearFieldError(input);
+    if (saveBtn) saveBtn.disabled = !!msg;
+    return !msg;
 }
 
 function formatDateRange(mon) {
@@ -625,6 +601,7 @@ function openAddEventModal(defaultDate) {
     document.getElementById('event-modal-title').textContent = 'Add Event';
     document.getElementById('event-modal-id').value = '';
     document.getElementById('event-date-input').value = defaultDate || todayGameDate();
+    document.getElementById('event-date-input').dataset.originalDate = '';
     document.getElementById('event-time-input').value = '';
     document.getElementById('event-level-input').value = '';
     document.getElementById('event-tf-select').value = '';
@@ -639,6 +616,7 @@ function openEditEventModal(evt) {
     document.getElementById('event-modal-title').textContent = 'Edit Event';
     document.getElementById('event-modal-id').value = evt.id;
     document.getElementById('event-date-input').value = evt.event_date;
+    document.getElementById('event-date-input').dataset.originalDate = evt.event_date;
     document.getElementById('event-time-input').value = evt.event_time;
     document.getElementById('event-level-input').value = evt.level ?? '';
     document.getElementById('event-tf-select').value = evt.task_force || '';
@@ -739,7 +717,7 @@ function updateEventModalForType() {
     const isDS = !!(et && et.short_name === 'DS');
     document.getElementById('event-tf-group').style.display = isDS ? '' : 'none';
     if (!isDS) document.getElementById('event-tf-select').value = '';
-    syncDesertStormDate(isDS);
+    checkEventDayRule();
 
     // Clearing the input is load-bearing, not tidiness. The group only HIDES, and
     // saveEvent reads the input's value whether or not it is visible — so before
@@ -802,6 +780,7 @@ async function saveEvent(e) {
     e.preventDefault();
     const errEl = document.getElementById('event-form-error');
     errEl.textContent = '';
+    if (!checkEventDayRule()) return;  // the reason is already under the date field
 
     const id     = document.getElementById('event-modal-id').value;
     const allDay = document.getElementById('event-allday-input').checked;
@@ -2274,9 +2253,8 @@ function bindEvents() {
     }
 
     // Flatpickr: time picker for event time field
-    document.getElementById('event-ds-date-select').addEventListener('change', e => {
-        document.getElementById('event-date-input').value = e.target.value;
-    });
+    ['input', 'change'].forEach(ev =>
+        document.getElementById('event-date-input').addEventListener(ev, checkEventDayRule));
 
     const timeFp = flatpickr('#event-time-input', {
         enableTime: true,

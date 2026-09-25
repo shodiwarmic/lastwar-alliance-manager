@@ -30,8 +30,7 @@ participation permissions**; give them to other ranks in Settings → Permission
   Participation** on their Profile. Schedule cards get a **Record** link and a board badge.
 - **Desert Storm battles on the schedule** — one event per task force, generated every Friday
   from the Desert Storm page's setup (tick **Generate Desert Storm**), or added by hand with the
-  task force chosen. Desert Storm is always on a Friday, so its date is picked from a list of
-  Fridays. They replace the display-only Friday entries everywhere the schedule is drawn,
+  task force chosen. Desert Storm is always on a Friday, so no other date can be saved. They replace the display-only Friday entries everywhere the schedule is drawn,
   exported and announced. The Storm page gets **Record last battle**, which prefills the
   battle's roles from the planner.
 - **Storm Attendance is carried over and retired** — every date logged on the old Storm

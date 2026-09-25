@@ -93,16 +93,19 @@ function show(id, on) {
 
 // --- Occurrence chooser (/participation/new) ----------------------------------------
 
-// The most recent n game-day Fridays, today included when it is one, newest first.
-function pastFridays(n) {
-    const d = new Date(gameDateStr() + 'T12:00:00Z');
-    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() - 5 + 7) % 7));
-    const out = [];
-    for (let i = 0; i < n; i++) {
-        out.push(d.toISOString().slice(0, 10));
-        d.setUTCDate(d.getUTCDate() - 7);
-    }
-    return out;
+// Desert Storm is fought on game-day Fridays only: on any other date Create is
+// disabled and the reason sits under the date, in the server's own words.
+function checkNewDayRule(types) {
+    const select = document.getElementById('pt-new-type');
+    const dateIn = document.getElementById('pt-new-date');
+    const btn = document.getElementById('pt-new-create');
+    if (!dateIn || !btn) return true;
+    const t = types.find(x => String(x.event_type_id) === select.value);
+    const msg = t && t.short_name === 'DS' ? desertStormDayError(dateIn.value) : '';
+    if (msg) setFieldError(dateIn, msg);
+    else clearFieldError(dateIn);
+    btn.disabled = !!msg;
+    return !msg;
 }
 
 async function initNew() {
@@ -123,20 +126,12 @@ async function initNew() {
     const wanted = new URLSearchParams(location.search).get('type');
     const pre = types.find(t => wanted && (t.short_name === wanted || String(t.event_type_id) === wanted));
     if (pre) select.value = String(pre.event_type_id);
-    // A Desert Storm battle belongs to one task force, so creating one asks which,
-    // and it is always fought on a Friday, so its date is picked from past Fridays.
+    // A Desert Storm battle belongs to one task force, so creating one asks which.
     const syncTF = () => {
         const t = types.find(x => String(x.event_type_id) === select.value);
-        const isDS = !!(t && t.short_name === 'DS');
         const g = document.getElementById('pt-new-tf-group');
         if (g) g.hidden = !(t && t.absence_rule === 'role');
-        const dateIn = document.getElementById('pt-new-date');
-        const fri = document.getElementById('pt-new-friday');
-        if (dateIn && fri) {
-            dateIn.hidden = isDS;
-            fri.hidden = !isDS;
-            if (isDS && !fri.options.length) fri.replaceChildren(...pastFridays(26).map(d => el('option', { value: d }, fmtDate(d))));
-        }
+        checkNewDayRule(types);
     };
     select.addEventListener('change', () => { syncTF(); loadRecent(); });
     syncTF();
@@ -149,6 +144,8 @@ async function initNew() {
         dateIn.max = gameDateStr();
         dateIn.value = gameDateStr();
         document.getElementById('pt-new-create').addEventListener('click', createOccurrence);
+        ['input', 'change'].forEach(ev => dateIn.addEventListener(ev, () => checkNewDayRule(types)));
+        checkNewDayRule(types);
     }
     loadRecent();
 }
@@ -188,10 +185,10 @@ async function loadRecent() {
 async function createOccurrence() {
     const status = document.getElementById('pt-new-status');
     status.textContent = '';
-    const fri = document.getElementById('pt-new-friday');
+    if (document.getElementById('pt-new-create').disabled) return;  // reason is under the date
     const body = {
         event_type_id: parseInt(document.getElementById('pt-new-type').value, 10),
-        event_date: fri && !fri.hidden ? fri.value : document.getElementById('pt-new-date').value,
+        event_date: document.getElementById('pt-new-date').value,
         event_time: document.getElementById('pt-new-time').value || '00:00',
     };
     const tfGroup = document.getElementById('pt-new-tf-group');

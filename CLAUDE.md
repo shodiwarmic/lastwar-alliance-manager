@@ -720,11 +720,11 @@ lives in the validator, not at a call site.
 
 **Desert Storm is one type (`DS`) with a nullable `task_force`**, not two types (081).
 Each task force fights its own battle, so a new DS row must name `A` or `B`, it is
-always on a game-day **Friday** (the modal and the recording screen offer a list of
-Fridays, not a date input — a greyed-out picker does not hold on a phone, where
-flatpickr falls back to the native input; the validator refuses any other weekday
-unless an update leaves the date unchanged), and a task force has at most one battle
-per date — the validator names that rule, and a
+always on a game-day **Friday** (the validator refuses any other weekday unless an
+update leaves the date unchanged, worded like the cooldown rejections with the next
+eligible date; the event modal and the recording screen show the same message under
+the date field via `desertStormDayError` in `global.js` and disable saving — keep the
+two texts identical), and a task force has at most one battle per date — the validator names that rule, and a
 partial unique index `(event_date, event_type_id, task_force) WHERE task_force IS NOT
 NULL` is the race backstop. `NULL` occurs only on legacy battles migrated from
 `storm_attendance`, which never recorded a task force; `KeepMissingTaskForce`

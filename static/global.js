@@ -108,6 +108,23 @@ function getVSTheme(dateStr) {
 window.foldSearch = (s) =>
     String(s == null ? '' : s).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
+// Desert Storm is fought on game-day Fridays only. Returns the rejection the server
+// gives for any other day (validateDesertStorm, handlers_schedule.go — worded like
+// the schedule's cooldown rejections), or '' for a Friday or an empty date, so a form
+// can say why it cannot be saved before the officer tries. The server remains the
+// authority; this is the same rule shown early, not a second copy of its judgement.
+window.desertStormDayError = (dateStr) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')) return '';
+    const d = new Date(dateStr + 'T12:00:00Z');
+    const dow = d.getUTCDay();
+    if (dow === 5) return '';
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const next = new Date(d);
+    next.setUTCDate(d.getUTCDate() + ((5 - dow + 7) % 7));
+    return 'Desert Storm runs on Fridays only — ' + dateStr + ' is a ' + days[dow]
+        + ' (next eligible date ' + next.toISOString().slice(0, 10) + ')';
+};
+
 // ---- Join-date helpers (anchored to today's GAME date) ----
 // Pure UTC date math so there's no local-timezone drift. "days ago" >= 0 = past.
 window.gameDaysAgoToISO = (n) => {

@@ -174,9 +174,14 @@ func validateSystemEventRules(q rowQuerier, short string, c eventCandidate, excl
 func validateDesertStorm(q rowQuerier, c eventCandidate, excludeID int) (string, error) {
 	// Desert Storm is always fought on a game-day Friday. Dates are game dates, so
 	// the weekday of the date string is the game's weekday.
+	// Worded like the cooldown rejections — the rule, what broke it, and the next
+	// date that would work — and mirrored by desertStormDayError (global.js), which
+	// shows the same text under the date field before the officer can save.
 	if !c.DateUnchanged {
 		if d, err := time.Parse("2006-01-02", c.Date); err == nil && d.Weekday() != time.Friday {
-			return "Desert Storm is always on a Friday — " + c.Date + " is a " + d.Weekday().String(), nil
+			next := d.AddDate(0, 0, (int(time.Friday)-int(d.Weekday())+7)%7)
+			return fmt.Sprintf("Desert Storm runs on Fridays only — %s is a %s (next eligible date %s)",
+				c.Date, d.Weekday(), next.Format("2006-01-02")), nil
 		}
 	}
 	if c.TaskForce == nil {
