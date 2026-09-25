@@ -127,6 +127,10 @@ type eventCandidate struct {
 	// the level rule grandfathers an untouched value the same way. Never set on a
 	// create.
 	KeepMissingTaskForce bool
+	// DateUnchanged marks an UPDATE that keeps the row's existing date, so a rule
+	// about the date itself (Desert Storm's Friday) is not re-applied to a value the
+	// officer did not touch.
+	DateUnchanged bool
 }
 
 func validateEventRules(q rowQuerier, tr scheduleTypeRules, c eventCandidate, excludeID int) (string, error) {
@@ -168,6 +172,13 @@ func validateSystemEventRules(q rowQuerier, short string, c eventCandidate, excl
 // date. The partial unique index (081) is the race backstop; this is what names
 // the rule. A legacy row with no task force is grandfathered on update only.
 func validateDesertStorm(q rowQuerier, c eventCandidate, excludeID int) (string, error) {
+	// Desert Storm is always fought on a game-day Friday. Dates are game dates, so
+	// the weekday of the date string is the game's weekday.
+	if !c.DateUnchanged {
+		if d, err := time.Parse("2006-01-02", c.Date); err == nil && d.Weekday() != time.Friday {
+			return "Desert Storm is always on a Friday — " + c.Date + " is a " + d.Weekday().String(), nil
+		}
+	}
 	if c.TaskForce == nil {
 		if c.KeepMissingTaskForce {
 			return "", nil
@@ -1270,7 +1281,8 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// No is_system gate — see validateEventRules.
-	cand := eventCandidate{Date: req.EventDate, Time: req.EventTime, TaskForce: req.TaskForce, KeepMissingTaskForce: keepMissingTF}
+	cand := eventCandidate{Date: req.EventDate, Time: req.EventTime, TaskForce: req.TaskForce,
+		KeepMissingTaskForce: keepMissingTF, DateUnchanged: req.EventDate == old.EventDate && req.EventTypeID == old.EventTypeID}
 	if msg, err := validateEventRules(db, tr, cand, id); err != nil {
 		slog.Error("updateScheduleEvent validateEventRules", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)

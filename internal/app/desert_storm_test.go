@@ -61,6 +61,11 @@ func TestDesertStormTaskForceRule(t *testing.T) {
 		return m
 	}
 
+	wed := with("A")
+	wed["event_date"] = "2026-09-23"
+	if rr := createEvent(t, wed); rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "always on a Friday — 2026-09-23 is a Wednesday") {
+		t.Errorf("DS on a Wednesday = %d %q", rr.Code, rr.Body.String())
+	}
 	if rr := createEvent(t, with("")); rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "needs a task force") {
 		t.Errorf("DS without TF = %d %q", rr.Code, rr.Body.String())
 	}
@@ -95,7 +100,16 @@ func TestDesertStormTaskForceRule(t *testing.T) {
 		t.Errorf("update onto TF B = %d, want 400", rr.Code)
 	}
 
-	// A legacy row (no task force) stays editable without one.
+	// Moving a battle off its Friday is refused.
+	rr = httptest.NewRecorder()
+	updateScheduleEvent(rr, ptReq(http.MethodPut, "/", map[string]any{"event_type_id": ds, "event_date": "2026-09-24", "task_force": "A"},
+		map[string]string{"id": strconv.Itoa(idA)}, nil))
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "always on a Friday") {
+		t.Errorf("move DS to a Thursday = %d %q", rr.Code, rr.Body.String())
+	}
+
+	// A legacy row (no task force) stays editable without one — and a legacy row
+	// on a non-Friday (typed into the old attendance screen) keeps its date too.
 	res, _ := db.Exec(`INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, notes, created_by) VALUES ('2026-08-07', ?, '00:00', 1, '', 1)`, ds)
 	legacy, _ := res.LastInsertId()
 	rr = httptest.NewRecorder()
@@ -103,6 +117,14 @@ func TestDesertStormTaskForceRule(t *testing.T) {
 		map[string]string{"id": strconv.Itoa(int(legacy))}, nil))
 	if rr.Code != http.StatusNoContent {
 		t.Errorf("edit notes on legacy DS row = %d %q", rr.Code, rr.Body.String())
+	}
+	res, _ = db.Exec(`INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, notes, created_by) VALUES ('2026-08-05', ?, '00:00', 1, '', 1)`, ds)
+	oddDay, _ := res.LastInsertId()
+	rr = httptest.NewRecorder()
+	updateScheduleEvent(rr, ptReq(http.MethodPut, "/", map[string]any{"event_type_id": ds, "all_day": true, "notes": "legacy Wednesday"},
+		map[string]string{"id": strconv.Itoa(int(oddDay))}, nil))
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("edit notes on a non-Friday legacy DS row = %d %q", rr.Code, rr.Body.String())
 	}
 }
 
@@ -193,7 +215,9 @@ func TestSeasonPushDeclinesDesertStormTemplateRows(t *testing.T) {
 	setupSettingsTestDB(t)
 	s, _, _ := seedPushableSeason(t, "2026-09-07")
 	ds := dsTypeID(t)
-	db.Exec(`UPDATE season_events SET event_type_id = ?, type_name = 'Desert Storm' WHERE is_server_event = 0`, ds)
+	// day_offset 5 puts the template on the season week's Friday, so it passes the
+	// Friday rule and is declined for the reason under test: no task force.
+	db.Exec(`UPDATE season_events SET event_type_id = ?, type_name = 'Desert Storm', day_offset = 5 WHERE is_server_event = 0`, ds)
 	result, err := pushSeasonEventsToSchedule(s, 1, "tester")
 	if err != nil {
 		t.Fatal(err)
