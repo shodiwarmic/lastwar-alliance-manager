@@ -1037,6 +1037,17 @@ feeds is gated on that.
 **Every read is load → derive → write**, in a fixed number of queries whatever the board
 count (`loadBoards`). Never derive per row inside an open cursor.
 
+**Recording input is a CSV import or a member search — there is no text box.** The CSV
+endpoint (`POST /api/participation/boards/{id}/csv`, `handleParticipationCSV`) maps
+headers before any row, matches names through `resolveBoardNames` (one folded index,
+tags stripped, a second row matching an already-claimed member left unmatched) and
+**saves nothing**: its rows go to the check table and are saved by the ordinary PUT.
+A hand-added row is a member picked from search, whose current name becomes the
+snapshot. **Rank is the row's position** in the table (rows move up and down); a
+legacy board keeps its NULL ranks rather than being given invented ones.
+`parseBoardAmount` (Go) and `ParticipationParse.parseAmount` (JS) read scores the same
+way — K/M/G/B suffixes, comma grouping — keep them in step.
+
 **`foreign_keys` is off, so every delete path clears participation rows explicitly:**
 - `deleteMemberTx` — values → entries → roles → exceptions → history → (clear
   `recorded_by`) → linked user → member, in **one transaction** that rolls back on the

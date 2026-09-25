@@ -20,8 +20,9 @@ compose up -d`. Three database migrations run on start (079–081); they add tab
 and change no existing strike or event. After upgrading, **R4 and R5 hold the two new
 participation permissions**; give them to other ranks in Settings → Permissions if you want.
 
-- **Event participation** — paste an Alliance Exercise, Zombie Siege or Desert Storm ranked list;
-  names are matched to members (accents and aliases included), anyone unmatched gets a picker, and
+- **Event participation** — import an Alliance Exercise, Zombie Siege or Desert Storm board from a
+  CSV (or add members by hand from a member search); names are matched to members (accents,
+  aliases and tags included), anyone unmatched gets a picker, and
   saving lists the strikes the event's own rule implies — someone missing from an Alliance
   Exercise, anyone at 0 waves in a Zombie Siege, a starter missing from a Desert Storm (never a
   sub). Each can be struck, excused with a reason, or dismissed. Recording is optional and nothing

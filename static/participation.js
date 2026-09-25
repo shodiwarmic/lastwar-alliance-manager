@@ -1,7 +1,7 @@
 // participation.js — the participation recording screen (#13).
 //
 //   /participation/new        choose a type, then a past occurrence (or create one)
-//   /participation/{eventID}  paste → check → save → suggested strikes
+//   /participation/{eventID}  import a CSV or add members → check → save → suggested strikes
 //
 // The server derives every status and every suggestion (participation.go); this
 // page only edits what is stored — the rows the mail listed, the roles for the
@@ -18,7 +18,7 @@ const EVENT_ID = pathMatch ? parseInt(pathMatch[1], 10) : 0;
 const STATUS_LABEL = { present: 'Present', zero: 'Zero', missed: 'Missed', excused: 'Excused' };
 
 let detail = null;   // GET /api/participation/boards/{id}
-let rows = [];       // working entries: {rank, name, member_id, member_name, member_rank, values:{key:number|null}}
+let rows = [];       // working entries in board order: {name, member_id, member_name, member_rank, values:{key:number|null}}
 let roles = [];      // working roles:   {member_id, member_name, role, task_force}
 let pickers = [];    // member pickers to destroy on re-render
 
@@ -243,7 +243,7 @@ async function loadBoard() {
 }
 
 function hideAllSteps() {
-    ['pt-paste', 'pt-check', 'pt-board', 'pt-suggest'].forEach(id => show(id, false));
+    ['pt-add', 'pt-check', 'pt-board', 'pt-suggest'].forEach(id => show(id, false));
 }
 
 function renderHeader() {
@@ -274,8 +274,10 @@ function renderHeader() {
 }
 
 function resetWorkingCopy() {
+    // Entries come back ranked-first in rank order, so the array order IS the board
+    // order and position gives the rank back on save.
     rows = detail.entries.map(e => ({
-        rank: e.rank, name: e.name, member_id: e.member_id, member_name: e.member_name || '',
+        name: e.name, member_id: e.member_id, member_name: e.member_name || '',
         member_rank: (detail.roster.find(m => m.id === e.member_id) || {}).rank || '',
         values: Object.fromEntries(trackables().map(t => [t.key, e.values[t.key] ?? null])),
     }));
@@ -286,7 +288,7 @@ function resetWorkingCopy() {
 
 function renderAll() {
     if (CAN_MANAGE) {
-        show('pt-paste', true);
+        show('pt-add', true);
         show('pt-check', rows.length > 0 || !!detail.board || isRoleType());
         document.getElementById('pt-delete').style.display = detail.board ? '' : 'none';
         renderEntries();
@@ -296,77 +298,96 @@ function renderAll() {
     renderSuggestions();
 }
 
-// --- Step 1: paste -----------------------------------------------------------------
+// --- Step 1: add the board ---------------------------------------------------------
 
-async function readPasted() {
-    const text = document.getElementById('pt-paste-input').value;
-    const parsed = PP.parse(text);
-    const box = document.getElementById('pt-unparsed');
-    if (parsed.unparsed.length) {
+// Rows are numbered by position: rank N is the Nth row. A board migrated from the old
+// Storm Attendance screen never had ranks, and giving it invented ones would be worse
+// than leaving them blank, so its rows stay unranked.
+function isRanked() {
+    return !(detail.board && detail.board.source === 'legacy');
+}
+
+// A blank CSV with the columns this event's board needs, so the leader never has to
+// guess the headers the import reads. The BOM keeps accented names intact in Excel.
+function downloadTemplate(e) {
+    e.preventDefault();
+    const header = ['Rank', 'Name', ...trackables().map(t => t.label)];
+    const blob = new Blob(['\ufeff' + header.join(',') + '\n'], { type: 'text/csv;charset=utf-8' });
+    const a = el('a', { href: URL.createObjectURL(blob), download: (detail.event.type_short || 'board') + '-' + detail.event.event_date + '.csv' });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// The server reads the file, maps its headers, and matches names the way every import
+// does; it saves nothing. The rows land in the check table to be fixed and saved.
+async function importCSV() {
+    const input = document.getElementById('pt-csv-input');
+    const file = input.files && input.files[0];
+    input.value = '';  // the same file can be chosen again after a fix
+    if (!file) return;
+    if (rows.length && !await showConfirm(
+        `Replace the ${rows.length} row${rows.length === 1 ? '' : 's'} in the table with the board from ${file.name}?`, 'Replace')) return;
+
+    const form = new FormData();
+    form.append('csv_file', file);
+    let res;
+    try {
+        res = await fetch('/api/participation/boards/' + EVENT_ID + '/csv', { method: 'POST', body: form });
+    } catch (err) {
+        console.error('importCSV:', err);
+        showToast('Network error — the file was not read.', 'error');
+        return;
+    }
+    if (!res.ok) {
+        showToast(await errorText(res, 'Could not read that file.'), 'error', 8000);
+        return;
+    }
+    const out = await res.json();
+    rows = out.rows.map(r => ({
+        name: r.name, member_id: r.member_id, member_name: r.member_name || '', member_rank: r.member_rank || '',
+        values: Object.fromEntries(trackables().map(t => [t.key, r.values[t.key] ?? null])),
+    }));
+    const box = document.getElementById('pt-import-problems');
+    if (out.problems.length) {
         box.replaceChildren(
-            el('span', null, `${parsed.unparsed.length} line${parsed.unparsed.length === 1 ? ' was' : 's were'} not read — no score found. Add ${parsed.unparsed.length === 1 ? 'it' : 'them'} by hand if ${parsed.unparsed.length === 1 ? 'it is a player' : 'they are players'}:`),
-            noTranslate(el('ul', null, ...parsed.unparsed.map(l => el('li', null, l)))));
+            el('span', null, `${out.problems.length} thing${out.problems.length === 1 ? '' : 's'} in ${file.name} need${out.problems.length === 1 ? 's' : ''} a look:`),
+            noTranslate(el('ul', null, ...out.problems.map(p => el('li', null, (p.line ? 'Line ' + p.line + ': ' : '') + p.message)))));
         box.hidden = false;
     } else {
         box.hidden = true;
     }
-    if (!parsed.rows.length) {
-        showToast('No ranked rows found in the pasted text.', 'error');
-        return;
-    }
-    if (rows.length && !await showConfirm(
-        `Replace the ${rows.length} row${rows.length === 1 ? '' : 's'} in the table with the ${parsed.rows.length} just read?`, 'Replace')) return;
-
-    const key = primaryKey();
-    rows = parsed.rows.map(r => ({
-        rank: r.rank, name: r.name, member_id: null, member_name: '', member_rank: '',
-        values: Object.fromEntries(trackables().map(t => [t.key, t.key === key ? r.value : null])),
-    }));
-    await resolveRows();
     show('pt-check', true);
     renderEntries();
+    showToast(`Read ${rows.length} row${rows.length === 1 ? '' : 's'} from ${file.name}.`);
 }
 
-// One call for the whole list; the server builds one folded-name index for it.
-async function resolveRows() {
-    const targets = rows.filter(r => !r.member_id && r.name);
-    if (!targets.length) return;
-    let res;
-    try {
-        res = await fetch('/api/participation/resolve', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ names: targets.map(r => r.name) }),
-        });
-    } catch (err) {
-        console.error('resolveRows:', err);
-        showToast('Could not match names to members — match them by hand.', 'error');
-        return;
-    }
-    if (!res.ok) {
-        showToast(await errorText(res, 'Could not match names to members.'), 'error');
-        return;
-    }
-    const out = await res.json();
-    const used = new Set(rows.filter(r => r.member_id).map(r => r.member_id));
-    out.forEach((m, i) => {
-        // A second row resolving to an already-matched member is left for the
-        // leader to settle rather than silently doubling up.
-        if (m.member_id && !used.has(m.member_id)) {
-            Object.assign(targets[i], { member_id: m.member_id, member_name: m.member_name, member_rank: m.member_rank });
-            used.add(m.member_id);
-        }
+// Adding by hand: search for the member and they join the end of the board. The
+// snapshot is simply their current name — there is nothing to type or to match.
+function renderAddMember() {
+    const box = document.getElementById('pt-add-member');
+    if (!box) return;
+    const picker = createMemberPicker({
+        placeholder: 'Add a member to the board…',
+        maxResults: 20,
+        keepOpenOnPick: false,
+        getCandidates: () => detail.roster,
+        isExcluded: m => rows.some(r => r.member_id === m.id),
+        onPick: m => {
+            rows.push({
+                name: m.name, member_id: m.id, member_name: m.name, member_rank: m.rank,
+                values: Object.fromEntries(trackables().map(t => [t.key, null])),
+            });
+            show('pt-check', true);
+            renderEntries();
+            // Straight to the score for the row just added.
+            const inputs = document.querySelectorAll('#pt-entries-body tr:last-child .pt-col-value input');
+            if (inputs.length) inputs[0].focus();
+        },
     });
-}
-
-function addRowByHand() {
-    rows.push({
-        rank: null, name: '', member_id: null, member_name: '', member_rank: '',
-        values: Object.fromEntries(trackables().map(t => [t.key, null])),
-    });
-    show('pt-check', true);
-    renderEntries();
-    const inputs = document.querySelectorAll('#pt-entries-body .pt-col-name input');
-    if (inputs.length) inputs[inputs.length - 1].focus();
+    pickers.push(picker);
+    box.replaceChildren(picker.el);
 }
 
 // --- Step 2: check -----------------------------------------------------------------
@@ -385,54 +406,64 @@ function updateSummary() {
     const unmatched = rows.length - matched;
     document.getElementById('pt-check-summary').textContent = rows.length
         ? `${rows.length} row${rows.length === 1 ? '' : 's'} · ${matched} matched · ${unmatched} need${unmatched === 1 ? 's' : ''} a member`
-        : 'No rows yet — paste the list above, or add rows by hand.';
+        : 'No rows yet — import a CSV above, or add members in board order.';
 }
 
 function renderEntries() {
     destroyPickers();
+    renderAddMember();
     const head = document.getElementById('pt-entries-head');
+    // Rank sits inside the Member cell rather than in its own column: on a phone the
+    // first column is the one that stays put while the table scrolls sideways, and it
+    // should be the name, not a number.
     head.replaceChildren(el('tr', null,
-        el('th', null, '#'), el('th', null, 'Name on board'), el('th', null, 'Member'),
+        el('th', null, '# · Member'),
         ...trackables().map(t => el('th', null, t.label)), el('th', null, '')));
 
     const body = document.getElementById('pt-entries-body');
     body.replaceChildren(...rows.map((r, i) => buildEntryRow(r, i)));
     if (!rows.length) {
-        body.appendChild(el('tr', null, el('td', { colspan: String(4 + trackables().length), className: 'empty-state' },
-            'No rows yet — paste the list above, or add rows by hand.')));
+        body.appendChild(el('tr', null, el('td', { colspan: String(2 + trackables().length), className: 'empty-state' },
+            'No rows yet — import a CSV above, or add members in board order.')));
     }
     updateSummary();
+}
+
+function moveRow(i, to) {
+    if (to < 0 || to >= rows.length) return;
+    const [r] = rows.splice(i, 1);
+    rows.splice(to, 0, r);
+    renderEntries();
 }
 
 function buildEntryRow(r, i) {
     const tr = el('tr', { className: r.member_id ? null : 'pt-row-unmatched' });
 
-    const rankIn = el('input', { type: 'number', min: '1', className: 'form-input', 'aria-label': 'Rank' });
-    rankIn.value = r.rank ?? '';
-    rankIn.addEventListener('input', () => { r.rank = rankIn.value ? parseInt(rankIn.value, 10) : null; });
-
-    const nameIn = el('input', { type: 'text', className: 'form-input', 'aria-label': 'Name on board' });
-    nameIn.value = r.name;
-    nameIn.addEventListener('input', () => { r.name = nameIn.value; });
-
     const matchTd = el('td');
+    matchTd.appendChild(el('span', { className: 'pt-rank-cell' }, (isRanked() ? String(i + 1) : '—') + ' · '));
+    // What the board called them, shown only when it differs from the roster name
+    // (an imported alias, a rename, a tag) — it is kept as the row's snapshot.
+    const boardName = r.name && r.name !== r.member_name
+        ? noTranslate(el('span', { className: 'pt-board-name' }, 'On the board: ' + r.name)) : null;
     if (r.member_id) {
         const clear = el('button', { type: 'button', className: 'btn btn-ghost btn-sm', title: 'Match a different member', 'aria-label': 'Match a different member' }, svgIcon('x'));
         clear.addEventListener('click', () => { Object.assign(r, { member_id: null, member_name: '', member_rank: '' }); renderEntries(); });
-        matchTd.appendChild(el('span', { className: 'pt-match' },
+        matchTd.append(el('span', { className: 'pt-match' },
             nameSpan(r.member_name),
             r.member_rank ? el('span', { className: 'member-rank rank-' + r.member_rank }, r.member_rank) : null,
             clear));
+        if (boardName) matchTd.appendChild(boardName);
     } else {
         const picker = createMemberPicker({
             placeholder: 'Pick member…',
             maxResults: 20,
             getCandidates: () => detail.roster,
-            isExcluded: m => usedMemberIds().has(m.id),
+            isExcluded: m => rows.some(x => x.member_id === m.id),
             onPick: m => { Object.assign(r, { member_id: m.id, member_name: m.name, member_rank: m.rank }); renderEntries(); },
         });
         pickers.push(picker);
-        matchTd.appendChild(el('span', { className: 'pt-match' }, picker.el));
+        matchTd.append(noTranslate(el('span', { className: 'pt-board-name' }, 'On the board: ' + r.name)),
+            el('span', { className: 'pt-match' }, picker.el));
     }
 
     const valueTds = trackables().map(t => {
@@ -446,10 +477,13 @@ function buildEntryRow(r, i) {
         return el('td', { className: 'pt-col-value' }, input);
     });
 
+    const up = rowActionBtn('btn btn-ghost btn-sm', 'chevron-up', 'Move up', () => moveRow(i, i - 1));
+    const down = rowActionBtn('btn btn-ghost btn-sm', 'chevron-down', 'Move down', () => moveRow(i, i + 1));
+    up.disabled = i === 0;
+    down.disabled = i === rows.length - 1;
     const remove = rowActionBtn('btn btn-danger btn-sm', 'trash', 'Remove', () => { rows.splice(i, 1); renderEntries(); });
 
-    tr.append(el('td', { className: 'pt-col-rank' }, rankIn), el('td', { className: 'pt-col-name' }, nameIn),
-        matchTd, ...valueTds, el('td', null, remove));
+    tr.append(matchTd, ...valueTds, el('td', null, el('div', { className: 'row-actions' }, up, down, remove)));
     return tr;
 }
 
@@ -496,13 +530,13 @@ async function saveBoard() {
     // Client checks mirror the server's so the officer is told before the round trip.
     for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
-        if (!r.name.trim()) { status.textContent = `Row ${i + 1} has no name.`; return; }
+        if (!(r.name || '').trim()) { status.textContent = `Row ${i + 1} has no name.`; return; }
         for (const t of trackables()) {
             if (r.values[t.key] == null) { status.textContent = `Row ${i + 1} (${r.name}) needs a value for ${t.label}.`; return; }
         }
     }
     const body = {
-        entries: rows.map(r => ({ rank: r.rank || null, name: r.name.trim(), member_id: r.member_id || null, values: r.values })),
+        entries: rows.map((r, i) => ({ rank: isRanked() ? i + 1 : null, name: r.name.trim(), member_id: r.member_id || null, values: r.values })),
         roles: isRoleType() ? roles.map(r => ({ member_id: r.member_id, role: r.role, task_force: r.task_force })) : [],
         notes: document.getElementById('pt-notes').value,
     };
@@ -726,8 +760,8 @@ async function undoException(s) {
 
 document.addEventListener('DOMContentLoaded', () => {
     if (CAN_MANAGE) {
-        document.getElementById('pt-parse').addEventListener('click', readPasted);
-        document.getElementById('pt-add-row').addEventListener('click', addRowByHand);
+        document.getElementById('pt-csv-input').addEventListener('change', importCSV);
+        document.getElementById('pt-csv-template').addEventListener('click', downloadTemplate);
         document.getElementById('pt-save').addEventListener('click', saveBoard);
         document.getElementById('pt-delete').addEventListener('click', deleteBoard);
         document.getElementById('pt-strike-all').addEventListener('click', strikeAll);

@@ -56,17 +56,17 @@
     </section>
 
     {{if .Permissions.ManageParticipation}}
-    <!-- Step 1 — Paste -->
-    <section id="pt-paste" class="card pt-card" hidden>
-        <h3>1 · Paste the ranked list</h3>
-        <p class="pt-step-hint">Copy the ranked list from the event mail — one player per line, as the mail shows it (rank, name, then the score). The alliance tag in front of a name is ignored.</p>
-        <!-- Populated by JS only, never server-rendered (browser translation). -->
-        <textarea id="pt-paste-input" class="form-input pt-paste-input" aria-label="Ranked list" placeholder="1  Name  81.20G&#10;2  Another Name  64.5G"></textarea>
+    <!-- Step 1 — Add the board -->
+    <section id="pt-add" class="card pt-card" hidden>
+        <h3>1 · Add the board</h3>
+        <p class="pt-step-hint">Import the board from a CSV, or add members one at a time in board order. Rows are numbered by their position, so the first row is rank 1. <a href="#" id="pt-csv-template">Download a blank CSV</a> with the columns this event needs.</p>
         <div class="pt-actions">
-            <button type="button" id="pt-parse" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-list-check"/></svg> Read list</button>
-            <button type="button" id="pt-add-row" class="btn btn-secondary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add row by hand</button>
+            <label class="btn btn-secondary btn-sm pt-file-btn"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-upload"/></svg> Import CSV
+                <input type="file" id="pt-csv-input" accept=".csv,text/csv" hidden>
+            </label>
+            <div id="pt-add-member" class="pt-add-member"></div>
         </div>
-        <div id="pt-unparsed" class="pt-unparsed" hidden></div>
+        <div id="pt-import-problems" class="pt-unparsed" hidden></div>
     </section>
 
     <!-- Step 2 — Check -->

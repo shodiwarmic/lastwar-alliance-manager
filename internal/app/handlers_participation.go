@@ -2,11 +2,13 @@ package app
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -467,61 +469,288 @@ func handleParticipationMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, h)
 }
 
-// --- Name resolution -------------------------------------------------------------
+// --- Name resolution ---------------------------------------------------------------
 
-// A mail prefixes names with the alliance tag, "[PoWr] Name". Stripped before
+// A board lists names with the alliance tag in front, "[PoWr] Name". Stripped before
 // lookup; the snapshot keeps what the board said.
 var ptTagPrefix = regexp.MustCompile(`^\[[^\]]{1,12}\]\s*`)
 
-// POST /api/participation/resolve {names:[]} — one read-only transaction, one
-// folded index for the whole batch (namematch.go's no-rebuild rule).
-func handleParticipationResolve(w http.ResponseWriter, r *http.Request) {
-	u := getAuthUser(r)
-	var body struct {
-		Names []string `json:"names"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	if len(body.Names) > 500 {
-		http.Error(w, "At most 500 names at a time", http.StatusBadRequest)
-		return
-	}
+type ptResolved struct {
+	MemberID   *int
+	MemberName string
+	MemberRank string
+	How        string
+}
+
+// resolveBoardNames matches a batch of board names to members in one read-only
+// transaction with one folded index for the whole batch (namematch.go's
+// no-rebuild rule): exact → alias → accent-folded, as every import does.
+func resolveBoardNames(userID int, names []string) ([]ptResolved, error) {
 	tx, err := db.Begin()
 	if err != nil {
-		slog.Error("handleParticipationResolve: begin failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	defer tx.Rollback()
-	idx, err := buildFoldedNameIndex(tx, u.ID)
+	idx, err := buildFoldedNameIndex(tx, userID)
 	if err != nil {
-		slog.Error("handleParticipationResolve: index failed", "error", err)
+		return nil, err
+	}
+	out := make([]ptResolved, len(names))
+	for i, raw := range names {
+		out[i].How = "none"
+		name := strings.TrimSpace(ptTagPrefix.ReplaceAllString(strings.TrimSpace(raw), ""))
+		if name == "" {
+			continue
+		}
+		if m, how, err := resolveMemberAliasWithIndex(tx, name, userID, idx); err == nil && m != nil {
+			id := m.ID
+			out[i] = ptResolved{MemberID: &id, MemberName: m.Name, MemberRank: m.Rank, How: how}
+		}
+	}
+	return out, nil
+}
+
+// --- CSV import --------------------------------------------------------------------
+
+// parseBoardAmount reads a score as the game prints it: "81.20G", "392.35M",
+// "1,234,567", "25". K/M/G/B suffixes are case-insensitive; the result is the raw
+// integer that is stored.
+func parseBoardAmount(s string) (int64, bool) {
+	s = strings.ReplaceAll(strings.TrimSpace(s), ",", "")
+	if s == "" {
+		return 0, false
+	}
+	mult := 1.0
+	switch strings.ToUpper(s[len(s)-1:]) {
+	case "K":
+		mult = 1e3
+	case "M":
+		mult = 1e6
+	case "G", "B":
+		mult = 1e9
+	}
+	if mult != 1 {
+		s = s[:len(s)-1]
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil || f < 0 {
+		return 0, false
+	}
+	return int64(f*mult + 0.5), true
+}
+
+type ptCSVRow struct {
+	Rank       *int              `json:"rank"`
+	Name       string            `json:"name"`
+	MemberID   *int              `json:"member_id"`
+	MemberName string            `json:"member_name"`
+	MemberRank string            `json:"member_rank"`
+	How        string            `json:"how"`
+	Values     map[string]*int64 `json:"values"`
+}
+
+type ptCSVProblem struct {
+	Line    int    `json:"line"`
+	Message string `json:"message"`
+}
+
+const maxBoardCSVRows = 500
+
+// POST /api/participation/boards/{eventID}/csv — multipart csv_file. Reads a board
+// from a CSV and matches its names; SAVES NOTHING. The rows come back for the
+// recording screen's check table, where anything unmatched or unreadable is fixed
+// before the ordinary board PUT.
+//
+// Columns: a name column (Name / Member / Player / Commander), one column per
+// trackable (its key or label; "Score"/"Value"/"Points" when the type has only one),
+// and an optional Rank. Rows are ordered by rank when every row has a readable one,
+// else kept in file order; either way the board numbers them by position.
+func handleParticipationCSV(w http.ResponseWriter, r *http.Request) {
+	u := getAuthUser(r)
+	id, ok := eventIDVar(r)
+	if !ok {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	types, err := loadParticipationTypes(db)
+	if err != nil {
+		slog.Error("handleParticipationCSV: types failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	type resolved struct {
-		Name       string `json:"name"`
-		MemberID   *int   `json:"member_id"`
-		MemberName string `json:"member_name"`
-		MemberRank string `json:"member_rank"`
-		How        string `json:"how"`
+	boards, err := loadBoards(db, types, boardFilter{EventID: id})
+	if err != nil {
+		slog.Error("handleParticipationCSV: load failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
-	out := make([]resolved, 0, len(body.Names))
-	for _, raw := range body.Names {
-		name := strings.TrimSpace(ptTagPrefix.ReplaceAllString(strings.TrimSpace(raw), ""))
-		res := resolved{Name: raw, How: "none"}
-		if name != "" {
-			m, how, err := resolveMemberAliasWithIndex(tx, name, u.ID, idx)
-			if err == nil && m != nil {
-				id := m.ID
-				res.MemberID, res.MemberName, res.MemberRank, res.How = &id, m.Name, m.Rank, how
+	if len(boards) == 0 {
+		http.Error(w, "That event no longer exists", http.StatusNotFound)
+		return
+	}
+	t := boards[0].Type
+	if t == nil {
+		http.Error(w, boards[0].Event.TypeName+" does not track participation", http.StatusBadRequest)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, MaxCSVUploadSize)
+	if err := r.ParseMultipartForm(MaxCSVUploadSize); err != nil {
+		http.Error(w, "Unable to read the upload — is the file under the size limit?", http.StatusBadRequest)
+		return
+	}
+	file, _, err := r.FormFile("csv_file")
+	if err != nil {
+		http.Error(w, "Missing csv_file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+	reader := csv.NewReader(file)
+	reader.FieldsPerRecord = -1 // tolerate ragged rows; a short row is reported, not fatal
+	records, err := reader.ReadAll()
+	if err != nil || len(records) < 2 {
+		http.Error(w, "That file is not a CSV with a header row and at least one row", http.StatusBadRequest)
+		return
+	}
+
+	// Map headers before touching a single row, so a missing column fails the whole
+	// file clearly instead of every row being skipped silently (CLAUDE.md).
+	nameCol, rankCol := -1, -1
+	valueCol := map[string]int{}
+	norm := func(h string) string {
+		return strings.ToLower(strings.TrimSpace(strings.TrimPrefix(h, "\ufeff"))) // our own exports start with a BOM
+	}
+	for i, h := range records[0] {
+		switch n := norm(h); n {
+		case "name", "member", "player", "commander", "name on board":
+			if nameCol < 0 {
+				nameCol = i
+			}
+		case "rank", "#", "no", "no.", "position", "pos":
+			if rankCol < 0 {
+				rankCol = i
+			}
+		default:
+			for _, tr := range t.Trackables {
+				if n == strings.ToLower(tr.Key) || n == strings.ToLower(tr.Label) ||
+					(len(t.Trackables) == 1 && (n == "score" || n == "value" || n == "points")) {
+					if _, seen := valueCol[tr.Key]; !seen {
+						valueCol[tr.Key] = i
+					}
+				}
 			}
 		}
-		out = append(out, res)
 	}
-	writeJSON(w, out)
+	if nameCol < 0 {
+		http.Error(w, "CSV missing required column: Name (or Member, Player)", http.StatusBadRequest)
+		return
+	}
+	for _, tr := range t.Trackables {
+		if _, ok := valueCol[tr.Key]; !ok {
+			alt := tr.Key
+			if len(t.Trackables) == 1 {
+				alt += ", Score"
+			}
+			http.Error(w, "CSV missing required column: "+tr.Label+" (or "+alt+")", http.StatusBadRequest)
+			return
+		}
+	}
+	if len(records)-1 > maxBoardCSVRows {
+		http.Error(w, "At most "+strconv.Itoa(maxBoardCSVRows)+" rows in one board", http.StatusBadRequest)
+		return
+	}
+
+	type parsed struct {
+		row  ptCSVRow
+		line int
+	}
+	var rows []parsed
+	problems := []ptCSVProblem{}
+	ranksUsable := rankCol >= 0
+	cell := func(rec []string, i int) string {
+		if i < 0 || i >= len(rec) {
+			return ""
+		}
+		return strings.TrimSpace(rec[i])
+	}
+	for n, rec := range records[1:] {
+		line := n + 2
+		name := cell(rec, nameCol)
+		if name == "" {
+			blank := true
+			for _, c := range rec {
+				if strings.TrimSpace(c) != "" {
+					blank = false
+				}
+			}
+			if !blank {
+				problems = append(problems, ptCSVProblem{line, "no name — row skipped"})
+			}
+			continue
+		}
+		row := ptCSVRow{Name: name, Values: map[string]*int64{}}
+		for _, tr := range t.Trackables {
+			raw := cell(rec, valueCol[tr.Key])
+			if v, ok := parseBoardAmount(raw); ok {
+				val := v
+				row.Values[tr.Key] = &val
+			} else {
+				row.Values[tr.Key] = nil
+				problems = append(problems, ptCSVProblem{line, name + ": " + tr.Label + " \"" + raw + "\" is not a number — fill it in before saving"})
+			}
+		}
+		if rankCol >= 0 {
+			if k, err := strconv.Atoi(strings.TrimSuffix(cell(rec, rankCol), ".")); err == nil && k > 0 {
+				row.Rank = &k
+			} else {
+				ranksUsable = false
+			}
+		}
+		rows = append(rows, parsed{row, line})
+	}
+	if len(rows) == 0 {
+		http.Error(w, "No rows with a name in that file", http.StatusBadRequest)
+		return
+	}
+	if rankCol >= 0 && !ranksUsable {
+		problems = append(problems, ptCSVProblem{0, "The Rank column has blank or unreadable values, so rows are kept in file order"})
+	}
+	if ranksUsable {
+		sort.SliceStable(rows, func(i, j int) bool { return *rows[i].row.Rank < *rows[j].row.Rank })
+	}
+
+	names := make([]string, len(rows))
+	for i, p := range rows {
+		names[i] = p.row.Name
+	}
+	matches, err := resolveBoardNames(u.ID, names)
+	if err != nil {
+		slog.Error("handleParticipationCSV: resolve failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	usedBy := map[int]int{} // member id → line that claimed it
+	out := make([]ptCSVRow, 0, len(rows))
+	for i, p := range rows {
+		row := p.row
+		row.Name = strings.TrimSpace(ptTagPrefix.ReplaceAllString(row.Name, ""))
+		m := matches[i]
+		row.How = m.How
+		if m.MemberID != nil {
+			if first, taken := usedBy[*m.MemberID]; taken {
+				// Two rows resolving to one member is for the leader to settle — a
+				// guess here would silently drop or double someone.
+				row.How = "none"
+				problems = append(problems, ptCSVProblem{p.line, row.Name + " matches " + m.MemberName + ", already on line " + strconv.Itoa(first) + " — pick the right member"})
+			} else {
+				usedBy[*m.MemberID] = p.line
+				row.MemberID, row.MemberName, row.MemberRank = m.MemberID, m.MemberName, m.MemberRank
+			}
+		}
+		out = append(out, row)
+	}
+	sort.SliceStable(problems, func(i, j int) bool { return problems[i].Line < problems[j].Line })
+	writeJSON(w, map[string]any{"rows": out, "problems": problems})
 }
 
 // --- Writes ----------------------------------------------------------------------

@@ -60,11 +60,26 @@
     font-size: 0.85rem;
     margin: 0 0 10px 0;
 }
-.pt-paste-input {
-    width: 100%;
-    min-height: 9rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.85rem;
+.pt-file-btn {
+    cursor: pointer;
+}
+.pt-add-member {
+    flex: 1 1 14rem;
+    max-width: 22rem;
+}
+.pt-board-name {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+.pt-rank-cell {
+    font-weight: 600;
+    white-space: nowrap;
+    margin-right: 2px;
+}
+.pt-entries-table td:first-child > .pt-match,
+.pt-entries-table td:first-child > .pt-rank-cell {
+    vertical-align: middle;
 }
 .pt-actions {
     display: flex;
@@ -90,9 +105,7 @@
     padding: 4px 8px;
     min-width: 0;
 }
-.pt-entries-table .pt-col-rank input { width: 3.5rem; }
 .pt-entries-table .pt-col-value input { width: 10.5rem; }
-.pt-entries-table .pt-col-name input { min-width: 7rem; }
 .pt-entries-table td { vertical-align: middle; }
 .pt-row-unmatched td { background: var(--color-warning-bg); }
 .pt-match {

@@ -1,8 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -521,5 +523,92 @@ func TestParticipationBoardsAreNeverBatched(t *testing.T) {
 	putBoard(t, b, map[string]any{"entries": []any{entry(1, "Alpha", 1, "damage", 1)}})
 	if n := count(t, `SELECT COUNT(*) FROM activity_log WHERE entity_type = 'participation_board' AND action = 'created'`); n != 2 {
 		t.Errorf("activity rows = %d, want one per board", n)
+	}
+}
+
+func csvUpload(t *testing.T, eventID int, content string) *httptest.ResponseRecorder {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("csv_file", "board.csv")
+	fw.Write([]byte(content))
+	mw.Close()
+	r := httptest.NewRequest(http.MethodPost, "/", &buf)
+	r.Header.Set("Content-Type", mw.FormDataContentType())
+	r = r.WithContext(context.WithValue(r.Context(), authUserKey, &AuthUser{ID: 1, Username: "tester", IsAdmin: true}))
+	r = mux.SetURLVars(r, map[string]string{"eventID": strconv.Itoa(eventID)})
+	rr := httptest.NewRecorder()
+	handleParticipationCSV(rr, r)
+	return rr
+}
+
+// The CSV import reads and matches a board but saves nothing: its rows go to the
+// check table and are saved through the ordinary PUT.
+func TestParticipationCSVImport(t *testing.T) {
+	f := setupParticipationTestDB(t)
+	ev := seedEvent(t, f.mg, "2026-09-01")
+
+	// BOM (our own exports start with one), a label header, suffixed and comma-grouped
+	// scores, a tagged name, an accent-folded match, ranks out of order, a duplicate
+	// match, an unreadable score and an unknown name.
+	rr := csvUpload(t, ev, "\ufeffRank,Member,Total Damage\n"+
+		"3,[PoWr] Bravo,\"1,234,567\"\n"+
+		"1,alpha,81.20G\n"+
+		"2,Chárlie,392.35M\n"+
+		"4,Bravo,5\n"+
+		"5,Nobody,abc\n")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("csv = %d %s", rr.Code, rr.Body.String())
+	}
+	var out struct {
+		Rows     []ptCSVRow     `json:"rows"`
+		Problems []ptCSVProblem `json:"problems"`
+	}
+	json.Unmarshal(rr.Body.Bytes(), &out)
+	if len(out.Rows) != 5 {
+		t.Fatalf("rows = %d, want 5: %+v", len(out.Rows), out.Rows)
+	}
+	want := []struct {
+		name   string
+		member int
+		value  int64
+	}{{"alpha", 1, 81200000000}, {"Chárlie", 3, 392350000}, {"Bravo", 2, 1234567}, {"Bravo", 0, 5}, {"Nobody", 0, -1}}
+	for i, w := range want {
+		r := out.Rows[i]
+		if r.Name != w.name {
+			t.Errorf("row %d name = %q, want %q (ordered by rank, tag stripped)", i, r.Name, w.name)
+		}
+		got := 0
+		if r.MemberID != nil {
+			got = *r.MemberID
+		}
+		if got != w.member {
+			t.Errorf("row %d (%s) member = %d, want %d", i, r.Name, got, w.member)
+		}
+		v := r.Values["damage"]
+		if w.value < 0 {
+			if v != nil {
+				t.Errorf("row %d value = %d, want nil for an unreadable score", i, *v)
+			}
+		} else if v == nil || *v != w.value {
+			t.Errorf("row %d value = %v, want %d", i, v, w.value)
+		}
+	}
+	if len(out.Problems) != 2 {
+		t.Errorf("problems = %+v, want the duplicate match and the unreadable score", out.Problems)
+	}
+	if n := count(t, `SELECT COUNT(*) FROM participation_boards`); n != 0 {
+		t.Errorf("the import saved %d boards; it must save nothing", n)
+	}
+
+	// A missing required column fails the whole file, before any row is read.
+	if rr := csvUpload(t, ev, "Name,Points\nAlpha,5\n"); rr.Code != http.StatusOK {
+		t.Errorf("single-trackable type should accept Points as the value column: %d %s", rr.Code, rr.Body.String())
+	}
+	if rr := csvUpload(t, ev, "Name,Rank\nAlpha,1\n"); rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "Total Damage") {
+		t.Errorf("missing value column = %d %q", rr.Code, rr.Body.String())
+	}
+	if rr := csvUpload(t, ev, "Player Name,Damage\nAlpha,5\n"); rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "Name") {
+		t.Errorf("missing name column = %d %q", rr.Code, rr.Body.String())
 	}
 }

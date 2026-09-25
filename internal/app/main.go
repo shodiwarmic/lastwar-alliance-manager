@@ -268,7 +268,7 @@ func Main() {
 	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}/suggestions", authMiddleware(requirePermission("manage_participation", handleParticipationSuggestions))).Methods("GET")
 	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}/strikes", authMiddleware(requirePermission("manage_participation", handleParticipationStrikes))).Methods("POST")
 	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}/exceptions", authMiddleware(requirePermission("manage_participation", handleParticipationException))).Methods("POST", "DELETE")
-	router.HandleFunc("/api/participation/resolve", authMiddleware(requirePermission("manage_participation", handleParticipationResolve))).Methods("POST")
+	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}/csv", authMiddleware(requirePermission("manage_participation", handleParticipationCSV))).Methods("POST")
 	router.HandleFunc("/api/participation/occurrences", authMiddleware(requirePermission("manage_participation", handleParticipationOccurrence))).Methods("POST")
 	router.HandleFunc("/api/participation/members/{id:[0-9]+}", authMiddleware(handleParticipationMember)).Methods("GET")
 	router.HandleFunc("/api/participation/me", authMiddleware(handleParticipationMe)).Methods("GET")
