@@ -115,6 +115,7 @@
 .pt-entries-table .pt-col-value input { width: 10.5rem; }
 .pt-entries-table td { vertical-align: middle; }
 .pt-row-unmatched td { background: var(--color-warning-bg); }
+.pt-row-duplicate td { background: var(--color-danger-bg); }
 .pt-match {
     display: inline-flex;
     align-items: center;
@@ -143,7 +144,13 @@
         border-bottom: 1px solid var(--color-border);
     }
     .pt-entries-table tbody tr:last-child { border-bottom: none; }
-    .pt-entries-table tr.pt-row-unmatched { background: var(--color-warning-bg); }
+    /* tbody + :hover so the table's hover tint (which sticks after a tap on a
+       phone) never hides a row's state. */
+    .pt-entries-table tbody tr.pt-row-unmatched,
+    .pt-entries-table tbody tr.pt-row-unmatched:hover { background: var(--color-warning-bg); }
+    .pt-entries-table tbody tr.pt-row-duplicate,
+    .pt-entries-table tbody tr.pt-row-duplicate:hover { background: var(--color-danger-bg); }
+    .pt-entries-table .field-error-message { grid-column: 1 / -1; }
     .pt-entries-table td {
         grid-column: 1 / -1;
         padding: 0;

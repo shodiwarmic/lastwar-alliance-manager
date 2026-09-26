@@ -243,6 +243,7 @@ func TestParticipationBoardPutValidates(t *testing.T) {
 	}{
 		{"future date", future, map[string]any{"entries": []any{}}, "has not happened yet"},
 		{"untracked type", custom, map[string]any{"entries": []any{}}, "does not track participation"},
+		{"duplicate name", past, map[string]any{"entries": []any{entry(1, "Bravo", 2, "damage", 5), entry(2, "bravo", 0, "damage", 4)}}, "is on the board twice"},
 		{"duplicate rank", past, map[string]any{"entries": []any{entry(1, "A", 1, "damage", 5), entry(1, "B", 2, "damage", 4)}}, "Rank 1 appears twice"},
 		{"duplicate member", past, map[string]any{"entries": []any{entry(1, "A", 1, "damage", 5), entry(2, "A2", 1, "damage", 4)}}, "already on the board"},
 		{"missing value", past, map[string]any{"entries": []any{map[string]any{"rank": 1, "name": "A", "member_id": 1, "values": map[string]any{}}}}, "needs a value for Total Damage"},

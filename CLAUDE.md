@@ -1050,7 +1050,9 @@ automatic matches are taken as read and a guess would credit one member with ano
 result; tags stripped; a second row matching an already-claimed member left unmatched) and
 **saves nothing**: its rows go to the check table and are saved by the ordinary PUT.
 A hand-added row is a member picked from search, whose current name becomes the
-snapshot. **Rank is the row's position** in the table (rows move up and down); a
+snapshot. **A member on the board twice blocks saving** — the same matched member or the same
+name (case-insensitive) on two rows; the check table marks both rows and disables Save,
+and the PUT refuses it too. **Rank is the row's position** in the table (rows move up and down); a
 legacy board keeps its NULL ranks rather than being given invented ones.
 `parseBoardAmount` (Go) and `ParticipationParse.parseAmount` (JS) read scores the same
 way — K/M/G/B suffixes, comma grouping — keep them in step.

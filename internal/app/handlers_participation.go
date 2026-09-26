@@ -783,7 +783,7 @@ func validateBoardPut(ev ptEvent, t *ptType, today string, body *ptPutBody) stri
 		return "This event is on " + ev.EventDate + ", which has not happened yet — a board can only be recorded after the event"
 	}
 	known := t.trackableIDs()
-	ranks, members := map[int]bool{}, map[int]bool{}
+	ranks, members, names := map[int]bool{}, map[int]bool{}, map[string]int{}
 	for i := range body.Entries {
 		e := &body.Entries[i]
 		e.Name = strings.TrimSpace(e.Name)
@@ -800,6 +800,13 @@ func validateBoardPut(ev ptEvent, t *ptType, today string, body *ptPutBody) stri
 			}
 			ranks[*e.Rank] = true
 		}
+		// The game lists each player once, so the same name twice is a mistake
+		// whether or not either row is matched.
+		key := strings.ToLower(e.Name)
+		if prev, ok := names[key]; ok {
+			return row + " (" + e.Name + ") is on the board twice — it is also row " + strconv.Itoa(prev)
+		}
+		names[key] = i + 1
 		if e.MemberID != nil {
 			if members[*e.MemberID] {
 				return row + " (" + e.Name + ") is matched to a member already on the board"

@@ -401,12 +401,43 @@ function usedMemberIds() {
     return new Set([...rows.map(r => r.member_id), ...roles.map(r => r.member_id)].filter(Boolean));
 }
 
+// A member appearing twice on one board is always a mistake — the game lists each
+// player once. Rows clash when they share a matched member, or when their names are
+// the same (a row left unmatched because its member was already claimed, say, or a
+// matched member's roster name). Returns, per row, the other row it clashes with.
+function duplicateRows() {
+    const firstRow = new Map();
+    const clash = rows.map(() => null);
+    rows.forEach((r, i) => {
+        const keys = ['n:' + (r.name || '').trim().toLowerCase()];
+        if (r.member_id) keys.push('m:' + r.member_id, 'n:' + (r.member_name || '').trim().toLowerCase());
+        for (const k of new Set(keys)) {
+            if (k === 'n:') continue;
+            if (!firstRow.has(k)) { firstRow.set(k, i); continue; }
+            const j = firstRow.get(k);
+            if (j === i) continue;
+            if (clash[i] == null) clash[i] = j;
+            if (clash[j] == null) clash[j] = i;
+        }
+    });
+    return clash;
+}
+
 function updateSummary() {
     const matched = rows.filter(r => r.member_id).length;
     const unmatched = rows.length - matched;
     document.getElementById('pt-check-summary').textContent = rows.length
         ? `${rows.length} row${rows.length === 1 ? '' : 's'} · ${matched} matched · ${unmatched} need${unmatched === 1 ? 's' : ''} a member`
         : 'No rows yet — import a CSV above, or add members in board order.';
+    // Saving is blocked, not just warned about, while any member is on the board twice.
+    const dups = duplicateRows().filter(x => x != null).length;
+    const save = document.getElementById('pt-save');
+    const status = document.getElementById('pt-save-status');
+    if (!save) return;
+    save.disabled = dups > 0;
+    save.dataset.dupBlocked = dups > 0 ? '1' : '';
+    if (dups) status.textContent = 'A member is on the board twice — remove the extra row to save.';
+    else if (status.textContent.includes('on the board twice')) status.textContent = '';
 }
 
 function renderEntries() {
@@ -421,7 +452,8 @@ function renderEntries() {
         ...trackables().map(t => el('th', null, t.label)), el('th', null, '')));
 
     const body = document.getElementById('pt-entries-body');
-    body.replaceChildren(...rows.map((r, i) => buildEntryRow(r, i)));
+    const clash = duplicateRows();
+    body.replaceChildren(...rows.map((r, i) => buildEntryRow(r, i, clash[i])));
     if (!rows.length) {
         body.appendChild(el('tr', null, el('td', { colspan: String(2 + trackables().length), className: 'empty-state' },
             'No rows yet — import a CSV above, or add members in board order.')));
@@ -436,8 +468,8 @@ function moveRow(i, to) {
     renderEntries();
 }
 
-function buildEntryRow(r, i) {
-    const tr = el('tr', { className: r.member_id ? null : 'pt-row-unmatched' });
+function buildEntryRow(r, i, clashesWith) {
+    const tr = el('tr', { className: [r.member_id ? '' : 'pt-row-unmatched', clashesWith != null ? 'pt-row-duplicate' : ''].join(' ').trim() || null });
 
     // The cell holds up to three parts — the row head (rank and member, or rank and
     // what the board said), the board's own name when it differs, and the picker —
@@ -467,6 +499,11 @@ function buildEntryRow(r, i) {
         matchTd.append(el('span', { className: 'pt-row-head' }, rank,
             noTranslate(el('span', { className: 'pt-board-name' }, 'On the board: ' + r.name))),
             el('span', { className: 'pt-match pt-pick' }, picker.el));
+    }
+
+    if (clashesWith != null) {
+        matchTd.appendChild(el('span', { className: 'field-error-message' },
+            `Also on the board as row ${clashesWith + 1} — remove one of them.`));
     }
 
     const valueTds = trackables().map(t => {
@@ -535,6 +572,7 @@ async function saveBoard() {
     const status = document.getElementById('pt-save-status');
     status.textContent = '';
     // Client checks mirror the server's so the officer is told before the round trip.
+    if (duplicateRows().some(x => x != null)) { updateSummary(); return; }
     for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
         if (!(r.name || '').trim()) { status.textContent = `Row ${i + 1} has no name.`; return; }
@@ -557,10 +595,10 @@ async function saveBoard() {
     } catch (err) {
         console.error('saveBoard:', err);
         status.textContent = 'Network error — the board was not saved.';
-        btn.disabled = false;
+        btn.disabled = !!btn.dataset.dupBlocked;
         return;
     }
-    btn.disabled = false;
+    btn.disabled = !!btn.dataset.dupBlocked;
     if (!res.ok) {
         status.textContent = await errorText(res, 'Could not save the board.');
         return;
