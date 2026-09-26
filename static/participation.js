@@ -449,12 +449,11 @@ function buildEntryRow(r, i) {
     const boardName = r.name && r.name !== r.member_name
         ? noTranslate(el('span', { className: 'pt-board-name' }, 'On the board: ' + r.name)) : null;
     if (r.member_id) {
-        const clear = el('button', { type: 'button', className: 'btn btn-ghost btn-sm', title: 'Match a different member', 'aria-label': 'Match a different member' }, svgIcon('x'));
-        clear.addEventListener('click', () => { Object.assign(r, { member_id: null, member_name: '', member_rank: '' }); renderEntries(); });
+        // No "match someone else" button: a wrong match is fixed by removing the row
+        // and adding the right member, and the button crowded the row on a phone.
         matchTd.appendChild(el('span', { className: 'pt-row-head' }, rank, el('span', { className: 'pt-match' },
-            nameSpan(r.member_name),
-            r.member_rank ? el('span', { className: 'member-rank rank-' + r.member_rank }, r.member_rank) : null,
-            clear)));
+            el('span', { className: 'pt-member-name' }, nameSpan(r.member_name)),
+            r.member_rank ? el('span', { className: 'member-rank rank-' + r.member_rank }, r.member_rank) : null)));
         if (boardName) matchTd.appendChild(boardName);
     } else {
         const picker = createMemberPicker({

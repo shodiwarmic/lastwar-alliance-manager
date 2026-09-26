@@ -86,6 +86,8 @@
 .pt-row-head .pt-board-name { display: inline; }
 .pt-col-member .pt-pick { display: flex; margin-top: 4px; }
 .pt-cell-label { display: none; }
+.pt-member-name { white-space: nowrap; }
+.pt-row-head .member-rank { flex-shrink: 0; }
 .pt-actions {
     display: flex;
     gap: 8px;
@@ -159,6 +161,7 @@
         font-size: 0.95rem;
     }
     .pt-entries-table .pt-row-head .pt-match,
+    .pt-entries-table .pt-member-name,
     .pt-entries-table .pt-row-head .pt-board-name {
         min-width: 0;
         overflow: hidden;
