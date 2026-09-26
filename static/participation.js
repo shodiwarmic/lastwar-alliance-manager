@@ -439,8 +439,11 @@ function moveRow(i, to) {
 function buildEntryRow(r, i) {
     const tr = el('tr', { className: r.member_id ? null : 'pt-row-unmatched' });
 
-    const matchTd = el('td');
-    matchTd.appendChild(el('span', { className: 'pt-rank-cell' }, (isRanked() ? String(i + 1) : '—') + ' · '));
+    // The cell holds up to three parts — the row head (rank and member, or rank and
+    // what the board said), the board's own name when it differs, and the picker —
+    // kept as separate children so the narrow layout can place each on its own line.
+    const matchTd = el('td', { className: 'pt-col-member' });
+    const rank = el('span', { className: 'pt-rank-cell' }, (isRanked() ? String(i + 1) : '—') + ' · ');
     // What the board called them, shown only when it differs from the roster name
     // (an imported alias, a rename, a tag) — it is kept as the row's snapshot.
     const boardName = r.name && r.name !== r.member_name
@@ -448,10 +451,10 @@ function buildEntryRow(r, i) {
     if (r.member_id) {
         const clear = el('button', { type: 'button', className: 'btn btn-ghost btn-sm', title: 'Match a different member', 'aria-label': 'Match a different member' }, svgIcon('x'));
         clear.addEventListener('click', () => { Object.assign(r, { member_id: null, member_name: '', member_rank: '' }); renderEntries(); });
-        matchTd.append(el('span', { className: 'pt-match' },
+        matchTd.appendChild(el('span', { className: 'pt-row-head' }, rank, el('span', { className: 'pt-match' },
             nameSpan(r.member_name),
             r.member_rank ? el('span', { className: 'member-rank rank-' + r.member_rank }, r.member_rank) : null,
-            clear));
+            clear)));
         if (boardName) matchTd.appendChild(boardName);
     } else {
         const picker = createMemberPicker({
@@ -462,19 +465,24 @@ function buildEntryRow(r, i) {
             onPick: m => { Object.assign(r, { member_id: m.id, member_name: m.name, member_rank: m.rank }); renderEntries(); },
         });
         pickers.push(picker);
-        matchTd.append(noTranslate(el('span', { className: 'pt-board-name' }, 'On the board: ' + r.name)),
-            el('span', { className: 'pt-match' }, picker.el));
+        matchTd.append(el('span', { className: 'pt-row-head' }, rank,
+            noTranslate(el('span', { className: 'pt-board-name' }, 'On the board: ' + r.name))),
+            el('span', { className: 'pt-match pt-pick' }, picker.el));
     }
 
     const valueTds = trackables().map(t => {
-        const input = el('input', { type: 'text', inputmode: 'decimal', className: 'form-input', 'aria-label': t.label });
+        // Plain text keyboard, not inputmode=decimal: scores are typed the way the
+        // game prints them ("81.2G"), and a numeric keypad has no K/M/G.
+        const input = el('input', { type: 'text', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', className: 'form-input', 'aria-label': t.label });
         input.value = fmtValue(r.values[t.key]);
         input.addEventListener('input', () => {
             const v = input.value.trim() === '' ? null : PP.parseAmount(input.value.trim());
             r.values[t.key] = v;
             input.classList.toggle('field-error', input.value.trim() !== '' && v === null);
         });
-        return el('td', { className: 'pt-col-value' }, input);
+        // The column header's text, repeated in the cell for the narrow layout,
+        // which has no header row.
+        return el('td', { className: 'pt-col-value' }, el('span', { className: 'pt-cell-label' }, t.label), input);
     });
 
     const up = rowActionBtn('btn btn-ghost btn-sm', 'chevron-up', 'Move up', () => moveRow(i, i - 1));
@@ -483,7 +491,7 @@ function buildEntryRow(r, i) {
     down.disabled = i === rows.length - 1;
     const remove = rowActionBtn('btn btn-danger btn-sm', 'trash', 'Remove', () => { rows.splice(i, 1); renderEntries(); });
 
-    tr.append(matchTd, ...valueTds, el('td', null, el('div', { className: 'row-actions' }, up, down, remove)));
+    tr.append(matchTd, ...valueTds, el('td', { className: 'pt-col-actions' }, el('div', { className: 'row-actions' }, up, down, remove)));
     return tr;
 }
 

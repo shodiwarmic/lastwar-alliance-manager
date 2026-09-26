@@ -77,10 +77,15 @@
     white-space: nowrap;
     margin-right: 2px;
 }
-.pt-entries-table td:first-child > .pt-match,
-.pt-entries-table td:first-child > .pt-rank-cell {
-    vertical-align: middle;
+.pt-row-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    white-space: nowrap;
 }
+.pt-row-head .pt-board-name { display: inline; }
+.pt-col-member .pt-pick { display: flex; margin-top: 4px; }
+.pt-cell-label { display: none; }
 .pt-actions {
     display: flex;
     gap: 8px;
@@ -115,6 +120,68 @@
     white-space: nowrap;
 }
 .pt-match .inline-search { min-width: 11rem; }
+
+/* Narrow: the check table becomes a list, two lines per row — rank, member and the
+   row buttons on the first, each score (labelled, since there is no header row) on
+   its own line below. A container query on the table's wrapper rather than a page
+   breakpoint: what decides it is the room the table has, and a sideways-scrolling
+   table of inputs is the thing being avoided. */
+.pt-entries-wrap { container: pt-entries / inline-size; }
+@container pt-entries (max-width: 40rem) {
+    .pt-entries-table,
+    .pt-entries-table tbody { display: block; }
+    .pt-entries-table thead { display: none; }
+    .pt-entries-table tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        column-gap: 8px;
+        row-gap: 6px;
+        padding: 10px 4px;
+        border-bottom: 1px solid var(--color-border);
+    }
+    .pt-entries-table tbody tr:last-child { border-bottom: none; }
+    .pt-entries-table tr.pt-row-unmatched { background: var(--color-warning-bg); }
+    .pt-entries-table td {
+        grid-column: 1 / -1;
+        padding: 0;
+        border: none;
+        background: transparent;
+    }
+    /* The member cell dissolves so its parts are placed individually; with no
+       box of its own it also drops out of the mobile sticky-first-column rule. */
+    .pt-entries-table td.pt-col-member { display: contents; }
+    .pt-entries-table .pt-row-head {
+        grid-column: 1;
+        grid-row: 1;
+        min-width: 0;
+        overflow: hidden;
+        font-size: 0.95rem;
+    }
+    .pt-entries-table .pt-row-head .pt-match,
+    .pt-entries-table .pt-row-head .pt-board-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .pt-entries-table td.pt-col-actions { grid-column: 2; grid-row: 1; }
+    .pt-entries-table .pt-board-name,
+    .pt-entries-table .pt-pick { grid-column: 1 / -1; margin: 0; }
+    .pt-entries-table .pt-pick .inline-search { flex: 1; min-width: 0; }
+    .pt-entries-table td.pt-col-value {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-left: 1.1rem;
+    }
+    .pt-cell-label {
+        display: inline;
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+    }
+    .pt-entries-table .pt-col-value input { flex: 1; width: auto; min-width: 0; }
+}
 
 .pt-roles-table select.form-input {
     padding: 4px 8px;
