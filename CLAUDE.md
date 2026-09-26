@@ -407,6 +407,11 @@ Two rules for tier 3:
    preview, `mobilePreview`, the OCR import, the contributions import, and the CSV
    import. `namematch_test.go` guards the no-rebuild contract.
 
+**One caller skips tier 3 on purpose:** the participation board import resolves through
+`resolveMemberNameOrAlias` (tiers 1–2 alone). Its automatic matches are not reviewed
+name-by-name, and a wrong one credits one member with another's result — so there a
+near-miss stays unmatched for an officer to pick. Don't "fix" it back to the full engine.
+
 Folding is **strictly additive** — it only runs after tiers 1 and 2 miss, so it can
 turn a miss into a match but never change an existing match.
 
@@ -1039,8 +1044,10 @@ count (`loadBoards`). Never derive per row inside an open cursor.
 
 **Recording input is a CSV import or a member search — there is no text box.** The CSV
 endpoint (`POST /api/participation/boards/{id}/csv`, `handleParticipationCSV`) maps
-headers before any row, matches names through `resolveBoardNames` (one folded index,
-tags stripped, a second row matching an already-claimed member left unmatched) and
+headers before any row, matches names through `resolveBoardNames` (a member's name or
+alias only — **no accent-folded tier**, unlike every other import, because a board's
+automatic matches are taken as read and a guess would credit one member with another's
+result; tags stripped; a second row matching an already-claimed member left unmatched) and
 **saves nothing**: its rows go to the check table and are saved by the ordinary PUT.
 A hand-added row is a member picked from search, whose current name becomes the
 snapshot. **Rank is the row's position** in the table (rows move up and down); a

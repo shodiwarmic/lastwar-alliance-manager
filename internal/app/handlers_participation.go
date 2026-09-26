@@ -483,18 +483,16 @@ type ptResolved struct {
 }
 
 // resolveBoardNames matches a batch of board names to members in one read-only
-// transaction with one folded index for the whole batch (namematch.go's
-// no-rebuild rule): exact → alias → accent-folded, as every import does.
+// transaction, by name or alias only — deliberately without the accent-folded tier
+// every other import uses. An automatic match on a board is taken as read, so a
+// name that is not exactly a member's name or alias stays unmatched for an officer
+// to pick, rather than being guessed at.
 func resolveBoardNames(userID int, names []string) ([]ptResolved, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	idx, err := buildFoldedNameIndex(tx, userID)
-	if err != nil {
-		return nil, err
-	}
 	out := make([]ptResolved, len(names))
 	for i, raw := range names {
 		out[i].How = "none"
@@ -502,7 +500,7 @@ func resolveBoardNames(userID int, names []string) ([]ptResolved, error) {
 		if name == "" {
 			continue
 		}
-		if m, how, err := resolveMemberAliasWithIndex(tx, name, userID, idx); err == nil && m != nil {
+		if m, how, err := resolveMemberNameOrAlias(tx, name, userID); err == nil && m != nil {
 			id := m.ID
 			out[i] = ptResolved{MemberID: &id, MemberName: m.Name, MemberRank: m.Rank, How: how}
 		}

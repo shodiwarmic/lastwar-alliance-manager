@@ -548,15 +548,21 @@ func TestParticipationCSVImport(t *testing.T) {
 	f := setupParticipationTestDB(t)
 	ev := seedEvent(t, f.mg, "2026-09-01")
 
+	if _, err := db.Exec(`INSERT INTO member_aliases (member_id, user_id, category, alias) VALUES (3, NULL, 'global', 'Chuck')`); err != nil {
+		t.Fatal(err)
+	}
+
 	// BOM (our own exports start with one), a label header, suffixed and comma-grouped
-	// scores, a tagged name, an accent-folded match, ranks out of order, a duplicate
-	// match, an unreadable score and an unknown name.
+	// scores, a tagged name, an alias, a name that only matches once accents are
+	// folded (left unmatched: the board import never guesses), ranks out of order, a
+	// duplicate match, an unreadable score and an unknown name.
 	rr := csvUpload(t, ev, "\ufeffRank,Member,Total Damage\n"+
 		"3,[PoWr] Bravo,\"1,234,567\"\n"+
 		"1,alpha,81.20G\n"+
-		"2,Chárlie,392.35M\n"+
+		"2,Chuck,392.35M\n"+
 		"4,Bravo,5\n"+
-		"5,Nobody,abc\n")
+		"5,Nobody,abc\n"+
+		"6,Álpha,7\n")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("csv = %d %s", rr.Code, rr.Body.String())
 	}
@@ -565,14 +571,14 @@ func TestParticipationCSVImport(t *testing.T) {
 		Problems []ptCSVProblem `json:"problems"`
 	}
 	json.Unmarshal(rr.Body.Bytes(), &out)
-	if len(out.Rows) != 5 {
-		t.Fatalf("rows = %d, want 5: %+v", len(out.Rows), out.Rows)
+	if len(out.Rows) != 6 {
+		t.Fatalf("rows = %d, want 6: %+v", len(out.Rows), out.Rows)
 	}
 	want := []struct {
 		name   string
 		member int
 		value  int64
-	}{{"alpha", 1, 81200000000}, {"Chárlie", 3, 392350000}, {"Bravo", 2, 1234567}, {"Bravo", 0, 5}, {"Nobody", 0, -1}}
+	}{{"alpha", 1, 81200000000}, {"Chuck", 3, 392350000}, {"Bravo", 2, 1234567}, {"Bravo", 0, 5}, {"Nobody", 0, -1}, {"Álpha", 0, 7}}
 	for i, w := range want {
 		r := out.Rows[i]
 		if r.Name != w.name {
