@@ -8,7 +8,7 @@ in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#6-update-procedure). In short: a **pa
 needs only a new image (`docker compose pull`), while a **major** changes something outside the
 image and needs a terminal run of `scripts/update.sh`.
 
-## v1.1.0 — 2026-09-24
+## v1.1.0 — 2026-09-26
 
 Event participation: record who took part in an event, and how, from the ranked list the game
 mails afterwards — and let the app suggest the strikes that board implies, without ever filing one
@@ -21,9 +21,10 @@ and change no existing strike or event. After upgrading, **R4 and R5 hold the tw
 participation permissions**; give them to other ranks in Settings → Permissions if you want.
 
 - **Event participation** — import an Alliance Exercise, Zombie Siege or Desert Storm board from a
-  CSV (or add members by hand from a member search); names are matched to members (accents,
-  aliases and tags included), anyone unmatched gets a picker, and
-  saving lists the strikes the event's own rule implies — someone missing from an Alliance
+  CSV (or add members by hand from a member search). A name is matched only when it is exactly a
+  member's name or alias (a leading alliance tag is ignored) — nothing is guessed — and anyone
+  unmatched gets a picker. A member on the board twice blocks saving. On a phone each row is two
+  lines instead of a sideways-scrolling table. Saving lists the strikes the event's own rule implies — someone missing from an Alliance
   Exercise, anyone at 0 waves in a Zombie Siege, a starter missing from a Desert Storm (never a
   sub). Each can be struck, excused with a reason, or dismissed. Recording is optional and nothing
   nags about events nobody recorded. Boards are reviewed on a new **Participation** tab on the
