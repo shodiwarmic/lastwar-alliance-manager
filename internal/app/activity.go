@@ -13,9 +13,15 @@ import "log/slog"
 // last user. For credential-granting actions that is the wrong trade: the audit trail
 // exists precisely to answer "who was given access, and by whom", and that question
 // becomes unanswerable the moment two are issued together.
+//
+// The participation types are here for the audit trail's other question, "which
+// event": two boards recorded in fifteen minutes are two events, and five excusals in
+// a row are five members, each of which a merged row would reduce to the last one.
 var neverBatched = map[string]bool{
-	"password_reset_link": true,
-	"invite":              true,
+	"password_reset_link":     true,
+	"invite":                  true,
+	"participation_board":     true,
+	"participation_exception": true,
 }
 
 // logActivity records an audit entry. When action is "created", consecutive writes

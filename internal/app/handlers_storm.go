@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,7 +24,8 @@ func getStormAssignments(w http.ResponseWriter, r *http.Request) {
 		ORDER BY building_id, position
 	`, taskForce)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("getStormAssignments: query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -32,7 +34,8 @@ func getStormAssignments(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var a StormAssignment
 		if err := rows.Scan(&a.ID, &a.TaskForce, &a.BuildingID, &a.MemberID, &a.Position); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			slog.Error("getStormAssignments: scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		assignments = append(assignments, a)
@@ -53,7 +56,7 @@ func saveStormAssignments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -64,14 +67,16 @@ func saveStormAssignments(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := db.Begin()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("saveStormAssignments: begin failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer tx.Rollback()
 
 	_, err = tx.Exec("DELETE FROM storm_assignments WHERE task_force = ?", request.TaskForce)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("saveStormAssignments: delete failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -81,13 +86,15 @@ func saveStormAssignments(w http.ResponseWriter, r *http.Request) {
 			VALUES (?, ?, ?, ?)
 		`, request.TaskForce, assignment.BuildingID, assignment.MemberID, assignment.Position)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			slog.Error("saveStormAssignments: insert failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("saveStormAssignments: commit failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -113,7 +120,8 @@ func deleteStormAssignments(w http.ResponseWriter, r *http.Request) {
 
 	_, err := db.Exec("DELETE FROM storm_assignments WHERE task_force = ?", taskForce)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("deleteStormAssignments: delete failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -125,7 +133,8 @@ func deleteStormAssignments(w http.ResponseWriter, r *http.Request) {
 func getStormConfig(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query(`SELECT task_force, time_slot, participating FROM storm_tf_config ORDER BY task_force`)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("getStormConfig: query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -133,7 +142,8 @@ func getStormConfig(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var c StormTFConfig
 		if err := rows.Scan(&c.TaskForce, &c.TimeSlot, &c.Participating); err != nil {
-			http.Error(w, err.Error(), 500)
+			slog.Error("getStormConfig: scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		configs = append(configs, c)
@@ -145,12 +155,13 @@ func getStormConfig(w http.ResponseWriter, r *http.Request) {
 func saveStormConfig(w http.ResponseWriter, r *http.Request) {
 	var configs []StormTFConfig
 	if err := json.NewDecoder(r.Body).Decode(&configs); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("saveStormConfig: begin failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer tx.Rollback()
@@ -168,12 +179,14 @@ func saveStormConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, err := tx.Exec(`INSERT OR REPLACE INTO storm_tf_config (task_force, time_slot, participating) VALUES (?,?,?)`, c.TaskForce, c.TimeSlot, c.Participating); err != nil {
-			http.Error(w, err.Error(), 500)
+			slog.Error("saveStormConfig: insert failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("saveStormConfig: commit failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -213,7 +226,8 @@ func getStormRegistrations(w http.ResponseWriter, r *http.Request) {
 		    CASE m.rank WHEN 'R5' THEN 1 WHEN 'R4' THEN 2 WHEN 'R3' THEN 3 WHEN 'R2' THEN 4 WHEN 'R1' THEN 5 ELSE 6 END,
 		    lp.power DESC`)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("getStormRegistrations: query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -222,7 +236,8 @@ func getStormRegistrations(w http.ResponseWriter, r *http.Request) {
 		var reg StormRegistration
 		if err := rows.Scan(&reg.MemberID, &reg.MemberName, &reg.MemberRank, &reg.MemberPower,
 			&reg.ID, &reg.Slot1, &reg.Slot2, &reg.Slot3, &reg.UpdatedAt); err != nil {
-			http.Error(w, err.Error(), 500)
+			slog.Error("getStormRegistrations: scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		regs = append(regs, reg)
@@ -247,7 +262,7 @@ func upsertMyRegistration(w http.ResponseWriter, r *http.Request) {
 		Slot3 int `json:"slot_3"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 	_, err := db.Exec(`INSERT INTO storm_registrations (member_id, slot_1, slot_2, slot_3, updated_at)
@@ -256,7 +271,8 @@ func upsertMyRegistration(w http.ResponseWriter, r *http.Request) {
 		slot_3=excluded.slot_3, updated_at=CURRENT_TIMESTAMP`,
 		memberID, body.Slot1, body.Slot2, body.Slot3)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("upsertMyRegistration: insert failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -289,7 +305,7 @@ func upsertMemberRegistration(w http.ResponseWriter, r *http.Request) {
 		Slot3 int `json:"slot_3"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 	_, err := db.Exec(`INSERT INTO storm_registrations (member_id, slot_1, slot_2, slot_3, updated_at)
@@ -298,7 +314,8 @@ func upsertMemberRegistration(w http.ResponseWriter, r *http.Request) {
 		slot_3=excluded.slot_3, updated_at=CURRENT_TIMESTAMP`,
 		memberID, body.Slot1, body.Slot2, body.Slot3)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("upsertMemberRegistration: insert failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -306,7 +323,11 @@ func upsertMemberRegistration(w http.ResponseWriter, r *http.Request) {
 
 func deleteMemberRegistration(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	db.Exec(`DELETE FROM storm_registrations WHERE member_id = ?`, vars["member_id"])
+	if _, err := db.Exec(`DELETE FROM storm_registrations WHERE member_id = ?`, vars["member_id"]); err != nil {
+		slog.Error("deleteMemberRegistration: delete failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -353,7 +374,8 @@ func getStormGroups(w http.ResponseWriter, r *http.Request) {
 
 	groupRows, err := db.Query(`SELECT id, task_force, name, COALESCE(instructions,''), sort_order FROM storm_groups WHERE task_force=? ORDER BY sort_order`, tf)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("getStormGroups: groups query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer groupRows.Close()
@@ -361,7 +383,11 @@ func getStormGroups(w http.ResponseWriter, r *http.Request) {
 	var groups []*StormGroup
 	for groupRows.Next() {
 		var g StormGroup
-		groupRows.Scan(&g.ID, &g.TaskForce, &g.Name, &g.Instructions, &g.SortOrder)
+		if err := groupRows.Scan(&g.ID, &g.TaskForce, &g.Name, &g.Instructions, &g.SortOrder); err != nil {
+			slog.Error("getStormGroups: groups scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
 		g.Buildings = []StormGroupBuilding{}
 		g.DirectMembers = []StormGroupMember{}
 		groupMap[g.ID] = &g
@@ -370,48 +396,71 @@ func getStormGroups(w http.ResponseWriter, r *http.Request) {
 
 	bldgRows, err := db.Query(`SELECT sgb.id, sgb.group_id, sgb.building_id, sgb.sort_order FROM storm_group_buildings sgb JOIN storm_groups sg ON sg.id=sgb.group_id WHERE sg.task_force=? ORDER BY sgb.sort_order`, tf)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("getStormGroups: buildings query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer bldgRows.Close()
-	bldgMap := map[int]*StormGroupBuilding{}
+	// Index a building by its group and position, never by a pointer into
+	// g.Buildings: a later append to the same group can move the backing array, and
+	// members attached through a stale pointer were silently lost on read.
+	type bldgRef struct {
+		group *StormGroup
+		index int
+	}
+	bldgMap := map[int]bldgRef{}
 	for bldgRows.Next() {
 		var b StormGroupBuilding
 		var groupID int
-		bldgRows.Scan(&b.ID, &groupID, &b.BuildingID, &b.SortOrder)
+		if err := bldgRows.Scan(&b.ID, &groupID, &b.BuildingID, &b.SortOrder); err != nil {
+			slog.Error("getStormGroups: buildings scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
 		b.Members = []StormGroupMember{}
 		if g, ok := groupMap[groupID]; ok {
 			g.Buildings = append(g.Buildings, b)
-			bldgMap[b.ID] = &g.Buildings[len(g.Buildings)-1]
+			bldgMap[b.ID] = bldgRef{g, len(g.Buildings) - 1}
 		}
 	}
 
 	memRows, err := db.Query(`SELECT sgbm.id, sgbm.group_building_id, sgbm.member_id, sgbm.is_sub, sgbm.position FROM storm_group_building_members sgbm JOIN storm_group_buildings sgb ON sgb.id=sgbm.group_building_id JOIN storm_groups sg ON sg.id=sgb.group_id WHERE sg.task_force=? ORDER BY sgbm.position`, tf)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("getStormGroups: building members query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer memRows.Close()
 	for memRows.Next() {
 		var m StormGroupMember
 		var gbID, isSub int
-		memRows.Scan(&m.ID, &gbID, &m.MemberID, &isSub, &m.Position)
+		if err := memRows.Scan(&m.ID, &gbID, &m.MemberID, &isSub, &m.Position); err != nil {
+			slog.Error("getStormGroups: building members scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
 		m.IsSub = isSub == 1
-		if b, ok := bldgMap[gbID]; ok {
+		if ref, ok := bldgMap[gbID]; ok {
+			b := &ref.group.Buildings[ref.index]
 			b.Members = append(b.Members, m)
 		}
 	}
 
 	dmRows, err := db.Query(`SELECT sgm.id, sgm.group_id, sgm.member_id, sgm.is_sub, sgm.position FROM storm_group_members sgm JOIN storm_groups sg ON sg.id=sgm.group_id WHERE sg.task_force=? ORDER BY sgm.position`, tf)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("getStormGroups: direct members query failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer dmRows.Close()
 	for dmRows.Next() {
 		var m StormGroupMember
 		var groupID, isSub int
-		dmRows.Scan(&m.ID, &groupID, &m.MemberID, &isSub, &m.Position)
+		if err := dmRows.Scan(&m.ID, &groupID, &m.MemberID, &isSub, &m.Position); err != nil {
+			slog.Error("getStormGroups: direct members scan failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
 		m.IsSub = isSub == 1
 		if g, ok := groupMap[groupID]; ok {
 			g.DirectMembers = append(g.DirectMembers, m)
@@ -429,7 +478,7 @@ func getStormGroups(w http.ResponseWriter, r *http.Request) {
 func createStormGroup(w http.ResponseWriter, r *http.Request) {
 	var g StormGroup
 	if err := json.NewDecoder(r.Body).Decode(&g); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 	if g.TaskForce != "A" && g.TaskForce != "B" {
@@ -438,7 +487,8 @@ func createStormGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := db.Exec(`INSERT INTO storm_groups (task_force,name,instructions,sort_order) VALUES (?,?,?,?)`, g.TaskForce, g.Name, g.Instructions, g.SortOrder)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("createStormGroup: insert failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	id, _ := res.LastInsertId()
@@ -459,7 +509,7 @@ func updateStormGroup(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 	var g StormGroup
 	if err := json.NewDecoder(r.Body).Decode(&g); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -468,7 +518,8 @@ func updateStormGroup(w http.ResponseWriter, r *http.Request) {
 
 	_, err := db.Exec(`UPDATE storm_groups SET name=?,instructions=?,sort_order=? WHERE id=?`, g.Name, g.Instructions, g.SortOrder, id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("updateStormGroup: update failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -491,7 +542,8 @@ func deleteStormGroup(w http.ResponseWriter, r *http.Request) {
 
 	_, err := db.Exec(`DELETE FROM storm_groups WHERE id=?`, id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("deleteStormGroup: delete failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -506,7 +558,7 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 	groupID := mux.Vars(r)["id"]
 	var buildings []StormGroupBuilding
 	if err := json.NewDecoder(r.Body).Decode(&buildings); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -520,11 +572,17 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 	// Check for duplicates against other groups
 	assigned, err := getStormAssignedMemberIDs(tf)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("saveGroupBuildings: read assigned members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	// Remove current group's own members from the conflict check
-	curRows, _ := db.Query(`SELECT sgbm.member_id FROM storm_group_building_members sgbm JOIN storm_group_buildings sgb ON sgb.id=sgbm.group_building_id WHERE sgb.group_id=?`, groupID)
+	curRows, err := db.Query(`SELECT sgbm.member_id FROM storm_group_building_members sgbm JOIN storm_group_buildings sgb ON sgb.id=sgbm.group_building_id WHERE sgb.group_id=?`, groupID)
+	if err != nil {
+		slog.Error("saveGroupBuildings: read building members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer curRows.Close()
 	ownIDs := map[int]bool{}
 	for curRows.Next() {
@@ -532,7 +590,12 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 		curRows.Scan(&id)
 		ownIDs[id] = true
 	}
-	curRows2, _ := db.Query(`SELECT member_id FROM storm_group_members WHERE group_id=?`, groupID)
+	curRows2, err := db.Query(`SELECT member_id FROM storm_group_members WHERE group_id=?`, groupID)
+	if err != nil {
+		slog.Error("saveGroupBuildings: read direct members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer curRows2.Close()
 	for curRows2.Next() {
 		var id int
@@ -554,16 +617,26 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := db.Begin()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("saveGroupBuildings: begin failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer tx.Rollback()
-	tx.Exec(`DELETE FROM storm_group_building_members WHERE group_building_id IN (SELECT id FROM storm_group_buildings WHERE group_id=?)`, groupID)
-	tx.Exec(`DELETE FROM storm_group_buildings WHERE group_id=?`, groupID)
+	if _, err := tx.Exec(`DELETE FROM storm_group_building_members WHERE group_building_id IN (SELECT id FROM storm_group_buildings WHERE group_id=?)`, groupID); err != nil {
+		slog.Error("saveGroupBuildings: clear building members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM storm_group_buildings WHERE group_id=?`, groupID); err != nil {
+		slog.Error("saveGroupBuildings: clear buildings failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	for _, b := range buildings {
 		res, err := tx.Exec(`INSERT INTO storm_group_buildings (group_id,building_id,sort_order) VALUES (?,?,?)`, groupID, b.BuildingID, b.SortOrder)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			slog.Error("saveGroupBuildings: insert failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		gbID, _ := res.LastInsertId()
@@ -572,11 +645,16 @@ func saveGroupBuildings(w http.ResponseWriter, r *http.Request) {
 			if m.IsSub {
 				isSub = 1
 			}
-			tx.Exec(`INSERT INTO storm_group_building_members (group_building_id,member_id,is_sub,position) VALUES (?,?,?,?)`, gbID, m.MemberID, isSub, m.Position)
+			if _, err := tx.Exec(`INSERT INTO storm_group_building_members (group_building_id,member_id,is_sub,position) VALUES (?,?,?,?)`, gbID, m.MemberID, isSub, m.Position); err != nil {
+				slog.Error("saveGroupBuildings: insert building member failed", "member_id", m.MemberID, "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("saveGroupBuildings: commit failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -602,7 +680,7 @@ func saveGroupDirectMembers(w http.ResponseWriter, r *http.Request) {
 	groupID := mux.Vars(r)["id"]
 	var members []StormGroupMember
 	if err := json.NewDecoder(r.Body).Decode(&members); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -614,17 +692,28 @@ func saveGroupDirectMembers(w http.ResponseWriter, r *http.Request) {
 
 	assigned, err := getStormAssignedMemberIDs(tf)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		slog.Error("saveGroupDirectMembers: read assigned members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	curRows, _ := db.Query(`SELECT member_id FROM storm_group_members WHERE group_id=?`, groupID)
+	curRows, err := db.Query(`SELECT member_id FROM storm_group_members WHERE group_id=?`, groupID)
+	if err != nil {
+		slog.Error("saveGroupDirectMembers: read direct members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer curRows.Close()
 	for curRows.Next() {
 		var id int
 		curRows.Scan(&id)
 		delete(assigned, id)
 	}
-	bldgRows, _ := db.Query(`SELECT sgbm.member_id FROM storm_group_building_members sgbm JOIN storm_group_buildings sgb ON sgb.id=sgbm.group_building_id WHERE sgb.group_id=?`, groupID)
+	bldgRows, err := db.Query(`SELECT sgbm.member_id FROM storm_group_building_members sgbm JOIN storm_group_buildings sgb ON sgb.id=sgbm.group_building_id WHERE sgb.group_id=?`, groupID)
+	if err != nil {
+		slog.Error("saveGroupDirectMembers: read building members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	defer bldgRows.Close()
 	for bldgRows.Next() {
 		var id int
@@ -641,19 +730,29 @@ func saveGroupDirectMembers(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := db.Begin()
 	if err != nil {
+		slog.Error("saveGroupDirectMembers: begin failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	defer tx.Rollback()
-	tx.Exec(`DELETE FROM storm_group_members WHERE group_id=?`, groupID)
+	if _, err := tx.Exec(`DELETE FROM storm_group_members WHERE group_id=?`, groupID); err != nil {
+		slog.Error("saveGroupDirectMembers: clear direct members failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	for _, m := range members {
 		isSub := 0
 		if m.IsSub {
 			isSub = 1
 		}
-		tx.Exec(`INSERT INTO storm_group_members (group_id,member_id,is_sub,position) VALUES (?,?,?,?)`, groupID, m.MemberID, isSub, m.Position)
+		if _, err := tx.Exec(`INSERT INTO storm_group_members (group_id,member_id,is_sub,position) VALUES (?,?,?,?)`, groupID, m.MemberID, isSub, m.Position); err != nil {
+			slog.Error("saveGroupDirectMembers: insert direct member failed", "member_id", m.MemberID, "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
 	}
 	if err := tx.Commit(); err != nil {
+		slog.Error("saveGroupDirectMembers: commit failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}

@@ -25,6 +25,33 @@ func resolveMemberAlias(tx *sql.Tx, providedName string, currentUserID int) (*Me
 // index for tier 3. Pass nil to have it built on demand (and only on a tier 1/2
 // miss, so the common path never pays for it).
 func resolveMemberAliasWithIndex(tx *sql.Tx, providedName string, currentUserID int, idx *foldedNameIndex) (*Member, string, error) {
+	if m, how, err := resolveMemberNameOrAlias(tx, providedName, currentUserID); err == nil {
+		return m, how, nil
+	}
+
+	// 3. Accent-folded fallback. Tiers 1 and 2 compare with SQLite's LOWER(),
+	// which is ASCII-only, so "Pàcha" and "Pacha" miss each other. Folding
+	// catches that; an ambiguous fold is reported as no match rather than a
+	// guess (see foldedNameIndex.lookup).
+	if idx == nil {
+		built, err := buildFoldedNameIndex(tx, currentUserID)
+		if err != nil {
+			return nil, "none", sql.ErrNoRows
+		}
+		idx = built
+	}
+	if folded, ok := idx.lookup(providedName); ok {
+		return folded, "folded", nil
+	}
+
+	return nil, "none", sql.ErrNoRows
+}
+
+// resolveMemberNameOrAlias is tiers 1 and 2 of the alias engine alone: the member's
+// own name, then an alias (personal → global → OCR), both compared whole. For a
+// caller that must never guess: the participation board import, where a wrong
+// automatic match would put one member's result against another's name.
+func resolveMemberNameOrAlias(tx *sql.Tx, providedName string, currentUserID int) (*Member, string, error) {
 	var m Member
 
 	// 1. Exact Name
@@ -53,22 +80,6 @@ func resolveMemberAliasWithIndex(tx *sql.Tx, providedName string, currentUserID 
 	if err == nil {
 		return &m, category + "_alias", nil
 	}
-
-	// 3. Accent-folded fallback. Tiers 1 and 2 compare with SQLite's LOWER(),
-	// which is ASCII-only, so "Pàcha" and "Pacha" miss each other. Folding
-	// catches that; an ambiguous fold is reported as no match rather than a
-	// guess (see foldedNameIndex.lookup).
-	if idx == nil {
-		built, err := buildFoldedNameIndex(tx, currentUserID)
-		if err != nil {
-			return nil, "none", sql.ErrNoRows
-		}
-		idx = built
-	}
-	if folded, ok := idx.lookup(providedName); ok {
-		return folded, "folded", nil
-	}
-
 	return nil, "none", sql.ErrNoRows
 }
 

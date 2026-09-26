@@ -246,14 +246,34 @@ func Main() {
 	router.HandleFunc("/api/accountability/summary", authMiddleware(handleAccountabilitySummary)).Methods("GET")
 	router.HandleFunc("/api/accountability/strikes", authMiddleware(handleAllStrikes)).Methods("GET")
 	router.HandleFunc("/api/accountability/strike-types", authMiddleware(handleStrikeTypes)).Methods("GET")
-	router.HandleFunc("/api/accountability/storm-attendance", authMiddleware(handleStormAttendanceForDate)).Methods("GET")
 	router.HandleFunc("/api/accountability/members", authMiddleware(handleAccountabilityMembers)).Methods("GET")
 	router.HandleFunc("/api/accountability/members/{id:[0-9]+}", authMiddleware(handleAccountabilityMemberProfile)).Methods("GET")
 	router.HandleFunc("/api/accountability/report-data", authMiddleware(handleAccountabilityReportData)).Methods("GET")
 	router.HandleFunc("/api/accountability/strikes", authMiddleware(requirePermission("manage_accountability", handleStrikeCreate))).Methods("POST")
 	router.HandleFunc("/api/accountability/strikes/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeUpdate))).Methods("PUT")
 	router.HandleFunc("/api/accountability/strikes/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeDelete))).Methods("DELETE")
-	router.HandleFunc("/api/accountability/storm-attendance", authMiddleware(requirePermission("manage_accountability", handleStormAttendanceUpsert))).Methods("POST")
+	router.HandleFunc("/api/accountability/strike-types", authMiddleware(requirePermission("manage_accountability", handleStrikeTypeCreate))).Methods("POST")
+	// Participation (#13). Reads gate inline on view_participation OR
+	// manage_participation (canViewParticipation) — manage does not imply view, and
+	// the recording screen reads everything it writes. /me needs no permission.
+	// "new" is registered before the id route; the id's [0-9]+ keeps them apart.
+	router.HandleFunc("/participation/new", authMiddleware(handleParticipationPage)).Methods("GET")
+	router.HandleFunc("/participation/{eventID:[0-9]+}", authMiddleware(handleParticipationPage)).Methods("GET")
+	router.HandleFunc("/api/participation/types", authMiddleware(handleParticipationTypes)).Methods("GET")
+	router.HandleFunc("/api/participation/boards", authMiddleware(handleParticipationBoards)).Methods("GET")
+	router.HandleFunc("/api/participation/recent", authMiddleware(handleParticipationRecent)).Methods("GET")
+	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}", authMiddleware(handleParticipationBoard)).Methods("GET")
+	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}", authMiddleware(requirePermission("manage_participation", handleParticipationBoardPut))).Methods("PUT")
+	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}", authMiddleware(requirePermission("manage_participation", handleParticipationBoardDelete))).Methods("DELETE")
+	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}/suggestions", authMiddleware(requirePermission("manage_participation", handleParticipationSuggestions))).Methods("GET")
+	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}/strikes", authMiddleware(requirePermission("manage_participation", handleParticipationStrikes))).Methods("POST")
+	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}/exceptions", authMiddleware(requirePermission("manage_participation", handleParticipationException))).Methods("POST", "DELETE")
+	router.HandleFunc("/api/participation/boards/{eventID:[0-9]+}/csv", authMiddleware(requirePermission("manage_participation", handleParticipationCSV))).Methods("POST")
+	router.HandleFunc("/api/participation/occurrences", authMiddleware(requirePermission("manage_participation", handleParticipationOccurrence))).Methods("POST")
+	router.HandleFunc("/api/participation/members/{id:[0-9]+}", authMiddleware(handleParticipationMember)).Methods("GET")
+	router.HandleFunc("/api/participation/me", authMiddleware(handleParticipationMe)).Methods("GET")
+	router.HandleFunc("/api/accountability/strike-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeTypeUpdate))).Methods("PUT")
+	router.HandleFunc("/api/accountability/strike-types/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeTypeDelete))).Methods("DELETE")
 	router.HandleFunc("/api/train-logs/{id:[0-9]+}/showed-up", authMiddleware(requirePermission("manage_accountability", handleTrainNoShow))).Methods("PUT")
 
 	// Season Hub routes

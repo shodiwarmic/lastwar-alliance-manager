@@ -46,7 +46,9 @@ type announceEvent struct {
 	AllDay   bool   `json:"all_day"`
 	TypeName string `json:"type_name"`
 	Level    *int   `json:"level"`
-	Announce bool   `json:"-"`
+	// TaskForce names a Desert Storm battle ("A"/"B"); two can share a date.
+	TaskForce *string `json:"task_force,omitempty"`
+	Announce  bool    `json:"-"`
 }
 
 // droppedEvent is an event the announcement left out, and why.
@@ -162,11 +164,11 @@ func onDDate(onD []announceEvent) string {
 // loadAnnounceEvents reads one day's events with their type's announce flag.
 func loadAnnounceEvents(date string) ([]announceEvent, error) {
 	rows, err := db.Query(`
-		SELECT se.event_date, se.event_time, se.all_day, t.name, se.level, t.announce
+		SELECT se.event_date, se.event_time, se.all_day, t.name, se.level, t.announce, se.task_force
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
 		WHERE se.event_date = ?
-		ORDER BY se.all_day DESC, se.event_time`, date)
+		ORDER BY se.all_day DESC, se.event_time, se.task_force`, date)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +178,7 @@ func loadAnnounceEvents(date string) ([]announceEvent, error) {
 	for rows.Next() {
 		var ev announceEvent
 		var allDay, announce int
-		if err := rows.Scan(&ev.Date, &ev.Time, &allDay, &ev.TypeName, &ev.Level, &announce); err != nil {
+		if err := rows.Scan(&ev.Date, &ev.Time, &allDay, &ev.TypeName, &ev.Level, &announce, &ev.TaskForce); err != nil {
 			return nil, err
 		}
 		ev.AllDay = allDay == 1

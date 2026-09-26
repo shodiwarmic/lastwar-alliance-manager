@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -113,19 +114,42 @@ func loadScheduleTypeRules(q rowQuerier, typeID int) (scheduleTypeRules, error) 
 // System-only rules (the Alliance Exercise family gap, the 21:59 cutoff, the
 // variant cutover, the ZS gap) run when the type is a system type. The window rule
 // runs whenever the type has a parent, system or not.
-func validateEventRules(q rowQuerier, tr scheduleTypeRules, date, tm string, excludeID int) (string, error) {
+// eventCandidate is the row a write path proposes. A struct rather than loose
+// strings so a rule that needs more than a date and a time — Desert Storm's task
+// force — lives in the validator like every other rule, and all four write paths
+// get it without a condition at the call site.
+type eventCandidate struct {
+	Date      string
+	Time      string
+	TaskForce *string // Desert Storm only: "A" or "B"
+	// KeepMissingTaskForce lets an UPDATE of a legacy Desert Storm row (migrated
+	// from storm_attendance with no task force) through without supplying one —
+	// the level rule grandfathers an untouched value the same way. Never set on a
+	// create.
+	KeepMissingTaskForce bool
+	// DateUnchanged marks an UPDATE that keeps the row's existing date, so a rule
+	// about the date itself (Desert Storm's Friday) is not re-applied to a value the
+	// officer did not touch.
+	DateUnchanged bool
+}
+
+func validateEventRules(q rowQuerier, tr scheduleTypeRules, c eventCandidate, excludeID int) (string, error) {
+	if c.TaskForce != nil && tr.Short != "DS" {
+		return "Only Desert Storm events carry a task force", nil
+	}
 	if tr.IsSystem {
-		if msg, err := validateSystemEventRules(q, tr.Short, date, tm, excludeID); err != nil || msg != "" {
+		if msg, err := validateSystemEventRules(q, tr.Short, c, excludeID); err != nil || msg != "" {
 			return msg, err
 		}
 	}
 	if tr.ServerEventID != nil {
-		return validateEncounterWindow(q, tr.Name, *tr.ServerEventID, date)
+		return validateEncounterWindow(q, tr.Name, *tr.ServerEventID, c.Date)
 	}
 	return "", nil
 }
 
-func validateSystemEventRules(q rowQuerier, short, date, tm string, excludeID int) (string, error) {
+func validateSystemEventRules(q rowQuerier, short string, c eventCandidate, excludeID int) (string, error) {
+	date, tm := c.Date, c.Time
 	switch short {
 	case "MG", "LS":
 		if msg, err := validateAllianceExerciseVariant(q, short, date); err != nil || msg != "" {
@@ -137,6 +161,48 @@ func validateSystemEventRules(q rowQuerier, short, date, tm string, excludeID in
 		return validateAllianceExerciseGap(q, excludeID, date)
 	case "ZS":
 		return validateZSGap(q, excludeID, date)
+	case "DS":
+		return validateDesertStorm(q, c, excludeID)
+	}
+	return "", nil
+}
+
+// validateDesertStorm: each task force fights its own battle, so a Desert Storm
+// occurrence names its task force and there is at most one per task force per
+// date. The partial unique index (081) is the race backstop; this is what names
+// the rule. A legacy row with no task force is grandfathered on update only.
+func validateDesertStorm(q rowQuerier, c eventCandidate, excludeID int) (string, error) {
+	// Desert Storm is always fought on a game-day Friday. Dates are game dates, so
+	// the weekday of the date string is the game's weekday.
+	// Worded like the cooldown rejections — the rule, what broke it, and the next
+	// date that would work — and mirrored by desertStormDayError (global.js), which
+	// shows the same text under the date field before the officer can save.
+	if !c.DateUnchanged {
+		if d, err := time.Parse("2006-01-02", c.Date); err == nil && d.Weekday() != time.Friday {
+			next := d.AddDate(0, 0, (int(time.Friday)-int(d.Weekday())+7)%7)
+			return fmt.Sprintf("Desert Storm runs on Fridays only — %s is a %s (next eligible date %s)",
+				c.Date, d.Weekday(), next.Format("2006-01-02")), nil
+		}
+	}
+	if c.TaskForce == nil {
+		if c.KeepMissingTaskForce {
+			return "", nil
+		}
+		return "Desert Storm needs a task force, A or B", nil
+	}
+	tf := *c.TaskForce
+	if tf != "A" && tf != "B" {
+		return "Desert Storm's task force must be A or B", nil
+	}
+	var n int
+	if err := q.QueryRow(`SELECT COUNT(*) FROM schedule_events se
+		JOIN schedule_event_types t ON t.id = se.event_type_id
+		WHERE t.short_name = 'DS' AND se.event_date = ? AND se.task_force = ? AND se.id != ?`,
+		c.Date, tf, excludeID).Scan(&n); err != nil {
+		return "", err
+	}
+	if n > 0 {
+		return "Desert Storm Task Force " + tf + " is already scheduled on " + c.Date, nil
 	}
 	return "", nil
 }
@@ -929,11 +995,16 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		SELECT se.id, se.event_date, se.event_type_id,
 		       t.name, t.short_name, t.icon, t.is_system, t.server_event_id,
 		       se.event_time, se.all_day, se.level, COALESCE(se.notes,''),
-		       se.created_by, se.created_at, se.updated_at
+		       se.created_by, se.created_at, se.updated_at, se.task_force,
+		       pt.event_type_id IS NOT NULL, b.id IS NOT NULL,
+		       CASE WHEN b.id IS NULL THEN 0 ELSE
+		         (SELECT COUNT(*) FROM participation_entries e WHERE e.board_id = b.id) END
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
+		LEFT JOIN participation_types pt ON pt.event_type_id = se.event_type_id
+		LEFT JOIN participation_boards b ON b.schedule_event_id = se.id
 		WHERE se.event_date >= ? AND se.event_date <= ?
-		ORDER BY se.event_date, se.all_day DESC, se.event_time`, from, to)
+		ORDER BY se.event_date, se.all_day DESC, se.event_time, se.task_force`, from, to)
 	if err != nil {
 		slog.Error("getScheduleEvents query", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -950,7 +1021,8 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 			&ev.ID, &ev.EventDate, &ev.EventTypeID,
 			&ev.TypeName, &ev.TypeShort, &ev.TypeIcon, &isSystem, &parentID,
 			&ev.EventTime, &allDay, &ev.Level, &ev.Notes,
-			&ev.CreatedBy, &ev.CreatedAt, &ev.UpdatedAt,
+			&ev.CreatedBy, &ev.CreatedAt, &ev.UpdatedAt, &ev.TaskForce,
+			&ev.TracksParticipation, &ev.HasBoard, &ev.BoardRows,
 		); err != nil {
 			rows.Close()
 			slog.Error("getScheduleEvents scan", "error", err)
@@ -991,96 +1063,123 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(events)
 }
 
-func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		EventDate   string `json:"event_date"`
-		EventTypeID int    `json:"event_type_id"`
-		EventTime   string `json:"event_time"`
-		AllDay      bool   `json:"all_day"`
-		Level       *int   `json:"level"`
-		Notes       string `json:"notes"`
+// scheduleEventCreate is the body of a manual create, from either the Schedule
+// page or the participation recording screen's "create the occurrence" path.
+type scheduleEventCreate struct {
+	EventDate   string  `json:"event_date"`
+	EventTypeID int     `json:"event_type_id"`
+	EventTime   string  `json:"event_time"`
+	AllDay      bool    `json:"all_day"`
+	Level       *int    `json:"level"`
+	Notes       string  `json:"notes"`
+	TaskForce   *string `json:"task_force"`
+}
+
+// normTaskForce treats an empty task force as none, so a form's blank select and
+// an omitted field mean the same thing.
+func normTaskForce(tf *string) *string {
+	if tf == nil || *tf == "" {
+		return nil
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	if _, err := time.Parse("2006-01-02", req.EventDate); err != nil {
-		http.Error(w, "event_date must be YYYY-MM-DD", http.StatusBadRequest)
-		return
+	return tf
+}
+
+// insertScheduleEvent validates and inserts one manually created event. It is
+// shared by createScheduleEvent and POST /api/participation/occurrences so that
+// an occurrence created from the recording screen passes exactly the rules — and
+// gets exactly the messages — a create on the Schedule page does (#13 Q7).
+//
+// userMsg/code carry a rejection meant for the officer; err is an internal failure
+// already logged, for which the caller answers 500.
+func insertScheduleEvent(actor *AuthUser, req scheduleEventCreate) (id int64, userMsg string, code int, err error) {
+	if _, perr := time.Parse("2006-01-02", req.EventDate); perr != nil {
+		return 0, "event_date must be YYYY-MM-DD", http.StatusBadRequest, nil
 	}
 	if req.AllDay {
 		req.EventTime = "00:00"
 	} else if !validHHMM(req.EventTime) {
-		http.Error(w, "event_time must be a real time in HH:MM", http.StatusBadRequest)
-		return
+		return 0, "event_time must be a real time in HH:MM", http.StatusBadRequest, nil
 	}
 	if req.EventTypeID == 0 {
-		http.Error(w, "event_type_id is required", http.StatusBadRequest)
-		return
+		return 0, "event_type_id is required", http.StatusBadRequest, nil
 	}
 
 	tr, err := loadScheduleTypeRules(db, req.EventTypeID)
 	if err == sql.ErrNoRows {
-		http.Error(w, "event_type_id not found", http.StatusBadRequest)
-		return
+		return 0, "event_type_id not found", http.StatusBadRequest, nil
 	}
 	if err != nil {
-		slog.Error("createScheduleEvent lookup type", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		slog.Error("insertScheduleEvent lookup type", "error", err)
+		return 0, "", 0, err
 	}
-	typeName, isSystem := tr.Name, 0
-	if tr.IsSystem {
-		isSystem = 1
-	}
+	typeName := tr.Name
+	req.TaskForce = normTaskForce(req.TaskForce)
 
 	// No is_system gate: the validator decides what applies. A custom type with a
-	// parent window has a rule too.
-	if msg, err := validateEventRules(db, tr, req.EventDate, req.EventTime, 0); err != nil {
-		slog.Error("createScheduleEvent validateEventRules", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+	// parent window has a rule too, and Desert Storm's task-force rule is there.
+	cand := eventCandidate{Date: req.EventDate, Time: req.EventTime, TaskForce: req.TaskForce}
+	if msg, err := validateEventRules(db, tr, cand, 0); err != nil {
+		slog.Error("insertScheduleEvent validateEventRules", "error", err)
+		return 0, "", 0, err
 	} else if msg != "" {
-		http.Error(w, msg, http.StatusBadRequest)
-		return
+		return 0, msg, http.StatusBadRequest, nil
 	}
 
 	tl, err := loadTypeLevels(db, req.EventTypeID)
 	if err != nil {
-		slog.Error("createScheduleEvent loadTypeLevels", "error", err, "type_id", req.EventTypeID)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		slog.Error("insertScheduleEvent loadTypeLevels", "error", err, "type_id", req.EventTypeID)
+		return 0, "", 0, err
 	}
-	if msg, code := resolveEventLevel(&req.Level, typeName, isSystem == 1, tl); msg != "" {
+	if msg, code := resolveEventLevel(&req.Level, typeName, tr.IsSystem, tl); msg != "" {
 		if code == http.StatusInternalServerError {
-			slog.Error("createScheduleEvent level config", "type", typeName, "type_id", req.EventTypeID, "detail", msg)
-			http.Error(w, "Database error", code)
-			return
+			slog.Error("insertScheduleEvent level config", "type", typeName, "type_id", req.EventTypeID, "detail", msg)
+			return 0, "", 0, errors.New(msg)
 		}
-		http.Error(w, msg, code)
-		return
+		return 0, msg, code, nil
 	}
 
-	user := getAuthUser(r)
 	now := time.Now().UTC().Format(time.RFC3339)
-
 	allDayInt := 0
 	if req.AllDay {
 		allDayInt = 1
 	}
 	res, err := db.Exec(`
-		INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		req.EventDate, req.EventTypeID, req.EventTime, allDayInt, req.Level, req.Notes, user.ID, now, now)
+		INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by, created_at, updated_at, task_force)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.EventDate, req.EventTypeID, req.EventTime, allDayInt, req.Level, req.Notes, actor.ID, now, now, req.TaskForce)
+	if isUniqueViolation(err) && req.TaskForce != nil {
+		// Lost a race with an identical create; the index is the backstop.
+		return 0, "Desert Storm Task Force " + *req.TaskForce + " is already scheduled on " + req.EventDate, http.StatusBadRequest, nil
+	}
 	if err != nil {
-		slog.Error("createScheduleEvent insert", "error", err)
+		slog.Error("insertScheduleEvent insert", "error", err)
+		return 0, "", 0, err
+	}
+	id, _ = res.LastInsertId()
+
+	name := typeName + " " + req.EventDate
+	if req.TaskForce != nil {
+		name = typeName + " TF " + *req.TaskForce + " " + req.EventDate
+	}
+	logActivity(actor.ID, actor.Username, "created", "schedule_event", name, false)
+	return id, "", 0, nil
+}
+
+func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
+	var req scheduleEventCreate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	id, msg, code, err := insertScheduleEvent(getAuthUser(r), req)
+	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	id, _ := res.LastInsertId()
-
-	logActivity(user.ID, user.Username, "created", "schedule_event", typeName+" "+req.EventDate, false)
-
+	if msg != "" {
+		http.Error(w, msg, code)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{"id": id})
@@ -1089,28 +1188,30 @@ func createScheduleEvent(w http.ResponseWriter, r *http.Request) {
 func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(mux.Vars(r)["id"])
 	var req struct {
-		EventDate   string `json:"event_date"`
-		EventTypeID int    `json:"event_type_id"`
-		EventTime   string `json:"event_time"`
-		AllDay      bool   `json:"all_day"`
-		Level       *int   `json:"level"`
-		Notes       string `json:"notes"`
+		EventDate   string  `json:"event_date"`
+		EventTypeID int     `json:"event_type_id"`
+		EventTime   string  `json:"event_time"`
+		AllDay      bool    `json:"all_day"`
+		Level       *int    `json:"level"`
+		Notes       string  `json:"notes"`
+		TaskForce   *string `json:"task_force"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+	req.TaskForce = normTaskForce(req.TaskForce)
 
 	var old ScheduleEvent
 	var isSystem, oldAllDay int
 	err := db.QueryRow(`
 		SELECT se.event_date, se.event_type_id, t.short_name, t.is_system,
-		       se.event_time, se.all_day, se.level, COALESCE(se.notes,'')
+		       se.event_time, se.all_day, se.level, COALESCE(se.notes,''), se.task_force
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
 		WHERE se.id=?`, id).
 		Scan(&old.EventDate, &old.EventTypeID, &old.TypeShort, &isSystem,
-			&old.EventTime, &oldAllDay, &old.Level, &old.Notes)
+			&old.EventTime, &oldAllDay, &old.Level, &old.Notes, &old.TaskForce)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -1146,13 +1247,48 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "event_type_id not found", http.StatusBadRequest)
 		return
 	}
+
+	// A Desert Storm row keeps its task force unless the request names another; a
+	// row of any other type has none. Only an untouched legacy row may stay blank.
+	keepMissingTF := false
+	if tr.Short == "DS" {
+		if req.TaskForce == nil {
+			req.TaskForce = old.TaskForce
+			keepMissingTF = old.TaskForce == nil && req.EventTypeID == old.EventTypeID
+		}
+	} else if req.TaskForce != nil && req.EventTypeID == old.EventTypeID {
+		// Stale client field on a non-DS row: the validator names the rule.
+	} else {
+		req.TaskForce = nil
+	}
+	tfChanged := (old.TaskForce == nil) != (req.TaskForce == nil) ||
+		(old.TaskForce != nil && req.TaskForce != nil && *old.TaskForce != *req.TaskForce)
+
+	// A board's values are keyed to its type's trackables and its roles to the task
+	// force, so an event with a recorded board keeps both. Date, time, level and
+	// notes stay editable: a corrected date is the same occurrence, and the board
+	// should follow it.
+	if req.EventTypeID != old.EventTypeID || tfChanged {
+		var boards int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM participation_boards WHERE schedule_event_id = ?`, id).Scan(&boards); err != nil {
+			slog.Error("updateScheduleEvent board check", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if boards > 0 {
+			http.Error(w, "This event has a recorded participation board, so its type and task force cannot change — delete the board first", http.StatusConflict)
+			return
+		}
+	}
 	typeName, newIsSystem := tr.Name, 0
 	if tr.IsSystem {
 		newIsSystem = 1
 	}
 
 	// No is_system gate — see validateEventRules.
-	if msg, err := validateEventRules(db, tr, req.EventDate, req.EventTime, id); err != nil {
+	cand := eventCandidate{Date: req.EventDate, Time: req.EventTime, TaskForce: req.TaskForce,
+		KeepMissingTaskForce: keepMissingTF, DateUnchanged: req.EventDate == old.EventDate && req.EventTypeID == old.EventTypeID}
+	if msg, err := validateEventRules(db, tr, cand, id); err != nil {
 		slog.Error("updateScheduleEvent validateEventRules", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -1224,8 +1360,11 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err = db.Exec(`
-		UPDATE schedule_events SET event_date=?, event_type_id=?, event_time=?, all_day=?, level=?, notes=?, updated_at=? WHERE id=?`,
-		req.EventDate, req.EventTypeID, req.EventTime, newAllDayInt, req.Level, req.Notes, now, id); err != nil {
+		UPDATE schedule_events SET event_date=?, event_type_id=?, event_time=?, all_day=?, level=?, notes=?, task_force=?, updated_at=? WHERE id=?`,
+		req.EventDate, req.EventTypeID, req.EventTime, newAllDayInt, req.Level, req.Notes, req.TaskForce, now, id); isUniqueViolation(err) && req.TaskForce != nil {
+		http.Error(w, "Desert Storm Task Force "+*req.TaskForce+" is already scheduled on "+req.EventDate, http.StatusBadRequest)
+		return
+	} else if err != nil {
 		slog.Error("updateScheduleEvent update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -1243,6 +1382,16 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	if old.Notes != req.Notes {
 		changes = append(changes, "notes updated")
+	}
+	if tfChanged {
+		from, to := "none", "none"
+		if old.TaskForce != nil {
+			from = *old.TaskForce
+		}
+		if req.TaskForce != nil {
+			to = *req.TaskForce
+		}
+		changes = append(changes, "task force: "+from+" → "+to)
 	}
 
 	user := getAuthUser(r)
@@ -1266,6 +1415,21 @@ func deleteScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("deleteScheduleEvent fetch", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// A recorded board is history about members, so the occurrence it hangs off is
+	// not deleted underneath it — the same refusal deleteServerEvent gives for a
+	// window with encounters pointing at it. foreign_keys is off, so nothing else
+	// would stop the board being orphaned.
+	var boards int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM participation_boards WHERE schedule_event_id = ?`, id).Scan(&boards); err != nil {
+		slog.Error("deleteScheduleEvent board check", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if boards > 0 {
+		http.Error(w, "This event has a recorded participation board — delete the board first", http.StatusConflict)
 		return
 	}
 
@@ -1326,10 +1490,60 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	// the generate loop below inserts as it goes, and a read issued mid-loop would
 	// be a second statement on the single connection while nothing is open — legal,
 	// but pointlessly repeated once per candidate date.
-	var mgTypeID, lsTypeID, zsTypeID int
+	var mgTypeID, lsTypeID, zsTypeID, dsTypeID int
 	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='MG'`).Scan(&mgTypeID)
 	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='LS'`).Scan(&lsTypeID)
 	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='ZS'`).Scan(&zsTypeID)
+	db.QueryRow(`SELECT id FROM schedule_event_types WHERE short_name='DS'`).Scan(&dsTypeID)
+
+	// Each type's rule inputs, loaded once before the loop. The generator runs the
+	// SAME validator as every other write path (validateEventRules), so a rule added
+	// there — a parent window, Desert Storm's task force — reaches generated rows
+	// too. It used to call validateSystemEventRules directly, which was safe only
+	// while every generated type was a system type with no parent.
+	typeRules := map[int]scheduleTypeRules{}
+	for _, id := range []int{mgTypeID, lsTypeID, zsTypeID, dsTypeID} {
+		if id == 0 {
+			continue
+		}
+		tr, err := loadScheduleTypeRules(db, id)
+		if err != nil {
+			slog.Error("generateScheduleEvents type rules", "error", err, "type_id", id)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		typeRules[id] = tr
+	}
+
+	// Desert Storm's standing config, read up front for the same reason: one battle
+	// per participating task force per Friday, at its slot's time. Changing the
+	// config later does NOT move occurrences already generated — the same rule as
+	// moving a server-event window.
+	type dsSlot struct{ tf, time string }
+	var dsSlots []dsSlot
+	if dsTypeID != 0 {
+		rows, err := db.Query(`SELECT c.task_force, s.time_st FROM storm_tf_config c
+			JOIN storm_slot_times s ON s.slot = c.time_slot
+			WHERE c.participating = 1 ORDER BY c.task_force`)
+		if err != nil {
+			slog.Error("generateScheduleEvents storm config", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		for rows.Next() {
+			var sl dsSlot
+			if err := rows.Scan(&sl.tf, &sl.time); err != nil {
+				rows.Close()
+				slog.Error("generateScheduleEvents storm config scan", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+			if validHHMM(sl.time) {
+				dsSlots = append(dsSlots, sl)
+			}
+		}
+		rows.Close()
+	}
 
 	// The Alliance Exercise slot switches variant at Season 3 day 58. ok is false
 	// on a server with no Season 3 row, and then the slot is simply Marshal's Guard
@@ -1375,6 +1589,8 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	mgCreated := 0
 	lsCreated := 0
 	zsCreated := 0
+	dsCreated := 0
+	skippedError := 0
 	skippedExisting := 0
 	skippedInvalid := 0
 	invalid := []invalidGeneratedEvent{}
@@ -1388,16 +1604,25 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	// database when the next candidate is examined, so no separate list of
 	// pending rows has to be kept in step. Do not turn this into plan-then-bulk-
 	// insert — the batch would only be checked against what existed before it.
-	tryCreate := func(typeID int, short, dateStr, tm string, level int) bool {
+	tryCreate := func(typeID int, short, dateStr, tm string, level *int, tf *string) bool {
+		// task_force IS ?, not = ?: every MG/LS/ZS candidate binds NULL there, and
+		// = NULL is never true — the check would find nothing and re-insert.
 		var exists int
-		db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id=? AND event_date=?`, typeID, dateStr).Scan(&exists)
+		if err := db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id=? AND event_date=? AND task_force IS ?`,
+			typeID, dateStr, tf).Scan(&exists); err != nil {
+			// Unknown is not "absent": count it and move on rather than insert blind.
+			slog.Error("generateScheduleEvents exists check", "error", err, "date", dateStr, "type", short)
+			skippedError++
+			return false
+		}
 		if exists > 0 {
 			skippedExisting++
 			return false
 		}
-		msg, err := validateSystemEventRules(db, short, dateStr, tm, 0)
+		msg, err := validateEventRules(db, typeRules[typeID], eventCandidate{Date: dateStr, Time: tm, TaskForce: tf}, 0)
 		if err != nil {
 			slog.Error("generateScheduleEvents validate", "error", err, "date", dateStr, "type", short)
+			skippedError++
 			return false
 		}
 		if msg != "" {
@@ -1410,10 +1635,15 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 			return false
 		}
 		if _, err := db.Exec(`
-			INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by, created_at, updated_at)
-			VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
-			dateStr, typeID, tm, level, user.ID, now, now); err != nil {
+			INSERT INTO schedule_events (event_date, event_type_id, event_time, level, notes, created_by, created_at, updated_at, task_force)
+			VALUES (?, ?, ?, ?, '', ?, ?, ?, ?)`,
+			dateStr, typeID, tm, level, user.ID, now, now, tf); err != nil {
+			if isUniqueViolation(err) {
+				skippedExisting++ // lost a race; the index did its job
+				return false
+			}
 			slog.Error("generateScheduleEvents insert", "error", err, "date", dateStr, "type", short)
+			skippedError++
 			return false
 		}
 		return true
@@ -1446,7 +1676,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 				if !ok {
 					continue
 				}
-				if tryCreate(typeID, short, dateStr, s.MGDefaultTime, baseline) {
+				if tryCreate(typeID, short, dateStr, s.MGDefaultTime, &baseline, nil) {
 					if isSandworm {
 						lsCreated++
 						// Report the substitution rather than silently producing a
@@ -1488,7 +1718,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 				if !wdSet[planWD] {
 					continue
 				}
-				if tryCreate(zsTypeID, "ZS", d.Format("2006-01-02"), s.ZSDefaultTime, zsBaseline) {
+				if tryCreate(zsTypeID, "ZS", d.Format("2006-01-02"), s.ZSDefaultTime, &zsBaseline, nil) {
 					zsCreated++
 				}
 			}
@@ -1511,7 +1741,7 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 					for ; !cur.After(toT); cur = cur.AddDate(0, 0, zsGapDays) {
-						if tryCreate(zsTypeID, "ZS", cur.Format("2006-01-02"), s.ZSDefaultTime, zsBaseline) {
+						if tryCreate(zsTypeID, "ZS", cur.Format("2006-01-02"), s.ZSDefaultTime, &zsBaseline, nil) {
 							zsCreated++
 						}
 					}
@@ -1520,11 +1750,26 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	total := mgCreated + lsCreated + zsCreated
+	// --- Desert Storm: one battle per participating task force, every Friday ---
+	if genTypes["ds"] && dsTypeID != 0 {
+		for d := fromT; !d.After(toT); d = d.AddDate(0, 0, 1) {
+			if d.Weekday() != time.Friday {
+				continue
+			}
+			for _, sl := range dsSlots {
+				tf := sl.tf
+				if tryCreate(dsTypeID, "DS", d.Format("2006-01-02"), sl.time, nil, &tf) {
+					dsCreated++
+				}
+			}
+		}
+	}
+
+	total := mgCreated + lsCreated + zsCreated + dsCreated
 	if total > 0 {
 		logActivity(user.ID, user.Username, "created", "schedule_event",
 			fmt.Sprintf("%d events generated", total), false,
-			fmt.Sprintf("MG: %d, LS: %d, ZS: %d", mgCreated, lsCreated, zsCreated))
+			fmt.Sprintf("MG: %d, LS: %d, ZS: %d, DS: %d", mgCreated, lsCreated, zsCreated, dsCreated))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1532,7 +1777,9 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		"mg_created":       mgCreated,
 		"ls_created":       lsCreated,
 		"zs_created":       zsCreated,
+		"ds_created":       dsCreated,
 		"skipped_existing": skippedExisting,
+		"skipped_error":    skippedError,
 		"skipped_invalid":  skippedInvalid,
 		"invalid":          invalid,
 		"switched":         switched,

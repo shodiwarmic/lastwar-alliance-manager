@@ -887,6 +887,27 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 	// This is best-effort — if the season has no start_date the loop is skipped.
 	purgedAlliance, purgedServer := 0, 0
 	unlinkedTypes := 0
+	// Calendar rows carrying a recorded participation board are KEPT: the season's
+	// plan is being retracted, but a board is history about members, and deleting
+	// its occurrence would orphan it (foreign_keys is off). A stamped row is
+	// detached from the season instead. Counted as a set: a detached row then also
+	// matches the legacy date purge below, and must not be reported twice.
+	keptIDs := map[int]bool{}
+	collectKept := func(q string, args ...any) error {
+		rows, err := tx.Query(q, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var eid int
+			if err := rows.Scan(&eid); err != nil {
+				return err
+			}
+			keptIDs[eid] = true
+		}
+		return rows.Err()
+	}
 
 	// STAMPED rows first, by origin. This is the case the recomputed-date loop
 	// below cannot reach: once a season's start_date has moved, every date it
@@ -910,6 +931,20 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		unlinkedTypes += n
+	}
+	if derr := collectKept(`SELECT id FROM schedule_events
+		WHERE season_event_id IN (SELECT id FROM season_events WHERE season_id = ?)
+		  AND id IN (SELECT schedule_event_id FROM participation_boards)`, id); derr != nil {
+		slog.Error("handleSeasonDelete: find boarded events", "error", derr)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, derr := tx.Exec(`UPDATE schedule_events SET season_event_id = NULL, season_week = NULL
+		WHERE season_event_id IN (SELECT id FROM season_events WHERE season_id = ?)
+		  AND id IN (SELECT schedule_event_id FROM participation_boards)`, id); derr != nil {
+		slog.Error("handleSeasonDelete: detach boarded events", "error", derr)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
 	if res, derr := tx.Exec(`DELETE FROM schedule_events
 		WHERE season_event_id IN (SELECT id FROM season_events WHERE season_id = ?)`, id); derr == nil && res != nil {
@@ -981,7 +1016,15 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 								}
 							}
 						} else if p.eventTypeID.Valid {
-							res, _ := tx.Exec(`DELETE FROM schedule_events WHERE event_date = ? AND event_type_id = ?`,
+							if err := collectKept(`SELECT id FROM schedule_events WHERE event_date = ? AND event_type_id = ?
+								AND id IN (SELECT schedule_event_id FROM participation_boards)`,
+								dateStr, p.eventTypeID.Int64); err != nil {
+								slog.Error("handleSeasonDelete: find boarded legacy events", "error", err)
+								http.Error(w, "Database error", http.StatusInternalServerError)
+								return
+							}
+							res, _ := tx.Exec(`DELETE FROM schedule_events WHERE event_date = ? AND event_type_id = ?
+								AND id NOT IN (SELECT schedule_event_id FROM participation_boards)`,
 								dateStr, p.eventTypeID.Int64)
 							if res != nil {
 								if n, _ := res.RowsAffected(); n > 0 {
@@ -1029,14 +1072,22 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 			details += fmt.Sprintf("; %d encounter type(s) unlinked", unlinkedTypes)
 		}
 	}
+	keptWithBoards := len(keptIDs)
+	if keptWithBoards > 0 {
+		if details != "" {
+			details += "; "
+		}
+		details += fmt.Sprintf("kept %d event(s) with participation boards", keptWithBoards)
+	}
 	logActivity(user.ID, user.Username, "deleted", "season_config", s.Name, false, details)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"message":         "Season deleted",
-		"purged_alliance": purgedAlliance,
-		"purged_server":   purgedServer,
-		"unlinked_types":  unlinkedTypes,
+		"message":          "Season deleted",
+		"purged_alliance":  purgedAlliance,
+		"purged_server":    purgedServer,
+		"unlinked_types":   unlinkedTypes,
+		"kept_with_boards": keptWithBoards,
 	})
 }
 
@@ -3233,7 +3284,10 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 			// a level, so a template level on a type that does not is declined here
 			// rather than written past the validation the manual path applies.
 			pt := typeRulesFor(ev.eventTypeID)
-			msg, err := validateEventRules(db, pt.Rules, dateStr, ev.eventTime, 0)
+			// A season template carries no task force, so a Desert Storm row is
+			// declined here as invalid, with the validator's reason, rather than
+			// written as a NULL-task-force battle.
+			msg, err := validateEventRules(db, pt.Rules, eventCandidate{Date: dateStr, Time: ev.eventTime}, 0)
 			if err != nil {
 				return result, err
 			}

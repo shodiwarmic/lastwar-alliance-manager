@@ -1,0 +1,256 @@
+/* participation.css — the recording screen, plus the status badges every
+   participation surface shares (the recording screen, the Accountability tabs
+   and My Participation on Profile), so a status reads the same everywhere. */
+
+/* --- Status badges --- */
+.pt-badge {
+    display: inline-block;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.pt-badge--present { background: var(--color-success-bg); color: var(--color-success); }
+.pt-badge--zero    { background: var(--color-warning-bg); color: var(--color-warning); }
+.pt-badge--missed  { background: var(--color-danger-bg);  color: var(--color-danger); }
+.pt-badge--excused { background: var(--color-info-bg);    color: var(--color-info); }
+.pt-badge--role    { background: var(--color-purple-bg);  color: var(--color-purple); }
+.pt-badge--muted   { background: var(--bg-tertiary);      color: var(--color-text-muted); }
+
+.pt-counts {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.pt-reason {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
+/* --- Recording screen --- */
+.pt-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.pt-header-title {
+    font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+    font-weight: 700;
+    margin: 0;
+}
+.pt-header-meta {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+}
+.pt-card {
+    margin-bottom: 16px;
+}
+.pt-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 1rem;
+}
+.pt-step-hint {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 10px 0;
+}
+.pt-file-btn {
+    cursor: pointer;
+}
+.pt-add-member {
+    flex: 1 1 14rem;
+    max-width: 22rem;
+}
+.pt-board-name {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+.pt-rank-cell {
+    font-weight: 600;
+    white-space: nowrap;
+    margin-right: 2px;
+}
+.pt-row-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    white-space: nowrap;
+}
+.pt-row-head .pt-board-name { display: inline; }
+.pt-col-member .pt-pick { display: flex; margin-top: 4px; }
+.pt-cell-label { display: none; }
+.pt-member-name { white-space: nowrap; }
+.pt-row-head .member-rank { flex-shrink: 0; }
+.pt-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 10px;
+}
+.pt-actions .pt-spacer {
+    margin-left: auto;
+}
+.pt-unparsed {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: var(--color-warning);
+}
+.pt-unparsed ul {
+    margin: 4px 0 0 1.2rem;
+    padding: 0;
+}
+
+.pt-entries-table input.form-input {
+    padding: 4px 8px;
+    min-width: 0;
+}
+.pt-entries-table .pt-col-value input { width: 10.5rem; }
+.pt-entries-table td { vertical-align: middle; }
+.pt-row-unmatched td { background: var(--color-warning-bg); }
+.pt-row-duplicate td { background: var(--color-danger-bg); }
+.pt-match {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.pt-match .inline-search { min-width: 11rem; }
+
+/* Narrow: the check table becomes a list, two lines per row — rank, member and the
+   row buttons on the first, each score (labelled, since there is no header row) on
+   its own line below. A container query on the table's wrapper rather than a page
+   breakpoint: what decides it is the room the table has, and a sideways-scrolling
+   table of inputs is the thing being avoided. */
+.pt-entries-wrap { container: pt-entries / inline-size; }
+@container pt-entries (max-width: 40rem) {
+    .pt-entries-table,
+    .pt-entries-table tbody { display: block; }
+    .pt-entries-table thead { display: none; }
+    .pt-entries-table tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        column-gap: 8px;
+        row-gap: 6px;
+        padding: 10px 4px;
+        border-bottom: 1px solid var(--color-border);
+    }
+    .pt-entries-table tbody tr:last-child { border-bottom: none; }
+    /* tbody + :hover so the table's hover tint (which sticks after a tap on a
+       phone) never hides a row's state. */
+    .pt-entries-table tbody tr.pt-row-unmatched,
+    .pt-entries-table tbody tr.pt-row-unmatched:hover { background: var(--color-warning-bg); }
+    .pt-entries-table tbody tr.pt-row-duplicate,
+    .pt-entries-table tbody tr.pt-row-duplicate:hover { background: var(--color-danger-bg); }
+    .pt-entries-table .field-error-message { grid-column: 1 / -1; }
+    .pt-entries-table td {
+        grid-column: 1 / -1;
+        padding: 0;
+        border: none;
+        background: transparent;
+    }
+    /* The member cell dissolves so its parts are placed individually; with no
+       box of its own it also drops out of the mobile sticky-first-column rule. */
+    .pt-entries-table td.pt-col-member { display: contents; }
+    .pt-entries-table .pt-row-head {
+        grid-column: 1;
+        grid-row: 1;
+        min-width: 0;
+        overflow: hidden;
+        font-size: 0.95rem;
+    }
+    .pt-entries-table .pt-row-head .pt-match,
+    .pt-entries-table .pt-member-name,
+    .pt-entries-table .pt-row-head .pt-board-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .pt-entries-table td.pt-col-actions { grid-column: 2; grid-row: 1; }
+    .pt-entries-table .pt-board-name,
+    .pt-entries-table .pt-pick { grid-column: 1 / -1; margin: 0; }
+    .pt-entries-table .pt-pick .inline-search { flex: 1; min-width: 0; }
+    .pt-entries-table td.pt-col-value {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-left: 1.1rem;
+    }
+    .pt-cell-label {
+        display: inline;
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+    }
+    .pt-entries-table .pt-col-value input { flex: 1; width: auto; min-width: 0; }
+}
+
+.pt-roles-table select.form-input {
+    padding: 4px 8px;
+    width: auto;
+}
+.pt-section-title {
+    font-weight: 600;
+    margin: 16px 0 6px 0;
+}
+
+.pt-suggest-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.pt-suggest-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.pt-suggest-list li:last-child { border-bottom: none; }
+.pt-suggest-name { font-weight: 600; }
+.pt-suggest-list .row-actions { margin-left: auto; }
+
+.pt-recent-list {
+    list-style: none;
+    margin: 0 0 12px 0;
+    padding: 0;
+}
+.pt-recent-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.pt-recent-list li:last-child { border-bottom: none; }
+.pt-recent-list .btn { margin-left: auto; }
+
+.pt-create-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+.pt-create-row .form-group { margin: 0; }
+
+.pt-back-link {
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+.pt-back-link a {
+    color: var(--color-text-mid);
+    text-decoration: none;
+}
+.pt-back-link a:hover {
+    color: var(--color-text);
+}

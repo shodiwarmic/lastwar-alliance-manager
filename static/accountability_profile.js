@@ -21,13 +21,10 @@ function tagClass(tag) {
     return 'acc-tag acc-tag--reliable';
 }
 
+// Labels come from the managed category list. The old switch here rendered every
+// custom category as "Manual"; an unknown key now shows as itself.
 function strikeTypeLabel(t) {
-    switch (t) {
-        case 'vs_below_threshold': return 'VS Below Min';
-        case 'train_no_show':      return 'Train No-Show';
-        case 'storm_no_show':      return 'Storm No-Show';
-        default:                   return 'Manual';
-    }
+    return StrikeTypes.label(t);
 }
 
 // --- Add Strike modal ---
@@ -35,7 +32,7 @@ function strikeTypeLabel(t) {
 function openStrikeModal(preType) {
     document.getElementById('strike-member-id').value = MEMBER_ID;
     document.getElementById('strike-member-name').value = window._profileName || '';
-    if (preType) document.getElementById('strike-type').value = preType;
+    document.getElementById('strike-type').value = preType || '';
     document.getElementById('strike-reason').value = '';
     strikeRefDateFP.clear(false);
     document.getElementById('strike-modal-status').textContent = '';
@@ -55,6 +52,7 @@ async function saveStrike() {
     const reason     = document.getElementById('strike-reason').value.trim();
     const refDate    = document.getElementById('strike-ref-date').value;
     const status     = document.getElementById('strike-modal-status');
+    if (!strikeType) { status.textContent = 'Category is required.'; return; }
     if (!reason) { status.textContent = 'Reason is required.'; return; }
 
     const res = await fetch('/api/accountability/strikes', {
@@ -62,7 +60,10 @@ async function saveStrike() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ member_id: MEMBER_ID, strike_type: strikeType, reason, ref_date: refDate }),
     });
-    if (!res.ok) { status.textContent = 'Failed to save.'; return; }
+    if (!res.ok) {
+        status.textContent = res.status === 400 ? (await res.text()).trim() : 'Failed to save.';
+        return;
+    }
     closeStrikeModal();
     boot();
 }
@@ -99,11 +100,20 @@ function renderHeader(profile) {
         actions.className = 'acc-profile-actions';
         const addBtn = document.createElement('button');
         addBtn.className = 'btn btn-danger btn-sm';
-        addBtn.textContent = '+ Add Strike';
+        addBtn.append(svgIcon('plus'), document.createTextNode(' Add Strike'));
         addBtn.addEventListener('click', () => openStrikeModal(null));
         actions.appendChild(addBtn);
         header.appendChild(actions);
     }
+}
+
+// Each history table scrolls sideways inside its own wrapper, so on a phone the
+// Actions column stays reachable instead of running off the edge of the page.
+function appendScrollTable(container, table) {
+    const wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
+    wrap.appendChild(table);
+    container.appendChild(wrap);
 }
 
 function renderStrikes(strikes) {
@@ -159,26 +169,24 @@ function renderStrikes(strikes) {
 
         if (CAN_MANAGE) {
             const tdAct = document.createElement('td');
+            const actionWrap = document.createElement('div');
+            actionWrap.className = 'row-actions';
             if (s.status === 'active') {
-                const excuseBtn = document.createElement('button');
-                excuseBtn.className = 'btn btn-secondary btn-sm';
-                excuseBtn.textContent = 'Excuse';
-                excuseBtn.addEventListener('click', () => excuseStrike(s.id));
-                tdAct.appendChild(excuseBtn);
+                actionWrap.appendChild(
+                    rowActionBtn('btn btn-secondary btn-sm', 'check', 'Excuse', () => excuseStrike(s.id))
+                );
             }
-            const delBtn = document.createElement('button');
-            delBtn.className = 'btn btn-danger btn-sm';
-            delBtn.textContent = 'Delete';
-            delBtn.style.marginLeft = s.status === 'active' ? '6px' : '0';
-            delBtn.addEventListener('click', () => deleteStrike(s.id));
-            tdAct.appendChild(delBtn);
+            actionWrap.appendChild(
+                rowActionBtn('btn btn-danger btn-sm', 'trash', 'Delete', () => deleteStrike(s.id))
+            );
+            tdAct.appendChild(actionWrap);
             tr.appendChild(tdAct);
         }
 
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    container.appendChild(table);
+    appendScrollTable(container, table);
 }
 
 async function excuseStrike(strikeID) {
@@ -226,47 +234,26 @@ function renderVSHistory(vsHistory) {
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    container.appendChild(table);
+    appendScrollTable(container, table);
 }
 
-function renderStormHistory(stormHistory) {
-    const container = document.getElementById('tab-storm');
-    container.replaceChildren();
-    if (!stormHistory.length) {
-        container.appendChild(Object.assign(document.createElement('p'), { textContent: 'No storm attendance logged.' }));
-        return;
+// Participation tab: every recorded board that concerns this member, derived by
+// the server under each event's own rule. Loaded separately from the profile so a
+// failure here leaves the other tabs working.
+async function loadParticipationHistory() {
+    const container = document.getElementById('tab-participation');
+    try {
+        const res = await fetch('/api/participation/members/' + MEMBER_ID);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        ParticipationHistory.render(container, await res.json(), {
+            counts: true,
+            linkBoards: true,
+            emptyText: 'No participation recorded for this member yet.',
+        });
+    } catch (err) {
+        console.error('loadParticipationHistory:', err);
+        container.replaceChildren(Object.assign(document.createElement('p'), { className: 'empty-state', textContent: 'Failed to load participation.' }));
     }
-    const table = document.createElement('table');
-    table.className = 'data-table';
-    const thead = document.createElement('thead');
-    const headerRow = document.createElement('tr');
-    ['Date', 'Status', 'Excuse', 'Logged By'].forEach(h => {
-        const th = document.createElement('th');
-        th.textContent = h;
-        headerRow.appendChild(th);
-    });
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
-    const tbody = document.createElement('tbody');
-    stormHistory.forEach(s => {
-        const tr = document.createElement('tr');
-        const tdDate = document.createElement('td');
-        tdDate.textContent = s.storm_date;
-        const tdStatus = document.createElement('td');
-        const statusSpan = document.createElement('span');
-        statusSpan.className = 'acc-attend--' + s.status.replace('_', '-');
-        statusSpan.textContent = s.status === 'no_show' ? 'No-Show' : s.status.charAt(0).toUpperCase() + s.status.slice(1);
-        tdStatus.appendChild(statusSpan);
-        const tdExcuse = document.createElement('td');
-        tdExcuse.textContent = s.excuse_reason || '—';
-        if (s.excuse_reason) TranslateBlock.attach(tdExcuse, s.excuse_reason);
-        const tdBy = document.createElement('td');
-        tdBy.textContent = s.recorded_by || '—';
-        tr.append(tdDate, tdStatus, tdExcuse, tdBy);
-        tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    container.appendChild(table);
 }
 
 function renderTrainHistory(trainHistory) {
@@ -301,52 +288,41 @@ function renderTrainHistory(trainHistory) {
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    container.appendChild(table);
-}
-
-// --- Tab switching ---
-
-function initTabs() {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            document.querySelectorAll('.tab-content').forEach(c => { c.style.display = 'none'; });
-            const target = document.getElementById('tab-' + btn.dataset.tab);
-            if (target) target.style.display = 'block';
-        });
-    });
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) {
-        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
-        if (target) target.style.display = 'block';
-    }
+    appendScrollTable(container, table);
 }
 
 // --- Boot ---
 
 async function boot() {
     if (!MEMBER_ID) return;
+    try {
+        await StrikeTypes.load();
+        if (CAN_MANAGE) StrikeTypes.fillSelect(document.getElementById('strike-type'));
+    } catch (err) {
+        // Labels fall back to the raw key; the page is still usable.
+        console.error('StrikeTypes.load:', err);
+    }
     let profile;
     try {
         const res = await fetch('/api/accountability/members/' + MEMBER_ID);
         if (!res.ok) throw new Error();
         profile = await res.json();
-    } catch {
+    } catch (err) {
+        console.error('boot:', err);
         document.getElementById('profile-header').textContent = 'Failed to load profile.';
         return;
     }
     renderHeader(profile);
     renderStrikes(profile.strikes);
     renderVSHistory(profile.vs_history);
-    renderStormHistory(profile.storm_history);
     renderTrainHistory(profile.train_history);
+    loadParticipationHistory();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     strikeRefDateFP = flatpickr('#strike-ref-date', { dateFormat: 'Y-m-d', allowInput: true });
 
-    initTabs();
+    Tabs.init({ hash: true, defaultTab: 'strikes' });
     boot();
     if (CAN_MANAGE) {
         document.getElementById('btn-strike-save').addEventListener('click', saveStrike);

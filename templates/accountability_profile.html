@@ -8,6 +8,7 @@
 
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/accountability.css"}}">
+<link rel="stylesheet" href="{{asset "/participation.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {{end}}
@@ -26,7 +27,7 @@
     <div class="tab-bar" style="margin-top:1.5rem;">
         <button class="tab-btn active" data-tab="strikes">Strikes</button>
         <button class="tab-btn" data-tab="vs">VS History</button>
-        <button class="tab-btn" data-tab="storm">Storm Attendance</button>
+        <button class="tab-btn" data-tab="participation">Participation</button>
         <button class="tab-btn" data-tab="train">Train Record</button>
     </div>
 
@@ -36,7 +37,7 @@
     <div id="tab-vs" class="tab-content">
         <div class="loading-msg">Loading…</div>
     </div>
-    <div id="tab-storm" class="tab-content">
+    <div id="tab-participation" class="tab-content">
         <div class="loading-msg">Loading…</div>
     </div>
     <div id="tab-train" class="tab-content">
@@ -57,12 +58,10 @@
             <input type="hidden" id="strike-member-id">
         </div>
         <div class="form-group">
-            <label for="strike-type">Type</label>
+            <label for="strike-type">Category</label>
+            <!-- Options come from the managed category list (strike-types.js). -->
             <select id="strike-type" class="form-input">
-                <option value="vs_below_threshold">VS Below Threshold</option>
-                <option value="train_no_show">Train No-Show</option>
-                <option value="storm_no_show">Storm No-Show</option>
-                <option value="manual">Manual</option>
+                <option value="">— select —</option>
             </select>
         </div>
         <div class="form-group">
@@ -85,5 +84,8 @@
 
 {{define "scripts"}}
 <div id="page-config" data-member-id="{{.MemberID}}" data-can-manage="{{if .Permissions.ManageAccountability}}true{{else}}false{{end}}" hidden></div>
+<script src="{{asset "/tabs.js"}}"></script>
+<script src="{{asset "/strike-types.js"}}"></script>
+<script src="{{asset "/participation-history.js"}}"></script>
 <script src="{{asset "/accountability_profile.js"}}"></script>
 {{end}}

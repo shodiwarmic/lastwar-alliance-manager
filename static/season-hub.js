@@ -2232,7 +2232,16 @@
             fetch('/api/season-hub/seasons/' + activeSeason.id, { method: 'DELETE' })
                 .then(r => {
                     if (!r.ok) return r.text().then(t => { throw new Error(t); });
-                    showToast('Season deleted.');
+                    return r.json();
+                })
+                .then(res => {
+                    // Calendar events with a recorded participation board stay on the
+                    // schedule (a board is history); say so rather than leave them
+                    // looking like a purge that missed.
+                    const kept = (res && res.kept_with_boards) || 0;
+                    showToast(kept
+                        ? `Season deleted. ${kept} schedule event${kept === 1 ? '' : 's'} with a participation board ${kept === 1 ? 'was' : 'were'} kept.`
+                        : 'Season deleted.', 'success', kept ? 7000 : undefined);
                     // Clear the deleted season's data; loadSeasonList selects the
                     // next season and reloads its data (rewards/mail lazy-load on
                     // tab focus). Don't fetch rewards/mail here — activeSeason still

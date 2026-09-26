@@ -103,7 +103,7 @@ func TestGeneratedEventsAllPassTheManualValidator(t *testing.T) {
 			rows.Close()
 
 			for _, r := range stored {
-				msg, err := validateSystemEventRules(db, r.short, r.date, r.tm, r.id)
+				msg, err := validateSystemEventRules(db, r.short, eventCandidate{Date: r.date, Time: r.tm}, r.id)
 				if err != nil {
 					t.Fatalf("validate %s %s: %v", r.short, r.date, err)
 				}
@@ -184,7 +184,7 @@ func TestGeneratorValidatesAgainstItsOwnBatch(t *testing.T) {
 		t.Fatalf("stored %d rows, response said %d created", len(stored), out.ZSCreated)
 	}
 	for _, r := range stored {
-		msg, err := validateSystemEventRules(db, "ZS", r.date, r.tm, r.id)
+		msg, err := validateSystemEventRules(db, "ZS", eventCandidate{Date: r.date, Time: r.tm}, r.id)
 		if err != nil {
 			t.Fatalf("validate: %v", err)
 		}
@@ -322,7 +322,7 @@ func TestZSGapIsAboutDatesNotHours(t *testing.T) {
 				{"2026-09-10", "00:00", true},
 				{"2026-09-10", "23:00", true},
 			} {
-				msg, err := validateSystemEventRules(db, "ZS", c.date, c.tm, 0)
+				msg, err := validateSystemEventRules(db, "ZS", eventCandidate{Date: c.date, Time: c.tm}, 0)
 				if err != nil {
 					t.Fatalf("validate %s %s: %v", c.date, c.tm, err)
 				}
@@ -349,7 +349,7 @@ func TestZSGapLooksBothWays(t *testing.T) {
 	seedZS(t, "2026-09-10", "23:00")
 
 	for _, date := range []string{"2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12"} {
-		msg, err := validateSystemEventRules(db, "ZS", date, "23:00", 0)
+		msg, err := validateSystemEventRules(db, "ZS", eventCandidate{Date: date, Time: "23:00"}, 0)
 		if err != nil {
 			t.Fatalf("validate %s: %v", date, err)
 		}
@@ -358,7 +358,7 @@ func TestZSGapLooksBothWays(t *testing.T) {
 		}
 	}
 	for _, date := range []string{"2026-09-07", "2026-09-13"} {
-		msg, err := validateSystemEventRules(db, "ZS", date, "23:00", 0)
+		msg, err := validateSystemEventRules(db, "ZS", eventCandidate{Date: date, Time: "23:00"}, 0)
 		if err != nil {
 			t.Fatalf("validate %s: %v", date, err)
 		}
@@ -374,7 +374,7 @@ func TestZSGapExcludesTheRowBeingEdited(t *testing.T) {
 
 	// Moving the only siege one day along must be accepted: it cannot conflict
 	// with itself.
-	msg, err := validateSystemEventRules(db, "ZS", "2026-09-08", "23:00", id)
+	msg, err := validateSystemEventRules(db, "ZS", eventCandidate{Date: "2026-09-08", Time: "23:00"}, id)
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
@@ -382,7 +382,7 @@ func TestZSGapExcludesTheRowBeingEdited(t *testing.T) {
 		t.Errorf("moving the only ZS was rejected: %s", msg)
 	}
 	// Without the exclusion it is a conflict with itself.
-	if msg, _ := validateSystemEventRules(db, "ZS", "2026-09-08", "23:00", 0); msg == "" {
+	if msg, _ := validateSystemEventRules(db, "ZS", eventCandidate{Date: "2026-09-08", Time: "23:00"}, 0); msg == "" {
 		t.Error("excludeID 0 should still see the existing row")
 	}
 }
@@ -391,10 +391,10 @@ func TestZSAllDayEventNeedsNoSpecialCase(t *testing.T) {
 	setupSettingsTestDB(t)
 	// An all-day ZS stores event_time '00:00'. The date is the date.
 	seedZS(t, "2026-09-07", "00:00")
-	if msg, _ := validateSystemEventRules(db, "ZS", "2026-09-09", "00:00", 0); msg == "" {
+	if msg, _ := validateSystemEventRules(db, "ZS", eventCandidate{Date: "2026-09-09", Time: "00:00"}, 0); msg == "" {
 		t.Error("all-day ZS two days later accepted, want rejected")
 	}
-	if msg, _ := validateSystemEventRules(db, "ZS", "2026-09-10", "00:00", 0); msg != "" {
+	if msg, _ := validateSystemEventRules(db, "ZS", eventCandidate{Date: "2026-09-10", Time: "00:00"}, 0); msg != "" {
 		t.Errorf("all-day ZS on D+3 rejected: %s", msg)
 	}
 }
@@ -463,7 +463,7 @@ func TestMGRejectsConsecutiveDaysBothDirections(t *testing.T) {
 	seedMG(t, "2026-09-09", "20:00")
 
 	for _, date := range []string{"2026-09-08", "2026-09-09", "2026-09-10"} {
-		msg, err := validateSystemEventRules(db, "MG", date, "20:00", 0)
+		msg, err := validateSystemEventRules(db, "MG", eventCandidate{Date: date, Time: "20:00"}, 0)
 		if err != nil {
 			t.Fatalf("validate %s: %v", date, err)
 		}
@@ -475,7 +475,7 @@ func TestMGRejectsConsecutiveDaysBothDirections(t *testing.T) {
 	}
 	// Every other day is the cadence the UI has always advertised.
 	for _, date := range []string{"2026-09-07", "2026-09-11"} {
-		msg, err := validateSystemEventRules(db, "MG", date, "20:00", 0)
+		msg, err := validateSystemEventRules(db, "MG", eventCandidate{Date: date, Time: "20:00"}, 0)
 		if err != nil {
 			t.Fatalf("validate %s: %v", date, err)
 		}
@@ -492,13 +492,13 @@ func TestMGCutoffAndGapDoNotInteract(t *testing.T) {
 	setupSettingsTestDB(t)
 	seedMG(t, "2026-09-09", "21:59")
 
-	if msg, err := validateSystemEventRules(db, "MG", "2026-09-11", "00:30", 0); err != nil {
+	if msg, err := validateSystemEventRules(db, "MG", eventCandidate{Date: "2026-09-11", Time: "00:30"}, 0); err != nil {
 		t.Fatalf("validate: %v", err)
 	} else if msg != "" {
 		t.Errorf("MG two days after a 21:59 MG rejected: %s", msg)
 	}
 	// The cutoff still applies on its own terms.
-	if msg, _ := validateSystemEventRules(db, "MG", "2026-09-13", "22:00", 0); msg != "Marshal's Guard must start by 21:59 ST" {
+	if msg, _ := validateSystemEventRules(db, "MG", eventCandidate{Date: "2026-09-13", Time: "22:00"}, 0); msg != "Marshal's Guard must start by 21:59 ST" {
 		t.Errorf("cutoff message = %q", msg)
 	}
 }
@@ -507,7 +507,7 @@ func TestMGGapExcludesTheRowBeingEdited(t *testing.T) {
 	setupSettingsTestDB(t)
 	id := seedMG(t, "2026-09-09", "20:00")
 
-	if msg, err := validateSystemEventRules(db, "MG", "2026-09-10", "20:00", id); err != nil {
+	if msg, err := validateSystemEventRules(db, "MG", eventCandidate{Date: "2026-09-10", Time: "20:00"}, id); err != nil {
 		t.Fatalf("validate: %v", err)
 	} else if msg != "" {
 		t.Errorf("moving the only MG one day along was rejected: %s", msg)

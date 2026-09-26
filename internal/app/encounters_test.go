@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -266,7 +267,7 @@ func TestEncounterRuleAppliesToCustomTypesWithAParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadScheduleTypeRules: %v", err)
 	}
-	if msg, err := validateEventRules(db, tr, "2026-09-20", "12:00", 0); err != nil || msg == "" {
+	if msg, err := validateEventRules(db, tr, eventCandidate{Date: "2026-09-20", Time: "12:00"}, 0); err != nil || msg == "" {
 		t.Errorf("push: validateEventRules allowed a custom encounter outside its window (msg=%q err=%v)", msg, err)
 	}
 }
@@ -327,8 +328,20 @@ func TestParentChangeReportsStrandedEncounters(t *testing.T) {
 	sp := typeIDByShort(t, "SP")
 	gt := anchorServerEvent(t, "General's Trial", "2026-04-08")
 
+	// Only today-or-later encounters are reported, so the fixture must not be a fixed
+	// date — a hardcoded 2026-09-23 made this test fail from 2026-09-24 on. Use the
+	// first occurrence START on or after today: inside the window at the 04-08
+	// anchor, and outside it once the anchor moves to 04-09.
+	anchor, _ := time.Parse("2006-01-02", "2026-04-08")
+	today, _ := time.Parse("2006-01-02", gameDate())
+	seed := anchor
+	for seed.Before(today) {
+		seed = seed.AddDate(0, 0, 14)
+	}
+	seedDate := seed.Format("2006-01-02")
+
 	if rr := postEvent(t, map[string]any{
-		"event_date": "2026-09-23", "event_type_id": sp, "event_time": "23:00",
+		"event_date": seedDate, "event_type_id": sp, "event_time": "23:00",
 	}); rr.Code != http.StatusCreated {
 		t.Fatalf("seed SP: %d %s", rr.Code, rr.Body.String())
 	}
@@ -355,14 +368,14 @@ func TestParentChangeReportsStrandedEncounters(t *testing.T) {
 	if len(out.Stranded) == 0 {
 		t.Fatal("moving the window stranded an encounter and the response did not say so")
 	}
-	if out.Stranded[0].Date != "2026-09-23" || out.Stranded[0].Type != "Sky Predator" {
-		t.Errorf("stranded[0] = %+v, want the 2026-09-23 Sky Predator", out.Stranded[0])
+	if out.Stranded[0].Date != seedDate || out.Stranded[0].Type != "Sky Predator" {
+		t.Errorf("stranded[0] = %+v, want the %s Sky Predator", out.Stranded[0], seedDate)
 	}
 
 	// It was reported, not moved.
 	var date string
 	db.QueryRow(`SELECT event_date FROM schedule_events WHERE event_type_id = ?`, sp).Scan(&date)
-	if date != "2026-09-23" {
+	if date != seedDate {
 		t.Errorf("the event was relocated to %s — the app must never move somebody's schedule", date)
 	}
 }

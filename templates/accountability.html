@@ -18,8 +18,8 @@
     <div class="tab-bar">
         <button class="tab-btn active" data-tab="members">Members</button>
         <button class="tab-btn" data-tab="strikes">Strikes</button>
-        {{if .Permissions.ManageAccountability}}
-        <button class="tab-btn" data-tab="storm">Storm Attendance</button>
+        {{if .Permissions.ViewParticipation}}
+        <button class="tab-btn" data-tab="participation">Participation</button>
         {{end}}
         <button class="tab-btn" data-tab="report">Report</button>
     </div>
@@ -38,7 +38,7 @@
             <strong class="icon-label"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> <span id="vs-flag-heading">Members below the VS daily minimum:</span></strong>
             <span id="vs-flag-names" translate="no"></span>
             {{if .Permissions.ManageAccountability}}
-            <button id="btn-add-vs-strikes" class="btn btn-warning btn-sm" style="margin-left:8px;">Add VS Strikes</button>
+            <button id="btn-add-vs-strikes" class="btn btn-warning btn-sm" style="margin-left:8px;"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-flag"/></svg> Add VS Strikes</button>
             {{end}}
         </div>
 
@@ -76,6 +76,11 @@
                     <button type="button" id="strikes-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
                 </div>
             </div>
+            {{if .Permissions.ManageAccountability}}
+            <div class="acc-toolbar-right">
+                <button type="button" id="btn-strike-types" class="btn btn-secondary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tag"/></svg> Categories</button>
+            </div>
+            {{end}}
         </div>
 
         <div id="strikes-container">
@@ -83,28 +88,39 @@
         </div>
     </div>
 
-    <!-- ── Storm Attendance ──────────────────────────────────────────────── -->
-    {{if .Permissions.ManageAccountability}}
-    <div id="tab-storm" class="tab-content">
+    <!-- ── Participation ─────────────────────────────────────────────────── -->
+    {{if .Permissions.ViewParticipation}}
+    <div id="tab-participation" class="tab-content">
 
         <div class="acc-toolbar">
-            <div class="acc-toolbar-left">
-                <label for="storm-date-input" style="font-size:0.9rem;color:var(--color-text-muted);">Storm Date</label>
-                <input type="date" id="storm-date-input" class="form-input" style="width:180px;">
-                <button id="btn-storm-load" class="btn btn-secondary btn-sm">Load</button>
-                <div class="filter-search-wrap quick-search">
-                    <input type="text" id="storm-search" class="form-input" placeholder="Search members…" aria-label="Search members" autocomplete="off">
-                    <button type="button" id="storm-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
-                </div>
-            </div>
+            <div class="acc-toolbar-left" id="participation-chips"></div>
+            {{if .Permissions.ManageParticipation}}
             <div class="acc-toolbar-right">
-                <button id="btn-storm-save" class="btn btn-primary btn-sm" style="display:none;">Save Attendance</button>
-                <span id="storm-save-status" style="font-size:0.85rem;margin-left:8px;"></span>
+                <a href="/participation/new" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-clipboard-list"/></svg> Record board</a>
             </div>
+            {{end}}
         </div>
 
-        <div id="storm-member-list">
-            <p style="color:var(--color-text-muted);font-size:0.9rem;">Select a date and click Load to view or log attendance.</p>
+        <!-- Recorded boards only: an event nobody recorded says nothing about anyone. -->
+        <div class="table-wrapper">
+            <table class="data-table" id="participation-table" data-export-csv="participation-boards.csv" translate="no">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Event</th>
+                        <th>TF</th>
+                        <th>Rows</th>
+                        <th>Missed</th>
+                        <th>Excused</th>
+                        <th>Pending suggestions</th>
+                        <th>Recorded by</th>
+                        <th data-no-export></th>
+                    </tr>
+                </thead>
+                <tbody id="participation-tbody">
+                    <tr><td colspan="9" class="loading-msg">Loading…</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
     {{end}}
@@ -149,15 +165,10 @@
         </div>
         <div class="form-group">
             <label for="strike-type">Category</label>
+            <!-- Options come from the managed category list (strike-types.js). -->
             <select id="strike-type" class="form-input">
                 <option value="">— select —</option>
-                <option value="vs_below_threshold">VS Below Threshold</option>
-                <option value="train_no_show">Train No-Show</option>
-                <option value="storm_no_show">Storm No-Show</option>
-                <option value="__custom__">Manual</option>
             </select>
-            <input type="text" id="strike-type-custom" class="form-input"
-                   placeholder="Enter category" style="display:none;margin-top:6px;">
         </div>
         <div class="form-group">
             <label for="strike-reason">Reason</label>
@@ -174,6 +185,27 @@
         </div>
     </div>
 </div>
+
+<div id="strike-types-modal" class="modal">
+    <div class="modal-content modal-lg">
+        <h2>Strike Categories</h2>
+        <p class="acc-modal-hint">Changes save as you make them. System categories are written by the app itself, so they can be renamed but not deactivated or deleted. A category that strikes already use can be deactivated — it stops being offered, and its strikes keep their label.</p>
+        <div class="table-scroll">
+            <table class="data-table acc-types-table">
+                <thead><tr><th>Order</th><th>Category</th><th>Active</th><th></th></tr></thead>
+                <tbody id="strike-types-tbody"><tr><td colspan="4" class="loading-msg">Loading…</td></tr></tbody>
+            </table>
+        </div>
+        <div class="acc-types-add">
+            <input type="text" id="strike-type-new-label" class="form-input" placeholder="New category label" maxlength="60" autocomplete="off">
+            <span id="strike-type-new-key" class="acc-types-key"></span>
+            <button type="button" id="btn-strike-type-add" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
+        </div>
+        <div class="modal-actions">
+            <button type="button" id="btn-strike-types-close" class="btn btn-secondary">Close</button>
+        </div>
+    </div>
+</div>
 {{end}}
 {{end}}
 
@@ -183,5 +215,7 @@
      data-vs-completed="{{.VSCompletedDays}}"
      data-vs-imported-completed="{{.VSImportedCompleted}}"
      data-vs-fallback="{{if .VSFallbackActive}}true{{else}}false{{end}}" hidden></div>
+<script src="{{asset "/tabs.js"}}"></script>
+<script src="{{asset "/strike-types.js"}}"></script>
 <script src="{{asset "/accountability.js"}}"></script>
 {{end}}

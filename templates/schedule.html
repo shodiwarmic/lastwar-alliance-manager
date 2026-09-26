@@ -29,10 +29,10 @@
 
         <!-- Week Navigator (also used as day navigator on mobile) -->
         <div class="week-nav">
-            <button class="btn btn-secondary btn-sm" id="btn-prev-week">← Prev</button>
+            <button class="btn btn-secondary btn-sm" id="btn-prev-week" title="Previous week" aria-label="Previous week"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chevron-left"/></svg> <span class="action-label">Prev</span></button>
             <span id="week-range-label" class="week-range-label"></span>
-            <button class="btn btn-secondary btn-sm" id="btn-next-week">Next →</button>
-            <button class="btn btn-ghost btn-sm" id="btn-today">Today</button>
+            <button class="btn btn-secondary btn-sm" id="btn-next-week" title="Next week" aria-label="Next week"><span class="action-label">Next</span> <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chevron-right"/></svg></button>
+            <button class="btn btn-ghost btn-sm" id="btn-today"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Today</button>
         </div>
 
         <!-- Week grid -->
@@ -70,7 +70,7 @@
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Discord / Chat Text</h3>
             <textarea id="text-output" rows="20" readonly></textarea>
             <div class="modal-actions">
-                <button class="btn btn-secondary" id="btn-copy-text">Copy to Clipboard</button>
+                <button class="btn btn-secondary" id="btn-copy-text"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-copy"/></svg> Copy to Clipboard</button>
                 <button class="btn btn-ghost btn-sm" id="btn-close-text"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg> Close</button>
             </div>
         </div>
@@ -94,7 +94,7 @@
         <div class="panel-header">
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-world"/></svg> Server Events</h3>
             {{if .Permissions.ManageSchedule}}
-            <button class="btn btn-primary" id="btn-add-server-event">+ Add</button>
+            <button class="btn btn-primary" id="btn-add-server-event"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
             {{end}}
         </div>
         <p class="help-text">Repeating game-wide events displayed as banners on the calendar. Encounters
@@ -110,7 +110,7 @@
         <div class="panel-header">
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tag"/></svg> Event Types</h3>
             {{if .Permissions.ManageSchedule}}
-            <button class="btn btn-primary" id="btn-add-event-type">+ Add</button>
+            <button class="btn btn-primary" id="btn-add-event-type"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Add</button>
             {{end}}
         </div>
         <p class="help-text">System event types cannot be deleted or renamed. Their baseline level is set here; the ceiling that bounds it lives in Settings → Game Limits.</p>
@@ -222,6 +222,7 @@
                 <div class="gen-toggle-row">
                     <label><input type="checkbox" id="gen-mg" checked> Generate Alliance Exercise (MG / Large Sandworm)</label>
                     <label><input type="checkbox" id="gen-zs" checked> Generate ZS</label>
+                    <label title="One battle per participating task force, every Friday, at its slot time from the Desert Storm page. Changing that setup later does not move battles already generated."><input type="checkbox" id="gen-ds"> Generate Desert Storm</label>
                 </div>
                 <div class="modal-actions" style="margin-top:12px;">
                     <button class="btn btn-primary" id="btn-generate"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-bolt"/></svg> Generate Events</button>
@@ -244,11 +245,14 @@
 {{define "scripts"}}
 <div id="page-config"
     data-can-manage="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
+    data-can-record="{{if .Permissions.ManageParticipation}}true{{else}}false{{end}}"
+    data-can-view-participation="{{if or .Permissions.ViewParticipation .Permissions.ManageParticipation}}true{{else}}false{{end}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <!-- copyWithVariables + the global #vars-modal in layout.html. storm.html is the
      model: the announcement fills some variables in and prompts for the rest. -->
 <script src="{{asset "/mail.js"}}"></script>
+<script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/schedule.js"}}"></script>
 {{end}}
 
@@ -294,6 +298,17 @@
                     <span class="help-text" id="event-level-help"></span>
                 </label>
                 <input type="number" id="event-level-input" class="form-input" min="1">
+            </div>
+
+            <!-- Task force: Desert Storm only — each task force fights its own
+                 battle, so a Desert Storm event names which. schedule.js shows it. -->
+            <div class="form-group" id="event-tf-group" style="display:none;">
+                <label for="event-tf-select">Task force</label>
+                <select id="event-tf-select" class="form-input">
+                    <option value="">— select —</option>
+                    <option value="A">Task Force A</option>
+                    <option value="B">Task Force B</option>
+                </select>
             </div>
 
             <div class="form-group">

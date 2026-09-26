@@ -64,7 +64,7 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 > whom" — add the entity type to `neverBatched` rather than accepting the merge.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -407,6 +407,11 @@ Two rules for tier 3:
    preview, `mobilePreview`, the OCR import, the contributions import, and the CSV
    import. `namematch_test.go` guards the no-rebuild contract.
 
+**One caller skips tier 3 on purpose:** the participation board import resolves through
+`resolveMemberNameOrAlias` (tiers 1–2 alone). Its automatic matches are not reviewed
+name-by-name, and a wrong one credits one member with another's result — so there a
+near-miss stays unmatched for an officer to pick. Don't "fix" it back to the full engine.
+
 Folding is **strictly additive** — it only runs after tiers 1 and 2 miss, so it can
 turn a miss into a match but never change an existing match.
 
@@ -708,11 +713,33 @@ any game rule. A generated or pushed event could therefore sit on the calendar i
 state the same officer would have been refused by hand, which is worse than no
 validation: the schedule is read by the whole alliance as if it were checked.
 
-**Any new write into `schedule_events` for a system type (MG/ZS) calls
-`validateSystemEventRules` and `validateSystemLevel`** (`handlers_schedule.go`). The
-date/time rules live in the first and nowhere else; the level rule stays separate
-because its call timing is caller-specific — the update path deliberately
-grandfathers a level the officer did not touch.
+**Any new write into `schedule_events` calls `validateEventRules(q, typeRules,
+eventCandidate{Date, Time, TaskForce}, excludeID)`** plus the level rule
+(`handlers_schedule.go`). The date/time rules live behind it and nowhere else; the
+level rule stays separate because its call timing is caller-specific — the update
+path deliberately grandfathers a level the officer did not touch. All four write
+paths go through `validateEventRules`, the generator included (it once called
+`validateSystemEventRules` directly, which silently skipped any rule not keyed on
+`is_system`). The candidate is a struct so a rule needing more than a date and a time
+lives in the validator, not at a call site.
+
+**Desert Storm is one type (`DS`) with a nullable `task_force`**, not two types (081).
+Each task force fights its own battle, so a new DS row must name `A` or `B`, it is
+always on a game-day **Friday** (the validator refuses any other weekday unless an
+update leaves the date unchanged, worded like the cooldown rejections with the next
+eligible date; the event modal and the recording screen show the same message under
+the date field via `desertStormDayError` in `global.js` and disable saving — keep the
+two texts identical), and a task force has at most one battle per date — the validator names that rule, and a
+partial unique index `(event_date, event_type_id, task_force) WHERE task_force IS NOT
+NULL` is the race backstop. `NULL` occurs only on legacy battles migrated from
+`storm_attendance`, which never recorded a task force; `KeepMissingTaskForce`
+grandfathers those on update only. Any other type refuses a task force. The
+generator makes one battle per participating task force per Friday from
+`storm_tf_config` + `storm_slot_times`; its existence check binds `task_force IS ?`
+(`= NULL` is never true, and every non-DS candidate binds NULL). Changing the storm
+config never moves generated battles. The Season Hub push declines a DS template row
+(no task force) as invalid. The schedule's four renderers draw DS from these rows —
+there are no display-only storm entries any more.
 
 **A bulk caller validates and INSERTs one row at a time, in date order**, so each
 accepted row is in the database before the next candidate is checked and the batch is
@@ -968,6 +995,88 @@ The per-candidate queries are not an N+1 worth removing: a generate is bounded a
 days, i.e. ≤ ~75 candidates × 3 indexed point queries against an in-process SQLite
 file, measured at ~10 ms for 300 such statements. A pre-fetch would reintroduce
 exactly the in-memory bookkeeping the paragraph above rules out.
+
+## Participation framework (`participation.go`, `handlers_participation.go`)
+
+Per-member results for the events that mail a ranked board after they finish, built
+**once over `schedule_events` occurrences** — not as a table pair per event, which is the
+mistake upstream made three times. It is `033_season_trackables.sql` re-scoped from a
+season to an event type: `participation_trackables` declares a type's measures and
+`participation_values` stores them (EAV). Rank is a column on the entry, not a trackable.
+
+**Recording is optional, and that shapes everything.** An occurrence with no board means
+nobody recorded it and says nothing about any member. Views list recorded boards only,
+nothing prompts for coverage, and a strike can only ever be suggested from within a board
+that exists. Do not add a "missing boards" view or count.
+
+**Status is derived, never stored.** A board stores what the mail said (entries +
+values), the roles for that battle, and the officer's judgements (exceptions).
+`deriveBoard` is the ONE function that turns those into present / zero / missed /
+excused under the type's declared `absence_rule` — nothing else decides status:
+
+| Rule | Types | Missed means |
+|---|---|---|
+| `absent` | Marshal's Guard, Large Sandworm | an eligible roster member with no entry (appearing means you attacked) |
+| `zero` | Zombie Siege | an entry whose primary value is **present and 0** — absence is blameless (the game picks who is attacked) |
+| `role` | Desert Storm | a **starter** with no entry — an absent sub is never counted |
+
+The rule is a declared property of the type (`participation_types`), because getting it
+wrong manufactures accusations automatically. A **missing value is not a zero**: the
+board PUT refuses an entry lacking a value for any of the type's trackables.
+
+**Suggestions are derived on every read and never stored**; a strike is created only by
+an explicit confirm. The confirm re-derives and checks for an existing strike of the
+type's `strike_type` on `ref_date = event_date` **inside one transaction** — with one
+connection that is the serialisation point, which `handleStrikeCreate`'s
+check-then-insert lacks. Dismissing (`dismissed`) and excusing (`excused` + reason +
+author) are stored per `(board, member)` so a re-save never resurfaces them.
+`missed` exceptions are written **only by migration 081** for legacy
+`storm_attendance` no-shows, which have no role to derive a miss from.
+
+**Reads gate on `canViewParticipation`** (`view_participation` OR
+`manage_participation`): `userHasPermission` reads one key and manage does not imply
+view, and the recording screen reads what it writes. `/api/participation/me` needs no
+permission; `/members/{id}` also accepts `view_accountability`, because the page it
+feeds is gated on that.
+
+**Every read is load → derive → write**, in a fixed number of queries whatever the board
+count (`loadBoards`). Never derive per row inside an open cursor.
+
+**Recording input is a CSV import or a member search — there is no text box.** The CSV
+endpoint (`POST /api/participation/boards/{id}/csv`, `handleParticipationCSV`) maps
+headers before any row, matches names through `resolveBoardNames` (a member's name or
+alias only — **no accent-folded tier**, unlike every other import, because a board's
+automatic matches are taken as read and a guess would credit one member with another's
+result; tags stripped; a second row matching an already-claimed member left unmatched) and
+**saves nothing**: its rows go to the check table and are saved by the ordinary PUT.
+A hand-added row is a member picked from search, whose current name becomes the
+snapshot. **A member on the board twice blocks saving** — the same matched member or the same
+name (case-insensitive) on two rows; the check table marks both rows and disables Save,
+and the PUT refuses it too. **Rank is the row's position** in the table (rows move up and down); a
+legacy board keeps its NULL ranks rather than being given invented ones.
+`parseBoardAmount` (Go) and `ParticipationParse.parseAmount` (JS) read scores the same
+way — K/M/G/B suffixes, comma grouping — keep them in step.
+
+**`foreign_keys` is off, so every delete path clears participation rows explicitly:**
+- `deleteMemberTx` — values → entries → roles → exceptions → history → (clear
+  `recorded_by`) → linked user → member, in **one transaction** that rolls back on the
+  first failure. Used by the single delete and the import's bulk removal.
+- The board DELETE — values → entries → roles → exceptions → board.
+- The board PUT replaces values → entries → roles but **keeps exceptions**.
+- `deleteScheduleEvent` refuses (409) an event with a board; `updateScheduleEvent`
+  refuses a type change on one (date/time/level/notes stay editable).
+- The season delete **detaches** stamped rows that carry a board instead of deleting
+  them, and reports `kept_with_boards`.
+- Every user delete (`clearUserReferences`) nulls `recorded_by` on boards and
+  exceptions first; readers `LEFT JOIN users` and tolerate a dangling id anyway.
+
+**Creating an occurrence from the recording screen** (`POST /api/participation/occurrences`)
+goes through `insertScheduleEvent`, the same helper as the Schedule page's create, so
+it passes exactly the same rules and returns exactly the same messages. It needs
+`manage_participation`, not `manage_schedule`.
+
+`participation_board` and `participation_exception` are in `neverBatched`: two boards
+recorded in fifteen minutes are two events, and five excusals are five members.
 
 ## Known gotchas
 
