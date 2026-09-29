@@ -175,12 +175,25 @@ test_arch_ocr_refuses_local_on_arm() {
 }
 
 test_tools_installs_packages_not_binary_names() {
-    pf_tool_present() { case $1 in ss|gpg|fail2ban) return 1 ;; *) return 0 ;; esac; }
-    PF_TOOLS="curl ss gpg fail2ban"
+    pf_tool_present() { case $1 in ss|gpg|fail2ban|crontab) return 1 ;; *) return 0 ;; esac; }
+    PF_TOOLS="curl ss gpg fail2ban crontab"
     ! check_tools || _fail "missing tools passed"
-    assert_contains "$PF_MSG" "ss gpg fail2ban"
+    assert_contains "$PF_MSG" "ss gpg fail2ban crontab"
     remedy_tools
-    assert_called "apt-get install -y iproute2 gnupg fail2ban"
+    assert_called "apt-get install -y iproute2 gnupg fail2ban cron"
+}
+
+test_tools_finds_what_only_sbin_holds() {
+    # Debian's user PATH has no sbin, where ufw lives: found by the rehearsal on a real host,
+    # where a freshly installed ufw kept failing the check.
+    local sbin="$TEST_TMP/sbin" bin="$TEST_TMP/bin"
+    mkdir -p "$sbin" "$bin"
+    printf '#!/bin/sh\n' > "$sbin/fakeufw"
+    chmod +x "$sbin/fakeufw"
+    PF_SBIN_DIRS="$sbin"
+    PATH="$bin" pf_tool_present fakeufw || _fail "a tool in sbin was reported missing"
+    PATH="$bin" pf_tool_present not-anywhere-xyz && _fail "a missing tool was reported present"
+    true
 }
 
 test_disk_blocks_only_when_images_cannot_fit() {

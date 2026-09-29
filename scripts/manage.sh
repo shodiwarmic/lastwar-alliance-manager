@@ -72,8 +72,9 @@ require_install() {
     fi
 }
 
+# manage_preflight [EXTRA_TOOL...]
 manage_preflight() {
-    PF_TOOLS="curl tar sqlite3 sha256sum openssl"
+    PF_TOOLS="curl tar sqlite3 sha256sum openssl $*"
     PF_LOG="$APP_DIR/manage.log"
     preflight_run not-root sudo tools docker compose-v2 docker-running disk
 }
@@ -131,6 +132,17 @@ To run that release's image anyway, set APP_VERSION=$version in .env, then:
         fi
         tag=$(resolve_latest_release)
         [ -n "$tag" ] || die "could not resolve the latest release (no network, or GitHub refused); nothing changed — APP_VERSION stays $(env_get APP_VERSION)"
+        # Between a v2.0.0 merge and its publication, "latest" is still a release with no
+        # host files: say that, rather than failing the download with nothing to go on.
+        if is_release_tag "$tag" && version_lt "$tag" "$AM_FIRST_ASSET_RELEASE"; then
+            die "the newest published release, $tag, predates versioned host files ($AM_FIRST_ASSET_RELEASE has not been published yet); nothing changed"
+        fi
+        # "Newest" moving backwards (a release withdrawn) is never followed silently.
+        local current
+        current=$(env_get HOST_FILES_VERSION)
+        if is_release_tag "$tag" && is_release_tag "$current" && version_lt "$tag" "$current"; then
+            die "the newest published release, $tag, is older than this install's $current; nothing changed. To go back to it deliberately: ./scripts/manage.sh update --version $tag"
+        fi
     fi
     # It becomes a directory name under .staging/ that is then emptied: `..` must never pass.
     [[ $tag =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "unusable release name: $tag"
@@ -183,7 +195,8 @@ cmd_migrate() {
     if [ -d "$APP_DIR/.git" ] && ! command -v git >/dev/null 2>&1; then
         die "this install is a git clone but git is not installed. Install git (sudo apt-get install git), or remove .git to migrate it as a copy with no history."
     fi
-    manage_preflight
+    # crontab: a migrate installs the nightly backup, a root crontab line.
+    manage_preflight crontab
     stage1 1 "$@"
 }
 
@@ -284,9 +297,31 @@ apply_on_exit() {
         sudo install -m 0644 "$CADDY_BACKUP" "$AM_CADDYFILE" && sudo systemctl reload caddy \
             && log "Restored $AM_CADDYFILE from $CADDY_BACKUP." >&2
     fi
+    # What a migrate added outside the install directory, only where this run created it: a
+    # registry entry naming an install that is not migrated would mislead the next install.sh,
+    # and a helper or crontab line nothing registered feeds would fail every night.
+    if [ -n "${CREATED_REGISTRY:-}" ]; then
+        registry_remove "$CREATED_REGISTRY" && log "Removed the registry entry '$CREATED_REGISTRY' this run added." >&2
+    fi
+    if [ "${CREATED_HELPER:-0}" = 1 ]; then
+        sudo rm -f "$AM_BACKUP_HELPER"
+    fi
+    if [ "${CREATED_CRONTAB:-0}" = 1 ]; then
+        sudo crontab -l 2>/dev/null | grep -vF "$AM_BACKUP_HELPER" | sudo crontab -
+    fi
     printf 'Nothing else changed: the containers were not restarted. Backups: %s/*_%s*\n' \
         "$AM_BACKUP_DIR" "${BACKUP_TS:-}" >&2
     rm -rf "$SNAP"
+    remove_staging
+}
+
+# remove_staging — the unpacked release, once finished with. Only ever a directory under
+# $APP_DIR/.staging/: --staging arrives on a command line, and this is an rm -rf.
+remove_staging() {
+    case ${STAGING_DIR:-} in
+        "$APP_DIR/.staging/"?*) rm -rf "$STAGING_DIR" ;;
+    esac
+    rmdir "$APP_DIR/.staging" 2>/dev/null || true
 }
 
 # fail_apply MESSAGE — stop the apply with a reason; the EXIT trap does the rollback.
@@ -379,8 +414,11 @@ cmd_apply() {
         die "apply is the second stage of an update; run ./scripts/manage.sh update"
     fi
     APP_DIR=$app_dir
+    STAGING_DIR=$staging
     export APP_DIR
     cd "$APP_DIR"
+    # However this ends — a refusal below included — the unpacked release is not left behind.
+    trap 'remove_staging' EXIT
     AM_WRITER="manage.sh $target"
     registry_valid_name "$name" || die "--name may hold letters, digits, . _ and - only"
 
@@ -477,8 +515,12 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
     env_ensure OCR_ARCHIVE_DIR ''
 
     if [ "$migrate" = 1 ]; then
+        # What this run creates outside the install directory is undone by a rollback.
+        [ -e "$(registry_dir)/$name.conf" ] || CREATED_REGISTRY=$name
         registry_write "$name" "$APP_DIR" || fail_apply "could not register the install (above)"
         summary+=("registered as '$name' in $(registry_dir)")
+        [ -e "$AM_BACKUP_HELPER" ] || CREATED_HELPER=1
+        sudo crontab -l 2>/dev/null | grep -qF "$AM_BACKUP_HELPER" || CREATED_CRONTAB=1
         helper_out=$(ensure_backup_helper)
         summary+=("${helper_out#Nightly backup helper: }")
         # Only under PRODUCTION=true: a plain-HTTP LAN install with no proxy is exactly where
@@ -506,7 +548,8 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
     # to be created sees it. An `up` that fails after this is retried by the next update.
     env_set HOST_FILES_VERSION "$target"
     APPLY_ARMED=0
-    trap - EXIT INT TERM
+    trap 'remove_staging' EXIT
+    trap - INT TERM
     rm -rf "$SNAP"
 
     # 12. Start what was pulled.
@@ -520,8 +563,7 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
     sudo docker image prune -f >/dev/null || true
 
     # 13. Tidy.
-    rm -rf "$staging"
-    rmdir "$APP_DIR/.staging" 2>/dev/null || true
+    remove_staging
     rm -f "$shipped" "$previous"
 
     log ""
@@ -542,7 +584,7 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
 # never been the failing combination. Problems here are warnings — the proxy keeps its
 # working config, and the next update tries again.
 render_caddy() {
-    local deployed shipped app collab tmp validate=(sudo caddy)
+    local deployed shipped app collab tmp out validate=(sudo caddy)
     [ -f "$AM_CADDYFILE" ] || return 0
     deployed=$(caddyfile_rev "$AM_CADDYFILE")
     shipped=$(caddyfile_rev "$APP_DIR/deploy/Caddyfile")
@@ -566,7 +608,8 @@ render_caddy() {
     if id caddy >/dev/null 2>&1; then
         validate=(sudo -u caddy caddy)
     fi
-    if ! "${validate[@]}" validate --adapter caddyfile --config "$tmp" >/dev/null 2>&1; then
+    if ! out=$("${validate[@]}" validate --adapter caddyfile --config "$tmp" 2>&1); then
+        printf '%s\n' "$out" >&2
         warn "the rev $shipped Caddyfile did not validate, so $AM_CADDYFILE was left as it is. The rendered file is $tmp"
         return 0
     fi

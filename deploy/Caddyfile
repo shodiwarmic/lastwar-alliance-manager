@@ -23,40 +23,40 @@
 # Collabora on the IPv4 loopback only, and "localhost" may resolve to ::1 first.
 
 __APP_DOMAIN__ {
-    reverse_proxy 127.0.0.1:8080
-    encode gzip
-    header {
-        X-Content-Type-Options "nosniff"
-        # SAMEORIGIN, not DENY: the Collabora iframe loads inside this app's own pages.
-        X-Frame-Options "SAMEORIGIN"
-        X-XSS-Protection "1; mode=block"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        # frame-src / connect-src let the Collabora editor load and open its WebSocket.
-        # img-src carries the game CDN hosts that LastRank avatars are hotlinked from.
-        Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https://lastwar-cdn.akamaized.net https://lastwar-cdn.lastwarapp.net; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://__COLLABORA_DOMAIN__; frame-src https://__COLLABORA_DOMAIN__; frame-ancestors 'none';"
-        -Server
-    }
-    log {
-        output file /var/log/caddy/lastwar-access.log {
-            roll_size 100mb
-            roll_keep 10
-            roll_keep_for 720h
-        }
-        format json
-    }
+	reverse_proxy 127.0.0.1:8080
+	encode gzip
+	header {
+		X-Content-Type-Options "nosniff"
+		# SAMEORIGIN, not DENY: the Collabora iframe loads inside this app's own pages.
+		X-Frame-Options "SAMEORIGIN"
+		X-XSS-Protection "1; mode=block"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		# frame-src / connect-src let the Collabora editor load and open its WebSocket.
+		# img-src carries the game CDN hosts that LastRank avatars are hotlinked from.
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https://lastwar-cdn.akamaized.net https://lastwar-cdn.lastwarapp.net; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://__COLLABORA_DOMAIN__; frame-src https://__COLLABORA_DOMAIN__; frame-ancestors 'none';"
+		-Server
+	}
+	log {
+		output file /var/log/caddy/lastwar-access.log {
+			roll_size 100mb
+			roll_keep 10
+			roll_keep_for 720h
+		}
+		format json
+	}
 }
 
 __COLLABORA_DOMAIN__ {
-    encode gzip
-    reverse_proxy 127.0.0.1:9980
-    header {
-        X-Content-Type-Options "nosniff"
-        # No X-Frame-Options here: the editor MUST be embeddable — by the app, and only by it.
-        Content-Security-Policy "frame-ancestors https://__APP_DOMAIN__"
-        X-XSS-Protection "1; mode=block"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        -Server
-    }
+	encode gzip
+	reverse_proxy 127.0.0.1:9980
+	header {
+		X-Content-Type-Options "nosniff"
+		# No X-Frame-Options here: the editor MUST be embeddable — by the app, and only by it.
+		Content-Security-Policy "frame-ancestors https://__APP_DOMAIN__"
+		X-XSS-Protection "1; mode=block"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		-Server
+	}
 }

@@ -140,13 +140,23 @@ check_arch_ocr() {
 
 # The binary each tool comes from. Only the names that differ are listed; everything else
 # is installed under its own name.
-declare -gA PF_PACKAGE=([ss]=iproute2 [gpg]=gnupg [sha256sum]=coreutils)
+declare -gA PF_PACKAGE=([ss]=iproute2 [gpg]=gnupg [sha256sum]=coreutils [crontab]=cron)
+
+# Where a tool may live that an ordinary user's PATH does not reach: Debian's default user PATH
+# has no sbin, so `command -v ufw` fails for the (deliberately non-root) operator even once ufw
+# is installed. The scripts run such tools through sudo, whose secure_path does include them.
+PF_SBIN_DIRS=${AM_SBIN_DIRS:-/usr/local/sbin /usr/sbin /sbin}
 
 pf_tool_present() {
+    local d
     case $1 in
-        fail2ban) dpkg -s fail2ban >/dev/null 2>&1 ;;
-        *) command -v "$1" >/dev/null 2>&1 ;;
+        fail2ban) dpkg -s fail2ban >/dev/null 2>&1; return ;;
     esac
+    command -v "$1" >/dev/null 2>&1 && return 0
+    for d in $PF_SBIN_DIRS; do
+        [ -x "$d/$1" ] && return 0
+    done
+    return 1
 }
 
 pf_missing_tools() {
@@ -170,8 +180,8 @@ remedy_tools() {
         pkgs+=("${PF_PACKAGE[$t]:-$t}")
     done < <(pf_missing_tools)
     [ ${#pkgs[@]} -gt 0 ] || return 0
-    sudo apt-get update
-    sudo apt-get install -y "${pkgs[@]}"
+    apt_update
+    apt_install "${pkgs[@]}"
 }
 
 pf_define docker blocking 0 remedy_docker
@@ -185,15 +195,15 @@ remedy_docker() {
     local os codename
     os=$(pf_os_id)
     codename=$(pf_codename)
-    sudo apt-get update
-    sudo apt-get install -y ca-certificates curl
+    apt_update
+    apt_install ca-certificates curl
     sudo install -m 0755 -d /etc/apt/keyrings
     sudo curl -fsSL "https://download.docker.com/linux/$os/gpg" -o /etc/apt/keyrings/docker.asc
     sudo chmod a+r /etc/apt/keyrings/docker.asc
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$os $codename stable" \
         | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    sudo apt-get update
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    apt_update
+    apt_install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 }
 
 pf_define compose-v2 blocking 0 remedy_compose_v2
@@ -214,7 +224,7 @@ remedy_compose_v2() {
         return
     fi
     # docker-compose-plugin is the name in Docker's repository; Ubuntu's own is docker-compose-v2.
-    sudo apt-get install -y docker-compose-plugin || sudo apt-get install -y docker-compose-v2
+    apt_install docker-compose-plugin || apt_install docker-compose-v2
 }
 
 pf_define docker-running blocking 0 remedy_docker_running
@@ -281,7 +291,7 @@ check_dns() {
         fi
     done
     [ ${#bad[@]} -eq 0 ] && return 0
-    PF_MSG="not pointing at this host ($pub): $(IFS=';'; echo "${bad[*]}"). Caddy cannot get certificates until they do. If a CDN or another proxy fronts this host, that is expected: --ignore dns"
+    PF_MSG="not pointing at this host ($pub): $(IFS=';'; echo "${bad[*]}"). No certificate can be issued for them until they do. If a CDN or another proxy fronts this host, that is expected: --ignore dns"
     return 1
 }
 
@@ -331,9 +341,14 @@ pf_record_ignore() {
 # preflight_run ID... — run the checks, remediating and re-running as needed. Returns 0 when
 # nothing blocking is left; exits 1 otherwise, naming the ids.
 preflight_run() {
-    local pass id fn class remedied choice can_fix
+    local pass id fn class remedied choice can_fix interactive=1
     local -a blocking unresolved
     local -A msg
+    # No terminal to answer on (a pipe, cron, automation) is non-interactive too: a prompt
+    # there would read end-of-file and stop the run for no reason it could show.
+    if [ "${NON_INTERACTIVE:-0}" = 1 ] || [ ! -t 0 ]; then
+        interactive=0
+    fi
     for pass in 1 2 3; do
         blocking=()
         unresolved=()
@@ -368,7 +383,7 @@ preflight_run() {
                 pf_record_ignore "$id" "${msg[$id]}"
                 continue
             fi
-            if [ "${NON_INTERACTIVE:-0}" = 1 ]; then
+            if [ "$interactive" = 0 ]; then
                 if [ -n "$can_fix" ]; then
                     step "Fixing $id"
                     "${PF_REMEDY[$id]}"

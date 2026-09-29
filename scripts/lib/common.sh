@@ -47,6 +47,12 @@ confirm() {
     [[ $reply =~ ^[Yy]$ ]]
 }
 
+# --- Packages -----------------------------------------------------------------------------
+# DEBIAN_FRONTEND=noninteractive: on a terminal, a package's debconf questions (exim's mail
+# setup, pulled in by fail2ban's recommends, is one) would otherwise stop the install to ask.
+apt_update()  { sudo DEBIAN_FRONTEND=noninteractive apt-get update; }
+apt_install() { sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"; }
+
 # --- .env ---------------------------------------------------------------------------------
 # .env is read with grep, NEVER `source`d: the documented TRUSTED_ORIGINS is an unquoted
 # value with spaces (app.example.com, localhost:8080, …), which a shell parses as a command

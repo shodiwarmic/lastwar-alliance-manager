@@ -473,6 +473,21 @@ jobs:
                   fails.append(f'.github/scripts/release_paths.py: NOT_SHIPPED names {path}, '
                                f'which is no longer tracked -- drop the entry')
 
+          # The asset ships the mode git records, and an operator runs ./scripts/<name>.sh
+          # directly -- stage 1 of an update even execs the staged manage.sh. A shipped script
+          # outside scripts/lib/ (which is only ever sourced) must be executable in git, or
+          # every install gets "Permission denied". The rehearsal found exactly that.
+          modes = {}
+          for line in subprocess.run(['git', 'ls-files', '-s'], capture_output=True, text=True,
+                                     check=True).stdout.splitlines():
+              meta, path = line.split('\t', 1)
+              modes[path] = meta.split()[0]
+          for path in manifest:
+              if path.endswith('.sh') and not path.startswith('scripts/lib/') \
+                      and modes.get(path) != '100755':
+                  fails.append(f'{path}: shipped to be run, but not executable in git '
+                               f'(git update-index --chmod=+x {path})')
+
           if fails:
               print('Host-files manifest check failed:\n')
               for f in fails:

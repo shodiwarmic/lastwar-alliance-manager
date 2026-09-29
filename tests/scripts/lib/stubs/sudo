@@ -18,4 +18,5 @@ fi
 if [ -x "$STUB_RESPONSES/sudo" ]; then
     "$STUB_RESPONSES/sudo" "$@" || exit $?
 fi
-exec "$@"
+# Leading VAR=value arguments set the environment, as real sudo allows.
+exec env "$@"

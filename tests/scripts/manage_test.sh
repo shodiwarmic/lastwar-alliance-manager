@@ -116,6 +116,7 @@ test_stage1_stages_the_asset_and_hands_over_to_the_staged_copy() {
     run cmd_migrate --asset "$asset"
     assert_status 0
     assert_file "$APP/.staging/v9.9.9/scripts/manage.sh"
+    [ -x "$APP/.staging/v9.9.9/scripts/manage.sh" ] || _fail "the staged manage.sh cannot be exec'd"
     assert_eq "$(head -n1 "$TEST_TMP/exec-args")" "$APP/.staging/v9.9.9/scripts/manage.sh"
     assert_eq "$(sed -n '2,9p' "$TEST_TMP/exec-args" | tr '\n' ' ')" \
         "apply --app-dir $APP --target v9.9.9 --staging $APP/.staging/v9.9.9 --migrate "
@@ -200,6 +201,35 @@ SH
     assert_status 1
     assert_contains "$OUT" "APP_VERSION stays v2.0.0"
     assert_eq "$(env_get APP_VERSION)" v2.0.0
+}
+
+test_migrate_before_v2_is_published_says_so() {
+    make_clone
+    fake_host
+    stub_respond curl <<'SH'
+printf '{\n  "tag_name": "v1.1.0"\n}\n'
+SH
+    am_exec() { _fail "no handover expected"; }
+    run cmd_migrate
+    assert_status 1
+    assert_contains "$OUT" "has not been published yet"
+    assert_not_called "curl -fsSL --max-time 300"
+}
+
+test_update_never_follows_latest_backwards() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v2.1.0\n' >> "$APP/.env"
+    env_set APP_VERSION v2.1.0
+    stub_respond curl <<'SH'
+printf '{\n  "tag_name": "v2.0.5"\n}\n'
+SH
+    am_exec() { _fail "no handover expected"; }
+    run cmd_update
+    assert_status 1
+    assert_contains "$OUT" "is older than this install's v2.1.0"
+    assert_contains "$OUT" "--version v2.0.5"
+    assert_eq "$(env_get APP_VERSION)" v2.1.0
 }
 
 test_stage1_refuses_a_tag_that_is_a_path() {
@@ -312,15 +342,49 @@ test_a_copy_that_fails_half_way_is_rolled_back() {
     assert_no_file "$APP/.host-files.list"
 }
 
+test_a_failed_migrate_undoes_what_it_created_outside_the_install() {
+    # The rehearsal's failure: no cron on the host, so the crontab line cannot be added.
+    make_clone
+    fake_host
+    stub_respond crontab <<'SH'
+[ "$1" = - ] && exit 1
+exit 1
+SH
+    local before
+    before=$(tree_state "$APP")
+    mkdir -p "$APP/.staging"
+    make_staging "$APP/.staging/v9.9.9" v9.9.9
+    run cmd_apply --app-dir "$APP" --target v9.9.9 --staging "$APP/.staging/v9.9.9" --migrate
+    assert_status 1
+    assert_contains "$OUT" "putting the install back"
+    assert_eq "$(tree_state "$APP")" "$before"
+    assert_no_file "$AM_REGISTRY_DIR/default.conf" "the registry entry this run added"
+    assert_no_file "$AM_BACKUP_HELPER" "the helper this run added"
+    assert_no_dir "$APP/.staging" "the unpacked release"
+}
+
+test_a_rollback_never_removes_a_staging_dir_outside_the_install() {
+    make_clone
+    fake_host
+    make_staging "$TEST_TMP/stage" v9.9.9
+    touch "$TEST_TMP/fail-config"
+    run cmd_apply --app-dir "$APP" --target v9.9.9 --staging "$TEST_TMP/stage" --migrate
+    assert_status 1
+    assert_dir "$TEST_TMP/stage"
+}
+
 test_local_changes_are_saved_and_need_yes() {
     make_clone
     fake_host
     echo "stashed tweak" >> "$APP/deploy/Caddyfile"
     git -C "$APP" stash -q
     echo "# my tweak" >> "$APP/docker-compose.yml"
-    apply_migrate
+    mkdir -p "$APP/.staging"
+    make_staging "$APP/.staging/v9.9.9" v9.9.9
+    run cmd_apply --app-dir "$APP" --target v9.9.9 --staging "$APP/.staging/v9.9.9" --migrate
     assert_status 1
     assert_contains "$OUT" "--yes"
+    assert_no_dir "$APP/.staging" "a refusal leaves the unpacked release behind"
     local dir
     dir=$(compgen -G "$AM_BACKUP_DIR/migrate_*")
     assert_file "$dir/uncommitted.patch"

@@ -167,13 +167,13 @@ configure_firewall() {
 install_caddy() {
     if ! command -v caddy >/dev/null 2>&1; then
         step "Installing Caddy"
-        sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
+        apt_install debian-keyring debian-archive-keyring apt-transport-https
         curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
             | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
         curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
             | sudo tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
-        sudo apt-get update
-        sudo apt-get install -y caddy
+        apt_update
+        apt_install caddy
     fi
     step "Configuring Caddy for $DOMAIN and $COLLAB_DOMAIN"
     install_caddyfile
@@ -190,7 +190,9 @@ install_caddyfile() {
     chmod 0644 "$tmp"
     # As the caddy user, so validating cannot leave a root-owned log file behind for the
     # service to fail on.
-    if ! sudo -u caddy caddy validate --adapter caddyfile --config "$tmp" >/dev/null; then
+    local out
+    if ! out=$(sudo -u caddy caddy validate --adapter caddyfile --config "$tmp" 2>&1); then
+        printf '%s\n' "$out" >&2
         die "the rendered Caddyfile does not validate; it is at $tmp"
     fi
     if [ -e "$AM_CADDYFILE" ] && ! cmp -s "$tmp" "$AM_CADDYFILE"; then
@@ -306,7 +308,8 @@ main() {
     gather_choices
 
     local checks=(not-root sudo os existing-install legacy-service arch-ocr tools docker compose-v2 docker-running)
-    PF_TOOLS="curl tar openssl sqlite3 ufw ss fail2ban sha256sum"
+    # crontab: the nightly backup is a root crontab line, and a minimal image may lack cron.
+    PF_TOOLS="curl tar openssl sqlite3 ufw ss fail2ban sha256sum crontab"
     if [ "$PROXY" = caddy ]; then
         checks+=(port-80 port-443 caddyfile)
         PF_TOOLS="$PF_TOOLS gpg"
