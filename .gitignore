@@ -51,6 +51,9 @@ logs/
 *.backup
 *.bak
 
+# Python bytecode (the CI checks import .github/scripts/release_paths.py)
+__pycache__/
+
 # Temporary files
 tmp/
 temp/

@@ -1,12 +1,15 @@
 name: Build and Publish Docker Image
 
-# Two publish paths, one job:
-#   push to main  -> :edge          (the development image; never :latest)
-#   push tag vX.Y.Z -> :vX.Y.Z, :vX.Y, :latest
+# Two publish paths:
+#   push to main    -> :edge   (the development image; never :latest)
+#   push tag vX.Y.Z -> :vX.Y.Z and :vX.Y, then a DRAFT GitHub Release carrying the
+#                      host-files asset (the release-assets job below)
 #
-# `latest` means "latest RELEASE", not "latest commit" — an operator who pulls
-# it expects a released thing. That is why main publishes :edge instead.
-# See docs/RELEASING.md for the procedure and what the levels promise.
+# :latest is deliberately NOT moved here. It moves when a human publishes the draft
+# (release-published.yml), so :latest and the releases/latest host-files download always
+# name the same release -- an APP_VERSION=latest install never pulls a new image beside old
+# host files, or the reverse. `latest` means "latest RELEASE", not "latest commit"; that is
+# why main publishes :edge instead. See docs/RELEASING.md.
 #
 # The tag must be pushed from a personal clone. A tag pushed by an action using
 # the default GITHUB_TOKEN triggers no workflow at all, so the release would
@@ -81,36 +84,11 @@ jobs:
           # non-event by ordering the tag after the checks go green.
           REQUIRED_CHECKS = ['Build & Test', 'Docker Build']
 
-          # What a path change means for the OPERATOR -- what they must receive
-          # or do for this release -- not how important it is.
-          #
-          # Built from a full `git ls-files` census of the repository root, so
-          # the unclassified branch below fires only for genuinely new paths,
-          # never for a known file somebody forgot to list. deploy/ is listed
-          # file by file on purpose: entrypoint.sh ships INSIDE the image, its
-          # siblings are host configuration.
-          IMAGE_DIRS  = ('cmd/', 'internal/', 'templates/', 'static/', 'migrations/')
-          IMAGE_FILES = ('go.mod', 'go.sum', 'Dockerfile', 'deploy/entrypoint.sh')
-
-          # docker-compose.yml is host-affecting because an operator edits and
-          # keeps it. If the third-party image pins ever move out of it into
-          # .env, that classification has to be re-decided rather than assumed.
-          HOST_DIRS   = ('scripts/',)
-          HOST_FILES  = ('docker-compose.yml', 'docker-compose.local-ocr.yml',
-                         'deploy/Caddyfile', 'deploy/docker-compose.override.yml.example',
-                         'update.sh',            # the one-release root shim
-                         '.env.example')
-
-          # .github/ is neutral deliberately. A workflow change asks nothing of
-          # any host: it is delivered by git, runs only in CI, and the operator
-          # pulls the same image either way. Provenance of the artifact is
-          # guarded by PR review, not by this classifier -- and calling the
-          # pipeline host-affecting would force a major release for every CI
-          # tweak, which is how a guardrail erodes by annoyance.
-          # tests/ holds the host scripts' test runner: CI-only, never shipped to a host.
-          NEUTRAL_DIRS  = ('docs/', '.github/', 'tests/')
-          NEUTRAL_FILES = ('README.md', 'CLAUDE.md', 'SECURITY.md', 'LICENSE',
-                           'CHANGELOG.md', '.gitignore', '.dockerignore')
+          # What each path means for an OPERATOR -- image, host or neutral -- lives in
+          # .github/scripts/release_paths.py, shared with build-check.yml's host-files
+          # manifest check so the two cannot disagree about what a host receives.
+          sys.path.insert(0, '.github/scripts')
+          from release_paths import classify_diff
 
           SEMVER = re.compile(r'^v(\d+)\.(\d+)\.(\d+)$')
 
@@ -216,23 +194,14 @@ jobs:
           if diff.returncode != 0:
               fail(f'could not diff {prev_tag}..{TAG}: {diff.stderr.strip()}')
 
-          host, unclassified = [], []
-          for path in sorted(set(diff.stdout.split())):
-              if path.startswith(IMAGE_DIRS) or path in IMAGE_FILES:
-                  continue
-              if path.startswith(NEUTRAL_DIRS) or path in NEUTRAL_FILES:
-                  continue
-              if path.startswith(HOST_DIRS) or path in HOST_FILES:
-                  host.append(path)
-              else:
-                  unclassified.append(path)
+          host, unclassified = classify_diff(diff.stdout.split())
 
           if unclassified:
               fail(f'these paths are not classified, so {TAG} cannot be levelled:',
                    *unclassified,
                    '',
-                   'Add each one to IMAGE, HOST or NEUTRAL in this step, deciding',
-                   'what it asks of an operator receiving the release.')
+                   'Add each one to IMAGE, HOST or NEUTRAL in .github/scripts/release_paths.py,',
+                   'deciding what it asks of an operator receiving the release.')
 
           if host:
               fail(f'{TAG} is a {level} release, but it changes files outside the image:',
@@ -255,13 +224,15 @@ jobs:
       # APP_VERSION, Admin page — so nothing ever has to translate between
       # v1.2.3 and 1.2.3. `{{raw}}` is what keeps the pushed tag's leading "v";
       # the moving vX.Y tag gives "track patches, never auto-take a minor".
-      # The default `latest=auto` flavor adds :latest on semver TAG events only
-      # — a branch push is untouched, so main still yields :edge alone.
+      # latest=false: :latest moves on publishing the release, not on the tag
+      # push (see the header, and release-published.yml).
       - name: Compute image tags
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
           tags: |
             type=edge,branch=main
             type=semver,pattern={{raw}}
@@ -303,3 +274,61 @@ jobs:
           build-args: |
             APP_VERSION=${{ steps.meta.outputs.version }}
             APP_COMMIT=${{ github.sha }}
+
+  # The host-files asset and the draft release, for tags only. A job of its own, so that when
+  # it fails, "Re-run failed jobs" re-runs THIS -- and not the image build, which the
+  # never-rebuild rule forbids once the image has been pushed.
+  #
+  # Idempotent: no release yet -> create a draft carrying the asset; a draft already there ->
+  # upload whichever asset it lacks, after checking any it has matches this build byte for
+  # byte (the build is deterministic); a PUBLISHED release -> fail without touching it.
+  # A human publishes the draft, which is what moves :latest (release-published.yml).
+  release-assets:
+    name: Release assets
+    needs: build-and-push-image
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build the host-files asset
+        run: .github/scripts/build-host-files.sh "$GITHUB_REF_NAME" dist
+
+      - name: Create or complete the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          assets=(dist/host-files.tar.gz dist/host-files.tar.gz.sha256)
+          if ! state=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" \
+              --notes "Draft: replace this with the $TAG section of CHANGELOG.md, then publish. Publishing is what moves :latest and releases/latest." \
+              "${assets[@]}"
+            echo "Created the draft release $TAG with the host-files asset."
+            exit 0
+          fi
+          if [ "$state" != true ]; then
+            echo "::error::Release $TAG is already published; refusing to change its assets."
+            exit 1
+          fi
+          have=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          mkdir -p existing
+          for f in "${assets[@]}"; do
+            name=$(basename "$f")
+            if grep -qxF "$name" <<<"$have"; then
+              gh release download "$TAG" --pattern "$name" --dir existing --clobber
+              if ! cmp -s "existing/$name" "$f"; then
+                echo "::error::The draft's $name differs from this build of $TAG."
+                exit 1
+              fi
+              echo "$name already on the draft and identical."
+            else
+              gh release upload "$TAG" "$f"
+              echo "Uploaded $name to the draft."
+            fi
+          done

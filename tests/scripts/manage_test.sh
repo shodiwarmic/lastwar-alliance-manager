@@ -2,10 +2,8 @@
 # shellcheck disable=SC2034  # tests set globals that the functions under test read
 # Tests for scripts/manage.sh — the two-stage update and the v2.0.0 migration.
 
-# The host files a release ships, from this checkout, as the list build-host-files.sh reads.
-SHIPPED_FILES=(scripts/install.sh scripts/manage.sh scripts/update.sh scripts/lib/common.sh
-    scripts/lib/registry.sh scripts/lib/preflight.sh docker-compose.yml docker-compose.local-ocr.yml
-    deploy/Caddyfile deploy/docker-compose.override.yml.example .env.example)
+# The host files a release ships: the manifest build-host-files.sh reads, from this checkout.
+mapfile -t SHIPPED_FILES < <(sed 's/#.*//; s/[[:space:]]*$//' "$REPO_ROOT/.github/host-files.manifest" | grep -v '^$')
 
 # make_staging DIR TAG [SKIP] — DIR laid out as an unpacked asset for TAG, optionally
 # without the file SKIP (a release that stopped shipping it).
