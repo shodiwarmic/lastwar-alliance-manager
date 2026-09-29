@@ -2082,11 +2082,16 @@ must be installable by pulling a new image alone, so anything reaching outside t
 `scripts/`, the compose files, `.env.example`, the Caddyfile — is a major, because the host has
 to change too. CI enforces exactly that on the tag by classifying every changed path, which
 means **a new top-level path in the repo needs adding to one of the three lists** in
-`docker-publish.yml`'s release-level check; an unclassified path fails the release.
+`.github/scripts/release_paths.py` (shared by the release-level check and the host-files
+manifest check); an unclassified path fails the release. A new **host** file also goes in
+`.github/host-files.manifest` or in `NOT_SHIPPED` — Build & Test fails until it does.
 
-`main` publishes `:edge`; a version tag publishes `:vX.Y.Z`, `:vX.Y` and `:latest` (so `latest`
-means latest *release*). A deployed install pins itself with `APP_VERSION` in `.env`, and the
-running build is named on Admin → Security & API and in the startup log (`internal/app/version.go`).
+`main` publishes `:edge`; a version tag publishes `:vX.Y.Z` and `:vX.Y` plus a **draft** GitHub
+Release carrying `host-files.tar.gz`. `:latest` moves only when a human **publishes** that draft
+(`release-published.yml`, a manifest re-tag), so the `latest` image and the `releases/latest`
+host files always name the same release. A deployed install pins itself with `APP_VERSION` in
+`.env` and records its host files' release in `HOST_FILES_VERSION`; both are named on Admin →
+Security & API, and the build in the startup log (`internal/app/version.go`).
 
 The cut procedure, the failure remedies and the **never-rebuild rule** are in
 `docs/RELEASING.md`. Read it before tagging anything.
