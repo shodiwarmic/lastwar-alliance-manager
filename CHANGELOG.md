@@ -95,7 +95,7 @@ install in `/etc/alliance-manager/installs.d/`, installs the nightly backup help
   `data/` (the database has its own consistent backup beside it) but still includes `uploads/`.
 - **Updates no longer ask questions** — settings an old `.env` lacks get their defaults
   (`OCR_BACKEND_MODE=cloud`); the old one-time prompts are gone.
-  ([#PR](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/PR))
+  ([#102](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/102))
 
 ## v1.1.0 — 2026-09-26
 
