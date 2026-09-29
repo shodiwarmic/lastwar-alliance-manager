@@ -47,10 +47,19 @@ func readSetupKey(t *testing.T, path string) string {
 // instead of calling ip-api.com, and from a peer of its own so the shared login limiter
 // never carries over between tests.
 func setupClaimRequest(key, username string, peer string) *http.Request {
-	body, _ := json.Marshal(map[string]string{
-		"setup_key": key, "username": username,
+	return setupClaimRequestWith(map[string]any{"setup_key": key, "username": username}, peer)
+}
+
+// setupClaimRequestWith fills in a valid password and alliance identity, then applies fields.
+func setupClaimRequestWith(fields map[string]any, peer string) *http.Request {
+	payload := map[string]any{
 		"password": setupTestPassword, "confirm_password": setupTestPassword,
-	})
+		"alliance_name": "Setup Test Alliance", "alliance_tag": "STST", "server_number": 1712,
+	}
+	for k, v := range fields {
+		payload[k] = v
+	}
+	body, _ := json.Marshal(payload)
 	r := httptest.NewRequest(http.MethodPost, "/api/setup", strings.NewReader(string(body)))
 	r.RemoteAddr = peer
 	loginLimiters.Delete(strings.Split(peer, ":")[0])
@@ -294,9 +303,10 @@ func TestSetupClaimPassesCSRF(t *testing.T) {
 	}
 	token := strings.ReplaceAll(string(m[1]), "&#43;", "+")
 
-	body, _ := json.Marshal(map[string]string{
+	body, _ := json.Marshal(map[string]any{
 		"setup_key": key, "username": "csrfowner",
 		"password": setupTestPassword, "confirm_password": setupTestPassword,
+		"alliance_name": "Setup Test Alliance", "alliance_tag": "STST",
 	})
 	loginLimiters.Delete("127.0.0.1")
 	origin := "https://" + strings.TrimPrefix(srv.URL, "http://")
@@ -335,4 +345,87 @@ func TestSetupClaimPassesCSRF(t *testing.T) {
 		t.Fatalf("claim through CSRF: %d %s", post.StatusCode, msg)
 	}
 	waitForLoginRow(t, "csrfowner")
+}
+
+func TestSetupClaimRecordsTheAllianceIdentity(t *testing.T) {
+	path := setupSetupTestDB(t)
+	key := readSetupKey(t, path)
+
+	w := httptest.NewRecorder()
+	claimSetup(w, setupClaimRequestWith(map[string]any{
+		"setup_key": key, "username": "identity",
+		"alliance_name": "  Warmic  ", "alliance_tag": "WARMC", "server_number": 1712,
+	}, "127.0.0.1:7010"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("claim: %d %s", w.Code, w.Body.String())
+	}
+	waitForLoginRow(t, "identity")
+	var redirect map[string]string
+	json.Unmarshal(w.Body.Bytes(), &redirect)
+	if redirect["redirect"] != "/settings" {
+		t.Errorf("redirect = %q, want /settings (game limits come next)", redirect["redirect"])
+	}
+
+	var name, tag string
+	var server int
+	if err := db.QueryRow(`SELECT alliance_name, alliance_tag, COALESCE(our_server_id, 0) FROM settings WHERE id = 1`).
+		Scan(&name, &tag, &server); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Warmic" || tag != "WARMC" || server != 1712 {
+		t.Errorf("settings = (%q, %q, %d), want (Warmic, WARMC, 1712)", name, tag, server)
+	}
+	// Rule 2 holds from the first minute: the tag just entered is recognised as ours.
+	if !isOwnAlliance("", "warmc") {
+		t.Error("isOwnAlliance does not recognise the tag entered at setup")
+	}
+	var logged int
+	db.QueryRow(`SELECT COUNT(*) FROM activity_log WHERE entity_type = 'settings' AND action = 'updated' AND is_sensitive = 1`).Scan(&logged)
+	if logged != 1 {
+		t.Errorf("settings activity rows = %d, want 1", logged)
+	}
+}
+
+func TestSetupClaimLeavesTheServerUnsetWhenBlank(t *testing.T) {
+	path := setupSetupTestDB(t)
+	w := httptest.NewRecorder()
+	claimSetup(w, setupClaimRequestWith(map[string]any{
+		"setup_key": readSetupKey(t, path), "username": "noserver", "server_number": 0,
+	}, "127.0.0.1:7011"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("claim: %d %s", w.Code, w.Body.String())
+	}
+	waitForLoginRow(t, "noserver")
+	var server any
+	db.QueryRow(`SELECT our_server_id FROM settings WHERE id = 1`).Scan(&server)
+	if server != nil {
+		t.Errorf("our_server_id = %v, want NULL", server)
+	}
+}
+
+func TestSetupClaimRequiresNameAndTag(t *testing.T) {
+	path := setupSetupTestDB(t)
+	key := readSetupKey(t, path)
+	for _, c := range []struct {
+		field, value string
+	}{
+		{"alliance_tag", ""},
+		{"alliance_tag", "   "},
+		{"alliance_name", ""},
+		{"alliance_tag", strings.Repeat("T", setupAllianceTagMax+1)},
+	} {
+		w := httptest.NewRecorder()
+		claimSetup(w, setupClaimRequestWith(map[string]any{"setup_key": key, "username": "partial", c.field: c.value}, "127.0.0.1:7012"))
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s=%q: %d, want 400", c.field, c.value, w.Code)
+		}
+	}
+	var users int
+	db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&users)
+	if users != 0 {
+		t.Errorf("a refused claim created %d user(s)", users)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("a refused claim removed the setup key: %v", err)
+	}
 }

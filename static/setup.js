@@ -3,6 +3,9 @@
 const cfg = document.getElementById('page-config').dataset;
 
 const keyInput = document.getElementById('setup-key');
+const nameInput = document.getElementById('alliance-name');
+const tagInput = document.getElementById('alliance-tag');
+const serverInput = document.getElementById('server-number');
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
 const confirmInput = document.getElementById('confirm-password');
@@ -63,16 +66,19 @@ function updateMatchStatus() {
 
 function updateSubmitButton() {
     const keyOk = keyInput.value.trim().length > 0;
+    const identityOk = nameInput.value.trim().length > 0 && tagInput.value.trim().length > 0;
     const usernameOk = usernameRe.test(usernameInput.value.trim());
     const rulesOk = updateRules();
     const matchOk = updateMatchStatus();
-    const enabled = keyOk && usernameOk && rulesOk && matchOk;
+    const enabled = keyOk && identityOk && usernameOk && rulesOk && matchOk;
     submitBtn.disabled = !enabled;
     submitBtn.style.opacity = enabled ? '1' : '0.6';
     submitBtn.style.cursor = enabled ? 'pointer' : 'not-allowed';
 }
 
 keyInput.addEventListener('input', updateSubmitButton);
+nameInput.addEventListener('input', updateSubmitButton);
+tagInput.addEventListener('input', updateSubmitButton);
 usernameInput.addEventListener('blur', validateUsername);
 usernameInput.addEventListener('input', updateSubmitButton);
 passwordInput.addEventListener('input', updateSubmitButton);
@@ -101,6 +107,9 @@ document.getElementById('setup-form').addEventListener('submit', async (e) => {
                 username: usernameInput.value.trim(),
                 password: passwordInput.value,
                 confirm_password: confirmInput.value,
+                alliance_name: nameInput.value.trim(),
+                alliance_tag: tagInput.value.trim(),
+                server_number: Number(serverInput.value) || 0,
             }),
         });
 

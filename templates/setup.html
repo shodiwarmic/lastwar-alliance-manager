@@ -45,6 +45,26 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="alliance-name">Alliance name:</label>
+                        <input type="text" id="alliance-name" name="alliance_name" class="form-input"
+                            required maxlength="60" placeholder="e.g. Warmic">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="alliance-tag">Alliance tag:</label>
+                        <input type="text" id="alliance-tag" name="alliance_tag" class="form-input"
+                            required maxlength="10" placeholder="e.g. WARMC">
+                        <div class="field-hint">The tag also keeps your own alliance out of the list of other
+                            alliances the app tracks, so it matters beyond display.</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="server-number">Server number <span class="field-hint">(optional)</span>:</label>
+                        <input type="number" id="server-number" name="server_number" class="form-input"
+                            min="1" placeholder="e.g. 1712">
+                    </div>
+
+                    <div class="form-group">
                         <label for="username">Administrator username:</label>
                         <input type="text" id="username" name="username" class="form-input"
                             required minlength="3" maxlength="30"
@@ -72,6 +92,10 @@
                         {{if .PwdRequireNumber}}<li data-rule="number">Number required</li>{{end}}
                         {{if .PwdRequireSpecial}}<li data-rule="special">Special character required</li>{{end}}
                     </ul>
+
+                    <p class="field-hint" style="margin:14px 0;">Next you'll land on Settings. Set the game limits there — HQ level cap,
+                        member cap, VS minimum and the event level ceilings — before your first import; they
+                        differ from server to server.</p>
 
                     <button type="submit" class="btn btn-primary" id="submit-btn" disabled style="opacity:0.6;cursor:not-allowed;">
                         Create Administrator &amp; Log In

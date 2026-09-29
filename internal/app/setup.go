@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"log/slog"
@@ -23,9 +24,16 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gorilla/csrf"
 	"golang.org/x/crypto/bcrypt"
+)
+
+// Identity field limits, matching the Settings page's inputs.
+const (
+	setupAllianceNameMax = 60
+	setupAllianceTagMax  = 10
 )
 
 // setupKeyTTL bounds how long a key printed at install time stays redeemable. An install
@@ -197,6 +205,9 @@ func claimSetup(w http.ResponseWriter, r *http.Request) {
 		Username        string `json:"username"`
 		Password        string `json:"password"`
 		ConfirmPassword string `json:"confirm_password"`
+		AllianceName    string `json:"alliance_name"`
+		AllianceTag     string `json:"alliance_tag"`
+		ServerNumber    int    `json:"server_number"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -238,6 +249,26 @@ func claimSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validatePasswordPolicy(req.Password, 0); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// The alliance's identity, captured here so a new install does not start life as a
+	// blank "Alliance". The tag matters beyond display: it is half of the Rule 2 test
+	// (isOwnAlliance) that keeps our own alliance out of the external registry, so an
+	// install that never set it could file itself as a VS opponent. The server number
+	// stays optional — it only powers the NAP tab and search defaults.
+	req.AllianceName = strings.TrimSpace(req.AllianceName)
+	req.AllianceTag = strings.TrimSpace(req.AllianceTag)
+	if req.AllianceName == "" || utf8.RuneCountInString(req.AllianceName) > setupAllianceNameMax {
+		http.Error(w, fmt.Sprintf("Alliance name is required (up to %d characters)", setupAllianceNameMax), http.StatusBadRequest)
+		return
+	}
+	if req.AllianceTag == "" || utf8.RuneCountInString(req.AllianceTag) > setupAllianceTagMax {
+		http.Error(w, fmt.Sprintf("Alliance tag is required (up to %d characters)", setupAllianceTagMax), http.StatusBadRequest)
+		return
+	}
+	if req.ServerNumber < 0 {
+		http.Error(w, "Server number must be a positive number, or left blank", http.StatusBadRequest)
 		return
 	}
 
@@ -291,6 +322,14 @@ func claimSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	// The three identity columns only — not updateSettings' positional lists, which carry
+	// every other setting and would need values this page has no business supplying.
+	if _, err := tx.Exec(`UPDATE settings SET alliance_name = ?, alliance_tag = ?, our_server_id = NULLIF(?, 0) WHERE id = 1`,
+		req.AllianceName, req.AllianceTag, req.ServerNumber); err != nil {
+		slog.Error("failed to save alliance identity during setup", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	if err := tx.Commit(); err != nil {
 		slog.Error("failed to commit setup", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -305,6 +344,11 @@ func claimSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logActivity(int(userID), req.Username, "created", "user", req.Username, true, "initial administrator via setup key")
+	identity := []string{"alliance_name: → " + req.AllianceName, "alliance_tag: → " + req.AllianceTag}
+	if req.ServerNumber > 0 {
+		identity = append(identity, fmt.Sprintf("our_server_id: → %d", req.ServerNumber))
+	}
+	logActivity(int(userID), req.Username, "updated", "settings", "alliance identity", true, strings.Join(identity, "; "))
 	trackLogin(int(userID), req.Username, r, true)
 
 	session, _ := store.Get(r, "session")
@@ -314,6 +358,8 @@ func claimSetup(w http.ResponseWriter, r *http.Request) {
 	session.Values["is_admin"] = true
 	session.Save(r, w)
 
+	// Settings next: game limits (HQ cap, member cap, VS minimum, the event level ceilings)
+	// are worth setting before the first import, and the page says so.
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"redirect": "/"})
+	json.NewEncoder(w).Encode(map[string]string{"redirect": "/settings"})
 }
