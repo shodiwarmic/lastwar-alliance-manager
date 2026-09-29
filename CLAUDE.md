@@ -2138,8 +2138,8 @@ Rules that must hold:
   `backup_helper_text`; don't make it call `manage.sh`.
 - **Tests:** `bash tests/scripts/run.sh` — plain bash, stubbed system commands, every system
   path redirected into a temp dir. CI runs it with `bash -n` and `shellcheck -x -S warning`
-  (**Host scripts check**). shellcheck is not installed on the dev box; the image works:
-  `docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable -x -S warning <files>`.
+  (**Host scripts check**). The dev box has the same shellcheck as the runner (0.9.0, from apt),
+  so `shellcheck -x -S warning <files>` locally matches CI.
 - **Rehearsing against a real host:** `.github/scripts/build-host-files.sh <version> <outdir>`
   builds the tarball locally, and `./scripts/manage.sh update --asset <tarball>` (or `migrate
   --asset`) applies it without a published release.
