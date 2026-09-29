@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v2.0.0 — 2026-09-28
+## v2.0.0 — 2026-09-29
 
 Installs become versioned end to end. Until now the image followed a pinned release while
 everything else on the server — the compose files, the scripts, the proxy configuration — was a
