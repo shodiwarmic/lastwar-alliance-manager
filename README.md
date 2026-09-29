@@ -60,12 +60,18 @@ run a pinned release (`APP_VERSION` in `.env`) and can be rolled back to an earl
 
 Configuration is via a `.env` file — copy `.env.example` and fill it in. Every variable is documented in [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-## Default login credentials
+## First login
 
-- **Username**: `admin`
-- **Password**: `admin123`
+A fresh install has **no account and no default password**. Instead the app writes a one-time
+setup key to `data/setup-key` in the install directory, and every page sends you to `/setup`
+until the first administrator is created with it:
 
-⚠️ **Important**: The system forces you to change this immediately upon first login.
+```bash
+sudo cat data/setup-key
+```
+
+The key is valid for 24 hours and works once. If it has expired, delete the file and restart the
+app (`docker compose restart alliance-manager`) to issue a new one.
 
 ---
 

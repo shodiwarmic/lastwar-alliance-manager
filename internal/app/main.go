@@ -30,6 +30,24 @@ const staticDir = "static"
 // edits must always win there, while production caches aggressively.
 func isProduction() bool { return os.Getenv("PRODUCTION") == "true" }
 
+// staticFileFor maps a request path onto static/ and reports whether it names a regular
+// file there. It is the one definition of "a static asset", shared by the catch-all handler
+// that serves them and by setupGate, which lets them through before first-run setup — so the
+// two can never disagree about what is exempt. Cleaning first is what keeps a ../ path
+// inside static/.
+func staticFileFor(urlPath string) (cleanPath, fullPath string, ok bool) {
+	cleanPath = filepath.Clean(urlPath)
+	fullPath = filepath.Join(staticDir, cleanPath)
+	// Note `err != nil`, not `os.IsNotExist(err)`: a stat failure for any other reason
+	// (ENAMETOOLONG on an overlong URL segment, ELOOP, EACCES) leaves info nil, and `||`
+	// still evaluates info.IsDir() when the left operand is false — which nil-derefs.
+	info, err := os.Stat(fullPath)
+	if err != nil || info.IsDir() {
+		return cleanPath, fullPath, false
+	}
+	return cleanPath, fullPath, true
+}
+
 // getPageData loads the current user from the database and populates PageData.
 // The session cookie is only used to identify the user (user_id); all
 // authorization data is sourced live from the DB.
@@ -207,6 +225,12 @@ func Main() {
 	}
 	defer db.Close()
 
+	// No accounts yet means first-run: issue the setup key and gate every page on /setup.
+	if err := initSetupState(); err != nil {
+		slog.Error("Failed to initialise first-run setup", "error", err)
+		os.Exit(1)
+	}
+
 	// Sync the operator's OCR_BACKEND_MODE env choice into settings (replaces the
 	// old racy sqlite3 write in install.sh / update.sh). Runs post-migration.
 	reconcileOCRBackendFromEnv()
@@ -230,6 +254,8 @@ func Main() {
 	router.HandleFunc("/api/logout", logout).Methods("POST")
 	router.HandleFunc("/api/change-password", authMiddleware(changePassword)).Methods("POST")
 	router.HandleFunc("/api/members/{id}/invite", authMiddleware(requirePermission("manage_members", generateInvite))).Methods("POST")
+	router.HandleFunc("/setup", showSetupPage).Methods("GET")
+	router.HandleFunc("/api/setup", claimSetup).Methods("POST")
 	router.HandleFunc("/invite/{token}", showInvitePage).Methods("GET")
 	router.HandleFunc("/invite/{token}", claimInvite).Methods("POST")
 	router.HandleFunc("/api/members/{id}/reset-link", authMiddleware(requirePermission("manage_settings", generateMemberResetLink))).Methods("POST")
@@ -782,18 +808,8 @@ func Main() {
 	// on every single request.
 	staticFiles := http.FileServer(http.Dir(staticDir))
 	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Clean the path to prevent directory traversal attacks
-		cleanPath := filepath.Clean(r.URL.Path)
-		fullPath := filepath.Join(staticDir, cleanPath)
-
-		// Check if the file actually exists in the /static folder.
-		//
-		// Note `err != nil`, not `os.IsNotExist(err)`: a stat failure for any
-		// other reason (ENAMETOOLONG on an overlong URL segment, ELOOP,
-		// EACCES) leaves info nil, and `||` still evaluates info.IsDir() when
-		// the left operand is false — which nil-derefs.
-		info, err := os.Stat(fullPath)
-		if err != nil || info.IsDir() {
+		cleanPath, _, ok := staticFileFor(r.URL.Path)
+		if !ok {
 			// It's not a real file, so trigger our custom 404 template!
 			router.NotFoundHandler.ServeHTTP(w, r)
 			return
@@ -907,7 +923,7 @@ func Main() {
 		port = "8080"
 	}
 
-	srv := &http.Server{Addr: ":" + port, Handler: appHandler}
+	srv := &http.Server{Addr: ":" + port, Handler: setupGate(appHandler)}
 
 	go func() {
 		slog.Info("Server listening", "port", port)

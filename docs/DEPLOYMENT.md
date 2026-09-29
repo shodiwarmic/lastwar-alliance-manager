@@ -87,6 +87,18 @@ docker compose up -d
 ```
 This will download the latest images, compile the Go binary, create a private internal bridge network, start the Go application (exposing port `8080`), and start the Collabora document server (exposing port `9980`).
 
+### Step D: Create the first administrator
+The app ships with no account. It writes a one-time setup key to `data/setup-key` on first start;
+read it and open `https://app.yourdomain.com/setup` (every page redirects there until the first
+administrator exists):
+
+```bash
+sudo cat data/setup-key
+```
+
+The key is valid for 24 hours and works once. To issue a new one, delete the file and run
+`docker compose restart alliance-manager`.
+
 #### Architecture support (x86-64 and ARM)
 
 The application image is published for both **linux/amd64** and **linux/arm64**, so it runs on

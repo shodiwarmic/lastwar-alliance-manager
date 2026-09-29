@@ -55,6 +55,13 @@ EOF
 docker compose up -d --build
 ```
 
+Then read the one-time setup key and open `https://app.yourdomain.com/setup` to create the first
+administrator — there is no default account:
+
+```bash
+sudo cat data/setup-key
+```
+
 ### 4. Setup Reverse Proxy (Caddy - Recommended)
 ```bash
 # Install Caddy

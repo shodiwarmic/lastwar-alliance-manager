@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set Up - Last War Alliance Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="{{asset "/styles.css"}}">
+    <link rel="stylesheet" href="{{asset "/auth.css"}}">
+    <script src="{{asset "/theme.js"}}"></script>
+</head>
+<body>
+    <div id="csrf-container" hidden>
+        {{.CSRFToken}}
+    </div>
+
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <div class="login-header-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                         stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+                <h1>Alliance Manager</h1>
+                <p>First-time setup</p>
+            </div>
+
+            <div class="login-form">
+                <div id="server-error" class="error-message" style="display:none"></div>
+
+                <p class="invite-member-label">This install has no accounts yet. Create the first
+                    administrator with the setup key from the server.</p>
+
+                <form id="setup-form">
+                    <div class="form-group">
+                        <label for="setup-key">Setup key:</label>
+                        <input type="text" id="setup-key" name="setup_key" class="form-input"
+                            required autocomplete="off" spellcheck="false" translate="no">
+                        <div class="field-hint">On the server, in the install directory:
+                            <code translate="no">sudo cat data/setup-key</code>. It is valid for 24 hours; delete
+                            the file and restart the app to issue a new one.</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="username">Administrator username:</label>
+                        <input type="text" id="username" name="username" class="form-input"
+                            required minlength="3" maxlength="30"
+                            pattern="[a-zA-Z0-9._\-]+"
+                            autocomplete="username">
+                        <div id="username-error" class="field-hint error-hint" style="display:none;"></div>
+                        <div class="field-hint">Letters, numbers, <code>.</code> <code>_</code> <code>-</code> only &mdash; 3 to 30 characters</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" class="form-input" required autocomplete="new-password">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm-password">Confirm Password:</label>
+                        <input type="password" id="confirm-password" name="confirm_password" class="form-input" required autocomplete="new-password">
+                        <div id="match-status" style="margin-top:5px;font-size:0.85em;font-weight:bold;display:none;"></div>
+                    </div>
+
+                    <ul class="password-rules" id="password-rules">
+                        <li data-rule="length">Minimum {{.PwdMinLength}} characters</li>
+                        {{if .PwdRequireUpper}}<li data-rule="upper">Uppercase letter required</li>{{end}}
+                        {{if .PwdRequireLower}}<li data-rule="lower">Lowercase letter required</li>{{end}}
+                        {{if .PwdRequireNumber}}<li data-rule="number">Number required</li>{{end}}
+                        {{if .PwdRequireSpecial}}<li data-rule="special">Special character required</li>{{end}}
+                    </ul>
+
+                    <button type="submit" class="btn btn-primary" id="submit-btn" disabled style="opacity:0.6;cursor:not-allowed;">
+                        Create Administrator &amp; Log In
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{asset "/csrf.js"}}"></script>
+    <div id="page-config"
+         data-pwd-min-length="{{.PwdMinLength}}"
+         data-pwd-require-upper="{{if .PwdRequireUpper}}true{{else}}false{{end}}"
+         data-pwd-require-lower="{{if .PwdRequireLower}}true{{else}}false{{end}}"
+         data-pwd-require-number="{{if .PwdRequireNumber}}true{{else}}false{{end}}"
+         data-pwd-require-special="{{if .PwdRequireSpecial}}true{{else}}false{{end}}"
+         hidden></div>
+    <script src="{{asset "/setup.js"}}"></script>
+</body>
+</html>
