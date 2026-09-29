@@ -423,9 +423,10 @@ turn a miss into a match but never change an existing match.
 **Avatars** are hotlinked from the game CDN (`lastwar-cdn.akamaized.net` /
 `lastwar-cdn.lastwarapp.net`) — built via `buildLastRankAvatar()` in `global.js`
 with host failover. These hosts MUST be in the reverse-proxy CSP `img-src`
-(`scripts/install.sh` for new installs; `scripts/update.sh` auto-patches the Caddyfile on
-existing ones, keyed on the CDN host being absent). Without them avatars are
-blocked in production (they work in dev because there's no proxy CSP) and fall
+(`deploy/Caddyfile`, the one template: `scripts/install.sh` renders it, and
+`scripts/manage.sh update` re-renders a deployed file whose revision is lower — so a CSP
+change there needs the revision bumped, or no existing install receives it). Without them
+avatars are blocked in production (they work in dev because there's no proxy CSP) and fall
 back to initials.
 
 **Two rules that must hold for every history write from LastRank:**
@@ -2089,6 +2090,54 @@ running build is named on Admin → Security & API and in the startup log (`inte
 
 The cut procedure, the failure remedies and the **never-rebuild rule** are in
 `docs/RELEASING.md`. Read it before tagging anything.
+
+## Host scripts (`scripts/`, `deploy/`, compose files)
+
+What an install needs besides the image ships as **`host-files.tar.gz`**, a release asset
+built by CI from `.github/host-files.manifest`. A host is no longer a git clone. Three scripts,
+three libraries:
+
+| File | Role |
+|---|---|
+| `scripts/install.sh` | First install, from the unpacked asset, in any directory. Pre-flight, `.env`, firewall, Caddy, stack, registry, backup helper. `--non-interactive` + flags. |
+| `scripts/manage.sh` | `update` / `migrate` / `status` / `backup`, and the internal `apply`. |
+| `scripts/update.sh` | Retired signpost: forwards to `manage.sh update` once migrated, prints the migration command before. |
+| `scripts/lib/common.sh` | `.env` access (grep, **never `source`**), release resolution, asset download/verify/unpack, Caddyfile revision helpers, the nightly backup helper's text. |
+| `scripts/lib/registry.sh` | `/etc/alliance-manager/installs.d/<name>.conf`, one `APP_DIR="…"` line each. **Frozen format.** |
+| `scripts/lib/preflight.sh` | The check loop: each check blocking/advisory, ignorable or not, with an optional remedy; three passes at most. |
+
+Rules that must hold:
+
+- **The two-stage update.** `manage.sh update` (stage 1) is the copy on disk — the previous
+  release's. It downloads and unpacks the target into `$APP_DIR/.staging/<tag>/` and `exec`s
+  the **staged** `manage.sh apply`, which is the new release's code and does all the work.
+  Stage 1 is one release old by construction, so **its contract is frozen**: `apply`'s
+  argument list and `resolve_latest_release` / `download_asset` / `unpack_asset`. Add, never
+  change; `apply` ignores unknown arguments so a newer stage 1 can drive an older `apply`
+  (a rollback).
+- **Two anchors.** Operator commands derive `APP_DIR` from their own path; `apply` never does
+  (it runs from staging) — it takes `--app-dir`.
+- **The marker** is `HOST_FILES_VERSION=<tag>` in `.env`, written after every step that can
+  fail and before `up` (compose reads `env_file` at container creation). Its presence is what
+  "migrated" means. The Admin page shows it beside the image version.
+- **Rollback.** `apply` snapshots every path it may touch (the old and new file sets, `.env`,
+  `.host-files.list`) and an EXIT trap restores them on any non-zero exit before the marker.
+  Nothing restarts containers until after that point.
+- **Pruning is bounded.** An update deletes only `previous − new`, where previous is
+  `.host-files.list` (or `git ls-files` on a migrate); a file no release shipped is never a
+  candidate. `docker-compose.override.yml` and `.env` are never removed.
+- **The Caddyfile is one template with a revision on its first line.** Bump it with any change
+  to `deploy/Caddyfile`, or no install re-renders. A rollback never lowers it.
+- **The nightly backup helper is root-owned and self-contained** — it runs from root's cron,
+  so it must execute nothing from an install directory (operator-writable). Its text lives in
+  `backup_helper_text`; don't make it call `manage.sh`.
+- **Tests:** `bash tests/scripts/run.sh` — plain bash, stubbed system commands, every system
+  path redirected into a temp dir. CI runs it with `bash -n` and `shellcheck -x -S warning`
+  (**Host scripts check**). shellcheck is not installed on the dev box; the image works:
+  `docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable -x -S warning <files>`.
+- **Rehearsing against a real host:** `.github/scripts/build-host-files.sh <version> <outdir>`
+  builds the tarball locally, and `./scripts/manage.sh update --asset <tarball>` (or `migrate
+  --asset`) applies it without a published release.
 
 ## Running locally
 

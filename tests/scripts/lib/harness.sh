@@ -43,7 +43,8 @@ stub_calls() {
 # combined output in $OUT and its exit status in $STATUS. Never fails itself.
 run() {
     set +e
-    OUT=$(set -eE; "$@" 2>&1)
+    # `exec 2>&1` first, so what an EXIT trap prints on the way out is captured too.
+    OUT=$(exec 2>&1; set -eE; "$@")
     STATUS=$?
     set -e
 }

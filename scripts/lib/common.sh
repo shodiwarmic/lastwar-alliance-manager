@@ -201,6 +201,8 @@ backup_helper_text() {
 # Written by scripts/install.sh / scripts/manage.sh migrate — edits are overwritten.
 # Root-owned and self-contained on purpose: see scripts/lib/common.sh (backup_helper_text).
 set -e
+# Database copies hold every member's data: nothing this writes is for other local users.
+umask 077
 REGISTRY_DIR='$1'
 BACKUP_DIR='$2'
 mkdir -p "\$BACKUP_DIR"
@@ -254,17 +256,19 @@ ensure_backup_helper() {
             outcome="replaced (the previous file was not ours; kept as $AM_BACKUP_HELPER.backup_*)"
         fi
     fi
+    # Each step checked explicitly, so a failure is reported even where a caller has turned
+    # `set -e` off.
     if [ "$outcome" != unchanged ]; then
         # Run as root, install leaves the file root-owned — which is the point.
-        sudo install -D -m 0755 "$tmp" "$AM_BACKUP_HELPER"
+        sudo install -D -m 0755 "$tmp" "$AM_BACKUP_HELPER" || { rm -f "$tmp"; warn "could not write $AM_BACKUP_HELPER"; return 1; }
     fi
     rm -f "$tmp"
 
-    sudo mkdir -p "$AM_LOG_DIR"
+    sudo mkdir -p "$AM_LOG_DIR" || return 1
     if ! sudo crontab -l 2>/dev/null | grep -qF "$AM_BACKUP_HELPER"; then
         { sudo crontab -l 2>/dev/null || true
           printf '0 2 * * * %s >> %s/backup.log 2>&1\n' "$AM_BACKUP_HELPER" "$AM_LOG_DIR"
-        } | sudo crontab -
+        } | sudo crontab - || { warn "could not add the backup helper to root's crontab"; return 1; }
         outcome="$outcome; crontab line added"
     fi
     log "Nightly backup helper: $outcome"

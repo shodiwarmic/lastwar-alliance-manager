@@ -117,9 +117,16 @@ sudo docker compose start alliance-manager
 
 ### Updates
 ```bash
-cd /opt/lastwar
-./scripts/update.sh
+cd <install directory>
+./scripts/manage.sh update                     # newest release — host files and image together
+./scripts/manage.sh update --version v2.0.0    # a specific release (also how to roll back)
+./scripts/manage.sh status                     # what is running
 ```
+
+**Upgrading an install from before v2.0.0** (a git clone): don't run `update.sh` for this one —
+from the install directory run `git pull`, then `./scripts/manage.sh migrate`. See
+[DEPLOYMENT.md → Migrating an install from before v2.0.0](DEPLOYMENT.md#migrating-an-install-from-before-v200)
+for local changes, SCP copies and pre-Docker installs.
 
 ---
 

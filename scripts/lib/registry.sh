@@ -83,8 +83,12 @@ registry_write() {
     tmp=$(mktemp)
     printf '# Alliance Manager install "%s" — written by %s on %s\nAPP_DIR="%s"\n' \
         "$name" "${AM_WRITER:-${0##*/}}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$dir" > "$tmp"
-    sudo install -d -m 0755 "$(registry_dir)"
-    sudo install -m 0644 "$tmp" "$file"
+    # Checked explicitly: callers use `registry_write … || …`, where `set -e` does not apply.
+    if ! sudo install -d -m 0755 "$(registry_dir)" || ! sudo install -m 0644 "$tmp" "$file"; then
+        rm -f "$tmp"
+        warn "could not write $file"
+        return 1
+    fi
     rm -f "$tmp"
 }
 

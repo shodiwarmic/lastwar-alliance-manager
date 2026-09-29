@@ -104,12 +104,12 @@ These have working defaults and are absent from `.env.example`; set them only if
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `APP_VERSION` | `latest` | Which published image this install runs (`v1.2.3`, the moving `v1.2`, `latest`, or `edge`). `scripts/install.sh` and `scripts/update.sh` write the current release tag here for you; set it by hand only to pin to or roll back to a specific release. `latest` means the latest *release*; `edge` is built from `main`. See [RELEASING.md](RELEASING.md). |
+| `APP_VERSION` | `latest` | Which published image this install runs (`v1.2.3`, the moving `v1.2`, `latest`, or `edge`). `scripts/install.sh` and `scripts/manage.sh update` write the release tag here for you, together with the host files of the same release — pin or roll back with `./scripts/manage.sh update --version vX.Y.Z` rather than by hand. `latest` means the latest *release*; `edge` is built from `main`. See [RELEASING.md](RELEASING.md). |
 | `PORT` | `8080` | Port the Go application listens on inside its container. Change it only if you also change the published port in `docker-compose.yml`. |
 | `COLLABORA_PORT` | *(unset)* | Explicit port for the Collabora document server, appended to `COLLABORA_DOMAIN` when building WOPI URLs. Needed only when Collabora is reached on a non-standard port rather than through the reverse proxy. |
 | `TRUSTED_PROXY_COUNT` | `1` when `PRODUCTION=true`, else `0` | How many reverse proxies sit in front of the app. The client address every login rate limit keys on is read that many entries from the right of `X-Forwarded-For`; entries further left were sent by the client and are ignored. `0` ignores the header and uses the TCP peer. Set `2` if a CDN or load balancer sits in front of your Caddy or nginx. On an unproxied install running `PRODUCTION=true`, set `0` — otherwise a client could choose its own rate-limit bucket. |
 | `BIND_ADDR` | `127.0.0.1` | Read by `docker-compose.yml`, not by the app: the address ports 8080 and 9980 are published on. The default keeps them reachable only through the reverse proxy on the same host (Docker's published ports bypass `ufw`). Set `0.0.0.0` for a LAN or development install with no proxy. |
-| `OCR_BACKEND_MODE` | `cloud` | Set to `local` to use the bundled PaddleOCR sidecar instead of Google Cloud Vision. Also requires `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml`. `scripts/install.sh` and `scripts/update.sh` set both for you if you opt in. See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md). |
+| `OCR_BACKEND_MODE` | `cloud` | Set to `local` to use the bundled PaddleOCR sidecar instead of Google Cloud Vision. Also requires `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml`. `scripts/install.sh` sets both for you if you opt in. See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md). |
 
 Two further optional variables, `OCR_ARCHIVE_DIR` and `OCR_ARCHIVE_RETENTION_DAYS`, configure
 local-disk OCR archival and are documented under [OCR Request Archival](#ocr-request-archival-optional) below.
@@ -281,7 +281,7 @@ Backups land in `/var/backups/lastwar/`, in two pools with different retention r
 | Pool | Written by | What | Kept |
 |---|---|---|---|
 | `nightly_<install>_<timestamp>.db` | `/usr/local/bin/backup-lastwar.sh`, from root's crontab at 02:00 | The database of every registered install | 7 days |
-| `db_<timestamp>.db` and `app_<timestamp>.tar.gz` | Before every update | The database, and the install directory without `data/` (so including `uploads/` — the alliance's files) | The newest 10 of each |
+| `db_<timestamp>.db` and `app_<timestamp>.tar.gz` | `./scripts/manage.sh`, before every update (or on demand: `./scripts/manage.sh backup`) | The database, and the install directory without `data/` (so including `uploads/` — the alliance's files) | The newest 10 of each |
 
 They are kept apart on purpose: with a single newest-ten rule, ten nightly backups would push out
 every pre-update restore point in ten days.
@@ -322,54 +322,141 @@ For **local-disk** archival:
 
 ## 6. Update Procedure
 
-We strongly recommend using the included `scripts/update.sh` script. It pulls the latest code,
-moves your `APP_VERSION` pin to the newest release, downloads that image, and checks your proxy
-configuration for security compliance.
+An install is updated with `scripts/manage.sh`, from the install directory:
 
 ```bash
-cd /opt/lastwar
-./scripts/update.sh
+./scripts/manage.sh update
 ```
 
-If the script cannot reach the GitHub releases API it leaves an existing pin exactly as it is
+It moves the **host files and the image together** to the newest release: it downloads that
+release's `host-files.tar.gz` and checks it against its published checksum, takes a backup (see
+[Database Backups](#database-backups)), pins `APP_VERSION`, pulls the new images, and only then
+replaces the compose files and scripts — removing any a release has stopped shipping — checks
+the result is still a valid stack, re-renders the Caddyfile if the release ships a newer
+revision, and restarts the containers. If any step before the restart fails, the install is put
+back exactly as it was and the running containers are left alone. Files you added to the install
+directory yourself are never touched. If the script cannot reach GitHub it changes nothing,
 rather than silently moving your install onto something else.
 
-### Updating manually
+The update runs in two stages: the copy of `manage.sh` already on disk fetches and unpacks the
+new release into `.staging/`, then hands over to the **new** release's own copy, which does the
+work. So a release's changes to the updater take effect in the run that delivers them.
 
-An install runs the image named by `APP_VERSION` in `.env`, so a manual update is a change to
-that line followed by a pull:
-
-```bash
-cd /opt/lastwar
-git pull                        # brings the compose file and scripts up to date
-nano .env                       # set APP_VERSION=v1.2.3 (or latest)
-docker compose pull
-docker compose up -d
-```
-
-> **There is nothing to build.** The production compose file has no `build:` key — the image is
-> pre-built and published for you, so `docker compose build` does nothing here. Building from
-> source is a development workflow and needs the dev override
-> (`deploy/docker-compose.override.yml.example`), which ignores `APP_VERSION` by design.
+`./scripts/update.sh`, the updater before v2.0.0, still exists and simply runs
+`./scripts/manage.sh update` for you.
 
 ### Pinning and rolling back
 
-The same mechanism covers both. To hold an install on a known-good release, or to go back to
-one after a bad update, set the tag and pull:
+`--version` moves the install to a specific release — newer or older — host files and image
+together:
 
 ```bash
-# Roll back to a specific release
-sed -i 's/^APP_VERSION=.*/APP_VERSION=v1.2.3/' .env
-docker compose pull && docker compose up -d
+./scripts/manage.sh update --version v2.0.0
 ```
+
+Releases before v2.0.0 have no host-files asset, so they cannot be targeted this way. To run such
+a release's image, set `APP_VERSION` in `.env` by hand and `sudo docker compose pull && sudo docker
+compose up -d`; the host files stay as they are.
+
+A rollback does **not** roll back `/etc/caddy/Caddyfile`: a newer revision is left in place in
+front of the older release. Revisions only ever add hosts and headers, and `status` shows the
+deployed revision beside the release's own, so the difference is visible.
 
 Published tags are `vX.Y.Z` (exact release), `vX.Y` (moves with its patches), `latest` (the
-newest release) and `edge` (built from `main` — development, not a release). What each release
+newest release) and `edge` (built from `main` — development, not a release). An install pinned
+to `edge` is not updated by `manage.sh`: there are no host files built for it. What each release
 level promises about an update is set out in [RELEASING.md](RELEASING.md).
 
-Confirm which build is actually running afterwards on **Admin → Security & API → About this
-install**, or without logging in:
+> **There is nothing to build.** The production compose file has no `build:` key — the image is
+> pre-built and published for you. Building from source is a development workflow and needs the
+> dev override (`deploy/docker-compose.override.yml.example`), which ignores `APP_VERSION` by
+> design.
+
+### Checking what is running
 
 ```bash
-docker compose logs alliance-manager | head -n 1
+./scripts/manage.sh status
 ```
+
+prints the install directory and its registry entry, the release of the image and of the host
+files, the deployed Caddyfile revision beside the one this release ships, the image the container
+is actually running, its startup line, and `docker compose ps`. The same versions are on
+**Admin → Security & API → About this install**. Quote both when reporting a problem.
+
+`./scripts/manage.sh backup` takes the pre-update backup on its own, at any time.
+
+### Where installs are recorded
+
+Each install is recorded in `/etc/alliance-manager/installs.d/<name>.conf` — a root-owned file
+holding one line, `APP_DIR="…"`. The first install is named `default`. The nightly backup reads
+this list, which is how it finds the database wherever you installed.
+
+### Moving an install
+
+Moving the install directory is a manual procedure, and the data moves with it:
+
+```bash
+cd <install directory>
+sudo docker compose down                 # down, not stop — see below
+sudo sqlite3 data/alliance.db ".backup /tmp/before.db" && sha256sum /tmp/before.db
+sudo find uploads -type f | sort > /tmp/uploads-before.txt
+sudo mv <install directory> <new directory>
+sudoedit /etc/alliance-manager/installs.d/default.conf   # set APP_DIR="<new directory>"
+cd <new directory> && sudo docker compose up -d
+```
+
+Then compare a fresh `.backup` checksum and an `uploads/` listing with the ones taken before.
+Use `down`, not `stop`: both services have fixed container names, so a stopped container left
+behind collides with the one Compose creates from the new directory. `down` without `-v` removes
+the containers only — `data/`, `uploads/` and the OCR model volume stay.
+
+### Migrating an install from before v2.0.0
+
+Installs from before v2.0.0 are a git clone of the repository (or a copy of one), updated by
+`update.sh` pulling `main`. v2.0.0 converts them, in place, to versioned host files. **Do not
+run `update.sh` for this release.** From the install directory:
+
+```bash
+git pull
+./scripts/manage.sh migrate
+```
+
+`migrate` takes a backup, then removes the files git delivered that a host does not need (the
+source code, templates, docs), keeps everything git never delivered (`.env`, `data/`, `uploads/`,
+your own files), writes the v2.0.0 host files, pins the image to v2.0.0, registers the install,
+installs the nightly backup helper, and finally removes `.git`, so a `git pull` from habit can no
+longer drag unreleased files over released ones. Your data is not moved. Any step failing puts
+the clone back as it was.
+
+**If `git pull` refuses because of local changes**, run `git stash` first, then `git pull`.
+`migrate` saves uncommitted changes, every stash and any local commits as patch files under
+`/var/backups/lastwar/migrate_<timestamp>/`, says where, and asks you to re-run with `--yes`
+before it replaces the files they touched.
+
+**An install with no `.git`** (copied over with SCP rather than cloned) cannot `git pull`.
+Download the v2.0.0 asset into the install directory, take its `scripts/` out, and migrate:
+
+```bash
+curl -fsSL -o host-files.tar.gz \
+  https://github.com/shodiwarmic/lastwar-alliance-manager/releases/download/v2.0.0/host-files.tar.gz
+tar -xzf host-files.tar.gz scripts/ && rm host-files.tar.gz
+./scripts/manage.sh migrate
+```
+
+With no history to say which files were delivered, nothing is removed: the new files are laid
+over the old ones.
+
+**An install still running the pre-Docker `lastwar.service`** (data under `/var/lib/lastwar`) is
+not converted by this release. Convert it to Docker with the v1.1.0 scripts first — their update
+copies `/var/lib/lastwar` into the Docker install — then follow the steps above:
+
+```bash
+git checkout v1.1.0 && ./scripts/update.sh
+git checkout main && git pull && ./scripts/manage.sh migrate
+```
+
+`migrate` recognises this case and says so rather than proceeding.
+
+`TRUSTED_PROXY_COUNT=1` is written during the migration when `.env` has `PRODUCTION=true`
+(behind a proxy). The ports are published on `127.0.0.1` from v2.0.0 on; a LAN install reached
+without a proxy needs `BIND_ADDR=0.0.0.0` in `.env`.

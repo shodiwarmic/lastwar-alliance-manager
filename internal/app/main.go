@@ -53,10 +53,11 @@ func staticFileFor(urlPath string) (cleanPath, fullPath string, ok bool) {
 // authorization data is sourced live from the DB.
 func getPageData(r *http.Request, title, activePage string) PageData {
 	data := PageData{
-		Title:      title,
-		ActivePage: activePage,
-		AppVersion: appVersion,
-		AppCommit:  shortCommit(),
+		Title:            title,
+		ActivePage:       activePage,
+		AppVersion:       appVersion,
+		AppCommit:        shortCommit(),
+		HostFilesVersion: os.Getenv("HOST_FILES_VERSION"),
 	}
 
 	session, _ := store.Get(r, "session")

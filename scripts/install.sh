@@ -31,6 +31,8 @@
 # Re-running over the same directory is safe: each step adds what is missing and changes
 # nothing an operator has set.
 set -eE
+# Without this, bash runs every $(...) with `set -e` OFF.
+shopt -s inherit_errexit
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/common.sh

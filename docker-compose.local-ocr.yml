@@ -6,8 +6,8 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.local-ocr.yml up -d
 #
-# (scripts/install.sh / scripts/update.sh write a marker into .env so the alliance-manager
-# entrypoint knows to use this combined invocation automatically.)
+# (scripts/install.sh writes COMPOSE_FILE into .env when local OCR is chosen, so a plain
+# `docker compose up -d` uses this combined invocation automatically.)
 #
 # Trade-offs vs the default cloud (Google Cloud Vision) backend:
 #   - No per-image API cost; nothing leaves the local network.
