@@ -23,7 +23,6 @@ IMAGE_FILES = ('go.mod', 'go.sum', 'Dockerfile', 'deploy/entrypoint.sh')
 HOST_DIRS = ('scripts/',)
 HOST_FILES = ('docker-compose.yml', 'docker-compose.local-ocr.yml',
               'deploy/Caddyfile', 'deploy/docker-compose.override.yml.example',
-              'update.sh',            # the one-release root shim
               '.env.example')
 
 # Delivered to nobody. .github/ is neutral deliberately: a workflow change asks nothing of any
@@ -40,7 +39,6 @@ NEUTRAL_FILES = ('README.md', 'CLAUDE.md', 'SECURITY.md', 'LICENSE',
 NOT_SHIPPED = {
     'scripts/refresh-dev-db.sh': 'dev tooling: copies the production database to a dev box',
     'scripts/refresh-dev-db.conf.example': 'dev tooling: the config for the line above',
-    'update.sh': 'the root shim for pre-v1.0.0 installs; the release that ships assets removes it',
 }
 
 
