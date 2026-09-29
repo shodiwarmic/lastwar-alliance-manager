@@ -23,8 +23,12 @@ failed=()
 for file in "$TESTS_DIR"/*_test.sh; do
     [ -e "$file" ] || continue
     case $(basename "$file") in *"$file_filter"*) ;; *) continue ;; esac
-    tests=$(bash -c 'source "$1"; source "$2"; declare -F' _ "$TESTS_DIR/lib/harness.sh" "$file" \
+    # Listing a file's tests sources it, so it gets the same sandbox a test does.
+    tmp=$(mktemp -d)
+    tests=$(cd "$tmp" && TEST_TMP="$tmp" \
+        bash -c 'source "$1"; harness_setup; source "$2"; declare -F' _ "$TESTS_DIR/lib/harness.sh" "$file" \
         | awk '$3 ~ /^test_/ {print $3}')
+    rm -rf "$tmp"
     for t in $tests; do
         case $t in *"$test_filter"*) ;; *) continue ;; esac
         tmp=$(mktemp -d)

@@ -3,19 +3,25 @@
 ## One-Command Installation (Debian/Ubuntu)
 
 ```bash
-git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
-cd /opt/lastwar
+mkdir -p ~/alliance-manager && cd ~/alliance-manager      # any directory you like
+curl -fsSL -o host-files.tar.gz \
+  https://github.com/shodiwarmic/lastwar-alliance-manager/releases/latest/download/host-files.tar.gz
+tar -xzf host-files.tar.gz && rm host-files.tar.gz
 ./scripts/install.sh
 ```
 
 The script will automatically:
+- ✅ Check the host first (OS, Docker, free ports, DNS, disk, memory) and offer to fix what it can
 - ✅ Install Docker and Docker Compose
 - ✅ Create persistent data directories
 - ✅ Generate secure session/encryption keys and a `.env` file
-- ✅ Build the Go application and Collabora containers via Docker Compose
+- ✅ Pull the pre-built application and Collabora containers, pinned to the release you downloaded
 - ✅ Install Caddy with dual-domain routing and automatic SSL
 - ✅ Apply strict Content-Security-Policy headers for document security
-- ✅ Setup firewall (UFW) and automated database backups
+- ✅ Set up the firewall (UFW) and nightly database backups
+- ✅ Print the one-time setup key for creating the first administrator
+
+Unattended: `./scripts/install.sh --non-interactive --domain app.yourdomain.com` (see `--help`).
 
 ---
 
@@ -26,12 +32,14 @@ If you prefer to skip the script and spin it up manually:
 ### 1. Prerequisites
 - **DNS**: Two domains pointing to your server IP (e.g., `app.domain.com` and `collabora.domain.com`)
 - **Firewall**: Ports 80 and 443 open
-- **Software**: Git, Docker, and Docker Compose installed
+- **Software**: Docker and Docker Compose installed
 
 ### 2. Prepare Environment
 ```bash
-git clone [https://github.com/shodiwarmic/lastwar-alliance-manager.git](https://github.com/shodiwarmic/lastwar-alliance-manager.git) /opt/lastwar
-cd /opt/lastwar
+mkdir -p ~/alliance-manager && cd ~/alliance-manager      # any directory you like
+curl -fsSL -o host-files.tar.gz \
+  https://github.com/shodiwarmic/lastwar-alliance-manager/releases/latest/download/host-files.tar.gz
+tar -xzf host-files.tar.gz && rm host-files.tar.gz
 
 # Create volume directories
 mkdir -p ./data ./uploads
@@ -47,12 +55,17 @@ HTTPS=true
 APP_DOMAIN=app.yourdomain.com
 COLLABORA_DOMAIN=collabora.yourdomain.com
 TRUSTED_ORIGINS=localhost:8080, 127.0.0.1:8080
+APP_VERSION=$(cat HOST_FILES_VERSION)
+HOST_FILES_VERSION=$(cat HOST_FILES_VERSION)
 EOF
 ```
 
+For the local OCR sidecar instead of Google Cloud Vision, also add `OCR_BACKEND_MODE=local` and
+`COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml` before starting.
+
 ### 3. Start the Application Stack
 ```bash
-docker compose up -d --build
+sudo docker compose up -d
 ```
 
 Then read the one-time setup key and open `https://app.yourdomain.com/setup` to create the first
@@ -66,28 +79,14 @@ sudo cat data/setup-key
 ```bash
 # Install Caddy
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf '[https://dl.cloudsmith.io/public/caddy/stable/gpg.key](https://dl.cloudsmith.io/public/caddy/stable/gpg.key)' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf '[https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt](https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt)' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install caddy
 
-# Configure proxy and security headers
-cat << 'EOF' | sudo tee /etc/caddy/Caddyfile
-app.yourdomain.com {
-    reverse_proxy localhost:8080
-    header {
-        X-Frame-Options "DENY"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-    }
-}
-collabora.yourdomain.com {
-    reverse_proxy localhost:9980
-    header {
-        Content-Security-Policy "frame-ancestors [https://app.yourdomain.com](https://app.yourdomain.com)"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-    }
-}
-EOF
-
+# Render the shipped template with your two domains
+sed -e 's|__APP_DOMAIN__|app.yourdomain.com|g' \
+    -e 's|__COLLABORA_DOMAIN__|collabora.yourdomain.com|g' \
+    deploy/Caddyfile | sudo tee /etc/caddy/Caddyfile >/dev/null
 sudo systemctl restart caddy
 ```
 
@@ -96,7 +95,7 @@ sudo systemctl restart caddy
 ## Essential Commands
 
 ### Container Management
-Run these commands from inside your `/opt/lastwar` directory:
+Run these commands from inside your install directory:
 ```bash
 docker compose ps                 # Check container status
 docker compose logs -f            # View real-time logs for all services
@@ -107,12 +106,13 @@ docker compose down               # Stop and remove containers
 
 ### Backups
 ```bash
-# Manual database backup (from host machine)
-sqlite3 /opt/lastwar/data/alliance.db ".backup '/var/backups/lastwar/alliance_$(date +%Y%m%d_%H%M%S).db'"
+# Manual database backup of every registered install (what the nightly cron job runs)
+sudo /usr/local/bin/backup-lastwar.sh
 
-# Restore from backup
-sudo cp /var/backups/lastwar/alliance_YYYYMMDD_HHMMSS.db /opt/lastwar/data/alliance.db
-docker compose restart app
+# Restore from a backup — from your install directory, with the app stopped
+sudo docker compose stop alliance-manager
+sudo cp /var/backups/lastwar/nightly_default_YYYYMMDD_HHMMSS.db data/alliance.db
+sudo docker compose start alliance-manager
 ```
 
 ### Updates

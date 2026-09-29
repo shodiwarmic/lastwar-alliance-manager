@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2034  # tests set globals that the functions under test read
 # Tests for the nightly backup helper (backup_helper_text / ensure_backup_helper in
 # scripts/lib/common.sh) — the one routine root's cron runs.
 # shellcheck source=../../scripts/lib/common.sh

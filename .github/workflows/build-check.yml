@@ -422,7 +422,7 @@ jobs:
             exit 1
           fi
           for f in "${files[@]}"; do bash -n "$f"; done
-          shellcheck -S warning "${files[@]}"
+          shellcheck -x -S warning "${files[@]}"
           bash tests/scripts/run.sh
 
       - name: Set up Go

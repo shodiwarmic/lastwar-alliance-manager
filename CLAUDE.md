@@ -79,12 +79,17 @@ templates via `PageData.OCRBackendMode`.
 | `cloud` (default) | Hosted deployment | Auto-detects | GCP credentials in DB + Vision API enabled |
 | `local` | Self-hosted, no Cloud Vision | User picks per batch | The `lastwar-ocr-service:local` Docker image (PaddleOCR sidecar) |
 
-`scripts/install.sh` and `scripts/update.sh` prompt the operator to opt in to local mode
-on first install (or once on update for pre-existing installs). When
-local is selected, both scripts:
-1. Append `OCR_BACKEND_MODE=local` and `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml` to `.env`.
-2. Set `settings.ocr_backend_mode = 'local'` and default `cv_worker_url = 'http://ocr-local:8080'` in the DB.
-3. The next `docker compose up -d` brings up the `ocr-local` sidecar service defined in `docker-compose.local-ocr.yml`.
+`scripts/install.sh` asks the operator (or takes `--ocr local`). When local is selected it:
+1. Writes `OCR_BACKEND_MODE=local` and `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml` to `.env`.
+2. Leaves the database alone: the app reconciles `settings.ocr_backend_mode` and the default
+   `cv_worker_url = 'http://ocr-local:8080'` from the env var on startup
+   (`reconcileOCRBackendFromEnv`). A host-side `sqlite3` write raced the in-container
+   migrations and left root-owned `-wal`/`-shm` files, which is why none remains.
+3. The `docker compose up -d` brings up the `ocr-local` sidecar service defined in `docker-compose.local-ocr.yml`.
+
+There is no prompt on update: an install whose `.env` predates the setting gets
+`OCR_BACKEND_MODE=cloud` written silently, because a prompt inside an updater is what makes it
+unautomatable.
 
 Handlers should call `ProcessImages(ctx, files, category)` (in
 `image_processing.go`) which dispatches to either `ProcessImagesViaWorker`
@@ -2092,6 +2097,16 @@ go run ./cmd/server
 ```
 
 Migrations run automatically on startup via `initDB()`.
+
+**A fresh database has no account.** The app writes a one-time `setup-key` beside the database
+(`./setup-key` when `DATABASE_PATH` is unset — gitignored — or `data/setup-key` in the Docker
+stack) and every page redirects to `/setup` until the first administrator exists. The dev
+database is a production copy and has users, so this only shows on a scratch database.
+
+**The dev stack needs `BIND_ADDR=0.0.0.0` in `.env`.** `docker-compose.yml` publishes 8080 and
+9980 on `127.0.0.1` only (a production install is reached through its proxy), so without it
+the stack is unreachable at the WSL LAN IP from Windows or a phone — and so is Collabora, which
+the dev override serves at that IP via `COLLABORA_PORT`.
 
 **Static asset caching:** in non-production (`PRODUCTION != "true"`) the server sends
 `Cache-Control: no-store` for `static/` files (see `main.go`), so JS/CSS/SVG edits reload

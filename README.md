@@ -34,11 +34,13 @@ Everything is permission-gated by in-game rank (R1–R5), so officers see what t
 
 ## Quick install
 
-Debian/Ubuntu. The script installs Docker, generates secrets, configures Caddy with SSL, and pulls the pre-built containers.
+Debian/Ubuntu. The script checks the host, installs Docker, generates secrets, configures Caddy with SSL, and pulls the pre-built containers. Install into any directory you like:
 
 ```bash
-git clone https://github.com/shodiwarmic/lastwar-alliance-manager.git
-cd lastwar-alliance-manager
+mkdir -p ~/alliance-manager && cd ~/alliance-manager      # any directory you like
+curl -fsSL -o host-files.tar.gz \
+  https://github.com/shodiwarmic/lastwar-alliance-manager/releases/latest/download/host-files.tar.gz
+tar -xzf host-files.tar.gz && rm host-files.tar.gz
 ./scripts/install.sh
 ```
 

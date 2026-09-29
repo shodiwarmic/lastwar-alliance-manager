@@ -11,6 +11,10 @@ for arg in "$@"; do
             exit 97 ;;
     esac
 done
+# `sudo -u USER cmd …` runs cmd as USER; here it simply runs cmd.
+if [ "${1:-}" = -u ]; then
+    shift 2
+fi
 if [ -x "$STUB_RESPONSES/sudo" ]; then
     "$STUB_RESPONSES/sudo" "$@" || exit $?
 fi

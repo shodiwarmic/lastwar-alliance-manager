@@ -1,47 +1,42 @@
-# deploy/Caddyfile — REFERENCE TEMPLATE ONLY.
+# alliance-manager caddyfile rev 1
 #
-# Nothing reads this file at runtime. The live reverse-proxy config on a deployed host is
-# /etc/caddy/Caddyfile, which scripts/install.sh writes on first install and
-# scripts/update.sh patches on upgrade (e.g. adding the LastRank avatar CDN hosts to the
-# CSP img-src). Editing this file changes nothing on a running host — change the script
-# that generates it, or edit /etc/caddy/Caddyfile there and reload Caddy.
+# The ONE Caddyfile. scripts/install.sh renders it to /etc/caddy/Caddyfile, and
+# scripts/manage.sh update re-renders it whenever the revision on the first line is higher
+# than the deployed file's. So: bump the revision with every change to this file, or no
+# existing install will ever receive the change. The rendered file keeps this first line,
+# which is how the next update reads what it has.
+#
+# The two placeholders (APP_DOMAIN and COLLABORA_DOMAIN, each wrapped in double underscores)
+# are replaced from the same keys in the install's .env — render_caddyfile in
+# scripts/lib/common.sh; docs/DEPLOYMENT.md shows the one-line equivalent for rendering by
+# hand. A re-render overwrites hand edits to /etc/caddy/Caddyfile, keeping a dated backup.
+#
+# There is deliberately no www.<domain> redirect block: the documented DNS setup is two
+# records, and a site block for a name with no record makes Caddy retry a certificate it can
+# never get, forever, in its log. If your DNS has a www record, add the block by hand:
+#
+#   www.app.example.org {
+#       redir https://app.example.org{uri} permanent
+#   }
+#
+# Both upstreams are 127.0.0.1 rather than localhost: docker-compose.yml publishes the app and
+# Collabora on the IPv4 loopback only, and "localhost" may resolve to ::1 first.
 
-your-domain.com {
-    # Reverse proxy to Go application (handles all routing including 404s)
-    reverse_proxy localhost:8080
-
-    # Enable gzip compression
+__APP_DOMAIN__ {
+    reverse_proxy 127.0.0.1:8080
     encode gzip
-
-    # Security headers
     header {
-        # Prevent MIME type sniffing
         X-Content-Type-Options "nosniff"
-
-        # Prevent clickjacking — SAMEORIGIN (not DENY) is required so the
-        # Collabora iframe can load inside this app's own pages.
+        # SAMEORIGIN, not DENY: the Collabora iframe loads inside this app's own pages.
         X-Frame-Options "SAMEORIGIN"
-
-        # XSS protection (legacy browsers)
         X-XSS-Protection "1; mode=block"
-
-        # Referrer policy
         Referrer-Policy "strict-origin-when-cross-origin"
-
-        # HSTS - Force HTTPS for 1 year
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-
-        # Content Security Policy
-        # frame-src: allows the Collabora iframe to load on document pages.
-        # connect-src: allows Collabora's JS to open WebSocket connections back to its own domain.
-        # Replace collabora.your-domain.com with your actual Collabora subdomain.
-        Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https://lastwar-cdn.akamaized.net https://lastwar-cdn.lastwarapp.net; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://collabora.your-domain.com; frame-src https://collabora.your-domain.com; frame-ancestors 'none';"
-
-        # Remove server information
+        # frame-src / connect-src let the Collabora editor load and open its WebSocket.
+        # img-src carries the game CDN hosts that LastRank avatars are hotlinked from.
+        Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https://lastwar-cdn.akamaized.net https://lastwar-cdn.lastwarapp.net; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://__COLLABORA_DOMAIN__; frame-src https://__COLLABORA_DOMAIN__; frame-ancestors 'none';"
         -Server
     }
-
-    # Access logging
     log {
         output file /var/log/caddy/lastwar-access.log {
             roll_size 100mb
@@ -52,23 +47,16 @@ your-domain.com {
     }
 }
 
-# Collabora Online document server
-collabora.your-domain.com {
+__COLLABORA_DOMAIN__ {
     encode gzip
-    reverse_proxy localhost:9980
+    reverse_proxy 127.0.0.1:9980
     header {
         X-Content-Type-Options "nosniff"
-        # X-Frame-Options is omitted here because we MUST allow embedding.
-        # Instead, we use a strict CSP to ONLY allow your main domain to iframe it.
-        Content-Security-Policy "frame-ancestors https://your-domain.com"
+        # No X-Frame-Options here: the editor MUST be embeddable — by the app, and only by it.
+        Content-Security-Policy "frame-ancestors https://__APP_DOMAIN__"
         X-XSS-Protection "1; mode=block"
         Referrer-Policy "strict-origin-when-cross-origin"
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         -Server
     }
-}
-
-# Redirect www to non-www (optional)
-www.your-domain.com {
-    redir https://your-domain.com{uri} permanent
 }
