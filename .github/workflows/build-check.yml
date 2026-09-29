@@ -405,6 +405,26 @@ jobs:
                 f'{len(ALLOWED)} allowlisted).')
           EOF
 
+      # The host scripts run as the operator, with sudo, on a server nobody is watching: a
+      # syntax error or an unquoted expansion there is found by an operator mid-update. So
+      # every shell file is parsed, linted, and its function tests run on every PR.
+      # tests/scripts is a plain bash runner with stubbed system commands -- nothing it runs
+      # reaches the runner's own docker, apt or /etc. shellcheck ships on ubuntu-latest.
+      # Runs as a step of this job rather than its own job: the required status checks in
+      # branch protection are pinned to job names.
+      - name: Host scripts check
+        run: |
+          command -v shellcheck >/dev/null || { echo "shellcheck is not on this runner"; exit 1; }
+          shopt -s nullglob
+          files=(scripts/lib/*.sh tests/scripts/*.sh tests/scripts/lib/*.sh tests/scripts/lib/stubs/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "Host scripts check found nothing to check -- did scripts/lib or tests/scripts move?"
+            exit 1
+          fi
+          for f in "${files[@]}"; do bash -n "$f"; done
+          shellcheck -S warning "${files[@]}"
+          bash tests/scripts/run.sh
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:

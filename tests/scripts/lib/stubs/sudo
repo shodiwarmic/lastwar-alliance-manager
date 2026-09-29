@@ -1,0 +1,17 @@
+#!/bin/bash
+# sudo stub: logs the call, refuses anything aimed at a real system path (a test that forgot
+# to redirect one fails loudly rather than touching the host), then runs the command as the
+# current user — so `sudo docker …` reaches the docker stub, and `sudo install … $AM_*`
+# writes into the test's directory.
+printf '%s\n' "sudo $*" >> "$STUB_LOG"
+for arg in "$@"; do
+    case $arg in
+        /etc/*|/usr/*|/var/*|/opt/*)
+            printf 'sudo stub: refusing a real system path: %s\n' "$arg" >&2
+            exit 97 ;;
+    esac
+done
+if [ -x "$STUB_RESPONSES/sudo" ]; then
+    "$STUB_RESPONSES/sudo" "$@" || exit $?
+fi
+exec "$@"

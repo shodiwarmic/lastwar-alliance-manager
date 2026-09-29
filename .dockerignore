@@ -39,6 +39,9 @@ Thumbs.db
 # Fly.io
 fly.toml
 
-# Documentation
+# Documentation, CI and the host scripts' tests -- nothing the image needs, and listing
+# them keeps a doc or test change from invalidating the builder's `COPY . .` layer.
 README.md
 .github
+docs/
+tests/

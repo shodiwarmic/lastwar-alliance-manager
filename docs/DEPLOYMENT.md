@@ -240,12 +240,19 @@ sudo ufw enable
 ```
 
 ### Database Backups
-Because the database is stored in a Docker volume mapped to your host machine (`./data`), you can back it up easily using standard host cron jobs.
+Backups land in `/var/backups/lastwar/`, in two pools with different retention rules:
 
-```bash
-# Example backup command to add to crontab
-sqlite3 /opt/lastwar/data/alliance.db ".backup '/var/backups/lastwar/alliance_$(date +%Y%m%d).db'"
-```
+| Pool | Written by | What | Kept |
+|---|---|---|---|
+| `nightly_<install>_<timestamp>.db` | `/usr/local/bin/backup-lastwar.sh`, from root's crontab at 02:00 | The database of every registered install | 7 days |
+| `db_<timestamp>.db` and `app_<timestamp>.tar.gz` | Before every update | The database, and the install directory without `data/` (so including `uploads/` — the alliance's files) | The newest 10 of each |
+
+They are kept apart on purpose: with a single newest-ten rule, ten nightly backups would push out
+every pre-update restore point in ten days.
+
+The nightly helper is root-owned and self-contained — it runs nothing from the install directory,
+reads the install list from `/etc/alliance-manager/installs.d/`, and runs `sqlite3 .backup`
+itself. To take one by hand: `sudo /usr/local/bin/backup-lastwar.sh`.
 
 ### OCR Request Archival (optional)
 Archival is off by default and configured by an admin in **Admin → Security → OCR
