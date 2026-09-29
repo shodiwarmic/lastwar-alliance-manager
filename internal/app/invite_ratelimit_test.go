@@ -43,8 +43,10 @@ func TestUnauthenticatedTokenEndpointsAreRateLimited(t *testing.T) {
 				}
 			}
 
+			// The IP is the TCP peer, not an X-Forwarded-For value: with no trusted proxy
+			// the header is ignored, which is the point of lastwar-private-docs#62.
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			req.Header.Set("X-Forwarded-For", tc.ip)
+			req.RemoteAddr = tc.ip + ":4000"
 			rr := httptest.NewRecorder()
 			tc.handler(rr, req)
 

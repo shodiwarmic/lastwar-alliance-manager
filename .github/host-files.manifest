@@ -1,0 +1,19 @@
+# The files the host-files release asset (host-files.tar.gz) carries -- everything an install
+# needs besides the image. One path per line; built into the tarball by
+# .github/scripts/build-host-files.sh, which adds HOST_FILES_VERSION and .host-files.list.
+#
+# Build & Test's "Host-files manifest check" holds this list to the host set in
+# .github/scripts/release_paths.py: every path here must be tracked and host-classified, and
+# every host-classified file must be here or in NOT_SHIPPED there. A new host file therefore
+# fails CI until it is listed in one place or the other.
+scripts/install.sh
+scripts/manage.sh
+scripts/update.sh
+scripts/lib/common.sh
+scripts/lib/registry.sh
+scripts/lib/preflight.sh
+docker-compose.yml
+docker-compose.local-ocr.yml
+deploy/Caddyfile
+deploy/docker-compose.override.yml.example
+.env.example

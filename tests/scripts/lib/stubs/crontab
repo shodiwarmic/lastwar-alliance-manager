@@ -1,0 +1,12 @@
+#!/bin/bash
+# crontab stub: `-l` prints the stored table (exit 1 if none, as crontab does); `-` stores stdin.
+printf '%s\n' "crontab $*" >> "$STUB_LOG"
+if [ -x "$STUB_RESPONSES/crontab" ]; then
+    exec "$STUB_RESPONSES/crontab" "$@"
+fi
+table="$STUB_DIR/crontab"
+case ${1:-} in
+    -l) [ -f "$table" ] || exit 1; cat "$table" ;;
+    -)  cat > "$table" ;;
+    *)  exit 2 ;;
+esac

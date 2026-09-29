@@ -1,0 +1,52 @@
+name: Move latest to the published release
+
+# :latest moves HERE, when a human publishes a release -- not when the tag is pushed
+# (docker-publish.yml sets latest=false). A release is published only once its host-files
+# asset is attached, so from that moment the `latest` image and the releases/latest host-files
+# download name the same release: an install pinned to `latest` never gets a new image beside
+# old host files, or the reverse.
+#
+# This is a manifest re-tag (`imagetools create` copies the existing multi-arch manifest to a
+# new tag), not a build, so the never-rebuild rule holds. Pre-releases do not move latest.
+#
+# The release must be published by a person (or a token other than the default
+# GITHUB_TOKEN): events caused by GITHUB_TOKEN trigger no workflow at all.
+on:
+  release:
+    types: [published]
+
+jobs:
+  retag-latest:
+    name: Re-tag as latest
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Point latest at the release's image
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          IMAGE: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$TAG is not a vX.Y.Z release tag; latest not moved."
+            exit 1
+          fi
+          # The release's own image must already exist -- docker-publish.yml pushed it on the
+          # tag. If it does not, fail rather than move latest to nothing.
+          docker buildx imagetools inspect "$IMAGE:$TAG" > /dev/null
+          docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE:$TAG"
+          docker buildx imagetools inspect "$IMAGE:latest"

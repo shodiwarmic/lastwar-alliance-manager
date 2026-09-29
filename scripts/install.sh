@@ -1,344 +1,336 @@
 #!/bin/bash
-set -e
-
-# The script lives in scripts/ but every path below — .env, the compose files, the
-# backup tarball, `git pull`, APP_DIR — is relative to the repo root. Do this before
-# anything computes a path, so the script works from any working directory.
-cd "$(dirname "$0")/.." || exit 1
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-echo -e "${GREEN}Last War Alliance Manager - Docker Installation Script${NC}"
-echo "========================================================="
-echo ""
-
-# Check if running as root
-if [[ $EUID -eq 0 ]]; then
-   echo -e "${RED}This script should NOT be run as root${NC}"
-   echo "Please run as a regular user with sudo privileges"
-   exit 1
-fi
-
-command -v sudo >/dev/null 2>&1 || { echo -e "${RED}sudo is required but not installed${NC}"; exit 1; }
-
-# Capture the exact path where the app is being installed for the backup script later
-APP_DIR=$(pwd)
-
-# Detect OS
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$ID
-    DISTRO_CODENAME=$VERSION_CODENAME
-else
-    echo -e "${RED}Cannot detect OS. This script requires Debian or Ubuntu.${NC}"
-    exit 1
-fi
-
-if [ "$OS" != "debian" ] && [ "$OS" != "ubuntu" ]; then
-    echo -e "${RED}Unsupported OS: $OS. This script requires Debian or Ubuntu.${NC}"
-    exit 1
-fi
-
-# Ask for domains
-read -p "Enter your main app domain name (e.g., app.example.com): " DOMAIN
-if [ -z "$DOMAIN" ]; then
-   echo -e "${RED}App domain name is required${NC}"
-   exit 1
-fi
-
-read -p "Enter your Collabora domain name (default: collabora.$DOMAIN): " COLLABORA_DOMAIN
-COLLABORA_DOMAIN=${COLLABORA_DOMAIN:-collabora.$DOMAIN}
-
-echo ""
-echo -e "${RED}!!! DNS CONFIGURATION REQUIRED !!!${NC}"
-echo -e "${YELLOW}Before continuing, your DNS provider MUST have A-Records pointing to this server's IP for:${NC}"
-echo " 1. $DOMAIN"
-echo " 2. $COLLABORA_DOMAIN"
-echo "If these are not set, the reverse proxy will fail to start and SSL generation will break."
-read -p "Press Enter to confirm your DNS is configured, or Ctrl+C to abort..."
-
-echo ""
-echo "Choose reverse proxy:"
-echo "1) Caddy (Recommended - Automatic HTTPS)"
-echo "2) Nginx (Manual Let's Encrypt setup)"
-read -p "Enter choice [1-2]: " PROXY_CHOICE
-
-echo ""
-echo -e "${YELLOW}Starting installation...${NC}"
-echo ""
-
-echo -e "${GREEN}[1/6] Updating system packages...${NC}"
-sudo apt update
-
-echo -e "${GREEN}[2/6] Installing dependencies...${NC}"
-sudo apt install -y curl wget git ufw fail2ban sqlite3
-
-echo -e "${GREEN}[3/6] Installing Docker & Docker Compose...${NC}"
-if ! command -v docker &> /dev/null; then
-    sudo apt-get update
-    sudo apt-get install -y ca-certificates curl
-    sudo install -m 0755 -d /etc/apt/keyrings
-    sudo curl -fsSL https://download.docker.com/linux/$OS/gpg -o /etc/apt/keyrings/docker.asc
-    sudo chmod a+r /etc/apt/keyrings/docker.asc
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$OS $DISTRO_CODENAME stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    sudo apt-get update
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-fi
-
-echo -e "${GREEN}[4/6] Creating environment and directories...${NC}"
-mkdir -p ./data ./uploads
-
-if [ ! -f ".env" ]; then
-    echo "Generating secure .env file..."
-    SESSION_KEY=$(openssl rand -hex 32)
-    CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -hex 32)
-    cat > .env <<EOF
-DATABASE_PATH=/app/data/alliance.db
-STORAGE_PATH=/app/uploads
-SESSION_KEY=$SESSION_KEY
-CREDENTIAL_ENCRYPTION_KEY=$CREDENTIAL_ENCRYPTION_KEY
-PRODUCTION=true
-HTTPS=true
-PORT=8080
-APP_DOMAIN=$DOMAIN
-COLLABORA_DOMAIN=$COLLABORA_DOMAIN
-EOF
-fi
-
-# Pin this install to the current release. docker-compose.yml resolves
-# ${APP_VERSION:-latest}, so this line is what makes an install concretely
-# versioned instead of following whatever :latest points at on any given day.
+# shellcheck source-path=SCRIPTDIR
+# scripts/install.sh — install Alliance Manager on a fresh Debian or Ubuntu host.
 #
-# Deliberately its own block rather than part of the .env heredoc above: a
-# re-run of this script over an existing .env must still gain the pin, the same
-# shape as the OCR_BACKEND_MODE / OCR_ARCHIVE_ sentinel blocks below.
-if ! grep -q "^APP_VERSION=" .env; then
-    APP_VERSION_VALUE="latest"
-    # The call is guarded because `set -e` is on and `curl -f` exits 22 on the
-    # 404 the API returns while the repository has no release yet -- which is
-    # the COMMON path at first, not an edge case. jq is deliberately not a
-    # dependency of this script: one known key in a known payload is a sed away.
-    if RELEASE_JSON=$(curl -fsS "https://api.github.com/repos/shodiwarmic/lastwar-alliance-manager/releases/latest" 2>/dev/null); then
-        RESOLVED_TAG=$(printf '%s' "$RELEASE_JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
-        if [ -n "$RESOLVED_TAG" ]; then
-            APP_VERSION_VALUE="$RESOLVED_TAG"
-        fi
+# Runs from an unpacked host-files release asset, in whatever directory you chose:
+#
+#   mkdir -p ~/alliance-manager && cd ~/alliance-manager
+#   curl -fsSL -o host-files.tar.gz \
+#     https://github.com/shodiwarmic/lastwar-alliance-manager/releases/latest/download/host-files.tar.gz
+#   tar -xzf host-files.tar.gz && rm host-files.tar.gz
+#   ./scripts/install.sh
+#
+# That directory becomes the install: .env, data/ and uploads/ are created beside the
+# scripts, and it is recorded in /etc/alliance-manager/installs.d/ so the host knows where
+# its install lives. Later updates are ./scripts/manage.sh update.
+#
+# Every prompt has a flag, so the whole thing can run unattended:
+#
+#   ./scripts/install.sh --non-interactive --domain app.example.org
+#
+# Options:
+#   --domain NAME            the app's domain (required non-interactively)
+#   --collabora-domain NAME  the document editor's domain (default: collabora.<domain>)
+#   --proxy caddy|none       install and configure Caddy (default), or bring your own proxy
+#   --ocr cloud|local        Google Cloud Vision (default) or the local PaddleOCR sidecar
+#   --archive                prepare local-disk OCR request archival (local OCR only)
+#   --ignore ID[,ID...]      accept a failed prerequisite check (recorded in install.log)
+#   --name NAME              the name this install is registered under (default: default)
+#   --non-interactive        never prompt; a missing required value is an error
+#
+# Re-running over the same directory is safe: each step adds what is missing and changes
+# nothing an operator has set.
+set -eE
+# Without this, bash runs every $(...) with `set -e` OFF.
+shopt -s inherit_errexit
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/registry.sh
+source "$SCRIPT_DIR/lib/registry.sh"
+# shellcheck source=lib/preflight.sh
+source "$SCRIPT_DIR/lib/preflight.sh"
+
+usage() {
+    sed -n '/^# Options:/,/^# Re-running/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'
+}
+
+parse_args() {
+    DOMAIN='' COLLAB_DOMAIN='' PROXY=caddy OCR=cloud ARCHIVE=0 IGNORE='' NAME=default
+    NON_INTERACTIVE=0
+    local explicit_ocr=0 explicit_proxy=0
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --domain) DOMAIN=${2:-}; shift 2 ;;
+            --collabora-domain) COLLAB_DOMAIN=${2:-}; shift 2 ;;
+            --proxy) PROXY=${2:-}; explicit_proxy=1; shift 2 ;;
+            --ocr) OCR=${2:-}; explicit_ocr=1; shift 2 ;;
+            --archive) ARCHIVE=1; shift ;;
+            --ignore) IGNORE=${2:-}; shift 2 ;;
+            --name) NAME=${2:-}; shift 2 ;;
+            --non-interactive) NON_INTERACTIVE=1; shift ;;
+            -h|--help) usage; exit 0 ;;
+            *) die "unknown option: $1 (see --help)" ;;
+        esac
+    done
+    case $PROXY in caddy|none) ;; *) die "--proxy must be caddy or none" ;; esac
+    case $OCR in cloud|local) ;; *) die "--ocr must be cloud or local" ;; esac
+    registry_valid_name "$NAME" || die "--name may hold letters, digits, . _ and - only"
+    ASK_PROXY=$((1 - explicit_proxy))
+    ASK_OCR=$((1 - explicit_ocr))
+    export NON_INTERACTIVE
+}
+
+# ask VAR "prompt" [default] — read a value unless one was given; never prompts when
+# non-interactive.
+ask() {
+    local __var=$1 prompt=$2 default=${3:-} reply
+    if [ -n "${!__var}" ]; then
+        return 0
     fi
-    if [ "$APP_VERSION_VALUE" = "latest" ]; then
-        echo -e "${YELLOW}Could not resolve the latest release; using APP_VERSION=latest.${NC}"
+    if [ "$NON_INTERACTIVE" = 1 ]; then
+        printf -v "$__var" '%s' "$default"
+        return 0
+    fi
+    if [ -n "$default" ]; then
+        read -r -p "$prompt [$default]: " reply
     else
-        echo -e "${GREEN}Pinning this install to release $APP_VERSION_VALUE.${NC}"
+        read -r -p "$prompt: " reply
     fi
-    echo "APP_VERSION=$APP_VERSION_VALUE" >> .env
-fi
-
-echo -e "${GREEN}[5/6] Configuring firewall and proxy...${NC}"
-sudo ufw --force enable
-sudo ufw allow 22/tcp comment 'SSH'
-sudo ufw allow 80/tcp comment 'HTTP'
-sudo ufw allow 443/tcp comment 'HTTPS'
-
-if [ "$PROXY_CHOICE" = "1" ]; then
-    echo "Installing Caddy..."
-    sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-    sudo apt update
-    sudo apt install -y caddy
-    
-    sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
-$DOMAIN {
-    reverse_proxy localhost:8080
-    encode gzip
-    header {
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "SAMEORIGIN"
-        X-XSS-Protection "1; mode=block"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https://lastwar-cdn.akamaized.net https://lastwar-cdn.lastwarapp.net; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://$COLLABORA_DOMAIN; frame-src https://$COLLABORA_DOMAIN; frame-ancestors 'none';"
-        -Server
-    }
-    log {
-        output file /var/log/caddy/lastwar-access.log {
-            roll_size 100mb
-            roll_keep 10
-            roll_keep_for 720h
-        }
-        format json
-    }
+    printf -v "$__var" '%s' "${reply:-$default}"
 }
 
-www.$DOMAIN {
-    redir https://$DOMAIN{uri} permanent
+gather_choices() {
+    step "Configuration"
+    ask DOMAIN "The app's domain (e.g. app.example.org)"
+    [ -n "$DOMAIN" ] || die "a domain is required (--domain)"
+    if ! valid_domain "$DOMAIN" || placeholder_domain "$DOMAIN"; then
+        die "not a usable domain: $DOMAIN"
+    fi
+    ask COLLAB_DOMAIN "The document editor's domain" "collabora.$DOMAIN"
+    if ! valid_domain "$COLLAB_DOMAIN" || placeholder_domain "$COLLAB_DOMAIN"; then
+        die "not a usable domain: $COLLAB_DOMAIN"
+    fi
+
+    if [ "$NON_INTERACTIVE" = 0 ] && [ "$ASK_PROXY" = 1 ]; then
+        log ""
+        log "Reverse proxy:"
+        log "  1) Caddy — installed and configured for you, with automatic HTTPS (recommended)"
+        log "  2) None  — you run your own (e.g. nginx: docs/DEPLOYMENT.md → Reverse Proxy, Option B)"
+        local reply
+        read -r -p "Choice [1]: " reply
+        case ${reply:-1} in 2) PROXY=none ;; *) PROXY=caddy ;; esac
+    fi
+
+    if [ "$NON_INTERACTIVE" = 0 ] && [ "$ASK_OCR" = 1 ]; then
+        log ""
+        log "OCR backend, which turns ranking screenshots into player rows:"
+        log "  1) Cloud — Google Cloud Vision. Detects each screen by itself; needs a Google"
+        log "             Cloud project and Vision API key (an admin sets it in the app later)."
+        case $(pf_arch) in
+            aarch64|arm64)
+                log "  (Local OCR is not offered: its sidecar image is published for x86-64 only.)" ;;
+            *)
+                log "  2) Local — a PaddleOCR sidecar on this machine. No API cost, nothing leaves"
+                log "             the network; you pick the screen per upload. ~2 GB image."
+                local reply
+                read -r -p "Choice [1]: " reply
+                case ${reply:-1} in 2) OCR=local ;; *) OCR=cloud ;; esac ;;
+        esac
+    fi
+
+    if [ "$NON_INTERACTIVE" = 0 ] && [ "$ARCHIVE" = 0 ] && [ "$OCR" = local ]; then
+        log ""
+        log "Local OCR request archival keeps uploaded screenshots and the parsed result, to"
+        log "help improve OCR. It can grow past 10 GB over the retention window on this disk."
+        confirm "Prepare local archiving (you switch it on in Admin → Security)?" && ARCHIVE=1
+    fi
+    if [ "$ARCHIVE" = 1 ] && [ "$OCR" != local ]; then
+        log "Note: --archive prepares LOCAL-disk archival. For a Google Cloud Storage bucket, see"
+        log "docs/IMAGE_RECOGNITION.md → GCS archival setup, then set it in Admin → Security."
+        ARCHIVE=0
+    fi
 }
 
-$COLLABORA_DOMAIN {
-    encode gzip
-    reverse_proxy localhost:9980
-    header {
-        X-Content-Type-Options "nosniff"
-        # X-Frame-Options is omitted here because we MUST allow embedding.
-        # Instead, we use a strict CSP to ONLY allow your main domain to iframe it.
-        Content-Security-Policy "frame-ancestors https://$DOMAIN"
-        X-XSS-Protection "1; mode=block"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        -Server
-    }
+# rerun_detected — this directory already holds this install: it is registered here, or a
+# previous run got as far as writing the marker before stopping.
+rerun_detected() {
+    [ "$(registry_name_for "$APP_DIR" || true)" != "" ] && return 0
+    [ -f "$APP_DIR/.env" ] && ENV_FILE="$APP_DIR/.env" env_has HOST_FILES_VERSION
 }
-EOF
+
+configure_firewall() {
+    step "Firewall"
+    # Allow first, enable last — enabling first refuses new SSH connections in the gap.
+    # Any port sshd listens on is allowed, not just 22, so a moved SSH port is not locked out.
+    local port ssh_ports
+    ssh_ports=$(sudo ss -H -ltnp 2>/dev/null | awk '/"sshd"/ {n = split($4, a, ":"); print a[n]}' | sort -u)
+    for port in 22 $ssh_ports; do
+        sudo ufw allow "$port/tcp" comment 'SSH'
+    done
+    sudo ufw allow 80/tcp comment 'HTTP'
+    sudo ufw allow 443/tcp comment 'HTTPS'
+    sudo ufw --force enable
+}
+
+install_caddy() {
+    if ! command -v caddy >/dev/null 2>&1; then
+        step "Installing Caddy"
+        apt_install debian-keyring debian-archive-keyring apt-transport-https
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+            | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+            | sudo tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
+        apt_update
+        apt_install caddy
+    fi
+    step "Configuring Caddy for $DOMAIN and $COLLAB_DOMAIN"
+    install_caddyfile
     sudo systemctl enable caddy
     sudo systemctl restart caddy
-elif [ "$PROXY_CHOICE" = "2" ]; then
-    echo "Installing Nginx..."
-    sudo apt install -y nginx certbot python3-certbot-nginx
-    
-    sudo tee /etc/nginx/sites-available/lastwar > /dev/null <<EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name $DOMAIN $COLLABORA_DOMAIN;
-    
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
 }
-server {
-    listen 443 ssl;
-    server_name $DOMAIN;
-    location / {
-        proxy_pass http://localhost:8080;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+
+# install_caddyfile — render the template, validate the RENDERED file, and only then put it
+# in place. A different file already there is kept beside it, dated.
+install_caddyfile() {
+    local tmp
+    tmp=$(mktemp)
+    render_caddyfile "$APP_DIR/deploy/Caddyfile" "$DOMAIN" "$COLLAB_DOMAIN" > "$tmp"
+    chmod 0644 "$tmp"
+    # As the caddy user, so validating cannot leave a root-owned log file behind for the
+    # service to fail on.
+    local out
+    if ! out=$(sudo -u caddy caddy validate --adapter caddyfile --config "$tmp" 2>&1); then
+        printf '%s\n' "$out" >&2
+        die "the rendered Caddyfile does not validate; it is at $tmp"
+    fi
+    if [ -e "$AM_CADDYFILE" ] && ! cmp -s "$tmp" "$AM_CADDYFILE"; then
+        sudo cp -p "$AM_CADDYFILE" "$AM_CADDYFILE.backup_$(date +%Y%m%d_%H%M%S)"
+    fi
+    sudo install -D -m 0644 "$tmp" "$AM_CADDYFILE"
+    rm -f "$tmp"
 }
-server {
-    listen 443 ssl;
-    server_name $COLLABORA_DOMAIN;
-    location / {
-        proxy_pass http://localhost:9980;
-        proxy_set_header Host \$host;
-    }
-    location ~ ^/cool/(.*)/ws$ {
-        proxy_pass http://localhost:9980;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header Host \$host;
-        proxy_read_timeout 36000s;
-    }
-    location ^~ /cool/adminws {
-        proxy_pass http://localhost:9980;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header Host \$host;
-        proxy_read_timeout 36000s;
-    }
+
+write_env() {
+    step "Writing .env"
+    local tag archive_dir=''
+    tag=$(tr -d '[:space:]' < "$APP_DIR/HOST_FILES_VERSION")
+    if [ ! -f "$APP_DIR/.env" ]; then
+        (umask 077 && : > "$APP_DIR/.env")
+    fi
+    env_ensure SESSION_KEY "$(openssl rand -hex 32)"
+    env_ensure CREDENTIAL_ENCRYPTION_KEY "$(openssl rand -hex 32)"
+    env_ensure DATABASE_PATH /app/data/alliance.db
+    env_ensure STORAGE_PATH /app/uploads
+    env_ensure PRODUCTION true
+    env_ensure HTTPS true
+    env_ensure PORT 8080
+    env_ensure APP_DOMAIN "$DOMAIN"
+    env_ensure COLLABORA_DOMAIN "$COLLAB_DOMAIN"
+    env_ensure TRUSTED_PROXY_COUNT 1
+    # The pin is the release whose host files were just unpacked — not whatever the API
+    # calls latest right now — so host files and image are one release by construction.
+    env_ensure APP_VERSION "$tag"
+    env_ensure OCR_BACKEND_MODE "$OCR"
+    if [ "$OCR" = local ]; then
+        env_ensure COMPOSE_FILE docker-compose.yml:docker-compose.local-ocr.yml
+    fi
+    if [ "$ARCHIVE" = 1 ]; then
+        archive_dir=/app/data/ocr-archive
+        env_ensure OCR_ARCHIVE_RETENTION_DAYS 7
+    fi
+    env_ensure OCR_ARCHIVE_DIR "$archive_dir"
+    # Before `up`: compose reads env_file when it creates the container, and the Admin page
+    # shows this beside the image version.
+    env_ensure HOST_FILES_VERSION "$tag"
+    if [ "$(env_get APP_VERSION)" != "$tag" ]; then
+        warn "this .env pins APP_VERSION=$(env_get APP_VERSION), not the unpacked $tag — kept as it is"
+    fi
 }
-EOF
-    sudo ln -sf /etc/nginx/sites-available/lastwar /etc/nginx/sites-enabled/
-    sudo rm -f /etc/nginx/sites-enabled/default
-    sudo systemctl enable nginx
-    sudo systemctl restart nginx
-fi
 
-echo ""
-echo -e "${YELLOW}OCR backend selection${NC}"
-echo "Two options for the OCR pipeline that turns screenshots into player rows:"
-echo ""
-echo "  1) Cloud  — Google Cloud Vision."
-echo "              Auto-detects which screen each image is, mixes them in one upload."
-echo "              Requires a Google Cloud project + Vision API key (admin sets it later)."
-echo "              Per-image API cost (~\$0.0015) but zero local CPU."
-echo ""
-echo "  2) Local  — PaddleOCR sidecar container running on this machine."
-echo "              No API costs, nothing leaves the network."
-echo "              You select the screen + day in the upload UI per batch (auto-detect"
-echo "              isn't available because PaddleOCR can't reliably read stylised"
-echo "              game-UI titles)."
-echo "              Sidecar image is ~2GB and a first scan downloads ~250MB of model weights."
-echo ""
-read -p "Enter choice [1-2] (default: 1): " OCR_CHOICE
-OCR_CHOICE=${OCR_CHOICE:-1}
+start_stack() {
+    step "Pulling and starting the containers"
+    (cd "$APP_DIR" && sudo docker compose pull && sudo docker compose up -d)
+}
 
-if [ "$OCR_CHOICE" = "2" ]; then
-    OCR_BACKEND_MODE=local
-    echo -e "${GREEN}Local OCR sidecar enabled.${NC}"
-    echo "OCR_BACKEND_MODE=local" >> .env
-    echo "COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml" >> .env
-else
-    OCR_BACKEND_MODE=cloud
-    echo "OCR_BACKEND_MODE=cloud" >> .env
-fi
-echo ""
+# wait_for_app — until the app answers. A fresh install answers / with a redirect to /setup,
+# so the wait follows redirects and takes the FINAL status; a bare poll of /login would see
+# the redirect forever.
+wait_for_app() {
+    step "Waiting for the app to start"
+    local code
+    for _ in $(seq 1 "${AM_WAIT_TRIES:-45}"); do
+        code=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8080/ 2>/dev/null || true)
+        [ "$code" = 200 ] && return 0
+        sleep "${AM_WAIT_INTERVAL:-2}"
+    done
+    warn "the app has not answered after $((${AM_WAIT_TRIES:-45} * ${AM_WAIT_INTERVAL:-2})) seconds."
+    warn "Check its log: cd $APP_DIR && sudo docker compose logs alliance-manager"
+    return 1
+}
 
-# Optional: OCR request archival (prerequisites only — admin enables it later in
-# Admin → Security). No DB writes here; the OCR_ARCHIVE_DIR key is always written
-# (empty = off) so it doubles as the one-time-prompt sentinel for update.sh.
-echo -e "${YELLOW}OCR request archival (optional)${NC}"
-echo "Retain uploaded screenshots + parsed OCR response to improve OCR / debug mistakes."
-echo "Off by default; you enable it afterward in Admin → Security."
-ARCHIVE_DIR_VALUE=""
-if [ "$OCR_CHOICE" = "2" ]; then
-    if [ -t 0 ]; then
-        echo "  WARNING: local-disk archiving can accumulate 10GB+ over the retention window on"
-        echo "  this host's disk; if it fills, the database can halt/corrupt."
-        read -p "Set up local OCR archiving? [y/N]: " ENABLE_ARCHIVE
+finish() {
+    local key url="https://$DOMAIN/setup"
+    log ""
+    log "${C_GREEN}${C_BOLD}Alliance Manager $(env_get HOST_FILES_VERSION) is installed in $APP_DIR.${C_NC}"
+    if sudo test -f "$APP_DIR/data/setup-key"; then
+        key=$(sudo cat "$APP_DIR/data/setup-key")
+        log ""
+        log "Create the first administrator at:  $url"
+        log "Setup key (valid 24 hours, works once):"
+        log ""
+        log "    $key"
+        log ""
+        log "It stays readable with: sudo cat $APP_DIR/data/setup-key"
     else
-        ENABLE_ARCHIVE="N"
+        log "This install already has accounts: log in at https://$DOMAIN/"
     fi
-    if [[ "$ENABLE_ARCHIVE" =~ ^[Yy]$ ]]; then
-        ARCHIVE_DIR_VALUE="/app/data/ocr-archive"
-        echo "OCR_ARCHIVE_RETENTION_DAYS=7" >> .env
-        echo -e "${GREEN}Local archiving prepared — turn it on under Admin → Security → OCR Request Archival.${NC}"
+    if [ "$PROXY" = none ]; then
+        log ""
+        log "No proxy was configured. Put your own in front of 127.0.0.1:8080 and 127.0.0.1:9980"
+        log "for $DOMAIN and $COLLAB_DOMAIN — docs/DEPLOYMENT.md → Reverse Proxy, Option B."
     fi
-else
-    if [ -t 0 ]; then
-        read -p "Plan to archive OCR requests to a GCS bucket? [y/N]: " ENABLE_ARCHIVE
-    else
-        ENABLE_ARCHIVE="N"
+    log ""
+    log "Updates:  $APP_DIR/scripts/manage.sh update      Status:  $APP_DIR/scripts/manage.sh status"
+}
+
+main() {
+    parse_args "$@"
+    APP_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+    export APP_DIR
+    AM_WRITER=install.sh
+    PF_LOG="$APP_DIR/install.log"
+
+    if [ ! -f "$APP_DIR/HOST_FILES_VERSION" ]; then
+        die "no HOST_FILES_VERSION file beside scripts/ — install.sh runs from the unpacked host-files release asset:
+    curl -fsSL -o host-files.tar.gz https://github.com/$AM_REPO/releases/latest/download/host-files.tar.gz
+    tar -xzf host-files.tar.gz && ./scripts/install.sh"
     fi
-    if [[ "$ENABLE_ARCHIVE" =~ ^[Yy]$ ]]; then
-        echo "  See the GCS archival setup (bucket + IAM) in docs/IMAGE_RECOGNITION.md, then set the"
-        echo "  bucket name and mode in Admin → Security."
+
+    log "${C_BOLD}Alliance Manager installer — $(tr -d '[:space:]' < "$APP_DIR/HOST_FILES_VERSION"), into $APP_DIR${C_NC}"
+    RERUN=0
+    if rerun_detected; then
+        RERUN=1
+        log "This directory already holds this install; re-running adds whatever is missing."
     fi
+
+    gather_choices
+
+    local checks=(not-root sudo os existing-install legacy-service arch-ocr tools docker compose-v2 docker-running)
+    # crontab: the nightly backup is a root crontab line, and a minimal image may lack cron.
+    PF_TOOLS="curl tar openssl sqlite3 ufw ss fail2ban sha256sum crontab"
+    if [ "$PROXY" = caddy ]; then
+        checks+=(port-80 port-443 caddyfile)
+        PF_TOOLS="$PF_TOOLS gpg"
+    fi
+    checks+=(port-8080 port-9980 dns disk memory)
+    preflight_run "${checks[@]}"
+
+    mkdir -p "$APP_DIR/data" "$APP_DIR/uploads"
+    write_env
+    configure_firewall
+    if [ "$PROXY" = caddy ]; then
+        install_caddy
+    fi
+    start_stack
+    step "Registering the install"
+    registry_write "$NAME" "$APP_DIR" || die "could not register the install (above)"
+    ensure_backup_helper
+    wait_for_app || true
+    finish
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    main "$@"
 fi
-# Always write the sentinel (populated for a local opt-in, empty otherwise).
-echo "OCR_ARCHIVE_DIR=${ARCHIVE_DIR_VALUE}" >> .env
-echo ""
-
-echo -e "${GREEN}[6/6] Pulling and starting Docker containers...${NC}"
-sudo docker compose pull
-sudo docker compose up -d
-
-# OCR backend mode (cloud/local) is reconciled from the OCR_BACKEND_MODE env var
-# (written to .env above) by the app itself on startup — see
-# reconcileOCRBackendFromEnv in image_processing.go. No direct DB write here:
-# writing to the SQLite file from the host raced the in-container goose migrations
-# and left root-owned -wal/-shm files.
-
-echo "Setting up daily backups..."
-sudo tee /usr/local/bin/backup-lastwar.sh > /dev/null <<EOF
-#!/bin/bash
-BACKUP_DIR="/var/backups/lastwar"
-DB_PATH="$APP_DIR/data/alliance.db"
-DATE=\$(date +%Y%m%d_%H%M%S)
-
-mkdir -p \$BACKUP_DIR
-sudo sqlite3 \$DB_PATH ".backup '\$BACKUP_DIR/alliance_\$DATE.db'"
-find \$BACKUP_DIR -name "alliance_*.db" -mtime +7 -delete
-EOF
-sudo chmod +x /usr/local/bin/backup-lastwar.sh
-sudo mkdir -p /var/log/lastwar
-(sudo crontab -l 2>/dev/null; echo "0 2 * * * /usr/local/bin/backup-lastwar.sh >> /var/log/lastwar/backup.log 2>&1") | sudo crontab -
-
-echo -e "${GREEN}Installation Complete!${NC}"

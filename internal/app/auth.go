@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -77,20 +79,63 @@ func initSessionStore() {
 	}
 }
 
-// Get client IP with X-Forwarded-For and X-Real-IP support
+// trustedProxyCount is how many reverse proxies sit in front of the app, each of which
+// appends the address it received the request from to X-Forwarded-For. Set once at boot
+// from TRUSTED_PROXY_COUNT (see parseTrustedProxyCount) and read-only afterwards.
+var trustedProxyCount int
+
+// parseTrustedProxyCount resolves TRUSTED_PROXY_COUNT. Unset means 1 in production and 0
+// otherwise: every documented production shape is behind a proxy, and a wrong 0 there
+// collapses every client onto the Docker bridge address — one shared bucket of five login
+// attempts a minute for the whole alliance. A malformed value logs and falls back to that
+// same default rather than refusing to boot.
+func parseTrustedProxyCount(raw string, production bool) int {
+	def := 0
+	if production {
+		def = 1
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		slog.Error("TRUSTED_PROXY_COUNT must be a non-negative integer; using the default",
+			"value", raw, "default", def)
+		return def
+	}
+	return n
+}
+
+// getClientIP returns the address every per-IP rate limit keys on.
+//
+// X-Forwarded-For is read from the RIGHT: each proxy appends the address it received the
+// request from, so the entry trustedProxyCount places from the end was written by our
+// outermost proxy and is the real client. Everything to its left arrived with the request
+// and is whatever the client chose to send — reading the leftmost entry (as this function
+// once did) let a script rotate it and get a fresh limiter bucket per attempt.
+// X-Real-IP is not read at all: nothing in front of the app is documented to set it, so
+// it is exactly as client-settable as a forged X-Forwarded-For.
 func getClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		ips := strings.Split(xff, ",")
-		return strings.TrimSpace(ips[0])
+	peer := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(peer); err == nil {
+		peer = host
 	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
+	if trustedProxyCount == 0 {
+		return peer
 	}
-	ip := r.RemoteAddr
-	if colonIndex := strings.LastIndex(ip, ":"); colonIndex != -1 {
-		ip = ip[:colonIndex]
+	var hops []string
+	for _, v := range r.Header.Values("X-Forwarded-For") {
+		for _, h := range strings.Split(v, ",") {
+			if h = strings.TrimSpace(h); h != "" {
+				hops = append(hops, h)
+			}
+		}
 	}
-	return ip
+	if len(hops) < trustedProxyCount {
+		return peer
+	}
+	return hops[len(hops)-trustedProxyCount]
 }
 
 // Get IP geolocation information using ip-api.com

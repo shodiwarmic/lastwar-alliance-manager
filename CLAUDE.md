@@ -79,12 +79,17 @@ templates via `PageData.OCRBackendMode`.
 | `cloud` (default) | Hosted deployment | Auto-detects | GCP credentials in DB + Vision API enabled |
 | `local` | Self-hosted, no Cloud Vision | User picks per batch | The `lastwar-ocr-service:local` Docker image (PaddleOCR sidecar) |
 
-`scripts/install.sh` and `scripts/update.sh` prompt the operator to opt in to local mode
-on first install (or once on update for pre-existing installs). When
-local is selected, both scripts:
-1. Append `OCR_BACKEND_MODE=local` and `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml` to `.env`.
-2. Set `settings.ocr_backend_mode = 'local'` and default `cv_worker_url = 'http://ocr-local:8080'` in the DB.
-3. The next `docker compose up -d` brings up the `ocr-local` sidecar service defined in `docker-compose.local-ocr.yml`.
+`scripts/install.sh` asks the operator (or takes `--ocr local`). When local is selected it:
+1. Writes `OCR_BACKEND_MODE=local` and `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml` to `.env`.
+2. Leaves the database alone: the app reconciles `settings.ocr_backend_mode` and the default
+   `cv_worker_url = 'http://ocr-local:8080'` from the env var on startup
+   (`reconcileOCRBackendFromEnv`). A host-side `sqlite3` write raced the in-container
+   migrations and left root-owned `-wal`/`-shm` files, which is why none remains.
+3. The `docker compose up -d` brings up the `ocr-local` sidecar service defined in `docker-compose.local-ocr.yml`.
+
+There is no prompt on update: an install whose `.env` predates the setting gets
+`OCR_BACKEND_MODE=cloud` written silently, because a prompt inside an updater is what makes it
+unautomatable.
 
 Handlers should call `ProcessImages(ctx, files, category)` (in
 `image_processing.go`) which dispatches to either `ProcessImagesViaWorker`
@@ -418,9 +423,10 @@ turn a miss into a match but never change an existing match.
 **Avatars** are hotlinked from the game CDN (`lastwar-cdn.akamaized.net` /
 `lastwar-cdn.lastwarapp.net`) — built via `buildLastRankAvatar()` in `global.js`
 with host failover. These hosts MUST be in the reverse-proxy CSP `img-src`
-(`scripts/install.sh` for new installs; `scripts/update.sh` auto-patches the Caddyfile on
-existing ones, keyed on the CDN host being absent). Without them avatars are
-blocked in production (they work in dev because there's no proxy CSP) and fall
+(`deploy/Caddyfile`, the one template: `scripts/install.sh` renders it, and
+`scripts/manage.sh update` re-renders a deployed file whose revision is lower — so a CSP
+change there needs the revision bumped, or no existing install receives it). Without them
+avatars are blocked in production (they work in dev because there's no proxy CSP) and fall
 back to initials.
 
 **Two rules that must hold for every history write from LastRank:**
@@ -2076,14 +2082,67 @@ must be installable by pulling a new image alone, so anything reaching outside t
 `scripts/`, the compose files, `.env.example`, the Caddyfile — is a major, because the host has
 to change too. CI enforces exactly that on the tag by classifying every changed path, which
 means **a new top-level path in the repo needs adding to one of the three lists** in
-`docker-publish.yml`'s release-level check; an unclassified path fails the release.
+`.github/scripts/release_paths.py` (shared by the release-level check and the host-files
+manifest check); an unclassified path fails the release. A new **host** file also goes in
+`.github/host-files.manifest` or in `NOT_SHIPPED` — Build & Test fails until it does.
 
-`main` publishes `:edge`; a version tag publishes `:vX.Y.Z`, `:vX.Y` and `:latest` (so `latest`
-means latest *release*). A deployed install pins itself with `APP_VERSION` in `.env`, and the
-running build is named on Admin → Security & API and in the startup log (`internal/app/version.go`).
+`main` publishes `:edge`; a version tag publishes `:vX.Y.Z` and `:vX.Y` plus a **draft** GitHub
+Release carrying `host-files.tar.gz`. `:latest` moves only when a human **publishes** that draft
+(`release-published.yml`, a manifest re-tag), so the `latest` image and the `releases/latest`
+host files always name the same release. A deployed install pins itself with `APP_VERSION` in
+`.env` and records its host files' release in `HOST_FILES_VERSION`; both are named on Admin →
+Security & API, and the build in the startup log (`internal/app/version.go`).
 
 The cut procedure, the failure remedies and the **never-rebuild rule** are in
 `docs/RELEASING.md`. Read it before tagging anything.
+
+## Host scripts (`scripts/`, `deploy/`, compose files)
+
+What an install needs besides the image ships as **`host-files.tar.gz`**, a release asset
+built by CI from `.github/host-files.manifest`. A host is no longer a git clone. Three scripts,
+three libraries:
+
+| File | Role |
+|---|---|
+| `scripts/install.sh` | First install, from the unpacked asset, in any directory. Pre-flight, `.env`, firewall, Caddy, stack, registry, backup helper. `--non-interactive` + flags. |
+| `scripts/manage.sh` | `update` / `migrate` / `status` / `backup`, and the internal `apply`. |
+| `scripts/update.sh` | Retired signpost: forwards to `manage.sh update` once migrated, prints the migration command before. |
+| `scripts/lib/common.sh` | `.env` access (grep, **never `source`**), release resolution, asset download/verify/unpack, Caddyfile revision helpers, the nightly backup helper's text. |
+| `scripts/lib/registry.sh` | `/etc/alliance-manager/installs.d/<name>.conf`, one `APP_DIR="…"` line each. **Frozen format.** |
+| `scripts/lib/preflight.sh` | The check loop: each check blocking/advisory, ignorable or not, with an optional remedy; three passes at most. |
+
+Rules that must hold:
+
+- **The two-stage update.** `manage.sh update` (stage 1) is the copy on disk — the previous
+  release's. It downloads and unpacks the target into `$APP_DIR/.staging/<tag>/` and `exec`s
+  the **staged** `manage.sh apply`, which is the new release's code and does all the work.
+  Stage 1 is one release old by construction, so **its contract is frozen**: `apply`'s
+  argument list and `resolve_latest_release` / `download_asset` / `unpack_asset`. Add, never
+  change; `apply` ignores unknown arguments so a newer stage 1 can drive an older `apply`
+  (a rollback).
+- **Two anchors.** Operator commands derive `APP_DIR` from their own path; `apply` never does
+  (it runs from staging) — it takes `--app-dir`.
+- **The marker** is `HOST_FILES_VERSION=<tag>` in `.env`, written after every step that can
+  fail and before `up` (compose reads `env_file` at container creation). Its presence is what
+  "migrated" means. The Admin page shows it beside the image version.
+- **Rollback.** `apply` snapshots every path it may touch (the old and new file sets, `.env`,
+  `.host-files.list`) and an EXIT trap restores them on any non-zero exit before the marker.
+  Nothing restarts containers until after that point.
+- **Pruning is bounded.** An update deletes only `previous − new`, where previous is
+  `.host-files.list` (or `git ls-files` on a migrate); a file no release shipped is never a
+  candidate. `docker-compose.override.yml` and `.env` are never removed.
+- **The Caddyfile is one template with a revision on its first line.** Bump it with any change
+  to `deploy/Caddyfile`, or no install re-renders. A rollback never lowers it.
+- **The nightly backup helper is root-owned and self-contained** — it runs from root's cron,
+  so it must execute nothing from an install directory (operator-writable). Its text lives in
+  `backup_helper_text`; don't make it call `manage.sh`.
+- **Tests:** `bash tests/scripts/run.sh` — plain bash, stubbed system commands, every system
+  path redirected into a temp dir. CI runs it with `bash -n` and `shellcheck -x -S warning`
+  (**Host scripts check**). The dev box has the same shellcheck as the runner (0.9.0, from apt),
+  so `shellcheck -x -S warning <files>` locally matches CI.
+- **Rehearsing against a real host:** `.github/scripts/build-host-files.sh <version> <outdir>`
+  builds the tarball locally, and `./scripts/manage.sh update --asset <tarball>` (or `migrate
+  --asset`) applies it without a published release.
 
 ## Running locally
 
@@ -2092,6 +2151,16 @@ go run ./cmd/server
 ```
 
 Migrations run automatically on startup via `initDB()`.
+
+**A fresh database has no account.** The app writes a one-time `setup-key` beside the database
+(`./setup-key` when `DATABASE_PATH` is unset — gitignored — or `data/setup-key` in the Docker
+stack) and every page redirects to `/setup` until the first administrator exists. The dev
+database is a production copy and has users, so this only shows on a scratch database.
+
+**The dev stack needs `BIND_ADDR=0.0.0.0` in `.env`.** `docker-compose.yml` publishes 8080 and
+9980 on `127.0.0.1` only (a production install is reached through its proxy), so without it
+the stack is unreachable at the WSL LAN IP from Windows or a phone — and so is Collabora, which
+the dev override serves at that IP via `COLLABORA_PORT`.
 
 **Static asset caching:** in non-production (`PRODUCTION != "true"`) the server sends
 `Cache-Control: no-store` for `static/` files (see `main.go`), so JS/CSS/SVG edits reload

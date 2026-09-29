@@ -18,7 +18,7 @@ translates between `v1.2.3` and `1.2.3`.
 |---|---|---|
 | **Patch** `v1.2.3 → v1.2.4` | Image only — Go code, templates, static assets, migrations | Pull the new image. Nothing else. |
 | **Minor** `v1.2.3 → v1.3.0` | Image only, with new functionality | Pull the new image. Nothing else. |
-| **Major** `v1.2.3 → v2.0.0` | Anything reaching outside the image — compose files, scripts, `.env.example`, the Caddyfile | Run `scripts/update.sh` from a terminal: files on the host have to change. |
+| **Major** `v1.2.3 → v2.0.0` | Anything reaching outside the image — compose files, scripts, `.env.example`, the Caddyfile | Run `./scripts/manage.sh update` from a terminal: files on the host have to change, and it fetches them with the image. |
 
 **The load-bearing distinction is image-only versus not**, and only that one is machine-checked
 (see below). Patch and minor are treated identically by every piece of tooling here; nothing
@@ -26,12 +26,20 @@ audits whether a feature "deserved" its minor. Choose between them by judgement 
 — getting it wrong costs nothing, whereas calling a host-affecting change a patch costs an
 operator a broken install.
 
-> **A release that changes `scripts/update.sh` has to be run twice**, and the release notes should
-> say so. `update.sh` pulls the repository and then keeps running — but the rest of that run is
-> the *old* copy of the script, so whatever the release changed about the update procedure does
-> not happen until the operator runs it a second time. Verified on the v1.0.0 install, where the
-> new `APP_VERSION` pin was written only on the second run. Until the script re-execs itself after
-> the pull, this is a documentation problem to be handled by whoever cuts such a release.
+### The host-files asset
+
+What an install needs besides the image — the files `.github/host-files.manifest` lists — ships
+as a release asset, `host-files.tar.gz`, with its `host-files.tar.gz.sha256`. The tag's publish
+run builds both with `.github/scripts/build-host-files.sh` and attaches them to a **draft**
+GitHub Release. The build is deterministic, so running the script on the tag locally produces
+the same bytes and the same checksum.
+
+`./scripts/manage.sh update` runs in two stages, and the first is always the copy already on the
+host — the previous release's. A release's changes to the rest of the updater take effect in the
+run that delivers them. **A change to stage 1 itself** (the `apply` argument list, or
+`resolve_latest_release` / `download_asset` / `unpack_asset` in `scripts/lib/common.sh`) **takes
+effect one release late, by design**; say so in that release's notes if it matters. (Before
+v2.0.0 the whole of `update.sh` behaved this way, and a release changing it had to be run twice.)
 
 ### Published image tags
 
@@ -39,12 +47,18 @@ operator a broken install.
 |---|---|---|
 | `vX.Y.Z` | That exact release | Never |
 | `vX.Y` | The newest patch of that minor | Moves with each patch |
-| `latest` | The newest release | Moves with each release |
+| `latest` | The newest release | Moves when a release is **published** (not when it is tagged) |
 | `edge` | The newest commit on `main` | Moves with every merge |
 
 `latest` means **latest release**, not latest commit — an operator pulling it expects a released
 thing. Development builds are `edge`, which is what a push to `main` publishes. `vX.Y` is for an
 install that wants patches automatically but will never take a minor unattended.
+
+`latest` moves in `.github/workflows/release-published.yml`, when the draft release is published
+— a manifest re-tag of the already-built `vX.Y.Z`, not a rebuild. That keeps the `latest` image
+and the `releases/latest` host-files download on the same release at every moment; were `latest`
+moved at tag time, an install following it could pull the new image while its host files were
+still the previous release's.
 
 ### The never-rebuild rule
 
@@ -94,12 +108,19 @@ becomes impossible, discovered mid-release.
    > that way triggers no workflow at all, so the release would build nothing, fail nothing, and
    > look exactly like success.
 5. **Watch the publish run.** It asserts ancestry and checks, runs the release-level check, then
-   builds and pushes `vX.Y.Z`, `vX.Y` and `latest` for amd64 and arm64.
-6. **Create the GitHub Release**: `gh release create v1.2.3 --notes "..."`. Together with
-   `CHANGELOG.md` this is the artifact a prospective operator actually reads.
-7. **Verify the published tags** on the GHCR package page, or with
+   builds and pushes `vX.Y.Z` and `vX.Y` for amd64 and arm64. Its second job, **Release
+   assets**, builds `host-files.tar.gz` and creates a **draft** GitHub Release carrying it and its
+   checksum.
+6. **Publish the draft.** Open it, replace the placeholder with this version's section of
+   `CHANGELOG.md`, and publish. Publishing is what moves `latest`
+   (`release-published.yml` — watch it go green) and makes the asset the `releases/latest`
+   download that `manage.sh update` and the install instructions fetch. Together with
+   `CHANGELOG.md` the release is the artifact a prospective operator actually reads.
+7. **Verify.** The tags on the GHCR package page, or
    `docker manifest inspect ghcr.io/shodiwarmic/lastwar-alliance-manager:v1.2.3` — which also
-   confirms both architectures are present.
+   confirms both architectures are present — and that `latest` now names the same digest. The
+   asset: `.github/scripts/build-host-files.sh v1.2.3 /tmp/asset v1.2.3` from a clone must print
+   the checksum the release shows.
 
 ## When a release fails
 
@@ -124,6 +145,24 @@ must do, and editing them to make a release pass is editing the promise rather t
 **Failed after the image was published** — the version is burned. Cut the next one. See the
 never-rebuild rule.
 
+**Image published, but the Release assets job failed** — the version is fine; the release is just
+not finished. Re-run the failed job ("Re-run failed jobs" on that run): it rebuilds only the
+asset, never the image, and it completes an existing draft rather than creating a second one. If
+that cannot work, build the asset on the tag yourself — the build is deterministic, so it is the
+same file CI would have made — and attach it:
+
+```bash
+.github/scripts/build-host-files.sh v1.2.3 dist v1.2.3
+gh release create v1.2.3 --draft --verify-tag --title v1.2.3 --notes "…" \
+  dist/host-files.tar.gz dist/host-files.tar.gz.sha256      # or `gh release upload` onto the draft
+```
+
+Never publish a release without both assets: `manage.sh update` would resolve it as the latest and
+fail to download it (safely — it changes nothing — but every install would stop updating).
+
+**Published, but `latest` did not move** — re-run `release-published.yml` for that release. It only
+re-tags an existing manifest.
+
 ## What the release-level check actually does
 
 It lives in the tag-triggered half of `.github/workflows/docker-publish.yml`, runs before the
@@ -139,12 +178,15 @@ to check then.
 5. For a patch or minor, every path in the diff is classified image-affecting, host-affecting or
    neutral. A host-affecting path fails the release, naming the paths. An **unclassified** path
    also fails, demanding a decision — the lists cover the whole tree, so that only fires for a
-   genuinely new path.
+   genuinely new path. The lists live in `.github/scripts/release_paths.py`.
 
 Major releases skip step 5 entirely: promising nothing about paths is what that level is for.
 
-Adding a new top-level path to the repository means adding it to one of the three lists in that
-step, deciding what it asks of an operator who receives the release.
+Adding a new top-level path to the repository means adding it to one of the three lists in
+`.github/scripts/release_paths.py`, deciding what it asks of an operator who receives the release.
+A new **host** file also needs a decision about the asset: list it in `.github/host-files.manifest`,
+or in `NOT_SHIPPED` with its reason. Build & Test's **Host-files manifest check** fails until one
+of the two says so.
 
 ## Open question: fixes that never touch a board
 

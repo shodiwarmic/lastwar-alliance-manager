@@ -30,7 +30,9 @@ bearer-token API (`/api/mobile/*`), invite and password-reset token handling, fi
 download, SQL injection, and stored or reflected XSS.
 
 Out of scope: anything requiring an already-authenticated administrator (an admin can legitimately
-change almost anything), rate-limiting of ordinary application endpoints, findings that depend on
+change almost anything), rate-limiting of ordinary application endpoints (the login-family endpoints — login, the
+invite and password-reset pages and claims, and the first-run `/api/setup` claim — are the
+exception, and are in scope), findings that depend on
 a deployment ignoring the hardening steps below, and vulnerabilities in `lastrank.fun` — that is a
 third-party volunteer-run service, not ours; report those to its operators.
 
@@ -38,10 +40,12 @@ third-party volunteer-run service, not ours; report those to its operators.
 
 Two steps matter more than anything else, and both are on the operator:
 
-1. **Change the default administrator password immediately.** A fresh install seeds
-   `admin` / `admin123` and forces a change at first login — but the account exists from first
-   boot, so an instance exposed to the internet before that first login is exposed with a
-   published password. Do the first login before opening it up.
+1. **Claim a fresh install promptly.** The app ships with no account: until the first
+   administrator exists, every page redirects to `/setup`, which needs the one-time setup key the
+   app writes to `data/setup-key` (mode 0600, valid 24 hours, single-use, never logged). Reading
+   it needs a shell on the host. An unclaimed instance is still one that whoever reads that file
+   first will own, so claim it before sharing the address. To issue a new key, delete the file and
+   restart the app container.
 2. **Set `SESSION_KEY`** to at least 32 random characters in any deployment running
    `PRODUCTION=true`. If it is unset the app generates an ephemeral key and logs a warning, which
    silently logs every user out on each restart.

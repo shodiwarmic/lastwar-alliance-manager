@@ -1,0 +1,9 @@
+#!/bin/bash
+# Generic stub: logs "name args..." to $STUB_LOG, then runs $STUB_RESPONSES/name if a test
+# gave it one; otherwise succeeds silently.
+name=$(basename "$0")
+printf '%s\n' "$name $*" >> "$STUB_LOG"
+if [ -x "$STUB_RESPONSES/$name" ]; then
+    exec "$STUB_RESPONSES/$name" "$@"
+fi
+exit 0

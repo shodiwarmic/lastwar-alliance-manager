@@ -34,11 +34,13 @@ Everything is permission-gated by in-game rank (R1–R5), so officers see what t
 
 ## Quick install
 
-Debian/Ubuntu. The script installs Docker, generates secrets, configures Caddy with SSL, and pulls the pre-built containers.
+Debian/Ubuntu. The script checks the host, installs Docker, generates secrets, configures Caddy with SSL, and pulls the pre-built containers. Install into any directory you like:
 
 ```bash
-git clone https://github.com/shodiwarmic/lastwar-alliance-manager.git
-cd lastwar-alliance-manager
+mkdir -p ~/alliance-manager && cd ~/alliance-manager      # any directory you like
+curl -fsSL -o host-files.tar.gz \
+  https://github.com/shodiwarmic/lastwar-alliance-manager/releases/latest/download/host-files.tar.gz
+tar -xzf host-files.tar.gz && rm host-files.tar.gz
 ./scripts/install.sh
 ```
 
@@ -60,12 +62,18 @@ run a pinned release (`APP_VERSION` in `.env`) and can be rolled back to an earl
 
 Configuration is via a `.env` file — copy `.env.example` and fill it in. Every variable is documented in [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-## Default login credentials
+## First login
 
-- **Username**: `admin`
-- **Password**: `admin123`
+A fresh install has **no account and no default password**. Instead the app writes a one-time
+setup key to `data/setup-key` in the install directory, and every page sends you to `/setup`
+until the first administrator is created with it:
 
-⚠️ **Important**: The system forces you to change this immediately upon first login.
+```bash
+sudo cat data/setup-key
+```
+
+The key is valid for 24 hours and works once. If it has expired, delete the file and restart the
+app (`docker compose restart alliance-manager`) to issue a new one.
 
 ---
 

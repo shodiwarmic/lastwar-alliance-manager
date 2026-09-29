@@ -1459,6 +1459,11 @@ type PageData struct {
 	// so carrying them on every page costs no query.
 	AppVersion string
 	AppCommit  string
+	// HostFilesVersion is the release the install's host files (compose files, scripts,
+	// proxy template) came from — HOST_FILES_VERSION, which scripts/manage.sh writes to .env.
+	// Shown beside AppVersion so a host and an image on different releases are visible from
+	// inside the app. Empty on an install not yet migrated to versioned host files.
+	HostFilesVersion string
 }
 
 // DashboardCard represents a single card in the dashboard with its visibility state.

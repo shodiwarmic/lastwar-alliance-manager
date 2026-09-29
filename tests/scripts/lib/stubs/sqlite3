@@ -1,0 +1,11 @@
+#!/bin/bash
+# sqlite3 stub: understands `sqlite3 DB ".backup 'DEST'"` by copying DB to DEST.
+printf '%s\n' "sqlite3 $*" >> "$STUB_LOG"
+if [ -x "$STUB_RESPONSES/sqlite3" ]; then
+    exec "$STUB_RESPONSES/sqlite3" "$@"
+fi
+db=$1
+dest=$(printf '%s' "${2:-}" | sed -n "s/^\.backup '\(.*\)'\$/\1/p")
+if [ -n "$dest" ]; then
+    cp "$db" "$dest"
+fi
