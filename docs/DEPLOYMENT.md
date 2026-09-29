@@ -72,6 +72,8 @@ These have working defaults and are absent from `.env.example`; set them only if
 | `APP_VERSION` | `latest` | Which published image this install runs (`v1.2.3`, the moving `v1.2`, `latest`, or `edge`). `scripts/install.sh` and `scripts/update.sh` write the current release tag here for you; set it by hand only to pin to or roll back to a specific release. `latest` means the latest *release*; `edge` is built from `main`. See [RELEASING.md](RELEASING.md). |
 | `PORT` | `8080` | Port the Go application listens on inside its container. Change it only if you also change the published port in `docker-compose.yml`. |
 | `COLLABORA_PORT` | *(unset)* | Explicit port for the Collabora document server, appended to `COLLABORA_DOMAIN` when building WOPI URLs. Needed only when Collabora is reached on a non-standard port rather than through the reverse proxy. |
+| `TRUSTED_PROXY_COUNT` | `1` when `PRODUCTION=true`, else `0` | How many reverse proxies sit in front of the app. The client address every login rate limit keys on is read that many entries from the right of `X-Forwarded-For`; entries further left were sent by the client and are ignored. `0` ignores the header and uses the TCP peer. Set `2` if a CDN or load balancer sits in front of your Caddy or nginx. On an unproxied install running `PRODUCTION=true`, set `0` — otherwise a client could choose its own rate-limit bucket. |
+| `BIND_ADDR` | `127.0.0.1` | Read by `docker-compose.yml`, not by the app: the address ports 8080 and 9980 are published on. The default keeps them reachable only through the reverse proxy on the same host (Docker's published ports bypass `ufw`). Set `0.0.0.0` for a LAN or development install with no proxy. |
 | `OCR_BACKEND_MODE` | `cloud` | Set to `local` to use the bundled PaddleOCR sidecar instead of Google Cloud Vision. Also requires `COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml`. `scripts/install.sh` and `scripts/update.sh` set both for you if you opt in. See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md). |
 
 Two further optional variables, `OCR_ARCHIVE_DIR` and `OCR_ARCHIVE_RETENTION_DAYS`, configure
@@ -165,7 +167,6 @@ server {
     location / {
         proxy_pass http://localhost:8080;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
@@ -207,6 +208,11 @@ server {
 }
 ```
 *Run `sudo certbot --nginx -d app.yourdomain.com -d collabora.yourdomain.com` to apply SSL.*
+
+Keep the `X-Forwarded-For $proxy_add_x_forwarded_for` line: nginx appends the real client
+address to the end of the header, and the app reads it from there — one entry from the right,
+which is the default for `PRODUCTION=true` (`TRUSTED_PROXY_COUNT=1`). The app does not read
+`X-Real-IP`; a client can send that header as easily as a forged `X-Forwarded-For`.
 
 ---
 

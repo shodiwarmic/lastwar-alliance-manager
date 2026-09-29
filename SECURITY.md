@@ -30,7 +30,8 @@ bearer-token API (`/api/mobile/*`), invite and password-reset token handling, fi
 download, SQL injection, and stored or reflected XSS.
 
 Out of scope: anything requiring an already-authenticated administrator (an admin can legitimately
-change almost anything), rate-limiting of ordinary application endpoints, findings that depend on
+change almost anything), rate-limiting of ordinary application endpoints (the login-family endpoints — login and the
+invite and password-reset pages and claims — are the exception, and are in scope), findings that depend on
 a deployment ignoring the hardening steps below, and vulnerabilities in `lastrank.fun` — that is a
 third-party volunteer-run service, not ours; report those to its operators.
 

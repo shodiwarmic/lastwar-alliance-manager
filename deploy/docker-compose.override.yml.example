@@ -3,6 +3,10 @@
 # to the repo ROOT as docker-compose.override.yml, where Compose picks it up automatically:
 #
 #     cp deploy/docker-compose.override.yml.example docker-compose.override.yml
+#
+# The base file publishes 8080 and 9980 on 127.0.0.1 only. To reach the dev stack from
+# another machine (or from Windows via the WSL LAN IP), set BIND_ADDR=0.0.0.0 in .env —
+# not a `ports:` entry here, which would collide with the base file's binding.
 
 services:
   alliance-manager:

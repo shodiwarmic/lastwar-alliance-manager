@@ -879,6 +879,11 @@ func Main() {
 		slog.Info("Added trusted origins for CSRF", "origins", origins)
 	}
 
+	// How many proxies' worth of X-Forwarded-For to trust — every per-IP rate limit keys
+	// on the result. See getClientIP.
+	trustedProxyCount = parseTrustedProxyCount(os.Getenv("TRUSTED_PROXY_COUNT"), isProduction())
+	slog.Info("Client IP resolution", "trusted_proxy_count", trustedProxyCount)
+
 	csrfMiddleware := csrf.Protect(csrfKey, csrfOpts...)
 
 	// Create the protected router handler
