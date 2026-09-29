@@ -83,7 +83,7 @@ install in `/etc/alliance-manager/installs.d/`, installs the nightly backup help
   LAN install reached without a proxy sets `BIND_ADDR=0.0.0.0` in `.env`.
 - **One Caddyfile** — the proxy configuration is one template with a revision number;
   `manage.sh update` re-renders `/etc/caddy/Caddyfile` (keeping a dated backup) only when a
-  release ships a newer revision. The first update after migrating re-renders it once. The
+  release ships a newer revision. `migrate` re-renders it once, since every older install's file carries no revision. The
   rendered file no longer has a `www.` redirect block, which asked Caddy for a certificate the
   documented DNS records cannot satisfy — add it back by hand if your DNS has a `www` record.
 - **Nginx is manual-only** — the installer no longer configures nginx. Existing nginx installs keep
