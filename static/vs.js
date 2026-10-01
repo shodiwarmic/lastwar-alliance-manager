@@ -482,6 +482,12 @@ function buildMatchedRow(row) {
         calcBadge.textContent = 'Calculated Sat';
         tdUpdates.appendChild(calcBadge);
     }
+    if (row.error) {
+        const warn = document.createElement('span');
+        warn.className = 'import-row-warning';
+        warn.textContent = row.error;
+        tdUpdates.appendChild(warn);
+    }
 
     tr.append(tdName, tdType, tdUpdates);
     return tr;
@@ -584,6 +590,12 @@ function refreshUpdatesCell(unresolvedIndex) {
         badge.textContent = 'Calculated Sat';
         updatesCell.appendChild(badge);
     }
+    if (row.error) {
+        const warn = document.createElement('span');
+        warn.className = 'import-row-warning';
+        warn.textContent = row.error;
+        updatesCell.appendChild(warn);
+    }
 }
 
 function mapUnresolved(unresolvedIndex, memberId) {
@@ -601,6 +613,7 @@ function mapUnresolved(unresolvedIndex, memberId) {
             delete row.updated_fields.saturday;
             row.calculated_sat = false;
         }
+        row.error = '';
     } else {
         // Handle Selecting a member
         const member = allMembers.find(m => m.id == memberId);
@@ -611,15 +624,24 @@ function mapUnresolved(unresolvedIndex, memberId) {
         if (row.total !== undefined && row.total !== null && row.updated_fields.saturday === undefined) {
             const p = currentVSPoints[memberId] || {}; // Existing DB points from frontend state
 
-            // Get the value from the CSV upload, or fallback to their existing DB value
+            // A day is known when the CSV supplies it or the stored week has it (a
+            // stored 0 is the column default, not a recorded day) — the same rule
+            // as deriveSaturday on the server. With a day unknown, derive nothing.
             const getVal = (day) => row.updated_fields[day] !== undefined ? row.updated_fields[day] : (parseInt(p[day]) || 0);
+            const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+            const complete = days.every(d => row.updated_fields[d] !== undefined || (parseInt(p[d]) || 0) > 0);
 
-            const sum1to5 = getVal('monday') + getVal('tuesday') + getVal('wednesday') + getVal('thursday') + getVal('friday');
+            const sum1to5 = days.reduce((acc, d) => acc + getVal(d), 0);
             const calcSat = row.total - sum1to5;
 
-            if (calcSat >= 0) {
+            if (!complete) {
+                row.error = 'Saturday not derived: Mon–Fri incomplete';
+            } else if (calcSat >= 0) {
                 row.updated_fields.saturday = calcSat;
                 row.calculated_sat = true;
+                row.error = '';
+            } else {
+                row.error = 'Total is less than the sum of Monday–Friday';
             }
         }
     }

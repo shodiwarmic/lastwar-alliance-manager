@@ -134,6 +134,18 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	// Datapoint provenance: 'ocr' (upload.js) or 'csv' (vs.js); else 'import'.
 	src := provenanceSource(req.Source)
 
+	// Every key becomes a column name below. Refuse an unknown one before any SQL
+	// is built: it is a request this endpoint cannot honour, and joining it into
+	// a statement would be identifier injection.
+	for _, row := range req.Records {
+		for key := range row.UpdatedFields {
+			if !vsCommitFields[key] {
+				http.Error(w, fmt.Sprintf("Unknown field %q for %s: only monday–saturday, power and kills can be saved here", key, row.OriginalName), http.StatusBadRequest)
+				return
+			}
+		}
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -302,6 +314,59 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// vsDayColumns are the vs_points day columns, in week order.
+var vsDayColumns = []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
+
+// vsCommitFields is every key a commit's updated_fields may carry: the day
+// columns of vs_points, and power and kills, which go to their history tables.
+// Keys are joined into SQL as column names, so nothing else may get that far.
+var vsCommitFields = map[string]bool{
+	"monday": true, "tuesday": true, "wednesday": true, "thursday": true,
+	"friday": true, "saturday": true, "power": true, "kills": true,
+}
+
+// deriveSaturday fills in Saturday from a row's Weekly total: total − (Mon..Fri).
+// A day counts as known when the import supplies it or the stored week has it
+// (a stored 0 is the column default, so it does not). With any of Monday–Friday
+// unknown the total is kept, nothing is derived, and the row says why: a
+// mid-week upload would otherwise "derive" a Saturday out of missing days.
+func deriveSaturday(tx *sql.Tx, row *VSImportRow, weekDate string) {
+	if row.Total == nil || row.MatchedMember == nil {
+		return
+	}
+	if _, has := row.UpdatedFields["saturday"]; has {
+		return
+	}
+	stored := make([]int, 5)
+	err := tx.QueryRow(`SELECT monday, tuesday, wednesday, thursday, friday FROM vs_points WHERE member_id = ? AND week_date = ?`,
+		row.MatchedMember.ID, weekDate).Scan(&stored[0], &stored[1], &stored[2], &stored[3], &stored[4])
+	if err != nil && err != sql.ErrNoRows {
+		slog.Error("VS import: reading the stored week failed", "error", err, "member_id", row.MatchedMember.ID)
+		row.Error = "Saturday not derived: the stored week could not be read"
+		return
+	}
+	sum := 0
+	for i, day := range vsDayColumns[:5] {
+		if v, ok := row.UpdatedFields[day]; ok {
+			sum += v
+			continue
+		}
+		if stored[i] > 0 {
+			sum += stored[i]
+			continue
+		}
+		row.Error = "Saturday not derived: Mon–Fri incomplete"
+		return
+	}
+	sat := *row.Total - sum
+	if sat < 0 {
+		row.Error = "Total is less than the sum of Monday–Friday"
+		return
+	}
+	row.UpdatedFields["saturday"] = sat
+	row.CalculatedSat = true
+}
+
 // previewCSVImport processes uploaded CSV files and maps them to the existing alias engine
 func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxCSVUploadSize)
@@ -376,7 +441,7 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	validDays := []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
+	validDays := vsDayColumns
 
 	// Built once for the whole file — the tier-3 folded fallback inside
 	// resolveMemberAlias would otherwise rebuild it for every unmatched row.
@@ -424,31 +489,9 @@ func previewCSVImport(w http.ResponseWriter, r *http.Request) {
 		importRow.MatchedMember = member
 		importRow.MatchType = matchType
 
-		// Calculate missing Saturday logic
+		// Saturday from the Weekly total, when Monday–Friday are all known.
 		if providedTotal != nil {
-			_, hasSat := importRow.UpdatedFields["saturday"]
-			if !hasSat {
-				var dbMon, dbTue, dbWed, dbThu, dbFri int
-				tx.QueryRow(`SELECT monday, tuesday, wednesday, thursday, friday FROM vs_points WHERE member_id = ? AND week_date = ?`, member.ID, weekDate).
-					Scan(&dbMon, &dbTue, &dbWed, &dbThu, &dbFri)
-
-				getVal := func(day string, dbVal int) int {
-					if v, ok := importRow.UpdatedFields[day]; ok {
-						return v
-					}
-					return dbVal
-				}
-
-				sum := getVal("monday", dbMon) + getVal("tuesday", dbTue) + getVal("wednesday", dbWed) + getVal("thursday", dbThu) + getVal("friday", dbFri)
-				calcSat := *providedTotal - sum
-
-				if calcSat >= 0 {
-					importRow.UpdatedFields["saturday"] = calcSat
-					importRow.CalculatedSat = true
-				} else {
-					importRow.Error = "Total is less than the sum of Monday-Friday"
-				}
-			}
+			deriveSaturday(tx, &importRow, weekDate)
 		}
 		response.Matched = append(response.Matched, importRow)
 	}

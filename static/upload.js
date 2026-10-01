@@ -235,6 +235,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 resultBox.appendChild(ul);
             }
 
+            if (result.skipped_groups && result.skipped_groups.length > 0) {
+                resultBox.appendChild(document.createElement('br'));
+                const skipLabel = document.createElement('strong');
+                skipLabel.textContent = 'Not imported:';
+                resultBox.appendChild(skipLabel);
+                const ul = document.createElement('ul');
+                ul.style.cssText = 'margin: 5px 0 0 20px; font-size: 14px;';
+                result.skipped_groups.forEach(group => {
+                    const li = document.createElement('li');
+                    li.textContent = group;
+                    ul.appendChild(li);
+                });
+                resultBox.appendChild(ul);
+            }
+
             resultBox.appendChild(document.createElement('div')); // closing div placeholder
             document.getElementById('result-container').replaceChildren(resultBox);
 
@@ -331,8 +346,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('upload-preview-confirm-btn')?.addEventListener('click', commitImport);
 });
 
+// The fields a row will save, plus the Weekly total it came from and any reason
+// it will not save as shown.
+function fillUpdatesCell(td, row) {
+    const parts = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`);
+    if (row.total !== undefined && row.total !== null) parts.push(`weekly total: ${row.total}`);
+    td.textContent = parts.join(', ') + (row.calculated_sat ? ' (Saturday calculated)' : '');
+    if (row.error) {
+        const warn = document.createElement('span');
+        warn.className = 'import-row-warning';
+        warn.textContent = row.error;
+        td.appendChild(warn);
+    }
+}
+
 function buildMatchedRow(row) {
-    const updates = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`).join(', ');
 
     const tr = document.createElement('tr');
     tr.dataset.search = (row.original_name || '') + ' ' + (row.matched_member.name || '');
@@ -347,14 +375,13 @@ function buildMatchedRow(row) {
     tdType.appendChild(badge);
 
     const tdUpdates = document.createElement('td');
-    tdUpdates.textContent = updates;
+    fillUpdatesCell(tdUpdates, row);
 
     tr.append(tdName, tdType, tdUpdates);
     return tr;
 }
 
 function buildReviewRow(row, idx, bucketType, preSelectedId) {
-    const updates = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`).join(', ');
 
     const tr = document.createElement('tr');
     tr.dataset.index = idx;
@@ -407,7 +434,7 @@ function buildReviewRow(row, idx, bucketType, preSelectedId) {
     tdMap.appendChild(wrapper);
 
     const tdUpdates = document.createElement('td');
-    tdUpdates.textContent = updates;
+    fillUpdatesCell(tdUpdates, row);
 
     tr.append(tdName, tdMap, tdUpdates);
     return tr;

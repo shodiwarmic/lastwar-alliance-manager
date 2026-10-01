@@ -428,6 +428,38 @@ func postKillHistory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// vsUploadSkipReason says why a category the OCR service returned cannot be
+// stored by the VS upload page, or ("", false) when it can.
+func vsUploadSkipReason(category string) (string, bool) {
+	switch category {
+	case "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+		"weekly", "power", "kills":
+		return "", false
+	case "donation_daily", "donation_weekly":
+		return "not stored yet — see the roadmap", true
+	}
+	return "not a VS or Strength ranking — use the Participation page", true
+}
+
+// vsCategoryLabel is the preview's name for an OCR category.
+func vsCategoryLabel(category string) string {
+	switch category {
+	case "power":
+		return "Power Rankings"
+	case "kills":
+		return "Troop Kills"
+	case "weekly":
+		return "VS Points (Weekly total)"
+	case "donation_daily":
+		return "Donation (Daily)"
+	case "donation_weekly":
+		return "Donation (Weekly)"
+	case "monday", "tuesday", "wednesday", "thursday", "friday", "saturday":
+		return fmt.Sprintf("VS Points (%s)", strings.ToUpper(category[:1])+category[1:])
+	}
+	return category
+}
+
 // Process images with automatic bucketing via Cloud Run Worker
 func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(50 << 20)
@@ -492,6 +524,7 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	payloadMap := make(map[string]*VSImportRow)
 	var processedSummaries []string
 	seenSummaries := make(map[string]bool)
+	var skippedGroups []string
 
 	// Built once for every image and every row — resolveOCRPlayer's tier-3 folded
 	// fallback would otherwise rebuild it per candidate. Non-fatal on failure:
@@ -513,13 +546,18 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 		if activeCategory == "unknown" {
 			continue // Skip unreadable images unless forced
 		}
-
-		summary := "Power Rankings"
-		if activeCategory == "kills" {
-			summary = "Troop Kills"
-		} else if activeCategory != "power" {
-			summary = fmt.Sprintf("VS Points (%s)", strings.Title(activeCategory))
+		if activeCategory == "total" {
+			activeCategory = "weekly" // the CSV-era name for the Weekly Rank total
 		}
+
+		// Only what this page can store goes into the preview. Anything else is
+		// reported, not guessed into a vs_points column name.
+		if reason, skip := vsUploadSkipReason(activeCategory); skip {
+			skippedGroups = append(skippedGroups, fmt.Sprintf("%s (%d rows) — %s", vsCategoryLabel(activeCategory), len(records), reason))
+			continue
+		}
+
+		summary := vsCategoryLabel(activeCategory)
 
 		if !seenSummaries[summary] {
 			processedSummaries = append(processedSummaries, summary)
@@ -547,8 +585,26 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 				payloadMap[record.PlayerName] = row
 			}
 
-			row.UpdatedFields[activeCategory] = int(resolvedScore)
+			if activeCategory == "weekly" {
+				// The Weekly Rank screen is the CSV's Total column: Saturday is
+				// derived from it below, never stored as a "weekly" column.
+				total := int(resolvedScore)
+				row.Total = &total
+			} else {
+				row.UpdatedFields[activeCategory] = int(resolvedScore)
+			}
 		}
+	}
+
+	for _, row := range payloadMap {
+		if row.Total == nil {
+			continue
+		}
+		if row.MatchedMember == nil {
+			row.Error = "Saturday not derived: match this name to a member, then upload the Weekly Rank screen again"
+			continue
+		}
+		deriveSaturday(tx, row, weekDate)
 	}
 
 	response := VSImportPreviewResponse{}
@@ -564,6 +620,7 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message":          fmt.Sprintf("OCR Processed successfully. Found %d matched and %d unresolved records.", len(response.Matched), len(response.Unresolved)),
 		"processed_groups": processedSummaries,
+		"skipped_groups":   skippedGroups,
 		"matched":          response.Matched,
 		"unresolved":       response.Unresolved,
 		"week_date":        weekDate,
