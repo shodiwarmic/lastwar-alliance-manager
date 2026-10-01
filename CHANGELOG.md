@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v2.1.0 — unreleased
+## v2.1.0 — 2026-10-01
 
 Participation boards can be imported from the post-event mail's screenshots, the app now talks to
 the OCR service through a versioned contract, and the VS upload stops losing Weekly Rank and
