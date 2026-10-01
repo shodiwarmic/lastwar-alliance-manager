@@ -28,6 +28,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             itemSelectText: '', shouldSort: false,
         }));
 
+        // Not awaited: a cold OCR service must never hold the page up.
+        loadOCRServiceAbout();
+
         // Load initial data
         await loadUsers();
         await loadMembers();
@@ -918,6 +921,39 @@ async function saveOCRArchiveSettings(event) {
 }
 
 // Save CV Worker URL
+// About this install → the OCR service line, from /api/admin/ocr-service.
+async function loadOCRServiceAbout() {
+    const out = document.getElementById('ocr-service-about-text');
+    if (!out) return;
+    try {
+        const res = await fetch('/api/admin/ocr-service');
+        if (!res.ok) throw new Error(res.statusText);
+        const info = await res.json();
+        const mode = info.mode === 'local' ? 'local sidecar' : 'cloud';
+        out.replaceChildren();
+        if (!info.reachable) {
+            out.append(`${mode} — unreachable right now (it may be starting up; reload to try again).`);
+            return;
+        }
+        const code = (text) => {
+            const el = document.createElement('code');
+            el.textContent = text;
+            el.setAttribute('translate', 'no');
+            return el;
+        };
+        const versions = (info.schema_versions || []).join(', ');
+        out.append(`${mode}, version `, code(info.version), ' — commit: ', code(info.commit || 'unknown'),
+            ` — contract ${versions}${info.legacy ? ' (an older release that does not report its capabilities)' : ''}`);
+        if (!info.speaks) {
+            out.append(` — does not answer in contract ${info.app_contract}; uploads will fail until it is updated.`);
+        } else {
+            out.append('.');
+        }
+    } catch (error) {
+        out.textContent = 'could not be checked.';
+    }
+}
+
 async function saveCVWorkerUrl(event) {
     event.preventDefault();
     const url = document.getElementById('cv-worker-url').value;
@@ -931,6 +967,7 @@ async function saveCVWorkerUrl(event) {
 
         if (!response.ok) throw new Error(await response.text());
         showToast('Microservice routing updated.');
+        loadOCRServiceAbout();
     } catch (error) {
         showToast('Error: ' + error.message, 'error');
     }

@@ -62,6 +62,30 @@ The microservice returns a clean JSON payload mapping categories to their extrac
 
 > **Deploying the OCR service / Cloud Run instance** is documented in the [`lastwar-ocr-service`](https://github.com/shodiwarmic/lastwar-ocr-service) repository — follow its setup guide for the Cloud Run deployment, Vision API enablement, and service-account creation. This repo intentionally does not duplicate those steps.
 
+**The OCR service is never public.** Deploy it with `--no-allow-unauthenticated` and grant
+`roles/run.invoker` to this app's service account alone: every request spends Vision units
+billed to your project, and its `/health` names the exact release it runs. Every identity
+involved — this app's account, the OCR runtime account, the release deployer — with its grants,
+the key rotation procedure and the **required** billing budget alert, is in the OCR service's
+[`docs/GCP_PERMISSIONS.md`](https://github.com/shodiwarmic/lastwar-ocr-service/blob/main/docs/GCP_PERMISSIONS.md).
+This app's key carries invoker, archive and translation rights (`roles/cloudtranslate.user` and
+`roles/serviceusage.serviceUsageConsumer` for translation); rotate it yearly and on any
+suspected exposure.
+
+### The wire contract and the service's version
+
+The app and the OCR service speak a versioned contract, whose canonical text is
+`lastwar-screen-definitions`' README (Consumer Contract → Wire contract v1). This app reads
+**version 1** (`ocrContractVersion` in `image_processing.go`): every request sends
+`schema_version=1`, a response in any other version is refused with a message naming both,
+and a response without the field is v1 by rule. A feature that needs a capability (a category
+such as a post-event mail) asks the service's `/health` first, and refuses readably when the
+service is too old, rather than failing on the upload. **Admin → About this install** shows the
+service's release, commit and contract version.
+
+OCR service releases are tagged `vX.Y.Z`; a self-hosted sidecar runs `:local`, which moves
+only on a release. An app release that needs a newer service says so in `CHANGELOG.md`.
+
 ## OCR Request Archival (optional)
 
 The Alliance Manager can retain a best-effort copy of each OCR request — the

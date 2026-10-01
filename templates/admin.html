@@ -203,6 +203,7 @@
                         <p class="help-text">Which build this install is running &mdash; quote both when reporting a problem. The same pair is written to the startup log, so <code>docker compose logs alliance-manager</code> answers it without a login. <code>dev</code> means the image was built without a version stamp; <code>edge</code> means it was built from <code>main</code> rather than from a release.</p>
                         <p class="help-text">Version: <code translate="no">{{.AppVersion}}</code> &mdash; commit: <code translate="no">{{.AppCommit}}</code></p>
                         <p class="help-text">Host files: {{if .HostFilesVersion}}<code translate="no">{{.HostFilesVersion}}</code>{{else}}unknown &mdash; not yet migrated to versioned host files (run <code>./scripts/manage.sh migrate</code>){{end}}. The compose files, scripts and proxy template on the server, which <code>./scripts/manage.sh update</code> moves together with the image; <code>./scripts/manage.sh status</code> shows the same pair on the server.</p>
+                        <p class="help-text" id="ocr-service-about">OCR service: <span id="ocr-service-about-text">checking&hellip;</span> The image-recognition service this install sends screenshots to (Admin &rarr; Security &amp; API), and the contract version it answers in; this app reads version 1.</p>
                     </div>
                 </div>
             </div>

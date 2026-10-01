@@ -92,10 +92,24 @@ There is no prompt on update: an install whose `.env` predates the setting gets
 unautomatable.
 
 Handlers should call `ProcessImages(ctx, files, category)` (in
-`image_processing.go`) which dispatches to either `ProcessImagesViaWorker`
-(cloud, OIDC-authenticated) or `ProcessImagesViaLocalWorker` (plain HTTP)
-based on `LoadOCRBackendConfig()`. Don't hand-roll the dispatch in new
-handlers.
+`image_processing.go`), which dispatches on `LoadOCRBackendConfig()` to one
+`postProcessBatch` for both backends (an ID-token client in cloud mode, plain HTTP
+for the sidecar). `ProcessImages` sends `category` **only in local mode** — the VS
+upload keeps cloud auto-detection, so a stray screenshot in a batch is read for what
+it is. `ProcessImagesForCategory` sends it in both modes, for a feature where every
+frame must be read as one category (the participation import: the service never
+auto-detects a mail). Don't hand-roll the dispatch in new handlers.
+
+**The wire contract is versioned** (canonical text: `lastwar-screen-definitions`
+README → Wire contract v1). `ocrContractVersion = 1`: every request writes
+`schema_version`, `decodeWorkerResponse` reads a missing one as 1 and refuses any
+other, and a 4xx carrying `{error, code}` comes back as `*OCRServiceError` whose
+message is the service's own sentence. Before relying on a capability, ask
+`ocrServiceInfo(ctx)` — `/health` through the same client, cached five minutes per
+(mode, URL), successful answers only; `*OCRUnreachableError` means "try again", a
+service with no `schema_versions` reads as v1 with the 23 ranking categories.
+`OCRPlayer` carries the v1 additions `rank`, `rank_inferred`, `score_unread` so the
+archive keeps them.
 
 These return `(CVWorkerResponse, *OCRDiagnostics, error)`. The worker
 response is read by `decodeWorkerResponse`, which expects the
@@ -109,9 +123,11 @@ opaque blob for storage, so OCR-side schema changes need no Go change.
 
 ### OCR service deploy ordering
 
-The app requires `lastwar-ocr-service` to be running the response-envelope
-format (introduced alongside OCR diagnostics — `decodeWorkerResponse` treats a
-missing top-level `results` key as an error). Deploy accordingly:
+The OCR service releases first: a tag deploys its production, and an app release that needs
+a capability is tagged only once production runs it (v2.1.0's mail import needs OCR v1.0.0).
+An older service still works for everything it can do — the app asks `/health` before using a
+capability and refuses readably. The app also requires the response-envelope format
+(`decodeWorkerResponse` treats a missing top-level `results` key as an error). Deploy accordingly:
 
 - `lastwar-ocr-service` must be deployed **before or simultaneously with** the
   Alliance Manager app.
@@ -120,12 +136,13 @@ missing top-level `results` key as an error). Deploy accordingly:
 - The backward-compat shim that tolerated the old flat response was
   intentionally removed in Epic 42.
 
-`category` is required for local mode and ignored for cloud mode.
-Allowed values are the same as the OCR service's `VALID_CATEGORIES`
-list — `monday`–`saturday`, `weekly`, `power`, `kills`,
-`donation_daily`, `donation_weekly`, plus the 12 `<category>_<period>`
-keys for Alliance Contribution. The upload UI's "Image Category"
-dropdown enumerates them.
+`category` is required for local mode. Allowed values are the OCR service's
+categories (its `/health` lists them) — `monday`–`saturday`, `weekly`, `power`,
+`kills`, `donation_daily`, `donation_weekly`, the 12 `<category>_<period>` keys for
+Alliance Contribution, and from OCR service v1.0.0 the three mails
+(`alliance_exercise`, `zombie_siege`, `desert_storm`). The upload UI's "Image
+Category" dropdown enumerates the ranking ones; the mails belong to the
+participation import.
 
 Why local mode requires manual selection: PaddleOCR's English model
 can't reliably read Last War's stylised header text
@@ -1058,8 +1075,31 @@ result; tags stripped; a second row matching an already-claimed member left unma
 A hand-added row is a member picked from search, whose current name becomes the
 snapshot. **A member on the board twice blocks saving** — the same matched member or the same
 name (case-insensitive) on two rows; the check table marks both rows and disables Save,
-and the PUT refuses it too. **Rank is the row's position** in the table (rows move up and down); a
-legacy board keeps its NULL ranks rather than being given invented ones.
+and the PUT refuses it too. **Rank is the row's position** in the table (rows move up and down) for
+hand-added and CSV boards; a legacy board keeps its NULL ranks rather than being given invented ones.
+
+**The screenshot import keeps its own ranks** (`POST /api/participation/import`,
+`handlers_participation_import.go`). Like the CSV endpoint it saves nothing. It reads the
+type's mail category (`participation_types.ocr_category`, migration 082 — MG and LS share
+`alliance_exercise`) through `ProcessImagesForCategory`, after `ocrServiceInfo` says the service
+reads it (409 naming the release needed; 503 when unreachable), in chunks of at most 20 MiB
+(Cloud Run's request cap is 32 MiB). `mergeImportedRows` merges overlapping frames by name and
+rank and **flags, never resolves**: `rank_conflict`, `rank_disagreement`, `rank_unread`,
+`score_unread`. The one fold it makes is a row OCR read with different trailing marks on
+different frames (`Ragnarocket 뀨우` / `Ragnarocket #¦`): equal read scores, equal ranks (or
+one unread) and one name's letters and digits a prefix of the other's → one row, flagged
+`name_variants` with the other spellings. Equal ranks, not adjacent ones: Zombie Siege scores
+tie constantly, so a shared score and a shared start are not enough. The mail's modal timestamp (phone-local; converted with the browser's IANA
+zone, so the offset is the one on the mail's date — the binary embeds `time/tzdata`) picks the
+occurrence whose game-time start is before it, nearest first, within three days; an all-day
+occurrence starts at its game day's 00:00. A Desert Storm tie is settled by matched members
+against the planner, else left. In the check table such a board is in **'own' rank mode**: the
+save sends each row's rank as shown (an unread one as NULL), a rank on two rows blocks Save
+like a duplicate member, and moving a row renumbers only that row. The PUT body carries
+`source` (`manual` | `import`; never `legacy`), stored on insert and on replace; an import
+replacing a `legacy` board deletes its `missed` exceptions (written by 081 only because legacy
+boards have no entries) and keeps `excused` / `dismissed`. The chooser hands the rows to the
+board page through `sessionStorage`; a lost preview costs a re-upload.
 `parseBoardAmount` (Go) and `ParticipationParse.parseAmount` (JS) read scores the same
 way — K/M/G/B suffixes, comma grouping — keep them in step.
 

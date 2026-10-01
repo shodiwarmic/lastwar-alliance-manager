@@ -1276,6 +1276,14 @@ button {
     border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
 }
 
+/* A preview row the import will not save as shown (e.g. "Saturday not derived"). */
+.import-row-warning {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.85em;
+    color: var(--color-warning);
+}
+
 .import-result ul {
     margin: 10px 0 0 20px;
     padding: 0;
