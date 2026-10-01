@@ -92,10 +92,24 @@ There is no prompt on update: an install whose `.env` predates the setting gets
 unautomatable.
 
 Handlers should call `ProcessImages(ctx, files, category)` (in
-`image_processing.go`) which dispatches to either `ProcessImagesViaWorker`
-(cloud, OIDC-authenticated) or `ProcessImagesViaLocalWorker` (plain HTTP)
-based on `LoadOCRBackendConfig()`. Don't hand-roll the dispatch in new
-handlers.
+`image_processing.go`), which dispatches on `LoadOCRBackendConfig()` to one
+`postProcessBatch` for both backends (an ID-token client in cloud mode, plain HTTP
+for the sidecar). `ProcessImages` sends `category` **only in local mode** — the VS
+upload keeps cloud auto-detection, so a stray screenshot in a batch is read for what
+it is. `ProcessImagesForCategory` sends it in both modes, for a feature where every
+frame must be read as one category (the participation import: the service never
+auto-detects a mail). Don't hand-roll the dispatch in new handlers.
+
+**The wire contract is versioned** (canonical text: `lastwar-screen-definitions`
+README → Wire contract v1). `ocrContractVersion = 1`: every request writes
+`schema_version`, `decodeWorkerResponse` reads a missing one as 1 and refuses any
+other, and a 4xx carrying `{error, code}` comes back as `*OCRServiceError` whose
+message is the service's own sentence. Before relying on a capability, ask
+`ocrServiceInfo(ctx)` — `/health` through the same client, cached five minutes per
+(mode, URL), successful answers only; `*OCRUnreachableError` means "try again", a
+service with no `schema_versions` reads as v1 with the 23 ranking categories.
+`OCRPlayer` carries the v1 additions `rank`, `rank_inferred`, `score_unread` so the
+archive keeps them.
 
 These return `(CVWorkerResponse, *OCRDiagnostics, error)`. The worker
 response is read by `decodeWorkerResponse`, which expects the
@@ -120,12 +134,13 @@ missing top-level `results` key as an error). Deploy accordingly:
 - The backward-compat shim that tolerated the old flat response was
   intentionally removed in Epic 42.
 
-`category` is required for local mode and ignored for cloud mode.
-Allowed values are the same as the OCR service's `VALID_CATEGORIES`
-list — `monday`–`saturday`, `weekly`, `power`, `kills`,
-`donation_daily`, `donation_weekly`, plus the 12 `<category>_<period>`
-keys for Alliance Contribution. The upload UI's "Image Category"
-dropdown enumerates them.
+`category` is required for local mode. Allowed values are the OCR service's
+categories (its `/health` lists them) — `monday`–`saturday`, `weekly`, `power`,
+`kills`, `donation_daily`, `donation_weekly`, the 12 `<category>_<period>` keys for
+Alliance Contribution, and from OCR service v1.0.0 the three mails
+(`alliance_exercise`, `zombie_siege`, `desert_storm`). The upload UI's "Image
+Category" dropdown enumerates the ranking ones; the mails belong to the
+participation import.
 
 Why local mode requires manual selection: PaddleOCR's English model
 can't reliably read Last War's stylised header text

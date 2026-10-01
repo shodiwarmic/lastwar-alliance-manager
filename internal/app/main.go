@@ -384,6 +384,7 @@ func Main() {
 	// Add these to the Admin Routes section in main.go
 	router.HandleFunc("/api/admin/security/password-policy", authMiddleware(adminMiddleware(updatePasswordPolicy))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/cv-worker", authMiddleware(adminMiddleware(updateCVWorkerURL))).Methods("PUT")
+	router.HandleFunc("/api/admin/ocr-service", authMiddleware(adminMiddleware(getOCRServiceInfo))).Methods("GET")
 	router.HandleFunc("/api/admin/security/ocr-archive", authMiddleware(adminMiddleware(updateOCRArchiveSettings))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/translation", authMiddleware(adminMiddleware(updateTranslationSettings))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/translation/usage", authMiddleware(adminMiddleware(translationUsage))).Methods("GET")
