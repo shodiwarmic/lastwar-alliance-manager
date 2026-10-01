@@ -254,3 +254,64 @@
 .pt-back-link a:hover {
     color: var(--color-text);
 }
+
+/* --- Imported boards: ranks as read, and what needs a look ------------------- */
+
+/* The rank the mail showed, editable in place. Narrow: ranks are 1–3 digits. */
+.pt-entries-table input.form-input.pt-rank-input {
+    width: 3.2em;
+    padding: 2px 3px;
+    display: inline-block;
+    text-align: right;
+    -moz-appearance: textfield;
+}
+.pt-rank-input::-webkit-outer-spin-button,
+.pt-rank-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* In the narrow layout the member cell dissolves into grid items; a flag takes
+   the row's full width under the head. */
+@container pt-entries (max-width: 40rem) {
+    .pt-entries-table .pt-flag { grid-column: 1 / -1; }
+}
+
+/* "≈": the rank was not read but worked out from its neighbours. */
+.pt-rank-inferred {
+    margin-left: 2px;
+    color: var(--color-text-muted);
+    cursor: help;
+}
+
+.pt-flag {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    margin-top: 4px;
+    font-size: 0.85em;
+    color: var(--color-warning);
+    white-space: normal;
+}
+
+.pt-flag .svg-icon {
+    flex: none;
+    margin-top: 2px;
+}
+
+.pt-row-flagged > td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-warning);
+}
+
+.pt-import-result {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+}
+
+.pt-file-btn.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}

@@ -223,6 +223,9 @@ type OCRSectionDiagnostic struct {
 	Method       string  `json:"method"`
 	PlayersFound int     `json:"players_found"`
 	Note         *string `json:"note"`
+	// MailTimestamp is a post-event mail's date-time line, YYYY-MM-DD HH:MM:SS in
+	// the capturing phone's local time (contract v1 addition).
+	MailTimestamp *string `json:"mail_timestamp"`
 }
 
 // decodeWorkerResponse reads the OCR worker's {results, diagnostics} envelope,

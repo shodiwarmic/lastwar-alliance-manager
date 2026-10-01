@@ -771,6 +771,9 @@ type ptPutBody struct {
 	Roles   []ptPutRole     `json:"roles"`
 	Result  json.RawMessage `json:"result"`
 	Notes   string          `json:"notes"`
+	// Source is how the rows were entered: "manual" (the default) or "import" (the
+	// screenshot import). "legacy" is migration 081's and never comes from a client.
+	Source string `json:"source"`
 }
 
 // validateBoardPut is every rule a board write must pass that needs no database.
@@ -856,6 +859,13 @@ func validateBoardPut(ev ptEvent, t *ptType, today string, body *ptPutBody) stri
 	}
 	if len(body.Notes) > 4000 {
 		return "Notes are limited to 4000 characters"
+	}
+	switch body.Source {
+	case "":
+		body.Source = "manual"
+	case "manual", "import":
+	default:
+		return "A board's source must be manual or import"
 	}
 	return ""
 }
@@ -957,7 +967,7 @@ func handleParticipationBoardPut(w http.ResponseWriter, r *http.Request) {
 	if bd.Board == nil {
 		action = "created"
 		res, err := tx.Exec(`INSERT INTO participation_boards (schedule_event_id, source, result_json, notes, recorded_by)
-			VALUES (?, 'manual', ?, ?, ?)`, id, result, body.Notes, u.ID)
+			VALUES (?, ?, ?, ?, ?)`, id, body.Source, result, body.Notes, u.ID)
 		if err != nil {
 			slog.Error("handleParticipationBoardPut: insert board failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -972,8 +982,19 @@ func handleParticipationBoardPut(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
-		if _, err := tx.Exec(`UPDATE participation_boards SET result_json = ?, notes = ?, recorded_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-			result, body.Notes, u.ID, boardID); err != nil {
+		// Migration 081 wrote `missed` exceptions for a legacy board only because it
+		// had no entries to derive a miss from. Once the mail itself is imported,
+		// misses derive from its rows, and a stored one would contradict them.
+		// Excused and dismissed are judgements, and stay.
+		if bd.Board.Source == "legacy" && body.Source == "import" {
+			if _, err := tx.Exec(`DELETE FROM participation_exceptions WHERE board_id = ? AND kind = 'missed'`, boardID); err != nil {
+				slog.Error("handleParticipationBoardPut: clear legacy misses failed", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+		}
+		if _, err := tx.Exec(`UPDATE participation_boards SET source = ?, result_json = ?, notes = ?, recorded_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+			body.Source, result, body.Notes, u.ID, boardID); err != nil {
 			slog.Error("handleParticipationBoardPut: update board failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -1022,6 +1043,9 @@ func handleParticipationBoardPut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	details := strconv.Itoa(len(body.Entries)) + " rows, " + strconv.Itoa(matched) + " matched"
+	if body.Source == "import" {
+		details += ", imported from screenshots"
+	}
 	if len(body.Roles) > 0 {
 		details += ", " + strconv.Itoa(len(body.Roles)) + " roles"
 	}

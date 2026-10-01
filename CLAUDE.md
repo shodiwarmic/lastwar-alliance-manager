@@ -123,9 +123,11 @@ opaque blob for storage, so OCR-side schema changes need no Go change.
 
 ### OCR service deploy ordering
 
-The app requires `lastwar-ocr-service` to be running the response-envelope
-format (introduced alongside OCR diagnostics — `decodeWorkerResponse` treats a
-missing top-level `results` key as an error). Deploy accordingly:
+The OCR service releases first: a tag deploys its production, and an app release that needs
+a capability is tagged only once production runs it (v2.1.0's mail import needs OCR v1.0.0).
+An older service still works for everything it can do — the app asks `/health` before using a
+capability and refuses readably. The app also requires the response-envelope format
+(`decodeWorkerResponse` treats a missing top-level `results` key as an error). Deploy accordingly:
 
 - `lastwar-ocr-service` must be deployed **before or simultaneously with** the
   Alliance Manager app.
@@ -1073,8 +1075,31 @@ result; tags stripped; a second row matching an already-claimed member left unma
 A hand-added row is a member picked from search, whose current name becomes the
 snapshot. **A member on the board twice blocks saving** — the same matched member or the same
 name (case-insensitive) on two rows; the check table marks both rows and disables Save,
-and the PUT refuses it too. **Rank is the row's position** in the table (rows move up and down); a
-legacy board keeps its NULL ranks rather than being given invented ones.
+and the PUT refuses it too. **Rank is the row's position** in the table (rows move up and down) for
+hand-added and CSV boards; a legacy board keeps its NULL ranks rather than being given invented ones.
+
+**The screenshot import keeps its own ranks** (`POST /api/participation/import`,
+`handlers_participation_import.go`). Like the CSV endpoint it saves nothing. It reads the
+type's mail category (`participation_types.ocr_category`, migration 082 — MG and LS share
+`alliance_exercise`) through `ProcessImagesForCategory`, after `ocrServiceInfo` says the service
+reads it (409 naming the release needed; 503 when unreachable), in chunks of at most 20 MiB
+(Cloud Run's request cap is 32 MiB). `mergeImportedRows` merges overlapping frames by name and
+rank and **flags, never resolves**: `rank_conflict`, `rank_disagreement`, `rank_unread`,
+`score_unread`. The one fold it makes is a row OCR read with different trailing marks on
+different frames (`Ragnarocket 뀨우` / `Ragnarocket #¦`): equal read scores, equal ranks (or
+one unread) and one name's letters and digits a prefix of the other's → one row, flagged
+`name_variants` with the other spellings. Equal ranks, not adjacent ones: Zombie Siege scores
+tie constantly, so a shared score and a shared start are not enough. The mail's modal timestamp (phone-local; converted with the browser's IANA
+zone, so the offset is the one on the mail's date — the binary embeds `time/tzdata`) picks the
+occurrence whose game-time start is before it, nearest first, within three days; an all-day
+occurrence starts at its game day's 00:00. A Desert Storm tie is settled by matched members
+against the planner, else left. In the check table such a board is in **'own' rank mode**: the
+save sends each row's rank as shown (an unread one as NULL), a rank on two rows blocks Save
+like a duplicate member, and moving a row renumbers only that row. The PUT body carries
+`source` (`manual` | `import`; never `legacy`), stored on insert and on replace; an import
+replacing a `legacy` board deletes its `missed` exceptions (written by 081 only because legacy
+boards have no entries) and keeps `excused` / `dismissed`. The chooser hands the rows to the
+board page through `sessionStorage`; a lost preview costs a re-upload.
 `parseBoardAmount` (Go) and `ParticipationParse.parseAmount` (JS) read scores the same
 way — K/M/G/B suffixes, comma grouping — keep them in step.
 

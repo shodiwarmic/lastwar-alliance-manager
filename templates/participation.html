@@ -29,6 +29,29 @@
             <label for="pt-new-type">Event</label>
             <select id="pt-new-type" class="form-input"></select>
         </div>
+        {{if .Permissions.ManageParticipation}}
+        <div id="pt-new-import" hidden>
+            <p class="pt-section-title">Import from the mail</p>
+            <p class="pt-step-hint">Pick every screenshot of the post-event mail, top to bottom. The board is read from them, and the mail's own date and time pick the event it belongs to — nothing is saved until you check it.</p>
+            <div class="pt-actions">
+                <label class="btn btn-secondary btn-sm pt-file-btn"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-photo"/></svg> Import screenshots
+                    <input type="file" id="pt-new-shots" accept="image/*" multiple hidden>
+                </label>
+                <span id="pt-new-import-status" class="status-msg"></span>
+            </div>
+            <div id="pt-new-import-result" class="pt-import-result" hidden>
+                <p id="pt-new-import-summary" class="pt-step-hint"></p>
+                <div class="form-group">
+                    <label for="pt-new-import-target">Event</label>
+                    <select id="pt-new-import-target" class="form-input"></select>
+                </div>
+                <p id="pt-new-import-reason" class="pt-step-hint"></p>
+                <div class="pt-actions">
+                    <button type="button" id="pt-new-import-go" class="btn btn-primary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-arrow-right"/></svg> Continue to the board</button>
+                </div>
+            </div>
+        </div>
+        {{end}}
         <div id="pt-new-recent"></div>
         {{if .Permissions.ManageParticipation}}
         <p class="pt-section-title">Not on the schedule?</p>
@@ -59,8 +82,11 @@
     <!-- Step 1 — Add the board -->
     <section id="pt-add" class="card pt-card" hidden>
         <h3>1 · Add the board</h3>
-        <p class="pt-step-hint">Import the board from a CSV, or add members one at a time in board order. Rows are numbered by their position, so the first row is rank 1. <a href="#" id="pt-csv-template">Download a blank CSV</a> with the columns this event needs.</p>
+        <p class="pt-step-hint">Import the board from the mail's screenshots or a CSV, or add members one at a time in board order. Rows you add or import from a CSV are numbered by their position; rows read from screenshots keep the rank the mail shows. <a href="#" id="pt-csv-template">Download a blank CSV</a> with the columns this event needs.</p>
         <div class="pt-actions">
+            <label class="btn btn-secondary btn-sm pt-file-btn" id="pt-shots-btn" hidden><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-photo"/></svg> Import screenshots
+                <input type="file" id="pt-shots-input" accept="image/*" multiple hidden>
+            </label>
             <label class="btn btn-secondary btn-sm pt-file-btn"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-upload"/></svg> Import CSV
                 <input type="file" id="pt-csv-input" accept=".csv,text/csv" hidden>
             </label>

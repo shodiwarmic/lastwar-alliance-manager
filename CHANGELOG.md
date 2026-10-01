@@ -9,6 +9,37 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v2.1.0 — unreleased
+
+Participation boards can be imported from the post-event mail's screenshots, the app now talks to
+the OCR service through a versioned contract, and the VS upload stops losing Weekly Rank and
+Donation screenshots.
+
+**Minor** — an image pull; nothing on the host changes. **Needs OCR service v1.0.0 or later** for
+the mail import (contract version 1, categories `alliance_exercise`, `zombie_siege`,
+`desert_storm`). Against an older OCR service everything else works as before, and the import
+says which release it needs instead of failing on the upload. A self-hosted local-OCR sidecar
+gets it by pulling `:local` once v1.0.0 is released.
+
+- **Import a participation board from screenshots** — on the recording screen, for Alliance
+  Exercise (Marshal's Guard / Large Sandworm), Zombie Siege and Desert Storm. Ranks are kept as
+  the mail shows them; anything the reading could not settle is flagged on its row; the mail's
+  date and time suggest the event (and the Desert Storm task force). Saving is blocked while a
+  member or a rank is on the board twice. A board's source (`manual` / `import`) is now recorded.
+- **The OCR contract is versioned.** Every request names contract version 1; an answer in any
+  other version is refused with a message naming both, and a refusal from the service is shown
+  in its own words. Admin → About this install shows the OCR service's release, commit and
+  contract version.
+- **Fixed: Weekly Rank, Donation (Daily) and Donation (Weekly) uploads saved nothing** — each
+  row failed with "no such column". A Weekly Rank screenshot now becomes each member's Saturday
+  (the weekly total minus Monday–Friday) when Monday–Friday are all recorded, and the row says so
+  when they are not; Donation screenshots are listed as not stored yet.
+- **Fixed: a mid-week Weekly total no longer invents a Saturday** out of days not yet recorded
+  (CSV import and screenshots alike).
+- **Hardened: the VS import's commit accepts only real columns.** Field names sent by the
+  browser were joined into the SQL statement as column names; anything but Monday–Saturday,
+  power and kills is now refused before any SQL is built.
+
 ## v2.0.0 — 2026-09-29
 
 Installs become versioned end to end. Until now the image followed a pinned release while

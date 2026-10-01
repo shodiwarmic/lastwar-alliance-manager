@@ -37,13 +37,16 @@ type ptTrackable struct {
 }
 
 type ptType struct {
-	EventTypeID int           `json:"event_type_id"`
-	Name        string        `json:"name"`
-	Short       string        `json:"short_name"`
-	Icon        string        `json:"icon"`
-	AbsenceRule string        `json:"absence_rule"`
-	StrikeType  string        `json:"strike_type"`
-	StrikeLabel string        `json:"strike_label"`
+	EventTypeID int    `json:"event_type_id"`
+	Name        string `json:"name"`
+	Short       string `json:"short_name"`
+	Icon        string `json:"icon"`
+	AbsenceRule string `json:"absence_rule"`
+	StrikeType  string `json:"strike_type"`
+	StrikeLabel string `json:"strike_label"`
+	// OCRCategory is the OCR category that reads this type's post-event mail
+	// (migration 082), "" when it has none.
+	OCRCategory string        `json:"ocr_category"`
 	Trackables  []ptTrackable `json:"trackables"`
 }
 
@@ -333,7 +336,7 @@ func (bd *ptBoardData) derive(roster []ptRosterMember) []ptStatus {
 func loadParticipationTypes(q rowQueryer) (map[int]*ptType, error) {
 	rows, err := q.Query(`
 		SELECT pt.event_type_id, t.name, t.short_name, t.icon, pt.absence_rule, pt.strike_type,
-		       COALESCE(st.label, pt.strike_type)
+		       COALESCE(st.label, pt.strike_type), COALESCE(pt.ocr_category, '')
 		FROM participation_types pt
 		JOIN schedule_event_types t ON t.id = pt.event_type_id
 		LEFT JOIN strike_types st ON st.key = pt.strike_type`)
@@ -343,7 +346,7 @@ func loadParticipationTypes(q rowQueryer) (map[int]*ptType, error) {
 	types := map[int]*ptType{}
 	for rows.Next() {
 		t := &ptType{Trackables: []ptTrackable{}}
-		if err := rows.Scan(&t.EventTypeID, &t.Name, &t.Short, &t.Icon, &t.AbsenceRule, &t.StrikeType, &t.StrikeLabel); err != nil {
+		if err := rows.Scan(&t.EventTypeID, &t.Name, &t.Short, &t.Icon, &t.AbsenceRule, &t.StrikeType, &t.StrikeLabel, &t.OCRCategory); err != nil {
 			rows.Close()
 			return nil, err
 		}

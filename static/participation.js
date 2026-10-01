@@ -18,7 +18,15 @@ const EVENT_ID = pathMatch ? parseInt(pathMatch[1], 10) : 0;
 const STATUS_LABEL = { present: 'Present', zero: 'Zero', missed: 'Missed', excused: 'Excused' };
 
 let detail = null;   // GET /api/participation/boards/{id}
-let rows = [];       // working entries in board order: {name, member_id, member_name, member_rank, values:{key:number|null}}
+let rows = [];       // working entries in board order: {name, member_id, member_name, member_rank, values:{key:number|null},
+                     //   rank, rank_inferred, flags} — rank/flags matter only in 'own' rank mode
+// How rows get their rank. 'position': rank N is the Nth row (hand-added and CSV
+// boards). 'own': each row keeps the rank the mail showed (a screenshot import) —
+// nothing is renumbered, and a rank that could not be read stays blank until the
+// officer fills it in.
+let rankMode = 'position';
+let boardSource = 'manual'; // sent with the save: 'manual' or 'import'
+const PENDING_IMPORT = 'pt-import:';  // sessionStorage key prefix, + event id
 let roles = [];      // working roles:   {member_id, member_name, role, task_force}
 let pickers = [];    // member pickers to destroy on re-render
 
@@ -82,6 +90,84 @@ async function errorText(res, fallback) {
     }
 }
 
+// Why an imported row needs a look, in the officer's words.
+const FLAG_TEXT = {
+    rank_disagreement: 'The screenshots show this name at different ranks — check the rank.',
+    rank_unread: 'The rank could not be read — fill it in.',
+    score_unread: 'The value could not be read — fill it in.',
+    name_variants: 'Other screenshots read this name differently',
+};
+
+// The mail's screenshots → rows for the check table. The server reads and matches
+// them and saves nothing. The browser's zone (and its current offset, as a
+// fallback) turns the mail's phone-local time into an instant.
+async function postScreenshots(files, typeID, eventID) {
+    const form = new FormData();
+    [...files].forEach(f => form.append('images', f, f.name));
+    form.append('event_type_id', String(typeID));
+    if (eventID) form.append('event_id', String(eventID));
+    try { form.append('tz', Intl.DateTimeFormat().resolvedOptions().timeZone || ''); } catch (_) { /* no Intl zone */ }
+    form.append('tz_offset', String(-new Date().getTimezoneOffset()));
+    const res = await fetch('/api/participation/import', { method: 'POST', body: form });
+    if (!res.ok) throw new Error(await errorText(res, 'Could not read those screenshots.'));
+    return res.json();
+}
+
+function rowsFromImport(out) {
+    return out.rows.map(r => ({
+        name: r.name, member_id: r.member_id, member_name: r.member_name || '', member_rank: r.member_rank || '',
+        values: Object.fromEntries(trackables().map(t => [t.key, r.values[t.key] ?? null])),
+        rank: r.rank ?? null, rank_inferred: !!r.rank_inferred, flags: r.flags || [],
+        variants: r.variants || [],
+    }));
+}
+
+function showImportProblems(problems, what) {
+    const box = document.getElementById('pt-import-problems');
+    if (!box) return;
+    if (problems.length) {
+        box.replaceChildren(
+            el('span', null, `${problems.length} thing${problems.length === 1 ? '' : 's'} in ${what} need${problems.length === 1 ? 's' : ''} a look:`),
+            noTranslate(el('ul', null, ...problems.map(p => el('li', null, (p.line ? 'Line ' + p.line + ': ' : '') + p.message)))));
+        box.hidden = false;
+    } else {
+        box.hidden = true;
+    }
+}
+
+// Puts an import's rows into the check table in 'own' rank mode.
+function applyImport(out, what) {
+    rows = rowsFromImport(out);
+    rankMode = 'own';
+    boardSource = 'import';
+    showImportProblems(out.problems || [], what);
+    show('pt-check', true);
+    renderEntries();
+    showToast(`Read ${rows.length} row${rows.length === 1 ? '' : 's'} from ${what}.`);
+}
+
+// On the board page: import onto this occurrence.
+async function importScreenshotsHere() {
+    const input = document.getElementById('pt-shots-input');
+    const files = input.files ? [...input.files] : [];
+    input.value = '';
+    if (!files.length) return;
+    if (rows.length && !await showConfirm(
+        `Replace the ${rows.length} row${rows.length === 1 ? '' : 's'} in the table with the board read from ${files.length} screenshot${files.length === 1 ? '' : 's'}?`, 'Replace')) return;
+    const label = document.querySelector('#pt-shots-btn');
+    label.classList.add('disabled');
+    showToast(`Reading ${files.length} screenshot${files.length === 1 ? '' : 's'} — this can take a minute.`, 'info', 6000);
+    try {
+        const out = await postScreenshots(files, detail.type.event_type_id, EVENT_ID);
+        applyImport(out, files.length + ' screenshot' + (files.length === 1 ? '' : 's'));
+    } catch (err) {
+        console.error('importScreenshotsHere:', err);
+        showToast(err.message || 'Could not read those screenshots.', 'error', 10000);
+    } finally {
+        label.classList.remove('disabled');
+    }
+}
+
 function setHeader(...nodes) {
     document.getElementById('pt-header').replaceChildren(...nodes);
 }
@@ -131,6 +217,10 @@ async function initNew() {
         const t = types.find(x => String(x.event_type_id) === select.value);
         const g = document.getElementById('pt-new-tf-group');
         if (g) g.hidden = !(t && t.absence_rule === 'role');
+        const imp = document.getElementById('pt-new-import');
+        if (imp) imp.hidden = !(t && t.ocr_category);
+        const res = document.getElementById('pt-new-import-result');
+        if (res) res.hidden = true;
         checkNewDayRule(types);
     };
     select.addEventListener('change', () => { syncTF(); loadRecent(); });
@@ -143,7 +233,9 @@ async function initNew() {
     if (dateIn) {
         dateIn.max = gameDateStr();
         dateIn.value = gameDateStr();
-        document.getElementById('pt-new-create').addEventListener('click', createOccurrence);
+        document.getElementById('pt-new-create').addEventListener('click', () => createOccurrence());
+        document.getElementById('pt-new-shots').addEventListener('change', () => importOnNew(types));
+        document.getElementById('pt-new-import-go').addEventListener('click', continueImport);
         ['input', 'change'].forEach(ev => dateIn.addEventListener(ev, () => checkNewDayRule(types)));
         checkNewDayRule(types);
     }
@@ -182,10 +274,15 @@ async function loadRecent() {
         })));
 }
 
-async function createOccurrence() {
+// Creates the occurrence from the form and opens it. `stash`, when given, is an
+// import to hand to the board page.
+async function createOccurrence(stash) {
     const status = document.getElementById('pt-new-status');
     status.textContent = '';
-    if (document.getElementById('pt-new-create').disabled) return;  // reason is under the date
+    if (document.getElementById('pt-new-create').disabled) {  // reason is under the date
+        if (stash) document.getElementById('pt-new-date').scrollIntoView({ block: 'center' });
+        return;
+    }
     const body = {
         event_type_id: parseInt(document.getElementById('pt-new-type').value, 10),
         event_date: document.getElementById('pt-new-date').value,
@@ -210,7 +307,78 @@ async function createOccurrence() {
         return;
     }
     const out = await res.json();
+    if (stash) stashImport(out.id, stash);
     location.href = '/participation/' + out.id;
+}
+
+// --- Import from the mail (on /participation/new) ----------------------------------
+
+let pendingImport = null;  // the last /api/participation/import answer on this page
+
+// The chooser navigates with location.href, so the rows travel to the board page
+// through sessionStorage. A lost preview costs only a re-upload.
+function stashImport(eventID, out) {
+    try {
+        sessionStorage.setItem(PENDING_IMPORT + eventID, JSON.stringify(out));
+    } catch (err) {
+        console.error('stashImport:', err);
+        showToast('The rows could not be carried to the board — import the screenshots there instead.', 'error', 8000);
+    }
+}
+
+async function importOnNew(types) {
+    const input = document.getElementById('pt-new-shots');
+    const files = input.files ? [...input.files] : [];
+    input.value = '';
+    if (!files.length) return;
+    const status = document.getElementById('pt-new-import-status');
+    const t = types.find(x => String(x.event_type_id) === document.getElementById('pt-new-type').value);
+    status.textContent = `Reading ${files.length} screenshot${files.length === 1 ? '' : 's'}… this can take a minute.`;
+    document.getElementById('pt-new-import-result').hidden = true;
+    let out;
+    try {
+        out = await postScreenshots(files, t.event_type_id, 0);
+    } catch (err) {
+        console.error('importOnNew:', err);
+        status.textContent = err.message || 'Could not read those screenshots.';
+        return;
+    }
+    status.textContent = '';
+    pendingImport = out;
+
+    const n = out.rows.length;
+    const look = out.problems.length;
+    document.getElementById('pt-new-import-summary').textContent =
+        `${n} row${n === 1 ? '' : 's'} read from ${out.frames} screenshot${out.frames === 1 ? '' : 's'}`
+        + (out.mail_timestamp ? ` · mail sent ${out.mail_timestamp} (your phone's time)` : '')
+        + (look ? ` · ${look} thing${look === 1 ? '' : 's'} to check on the board` : '');
+    const target = document.getElementById('pt-new-import-target');
+    const opts = out.candidates.map(c => el('option', { value: String(c.event_id) },
+        fmtDate(c.event_date) + (c.task_force ? ' · TF ' + c.task_force : '') + (c.all_day ? '' : ' · ' + c.event_time + ' ST')
+        + (c.has_board ? ' · recorded (will be replaced)' : '')));
+    opts.push(el('option', { value: 'new' }, 'A new event — fill in the date below'));
+    target.replaceChildren(...opts);
+    const sug = out.suggested || {};
+    target.value = sug.event_id ? String(sug.event_id) : 'new';
+    if (sug.task_force) {
+        const tf = document.getElementById('pt-new-tf');
+        if (tf) tf.value = sug.task_force;
+    }
+    document.getElementById('pt-new-import-reason').textContent = sug.event_id
+        ? 'Suggested: ' + sug.reason + '. Change it if that is not the right event.'
+        : (sug.reason ? 'No event suggested: ' + sug.reason + '.' : '');
+    document.getElementById('pt-new-import-result').hidden = false;
+}
+
+async function continueImport() {
+    if (!pendingImport) return;
+    const target = document.getElementById('pt-new-import-target').value;
+    if (target === 'new') {
+        await createOccurrence(pendingImport);
+        return;
+    }
+    stashImport(target, pendingImport);
+    location.href = '/participation/' + target;
 }
 
 // --- Board -------------------------------------------------------------------------
@@ -240,6 +408,23 @@ async function loadBoard() {
     }
     if (CAN_MANAGE) resetWorkingCopy();
     renderAll();
+    if (CAN_MANAGE) await applyPendingImport();
+}
+
+// Rows imported on /participation/new for this occurrence, handed over in
+// sessionStorage. Replacing a recorded board still asks first.
+async function applyPendingImport() {
+    let raw = null;
+    try {
+        raw = sessionStorage.getItem(PENDING_IMPORT + EVENT_ID);
+        sessionStorage.removeItem(PENDING_IMPORT + EVENT_ID);
+    } catch (_) { return; }
+    if (!raw) return;
+    const out = JSON.parse(raw);
+    if (detail.board && rows.length && !await showConfirm(
+        `This event already has a board of ${rows.length} row${rows.length === 1 ? '' : 's'}. Replace it with the ${out.rows.length} rows read from the screenshots? Nothing is saved until you press Save.`, 'Replace')) return;
+    applyImport(out, 'the screenshots');
+    document.getElementById('pt-check').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function hideAllSteps() {
@@ -280,7 +465,11 @@ function resetWorkingCopy() {
         name: e.name, member_id: e.member_id, member_name: e.member_name || '',
         member_rank: (detail.roster.find(m => m.id === e.member_id) || {}).rank || '',
         values: Object.fromEntries(trackables().map(t => [t.key, e.values[t.key] ?? null])),
+        rank: e.rank ?? null, rank_inferred: false, flags: [],
     }));
+    // An imported board keeps its own ranks when it is edited again.
+    boardSource = detail.board && detail.board.source === 'import' ? 'import' : 'manual';
+    rankMode = boardSource === 'import' ? 'own' : 'position';
     const src = detail.board ? detail.roles : (detail.roles_prefill || []);
     roles = src.map(r => ({ member_id: r.member_id, member_name: r.member_name, role: r.role || 'starter', task_force: r.task_force || '' }));
     document.getElementById('pt-notes').value = detail.board ? detail.board.notes : '';
@@ -291,6 +480,8 @@ function renderAll() {
         show('pt-add', true);
         show('pt-check', rows.length > 0 || !!detail.board || isRoleType());
         document.getElementById('pt-delete').style.display = detail.board ? '' : 'none';
+        const shots = document.getElementById('pt-shots-btn');
+        if (shots) shots.hidden = !(detail.type && detail.type.ocr_category);
         renderEntries();
         renderRoles();
     }
@@ -348,16 +539,11 @@ async function importCSV() {
     rows = out.rows.map(r => ({
         name: r.name, member_id: r.member_id, member_name: r.member_name || '', member_rank: r.member_rank || '',
         values: Object.fromEntries(trackables().map(t => [t.key, r.values[t.key] ?? null])),
+        rank: null, rank_inferred: false, flags: [],
     }));
-    const box = document.getElementById('pt-import-problems');
-    if (out.problems.length) {
-        box.replaceChildren(
-            el('span', null, `${out.problems.length} thing${out.problems.length === 1 ? '' : 's'} in ${file.name} need${out.problems.length === 1 ? 's' : ''} a look:`),
-            noTranslate(el('ul', null, ...out.problems.map(p => el('li', null, (p.line ? 'Line ' + p.line + ': ' : '') + p.message)))));
-        box.hidden = false;
-    } else {
-        box.hidden = true;
-    }
+    rankMode = 'position';
+    boardSource = 'manual';
+    showImportProblems(out.problems, file.name);
     show('pt-check', true);
     renderEntries();
     showToast(`Read ${rows.length} row${rows.length === 1 ? '' : 's'} from ${file.name}.`);
@@ -375,9 +561,13 @@ function renderAddMember() {
         getCandidates: () => detail.roster,
         isExcluded: m => rows.some(r => r.member_id === m.id),
         onPick: m => {
+            // On a board that keeps its own ranks, a hand-added row takes the
+            // rank after the last one; the officer can change it.
+            const last = rows.reduce((mx, r) => (r.rank != null && r.rank > mx ? r.rank : mx), 0);
             rows.push({
                 name: m.name, member_id: m.id, member_name: m.name, member_rank: m.rank,
                 values: Object.fromEntries(trackables().map(t => [t.key, null])),
+                rank: rankMode === 'own' ? last + 1 : null, rank_inferred: false, flags: [],
             });
             show('pt-check', true);
             renderEntries();
@@ -404,13 +594,15 @@ function usedMemberIds() {
 // A member appearing twice on one board is always a mistake — the game lists each
 // player once. Rows clash when they share a matched member, or when their names are
 // the same (a row left unmatched because its member was already claimed, say, or a
-// matched member's roster name). Returns, per row, the other row it clashes with.
+// matched member's roster name) — or, on a board that keeps its own ranks, when two
+// rows carry the same rank. Returns, per row, the other row it clashes with.
 function duplicateRows() {
     const firstRow = new Map();
     const clash = rows.map(() => null);
     rows.forEach((r, i) => {
         const keys = ['n:' + (r.name || '').trim().toLowerCase()];
         if (r.member_id) keys.push('m:' + r.member_id, 'n:' + (r.member_name || '').trim().toLowerCase());
+        if (rankMode === 'own' && r.rank != null) keys.push('r:' + r.rank);
         for (const k of new Set(keys)) {
             if (k === 'n:') continue;
             if (!firstRow.has(k)) { firstRow.set(k, i); continue; }
@@ -436,7 +628,7 @@ function updateSummary() {
     if (!save) return;
     save.disabled = dups > 0;
     save.dataset.dupBlocked = dups > 0 ? '1' : '';
-    if (dups) status.textContent = 'A member is on the board twice — remove the extra row to save.';
+    if (dups) status.textContent = 'A member or a rank is on the board twice — fix the marked rows to save.';
     else if (status.textContent.includes('on the board twice')) status.textContent = '';
 }
 
@@ -461,10 +653,18 @@ function renderEntries() {
     updateSummary();
 }
 
+// Moving a row reorders the table. On a board that keeps its own ranks only the
+// moved row is renumbered — to follow the row now above it — and every other
+// rank stays as the mail showed it.
 function moveRow(i, to) {
     if (to < 0 || to >= rows.length) return;
     const [r] = rows.splice(i, 1);
     rows.splice(to, 0, r);
+    if (rankMode === 'own') {
+        const above = rows.slice(0, to).reverse().find(x => x.rank != null);
+        r.rank = above ? above.rank + 1 : 1;
+        r.rank_inferred = false;
+    }
     renderEntries();
 }
 
@@ -475,7 +675,23 @@ function buildEntryRow(r, i, clashesWith) {
     // what the board said), the board's own name when it differs, and the picker —
     // kept as separate children so the narrow layout can place each on its own line.
     const matchTd = el('td', { className: 'pt-col-member' });
-    const rank = el('span', { className: 'pt-rank-cell' }, (isRanked() ? String(i + 1) : '—') + ' · ');
+    let rank;
+    if (rankMode === 'own') {
+        // The rank the mail showed, editable; blank when it could not be read.
+        const rin = el('input', { type: 'number', min: '1', step: '1', inputmode: 'numeric', className: 'form-input pt-rank-input', 'aria-label': 'Rank' });
+        rin.value = r.rank != null ? String(r.rank) : '';
+        if (r.rank == null) rin.classList.add('field-error');
+        rin.addEventListener('change', () => {
+            const v = parseInt(rin.value, 10);
+            r.rank = Number.isFinite(v) && v > 0 ? v : null;
+            r.rank_inferred = false;
+            renderEntries();
+        });
+        rank = el('span', { className: 'pt-rank-cell' }, rin,
+            r.rank_inferred ? el('span', { className: 'pt-rank-inferred', title: 'Not read — worked out from the ranks either side' }, '≈') : null, ' · ');
+    } else {
+        rank = el('span', { className: 'pt-rank-cell' }, (isRanked() ? String(i + 1) : '—') + ' · ');
+    }
     // What the board called them, shown only when it differs from the roster name
     // (an imported alias, a rename, a tag) — it is kept as the row's snapshot.
     const boardName = r.name && r.name !== r.member_name
@@ -502,9 +718,26 @@ function buildEntryRow(r, i, clashesWith) {
     }
 
     if (clashesWith != null) {
-        matchTd.appendChild(el('span', { className: 'field-error-message' },
-            `Also on the board as row ${clashesWith + 1} — remove one of them.`));
+        const other = rows[clashesWith];
+        const sameRank = rankMode === 'own' && r.rank != null && other && other.rank === r.rank;
+        matchTd.appendChild(el('span', { className: 'field-error-message' }, sameRank
+            ? `Rank ${r.rank} is also row ${clashesWith + 1} — correct one of the ranks, or remove a row.`
+            : `Also on the board as row ${clashesWith + 1} — remove one of them.`));
     }
+    // What the import could not settle. A flag about something since filled in
+    // (a rank, a value) is no longer shown; nothing was ever repaired for the officer.
+    const flags = (r.flags || []).filter(f =>
+        !(f === 'rank_unread' && r.rank != null)
+        && !(f === 'score_unread' && trackables().every(t => r.values[t.key] != null))
+        && f !== 'rank_conflict');  // the clash message above says it, and goes with it
+    flags.forEach(f => {
+        // The reason is prose (translatable); the names it quotes are not.
+        const parts = f === 'name_variants'
+            ? [' ' + FLAG_TEXT[f] + ': ', noTranslate(el('span', null, (r.variants || []).join(' / '))), ' — check the name.']
+            : [' ' + (FLAG_TEXT[f] || f)];
+        matchTd.appendChild(el('span', { className: 'pt-flag' }, svgIcon('alert-triangle'), el('span', null, ...parts)));
+    });
+    if (flags.length) tr.classList.add('pt-row-flagged');
 
     const valueTds = trackables().map(t => {
         // Plain text keyboard, not inputmode=decimal: scores are typed the way the
@@ -581,7 +814,13 @@ async function saveBoard() {
         }
     }
     const body = {
-        entries: rows.map((r, i) => ({ rank: isRanked() ? i + 1 : null, name: r.name.trim(), member_id: r.member_id || null, values: r.values })),
+        // Imported ranks are saved as shown — an unread one as blank — never
+        // renumbered by position.
+        entries: rows.map((r, i) => ({
+            rank: rankMode === 'own' ? (r.rank ?? null) : (isRanked() ? i + 1 : null),
+            name: r.name.trim(), member_id: r.member_id || null, values: r.values,
+        })),
+        source: boardSource,
         roles: isRoleType() ? roles.map(r => ({ member_id: r.member_id, role: r.role, task_force: r.task_force })) : [],
         notes: document.getElementById('pt-notes').value,
     };
@@ -806,6 +1045,7 @@ async function undoException(s) {
 document.addEventListener('DOMContentLoaded', () => {
     if (CAN_MANAGE) {
         document.getElementById('pt-csv-input').addEventListener('change', importCSV);
+        document.getElementById('pt-shots-input')?.addEventListener('change', importScreenshotsHere);
         document.getElementById('pt-csv-template').addEventListener('click', downloadTemplate);
         document.getElementById('pt-save').addEventListener('click', saveBoard);
         document.getElementById('pt-delete').addEventListener('click', deleteBoard);
