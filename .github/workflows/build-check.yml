@@ -512,6 +512,33 @@ jobs:
       - name: Test
         run: go test ./...
 
+      # Fails only on a vulnerability the app's own code can reach (govulncheck's default), so
+      # an advisory in a package nothing calls does not block a PR. The standard library is
+      # scanned at the Go version that runs govulncheck, so that has to be the image's
+      # builder, read from the Dockerfile -- go.mod's `go 1.26.0` is a language floor, and
+      # scanning at it reports every stdlib fix since as reachable in a binary that has them.
+      # The tool is pinned for the same reason the Go version is: a new release can change
+      # what fails. Runs as a step of this job rather than its own job: the required status
+      # checks in branch protection are pinned to job names.
+      - name: Read the image's Go version
+        id: image-go
+        run: |
+          v=$(sed -n 's/^FROM .*golang:\([0-9][0-9.]*\)-.*/\1/p' Dockerfile)
+          if [ -z "$v" ]; then
+            echo "No golang:<version> builder found in the Dockerfile -- did the FROM line change?"
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go (image builder version)
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ steps.image-go.outputs.version }}
+          cache: false
+
+      - name: Vulnerability check
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
