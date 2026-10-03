@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gorilla/csrf"
+	csrf "filippo.io/csrf/gorilla"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 	"github.com/microcosm-cc/bluemonday"
@@ -390,8 +390,8 @@ func Main() {
 	router.HandleFunc("/api/admin/security/translation", authMiddleware(adminMiddleware(updateTranslationSettings))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/translation/usage", authMiddleware(adminMiddleware(translationUsage))).Methods("GET")
 	// Translating is a read affordance over content the user can already see, so
-	// it needs no permission beyond being signed in. POST (not GET) so gorilla/csrf
-	// covers it and so the source text travels in a body rather than a URL.
+	// it needs no permission beyond being signed in. POST (not GET) so the CSRF
+	// middleware covers it and so the source text travels in a body rather than a URL.
 	router.HandleFunc("/api/translate", authMiddleware(translateText)).Methods("POST")
 	router.HandleFunc("/api/admin/credentials", authMiddleware(adminMiddleware(updateExternalCredentials))).Methods("POST")
 	router.HandleFunc("/api/admin/credentials/{service}", authMiddleware(adminMiddleware(deleteExternalCredential))).Methods("DELETE")
@@ -888,7 +888,9 @@ func Main() {
 	}
 
 	// Add trusted origins for local testing and reverse proxies
-	// Note: gorilla/csrf expects domains/IPs without the scheme (http://) or port (:8080)
+	// Same-origin requests pass without an entry, at any address. An entry without a scheme
+	// is trusted as https:// only (filippo.io/csrf/gorilla); to trust a plain-HTTP origin,
+	// list it with its scheme, e.g. http://192.168.1.50:8080.
 	if trusted := os.Getenv("TRUSTED_ORIGINS"); trusted != "" {
 		origins := strings.Split(trusted, ",")
 		for i, o := range origins {

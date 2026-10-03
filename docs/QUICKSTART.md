@@ -151,7 +151,7 @@ curl -I [https://collabora.yourdomain.com/hosting/discovery](https://collabora.y
 ```
 
 ### CSRF "Forbidden" Errors
-If you cannot log in or save settings, ensure your `TRUSTED_ORIGINS` in your `.env` file includes the exact domain or IP you are using to access the site, including the port (e.g., `TRUSTED_ORIGINS=192.168.1.50:8080`).
+Requests from the page the app itself served are same-origin and pass at any address, so `TRUSTED_ORIGINS` is not needed for a domain, `localhost` or a LAN IP. If you still cannot log in or save settings, a proxy in front of the app is most likely rewriting the `Host` header — pass it through unchanged (Caddy does by default). `TRUSTED_ORIGINS` is for a genuinely different origin; an entry without a scheme is trusted as `https://` only, so list a plain-HTTP origin with its scheme (e.g., `TRUSTED_ORIGINS=http://192.168.1.50:8080`).
 
 ---
 

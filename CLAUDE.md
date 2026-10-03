@@ -1,7 +1,7 @@
 # Alliance Manager — Claude Code Guide
 
 ## Stack
-- **Backend**: Go, gorilla/mux, gorilla/csrf, gorilla/sessions, SQLite (`modernc.org/sqlite` — pure Go, no CGO)
+- **Backend**: Go, gorilla/mux, gorilla/sessions, filippo.io/csrf (gorilla/csrf-compatible API), SQLite (`modernc.org/sqlite` — pure Go, no CGO)
 - **Build**: `CGO_ENABLED=0` (no C compiler required in the build environment; see `Dockerfile`)
 - **Migrations**: Goose (`-- +goose Up` / `-- +goose StatementBegin` headers required)
 - **Frontend**: Vanilla JS, no build step. CSS custom properties (`var(--name)`) throughout.
@@ -313,7 +313,7 @@ that seems to want one.
 **Three rules that must hold:**
 
 1. **The roster fetch is POST, not GET** — it writes (registry stats, a history datapoint, an
-   activity row), and gorilla/csrf only covers POST/PUT/DELETE. The per-player step is a pure
+   activity row), and the CSRF check skips GET/HEAD/OPTIONS. The per-player step is a pure
    read and stays GET.
 2. **The extended pass uses `lastRankPlayerBulk`** (`lastrank.PlayerBulk`) — the shared bulk strategy: cheap cached
    GET, upgraded to a live enrich only when the record is older than `lastRankEnrichMaxAge`.
@@ -1683,7 +1683,7 @@ This bit `admin.js`: the roster is loaded once at page-load (`populateMemberDrop
 If you call `form.reset()` on a form containing a Choices select, **re-run your `setChoices()` populate immediately after the reset** (see `showCreateUserModal` in `admin.js`). Selecting a value with `setChoiceByValue()` is not enough — that sets the selection, it does not restore the option list.
 
 ### CSRF is handled globally
-`static/csrf.js` intercepts all `fetch` calls and injects `X-CSRF-Token` on POST/PUT/DELETE automatically. You don't need to manually attach the token in page JS.
+`filippo.io/csrf/gorilla` rejects cross-origin browser requests on every method except GET/HEAD/OPTIONS, using `Sec-Fetch-Site` and falling back to `Origin` vs `Host`. Requests carrying neither header (non-browser clients) pass. It ignores tokens: `csrf.TemplateField` and `static/csrf.js`'s `X-CSRF-Token` header are kept only for API compatibility. Page JS needs to do nothing — and must not mutate state on a GET.
 
 ### Pass `canManage` to the template, not the permission column name
 Handlers resolve the boolean server-side and pass it to the template. The column name never reaches the frontend.

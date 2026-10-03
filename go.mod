@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	cloud.google.com/go/storage v1.68.0
-	github.com/gorilla/csrf v1.7.3
+	filippo.io/csrf v0.2.1
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.4.0
 	github.com/joho/godotenv v1.5.1
