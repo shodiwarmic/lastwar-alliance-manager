@@ -53,7 +53,7 @@ const _ = uint(allianceReportEnrichTimeout - lastrank.EnrichTimeout - time.Secon
 // every member's name, power, hero power, alliance rank and HQ level.
 //
 // POST rather than GET because this writes — registry stats, a history datapoint and an
-// activity row. gorilla/csrf only covers POST/PUT/DELETE, and the sibling fetch-and-save
+// activity row. the CSRF check skips GET/HEAD/OPTIONS, and the sibling fetch-and-save
 // endpoint (POST /api/external-alliances/lookup) sets the precedent.
 func allianceReport(w http.ResponseWriter, r *http.Request) {
 	var body struct {

@@ -1,6 +1,7 @@
 version: 2
 updates:
-  # Go modules — weekly security + version alerts
+  # Go modules — weekly version updates. Security alerts and security updates are
+  # repository settings (Settings → Code security); this file cannot turn them on.
   - package-ecosystem: gomod
     directory: /
     schedule:
@@ -15,7 +16,7 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  # Docker base image — weekly digest/version alerts
+  # Docker base image — weekly digest/version updates
   - package-ecosystem: docker
     directory: /
     schedule:

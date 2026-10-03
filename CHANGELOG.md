@@ -9,6 +9,26 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v2.1.1 — unreleased
+
+A dependency replacement: the CSRF middleware moves from `github.com/gorilla/csrf` to
+`filippo.io/csrf/gorilla`, for the public Go advisory
+[GO-2025-3884](https://pkg.go.dev/vuln/GO-2025-3884), which has no fixed `gorilla/csrf` release.
+
+**Patch** — an image pull; nothing on the host changes, and no `.env` needs editing.
+
+- **CSRF protection now checks where a request came from, not a token.** A state-changing
+  request from a browser is accepted when it is same-origin — read from the browser's
+  `Sec-Fetch-Site` header, or by comparing `Origin` with `Host` where that header is absent —
+  and refused otherwise. Requests from non-browser clients (the Android scanner, Collabora) are
+  unaffected.
+- **`TRUSTED_ORIGINS` is rarely needed now.** The app's own domain, `localhost` and a LAN address
+  all work without an entry, because the page the app served is same-origin with it. Existing
+  entries keep working. An entry written without a scheme (`app.example.com`) now trusts that
+  host over HTTPS only; to trust a plain-HTTP origin, write it with its scheme
+  (`http://192.168.1.50:8080`).
+  ([#105](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/105))
+
 ## v2.1.0 — 2026-10-01
 
 Participation boards can be imported from the post-event mail's screenshots, the app now talks to

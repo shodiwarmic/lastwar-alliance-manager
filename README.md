@@ -81,7 +81,7 @@ app (`docker compose restart alliance-manager`) to issue a new one.
 
 - **Encrypted Credentials**: External API credentials (like GCP Service Accounts) are symmetrically encrypted at rest using AES-GCM. The application employs strict memory hygiene, zeroing out sensitive plaintext buffers immediately after cryptographic operations or API transmissions to prevent memory scraping.
 - **Isolated Internal Networking**: The Go application and the Collabora document server communicate exclusively over a private Docker bridge (`lastwar-net`), preventing external data exposure.
-- **Strict CSRF Protection**: All mutating endpoints (POST/PUT/DELETE) are protected by robust Cross-Site Request Forgery tokens integrated natively into the JS fetch interceptors.
+- **CSRF Protection**: Every state-changing request (anything but GET/HEAD/OPTIONS) from a browser is rejected unless it is same-origin, checked with the browser's Fetch-metadata `Sec-Fetch-Site` header and falling back to `Origin` versus `Host`.
 - **Content-Security-Policy**: The automated Caddy setup configures strict CSP headers on both domains. The main app uses `frame-src` and `connect-src` to restrict iframes and WebSocket connections exclusively to your Collabora subdomain. The Collabora server uses `frame-ancestors` to ensure it can *only* be embedded within your Alliance Manager domain.
 - **Password Hashing**: Passwords are exclusively hashed with bcrypt before storage, accompanied by strict server-side complexity enforcement.
 - **WOPI JWT**: Document editing sessions are secured with short-lived JSON Web Tokens.

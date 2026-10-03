@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/csrf"
+	csrf "filippo.io/csrf/gorilla"
 	"github.com/gorilla/mux"
 )
 
@@ -277,72 +277,60 @@ func TestSetupClaimRefusesAnExpiredOrMissingKey(t *testing.T) {
 }
 
 // The setup POST sits inside the CSRF-protected router (only WOPI and the mobile API bypass
-// it), so the page has to carry the token and csrf.js has to find it. A miss would be a 403
-// on the only way into a fresh install, so this runs the real round trip: render the page,
-// lift the token and cookie off it, post with them.
+// it). A browser's own same-origin request refused there would be a 403 on the only way into a
+// fresh install, so this runs the claim through the real middleware the way each deployment's
+// browser sends it, and checks a cross-origin one is still refused.
 func TestSetupClaimPassesCSRF(t *testing.T) {
 	path := setupSetupTestDB(t)
 	key := readSetupKey(t, path)
 
 	router := mux.NewRouter()
-	router.HandleFunc("/setup", showSetupPage).Methods("GET")
 	router.HandleFunc("/api/setup", claimSetup).Methods("POST")
-	handler := setupGate(csrf.Protect([]byte("0123456789abcdef0123456789abcdef"), csrf.Secure(false), csrf.Path("/"))(router))
+	// The trusted host is listed without a scheme, the documented TRUSTED_ORIGINS shape.
+	handler := setupGate(csrf.Protect(nil, csrf.TrustedOrigins([]string{"app.example.com"}))(router))
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
-
-	resp, err := http.Get(srv.URL + "/setup")
-	if err != nil {
-		t.Fatal(err)
-	}
-	page, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	m := regexp.MustCompile(`name="gorilla.csrf.Token" value="([^"]+)"`).FindSubmatch(page)
-	if m == nil {
-		t.Fatalf("the setup page carries no CSRF token:\n%s", page)
-	}
-	token := strings.ReplaceAll(string(m[1]), "&#43;", "+")
 
 	body, _ := json.Marshal(map[string]any{
 		"setup_key": key, "username": "csrfowner",
 		"password": setupTestPassword, "confirm_password": setupTestPassword,
 		"alliance_name": "Setup Test Alliance", "alliance_tag": "STST",
 	})
-	loginLimiters.Delete("127.0.0.1")
-	origin := "https://" + strings.TrimPrefix(srv.URL, "http://")
+	post := func(headers map[string]string) (int, string) {
+		t.Helper()
+		loginLimiters.Delete("127.0.0.1")
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/setup", strings.NewReader(string(body)))
+		req.Header.Set("Content-Type", "application/json")
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		msg, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return resp.StatusCode, string(msg)
+	}
+	host := strings.TrimPrefix(srv.URL, "http://")
 
-	// Without the token the claim is refused before it reaches the handler.
-	bare, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/setup", strings.NewReader(string(body)))
-	bare.Header.Set("Origin", origin)
-	for _, c := range resp.Cookies() {
-		bare.AddCookie(c)
-	}
-	refused, err := http.DefaultClient.Do(bare)
-	if err != nil {
-		t.Fatal(err)
-	}
-	refused.Body.Close()
-	if refused.StatusCode != http.StatusForbidden {
-		t.Fatalf("claim without a CSRF token: %d, want 403", refused.StatusCode)
+	// Refused before they reach the handler, so none of these claims the install.
+	for name, h := range map[string]map[string]string{
+		"cross-site fetch metadata":         {"Sec-Fetch-Site": "cross-site", "Origin": "https://evil.example"},
+		"foreign Origin, no fetch metadata": {"Origin": "http://evil.example"},
+		// A trusted host listed without a scheme must not also trust its plain-HTTP origin.
+		"http twin of a trusted host": {"Sec-Fetch-Site": "cross-site", "Origin": "http://app.example.com"},
+	} {
+		if code, msg := post(h); code != http.StatusForbidden {
+			t.Fatalf("%s: %d %s, want 403", name, code, msg)
+		}
 	}
 
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/setup", strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-CSRF-Token", token)
-	// What a browser sends behind the Caddy install.sh sets up: TLS ends at the proxy, so the
-	// app sees plain HTTP while the Origin says https — which is what gorilla/csrf assumes.
-	req.Header.Set("Origin", origin)
-	for _, c := range resp.Cookies() {
-		req.AddCookie(c)
-	}
-	post, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	msg, _ := io.ReadAll(post.Body)
-	post.Body.Close()
-	if post.StatusCode != http.StatusOK {
-		t.Fatalf("claim through CSRF: %d %s", post.StatusCode, msg)
+	// Plain HTTP at a LAN address: browsers send no Sec-Fetch-* to an insecure origin, so the
+	// check falls back to Origin against Host — and must pass with no TRUSTED_ORIGINS entry.
+	// (Behind Caddy the browser sends Sec-Fetch-Site: same-origin, which passes on its own.)
+	if code, msg := post(map[string]string{"Origin": "http://" + host}); code != http.StatusOK {
+		t.Fatalf("same-origin claim over plain HTTP: %d %s", code, msg)
 	}
 	waitForLoginRow(t, "csrfowner")
 }
