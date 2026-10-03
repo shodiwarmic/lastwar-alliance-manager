@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v2.1.1 — unreleased
+## v2.1.1 — 2026-10-03
 
 A dependency replacement: the CSRF middleware moves from `github.com/gorilla/csrf` to
 `filippo.io/csrf/gorilla`, for the public Go advisory
