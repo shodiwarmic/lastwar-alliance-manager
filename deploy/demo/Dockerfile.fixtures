@@ -1,0 +1,25 @@
+# The demo's stand-in OCR service and Collabora (cmd/demo-fixtures). Build from the
+# repository root:
+#
+#   docker build -f deploy/demo/Dockerfile.fixtures -t demo-fixtures .
+#
+# One static binary; the canned answers and the document pictures are compiled in.
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY . .
+ARG APP_VERSION=dev
+ARG APP_COMMIT=unknown
+ARG TARGETARCH
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build \
+    -ldflags "-X lastwar-alliance/internal/fixtures.Version=${APP_VERSION} -X lastwar-alliance/internal/fixtures.Commit=${APP_COMMIT}" \
+    -o demo-fixtures ./cmd/demo-fixtures
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=builder /app/demo-fixtures /demo-fixtures
+EXPOSE 8080
+ENTRYPOINT ["/demo-fixtures"]
+CMD ["-port", "8080"]

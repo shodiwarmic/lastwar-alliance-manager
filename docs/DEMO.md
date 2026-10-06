@@ -48,3 +48,35 @@ VS points per weekday), each beside the read-only query that produced it. No row
 player's figure is in it — the top decile, which ends at one real player, is never measured.
 Names are composed from syllable tables in several scripts; nothing is drawn from a list of
 players.
+
+## The fixtures service
+
+The demo cannot run the OCR service or Collabora, so one small binary stands in for both:
+
+```bash
+go run ./cmd/demo-fixtures -port 9090 -frame-ancestors http://localhost:8080
+```
+
+| Route | Stands in for | Answers |
+|---|---|---|
+| `GET /health` | the OCR service | contract version 1 and all 26 categories, so the app's capability checks pass |
+| `POST /process-batch` | the OCR service | a **canned leaderboard** for the requested category, naming the demo alliance's members — whatever image was uploaded. Its diagnostics say so (`engine: demo-canned`), and that reaches the activity log. A mail carries "now" as its timestamp, so the participation import finds a recent occurrence |
+| `/browser/dist/cool.html` | Collabora | a **picture** of the document the app asked to open (by the file id in `WOPISrc`), in the requested theme, with a "Demo" band; a file that is not a seeded sample gets a generic "no preview" picture. It never calls the app back |
+
+It needs no database: the boards and the file list come from `demo.Manifest()`, a pure function of
+the seed. It is configured by flags, not environment variables. `-frame-ancestors` is the app's
+origin, the only page allowed to embed the document picture.
+
+Point a seeded app at it with the OCR backend in local mode — the demo never auto-detects a
+screen, so a category is always sent — and Collabora at its host:
+
+```bash
+go run ./cmd/demo-seed --db /tmp/demo.db --uploads /tmp/demo-uploads --worker-url http://localhost:9090
+OCR_BACKEND_MODE=local COLLABORA_DOMAIN=localhost:9090 \
+  DATABASE_PATH=/tmp/demo.db STORAGE_PATH=/tmp/demo-uploads go run ./cmd/server
+```
+
+`deploy/demo/Dockerfile.fixtures` builds it (`docker build -f deploy/demo/Dockerfile.fixtures .`
+from the repository root). The document pictures in `internal/fixtures/img/` were captured from a
+real Collabora opening the seeded `.docx` and `.xlsx`, light and dark; retake them if the sample
+files change.
