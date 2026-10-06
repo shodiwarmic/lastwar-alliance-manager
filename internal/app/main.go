@@ -127,14 +127,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	}
 	data.TranslationBackendMode = translationMode
 
-	// The pipeline is ready when:
-	//   - cloud mode: GCP credentials AND a worker URL are configured
-	//   - local mode: just a worker URL (the local sidecar URL); no GCP needed
-	if ocrMode == string(OCRBackendLocal) {
-		data.OCRPipelineReady = cvWorkerURL != ""
-	} else {
-		data.OCRPipelineReady = hasGCP && cvWorkerURL != ""
-	}
+	data.OCRPipelineReady = ocrPipelineReady(ocrMode, hasGCP, cvWorkerURL)
 
 	data.SkillLabels = SkillLabels
 

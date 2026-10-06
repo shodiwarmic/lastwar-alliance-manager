@@ -77,6 +77,17 @@ func reconcileOCRBackendFromEnv() {
 	slog.Info("OCR backend reconciled from env", "mode", mode)
 }
 
+// ocrPipelineReady is whether OCR can run at all. Cloud mode needs the GCP credential
+// AND a worker URL; local mode needs only the sidecar's URL. The page data and the
+// settings API (which the Upload page gates on) both answer through this, so they cannot
+// disagree — they did, and every local-mode install's Upload page locked itself out.
+func ocrPipelineReady(mode string, hasGCPKey bool, workerURL string) bool {
+	if mode == string(OCRBackendLocal) {
+		return workerURL != ""
+	}
+	return hasGCPKey && workerURL != ""
+}
+
 // ocrContractVersion is the wire-contract version this app parses: the canonical
 // text is lastwar-screen-definitions' README (Consumer Contract → Wire contract
 // v1). Every request names it, and a response in any other version is refused

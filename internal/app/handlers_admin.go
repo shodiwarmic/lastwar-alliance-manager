@@ -685,6 +685,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	// Check if the GCP Vision credentials physically exist in the database
 	var hasGCPKey bool
 	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCPKey)
+	// The mode is not in the positional settings SELECT above; read it the one shared way.
+	ocrMode, _, _ := LoadOCRBackendConfig()
 
 	// Archive status snapshot (for the admin "archiving is failing" banner).
 	archErr, archErrAt, archOK := getArchiveStatus()
@@ -712,7 +714,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	response := extendedSettings{
 		Settings:              s,
 		HasGCPCredentials:     hasGCPKey,
-		OCRPipelineReady:      hasGCPKey && s.CVWorkerURL != "", // Requires BOTH to be true
+		OCRPipelineReady:      ocrPipelineReady(string(ocrMode), hasGCPKey, s.CVWorkerURL),
 		ArchiveGCSAvailable:   hasGCPKey,
 		ArchiveLocalAvailable: os.Getenv("OCR_ARCHIVE_DIR") != "",
 		ArchiveLastError:      archErr,
