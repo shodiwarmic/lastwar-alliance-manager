@@ -60,11 +60,15 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	}
 
 	session, _ := store.Get(r, "session")
-	userID, ok := session.Values["user_id"].(int)
-	if ok && userID > 0 {
-		user := loadUserFromDB(userID)
+	{
+		user := loadSessionUser(session)
 		if user != nil {
 			data.IsAuthenticated = true
+			data.PreviewRank = user.PreviewRank
+			data.CanExitPreview = user.RealIsAdmin && user.PreviewRank != ""
+			if user.RealIsAdmin {
+				data.PreviewRanks = ValidRanks
+			}
 			data.Username = user.Username
 			data.Rank = user.Rank
 			if user.MemberID != nil {
@@ -272,6 +276,11 @@ func Main() {
 
 	// Activity log
 	router.HandleFunc("/api/activity", authMiddleware(getActivityLog)).Methods("GET")
+
+	// Admin preview as rank (175). requireRealAdmin, not adminMiddleware: under a preview
+	// IsAdmin is false, and the admin must still be able to switch rank or exit.
+	router.HandleFunc("/api/preview-rank", authMiddleware(requireRealAdmin(startRankPreview))).Methods("POST")
+	router.HandleFunc("/api/preview-rank", authMiddleware(requireRealAdmin(endRankPreview))).Methods("DELETE")
 
 	// Accountability
 	router.HandleFunc("/accountability", authMiddleware(handleAccountability)).Methods("GET")

@@ -474,6 +474,23 @@ main {
     color: var(--color-text-muted);
     margin: 0; line-height: 1.2;
 }
+/* Page-wide banner above the topbar: the admin rank preview (175), the demo notice (176). */
+.app-banner {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding: 6px 24px;
+    font-size: 13px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.app-banner--preview { background: var(--color-purple-bg); color: var(--color-purple); }
+.app-banner-select {
+    font: inherit; padding: 2px 6px; border-radius: 4px;
+    border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-primary);
+}
+.sidebar-user-preview { font-style: italic; }
+.preview-rank-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.preview-rank-row .form-input { width: auto; min-width: 90px; }
+
 .content-scroll {
     flex: 1;
     overflow-y: auto;

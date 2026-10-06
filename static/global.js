@@ -1166,3 +1166,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1200);
     });
 })();
+
+
+// ---- Admin preview as rank (175) ----
+//
+// The banner layout.html renders while an administrator previews a rank: a rank select
+// that switches the preview in place, and Exit. Both reload, because every permission the
+// page was rendered with belongs to the rank being left.
+(function () {
+    const select = document.getElementById('preview-banner-rank');
+    const exit = document.getElementById('preview-banner-exit');
+    if (!select && !exit) return;
+
+    async function send(method, body) {
+        const res = await fetch('/api/preview-rank', {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        if (!res.ok) throw new Error(await res.text());
+    }
+    if (select) {
+        select.addEventListener('change', async () => {
+            try {
+                await send('POST', { rank: select.value });
+                location.reload();
+            } catch (e) {
+                showToast('Could not switch the preview rank.', 'error');
+            }
+        });
+    }
+    if (exit) {
+        exit.addEventListener('click', async () => {
+            try {
+                await send('DELETE');
+                location.reload();
+            } catch (e) {
+                showToast('Could not exit the preview.', 'error');
+            }
+        });
+    }
+})();

@@ -37,6 +37,19 @@
                     <div class="loading-msg">Loading users...</div>
                 </div>
             </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-eye"/></svg> Preview as rank</h2>
+                </div>
+                <p class="help-text">See the app exactly as a rank does — its menu, its pages, what it may change — without a second account. Your own profile stays yours. A banner on every page switches rank or exits.</p>
+                <div class="preview-rank-row">
+                    <select id="preview-rank-select" class="form-input" aria-label="Rank to preview">
+                        {{range .PreviewRanks}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                    <button class="btn btn-primary" id="preview-rank-start">Start preview</button>
+                </div>
+            </div>
         </div>
 
         <!-- Login History Tab -->

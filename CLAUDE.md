@@ -34,7 +34,7 @@ Every handler that creates, updates, or deletes data must call `logActivity`. Th
 logActivity(userID int, username, action, entityType, entityName string, isSensitive bool, details ...string)
 ```
 
-**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"deferred"`, `"deactivated"`, `"reactivated"`, `"reset"`
+**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"deferred"`, `"deactivated"`, `"reactivated"`, `"reset"`, and `"started"` / `"ended"` (`rank_preview` only)
 
 > `"reset_password"` is retired — no handler emits it since the random-password flow was
 > removed. Historical rows keep it, which is harmless: `activity.js` renders actions verbatim.
@@ -64,7 +64,7 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 > whom" — add the entity type to `neverBatched` rather than accepting the merge.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -1684,6 +1684,23 @@ If you call `form.reset()` on a form containing a Choices select, **re-run your 
 
 ### CSRF is handled globally
 `filippo.io/csrf/gorilla` rejects cross-origin browser requests on every method except GET/HEAD/OPTIONS, using `Sec-Fetch-Site` and falling back to `Origin` vs `Host`. Requests carrying neither header (non-browser clients) pass. It ignores tokens: `csrf.TemplateField` and `static/csrf.js`'s `X-CSRF-Token` header are kept only for API compatibility. Page JS needs to do nothing — and must not mutate state on a GET.
+
+### Admin preview as rank: `IsAdmin` is false under a preview
+
+`loadSessionUser` (`middleware.go`) is where a session becomes an `AuthUser`, and both
+`authMiddleware` and `getPageData` go through it. When an admin's session carries
+`preview_rank`, it sets `IsAdmin = false`, `Rank = <previewed rank>`, `PreviewRank` and
+`RealIsAdmin = true`, so every downstream check answers as that rank. `MemberID` stays the
+admin's own — "own" data is untouched. `userHasPermission` accepts a nil `MemberID` while a
+preview is active (an unlinked admin has none).
+
+- **Gate on `IsAdmin`, never on `RealIsAdmin`.** Only `requireRealAdmin`, which guards the two
+  `/api/preview-rank` routes, reads `RealIsAdmin` — it is what lets an admin switch or exit a
+  preview at all. Anything else reading it would leak admin rights into the preview.
+- **New permission checks go through `userHasPermission`**, not a hand-rolled
+  `MemberID != nil` test — `getActivityLog` had one and would have 403'd an unlinked admin
+  previewing a rank that holds `view_activity`.
+- The `rank_preview` activity rows are sensitive, so they show only after Exit.
 
 ### Pass `canManage` to the template, not the permission column name
 Handlers resolve the boolean server-side and pass it to the template. The column name never reaches the frontend.

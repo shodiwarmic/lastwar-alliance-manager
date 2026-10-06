@@ -59,6 +59,7 @@ const ENTITY_LABELS = {
     poll_instance:         'Poll',
     lastrank_sync:         'LastRank Sync',
     lastrank_review:       'LastRank Review',
+    rank_preview:          'rank preview',
     vs_league_season:      'Duel League season',
     vs_league_week:        'Duel League week',
     external_alliance:     'external alliance',

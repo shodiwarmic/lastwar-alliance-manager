@@ -1154,3 +1154,27 @@ async function saveStormSlots() {
         statusEl.style.color = 'var(--color-danger)';
     }
 }
+
+
+// ---- Preview as rank (175) ----
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('preview-rank-start');
+    const select = document.getElementById('preview-rank-select');
+    if (!btn || !select) return;
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/preview-rank', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rank: select.value }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            // The Admin page is not visible to any rank, so the preview starts on the dashboard.
+            window.location.href = '/';
+        } catch (e) {
+            showToast('Could not start the preview.', 'error');
+            btn.disabled = false;
+        }
+    });
+});

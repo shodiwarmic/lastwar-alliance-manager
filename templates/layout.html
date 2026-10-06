@@ -191,7 +191,7 @@
         <div class="sidebar-user-avatar" data-lr-photo="{{.UserPhotoURL}}" data-lr-photo-failover="{{.UserPhotoFailover}}">{{printf "%.2s" .Username}}</div>
         <div style="flex:1;min-width:0">
           <div class="sidebar-user-name" translate="no">{{.Username}}</div>
-          <div class="sidebar-user-role">{{.Rank}}</div>
+          <div class="sidebar-user-role">{{.Rank}}{{if .PreviewRank}} <span class="sidebar-user-preview">(previewing)</span>{{end}}</div>
         </div>
         <div class="user-dropdown">
           <button id="username-display" class="username-btn" aria-label="User menu">
@@ -220,6 +220,18 @@
 
     <!-- Content area -->
     <div class="content-area">
+      {{if .PreviewRank}}
+      <div class="app-banner app-banner--preview" role="status">
+        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-eye"/></svg>
+        <span>Previewing as</span>
+        {{if .CanExitPreview}}
+        <select id="preview-banner-rank" class="app-banner-select" aria-label="Preview rank">
+          {{range .PreviewRanks}}<option value="{{.}}"{{if eq . $.PreviewRank}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        <button type="button" id="preview-banner-exit" class="btn btn-secondary btn-sm">Exit preview</button>
+        {{else}}<strong>{{.PreviewRank}}</strong>{{end}}
+      </div>
+      {{end}}
       <div class="topbar">
         {{block "header_text" .}}
           <h1>Alliance Manager</h1>

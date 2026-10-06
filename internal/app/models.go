@@ -1464,6 +1464,12 @@ type PageData struct {
 	// Shown beside AppVersion so a host and an image on different releases are visible from
 	// inside the app. Empty on an install not yet migrated to versioned host files.
 	HostFilesVersion string
+	// PreviewRank is the rank an administrator is previewing the app as ("" when not).
+	// CanExitPreview is true while they are, and drives the banner's rank switcher and
+	// Exit; PreviewRanks lists the ranks either control offers (admins only).
+	PreviewRank    string
+	CanExitPreview bool
+	PreviewRanks   []string
 }
 
 // DashboardCard represents a single card in the dashboard with its visibility state.
