@@ -483,6 +483,7 @@ main {
     border-bottom: 1px solid var(--color-border);
 }
 .app-banner--preview { background: var(--color-purple-bg); color: var(--color-purple); }
+.app-banner--demo { background: var(--color-info-bg); color: var(--color-info); }
 .app-banner-select {
     font: inherit; padding: 2px 6px; border-radius: 4px;
     border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-primary);

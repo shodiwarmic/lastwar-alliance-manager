@@ -2057,6 +2057,22 @@ The fictional demo alliance (docs/DEMO.md). Rules that must hold:
 - **Real data supplies shape only.** `params.go` holds rounded aggregates with their queries;
   never commit a row, a name or a single player's figure from the dev database.
 
+## Demo mode (`DEMO_MODE=true`, `demo_mode.go`)
+
+The public demo (docs/DEMO.md): the ordinary image, seeded at boot. Every visitor is an admin.
+
+- **The block list is applied at route registration** — `demoBlock(...)` around the handler in
+  `buildRouter`, writes only. A new route that writes something a visitor must not (an
+  account, a credential, the disk, anything reaching LastRank or another upstream) gets the
+  wrapper **and a row in `demoBlocked`** (`demo_mode_test.go`), which asserts each route both
+  ways.
+- **`/api/demo/*` exists only in demo mode** (registered inside `if demoMode()`).
+- **`demoSecurityHeaders` mirrors `deploy/Caddyfile`'s app-site header block**, compared by
+  `TestDemoHeadersMatchTheCaddyfile` — a Caddyfile header change fails that test until the list
+  follows it.
+- `trackLogin` and the LastRank scheduler tick return early in demo mode; `login_message` is
+  neither shown nor stored.
+
 ## Session Key Requirement
 
 `SESSION_KEY` is resolved **once, at the top of `Main()`** (`session_key.go`), before the

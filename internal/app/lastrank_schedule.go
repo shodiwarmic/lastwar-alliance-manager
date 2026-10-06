@@ -163,6 +163,11 @@ func startLastRankScheduler() {
 // freshness pre-filters inside each job's Plan, not from the scheduler knowing
 // which kind of tick this is — see the file header.
 func runScheduledLastRankTick() {
+	// The demo never reaches LastRank, whatever its Settings page says: every visitor can
+	// switch the scheduler on, and the volunteer service must not see a demo's traffic.
+	if demoMode() {
+		return
+	}
 	cfg := loadLastRankScheduleConfig()
 	if !cfg.Enabled {
 		return

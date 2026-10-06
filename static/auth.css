@@ -98,3 +98,11 @@ body {
 .invite-error-icon  { font-size: 2.5em; margin-bottom: 10px; }
 .invite-error-state h2 { margin-bottom: 10px; color: var(--color-text); }
 .invite-error-state p  { color: var(--color-text-muted); font-size: 14px; }
+
+/* Demo sign-in (176): one button per seeded account, in place of the password form. */
+.demo-login { display: flex; flex-direction: column; gap: 8px; }
+.demo-login-intro, .demo-login-note { margin: 0; font-size: 0.9em; color: var(--text-secondary); }
+.demo-login-note { margin-top: 6px; font-size: 0.8em; color: var(--text-muted); }
+.demo-login-btn { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; width: 100%; text-align: left; }
+.demo-login-who { font-weight: 600; }
+.demo-login-sub { font-size: 0.85em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

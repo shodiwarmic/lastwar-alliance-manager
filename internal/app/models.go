@@ -1470,6 +1470,10 @@ type PageData struct {
 	PreviewRank    string
 	CanExitPreview bool
 	PreviewRanks   []string
+	// DemoMode is the public demo (DEMO_MODE=true): the layout shows its banner and
+	// global.js toasts its refusals. DemoResetHours is DEMO_RESET_HOURS, for the banner.
+	DemoMode       bool
+	DemoResetHours string
 }
 
 // DashboardCard represents a single card in the dashboard with its visibility state.

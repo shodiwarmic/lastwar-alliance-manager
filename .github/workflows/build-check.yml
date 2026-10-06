@@ -359,6 +359,13 @@ jobs:
           ALLOWED = {
               'PORT': 'documented in docs/DEPLOYMENT.md -> Optional variables',
               'COLLABORA_PORT': 'documented in docs/DEPLOYMENT.md -> Optional variables',
+              # The public demo's own settings. Not in .env.example: that file is a host
+              # file, and no operator install sets them.
+              'DEMO_MODE': 'demo deployment only; documented in docs/DEMO.md',
+              'DEMO_FIXTURES_URL': 'demo deployment only; documented in docs/DEMO.md',
+              'DEMO_FIXTURES_ORIGIN': 'demo deployment only; documented in docs/DEMO.md',
+              'DEMO_RESET_HOURS': 'demo deployment only; documented in docs/DEMO.md',
+              'DEMO_PASSWORD': 'demo deployment only; documented in docs/DEMO.md',
           }
 
           read_at = {}

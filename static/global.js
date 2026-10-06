@@ -1207,3 +1207,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 })();
+
+// ---- Demo mode (176) ----
+//
+// In the public demo some actions are refused with a 403 whose body is one fixed
+// sentence. Page scripts do not surface a 403's body — most toast their own "Failed to
+// …" — so this wraps fetch once, toasts the demo's sentence itself, and drops the page's
+// own error toast that follows within a moment. Only active when the layout says demo
+// mode; otherwise nothing is wrapped.
+(function () {
+    const cfg = document.getElementById('layout-config');
+    if (!cfg || cfg.dataset.demo !== 'true' || !window.fetch) return;
+    const DEMO_REFUSAL = 'This action is disabled in the demo.';
+    let quietUntil = 0;
+    const realFetch = window.fetch;
+    window.fetch = async function (...args) {
+        const res = await realFetch.apply(this, args);
+        if (res.status === 403) {
+            try {
+                const body = (await res.clone().text()).trim();
+                if (body === DEMO_REFUSAL) {
+                    showToast(DEMO_REFUSAL, 'info', 5000);
+                    quietUntil = Date.now() + 2000;
+                }
+            } catch (e) { /* an unreadable body is not ours */ }
+        }
+        return res;
+    };
+    const realToast = window.showToast;
+    window.showToast = function (message, type, duration) {
+        if (type === 'error' && Date.now() < quietUntil) return;
+        return realToast(message, type, duration);
+    };
+})();

@@ -189,6 +189,9 @@ The app compresses its own text responses (HTML, CSS, JS, JSON, SVG, CSV) with g
 reached without a proxy is not served full-size assets. Caddy's `encode gzip` passes an
 already-encoded response through untouched, and nginx's `gzip` does the same.
 
+The project's public demo runs on Cloud Run without a proxy, in demo mode — a different
+deployment from an install; see `docs/DEMO.md`.
+
 ### Option B: Nginx
 The installer does not configure nginx: install with `./scripts/install.sh --proxy none`, which
 sets up everything except the proxy, then configure nginx yourself. Ensure you have `certbot` and

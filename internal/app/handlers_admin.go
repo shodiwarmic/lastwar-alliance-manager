@@ -858,6 +858,13 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 	var prevAllianceID string
 	db.QueryRow(`SELECT COALESCE(lastrank_alliance_id, '') FROM settings WHERE id = 1`).Scan(&prevAllianceID)
 
+	// The demo's sign-in page is always the app's own: the login banner is stored unchanged,
+	// since every visitor is an administrator and would otherwise be writing the next
+	// visitor's first screen.
+	if demoMode() {
+		db.QueryRow(`SELECT COALESCE(login_message, '') FROM settings WHERE id = 1`).Scan(&settings.LoginMessage)
+	}
+
 	// Note: current_season and season_start_date are no longer editable here —
 	// and never read either: see getSettings, which derives both from the seasons
 	// table (owned by Season Hub). The settings columns of those names are dead

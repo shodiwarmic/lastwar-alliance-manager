@@ -220,6 +220,12 @@
 
     <!-- Content area -->
     <div class="content-area">
+      {{if .DemoMode}}
+      <div class="app-banner app-banner--demo" role="note">
+        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-info-circle"/></svg>
+        <span>Demo — fictional data. Resets {{if ne .DemoResetHours "0"}}at least every {{.DemoResetHours}} hours and {{end}}on every cold start.</span>
+      </div>
+      {{end}}
       {{if .PreviewRank}}
       <div class="app-banner app-banner--preview" role="status">
         <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-eye"/></svg>
@@ -332,6 +338,7 @@
   <div id="layout-config"
        data-can-manage-members="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
        data-translation-mode="{{.TranslationBackendMode}}"
+       data-demo="{{if .DemoMode}}true{{else}}false{{end}}"
        hidden></div>
 
   <script src="{{asset "/global.js"}}"></script>
