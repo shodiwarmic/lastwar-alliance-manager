@@ -185,6 +185,10 @@ higher revision, and leaves the file alone otherwise. A hand edit is therefore o
 next revision; a `www.` redirect, if your DNS has that record, is one such addition (the template
 shows the block).
 
+The app compresses its own text responses (HTML, CSS, JS, JSON, SVG, CSV) with gzip, so an install
+reached without a proxy is not served full-size assets. Caddy's `encode gzip` passes an
+already-encoded response through untouched, and nginx's `gzip` does the same.
+
 ### Option B: Nginx
 The installer does not configure nginx: install with `./scripts/install.sh --proxy none`, which
 sets up everything except the proxy, then configure nginx yourself. Ensure you have `certbot` and

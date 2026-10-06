@@ -919,7 +919,7 @@ func Main() {
 		port = "8080"
 	}
 
-	srv := &http.Server{Addr: ":" + port, Handler: setupGate(appHandler)}
+	srv := &http.Server{Addr: ":" + port, Handler: gzipMiddleware(setupGate(appHandler))}
 
 	go func() {
 		slog.Info("Server listening", "port", port)
