@@ -1,5 +1,9 @@
 # Last War: Survival — Alliance Manager
 
+[![Build Check](https://img.shields.io/github/actions/workflow/status/shodiwarmic/lastwar-alliance-manager/build-check.yml?branch=main&label=build)](https://github.com/shodiwarmic/lastwar-alliance-manager/actions/workflows/build-check.yml)
+[![Latest release](https://img.shields.io/github/v/release/shodiwarmic/lastwar-alliance-manager)](https://github.com/shodiwarmic/lastwar-alliance-manager/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/shodiwarmic/lastwar-alliance-manager)](LICENSE)
+
 A comprehensive, self-hosted web application for managing your alliance in the online game Last War: Survival. Track member growth, monitor VS Duel activity, plan Desert Storm, host alliance documents, and share feedback — all deployed via Docker.
 
 Everything is permission-gated by in-game rank (R1–R5), so officers see what they need and members see what concerns them.
@@ -29,6 +33,18 @@ Everything is permission-gated by in-game rank (R1–R5), so officers see what t
 | 🌐 **Inline Translation** | Translate a single member-written note in place, without translating the whole page |
 
 **→ [Full feature list](docs/FEATURES.md)** — every feature in detail, with the permission each one needs.
+
+## Screenshots
+
+*A fictional alliance — every name and number in these pictures is generated.*
+
+![The dashboard: alliance health, VS performance, the schedule, diplomacy and what needs attention](docs/img/dashboard.png)
+
+| | |
+|---|---|
+| ![The member roster](docs/img/members.png) | ![A VS Duel League week](docs/img/vs-duel-league.png) |
+| ![The Season Hub rankings](docs/img/season-hub.png) | ![The alliance schedule](docs/img/schedule.png) |
+| ![The roster on a phone](docs/img/members-mobile.png) | ![The dashboard in dark mode](docs/img/dashboard-dark.png) |
 
 ---
 

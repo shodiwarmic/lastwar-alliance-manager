@@ -9,7 +9,39 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v2.1.1 — unreleased
+## v2.2.0 — unreleased
+
+A fictional demo alliance and the public demo built on it, an administrator's preview of the app
+as any rank, response compression, and a production install that refuses to start without a
+session key.
+
+**Minor** — an image pull; nothing on the host changes, and no `.env` needs editing — **provided
+`SESSION_KEY` is set**, as every documented install does. An install running `PRODUCTION=true`
+with no `SESSION_KEY` (or one shorter than 32 characters) now refuses to start; set one
+(`openssl rand -hex 32`) before updating. Existing sessions, mobile-app logins and open
+documents survive the update.
+
+- **Preview as rank.** An administrator can see the app exactly as any rank does, from the user
+  menu (**More** on a phone) or the Admin page's User Management tab; a banner on every page
+  switches rank or exits. Starting, switching
+  and ending a preview are recorded in the activity log.
+- **The app compresses its own responses** (gzip for pages, scripts, styles and JSON), so an
+  install reached without a reverse proxy is no longer served every asset full-size. Behind Caddy
+  nothing changes.
+- **`PRODUCTION=true` requires `SESSION_KEY`.** An unset key used to boot with a temporary one,
+  logging everyone out on every restart. The mobile API's login is now rate-limited like the web
+  login.
+- **Local OCR mode's Upload page works without a Google Cloud key.** It reported the OCR pipeline
+  as disabled unless a Cloud Vision key was stored too.
+- **A demo alliance generator** (`cmd/demo-seed`) writes a complete, entirely fictional install —
+  100 members, their history, a season, a Duel League, events and documents — and **demo mode**
+  (`DEMO_MODE=true`) runs it as a public demo with one-click sign-in, a stand-in OCR service and
+  document viewer (`cmd/demo-fixtures`), and a self-reset. Operators need none of it; see
+  `docs/DEMO.md`.
+- **Screenshots** in the README, of the demo alliance.
+  ([#110](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/110))
+
+## v2.1.1 — 2026-10-03
 
 A dependency replacement: the CSRF middleware moves from `github.com/gorilla/csrf` to
 `filippo.io/csrf/gorilla`, for the public Go advisory

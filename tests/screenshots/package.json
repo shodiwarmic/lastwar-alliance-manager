@@ -1,0 +1,12 @@
+{
+  "name": "alliance-manager-screenshots",
+  "private": true,
+  "description": "Captures the README screenshots from a seeded local instance. Run by hand; not part of CI.",
+  "type": "module",
+  "scripts": {
+    "capture": "node capture.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

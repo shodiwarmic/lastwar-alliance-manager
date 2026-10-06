@@ -9,6 +9,8 @@ and operations, see [DEPLOYMENT.md](DEPLOYMENT.md) and [QUICKSTART.md](QUICKSTAR
 ---
 
 ### ⚙️ Core Management
+
+![The member roster — a fictional alliance](img/members.png)
 - **Advanced Authentication**: Secure login/logout with rolling session management to keep active users logged in while expiring idle sessions.
 - **Configurable Password Policies**: Admin-controlled password complexity requirements (minimum length, uppercase, lowercase, numbers, special characters).
 - **Password Security Lifecycle**: Enforce password expiration dates, track password history to prevent reuse, and trigger forced password resets.
@@ -44,6 +46,8 @@ and operations, see [DEPLOYMENT.md](DEPLOYMENT.md) and [QUICKSTART.md](QUICKSTAR
 - **LastRank Avatars**: Member and prospect cards show the player's in-game avatar (hotlinked from the game CDN), and the logged-in user's own avatar fills the sidebar tile. For transfers, the seat color rings the avatar instead of a separate dot. Avatars fall back gracefully to initials / no-image if unavailable. *Operator note:* avatars need the game CDN hosts (`lastwar-cdn.akamaized.net`, `lastwar-cdn.lastwarapp.net`) in the reverse-proxy `img-src` CSP. The Caddyfile that `scripts/install.sh` writes carries them, and `./scripts/manage.sh update` re-renders an older Caddyfile (backing it up first, then reloading Caddy) — no manual step. With a proxy of your own, add them yourself. If the hosts aren't present, avatars simply fall back to initials/no-image.
 
 ### 🏠 Overview Dashboard
+
+![The dashboard — a fictional alliance](img/dashboard.png)
 - **Customizable Landing Page**: The default landing page is a per-user dashboard surfacing key alliance data at a glance without navigating between pages. Cards can be reordered via drag-and-drop and toggled on or off; preferences are saved per account.
 - **Alliance Health Card**: Active member count, total alliance power, and percentage of members currently eligible for train.
 - **VS Performance Card**: Current week total points, average per member, percentage meeting the configured minimum, and top/bottom 3 contributors. The minimum threshold is configurable in Settings.
@@ -64,6 +68,8 @@ and operations, see [DEPLOYMENT.md](DEPLOYMENT.md) and [QUICKSTART.md](QUICKSTAR
 - **Audit / Activity Log**: A structured, chronological audit trail of all write operations across the app — member changes, recruits, allies, storm, OC, awards, files, imports, and more. Consecutive creates of the same entity type by the same user within 15 minutes are batched into a single entry. Update events include a field-level diff (e.g. `status: interested → pending`). Accessible to R4/R5 by default via a dedicated `/activity` page with user and limit filters. Sensitive events (user accounts, permissions, settings, credentials, invitations) are visible to admins only.
 
 ### 🗡️ VS Duel League
+
+![A VS Duel League week — a fictional alliance](img/vs-duel-league.png)
 
 The **Duel League** tab of the VS Hub page tracks alliance-vs-alliance Duel League performance — the weekly matchup, not just individual member points — so leadership can understand *why* a week was won or lost, not only that it was.
 
@@ -106,6 +112,8 @@ The **Duel League** tab of the VS Hub page tracks alliance-vs-alliance Duel Leag
 - **Permission-Gated Access**: Separate `view_storm` and `manage_storm` permissions let you control who can see vs. administer the planner.
 
 ### 🗓️ Alliance Schedule
+
+![The alliance schedule — a fictional alliance](img/schedule.png)
 - **Calendar-Based Events**: Schedule Marshal's Guard, Large Sandworm, Zombie Siege, and custom events on specific dates with exact server times. No more repeating templates — every event lives on a real calendar date.
 - **Alliance Exercise — two events, one slot**: The every-other-day Alliance Exercise slot runs **Marshal's Guard** up to Season 3 day 57 and **Large Sandworm** from day 58, and the two use different level scales (1–12 versus tens). The app now models them as separate event types with their own levels, works out the changeover date from your Season 3 start date, and refuses the variant the game does not offer on a given date — naming the date and what to schedule instead. The generator follows the same line automatically and reports every date it switched. A server that has not reached Season 3 keeps scheduling Marshal's Guard, with no changeover at all.
 - **Event Types**: A managed registry of event types. MG, Large Sandworm and ZS are built-in system types; officers can add custom types (SVS, etc.) with a name, short name, and icon. Any type can be marked as **carrying a level** — not only the built-in ones — and each type owns its own baseline and ceiling, so adding a new one never borrows another type's numbers.
@@ -149,6 +157,8 @@ The **Duel League** tab of the VS Hub page tracks alliance-vs-alliance Duel Leag
 - **Permission-Gated Access**: `manage_members` controls archive/reactivate and viewing former members. Separate `view_recruiting` and `manage_recruiting` permissions (R4–R5 default) gate the Recruiting page and prospect CRUD. Hard-deleting archived members is admin-only.
 
 ### 🏆 Season Hub
+
+![The Season Hub rankings — a fictional alliance](img/season-hub.png)
 A season-scoped tracking and reward distribution system for structured in-game competition seasons.
 - **Season Management**: Create and archive seasons with configurable parameters — week count, key event name and attendance requirement, and participation tier thresholds. Future-dated seasons are created in an upcoming state and activate automatically when their start date arrives. R5-only: edit or delete any non-active season.
 - **Push to Schedule** *(R4/R5)*: Materialises a season's event list onto the Alliance Schedule as real calendar dates, derived from the season start date and each event's week and day. Runs automatically when a season is created and on demand from Edit Season. Events that already exist on their date are left alone, and the result reports what was created and what was skipped — as already present, as having no day set, or as having no event type. Each pushed event now remembers which season event and week it came from, so **moving a season's start date and pushing again no longer creates a second copy of everything**: the events are recognised wherever they now sit, and the result says how many have drifted from the date the template computes, naming both dates. Drifted events are never moved or deleted — an officer may have placed one deliberately. Deleting a season removes exactly what it created, including after such a move, which previously left every event behind.
