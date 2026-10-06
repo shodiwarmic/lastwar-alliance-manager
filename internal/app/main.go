@@ -324,6 +324,11 @@ func Main() {
 
 	srv := &http.Server{Addr: ":" + port, Handler: gzipMiddleware(demoHeaders(setupGate(appHandler)))}
 
+	// Registered before the server starts: a SIGTERM that arrived between "listening" and
+	// this line would otherwise kill the process without the graceful shutdown below.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
 	go func() {
 		slog.Info("Server listening", "port", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -332,8 +337,6 @@ func Main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	slog.Info("Shutting down server...")
