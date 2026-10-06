@@ -7,7 +7,9 @@
 - **Frontend**: Vanilla JS, no build step. CSS custom properties (`var(--name)`) throughout.
 - **Templates**: Go `html/template`, parsed as `layout.html` + page template pairs
 - **Layout**: `package app` in `internal/app/` (every handler, model and job lives there) plus
-  `internal/lastrank`, the only package allowed to talk to `lastrank.fun`; the binary is
+  `internal/lastrank`, the only package allowed to talk to `lastrank.fun`, and three leaf
+  packages the app imports: `internal/gametime` (the UTC−2 game clock and week rule),
+  `internal/ooxml` (minimal .docx/.xlsx writer) and `internal/demo` (the demo seed); the binary is
   `cmd/server`, a four-line `main()` calling `app.Main()`. `migrations/`, `templates/` and
   `static/` stay at the repository root and are resolved **relative to the working directory**,
   so run the app from the root (`go run ./cmd/server`). Tests are chdir'd there by `TestMain`
@@ -2027,6 +2029,33 @@ burst of upstream calls.
 > to `--text-muted` / `--text-primary` / `--bg-primary`; that is backwards — those
 > are the deprecated names (docs/DESIGN_STANDARD.md → Legacy tokens). Migrate *to* the
 > `--color-*` names, never away from them.
+
+## Demo seed (`internal/demo`, `cmd/demo-seed`)
+
+The fictional demo alliance (docs/DEMO.md). Rules that must hold:
+
+- **The import points app → demo, never back.** `internal/demo` must not import `internal/app`
+  (same rule as `internal/lastrank`). What both need lives in a leaf package: the game clock and
+  the VS-week Monday rule in `internal/gametime` — the app's `gameNow`,
+  `normalizeToGameWeekMonday` and `sqliteTimeLayout` are one-line wrappers over it — and the
+  OOXML writer in `internal/ooxml`.
+- **Insert through explicit column lists.** A migration that renames or drops a column must
+  fail the generator and `internal/demo`'s tests, not produce a stale database. A new table
+  with a page of its own wants rows in the seed and an entry in `seededTables`.
+- **The generator bypasses the validators, so it must obey them by construction.**
+  `TestDemoScheduleObeysTheValidator` (`internal/app`) runs `validateEventRules` and the level
+  rule over every generated schedule row; a change to a game rule shows up there.
+- **Two anchors, one dataset.** `Options.Today` zero means now (the demo); a fixed date
+  freezes the dates (tests, `--today`). Names and numbers never depend on the anchor, which is
+  also what lets `demo.Manifest()` be a pure function the fixtures service calls without a
+  database. Seeded tables are filled in one fixed order from empty, so ids are stable.
+- **Determinism.** Every random draw comes from `stream(area)` (one seeded PCG per area) —
+  never `math/rand`'s global source, and never a `range` over a map, whose order is random.
+  `TestSeedIsDeterministic` seeds twice and compares every table.
+- **No `.pptx` sample file.** Nothing writes one; the sample set is `.docx`, `.xlsx`, `.csv`,
+  `.png`.
+- **Real data supplies shape only.** `params.go` holds rounded aggregates with their queries;
+  never commit a row, a name or a single player's figure from the dev database.
 
 ## Session Key Requirement
 
