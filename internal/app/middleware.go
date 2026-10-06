@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
-	"os"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -185,10 +184,8 @@ func wopiAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		claims := &WOPIClaims{}
-		secretKey := os.Getenv("SESSION_KEY")
-
 		token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-			return []byte(secretKey), nil
+			return tokenSecret(), nil
 		})
 
 		if err != nil || !token.Valid {

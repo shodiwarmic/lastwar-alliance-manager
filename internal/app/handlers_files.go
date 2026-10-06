@@ -843,9 +843,8 @@ func generateWOPIToken(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	secretKey := os.Getenv("SESSION_KEY")
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, _ := token.SignedString([]byte(secretKey))
+	tokenString, _ := token.SignedString(tokenSecret())
 
 	collaboraDomain := os.Getenv("COLLABORA_DOMAIN")
 	if port := os.Getenv("COLLABORA_PORT"); port != "" {

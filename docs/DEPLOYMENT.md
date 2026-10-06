@@ -85,6 +85,7 @@ echo "HOST_FILES_VERSION=$(cat HOST_FILES_VERSION)" >> .env
 
 Ensure your `.env` contains secure values. You **must** generate random 32-byte hex strings for both the session key and the credential encryption key.
 *(You can generate these by running `openssl rand -hex 32` in your terminal).*
+With `PRODUCTION=true` the app refuses to start when `SESSION_KEY` is unset or shorter than 32 characters.
 
 ```env
 SESSION_KEY=your_generated_64_character_hex_string_here

@@ -2013,16 +2013,18 @@ burst of upstream calls.
 
 ## Session Key Requirement
 
-`SESSION_KEY` must be set in production. If unset, the app generates an
-ephemeral key and logs a warning — this causes all users to be logged out
-on every restart. A key shorter than `MinSessionKeyLen` (32 chars) already
-refuses to boot (`os.Exit(1)`), but an **unset** key still boots with an
-ephemeral one even in production mode. A future improvement should make the
-app refuse to start in production (`PRODUCTION=true`) without a valid
-`SESSION_KEY`.
+`SESSION_KEY` is resolved **once, at the top of `Main()`** (`session_key.go`), before the
+database is opened. With `PRODUCTION=true` an unset key, or one shorter than
+`MinSessionKeyLen` (32 chars), makes the app log `Refusing to start` and exit 1; a short key is
+refused in development too. Without `PRODUCTION` an unset key gets an ephemeral one, so every
+restart logs everyone out.
 
-**Operator action:** Confirm `SESSION_KEY` is set in all production deployments
-before enabling `PRODUCTION=true`.
+The resolved `sessionKeys` carries two forms, and nothing else reads the variable:
+- `store` — the 32 bytes for the cookie store (a 64-char hex key decoded, otherwise the raw
+  bytes truncated). filippo.io/csrf ignores its key, so it is passed the same bytes.
+- `raw` (via `tokenSecret()`) — the string verbatim, the HMAC secret of the mobile and WOPI
+  JWTs. **Keep it the raw string**: switching to the decoded bytes would invalidate every
+  outstanding scanner/collector token and open Collabora session on upgrade.
 
 ## Documentation
 

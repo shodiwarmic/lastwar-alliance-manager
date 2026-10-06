@@ -2,9 +2,7 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -44,29 +42,17 @@ func getLoginLimiter(ip string) *rate.Limiter {
 	return l
 }
 
-// initSessionStore initializes the session store with secure settings
+// initSessionStore initializes the session store with secure settings. Main resolves
+// SESSION_KEY first (loadSessionKey) and exits on a refusal; a caller that has not — the
+// tests — gets it resolved here.
 func initSessionStore() {
-	sessionKey := os.Getenv("SESSION_KEY")
-	if sessionKey == "" {
-		key := make([]byte, 32)
-		if _, err := rand.Read(key); err != nil {
-			log.Fatal("Failed to generate random session key: ", err)
-		}
-		sessionKey = hex.EncodeToString(key)
-		slog.Warn("No SESSION_KEY environment variable set; using generated key (not persistent across restarts)")
-	}
-
-	key, err := hex.DecodeString(sessionKey)
-	if err != nil || len(key) != 32 {
-		key = []byte(sessionKey)
-		if len(key) < 32 {
-			padded := make([]byte, 32)
-			copy(padded, key)
-			key = padded
+	if sessionKeys.store == nil {
+		if err := loadSessionKey(); err != nil {
+			log.Fatal("Failed to resolve SESSION_KEY: ", err)
 		}
 	}
 
-	store = sessions.NewCookieStore(key[:32])
+	store = sessions.NewCookieStore(sessionKeys.store)
 
 	isProduction := os.Getenv("PRODUCTION") == "true" || os.Getenv("HTTPS") == "true"
 

@@ -4,7 +4,6 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -212,6 +211,14 @@ func Main() {
 	// looks, and it is the only place outside the Admin page that names the
 	// build. See version.go.
 	slog.Info("Initializing Alliance Manager server", "version", appVersion, "commit", shortCommit())
+
+	// Resolve SESSION_KEY before anything else starts: a refusal (unset under
+	// PRODUCTION=true, or too short) must exit before the database is opened or a
+	// migration, the janitor or the scheduler runs.
+	if err := loadSessionKey(); err != nil {
+		slog.Error("Refusing to start", "error", err)
+		os.Exit(1)
+	}
 
 	// Hash static/ before anything can serve a request: assetHashes is written
 	// here and read-only afterwards, which is what makes it lock-free.
@@ -861,25 +868,9 @@ func Main() {
 		staticFiles.ServeHTTP(w, r)
 	})
 
-	// 4. Initialize CSRF Protection
-	var csrfKey []byte
-	sessionKey := os.Getenv("SESSION_KEY")
-	if sessionKey == "" {
-		// TODO: refuse to start if PRODUCTION=true and SESSION_KEY is unset or < 32 bytes.
-		// Today an unset key boots with an ephemeral one (below), logging everyone out on restart.
-		// Dev mode: generate an ephemeral random key (sessions won't persist across restarts)
-		csrfKey = make([]byte, 32)
-		if _, err := rand.Read(csrfKey); err != nil {
-			slog.Error("Failed to generate ephemeral CSRF key", "error", err)
-			os.Exit(1)
-		}
-		slog.Warn("SESSION_KEY not set; using ephemeral CSRF key")
-	} else if len(sessionKey) < MinSessionKeyLen {
-		slog.Error("SESSION_KEY must be at least 32 characters", "length", len(sessionKey))
-		os.Exit(1)
-	} else {
-		csrfKey = []byte(sessionKey[:32])
-	}
+	// 4. Initialize CSRF Protection. filippo.io/csrf ignores the key (it checks
+	// Sec-Fetch-Site / Origin, not tokens); the session store's is passed for form.
+	csrfKey := sessionKeys.store
 
 	// Base CSRF options
 	csrfOpts := []csrf.Option{
