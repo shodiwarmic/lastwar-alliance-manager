@@ -734,10 +734,8 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/jobs/cancel", authMiddleware(cancelJobHandler)).Methods("POST")
 
 	// Mobile API (bearer token auth, CSRF exempt)
-	router.HandleFunc("/api/mobile/login", demoBlock(mobileLogin)).Methods("POST")
-	router.HandleFunc("/api/mobile/members", demoBlock(mobileBearerMiddleware(getMobileMembers))).Methods("GET")
-	router.HandleFunc("/api/mobile/preview", demoBlock(mobileBearerMiddleware(requireMobilePermission("manage_vs", mobilePreview)))).Methods("POST")
-	router.HandleFunc("/api/mobile/commit", demoBlock(mobileBearerMiddleware(requireMobilePermission("manage_vs", mobileCommit)))).Methods("POST")
+	// — every route comes from the store registry (mobile_stores.go), gated live.
+	registerMobileRoutes(router)
 
 	// Dyno
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(getDynoRecommendations)).Methods("GET")

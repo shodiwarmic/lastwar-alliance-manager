@@ -176,6 +176,12 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	req.WeekDate = normWeek
 
+	// Every permission a record can need is resolved before the transaction opens:
+	// userHasPermission reads through db, and the pool's one connection belongs to the
+	// transaction until it ends, so asking inside it would wait out the statement
+	// ceiling and answer 500.
+	canMembers := userHasPermission(getAuthUser(r), "manage_members")
+
 	tx, err := db.Begin()
 	if err != nil {
 		slog.Error("mobileCommit: begin tx failed", "error", err)
@@ -294,7 +300,6 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	// this transaction. A global alias needs manage_members; an OCR mapping replaces
 	// another member's global alias only with it too.
 	aliasesSaved := 0
-	canMembers := claims.ManageMembers || claims.IsAdmin
 	actor := aliasActor{UserID: claims.UserID, Username: claims.Username, Via: "mobile"}
 	for _, aliasReq := range req.SaveAliases {
 		if aliasReq.Category == "global" && !canMembers {

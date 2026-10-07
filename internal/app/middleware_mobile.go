@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/gorilla/mux"
 )
 
 // mobileContextKey is a typed context key to avoid collisions with WOPI and other middleware.
@@ -45,7 +46,18 @@ func mobileBearerMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// Identity and permissions are resolved live, as on the session path: the user
+		// goes into the context under the same key, so getAuthUser, requirePermission and
+		// userHasPermission work here unchanged. The token's permission claims are never
+		// read for authorization — a rank change or a matrix edit takes effect on the
+		// next request, not when the seven-day token expires.
+		user := loadUserFromDB(claims.UserID)
+		if user == nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		ctx := context.WithValue(r.Context(), mobileContextKey{}, claims)
+		ctx = context.WithValue(ctx, authUserKey, user)
 		next(w, r.WithContext(ctx))
 	}
 }
@@ -60,24 +72,32 @@ func getMobileClaims(r *http.Request) *MobileTokenClaims {
 	return claims
 }
 
-// requireMobilePermission checks a specific permission from the JWT claims.
-// Supported permission strings: "manage_vs", "manage_members", "is_admin".
-func requireMobilePermission(permission string, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		claims := getMobileClaims(r)
-		var allowed bool
-		switch permission {
-		case "manage_vs":
-			allowed = claims.ManageVS || claims.IsAdmin
-		case "manage_members":
-			allowed = claims.ManageMembers || claims.IsAdmin
-		case "is_admin":
-			allowed = claims.IsAdmin
+// mobileGate wraps a mobile route's handler in its permission gate: none (any signed-in
+// user), requirePermission, or requireAnyPermission. The keys are RankPermissions JSON
+// tags, the same as the web's (mobile_stores_test.go checks).
+func mobileGate(perms []string, h http.HandlerFunc) http.HandlerFunc {
+	switch len(perms) {
+	case 0:
+		return h
+	case 1:
+		return requirePermission(perms[0], h)
+	default:
+		return requireAnyPermission(perms, h)
+	}
+}
+
+// registerMobileRoutes registers every route the store registry declares, behind the
+// demo block and the bearer middleware (login has no token yet).
+func registerMobileRoutes(router *mux.Router) {
+	routes := mobileBaseRoutes()
+	for _, st := range mobileStores() {
+		routes = append(routes, st.Routes...)
+	}
+	for _, rt := range routes {
+		h := mobileGate(rt.Perms, rt.Handler)
+		if rt.Path != "/api/mobile/login" {
+			h = mobileBearerMiddleware(h)
 		}
-		if !allowed {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
-		next(w, r)
+		router.HandleFunc(rt.Path, demoBlock(h)).Methods(rt.Method)
 	}
 }

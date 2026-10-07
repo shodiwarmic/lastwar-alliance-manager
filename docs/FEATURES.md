@@ -231,6 +231,13 @@ To maintain a lightweight core application, heavy image processing and Optical C
 - **Scan Diagnostics in the Activity Log**: Every screenshot import logs a one-line OCR summary alongside the import entry on the Activity page — the engine used, image count, and a roll-up of how images were classified (e.g. `12×day_color_saturation@0.95, 2×day_text_fallback@0.75`), including any images that yielded no players. This surfaces extraction quality at a glance without enabling full archival. (Shown only when the OCR service reports diagnostics.)
 - See [IMAGE_RECOGNITION.md](IMAGE_RECOGNITION.md) for detailed technical documentation.
 
+### 📱 Mobile Scanner API
+The Android scanner ([`shodiwarmic/lastwar-android-scanner`](https://github.com/shodiwarmic/lastwar-android-scanner)) reads ranking screens on the phone and sends the results here through a token-authenticated API under `/api/mobile/`.
+- **The same permissions as the web, applied live**: every request checks the signed-in account's current rank permissions, so a promotion, a demotion or an edit to the permission matrix takes effect on the phone at once — not when its seven-day sign-in runs out. Deactivating an account or changing its password stops its phone immediately.
+- **The app says what it can do**: the scanner asks the server which kinds of data it accepts and which of them this account may read or write, and greys out the rest. A newer scanner keeps working against an older server, and the other way round.
+- **Scan uploads**: VS points for Monday–Saturday, power and kills, with the names the scanner could not match mapped to members as personal, global or OCR nicknames.
+- **Never available on the public demo.**
+
 ### 🌐 Inline Translation
 
 - **Translate a single note, not the whole page**: Alliances are rarely all one language. Where a member has written free text — a shoutout note, an alliance mail, a prospect or ally note, a schedule note, or a strike reason — a small **Translate** control appears next to it for readers whose language differs. One click swaps that block into your language; another click brings the original straight back. The rest of the page is untouched, and the stored text is never modified.
