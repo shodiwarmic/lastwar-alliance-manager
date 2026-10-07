@@ -1555,6 +1555,9 @@ type MobileScanEntry struct {
 	Name     string `json:"name"`
 	Score    int64  `json:"score"`
 	Category string `json:"category"`
+	// CapturedAt is when the phone read the screen (RFC 3339, optional); the preview
+	// echoes it and the commit dates member stats by it (private-docs 202).
+	CapturedAt string `json:"captured_at,omitempty"`
 }
 
 // MobileAlias is one row from member_aliases, scoped to what the current
@@ -1585,6 +1588,7 @@ type MobilePreviewMatch struct {
 	MatchType     string  `json:"match_type"`
 	Category      string  `json:"category"`
 	Score         int64   `json:"score"`
+	CapturedAt    string  `json:"captured_at,omitempty"`
 }
 
 type MobilePreviewResponse struct {
@@ -1602,6 +1606,10 @@ type MobileCommitRecord struct {
 	OriginalName string `json:"original_name"`
 	Category     string `json:"category"`
 	Score        int64  `json:"score"`
+	// CapturedAt (RFC 3339, optional) dates a member-stat record: refused more than
+	// 10 minutes ahead or 30 days back; absent means now. VS days are keyed by
+	// week_date and take no time.
+	CapturedAt string `json:"captured_at,omitempty"`
 }
 
 type MobileCommitRequest struct {

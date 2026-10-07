@@ -964,7 +964,7 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 				if h.val <= 0 {
 					continue
 				}
-				if _, err := recordHistoryIfChanged(db, h.table, h.col, existingID, h.val, src); err != nil {
+				if _, err := recordHistoryIfChanged(db, h.table, h.col, existingID, h.val, src, ""); err != nil {
 					slog.Error("members import: history write failed", "table", h.table, "member_id", existingID, "error", err)
 				}
 			}

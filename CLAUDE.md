@@ -256,7 +256,11 @@ If you add a new alias category that should be visible to mobile clients, update
 
 ### Wire format for `/api/mobile/preview` entries
 
-Scanner → backend payload is `{name, score, category}` per entry — **no `candidates[]` array**. The scanner runs its own crash-token disambiguation (using the cached roster + the same Exact → Personal → Global → OCR alias hierarchy as `resolveMemberAlias`) before sending. The backend's `resolveMemberAlias` runs once per received name as a final safety net, but cannot fix a wrong score because by the time the entry hits the API only one `(name, score)` pair survives.
+Scanner → backend payload is `{name, score, category}` per entry, plus an optional
+`captured_at` (RFC 3339: when the phone read the screen) — **no `candidates[]` array**. The
+preview echoes `captured_at` from the request; the commit dates a member-stat record by it
+(`parseCapturedAt`: refused more than 10 minutes ahead or 30 days back, naming the phone's
+clock; absent means now). VS days are keyed by `week_date` and take no time. The scanner runs its own crash-token disambiguation (using the cached roster + the same Exact → Personal → Global → OCR alias hierarchy as `resolveMemberAlias`) before sending. The backend's `resolveMemberAlias` runs once per received name as a final safety net, but cannot fix a wrong score because by the time the entry hits the API only one `(name, score)` pair survives.
 
 This intentionally differs from the OCR-service path, which sends `candidates[]` because it has no roster access. Both paths converge on the same backend disambiguation rules — see the "Name resolution" section of `lastwar-screen-definitions/README.md` for the canonical algorithm both implementations must agree on.
 
@@ -561,7 +565,9 @@ normalizes a client-declared origin.
 `recordHistoryIfChanged` (`handlers_career.go`), which skips a value equal to the member's
 latest row and reports it as unchanged; `memberStats` (`memberstats.go`) maps each commit
 category to its table, column and minimum. The mobile commit, the VS import commit and the
-Members CSV import use it — a repeat upload adds no rows. No other history/state tables carry a
+Members CSV import use it — a repeat upload adds no rows. Its `at` argument dates a
+reading (the mobile `captured_at`): the comparison is then against the latest row at or
+before it, the row is inserted with that `recorded_at`, and later rows are left alone. No other history/state tables carry a
 `source` column — don't assume one on tables outside this list.
 
 > **`alliance_stats_history` is keyed on `external_alliance_id`, not

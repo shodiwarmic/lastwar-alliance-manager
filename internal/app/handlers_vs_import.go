@@ -196,7 +196,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			st := memberStats[h.category]
-			wrote, err := recordHistoryIfChanged(tx, st.Table, st.Column, row.MatchedMember.ID, int64(h.val), src)
+			wrote, err := recordHistoryIfChanged(tx, st.Table, st.Column, row.MatchedMember.ID, int64(h.val), src, "")
 			switch {
 			case err != nil:
 				dbErrors = append(dbErrors, fmt.Sprintf("%s Error (%s): %v", h.label, row.OriginalName, err))
