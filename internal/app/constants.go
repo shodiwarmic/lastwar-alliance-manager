@@ -52,6 +52,18 @@ var CareerTypeLabels = map[int]string{
 	102: "War Leader",
 }
 
+// ValidProfessions is the member modal's profession list. It is wider than
+// CareerTypeLabels, which translates LastRank's codes and leaves the unreleased 103 out
+// on purpose; every label that map holds must be in this list (a test checks).
+var ValidProfessions = []string{"Engineer", "War Leader", "Diplomat"}
+
+// ValidSquadTypes is the member modal's squad-type list.
+var ValidSquadTypes = []string{"Tank", "Aircraft", "Missile"}
+
+// TroopTierMinHQ maps each troop tier to the lowest HQ level that unlocks it — the
+// member modal's list ("T5 (HQ 14+)"). Its keys are the valid troop levels, 1–11.
+var TroopTierMinHQ = map[int]int{1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35}
+
 // CareerTypeLabel returns the profession name for a career_type code, or
 // "Unknown" if the code is not recognised. Callers that write the result back to
 // members.profession must instead gate on the map's comma-ok (see the LastRank

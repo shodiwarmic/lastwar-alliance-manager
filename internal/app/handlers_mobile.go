@@ -41,19 +41,25 @@ type mobileRosterQuerier interface {
 	Query(query string, args ...any) (*sql.Rows, error)
 }
 
-// loadMobileRoster returns active members with the aliases the given user is
-// allowed to see (their own personals + all global + all OCR aliases).
+// loadMobileRoster returns active members — and, with includeFormer, former ones
+// (rank "EX") — with the aliases the given user is allowed to see (their own personals
+// + all global + all OCR aliases) and the attributes a scan can confirm.
 // It mirrors the Exact → Personal → Global → OCR hierarchy described in
 // lastwar-screen-definitions/README.md so the scanner's RosterAliasResolver
 // can run the same lookup on-device.
-func loadMobileRoster(q mobileRosterQuerier, userID int) ([]MobileMember, error) {
+func loadMobileRoster(q mobileRosterQuerier, userID int, includeFormer bool) ([]MobileMember, error) {
+	where := `WHERE m.rank != 'EX'`
+	if includeFormer {
+		where = ``
+	}
 	rows, err := q.Query(`
-		SELECT m.id, m.name, m.rank, a.alias, a.category
+		SELECT m.id, m.name, m.rank, COALESCE(m.troop_level, 0), COALESCE(m.squad_type, ''), COALESCE(m.profession, ''),
+		       a.alias, a.category
 		FROM members m
 		LEFT JOIN member_aliases a
 		  ON a.member_id = m.id
 		  AND (a.user_id IS NULL OR a.user_id = ?)
-		WHERE m.rank != 'EX'
+		`+where+`
 		ORDER BY m.name ASC, a.category ASC, a.alias ASC
 	`, userID)
 	if err != nil {
@@ -65,16 +71,17 @@ func loadMobileRoster(q mobileRosterQuerier, userID int) ([]MobileMember, error)
 	order := []int{}
 	for rows.Next() {
 		var (
-			id            int
-			name, rank    string
-			alias, catSql sql.NullString
+			id, troop               int
+			name, rank, squad, prof string
+			alias, catSql           sql.NullString
 		)
-		if err := rows.Scan(&id, &name, &rank, &alias, &catSql); err != nil {
+		if err := rows.Scan(&id, &name, &rank, &troop, &squad, &prof, &alias, &catSql); err != nil {
 			return nil, err
 		}
 		mm, ok := byID[id]
 		if !ok {
-			mm = &MobileMember{ID: id, Name: name, Rank: rank, Aliases: []MobileAlias{}}
+			mm = &MobileMember{ID: id, Name: name, Rank: rank, TroopLevel: troop, SquadType: squad,
+				Profession: prof, Aliases: []MobileAlias{}}
 			byID[id] = mm
 			order = append(order, id)
 		}
@@ -89,12 +96,18 @@ func loadMobileRoster(q mobileRosterQuerier, userID int) ([]MobileMember, error)
 	return out, nil
 }
 
-// GET /api/mobile/members
-// Returns active member list with aliases scoped to the current user, so the
-// scanner's RosterAliasResolver can run Exact → Personal → Global → OCR locally.
+// GET /api/mobile/members[?include_former=true]
+// Returns the member list with aliases scoped to the current user, so the scanner's
+// RosterAliasResolver can run Exact → Personal → Global → OCR locally. Former members
+// (rank "EX") need manage_members: they are what a roster "rejoin" names.
 func getMobileMembers(w http.ResponseWriter, r *http.Request) {
 	claims := getMobileClaims(r)
-	members, err := loadMobileRoster(db, claims.UserID)
+	includeFormer := r.URL.Query().Get("include_former") == "true"
+	if includeFormer && !userHasPermission(getAuthUser(r), "manage_members") {
+		http.Error(w, "Forbidden: include_former needs manage_members", http.StatusForbidden)
+		return
+	}
+	members, err := loadMobileRoster(db, claims.UserID, includeFormer)
 	if err != nil {
 		slog.Error("getMobileMembers: roster load failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -127,7 +140,7 @@ func mobilePreview(w http.ResponseWriter, r *http.Request) {
 	// Fetch all active members (with aliases scoped to the current user) for
 	// the picker UI. Same shape as /api/mobile/members so the scanner can
 	// reuse the cached roster — see RosterAliasResolver on the device.
-	allMembers, err := loadMobileRoster(tx, claims.UserID)
+	allMembers, err := loadMobileRoster(tx, claims.UserID, false)
 	if err != nil {
 		slog.Error("mobilePreview: roster load failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)

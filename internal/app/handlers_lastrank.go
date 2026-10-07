@@ -538,7 +538,7 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 	// Archive members the officer confirmed as departed (rank → EX).
 	var archiveN int
 	for _, mid := range req.Archive {
-		ok, err := applyArchive(tx, mid)
+		ok, err := applyArchive(tx, mid, leaveReasonLastRank)
 		if err != nil {
 			dbError(w, "lastRankCommit archive", err)
 			return

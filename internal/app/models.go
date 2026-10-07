@@ -1571,10 +1571,13 @@ type MobileAlias struct {
 // RosterAliasResolver can run the same Exact → Personal → Global → OCR
 // lookup that the backend does in resolveMemberAlias.
 type MobileMember struct {
-	ID      int           `json:"id"`
-	Name    string        `json:"name"`
-	Rank    string        `json:"rank"`
-	Aliases []MobileAlias `json:"aliases"`
+	ID         int           `json:"id"`
+	Name       string        `json:"name"`
+	Rank       string        `json:"rank"`
+	TroopLevel int           `json:"troop_level"`
+	SquadType  string        `json:"squad_type"`
+	Profession string        `json:"profession"`
+	Aliases    []MobileAlias `json:"aliases"`
 }
 
 type MobilePreviewRequest struct {

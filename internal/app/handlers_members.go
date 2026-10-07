@@ -152,15 +152,14 @@ func createMember(w http.ResponseWriter, r *http.Request) {
 
 	// Manual add = a genuine new join → stamp joined_at with today's game date.
 	// HQ level is history-only (no members.level column); seed it below.
-	result, err := tx.Exec("INSERT INTO members (name, rank, eligible, squad_type, troop_level, profession, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?)", m.Name, m.Rank, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, gameDate())
+	id, err := addMemberTx(tx, newMember{Name: m.Name, Rank: m.Rank, Eligible: m.Eligible,
+		SquadType: m.SquadType, TroopLevel: m.TroopLevel, Profession: m.Profession})
 	if err != nil {
 		slog.Error("createMember: insert failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-
-	id, _ := result.LastInsertId()
-	m.ID = int(id)
+	m.ID = id
 
 	// Seed HQ level + profession level history (history-only fields).
 	if m.Level > 0 {
@@ -259,23 +258,21 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	oldHQ, _ := latestHistoryValue(tx, "hq_level_history", "hq_level", id)
 	oldProfLevel, hadProfLevel := latestHistoryValue(tx, "profession_level_history", "profession_level", id)
 
-	// 2. Perform the main UPDATE. joined_at = NULLIF(?, '') so a blank clears it.
+	// 2. A rename goes through the shared roster primitive: the old name becomes a
+	// global alias (re-pointing an existing one) and an OCR alias spelling the new name
+	// is dropped. Then the main UPDATE. joined_at = NULLIF(?, '') so a blank clears it.
+	if m.Name != "" && old.Name != m.Name {
+		u := getAuthUser(r)
+		if _, err := renameMemberTx(tx, aliasActor{UserID: u.ID, Username: u.Username, Via: "rename on the Members page"}, id, m.Name); err != nil {
+			dbError(w, "updateMember: rename", err)
+			return
+		}
+	}
 	_, err = tx.Exec("UPDATE members SET name = ?, rank = ?, eligible = ?, squad_type = ?, troop_level = ?, profession = ?, notes = ?, lastrank_public_id = ?, joined_at = NULLIF(?, '') WHERE id = ?", m.Name, m.Rank, m.Eligible, m.SquadType, m.TroopLevel, m.Profession, m.Notes, m.LastRankPublicID, m.JoinedAt, id)
 	if err != nil {
 		slog.Error("updateMember: exec failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
-	}
-
-	// 3. If the name changed, save the old name as a Global Alias — re-pointing an
-	// existing one rather than adding a duplicate row beside it.
-	if m.Name != "" && old.Name != m.Name {
-		u := getAuthUser(r)
-		if _, aliasErr := saveAliasTx(tx, aliasWrite{MemberID: id, Alias: old.Name, Category: "global",
-			Actor: aliasActor{UserID: u.ID, Username: u.Username, Via: "rename on the Members page"}}); aliasErr != nil {
-			dbError(w, "updateMember: rename alias", aliasErr)
-			return
-		}
 	}
 
 	// Build activity details from changed fields
@@ -296,15 +293,8 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		}
 		changes = append(changes, "profession level: "+prev+" → "+strconv.Itoa(*m.ProfessionLevel))
 	}
-	if old.TroopLevel != m.TroopLevel {
-		changes = append(changes, "troop level: "+strconv.Itoa(old.TroopLevel)+" → "+strconv.Itoa(m.TroopLevel))
-	}
-	if old.Profession != m.Profession && m.Profession != "" {
-		changes = append(changes, "profession: "+old.Profession+" → "+m.Profession)
-	}
-	if old.SquadType != m.SquadType && m.SquadType != "" {
-		changes = append(changes, "squad: "+old.SquadType+" → "+m.SquadType)
-	}
+	changes = append(changes, memberAttributeChanges(old.TroopLevel, old.SquadType, old.Profession,
+		m.TroopLevel, m.SquadType, m.Profession)...)
 	if old.Eligible != m.Eligible {
 		eligStr := func(b bool) string {
 			if b {
@@ -505,18 +495,13 @@ func archiveMember(w http.ResponseWriter, r *http.Request) {
 	var memberName string
 	db.QueryRow("SELECT name FROM members WHERE id = ?", id).Scan(&memberName)
 
-	result, err := db.Exec(
-		"UPDATE members SET rank = 'EX', eligible = 0, leave_reason = ? WHERE id = ? AND rank != 'EX'",
-		req.LeaveReason, id,
-	)
+	archived, err := applyArchive(db, id, req.LeaveReason)
 	if err != nil {
 		slog.Error("Failed to archive member", "member_id", id, "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
+	if !archived {
 		http.Error(w, "Member not found or already archived", http.StatusNotFound)
 		return
 	}
@@ -552,15 +537,13 @@ func reactivateMember(w http.ResponseWriter, r *http.Request) {
 	var memberName string
 	db.QueryRow("SELECT name FROM members WHERE id = ?", id).Scan(&memberName)
 
-	result, err := db.Exec("UPDATE members SET rank = ?, eligible = 1 WHERE id = ? AND rank = 'EX'", body.Rank, id)
+	reactivated, err := reactivateMemberTx(db, id, body.Rank)
 	if err != nil {
 		slog.Error("Failed to reactivate member", "member_id", id, "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
+	if !reactivated {
 		http.Error(w, "Member not found or not archived", http.StatusNotFound)
 		return
 	}
@@ -607,21 +590,17 @@ func updateFormerMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	_, err = tx.Exec("UPDATE members SET name = ?, leave_reason = ? WHERE id = ? AND rank = 'EX'", req.Name, req.LeaveReason, id)
+	// A rename goes through the shared roster primitive (the old name becomes a global
+	// alias, re-pointing an existing one).
+	if _, err := renameMemberTx(tx, aliasActor{UserID: user.ID, Username: user.Username, Via: "rename on the Members page"}, id, req.Name); err != nil {
+		dbError(w, "updateFormerMember: rename", err)
+		return
+	}
+	_, err = tx.Exec("UPDATE members SET leave_reason = ? WHERE id = ? AND rank = 'EX'", req.LeaveReason, id)
 	if err != nil {
 		slog.Error("Failed to update former member", "member_id", id, "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
-	}
-
-	// The old name becomes a global alias, re-pointing an existing one rather than
-	// adding a duplicate row beside it.
-	if oldName != req.Name {
-		if _, aliasErr := saveAliasTx(tx, aliasWrite{MemberID: id, Alias: oldName, Category: "global",
-			Actor: aliasActor{UserID: user.ID, Username: user.Username, Via: "rename on the Members page"}}); aliasErr != nil {
-			dbError(w, "updateFormerMember: rename alias", aliasErr)
-			return
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		dbError(w, "updateFormerMember commit", err)
@@ -1128,10 +1107,9 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Enforce Troop Level Requirements based on HQ Level
-	troopReqs := map[int]int{1: 1, 2: 4, 3: 6, 4: 10, 5: 14, 6: 17, 7: 20, 8: 24, 9: 27, 10: 30, 11: 35}
-	if reqHQ, exists := troopReqs[req.TroopLevel]; exists && req.Level < reqHQ {
+	if reqHQ, exists := TroopTierMinHQ[req.TroopLevel]; exists && req.Level < reqHQ {
 		maxValid := 0
-		for t, hq := range troopReqs {
+		for t, hq := range TroopTierMinHQ {
 			if req.Level >= hq && t > maxValid {
 				maxValid = t
 			}
@@ -1183,15 +1161,8 @@ func updateMyProfile(w http.ResponseWriter, r *http.Request) {
 	if oldLevel != req.Level {
 		profileChanges = append(profileChanges, "HQ level: "+strconv.Itoa(oldLevel)+" → "+strconv.Itoa(req.Level))
 	}
-	if oldTroopLevel != req.TroopLevel {
-		profileChanges = append(profileChanges, "troop level: "+strconv.Itoa(oldTroopLevel)+" → "+strconv.Itoa(req.TroopLevel))
-	}
-	if oldSquadType != req.SquadType && req.SquadType != "" {
-		profileChanges = append(profileChanges, "squad: "+oldSquadType+" → "+req.SquadType)
-	}
-	if oldProfession != req.Profession && req.Profession != "" {
-		profileChanges = append(profileChanges, "profession: "+oldProfession+" → "+req.Profession)
-	}
+	profileChanges = append(profileChanges, memberAttributeChanges(oldTroopLevel, oldSquadType, oldProfession,
+		req.TroopLevel, req.SquadType, req.Profession)...)
 	if req.Power > 0 {
 		profileChanges = append(profileChanges, "power updated")
 	}
