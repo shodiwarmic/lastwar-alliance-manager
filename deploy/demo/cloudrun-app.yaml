@@ -7,6 +7,9 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
+  # The budget alert filters on this label (docs/DEMO.md).
+  labels:
+    app: lastwar-demo
   name: lastwar-demo
   annotations:
     run.googleapis.com/ingress: all
@@ -20,6 +23,9 @@ spec:
         autoscaling.knative.dev/minScale: "0"
         run.googleapis.com/execution-environment: gen2
     spec:
+      # A runtime account of its own, granted only secretAccessor on the demo's two secrets —
+      # not the default compute account, which holds Editor on the project.
+      serviceAccountName: <RUNTIME-SA>
       containerConcurrency: 80
       timeoutSeconds: 60
       containers:
@@ -39,9 +45,10 @@ spec:
               value: "true"
             - name: OCR_BACKEND_MODE
               value: local
-            # Measured on the first deploy with /api/demo/whoami (docs/DEMO.md).
+            # Measured on the first deploy with /api/demo/whoami (docs/DEMO.md): Google's
+            # front end is one hop, and a forged X-Forwarded-For does not move client_ip.
             - name: TRUSTED_PROXY_COUNT
-              value: "<MEASURED>"
+              value: "1"
             - name: DEMO_RESET_HOURS
               value: "6"
             - name: DATABASE_PATH

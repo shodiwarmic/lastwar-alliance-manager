@@ -142,7 +142,9 @@ it never runs an image older than what an operator would install.
 2. **Build and push the fixtures image** from the same tag:
    `docker build -f deploy/demo/Dockerfile.fixtures --build-arg APP_VERSION=vX.Y.Z -t <...>/demo-fixtures:vX.Y.Z .`
 3. **Secrets** in Secret Manager: `lastwar-demo-session-key` (`openssl rand -hex 32`) and
-   `lastwar-demo-password`.
+   `lastwar-demo-password`. **A runtime service account of the demo's own** (`<RUNTIME-SA>` in
+   both specs) holding only `roles/secretmanager.secretAccessor` on those two secrets — never the
+   default compute account, which is Editor on the project.
 4. **Deploy the fixtures service first**, then the app, with the hosts filled into both specs:
    `gcloud run services replace deploy/demo/cloudrun-fixtures.yaml`, then `cloudrun-app.yaml`.
    Both are public (`allUsers` invoker).
@@ -151,13 +153,18 @@ it never runs an image older than what an operator would install.
    sign-ins from one client must not share a rate-limit bucket with another client. Record one
    visit's egress and CPU against the table below, and how often an idle instance actually
    resets.
-6. **A budget alert** on the billing account. `max-instances 1` caps compute; nothing caps
-   egress except the alert.
+6. **A budget alert** on the billing account, filtered on the `app: lastwar-demo` label both
+   specs carry. `max-instances 1` caps compute; nothing caps egress except the alert.
 7. **The launch gate**: the security review of open issues is recorded in the project's private
    tracker before the demo is listed anywhere.
 
-**Cost** (free tier per billing account per month, as of 2026-09-30; per-visit figures are
-estimates until step 5 measures them): 180,000 vCPU-s, 360,000 GiB-s, 2M requests and **1 GB
-egress from North America** are free; at about 0.5 MB gzipped a visit, egress is the first limit,
-around 2,000 visits a month. A scaled-to-zero service costs nothing while idle. Artifact
-Registry's free 0.5 GB holds both images.
+**Measured on the first deploy (v2.2.0, 2026-10-07):** `TRUSTED_PROXY_COUNT=1` — Google's front
+end appends one `X-Forwarded-For` entry, and a forged leading entry does not move `client_ip`.
+One visit (sign-in and seven pages, cold caches) is about 164 requests and **470 KiB** — an upper
+bound, since it counts the CDN-hosted libraries the demo does not serve.
+
+**Cost** (free tier per billing account per month, as of 2026-09-30): 180,000 vCPU-s, 360,000
+GiB-s, 2M requests and **1 GB egress from North America** are free; at under 0.5 MB a visit,
+egress is the first limit, around 2,000 visits a month. A scaled-to-zero service costs nothing
+while idle. Artifact Registry's free 0.5 GB holds both images; the demo's repository keeps the
+three most recent of each.
