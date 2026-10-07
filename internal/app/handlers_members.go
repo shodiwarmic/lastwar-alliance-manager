@@ -1234,18 +1234,11 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 	memberID := mux.Vars(r)["id"]
 	user := getAuthUser(r)
 	userID := user.ID
-	isAdmin := user.IsAdmin
 
-	canManageGlobal := isAdmin
-	if !canManageGlobal {
-		_ = db.QueryRow(`
-			SELECT p.manage_members 
-			FROM users u
-			JOIN members m ON u.member_id = m.id
-			JOIN permissions p ON m.rank = p.rank
-			WHERE u.id = ?
-		`, userID).Scan(&canManageGlobal)
-	}
+	// Global and OCR aliases are roster data: the same permission as the rest of the
+	// roster. (This read a `permissions` table that has never existed, so only admins
+	// passed — private-docs 210.)
+	canManageGlobal := userHasPermission(user, "manage_members")
 
 	var req struct {
 		Alias    string `json:"alias"`
@@ -1292,16 +1285,10 @@ func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 	userID := user.ID
 	isAdmin := user.IsAdmin
 
-	canManageGlobal := isAdmin
-	if !canManageGlobal {
-		_ = db.QueryRow(`
-			SELECT p.manage_members 
-			FROM users u
-			JOIN members m ON u.member_id = m.id
-			JOIN permissions p ON m.rank = p.rank
-			WHERE u.id = ?
-		`, userID).Scan(&canManageGlobal)
-	}
+	// Global and OCR aliases are roster data: the same permission as the rest of the
+	// roster. (This read a `permissions` table that has never existed, so only admins
+	// passed — private-docs 210.)
+	canManageGlobal := userHasPermission(user, "manage_members")
 
 	var category, aliasText, memberName string
 	var ownerID *int
