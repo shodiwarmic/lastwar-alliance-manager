@@ -122,7 +122,8 @@ func getNAP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The capture date lives on the history series, not on the registry (which has no recorded_at).
-	db.QueryRow(`SELECT COALESCE(MAX(recorded_at), '') FROM alliance_stats_history WHERE server = ?`,
+	// LastRank rows only: a mobile datapoint is history, never the NAP view's clock.
+	db.QueryRow(`SELECT COALESCE(MAX(recorded_at), '') FROM alliance_stats_history WHERE server = ? AND source = 'lastrank'`,
 		cfg.server).Scan(&resp.CapturedAt)
 
 	resp.Alliances = alliances
@@ -153,8 +154,10 @@ func loadRegistryLadder(cfg napConfig) ([]NAPAlliance, error) {
 }
 
 // loadOwnLadderRow rebuilds our own row from the history series — we are deliberately absent from
-// the registry. Source-agnostic: an OCR'd or hand-entered figure serves here just as well as a
-// LastRank one.
+// the registry. LastRank rows only: our rank is a position within a LastRank ladder capture, and
+// the NAP view is built from those captures. A mobile (or any other) datapoint newer than the last
+// ladder would otherwise become "our row", carrying no rank and dropping us from the pact. Other
+// sources' datapoints are history only until a provider-agnostic view exists (private-docs 154).
 func loadOwnLadderRow(server int) (NAPAlliance, bool) {
 	var a NAPAlliance
 	var rank sql.NullInt64
@@ -163,7 +166,7 @@ func loadOwnLadderRow(server int) (NAPAlliance, bool) {
 	// look it up from (Rule 2), so this row is the only place it lives.
 	err := db.QueryRow(`SELECT tag, name, power, kills, power_rank, member_count, lastrank_id, recorded_at
 		FROM alliance_stats_history
-		WHERE is_own = 1 AND server = ?
+		WHERE is_own = 1 AND server = ? AND source = 'lastrank'
 		ORDER BY recorded_at DESC LIMIT 1`, server).
 		Scan(&a.Tag, &a.Name, &a.Power, &a.Kills, &rank, &a.MemberCount, &a.LastRankID, &recordedAt)
 	if err != nil {

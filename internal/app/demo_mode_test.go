@@ -61,6 +61,7 @@ var demoBlocked = []struct{ method, path string }{
 	{"GET", "/api/mobile/vs-league/current"},
 	{"POST", "/api/mobile/vs-league/week"},
 	{"POST", "/api/mobile/train-logs"},
+	{"POST", "/api/mobile/alliance-stats"},
 	{"POST", "/api/files/upload"},
 	{"POST", "/api/files/create"},
 	{"DELETE", "/api/files/1"},

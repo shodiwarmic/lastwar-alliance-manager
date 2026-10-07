@@ -9,6 +9,48 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v2.3.0 — unreleased
+
+The scanner app can now send every kind of game data the alliance manager stores, so new
+scanner features no longer wait for a server release. Phone permissions now follow the
+permission matrix live, alias changes are each recorded, and repeat uploads stop adding
+duplicate history.
+
+**Minor** — an image pull; nothing on the host changes, no `.env` needs editing, and there is no
+database migration. Mobile-app logins survive the update.
+
+- **New mobile endpoints** under `/api/mobile/` for VS Weekly Rank totals, hero power, squad
+  power, HQ and profession level; member troop level, squad type and profession; confirmed roster
+  changes (rank, rename, join, rejoin, leave); recruiting prospects; Season Hub contributions;
+  participation boards from the event mails; VS Duel League weeks, days and brackets; train logs;
+  and alliance power rankings. `GET /api/mobile/capabilities` tells the app what this server
+  accepts and what this account may do. Officer judgement — notes, strategy, lineups, statuses —
+  stays on the web.
+- **Phone permissions are live.** A rank change, a deactivation or a permission-matrix edit now
+  applies to a signed-in phone on its next request, instead of when its seven-day sign-in
+  expires.
+- **Each scanned reading needs the permission of the page that records it.** VS points need VS
+  management, as on the VS page; power, kills and the other member figures need roster
+  management, as everywhere on the web. If your permission matrix gives a rank one of these and
+  not the other: a rank with only VS management can still upload VS points but its uploads stop
+  saving power and kills; a rank with only roster management can now upload power and kills but
+  not VS points. The default matrix (R4 and R5 hold both) is unaffected.
+- **Every alias change is recorded**, one activity row each — from the VS import, the scanner,
+  the Season Hub import, LastRank and the Members page. Saving a scanner or import alias no
+  longer deletes other people's personal nicknames, and an OCR alias can no longer silently take
+  over another member's global alias unless you can manage the roster. Renames keep the old name
+  as a nickname on every path.
+- **Repeat uploads no longer add duplicate history.** A power, kills or level reading equal to
+  the member's last one is skipped and reported as unchanged, and a scan synced late is dated by
+  when it was taken, not when it arrived.
+- **Fixed: roster managers who aren't admins can add and remove global nicknames** on the Members
+  page; only admins could.
+- **Fixed: a train log for a member who no longer exists** is refused instead of half-saving and
+  showing an error, and a log can't be dated in the future.
+- **Fixed: the VS Duel League week save** answers the week it saved.
+- **Desert Storm boards first recorded from a phone** offer the planner's lineup on the web, as
+  a new board does.
+
 ## v2.2.0 — 2026-10-07
 
 A fictional demo alliance and the public demo built on it, an administrator's preview of the app
