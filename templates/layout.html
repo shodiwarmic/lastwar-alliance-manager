@@ -159,6 +159,13 @@
       <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-moon"/></svg>
       Dark
     </a>
+    {{if and .PreviewRanks (not .PreviewRank)}}
+    <div class="dropdown-divider"></div>
+    <div class="sidebar-section-label">Preview as rank</div>
+    <div class="preview-rank-chips">
+      {{range .PreviewRanks}}<button type="button" class="preview-rank-chip" data-rank="{{.}}">{{.}}</button>{{end}}
+    </div>
+    {{end}}
     <div class="dropdown-divider"></div>
     <a href="#" class="sidebar-link logout-btn">
       <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-logout"/></svg>
@@ -191,7 +198,7 @@
         <div class="sidebar-user-avatar" data-lr-photo="{{.UserPhotoURL}}" data-lr-photo-failover="{{.UserPhotoFailover}}">{{printf "%.2s" .Username}}</div>
         <div style="flex:1;min-width:0">
           <div class="sidebar-user-name" translate="no">{{.Username}}</div>
-          <div class="sidebar-user-role">{{.Rank}}</div>
+          <div class="sidebar-user-role">{{.Rank}}{{if .PreviewRank}} <span class="sidebar-user-preview">(previewing)</span>{{end}}</div>
         </div>
         <div class="user-dropdown">
           <button id="username-display" class="username-btn" aria-label="User menu">
@@ -220,6 +227,24 @@
 
     <!-- Content area -->
     <div class="content-area">
+      {{if .DemoMode}}
+      <div class="app-banner app-banner--demo" role="note">
+        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-info-circle"/></svg>
+        <span>Demo — fictional data. Resets {{if ne .DemoResetHours "0"}}at least every {{.DemoResetHours}} hours and {{end}}on every cold start.</span>
+      </div>
+      {{end}}
+      {{if .PreviewRank}}
+      <div class="app-banner app-banner--preview" role="status">
+        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-eye"/></svg>
+        <span>Previewing as</span>
+        {{if .CanExitPreview}}
+        <select id="preview-banner-rank" class="app-banner-select" aria-label="Preview rank">
+          {{range .PreviewRanks}}<option value="{{.}}"{{if eq . $.PreviewRank}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        <button type="button" id="preview-banner-exit" class="btn btn-secondary btn-sm">Exit preview</button>
+        {{else}}<strong>{{.PreviewRank}}</strong>{{end}}
+      </div>
+      {{end}}
       <div class="topbar">
         {{block "header_text" .}}
           <h1>Alliance Manager</h1>
@@ -320,6 +345,7 @@
   <div id="layout-config"
        data-can-manage-members="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
        data-translation-mode="{{.TranslationBackendMode}}"
+       data-demo="{{if .DemoMode}}true{{else}}false{{end}}"
        hidden></div>
 
   <script src="{{asset "/global.js"}}"></script>

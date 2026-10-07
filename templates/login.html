@@ -31,6 +31,18 @@
                 <div id="error-message" class="error-message" style="display:none"></div>
                 <div id="success-message" class="success-message" style="display:none"></div>
 
+                {{if .DemoMode}}
+                <div class="demo-login" id="demo-login" data-demo="true">
+                    <p class="demo-login-intro">A demo with a made-up alliance, Cinder Vale. Pick who to be:</p>
+                    {{range .DemoAccounts}}
+                    <button type="button" class="btn btn-secondary demo-login-btn" data-account="{{.Username}}">
+                        <span class="demo-login-who">{{if .IsAdmin}}Administrator{{else}}{{.Rank}}{{end}}</span>
+                        <span class="demo-login-sub">{{if .IsAdmin}}sees every page{{else}}<span translate="no">{{.Member}}</span>{{end}}</span>
+                    </button>
+                    {{end}}
+                    <p class="demo-login-note">Everything here is fictional and resets regularly. Changes you make are visible to other visitors until then.</p>
+                </div>
+                {{else}}
                 <form id="login-form">
                     <div class="form-group">
                         <label for="username">Username:</label>
@@ -42,6 +54,7 @@
                     </div>
                     <button type="submit" class="btn btn-primary" id="login-btn">Login</button>
                 </form>
+                {{end}}
 
                 {{ if .LoginMessage }}
                 <div class="login-banner">

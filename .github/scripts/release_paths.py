@@ -30,7 +30,9 @@ HOST_FILES = ('docker-compose.yml', 'docker-compose.local-ocr.yml',
 # the artifact is guarded by PR review, not by this classifier, and calling the pipeline
 # host-affecting would force a major release for every CI tweak, which is how a guardrail
 # erodes by annoyance. tests/ holds the host scripts' test runner: CI-only.
-NEUTRAL_DIRS = ('docs/', '.github/', 'tests/')
+# deploy/demo/ is the public demo's own deployment (docs/DEMO.md): run by the project, shipped
+# to no operator, so neither image nor host.
+NEUTRAL_DIRS = ('docs/', '.github/', 'tests/', 'deploy/demo/')
 NEUTRAL_FILES = ('README.md', 'CLAUDE.md', 'SECURITY.md', 'LICENSE',
                  'CHANGELOG.md', '.gitignore', '.dockerignore')
 

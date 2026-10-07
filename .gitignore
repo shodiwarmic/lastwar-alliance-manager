@@ -65,3 +65,7 @@ docker-compose.override.yml
 
 # Third-party API reference — not ours to publish; kept local only
 docs/LASTRANK_API_REFERENCE.md
+
+# README screenshot capture (tests/screenshots): dependencies and the saved login
+tests/screenshots/node_modules/
+tests/screenshots/.auth/

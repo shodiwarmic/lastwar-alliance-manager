@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -15,6 +14,15 @@ import (
 const mobileTokenExpiry = 7 * 24 * time.Hour
 
 func mobileLogin(w http.ResponseWriter, r *http.Request) {
+	// The same per-IP limiter as the web login: this endpoint takes a password too, and
+	// is CSRF-exempt. The scanner and collector log in once per seven-day token, so a
+	// burst of five is far above anything a real client does.
+	if !getLoginLimiter(getClientIP(r)).Allow() {
+		slog.Warn("mobile login rate limit exceeded", "ip", getClientIP(r))
+		http.Error(w, "Too many login attempts. Please try again later.", http.StatusTooManyRequests)
+		return
+	}
+
 	var creds Credentials
 	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -78,13 +86,6 @@ func mobileLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	secretKey := os.Getenv("SESSION_KEY")
-	if secretKey == "" {
-		slog.Error("mobileLogin: SESSION_KEY not set; cannot issue mobile token")
-		http.Error(w, "Server configuration error", http.StatusInternalServerError)
-		return
-	}
-
 	now := time.Now()
 	expiresAt := now.Add(mobileTokenExpiry)
 	claims := MobileTokenClaims{
@@ -103,7 +104,7 @@ func mobileLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString([]byte(secretKey))
+	tokenStr, err := token.SignedString(tokenSecret())
 	if err != nil {
 		slog.Error("mobileLogin: failed to sign token", "error", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)

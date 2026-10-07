@@ -85,6 +85,7 @@ echo "HOST_FILES_VERSION=$(cat HOST_FILES_VERSION)" >> .env
 
 Ensure your `.env` contains secure values. You **must** generate random 32-byte hex strings for both the session key and the credential encryption key.
 *(You can generate these by running `openssl rand -hex 32` in your terminal).*
+With `PRODUCTION=true` the app refuses to start when `SESSION_KEY` is unset or shorter than 32 characters.
 
 ```env
 SESSION_KEY=your_generated_64_character_hex_string_here
@@ -183,6 +184,13 @@ The first line of the rendered file carries the template's revision
 higher revision, and leaves the file alone otherwise. A hand edit is therefore overwritten by the
 next revision; a `www.` redirect, if your DNS has that record, is one such addition (the template
 shows the block).
+
+The app compresses its own text responses (HTML, CSS, JS, JSON, SVG, CSV) with gzip, so an install
+reached without a proxy is not served full-size assets. Caddy's `encode gzip` passes an
+already-encoded response through untouched, and nginx's `gzip` does the same.
+
+The project's public demo runs on Cloud Run without a proxy, in demo mode — a different
+deployment from an install; see `docs/DEMO.md`.
 
 ### Option B: Nginx
 The installer does not configure nginx: install with `./scripts/install.sh --proxy none`, which

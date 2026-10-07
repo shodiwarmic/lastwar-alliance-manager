@@ -474,6 +474,36 @@ main {
     color: var(--color-text-muted);
     margin: 0; line-height: 1.2;
 }
+/* Page-wide banner above the topbar: the admin rank preview (175), the demo notice (176). */
+.app-banner {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding: 6px 24px;
+    font-size: 13px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.app-banner--preview { background: var(--color-purple-bg); color: var(--color-purple); }
+.app-banner--demo { background: var(--color-info-bg); color: var(--color-info); }
+.app-banner-select {
+    font: inherit; padding: 2px 6px; border-radius: 4px;
+    border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-primary);
+}
+.sidebar-user-preview { font-style: italic; }
+/* "Preview as rank" in the user menu (desktop dropdown and the mobile More sheet). */
+.preview-rank-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 8px; }
+.preview-rank-chip {
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    min-width: 44px; min-height: 36px; padding: 4px 10px; border-radius: 6px;
+    /* Drawn from the text colour: the chips sit in the light desktop dropdown and in the
+       dark mobile More sheet alike. */
+    border: 1px solid color-mix(in srgb, currentColor 35%, transparent); background: transparent;
+    color: var(--color-sidebar-text); /* as the menu's own links */
+}
+.preview-rank-chip:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+.preview-rank-chip:disabled { opacity: 0.5; cursor: wait; }
+.preview-rank-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.preview-rank-row .form-input { width: auto; min-width: 90px; }
+
 .content-scroll {
     flex: 1;
     overflow-y: auto;

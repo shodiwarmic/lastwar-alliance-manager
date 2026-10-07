@@ -2,9 +2,7 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -44,29 +42,17 @@ func getLoginLimiter(ip string) *rate.Limiter {
 	return l
 }
 
-// initSessionStore initializes the session store with secure settings
+// initSessionStore initializes the session store with secure settings. Main resolves
+// SESSION_KEY first (loadSessionKey) and exits on a refusal; a caller that has not — the
+// tests — gets it resolved here.
 func initSessionStore() {
-	sessionKey := os.Getenv("SESSION_KEY")
-	if sessionKey == "" {
-		key := make([]byte, 32)
-		if _, err := rand.Read(key); err != nil {
-			log.Fatal("Failed to generate random session key: ", err)
-		}
-		sessionKey = hex.EncodeToString(key)
-		slog.Warn("No SESSION_KEY environment variable set; using generated key (not persistent across restarts)")
-	}
-
-	key, err := hex.DecodeString(sessionKey)
-	if err != nil || len(key) != 32 {
-		key = []byte(sessionKey)
-		if len(key) < 32 {
-			padded := make([]byte, 32)
-			copy(padded, key)
-			key = padded
+	if sessionKeys.store == nil {
+		if err := loadSessionKey(); err != nil {
+			log.Fatal("Failed to resolve SESSION_KEY: ", err)
 		}
 	}
 
-	store = sessions.NewCookieStore(key[:32])
+	store = sessions.NewCookieStore(sessionKeys.store)
 
 	isProduction := os.Getenv("PRODUCTION") == "true" || os.Getenv("HTTPS") == "true"
 
@@ -174,6 +160,11 @@ func getIPGeolocation(ip string) (*IPGeolocation, error) {
 // Track login attempt in database. Geolocation is resolved asynchronously so it
 // never blocks the login response.
 func trackLogin(userID int, username string, r *http.Request, success bool) {
+	// The demo publishes nothing about its visitors: every visitor is an administrator,
+	// and login history (IP, user agent, geolocation) is shown to administrators.
+	if demoMode() {
+		return
+	}
 	ip := getClientIP(r)
 	userAgent := r.Header.Get("User-Agent")
 
@@ -275,22 +266,28 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := store.Get(r, "session")
-	delete(session.Values, "force_change_user_id")
-	session.Values["authenticated"] = true
-	session.Values["username"] = user.Username
-	session.Values["user_id"] = user.ID
-	if user.MemberID != nil {
-		session.Values["member_id"] = *user.MemberID
-	}
-	session.Values["is_admin"] = user.IsAdmin
-	session.Save(r, w)
+	establishSession(w, r, user.ID, user.Username, user.MemberID, user.IsAdmin)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message":  "Login successful",
 		"username": user.Username,
 	})
+}
+
+// establishSession signs a user in on this browser: the session values the web login
+// sets. Shared by login and the demo's "Try as" login, so the two cannot drift.
+func establishSession(w http.ResponseWriter, r *http.Request, userID int, username string, memberID *int, isAdmin bool) {
+	session, _ := store.Get(r, "session")
+	delete(session.Values, "force_change_user_id")
+	session.Values["authenticated"] = true
+	session.Values["username"] = username
+	session.Values["user_id"] = userID
+	if memberID != nil {
+		session.Values["member_id"] = *memberID
+	}
+	session.Values["is_admin"] = isAdmin
+	session.Save(r, w)
 }
 
 func forceChangePassword(w http.ResponseWriter, r *http.Request) {

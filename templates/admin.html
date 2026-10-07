@@ -25,6 +25,19 @@
         <div id="tab-users" class="tab-content">
             <div class="card">
                 <div class="card-header">
+                    <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-eye"/></svg> Preview as rank</h2>
+                </div>
+                <p class="help-text">See the app exactly as a rank does — its menu, its pages, what it may change — without a second account. Your own profile stays yours. A banner on every page switches rank or exits. Also in your user menu (More on a phone).</p>
+                <div class="preview-rank-row">
+                    <select id="preview-rank-select" class="form-input" aria-label="Rank to preview">
+                        {{range .PreviewRanks}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                    <button class="btn btn-primary" id="preview-rank-start">Start preview</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
                     <h2 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-users"/></svg> User Management</h2>
                     <button class="btn btn-primary" id="create-user-btn">
                         <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> Create New User

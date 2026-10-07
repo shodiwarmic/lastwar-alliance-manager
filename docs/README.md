@@ -13,6 +13,10 @@ belongs in `static/` or `templates/` instead.
   here. This is the file to update when a feature is added, changed or removed.
 - `DEPLOYMENT.md` — production deployment guide (Docker, Caddy, environment).
 - `QUICKSTART.md` — the short path from a fresh host to a running install.
+- `img/` — the README and feature-list screenshots, of the fictional demo alliance; taken by
+  `tests/screenshots/` (its README has the retake rules).
+- `DEMO.md` — the fictional demo alliance: the generator (`cmd/demo-seed`), and how the
+  public demo and the screenshots use it.
 - `IMAGE_RECOGNITION.md` — the OCR pipeline: cloud (Cloud Vision) vs local (PaddleOCR),
   and the optional GCS archival setup.
 - `DESIGN_STANDARD.md` / `DESIGN_STANDARD.html` — the UI design standard (tokens,

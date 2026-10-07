@@ -4,13 +4,13 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -19,6 +19,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 	"github.com/microcosm-cc/bluemonday"
+
+	"lastwar-alliance/internal/demo"
 )
 
 // staticDir is the on-disk directory served at the root URL prefix, so
@@ -61,11 +63,15 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	}
 
 	session, _ := store.Get(r, "session")
-	userID, ok := session.Values["user_id"].(int)
-	if ok && userID > 0 {
-		user := loadUserFromDB(userID)
+	{
+		user := loadSessionUser(session)
 		if user != nil {
 			data.IsAuthenticated = true
+			data.PreviewRank = user.PreviewRank
+			data.CanExitPreview = user.RealIsAdmin && user.PreviewRank != ""
+			if user.RealIsAdmin {
+				data.PreviewRanks = ValidRanks
+			}
 			data.Username = user.Username
 			data.Rank = user.Rank
 			if user.MemberID != nil {
@@ -124,16 +130,13 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 	}
 	data.TranslationBackendMode = translationMode
 
-	// The pipeline is ready when:
-	//   - cloud mode: GCP credentials AND a worker URL are configured
-	//   - local mode: just a worker URL (the local sidecar URL); no GCP needed
-	if ocrMode == string(OCRBackendLocal) {
-		data.OCRPipelineReady = cvWorkerURL != ""
-	} else {
-		data.OCRPipelineReady = hasGCP && cvWorkerURL != ""
-	}
+	data.OCRPipelineReady = ocrPipelineReady(ocrMode, hasGCP, cvWorkerURL)
 
 	data.SkillLabels = SkillLabels
+	if demoMode() {
+		data.DemoMode = true
+		data.DemoResetHours = strconv.FormatFloat(demoResetHours(), 'f', -1, 64)
+	}
 
 	return data
 }
@@ -213,6 +216,14 @@ func Main() {
 	// build. See version.go.
 	slog.Info("Initializing Alliance Manager server", "version", appVersion, "commit", shortCommit())
 
+	// Resolve SESSION_KEY before anything else starts: a refusal (unset under
+	// PRODUCTION=true, or too short) must exit before the database is opened or a
+	// migration, the janitor or the scheduler runs.
+	if err := loadSessionKey(); err != nil {
+		slog.Error("Refusing to start", "error", err)
+		os.Exit(1)
+	}
+
 	// Hash static/ before anything can serve a request: assetHashes is written
 	// here and read-only afterwards, which is what makes it lock-free.
 	buildAssetHashes()
@@ -225,6 +236,17 @@ func Main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+
+	// The public demo seeds an empty database before first-run setup is decided, so it
+	// never boots unclaimed. A seed failure exits: a failed revision is visible, a setup
+	// page whose key nobody can read is not.
+	if demoMode() {
+		if err := seedDemoAtBoot(); err != nil {
+			slog.Error("Demo seed failed", "error", err)
+			os.Exit(1)
+		}
+		startDemoReset()
+	}
 
 	// No accounts yet means first-run: issue the setup key and gate every page on /setup.
 	if err := initSetupState(); err != nil {
@@ -247,24 +269,140 @@ func Main() {
 	// until an operator enables it in Settings.
 	startLastRankScheduler()
 
+	router := buildRouter()
+
+	// 4. Initialize CSRF Protection. filippo.io/csrf ignores the key (it checks
+	// Sec-Fetch-Site / Origin, not tokens); the session store's is passed for form.
+	csrfKey := sessionKeys.store
+
+	// Base CSRF options
+	csrfOpts := []csrf.Option{
+		csrf.Secure(os.Getenv("PRODUCTION") == "true"),
+		csrf.Path("/"),
+	}
+
+	// Add trusted origins for local testing and reverse proxies
+	// Same-origin requests pass without an entry, at any address. An entry without a scheme
+	// is trusted as https:// only (filippo.io/csrf/gorilla); to trust a plain-HTTP origin,
+	// list it with its scheme, e.g. http://192.168.1.50:8080.
+	if trusted := os.Getenv("TRUSTED_ORIGINS"); trusted != "" {
+		origins := strings.Split(trusted, ",")
+		for i, o := range origins {
+			origins[i] = strings.TrimSpace(o)
+		}
+		csrfOpts = append(csrfOpts, csrf.TrustedOrigins(origins))
+		slog.Info("Added trusted origins for CSRF", "origins", origins)
+	}
+
+	// How many proxies' worth of X-Forwarded-For to trust — every per-IP rate limit keys
+	// on the result. See getClientIP.
+	trustedProxyCount = parseTrustedProxyCount(os.Getenv("TRUSTED_PROXY_COUNT"), isProduction())
+	slog.Info("Client IP resolution", "trusted_proxy_count", trustedProxyCount)
+
+	csrfMiddleware := csrf.Protect(csrfKey, csrfOpts...)
+
+	// Create the protected router handler
+	protectedHandler := csrfMiddleware(router)
+
+	// Create a conditional handler to bypass CSRF for WOPI webhooks
+	appHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/wopi/") ||
+			strings.HasPrefix(r.URL.Path, "/api/mobile/") {
+			// Send WOPI and mobile API traffic directly to the router (bypassing CSRF)
+			router.ServeHTTP(w, r)
+		} else {
+			// Send all other traffic through the CSRF middleware
+			protectedHandler.ServeHTTP(w, r)
+		}
+	})
+
+	// 5. Start Server
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	srv := &http.Server{Addr: ":" + port, Handler: gzipMiddleware(demoHeaders(setupGate(appHandler)))}
+
+	// Registered before the server starts: a SIGTERM that arrived between "listening" and
+	// this line would otherwise kill the process without the graceful shutdown below.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		slog.Info("Server listening", "port", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("Server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-quit
+
+	slog.Info("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+	}
+
+	// Stop any running background job before draining archives. Bounded: an
+	// in-flight LastRank enrich has its own 25s ceiling and we cannot always
+	// outlast it, so reconcileInterruptedJobs on the next boot is the backstop.
+	drainJobs(10 * time.Second)
+
+	// Drain in-flight OCR archive goroutines. archiveSem is acquire-by-send /
+	// release-by-receive (cap 4): sending cap times blocks until every active
+	// goroutine has released. BOUNDED — a hung cloud upload must not wedge exit.
+	drained := make(chan struct{})
+	go func() {
+		for i := 0; i < cap(archiveSem); i++ {
+			archiveSem <- struct{}{}
+		}
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		slog.Info("Archive goroutines drained")
+	case <-time.After(10 * time.Second):
+		slog.Warn("Archive drain timed out; exiting with in-flight archives")
+	}
+	slog.Info("Server stopped")
+}
+
+// buildRouter registers every route. Split out of Main so tests can drive the real
+// registrations (the demo block list is asserted route by route against it).
+func buildRouter() *mux.Router {
 	router := mux.NewRouter()
 
 	// Auth routes (public)
 	router.HandleFunc("/api/login", login).Methods("POST")
-	router.HandleFunc("/api/force-change-password", forceChangePassword).Methods("POST")
+	router.HandleFunc("/api/force-change-password", demoBlock(forceChangePassword)).Methods("POST")
 	router.HandleFunc("/api/logout", logout).Methods("POST")
-	router.HandleFunc("/api/change-password", authMiddleware(changePassword)).Methods("POST")
-	router.HandleFunc("/api/members/{id}/invite", authMiddleware(requirePermission("manage_members", generateInvite))).Methods("POST")
+	router.HandleFunc("/api/change-password", demoBlock(authMiddleware(changePassword))).Methods("POST")
+	router.HandleFunc("/api/members/{id}/invite", demoBlock(authMiddleware(requirePermission("manage_members", generateInvite)))).Methods("POST")
 	router.HandleFunc("/setup", showSetupPage).Methods("GET")
 	router.HandleFunc("/api/setup", claimSetup).Methods("POST")
 	router.HandleFunc("/invite/{token}", showInvitePage).Methods("GET")
-	router.HandleFunc("/invite/{token}", claimInvite).Methods("POST")
-	router.HandleFunc("/api/members/{id}/reset-link", authMiddleware(requirePermission("manage_settings", generateMemberResetLink))).Methods("POST")
+	router.HandleFunc("/invite/{token}", demoBlock(claimInvite)).Methods("POST")
+	router.HandleFunc("/api/members/{id}/reset-link", demoBlock(authMiddleware(requirePermission("manage_settings", generateMemberResetLink)))).Methods("POST")
 	router.HandleFunc("/reset-password/{token}", showResetPasswordPage).Methods("GET")
-	router.HandleFunc("/reset-password/{token}", claimPasswordReset).Methods("POST")
+	router.HandleFunc("/reset-password/{token}", demoBlock(claimPasswordReset)).Methods("POST")
 
 	// Activity log
 	router.HandleFunc("/api/activity", authMiddleware(getActivityLog)).Methods("GET")
+
+	// The public demo's own routes (176), registered only in demo mode: the "Try as"
+	// sign-in and the address check for setting TRUSTED_PROXY_COUNT.
+	if demoMode() {
+		router.HandleFunc("/api/demo/login", demoLogin).Methods("POST")
+		router.HandleFunc("/api/demo/whoami", demoWhoami).Methods("GET")
+	}
+
+	// Admin preview as rank (175). requireRealAdmin, not adminMiddleware: under a preview
+	// IsAdmin is false, and the admin must still be able to switch rank or exit.
+	router.HandleFunc("/api/preview-rank", authMiddleware(requireRealAdmin(startRankPreview))).Methods("POST")
+	router.HandleFunc("/api/preview-rank", authMiddleware(requireRealAdmin(endRankPreview))).Methods("DELETE")
 
 	// Accountability
 	router.HandleFunc("/accountability", authMiddleware(handleAccountability)).Methods("GET")
@@ -372,36 +510,36 @@ func Main() {
 
 	// Admin routes (admin only)
 	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(getAdminUsers))).Methods("GET")
-	router.HandleFunc("/api/admin/users", authMiddleware(adminMiddleware(createAdminUser))).Methods("POST")
-	router.HandleFunc("/api/admin/users/{id}", authMiddleware(adminMiddleware(updateAdminUser))).Methods("PUT")
-	router.HandleFunc("/api/admin/users/{id}", authMiddleware(adminMiddleware(deleteAdminUser))).Methods("DELETE")
-	router.HandleFunc("/api/admin/users/{id}/reset-link", authMiddleware(adminMiddleware(generateUserResetLink))).Methods("POST")
-	router.HandleFunc("/api/admin/users/{id}/deactivate", authMiddleware(adminMiddleware(deactivateUser))).Methods("PUT")
-	router.HandleFunc("/api/admin/users/{id}/reactivate", authMiddleware(adminMiddleware(reactivateUser))).Methods("PUT")
+	router.HandleFunc("/api/admin/users", demoBlock(authMiddleware(adminMiddleware(createAdminUser)))).Methods("POST")
+	router.HandleFunc("/api/admin/users/{id}", demoBlock(authMiddleware(adminMiddleware(updateAdminUser)))).Methods("PUT")
+	router.HandleFunc("/api/admin/users/{id}", demoBlock(authMiddleware(adminMiddleware(deleteAdminUser)))).Methods("DELETE")
+	router.HandleFunc("/api/admin/users/{id}/reset-link", demoBlock(authMiddleware(adminMiddleware(generateUserResetLink)))).Methods("POST")
+	router.HandleFunc("/api/admin/users/{id}/deactivate", demoBlock(authMiddleware(adminMiddleware(deactivateUser)))).Methods("PUT")
+	router.HandleFunc("/api/admin/users/{id}/reactivate", demoBlock(authMiddleware(adminMiddleware(reactivateUser)))).Methods("PUT")
 	router.HandleFunc("/api/admin/login-history", authMiddleware(adminMiddleware(getLoginHistory))).Methods("GET")
 	router.HandleFunc("/api/admin/users/{id}/file-count", authMiddleware(adminMiddleware(getUserFileCount))).Methods("GET")
-	router.HandleFunc("/api/admin/users/{id}/transfer-files", authMiddleware(adminMiddleware(transferUserFiles))).Methods("POST")
+	router.HandleFunc("/api/admin/users/{id}/transfer-files", demoBlock(authMiddleware(adminMiddleware(transferUserFiles)))).Methods("POST")
 
 	// Add these to the Admin Routes section in main.go
-	router.HandleFunc("/api/admin/security/password-policy", authMiddleware(adminMiddleware(updatePasswordPolicy))).Methods("PUT")
-	router.HandleFunc("/api/admin/security/cv-worker", authMiddleware(adminMiddleware(updateCVWorkerURL))).Methods("PUT")
+	router.HandleFunc("/api/admin/security/password-policy", demoBlock(authMiddleware(adminMiddleware(updatePasswordPolicy)))).Methods("PUT")
+	router.HandleFunc("/api/admin/security/cv-worker", demoBlock(authMiddleware(adminMiddleware(updateCVWorkerURL)))).Methods("PUT")
 	router.HandleFunc("/api/admin/ocr-service", authMiddleware(adminMiddleware(getOCRServiceInfo))).Methods("GET")
-	router.HandleFunc("/api/admin/security/ocr-archive", authMiddleware(adminMiddleware(updateOCRArchiveSettings))).Methods("PUT")
-	router.HandleFunc("/api/admin/security/translation", authMiddleware(adminMiddleware(updateTranslationSettings))).Methods("PUT")
+	router.HandleFunc("/api/admin/security/ocr-archive", demoBlock(authMiddleware(adminMiddleware(updateOCRArchiveSettings)))).Methods("PUT")
+	router.HandleFunc("/api/admin/security/translation", demoBlock(authMiddleware(adminMiddleware(updateTranslationSettings)))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/translation/usage", authMiddleware(adminMiddleware(translationUsage))).Methods("GET")
 	// Translating is a read affordance over content the user can already see, so
 	// it needs no permission beyond being signed in. POST (not GET) so the CSRF
 	// middleware covers it and so the source text travels in a body rather than a URL.
 	router.HandleFunc("/api/translate", authMiddleware(translateText)).Methods("POST")
-	router.HandleFunc("/api/admin/credentials", authMiddleware(adminMiddleware(updateExternalCredentials))).Methods("POST")
-	router.HandleFunc("/api/admin/credentials/{service}", authMiddleware(adminMiddleware(deleteExternalCredential))).Methods("DELETE")
+	router.HandleFunc("/api/admin/credentials", demoBlock(authMiddleware(adminMiddleware(updateExternalCredentials)))).Methods("POST")
+	router.HandleFunc("/api/admin/credentials/{service}", demoBlock(authMiddleware(adminMiddleware(deleteExternalCredential)))).Methods("DELETE")
 
 	// Files Implementation API
 	router.HandleFunc("/api/files", authMiddleware(requirePermission("view_files", getFilesList))).Methods("GET")
-	router.HandleFunc("/api/files/upload", authMiddleware(requirePermission("upload_files", uploadFile))).Methods("POST")
-	router.HandleFunc("/api/files/create", authMiddleware(requirePermission("upload_files", createBlankFile))).Methods("POST")
+	router.HandleFunc("/api/files/upload", demoBlock(authMiddleware(requirePermission("upload_files", uploadFile)))).Methods("POST")
+	router.HandleFunc("/api/files/create", demoBlock(authMiddleware(requirePermission("upload_files", createBlankFile)))).Methods("POST")
 	router.HandleFunc("/api/files/{id}", authMiddleware(updateFile)).Methods("PUT")
-	router.HandleFunc("/api/files/{id}", authMiddleware(deleteFile)).Methods("DELETE")
+	router.HandleFunc("/api/files/{id}", demoBlock(authMiddleware(deleteFile))).Methods("DELETE")
 	router.HandleFunc("/api/files/download/{id}", authMiddleware(downloadFile)).Methods("GET")
 	router.HandleFunc("/api/files/{id}/wopi-token", authMiddleware(generateWOPIToken)).Methods("GET")
 
@@ -417,8 +555,8 @@ func Main() {
 	wopiRouter.HandleFunc("/files/{id}/contents", wopiAuthMiddleware(wopiGetFile)).Methods("GET")
 
 	// WOPI POST routes (CSRF exemption is handled at the server level below)
-	wopiRouter.HandleFunc("/files/{id}", wopiAuthMiddleware(wopiActionHandler)).Methods("POST")
-	wopiRouter.HandleFunc("/files/{id}/contents", wopiAuthMiddleware(wopiPutFile)).Methods("POST")
+	wopiRouter.HandleFunc("/files/{id}", demoBlock(wopiAuthMiddleware(wopiActionHandler))).Methods("POST")
+	wopiRouter.HandleFunc("/files/{id}/contents", demoBlock(wopiAuthMiddleware(wopiPutFile))).Methods("POST")
 
 	// Schedule event types.
 	//
@@ -488,7 +626,7 @@ func Main() {
 	router.HandleFunc("/api/members/stats", authMiddleware(getMemberStats)).Methods("GET")
 	router.HandleFunc("/api/members", authMiddleware(requirePermission("manage_members", createMember))).Methods("POST")
 	router.HandleFunc("/api/members/{id:[0-9]+}", authMiddleware(requirePermission("manage_members", updateMember))).Methods("PUT")
-	router.HandleFunc("/api/members/{id:[0-9]+}", authMiddleware(adminMiddleware(deleteMember))).Methods("DELETE")
+	router.HandleFunc("/api/members/{id:[0-9]+}", demoBlock(authMiddleware(adminMiddleware(deleteMember)))).Methods("DELETE")
 	router.HandleFunc("/api/members/{id:[0-9]+}/archive", authMiddleware(requirePermission("manage_members", archiveMember))).Methods("PUT")
 	router.HandleFunc("/api/members/{id:[0-9]+}/reactivate", authMiddleware(requirePermission("manage_members", reactivateMember))).Methods("PUT")
 	router.HandleFunc("/api/former-members", authMiddleware(requirePermission("manage_members", getFormerMembers))).Methods("GET")
@@ -517,9 +655,9 @@ func Main() {
 	router.HandleFunc("/api/allies/nap", authMiddleware(requirePermission("view_allies", getNAP))).Methods("GET")
 	// Refresh is a three-phase, browser-driven flow (ladder → member count per alliance → finish),
 	// mirroring the LastRank member sync. See handlers_nap.go.
-	router.HandleFunc("/api/allies/nap/refresh", authMiddleware(requirePermission("manage_allies", refreshNAP))).Methods("POST")
-	router.HandleFunc("/api/allies/nap/member", authMiddleware(requirePermission("manage_allies", napMemberCount))).Methods("POST")
-	router.HandleFunc("/api/allies/nap/finish", authMiddleware(requirePermission("manage_allies", napFinish))).Methods("POST")
+	router.HandleFunc("/api/allies/nap/refresh", demoBlock(authMiddleware(requirePermission("manage_allies", refreshNAP)))).Methods("POST")
+	router.HandleFunc("/api/allies/nap/member", demoBlock(authMiddleware(requirePermission("manage_allies", napMemberCount)))).Methods("POST")
+	router.HandleFunc("/api/allies/nap/finish", demoBlock(authMiddleware(requirePermission("manage_allies", napFinish)))).Methods("POST")
 	router.HandleFunc("/api/allies", authMiddleware(getAllies)).Methods("GET")
 	router.HandleFunc("/api/allies", authMiddleware(requirePermission("manage_allies", createAlly))).Methods("POST")
 	router.HandleFunc("/api/allies/{id:[0-9]+}", authMiddleware(requirePermission("manage_allies", updateAlly))).Methods("PUT")
@@ -554,32 +692,32 @@ func Main() {
 	router.HandleFunc("/api/vs-league/weeks/{id:[0-9]+}/matchups", authMiddleware(requirePermission("manage_vs_points", saveVSLeagueMatchups))).Methods("POST")
 	router.HandleFunc("/api/vs-league/participation", authMiddleware(requirePermission("view_vs_points", getVSLeagueParticipation))).Methods("GET")
 	router.HandleFunc("/api/vs-league/analytics", authMiddleware(requirePermission("view_vs_points", getVSLeagueAnalytics))).Methods("GET")
-	router.HandleFunc("/api/vs-league/opponent-lookup", authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentLookup))).Methods("POST")
-	router.HandleFunc("/api/vs-league/opponent-roster", authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentRoster))).Methods("GET")
-	router.HandleFunc("/api/vs-league/our-snapshot", authMiddleware(requirePermission("manage_vs_points", vsLeagueOurSnapshot))).Methods("GET")
+	router.HandleFunc("/api/vs-league/opponent-lookup", demoBlock(authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentLookup)))).Methods("POST")
+	router.HandleFunc("/api/vs-league/opponent-roster", demoBlock(authMiddleware(requirePermission("manage_vs_points", vsLeagueOpponentRoster)))).Methods("GET")
+	router.HandleFunc("/api/vs-league/our-snapshot", demoBlock(authMiddleware(requirePermission("manage_vs_points", vsLeagueOurSnapshot)))).Methods("GET")
 	router.HandleFunc("/api/external-alliances", authMiddleware(getExternalAlliancesGated)).Methods("GET")
 	router.HandleFunc("/api/external-alliances", authMiddleware(requireManageExternalAlliances(createExternalAlliance))).Methods("POST")
 	router.HandleFunc("/api/external-alliances/{id:[0-9]+}", authMiddleware(requireManageExternalAlliances(updateExternalAlliance))).Methods("PUT")
 	router.HandleFunc("/api/external-alliances/{id:[0-9]+}", authMiddleware(requireManageExternalAlliances(deleteExternalAlliance))).Methods("DELETE")
-	router.HandleFunc("/api/external-alliances/{id:[0-9]+}/refresh", authMiddleware(requireManageExternalAlliances(refreshExternalAlliance))).Methods("POST")
-	router.HandleFunc("/api/external-alliances/lookup", authMiddleware(requireManageExternalAlliances(lookupExternalAlliance))).Methods("POST")
-	router.HandleFunc("/api/external-alliances/search", authMiddleware(requireManageExternalAlliances(searchExternalAlliancesLastRank))).Methods("GET")
+	router.HandleFunc("/api/external-alliances/{id:[0-9]+}/refresh", demoBlock(authMiddleware(requireManageExternalAlliances(refreshExternalAlliance)))).Methods("POST")
+	router.HandleFunc("/api/external-alliances/lookup", demoBlock(authMiddleware(requireManageExternalAlliances(lookupExternalAlliance)))).Methods("POST")
+	router.HandleFunc("/api/external-alliances/search", demoBlock(authMiddleware(requireManageExternalAlliances(searchExternalAlliancesLastRank)))).Methods("GET")
 	// Scout report. POST on the roster fetch because it writes (registry stats + history +
 	// activity); the per-player step is a pure read that persists nothing.
-	router.HandleFunc("/api/external-alliances/report", authMiddleware(requireManageExternalAlliances(allianceReport))).Methods("POST")
-	router.HandleFunc("/api/external-alliances/report/player", authMiddleware(requireManageExternalAlliances(allianceReportPlayer))).Methods("GET")
+	router.HandleFunc("/api/external-alliances/report", demoBlock(authMiddleware(requireManageExternalAlliances(allianceReport)))).Methods("POST")
+	router.HandleFunc("/api/external-alliances/report/player", demoBlock(authMiddleware(requireManageExternalAlliances(allianceReportPlayer)))).Methods("GET")
 
 	// LastRank.fun enrichment (manual trigger; client-side rate-limited globally)
-	router.HandleFunc("/api/lastrank/preview", authMiddleware(requirePermission("manage_members", lastRankPreview))).Methods("POST")
-	router.HandleFunc("/api/lastrank/commit", authMiddleware(requirePermission("manage_members", lastRankCommit))).Methods("POST")
-	router.HandleFunc("/api/lastrank/player", authMiddleware(requirePermission("manage_members", lastRankSyncPlayer))).Methods("POST")
-	router.HandleFunc("/api/lastrank/finish", authMiddleware(requirePermission("manage_members", lastRankFinish))).Methods("POST")
-	router.HandleFunc("/api/lastrank/prospect", authMiddleware(requirePermission("manage_recruiting", lastRankProspectLookup))).Methods("POST")
+	router.HandleFunc("/api/lastrank/preview", demoBlock(authMiddleware(requirePermission("manage_members", lastRankPreview)))).Methods("POST")
+	router.HandleFunc("/api/lastrank/commit", demoBlock(authMiddleware(requirePermission("manage_members", lastRankCommit)))).Methods("POST")
+	router.HandleFunc("/api/lastrank/player", demoBlock(authMiddleware(requirePermission("manage_members", lastRankSyncPlayer)))).Methods("POST")
+	router.HandleFunc("/api/lastrank/finish", demoBlock(authMiddleware(requirePermission("manage_members", lastRankFinish)))).Methods("POST")
+	router.HandleFunc("/api/lastrank/prospect", demoBlock(authMiddleware(requirePermission("manage_recruiting", lastRankProspectLookup)))).Methods("POST")
 	// Same finish handler, gated for recruiting officers (kind="prospects").
-	router.HandleFunc("/api/lastrank/prospect/finish", authMiddleware(requirePermission("manage_recruiting", lastRankFinish))).Methods("POST")
+	router.HandleFunc("/api/lastrank/prospect/finish", demoBlock(authMiddleware(requirePermission("manage_recruiting", lastRankFinish)))).Methods("POST")
 	// Player name search, so recruiters find a prospect's LastRank id in-app instead
 	// of copy-pasting a URL from a browser tab.
-	router.HandleFunc("/api/lastrank/player-search", authMiddleware(requirePermission("manage_recruiting", lastRankPlayerSearch))).Methods("GET")
+	router.HandleFunc("/api/lastrank/player-search", demoBlock(authMiddleware(requirePermission("manage_recruiting", lastRankPlayerSearch)))).Methods("GET")
 
 	// LastRank Phase-1 review queue. The read costs nothing upstream, so an officer
 	// can work a backlog without spending a request against the volunteer service.
@@ -591,15 +729,15 @@ func Main() {
 	// depends on the job KIND in the payload (manage_members / manage_allies /
 	// manage_recruiting / manage_external_alliances), so each handler resolves it
 	// via resolveJobKind. See jobs.go.
-	router.HandleFunc("/api/jobs/start", authMiddleware(startJobHandler)).Methods("POST")
+	router.HandleFunc("/api/jobs/start", demoBlock(authMiddleware(startJobHandler))).Methods("POST")
 	router.HandleFunc("/api/jobs/current", authMiddleware(currentJobHandler)).Methods("GET")
 	router.HandleFunc("/api/jobs/cancel", authMiddleware(cancelJobHandler)).Methods("POST")
 
 	// Mobile API (bearer token auth, CSRF exempt)
-	router.HandleFunc("/api/mobile/login", mobileLogin).Methods("POST")
-	router.HandleFunc("/api/mobile/members", mobileBearerMiddleware(getMobileMembers)).Methods("GET")
-	router.HandleFunc("/api/mobile/preview", mobileBearerMiddleware(requireMobilePermission("manage_vs", mobilePreview))).Methods("POST")
-	router.HandleFunc("/api/mobile/commit", mobileBearerMiddleware(requireMobilePermission("manage_vs", mobileCommit))).Methods("POST")
+	router.HandleFunc("/api/mobile/login", demoBlock(mobileLogin)).Methods("POST")
+	router.HandleFunc("/api/mobile/members", demoBlock(mobileBearerMiddleware(getMobileMembers))).Methods("GET")
+	router.HandleFunc("/api/mobile/preview", demoBlock(mobileBearerMiddleware(requireMobilePermission("manage_vs", mobilePreview)))).Methods("POST")
+	router.HandleFunc("/api/mobile/commit", demoBlock(mobileBearerMiddleware(requireMobilePermission("manage_vs", mobileCommit)))).Methods("POST")
 
 	// Dyno
 	router.HandleFunc("/api/dyno-recommendations", authMiddleware(getDynoRecommendations)).Methods("GET")
@@ -707,10 +845,13 @@ func Main() {
 			session.Save(r, w)
 		}
 
+		// The demo's sign-in page is always the app's own: no admin-set banner, which
+		// any visitor (every one an administrator) could otherwise write.
 		var rawMessage string
-		err := db.QueryRow("SELECT COALESCE(login_message, '') FROM settings WHERE id = 1").Scan(&rawMessage)
-		if err != nil {
-			rawMessage = ""
+		if !demoMode() {
+			if err := db.QueryRow("SELECT COALESCE(login_message, '') FROM settings WHERE id = 1").Scan(&rawMessage); err != nil {
+				rawMessage = ""
+			}
 		}
 
 		p := bluemonday.UGCPolicy()
@@ -719,9 +860,15 @@ func Main() {
 		data := struct {
 			LoginMessage template.HTML
 			CSRFToken    template.HTML
+			DemoMode     bool
+			DemoAccounts []demo.Account
 		}{
 			LoginMessage: template.HTML(safeMessage),
 			CSRFToken:    csrf.TemplateField(r),
+			DemoMode:     demoMode(),
+		}
+		if data.DemoMode {
+			data.DemoAccounts = demo.Manifest().Accounts
 		}
 
 		noStoreHTML(w)
@@ -861,114 +1008,5 @@ func Main() {
 		staticFiles.ServeHTTP(w, r)
 	})
 
-	// 4. Initialize CSRF Protection
-	var csrfKey []byte
-	sessionKey := os.Getenv("SESSION_KEY")
-	if sessionKey == "" {
-		// TODO: refuse to start if PRODUCTION=true and SESSION_KEY is unset or < 32 bytes.
-		// Today an unset key boots with an ephemeral one (below), logging everyone out on restart.
-		// Dev mode: generate an ephemeral random key (sessions won't persist across restarts)
-		csrfKey = make([]byte, 32)
-		if _, err := rand.Read(csrfKey); err != nil {
-			slog.Error("Failed to generate ephemeral CSRF key", "error", err)
-			os.Exit(1)
-		}
-		slog.Warn("SESSION_KEY not set; using ephemeral CSRF key")
-	} else if len(sessionKey) < MinSessionKeyLen {
-		slog.Error("SESSION_KEY must be at least 32 characters", "length", len(sessionKey))
-		os.Exit(1)
-	} else {
-		csrfKey = []byte(sessionKey[:32])
-	}
-
-	// Base CSRF options
-	csrfOpts := []csrf.Option{
-		csrf.Secure(os.Getenv("PRODUCTION") == "true"),
-		csrf.Path("/"),
-	}
-
-	// Add trusted origins for local testing and reverse proxies
-	// Same-origin requests pass without an entry, at any address. An entry without a scheme
-	// is trusted as https:// only (filippo.io/csrf/gorilla); to trust a plain-HTTP origin,
-	// list it with its scheme, e.g. http://192.168.1.50:8080.
-	if trusted := os.Getenv("TRUSTED_ORIGINS"); trusted != "" {
-		origins := strings.Split(trusted, ",")
-		for i, o := range origins {
-			origins[i] = strings.TrimSpace(o)
-		}
-		csrfOpts = append(csrfOpts, csrf.TrustedOrigins(origins))
-		slog.Info("Added trusted origins for CSRF", "origins", origins)
-	}
-
-	// How many proxies' worth of X-Forwarded-For to trust — every per-IP rate limit keys
-	// on the result. See getClientIP.
-	trustedProxyCount = parseTrustedProxyCount(os.Getenv("TRUSTED_PROXY_COUNT"), isProduction())
-	slog.Info("Client IP resolution", "trusted_proxy_count", trustedProxyCount)
-
-	csrfMiddleware := csrf.Protect(csrfKey, csrfOpts...)
-
-	// Create the protected router handler
-	protectedHandler := csrfMiddleware(router)
-
-	// Create a conditional handler to bypass CSRF for WOPI webhooks
-	appHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/wopi/") ||
-			strings.HasPrefix(r.URL.Path, "/api/mobile/") {
-			// Send WOPI and mobile API traffic directly to the router (bypassing CSRF)
-			router.ServeHTTP(w, r)
-		} else {
-			// Send all other traffic through the CSRF middleware
-			protectedHandler.ServeHTTP(w, r)
-		}
-	})
-
-	// 5. Start Server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	srv := &http.Server{Addr: ":" + port, Handler: setupGate(appHandler)}
-
-	go func() {
-		slog.Info("Server listening", "port", port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Server error", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	slog.Info("Shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		slog.Error("Server forced to shutdown", "error", err)
-	}
-
-	// Stop any running background job before draining archives. Bounded: an
-	// in-flight LastRank enrich has its own 25s ceiling and we cannot always
-	// outlast it, so reconcileInterruptedJobs on the next boot is the backstop.
-	drainJobs(10 * time.Second)
-
-	// Drain in-flight OCR archive goroutines. archiveSem is acquire-by-send /
-	// release-by-receive (cap 4): sending cap times blocks until every active
-	// goroutine has released. BOUNDED — a hung cloud upload must not wedge exit.
-	drained := make(chan struct{})
-	go func() {
-		for i := 0; i < cap(archiveSem); i++ {
-			archiveSem <- struct{}{}
-		}
-		close(drained)
-	}()
-	select {
-	case <-drained:
-		slog.Info("Archive goroutines drained")
-	case <-time.After(10 * time.Second):
-		slog.Warn("Archive drain timed out; exiting with in-flight archives")
-	}
-	slog.Info("Server stopped")
+	return router
 }

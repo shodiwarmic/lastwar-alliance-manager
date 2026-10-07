@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
-	"os"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/gorilla/sessions"
 )
 
 type contextKey string
@@ -21,6 +21,14 @@ type AuthUser struct {
 	IsAdmin  bool
 	MemberID *int
 	Rank     string
+	// PreviewRank is set while an admin is previewing the app as a rank (175). For the
+	// rest of the request IsAdmin is then false and Rank is the previewed rank, so every
+	// permission check downstream answers as that rank would; MemberID stays the admin's
+	// own, so "own" data (profile, own VS, own strikes) is unchanged.
+	PreviewRank string
+	// RealIsAdmin is true whenever the account is an administrator, preview or not. Only
+	// the preview's own start/exit routes read it — nothing else may.
+	RealIsAdmin bool
 }
 
 // getAuthUser returns the AuthUser injected by authMiddleware, or nil.
@@ -51,6 +59,49 @@ func loadUserFromDB(userID int) *AuthUser {
 		user.MemberID = &mid
 		db.QueryRow("SELECT rank FROM members WHERE id = ?", mid).Scan(&user.Rank)
 	}
+	return user
+}
+
+// previewRankKey is the session value holding an admin's preview-as-rank.
+const previewRankKey = "preview_rank"
+
+// validPreviewRank reports whether r is one of ValidRanks.
+func validPreviewRank(r string) bool {
+	for _, v := range ValidRanks {
+		if r == v {
+			return true
+		}
+	}
+	return false
+}
+
+// loadSessionUser resolves the session's user (nil when it names no live one) and applies
+// an administrator's preview-as-rank. It is the one place a preview takes effect: both
+// authMiddleware (API routes) and getPageData (pages) call it, so a page and the API calls
+// it makes always agree about who the user is. A preview flag on a non-admin — a demoted
+// admin with a live cookie — is ignored and deleted (the caller's session.Save persists
+// the deletion).
+func loadSessionUser(session *sessions.Session) *AuthUser {
+	userID, ok := session.Values["user_id"].(int)
+	if !ok || userID <= 0 {
+		return nil
+	}
+	user := loadUserFromDB(userID)
+	if user == nil {
+		return nil
+	}
+	user.RealIsAdmin = user.IsAdmin
+	rank, _ := session.Values[previewRankKey].(string)
+	if rank == "" {
+		return user
+	}
+	if !user.IsAdmin || !validPreviewRank(rank) {
+		delete(session.Values, previewRankKey)
+		return user
+	}
+	user.PreviewRank = rank
+	user.IsAdmin = false
+	user.Rank = rank
 	return user
 }
 
@@ -101,13 +152,7 @@ func jwtSubjectStillValid(userID int, issuedAt *jwt.NumericDate) bool {
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		session, _ := store.Get(r, "session")
-		userID, ok := session.Values["user_id"].(int)
-		if !ok || userID == 0 {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		user := loadUserFromDB(userID)
+		user := loadSessionUser(session)
 		if user == nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -137,7 +182,8 @@ func userHasPermission(user *AuthUser, permKey string) bool {
 	if user.IsAdmin {
 		return true
 	}
-	if user.MemberID != nil && user.Rank != "" {
+	// An admin previewing a rank may have no linked member; the preview stands in for one.
+	if (user.MemberID != nil || user.PreviewRank != "") && user.Rank != "" {
 		var val int64
 		query := `SELECT COALESCE(json_extract(permissions, '$.' || ?), 0) FROM rank_permissions WHERE rank = ?`
 		if err := db.QueryRow(query, permKey, user.Rank).Scan(&val); err == nil && val != 0 {
@@ -175,6 +221,20 @@ func adminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// requireRealAdmin restricts a handler to administrators whether or not they are
+// previewing a rank. Under a preview IsAdmin is false, so adminMiddleware would leave an
+// admin unable to switch or exit the preview; only the preview routes use this.
+func requireRealAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := getAuthUser(r)
+		if user == nil || !(user.RealIsAdmin || user.IsAdmin) {
+			http.Error(w, "Forbidden: Admin access required", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
 // wopiAuthMiddleware verifies a WOPI JWT access token.
 func wopiAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -185,10 +245,8 @@ func wopiAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		claims := &WOPIClaims{}
-		secretKey := os.Getenv("SESSION_KEY")
-
 		token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-			return []byte(secretKey), nil
+			return tokenSecret(), nil
 		})
 
 		if err != nil || !token.Valid {

@@ -15,17 +15,11 @@ import (
 func getActivityLog(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
 
-	// Permission check: admin always allowed; non-admins need view_activity
-	if !user.IsAdmin {
-		if user.MemberID == nil || user.Rank == "" {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
-		perms := getRankPermissions(user.Rank)
-		if !perms.ViewActivity {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
+	// Permission check: admin always allowed; non-admins need view_activity (which also
+	// covers an admin previewing a rank with no linked member).
+	if !userHasPermission(user, "view_activity") {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
 	}
 
 	// Parse query params

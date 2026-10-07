@@ -71,7 +71,7 @@ function checkForcePasswordRequirements() {
 document.getElementById('force-new-password').addEventListener('input', checkForcePasswordRequirements);
 document.getElementById('force-confirm-password').addEventListener('input', checkForcePasswordRequirements);
 
-document.getElementById('login-form').addEventListener('submit', async (e) => {
+document.getElementById('login-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const username = document.getElementById('username').value.trim();
@@ -190,4 +190,28 @@ document.getElementById('force-password-form').addEventListener('submit', async 
         submitBtn.disabled = false;
         submitBtn.textContent = 'Update & Login';
     }
+});
+
+// ---- Demo sign-in (176) ----
+// The demo's login page offers one button per seeded account instead of a password
+// form; each signs in through /api/demo/login.
+document.querySelectorAll('.demo-login-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const err = document.getElementById('error-message');
+        err.style.display = 'none';
+        document.querySelectorAll('.demo-login-btn').forEach(b => { b.disabled = true; });
+        try {
+            const res = await fetch('/api/demo/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ account: btn.dataset.account }),
+            });
+            if (!res.ok) throw new Error((await res.text()).trim() || 'Sign-in failed.');
+            window.location.href = '/';
+        } catch (e) {
+            err.textContent = e.message;
+            err.style.display = 'block';
+            document.querySelectorAll('.demo-login-btn').forEach(b => { b.disabled = false; });
+        }
+    });
 });

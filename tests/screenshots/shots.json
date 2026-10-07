@@ -1,0 +1,15 @@
+{
+  "today": "2026-10-06",
+  "base": "http://localhost:8080",
+  "account": "demo-admin",
+  "max_height": 1400,
+  "shots": [
+    { "file": "dashboard",        "path": "/",           "width": 1440, "theme": "light" },
+    { "file": "members",          "path": "/members",    "width": 1440, "theme": "light" },
+    { "file": "vs-duel-league",   "path": "/vs#league",  "width": 1440, "theme": "light" },
+    { "file": "season-hub",       "path": "/season-hub", "width": 1440, "theme": "light" },
+    { "file": "schedule",         "path": "/schedule",   "width": 1440, "theme": "light" },
+    { "file": "members-mobile",   "path": "/members",    "width": 412,  "theme": "light", "max_height": 1600 },
+    { "file": "dashboard-dark",   "path": "/",           "width": 1440, "theme": "dark" }
+  ]
+}

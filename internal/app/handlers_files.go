@@ -18,6 +18,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
+
+	"lastwar-alliance/internal/ooxml"
 )
 
 func getStoragePath() string {
@@ -488,7 +490,7 @@ func createBlankFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, ext, err := blankDocumentBytes(req.Kind)
+	data, ext, err := ooxml.Blank(req.Kind)
 	if err != nil {
 		http.Error(w, "Invalid document type", http.StatusBadRequest)
 		return
@@ -843,9 +845,8 @@ func generateWOPIToken(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	secretKey := os.Getenv("SESSION_KEY")
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, _ := token.SignedString([]byte(secretKey))
+	tokenString, _ := token.SignedString(tokenSecret())
 
 	collaboraDomain := os.Getenv("COLLABORA_DOMAIN")
 	if port := os.Getenv("COLLABORA_PORT"); port != "" {

@@ -11,11 +11,13 @@ package app
 import (
 	"strings"
 	"time"
+
+	"lastwar-alliance/internal/gametime"
 )
 
 // sqliteTimeLayout is the shape CURRENT_TIMESTAMP writes (UTC, space-separated).
 // Never format a timestamp for a column with time.RFC3339.
-const sqliteTimeLayout = "2006-01-02 15:04:05"
+const sqliteTimeLayout = gametime.SQLiteLayout
 
 // lastRankParseTime parses an ISO-8601 timestamp from the API — or one read back out of
 // SQLite. Both shapes matter: a column DECLARED TIMESTAMP/DATETIME/DATE is parsed by the

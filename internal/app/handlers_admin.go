@@ -685,6 +685,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	// Check if the GCP Vision credentials physically exist in the database
 	var hasGCPKey bool
 	db.QueryRow("SELECT EXISTS(SELECT 1 FROM credentials WHERE service_name = 'gcp_vision')").Scan(&hasGCPKey)
+	// The mode is not in the positional settings SELECT above; read it the one shared way.
+	ocrMode, _, _ := LoadOCRBackendConfig()
 
 	// Archive status snapshot (for the admin "archiving is failing" banner).
 	archErr, archErrAt, archOK := getArchiveStatus()
@@ -712,7 +714,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	response := extendedSettings{
 		Settings:              s,
 		HasGCPCredentials:     hasGCPKey,
-		OCRPipelineReady:      hasGCPKey && s.CVWorkerURL != "", // Requires BOTH to be true
+		OCRPipelineReady:      ocrPipelineReady(string(ocrMode), hasGCPKey, s.CVWorkerURL),
 		ArchiveGCSAvailable:   hasGCPKey,
 		ArchiveLocalAvailable: os.Getenv("OCR_ARCHIVE_DIR") != "",
 		ArchiveLastError:      archErr,
@@ -855,6 +857,13 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 	// Read the id we're replacing, so a *change* of alliance identity can re-assert Rule 2 below.
 	var prevAllianceID string
 	db.QueryRow(`SELECT COALESCE(lastrank_alliance_id, '') FROM settings WHERE id = 1`).Scan(&prevAllianceID)
+
+	// The demo's sign-in page is always the app's own: the login banner is stored unchanged,
+	// since every visitor is an administrator and would otherwise be writing the next
+	// visitor's first screen.
+	if demoMode() {
+		db.QueryRow(`SELECT COALESCE(login_message, '') FROM settings WHERE id = 1`).Scan(&settings.LoginMessage)
+	}
 
 	// Note: current_season and season_start_date are no longer editable here —
 	// and never read either: see getSettings, which derives both from the seasons

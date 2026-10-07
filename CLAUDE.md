@@ -7,7 +7,9 @@
 - **Frontend**: Vanilla JS, no build step. CSS custom properties (`var(--name)`) throughout.
 - **Templates**: Go `html/template`, parsed as `layout.html` + page template pairs
 - **Layout**: `package app` in `internal/app/` (every handler, model and job lives there) plus
-  `internal/lastrank`, the only package allowed to talk to `lastrank.fun`; the binary is
+  `internal/lastrank`, the only package allowed to talk to `lastrank.fun`, and three leaf
+  packages the app imports: `internal/gametime` (the UTC−2 game clock and week rule),
+  `internal/ooxml` (minimal .docx/.xlsx writer) and `internal/demo` (the demo seed); the binary is
   `cmd/server`, a four-line `main()` calling `app.Main()`. `migrations/`, `templates/` and
   `static/` stay at the repository root and are resolved **relative to the working directory**,
   so run the app from the root (`go run ./cmd/server`). Tests are chdir'd there by `TestMain`
@@ -34,7 +36,7 @@ Every handler that creates, updates, or deletes data must call `logActivity`. Th
 logActivity(userID int, username, action, entityType, entityName string, isSensitive bool, details ...string)
 ```
 
-**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"deferred"`, `"deactivated"`, `"reactivated"`, `"reset"`
+**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"deferred"`, `"deactivated"`, `"reactivated"`, `"reset"`, and `"started"` / `"ended"` (`rank_preview` only)
 
 > `"reset_password"` is retired — no handler emits it since the random-password flow was
 > removed. Historical rows keep it, which is harmless: `activity.js` renders actions verbatim.
@@ -64,7 +66,7 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 > whom" — add the entity type to `neverBatched` rather than accepting the merge.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -1685,6 +1687,23 @@ If you call `form.reset()` on a form containing a Choices select, **re-run your 
 ### CSRF is handled globally
 `filippo.io/csrf/gorilla` rejects cross-origin browser requests on every method except GET/HEAD/OPTIONS, using `Sec-Fetch-Site` and falling back to `Origin` vs `Host`. Requests carrying neither header (non-browser clients) pass. It ignores tokens: `csrf.TemplateField` and `static/csrf.js`'s `X-CSRF-Token` header are kept only for API compatibility. Page JS needs to do nothing — and must not mutate state on a GET.
 
+### Admin preview as rank: `IsAdmin` is false under a preview
+
+`loadSessionUser` (`middleware.go`) is where a session becomes an `AuthUser`, and both
+`authMiddleware` and `getPageData` go through it. When an admin's session carries
+`preview_rank`, it sets `IsAdmin = false`, `Rank = <previewed rank>`, `PreviewRank` and
+`RealIsAdmin = true`, so every downstream check answers as that rank. `MemberID` stays the
+admin's own — "own" data is untouched. `userHasPermission` accepts a nil `MemberID` while a
+preview is active (an unlinked admin has none).
+
+- **Gate on `IsAdmin`, never on `RealIsAdmin`.** Only `requireRealAdmin`, which guards the two
+  `/api/preview-rank` routes, reads `RealIsAdmin` — it is what lets an admin switch or exit a
+  preview at all. Anything else reading it would leak admin rights into the preview.
+- **New permission checks go through `userHasPermission`**, not a hand-rolled
+  `MemberID != nil` test — `getActivityLog` had one and would have 403'd an unlinked admin
+  previewing a rank that holds `view_activity`.
+- The `rank_preview` activity rows are sensitive, so they show only after Exit.
+
 ### Pass `canManage` to the template, not the permission column name
 Handlers resolve the boolean server-side and pass it to the template. The column name never reaches the frontend.
 
@@ -2011,18 +2030,63 @@ burst of upstream calls.
 > are the deprecated names (docs/DESIGN_STANDARD.md → Legacy tokens). Migrate *to* the
 > `--color-*` names, never away from them.
 
+## Demo seed (`internal/demo`, `cmd/demo-seed`)
+
+The fictional demo alliance (docs/DEMO.md). Rules that must hold:
+
+- **The import points app → demo, never back.** `internal/demo` must not import `internal/app`
+  (same rule as `internal/lastrank`). What both need lives in a leaf package: the game clock and
+  the VS-week Monday rule in `internal/gametime` — the app's `gameNow`,
+  `normalizeToGameWeekMonday` and `sqliteTimeLayout` are one-line wrappers over it — and the
+  OOXML writer in `internal/ooxml`.
+- **Insert through explicit column lists.** A migration that renames or drops a column must
+  fail the generator and `internal/demo`'s tests, not produce a stale database. A new table
+  with a page of its own wants rows in the seed and an entry in `seededTables`.
+- **The generator bypasses the validators, so it must obey them by construction.**
+  `TestDemoScheduleObeysTheValidator` (`internal/app`) runs `validateEventRules` and the level
+  rule over every generated schedule row; a change to a game rule shows up there.
+- **Two anchors, one dataset.** `Options.Today` zero means now (the demo); a fixed date
+  freezes the dates (tests, `--today`). Names and numbers never depend on the anchor, which is
+  also what lets `demo.Manifest()` be a pure function the fixtures service calls without a
+  database. Seeded tables are filled in one fixed order from empty, so ids are stable.
+- **Determinism.** Every random draw comes from `stream(area)` (one seeded PCG per area) —
+  never `math/rand`'s global source, and never a `range` over a map, whose order is random.
+  `TestSeedIsDeterministic` seeds twice and compares every table.
+- **No `.pptx` sample file.** Nothing writes one; the sample set is `.docx`, `.xlsx`, `.csv`,
+  `.png`.
+- **Real data supplies shape only.** `params.go` holds rounded aggregates with their queries;
+  never commit a row, a name or a single player's figure from the dev database.
+
+## Demo mode (`DEMO_MODE=true`, `demo_mode.go`)
+
+The public demo (docs/DEMO.md): the ordinary image, seeded at boot. Every visitor is an admin.
+
+- **The block list is applied at route registration** — `demoBlock(...)` around the handler in
+  `buildRouter`, writes only. A new route that writes something a visitor must not (an
+  account, a credential, the disk, anything reaching LastRank or another upstream) gets the
+  wrapper **and a row in `demoBlocked`** (`demo_mode_test.go`), which asserts each route both
+  ways.
+- **`/api/demo/*` exists only in demo mode** (registered inside `if demoMode()`).
+- **`demoSecurityHeaders` mirrors `deploy/Caddyfile`'s app-site header block**, compared by
+  `TestDemoHeadersMatchTheCaddyfile` — a Caddyfile header change fails that test until the list
+  follows it.
+- `trackLogin` and the LastRank scheduler tick return early in demo mode; `login_message` is
+  neither shown nor stored.
+
 ## Session Key Requirement
 
-`SESSION_KEY` must be set in production. If unset, the app generates an
-ephemeral key and logs a warning — this causes all users to be logged out
-on every restart. A key shorter than `MinSessionKeyLen` (32 chars) already
-refuses to boot (`os.Exit(1)`), but an **unset** key still boots with an
-ephemeral one even in production mode. A future improvement should make the
-app refuse to start in production (`PRODUCTION=true`) without a valid
-`SESSION_KEY`.
+`SESSION_KEY` is resolved **once, at the top of `Main()`** (`session_key.go`), before the
+database is opened. With `PRODUCTION=true` an unset key, or one shorter than
+`MinSessionKeyLen` (32 chars), makes the app log `Refusing to start` and exit 1; a short key is
+refused in development too. Without `PRODUCTION` an unset key gets an ephemeral one, so every
+restart logs everyone out.
 
-**Operator action:** Confirm `SESSION_KEY` is set in all production deployments
-before enabling `PRODUCTION=true`.
+The resolved `sessionKeys` carries two forms, and nothing else reads the variable:
+- `store` — the 32 bytes for the cookie store (a 64-char hex key decoded, otherwise the raw
+  bytes truncated). filippo.io/csrf ignores its key, so it is passed the same bytes.
+- `raw` (via `tokenSecret()`) — the string verbatim, the HMAC secret of the mobile and WOPI
+  JWTs. **Keep it the raw string**: switching to the decoded bytes would invalidate every
+  outstanding scanner/collector token and open Collabora session on upgrade.
 
 ## Documentation
 

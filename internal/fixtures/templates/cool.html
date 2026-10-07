@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Document preview — demo</title>
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: flex; flex-direction: column; background: {{if .Dark}}#1a1f2e{{else}}#f4f5f7{{end}}; color: {{if .Dark}}#e9ecef{{else}}#333{{end}}; }
+  .caption { padding: 8px 14px; font-size: 13px; border-bottom: 1px solid {{if .Dark}}rgba(255,255,255,0.1){{else}}#e2e4e8{{end}}; }
+  .pan { flex: 1; overflow: auto; position: relative; -webkit-overflow-scrolling: touch; }
+  .pan img { display: block; max-width: none; }
+  .band { position: fixed; top: 46%; left: -10%; width: 120%; transform: rotate(-18deg); text-align: center;
+          font-size: 42px; font-weight: 800; letter-spacing: 12px; color: rgba(102,126,234,0.22);
+          pointer-events: none; user-select: none; }
+</style>
+</head>
+<body>
+  <div class="caption">Demo — a picture of this document. On a real install this opens in the built-in editor.</div>
+  <div class="pan"><img src="{{.Image}}" alt="A picture of the document, as the editor would show it"></div>
+  <div class="band" aria-hidden="true">DEMO</div>
+</body>
+</html>

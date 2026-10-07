@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"lastwar-alliance/internal/gametime"
 )
 
 // writeJSON sets Content-Type and encodes v as JSON. Encoding errors are logged
@@ -48,23 +50,16 @@ func formatDateString(t time.Time) string {
 }
 
 // Helper function to get Monday of a week
-func getMondayOfWeek(date time.Time) time.Time {
-	offset := int(time.Monday - date.Weekday())
-	if offset > 0 {
-		offset = -6
-	}
-	return date.AddDate(0, 0, offset)
-}
+func getMondayOfWeek(date time.Time) time.Time { return gametime.MondayOf(date) }
 
-// --- Game-time clock (single source of truth) ---
+// --- Game-time clock ---
 //
-// The game day rolls over at a FIXED 02:00 UTC (10PM EDT / 9PM EST) — i.e. a fixed
-// UTC-2 offset with NO daylight saving. Do NOT use a DST zone like America/New_York;
-// the boundary is a constant UTC instant. VS weeks run Mon–Sat with week_date = the Monday.
-var gameLoc = time.FixedZone("Game (UTC-2)", -2*3600)
+// The clock and its rules live in internal/gametime (shared with the demo generator);
+// these wrappers keep the app's call sites unchanged. See gametime.Loc for the rule.
+var gameLoc = gametime.Loc
 
 // gameNow returns the current time in game time (UTC-2).
-func gameNow() time.Time { return time.Now().In(gameLoc) }
+func gameNow() time.Time { return gametime.Now() }
 
 // gameDate returns the current date in game time as "YYYY-MM-DD".
 func gameDate() string { return gameNow().Format("2006-01-02") }
@@ -123,11 +118,7 @@ func dayDate(base string, add int) string {
 // the input is a calendar date with no time-of-day, so shifting it -2h would wrongly
 // roll a Monday back to the previous week.
 func normalizeToGameWeekMonday(dateStr string) (string, error) {
-	t, err := parseDate(dateStr)
-	if err != nil {
-		return "", err
-	}
-	return formatDateString(getMondayOfWeek(t)), nil
+	return gametime.WeekMonday(dateStr)
 }
 
 // Generate random alphanumeric password
