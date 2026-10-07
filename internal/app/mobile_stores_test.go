@@ -59,9 +59,14 @@ func TestMobileTableCoverage(t *testing.T) {
 			t.Errorf("store table %s does not exist", tb)
 		}
 	}
-	for tb := range mobileExcludedTables {
+	for tb, reason := range mobileExcludedTables {
 		if !exists[tb] {
 			t.Errorf("excluded table %s does not exist; remove its entry", tb)
+		}
+		// Every store this project promised has landed; a placeholder reason left
+		// behind would hide a table that never got its endpoint.
+		if strings.Contains(reason, "covered later") {
+			t.Errorf("table %s is still waiting for its endpoint: %q", tb, reason)
 		}
 	}
 }

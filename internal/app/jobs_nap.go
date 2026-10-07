@@ -64,7 +64,8 @@ func (j *napMembersJob) Plan(ctx context.Context) ([]jobItem, error) {
 	// The capture date lives on the history series, not the registry. Read AFTER
 	// the ladder cursor is closed — a query issued while it is open would deadlock
 	// the single connection.
-	if err := db.QueryRow(`SELECT COALESCE(MAX(recorded_at), '') FROM alliance_stats_history WHERE server = ?`,
+	// LastRank rows only: the key the member-count backfill matches on is a LastRank capture.
+	if err := db.QueryRow(`SELECT COALESCE(MAX(recorded_at), '') FROM alliance_stats_history WHERE server = ? AND source = 'lastrank'`,
 		cfg.server).Scan(&j.capturedAt); err != nil {
 		return nil, err
 	}

@@ -242,6 +242,7 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | GET | `/api/mobile/vs-league/current` | `getMobileVSLeagueCurrent` | `view_vs_points` | Active season, current week date, the current week's game-read fields, days and bracket |
 | POST | `/api/mobile/vs-league/week` | `postMobileVSLeagueWeek` | `manage_vs_points` | Week fields, days and bracket in one transaction (`upsertLeagueWeekTx`, `saveLeagueDaysTx`, `replaceLeagueMatchupsTx`, shared with the web); 409 with no active season |
 | POST | `/api/mobile/train-logs` | `postMobileTrainLog` | `manage_train` | Date, type, conductor, VIP; a retry within 10 minutes returns the first log (`duplicate`). Shares `writeTrainLogTx` with the web create and update |
+| POST | `/api/mobile/alliance-stats` | `postMobileAllianceStats` | `manage_allies` | Alliance ranking observations → history (source `mobile`) and registry identity; 409 until `alliance_tag` is set |
 
 ### Roster writes (`roster_apply.go`)
 
@@ -660,6 +661,18 @@ before it, the row is inserted with that `recorded_at`, and later rows are left 
 > The detail path must never touch `external_alliances.lastrank_captured_at`,
 > `power_rank` or `kills_rank` — see migration 058 for why mixing the two clocks
 > strands a row's rank at NULL forever. It guards on and writes `lastrank_seen_at`.
+>
+> **A third writer: the mobile route (`postMobileAllianceStats`), source `mobile`.** It writes
+> change-only history datapoints (inserted `ON CONFLICT DO NOTHING`, so a same-second repeat is
+> "unchanged", not a 500) and registry **identity** only — tag, name, server, through the
+> server-strict `upsertExternalAllianceIdentityTx` (tags repeat across servers) — never the
+> registry's power, kills, ranks, member count or `lastrank_captured_at`. Its datapoints are
+> **history only**: the NAP view's three readers (`getNAP`'s capture date, `napMembersJob.Plan`'s
+> key, `loadOwnLadderRow`) filter on `source = 'lastrank'`, so a newer mobile point can't move
+> the capture date, starve the member-count backfill or replace our ranked row. A
+> provider-agnostic view is private-docs 154. Our own alliance is recognised by
+> `settings.alliance_tag` alone (the phone has no LastRank id), so the route refuses with 409
+> while it is empty rather than registering us.
 
 ## Our own alliance must never be in `external_alliances` (Rule 2)
 

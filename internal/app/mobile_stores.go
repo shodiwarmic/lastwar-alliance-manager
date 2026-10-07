@@ -127,15 +127,22 @@ func mobileStores() []mobileStore {
 				{Method: "POST", Path: "/api/mobile/train-logs", Perms: []string{"manage_train"}, Handler: postMobileTrainLog},
 			},
 		},
+		{
+			Key:        "alliance_stats",
+			Tables:     []string{"alliance_stats_history", "external_alliances"},
+			ReadPerms:  []string{"view_allies"},
+			WritePerms: []string{"manage_allies"},
+			WriteReady: allianceStatsWritable,
+			Routes: []mobileRoute{
+				{Method: "POST", Path: "/api/mobile/alliance-stats", Perms: []string{"manage_allies"}, Handler: postMobileAllianceStats},
+			},
+		},
 	}
 }
 
 // mobileExcludedTables classifies every table that is not a mobile store's, with the
 // reason. A table in neither this map nor a store fails mobile_stores_test.go.
 var mobileExcludedTables = map[string]string{
-	// Game-read stores this PR adds a route for in a later commit.
-	"alliance_stats_history": "covered later in this PR (C13)",
-	"external_alliances":     "covered later in this PR (C13)",
 
 	// Officer judgement or app data: nothing the game shows.
 	"member_aliases":               "app data: officers' name-resolution mappings, written alongside scans by save_aliases",

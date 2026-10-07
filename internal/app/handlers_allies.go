@@ -261,6 +261,41 @@ func upsertExternalAllianceTx(tx *sql.Tx, tag, name, serverStr string, st *exter
 
 // findOrCreateExternalAllianceTx links an ally or prospect to its registry row. Thin wrapper over
 // upsertExternalAllianceTx for callers that carry no stats.
+// upsertExternalAllianceIdentityTx is upsertExternalAllianceTx's server-strict mode, for an
+// observation that knows its server (the mobile alliance-stats route): it finds the row by tag
+// AND server — tags repeat across servers, and the tag-only lookup would attach another server's
+// alliance — and writes identity only (tag, name, server), never the registry's power, kills,
+// ranks, member count or lastrank_captured_at, which are the LastRank clock's. Our own tag mints
+// nothing (Rule 2). The other callers' server-blind lookup is private-docs 214.
+func upsertExternalAllianceIdentityTx(tx *sql.Tx, tag, name string, server int) (sql.NullInt64, error) {
+	tag, name = strings.TrimSpace(tag), strings.TrimSpace(name)
+	if tag == "" || server <= 0 {
+		return sql.NullInt64{}, nil
+	}
+	if ourTag := ourAllianceTagTx(tx); ourTag != "" && strings.EqualFold(tag, ourTag) {
+		return sql.NullInt64{}, nil
+	}
+	var id int64
+	err := tx.QueryRow(`SELECT id FROM external_alliances WHERE tag = ? COLLATE NOCASE AND server = ?
+		ORDER BY updated_at DESC LIMIT 1`, tag, server).Scan(&id)
+	if err == nil {
+		if _, uerr := tx.Exec(`UPDATE external_alliances SET name = COALESCE(NULLIF(?,''), name), updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?`, name, id); uerr != nil {
+			return sql.NullInt64{}, uerr
+		}
+		return sql.NullInt64{Int64: id, Valid: true}, nil
+	}
+	if err != sql.ErrNoRows {
+		return sql.NullInt64{}, err
+	}
+	res, err := tx.Exec(`INSERT INTO external_alliances (tag, name, server) VALUES (?, ?, ?)`, tag, nullStr(name), server)
+	if err != nil {
+		return sql.NullInt64{}, err
+	}
+	nid, _ := res.LastInsertId()
+	return sql.NullInt64{Int64: nid, Valid: true}, nil
+}
+
 func findOrCreateExternalAllianceTx(tx *sql.Tx, tag, name, serverStr string) (sql.NullInt64, error) {
 	return upsertExternalAllianceTx(tx, tag, name, serverStr, nil)
 }
