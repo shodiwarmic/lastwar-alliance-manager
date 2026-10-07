@@ -154,6 +154,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	successCount := 0
+	unchangedCount := 0
 	aliasCount := 0
 	var dbErrors []string
 
@@ -182,23 +183,28 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Save Power Record
-		if hasPower {
-			_, err = tx.Exec("INSERT INTO power_history (member_id, power, source) VALUES (?, ?, ?)", row.MatchedMember.ID, powerVal, src)
-			if err != nil {
-				dbErrors = append(dbErrors, fmt.Sprintf("Power Error (%s): %v", row.OriginalName, err))
-			} else {
-				successCount++
+		rowCounted := false
+		// Power and kills go through the one change-only writer: a reading equal to the
+		// member's latest row is counted as unchanged, not written again (private-docs 203).
+		for _, h := range []struct {
+			has      bool
+			category string
+			val      int
+			label    string
+		}{{hasPower, "power", powerVal, "Power"}, {hasKills, "kills", killsVal, "Kill Count"}} {
+			if !h.has {
+				continue
 			}
-		}
-
-		// Save Kill Count Record
-		if hasKills {
-			_, err = tx.Exec("INSERT INTO kill_history (member_id, kills, source) VALUES (?, ?, ?)", row.MatchedMember.ID, killsVal, src)
-			if err != nil {
-				dbErrors = append(dbErrors, fmt.Sprintf("Kill Count Error (%s): %v", row.OriginalName, err))
-			} else {
+			st := memberStats[h.category]
+			wrote, err := recordHistoryIfChanged(tx, st.Table, st.Column, row.MatchedMember.ID, int64(h.val), src)
+			switch {
+			case err != nil:
+				dbErrors = append(dbErrors, fmt.Sprintf("%s Error (%s): %v", h.label, row.OriginalName, err))
+			case wrote:
 				successCount++
+				rowCounted = true
+			default:
+				unchangedCount++
 			}
 		}
 
@@ -245,8 +251,8 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 
 			if vsErr != nil {
 				dbErrors = append(dbErrors, fmt.Sprintf("VS Points Error (%s): %v", row.OriginalName, vsErr))
-			} else if !hasPower && !hasKills {
-				// Only increment success if it wasn't already incremented by power/kills inserts
+			} else if !rowCounted {
+				// Only increment success if it wasn't already incremented by a power/kills write
 				successCount++
 			}
 		}
@@ -290,6 +296,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"message":          fmt.Sprintf("Import successful. Saved data for %d members and registered %d new aliases.", successCount, aliasCount),
 		"imported":         successCount,
+		"unchanged":        unchangedCount,
 		"aliases_saved":    aliasCount,
 		"aliases_received": aliasesReceived,
 	}
