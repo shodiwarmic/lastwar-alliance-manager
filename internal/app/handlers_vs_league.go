@@ -705,34 +705,14 @@ func weekHasDayRows(weekID int) (bool, error) {
 	return n > 0, err
 }
 
-// createVSLeagueWeek upserts a week matchup (unique on season_id + normalized week_date).
-func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
-	user := getAuthUser(r)
-	var p vsLeagueWeekPayload
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-		badRequest(w, "Invalid request body")
-		return
-	}
-	if p.SeasonID <= 0 || p.WeekDate == "" {
-		badRequest(w, "season_id and week_date are required")
-		return
-	}
-	if msg := p.validate(); msg != "" {
-		badRequest(w, msg)
-		return
-	}
-	lrid, ok := sanitizeLastRankIDPtr(p.OpponentLastRankID)
-	if !ok {
-		badRequest(w, "The opponent LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
-		return
-	}
-	p.OpponentLastRankID = lrid
-	weekDate, err := normalizeToGameWeekMonday(p.WeekDate)
-	if err != nil {
-		badRequest(w, "invalid week_date")
-		return
-	}
-
+// upsertLeagueWeekTx upserts a week (unique on season_id + week_date): a field left nil
+// keeps its stored value (COALESCE), and a side's snapshot time is stamped when
+// p.SnapshotNow / p.OurSnapshotNow. weekDate is already normalised. It returns the week's
+// id READ BACK by (season_id, week_date): after an upsert's UPDATE branch SQLite leaves
+// last_insert_rowid() at whatever row was inserted last — on the single connection often
+// an activity_log row — so LastInsertId would answer the wrong id. A week_number another
+// week of the season uses fails with a unique conflict (isUniqueConflict).
+func upsertLeagueWeekTx(q historyExecer, p vsLeagueWeekPayload, weekDate string) (int, error) {
 	var snapshotAt *string
 	if p.SnapshotNow {
 		now := time.Now().UTC().Format("2006-01-02 15:04:05")
@@ -743,8 +723,7 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC().Format("2006-01-02 15:04:05")
 		ourSnapshotAt = &now
 	}
-
-	res, err := db.Exec(`INSERT INTO vs_league_weeks
+	if _, err := q.Exec(`INSERT INTO vs_league_weeks
 		(season_id, week_number, week_date, league_tier, league_rank,
 		 opponent_tag, opponent_name, opponent_server,
 		 opponent_lastrank_id, opponent_power, opponent_kills, opponent_member_count,
@@ -779,7 +758,43 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		p.OpponentLastRankID, p.OpponentPower, p.OpponentKills, p.OpponentMemberCount,
 		snapshotAt, p.OpponentLastRankSeenAt,
 		p.OurPower, p.OurKills, p.OurMemberCount, p.OurServer, ourSnapshotAt,
-		p.OurPoints, p.OpponentPoints, p.Outcome, p.StrategyLabel, p.StrategyResult, p.Notes)
+		p.OurPoints, p.OpponentPoints, p.Outcome, p.StrategyLabel, p.StrategyResult, p.Notes); err != nil {
+		return 0, err
+	}
+	var id int
+	err := q.QueryRow(`SELECT id FROM vs_league_weeks WHERE season_id = ? AND week_date = ?`, p.SeasonID, weekDate).Scan(&id)
+	return id, err
+}
+
+// createVSLeagueWeek upserts a week matchup (unique on season_id + normalized week_date).
+func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	var p vsLeagueWeekPayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		badRequest(w, "Invalid request body")
+		return
+	}
+	if p.SeasonID <= 0 || p.WeekDate == "" {
+		badRequest(w, "season_id and week_date are required")
+		return
+	}
+	if msg := p.validate(); msg != "" {
+		badRequest(w, msg)
+		return
+	}
+	lrid, ok := sanitizeLastRankIDPtr(p.OpponentLastRankID)
+	if !ok {
+		badRequest(w, "The opponent LastRank link/id isn't valid — paste a lastrank.fun/a/<id> link or a 32-char id")
+		return
+	}
+	p.OpponentLastRankID = lrid
+	weekDate, err := normalizeToGameWeekMonday(p.WeekDate)
+	if err != nil {
+		badRequest(w, "invalid week_date")
+		return
+	}
+
+	id, err := upsertLeagueWeekTx(db, p, weekDate)
 	if err != nil {
 		if isUniqueConflict(err) {
 			http.Error(w, "That week number is already used in this season", http.StatusConflict)
@@ -788,7 +803,6 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		dbError(w, "createVSLeagueWeek upsert", err)
 		return
 	}
-	id, _ := res.LastInsertId()
 	logActivity(user.ID, user.Username, "updated", entityVSLeagueWeek, weekLabel(p.WeekNumber, weekDate), false)
 	writeJSON(w, map[string]any{"id": id, "week_date": weekDate})
 }
@@ -966,6 +980,77 @@ func (d vsLeagueDayPayload) carriesInfo() bool {
 		(d.MVPName != nil && strings.TrimSpace(*d.MVPName) != "")
 }
 
+// validateLeagueDays is every rule a day batch must pass before any write: day 1–6,
+// a known outcome, and an outcome that doesn't contradict both scores (F-R07).
+func validateLeagueDays(days []vsLeagueDayPayload) string {
+	for _, d := range days {
+		if d.DayNumber < 1 || d.DayNumber > 6 {
+			return "day_number must be 1-6"
+		}
+		outcome := normalizeDayOutcome(d.Outcome)
+		switch outcome {
+		case "win", "loss", "tie", "pending":
+		default:
+			return "outcome must be win/loss/tie/pending"
+		}
+		if d.OurScore != nil && d.OpponentScore != nil && outcome != "pending" &&
+			outcome != deriveDayOutcome(int(*d.OurScore), int(*d.OpponentScore)) {
+			return "day " + strconv.Itoa(d.DayNumber) + ": outcome contradicts the entered scores"
+		}
+	}
+	return ""
+}
+
+// saveLeagueDaysTx upserts a validated day batch. An empty, pure-pending day is deleted
+// so "has day rows" stays meaningful (F-R16); the MVP resolves to our member as the web
+// always has.
+func saveLeagueDaysTx(tx *sql.Tx, weekID int, days []vsLeagueDayPayload, userID int) error {
+	for _, d := range days {
+		// Normalize outcome from raw scores when both are present (F-R07).
+		outcome := normalizeDayOutcome(d.Outcome)
+		if d.OurScore != nil && d.OpponentScore != nil {
+			outcome = deriveDayOutcome(int(*d.OurScore), int(*d.OpponentScore))
+		}
+		if !d.carriesInfo() {
+			if _, err := tx.Exec(`DELETE FROM vs_league_days WHERE week_id = ? AND day_number = ?`, weekID, d.DayNumber); err != nil {
+				return err
+			}
+			continue
+		}
+		mvpIsOurs := true
+		if d.MVPIsOurs != nil {
+			mvpIsOurs = *d.MVPIsOurs
+		}
+		var mvpMemberID *int
+		var mvpName *string
+		if d.MVPName != nil && strings.TrimSpace(*d.MVPName) != "" {
+			name := strings.TrimSpace(*d.MVPName)
+			mvpName = &name
+			if mvpIsOurs {
+				if m, _, aerr := resolveMemberAlias(tx, name, userID); aerr == nil && m != nil {
+					id := m.ID
+					mvpMemberID = &id
+				}
+			}
+		}
+		if _, err := tx.Exec(`INSERT INTO vs_league_days
+			(week_id, day_number, our_score, opponent_score, outcome, mvp_is_ours, mvp_member_id, mvp_name, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+			ON CONFLICT(week_id, day_number) DO UPDATE SET
+			 our_score = excluded.our_score,
+			 opponent_score = excluded.opponent_score,
+			 outcome = excluded.outcome,
+			 mvp_is_ours = excluded.mvp_is_ours,
+			 mvp_member_id = excluded.mvp_member_id,
+			 mvp_name = excluded.mvp_name,
+			 updated_at = CURRENT_TIMESTAMP`,
+			weekID, d.DayNumber, d.OurScore, d.OpponentScore, outcome, boolToInt(mvpIsOurs), mvpMemberID, mvpName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func saveVSLeagueDays(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
 	weekID, err := strconv.Atoi(mux.Vars(r)["id"])
@@ -986,17 +1071,9 @@ func saveVSLeagueDays(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "Invalid request body")
 		return
 	}
-	for _, d := range payload.Days {
-		if d.DayNumber < 1 || d.DayNumber > 6 {
-			badRequest(w, "day_number must be 1-6")
-			return
-		}
-		switch normalizeDayOutcome(d.Outcome) {
-		case "win", "loss", "tie", "pending":
-		default:
-			badRequest(w, "outcome must be win/loss/tie/pending")
-			return
-		}
+	if msg := validateLeagueDays(payload.Days); msg != "" {
+		badRequest(w, msg)
+		return
 	}
 
 	tx, err := db.Begin()
@@ -1006,59 +1083,9 @@ func saveVSLeagueDays(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	for _, d := range payload.Days {
-		// Normalize outcome from raw scores when both are present (F-R07).
-		outcome := normalizeDayOutcome(d.Outcome)
-		if d.OurScore != nil && d.OpponentScore != nil {
-			derived := deriveDayOutcome(int(*d.OurScore), int(*d.OpponentScore))
-			if outcome != "pending" && outcome != derived {
-				badRequest(w, "day "+strconv.Itoa(d.DayNumber)+": outcome contradicts the entered scores")
-				return
-			}
-			outcome = derived
-		}
-
-		if !d.carriesInfo() {
-			// Drop an empty/pure-pending day so "has day rows" stays meaningful (F-R16).
-			if _, err := tx.Exec(`DELETE FROM vs_league_days WHERE week_id = ? AND day_number = ?`, weekID, d.DayNumber); err != nil {
-				dbError(w, "saveVSLeagueDays delete", err)
-				return
-			}
-			continue
-		}
-
-		mvpIsOurs := true
-		if d.MVPIsOurs != nil {
-			mvpIsOurs = *d.MVPIsOurs
-		}
-		var mvpMemberID *int
-		var mvpName *string
-		if d.MVPName != nil && strings.TrimSpace(*d.MVPName) != "" {
-			name := strings.TrimSpace(*d.MVPName)
-			mvpName = &name
-			if mvpIsOurs {
-				if m, _, aerr := resolveMemberAlias(tx, name, user.ID); aerr == nil && m != nil {
-					id := m.ID
-					mvpMemberID = &id
-				}
-			}
-		}
-
-		if _, err := tx.Exec(`INSERT INTO vs_league_days
-			(week_id, day_number, our_score, opponent_score, outcome, mvp_is_ours, mvp_member_id, mvp_name, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-			ON CONFLICT(week_id, day_number) DO UPDATE SET
-			 our_score = excluded.our_score,
-			 opponent_score = excluded.opponent_score,
-			 outcome = excluded.outcome,
-			 mvp_is_ours = excluded.mvp_is_ours,
-			 mvp_member_id = excluded.mvp_member_id,
-			 mvp_name = excluded.mvp_name,
-			 updated_at = CURRENT_TIMESTAMP`,
-			weekID, d.DayNumber, d.OurScore, d.OpponentScore, outcome, boolToInt(mvpIsOurs), mvpMemberID, mvpName); err != nil {
-			dbError(w, "saveVSLeagueDays upsert", err)
-			return
-		}
+	if err := saveLeagueDaysTx(tx, weekID, payload.Days, user.ID); err != nil {
+		dbError(w, "saveVSLeagueDays", err)
+		return
 	}
 	if err := tx.Commit(); err != nil {
 		dbError(w, "saveVSLeagueDays commit", err)
@@ -1118,6 +1145,65 @@ type vsLeagueMatchupPayload struct {
 	IsOurs     bool    `json:"is_ours"`
 }
 
+// validateLeagueMatchups is every rule a bracket must pass: at most 8 pairings, unique
+// indexes 1–8, ranks 1–16, points 0–13 summing to at most 13, one pairing ours at most.
+func validateLeagueMatchups(ms []vsLeagueMatchupPayload) string {
+	if len(ms) > 8 {
+		return "at most 8 pairings per week"
+	}
+	seenIdx := map[int]bool{}
+	oursCount := 0
+	inRange := func(p *int, lo, hi int) bool { return p == nil || (*p >= lo && *p <= hi) }
+	for i, m := range ms {
+		idx := i + 1
+		if m.MatchIndex != nil {
+			idx = *m.MatchIndex
+		}
+		if idx < 1 || idx > 8 || seenIdx[idx] {
+			return "match_index values must be unique and 1-8"
+		}
+		seenIdx[idx] = true
+		if !inRange(m.ARank, 1, 16) || !inRange(m.BRank, 1, 16) {
+			return "ranks must be 1-16"
+		}
+		if !inRange(m.APoints, 0, 13) || !inRange(m.BPoints, 0, 13) {
+			return "points must be 0-13"
+		}
+		if m.APoints != nil && m.BPoints != nil && *m.APoints+*m.BPoints > 13 {
+			return "a matchup's points can't sum to more than 13"
+		}
+		if m.IsOurs {
+			oursCount++
+		}
+	}
+	if oursCount > 1 {
+		return "only one pairing can be marked as ours"
+	}
+	return ""
+}
+
+// replaceLeagueMatchupsTx replaces a week's bracket with a validated one.
+func replaceLeagueMatchupsTx(tx *sql.Tx, weekID int, ms []vsLeagueMatchupPayload) error {
+	if _, err := tx.Exec(`DELETE FROM vs_league_matchups WHERE week_id = ?`, weekID); err != nil {
+		return err
+	}
+	for i, m := range ms {
+		idx := i + 1
+		if m.MatchIndex != nil {
+			idx = *m.MatchIndex
+		}
+		if _, err := tx.Exec(`INSERT INTO vs_league_matchups
+			(week_id, match_index, a_rank, a_server, a_tag, a_name, a_points,
+			 b_rank, b_server, b_tag, b_name, b_points, is_ours)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			weekID, idx, m.ARank, m.AServer, m.ATag, m.AName, m.APoints,
+			m.BRank, m.BServer, m.BTag, m.BName, m.BPoints, boolToInt(m.IsOurs)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // saveVSLeagueMatchups batch-replaces a week's bracket. Validation runs BEFORE the tx; the tx
 // only DELETEs then INSERTs (no I/O), keeping the single write lock brief.
 func saveVSLeagueMatchups(w http.ResponseWriter, r *http.Request) {
@@ -1140,41 +1226,8 @@ func saveVSLeagueMatchups(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "Invalid request body")
 		return
 	}
-	if len(payload.Matchups) > 8 {
-		badRequest(w, "at most 8 pairings per week")
-		return
-	}
-	seenIdx := map[int]bool{}
-	oursCount := 0
-	inRange := func(p *int, lo, hi int) bool { return p == nil || (*p >= lo && *p <= hi) }
-	for i, m := range payload.Matchups {
-		idx := i + 1
-		if m.MatchIndex != nil {
-			idx = *m.MatchIndex
-		}
-		if idx < 1 || idx > 8 || seenIdx[idx] {
-			badRequest(w, "match_index values must be unique and 1-8")
-			return
-		}
-		seenIdx[idx] = true
-		if !inRange(m.ARank, 1, 16) || !inRange(m.BRank, 1, 16) {
-			badRequest(w, "ranks must be 1-16")
-			return
-		}
-		if !inRange(m.APoints, 0, 13) || !inRange(m.BPoints, 0, 13) {
-			badRequest(w, "points must be 0-13")
-			return
-		}
-		if m.APoints != nil && m.BPoints != nil && *m.APoints+*m.BPoints > 13 {
-			badRequest(w, "a matchup's points can't sum to more than 13")
-			return
-		}
-		if m.IsOurs {
-			oursCount++
-		}
-	}
-	if oursCount > 1 {
-		badRequest(w, "only one pairing can be marked as ours")
+	if msg := validateLeagueMatchups(payload.Matchups); msg != "" {
+		badRequest(w, msg)
 		return
 	}
 
@@ -1184,24 +1237,9 @@ func saveVSLeagueMatchups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM vs_league_matchups WHERE week_id = ?`, weekID); err != nil {
-		dbError(w, "saveVSLeagueMatchups delete", err)
+	if err := replaceLeagueMatchupsTx(tx, weekID, payload.Matchups); err != nil {
+		dbError(w, "saveVSLeagueMatchups", err)
 		return
-	}
-	for i, m := range payload.Matchups {
-		idx := i + 1
-		if m.MatchIndex != nil {
-			idx = *m.MatchIndex
-		}
-		if _, err := tx.Exec(`INSERT INTO vs_league_matchups
-			(week_id, match_index, a_rank, a_server, a_tag, a_name, a_points,
-			 b_rank, b_server, b_tag, b_name, b_points, is_ours)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			weekID, idx, m.ARank, m.AServer, m.ATag, m.AName, m.APoints,
-			m.BRank, m.BServer, m.BTag, m.BName, m.BPoints, boolToInt(m.IsOurs)); err != nil {
-			dbError(w, "saveVSLeagueMatchups insert", err)
-			return
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		dbError(w, "saveVSLeagueMatchups commit", err)

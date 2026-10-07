@@ -239,6 +239,8 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | POST | `/api/mobile/participation/import` | `mobileParticipationImport` | `manage_participation` | Frames (multipart, the web import's limits) → the same answer |
 | POST | `/api/mobile/participation/occurrences` | `mobileParticipationOccurrence` | `manage_participation` | Create the occurrence a board hangs on (the web body) |
 | PUT | `/api/mobile/participation/boards/{eventID}` | `mobileParticipationBoardPut` | `manage_participation` | Entries and values only; roles, result, notes and exceptions kept |
+| GET | `/api/mobile/vs-league/current` | `getMobileVSLeagueCurrent` | `view_vs_points` | Active season, current week date, the current week's game-read fields, days and bracket |
+| POST | `/api/mobile/vs-league/week` | `postMobileVSLeagueWeek` | `manage_vs_points` | Week fields, days and bracket in one transaction (`upsertLeagueWeekTx`, `saveLeagueDaysTx`, `replaceLeagueMatchupsTx`, shared with the web); 409 with no active season |
 
 ### Roster writes (`roster_apply.go`)
 
