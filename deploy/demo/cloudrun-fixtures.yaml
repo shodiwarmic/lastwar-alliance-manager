@@ -7,6 +7,9 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
+  # The budget alert filters on this label (docs/DEMO.md).
+  labels:
+    app: lastwar-demo
   name: lastwar-demo-fixtures
   annotations:
     run.googleapis.com/ingress: all
@@ -17,12 +20,18 @@ spec:
         autoscaling.knative.dev/maxScale: "1"
         autoscaling.knative.dev/minScale: "0"
     spec:
+      # A runtime account of its own, granted only secretAccessor on the demo's two secrets —
+      # not the default compute account, which holds Editor on the project.
+      serviceAccountName: <RUNTIME-SA>
       containerConcurrency: 80
       timeoutSeconds: 60
       containers:
         - image: <REGION>-docker.pkg.dev/<PROJECT>/lastwar-demo/demo-fixtures:<VERSION>
-          # Flags, not environment variables. frame-ancestors is the app service's origin.
-          args: ["-port", "8080", "-frame-ancestors", "https://<APP-HOST>.run.app"]
+          # Flags, not environment variables. frame-ancestors lists the app service's origins —
+          # Cloud Run answers on two hostnames (<service>-<project-number>.<region>.run.app and
+          # the older <service>-<hash>-<region-code>.a.run.app); a visitor on the one not listed
+          # gets a blocked document frame.
+          args: ["-port", "8080", "-frame-ancestors", "https://<APP-HOST>.run.app https://<APP-LEGACY-HOST>.a.run.app"]
           ports:
             - containerPort: 8080
           resources:

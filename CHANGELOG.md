@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v2.2.0 — unreleased
+## v2.2.0 — 2026-10-07
 
 A fictional demo alliance and the public demo built on it, an administrator's preview of the app
 as any rank, response compression, and a production install that refuses to start without a
