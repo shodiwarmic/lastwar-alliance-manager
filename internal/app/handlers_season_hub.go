@@ -1581,6 +1581,108 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 // Contribution import (OCR)
 // ---------------------------------------------------------------------------
 
+// contributionTargetInfo is where a contributions import lands: an unarchived season,
+// a week (0 for a season-total category), and the trackable the category names.
+type contributionTargetInfo struct {
+	Season      *Season
+	WeekNumber  int
+	TrackableID int
+	Category    string
+}
+
+// activityName is the import's activity-log entity name ("S3 — siege weekly Week 2").
+func (t contributionTargetInfo) activityName() string {
+	weekLabel := fmt.Sprintf("Week %d", t.WeekNumber)
+	if t.WeekNumber == 0 {
+		weekLabel = "Season Total"
+	}
+	return fmt.Sprintf("%s — %s %s", t.Season.Name, strings.ReplaceAll(t.Category, "_", " "), weekLabel)
+}
+
+// contributionTarget validates a contributions import's season, week and category — the
+// web import and the mobile route apply one rule. A non-zero status is the HTTP answer
+// with msg. Reads through db: call it before any transaction opens.
+func contributionTarget(seasonID, weekNumber int, category string) (contributionTargetInfo, int, string) {
+	if seasonID == 0 {
+		return contributionTargetInfo{}, http.StatusBadRequest, "season_id is required"
+	}
+	if category == "" {
+		return contributionTargetInfo{}, http.StatusBadRequest, "category is required"
+	}
+	// Season-total screenshots always land in the week_number=0 slot — canonical tie-breaker.
+	if strings.HasSuffix(category, "_season") {
+		weekNumber = 0
+	}
+	s, err := loadSeasonByID(seasonID)
+	if err == sql.ErrNoRows {
+		return contributionTargetInfo{}, http.StatusNotFound, "Season not found"
+	}
+	if err != nil {
+		slog.Error("contributionTarget: load season", "error", err)
+		return contributionTargetInfo{}, http.StatusInternalServerError, "Database error"
+	}
+	if s.ArchivedAt != "" {
+		return contributionTargetInfo{}, http.StatusConflict, "Season is archived and cannot be modified"
+	}
+	// Derive trackable key from category by stripping the granularity suffix.
+	trackableKey := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(category, "_season"), "_weekly"), "_daily")
+	var trackableID int
+	if err := db.QueryRow(`SELECT id FROM season_trackables WHERE season_id = ? AND key = ?`,
+		seasonID, trackableKey).Scan(&trackableID); err == sql.ErrNoRows {
+		return contributionTargetInfo{}, http.StatusBadRequest, "Invalid category for this season"
+	} else if err != nil {
+		slog.Error("contributionTarget: lookup trackable", "error", err)
+		return contributionTargetInfo{}, http.StatusInternalServerError, "Database error"
+	}
+	return contributionTargetInfo{Season: s, WeekNumber: weekNumber, TrackableID: trackableID, Category: category}, 0, ""
+}
+
+// resolveContributionRows resolves read rows to members (tiers 1–3, candidates for an
+// ambiguous split) — the web import and the mobile preview share it.
+func resolveContributionRows(tx *sql.Tx, records []OCRPlayer, userID int) (matched, unresolved []ContributionImportRow) {
+	matched, unresolved = []ContributionImportRow{}, []ContributionImportRow{}
+	// Built once for the whole batch — resolveOCRPlayer's tier-3 folded fallback
+	// would otherwise rebuild it per candidate. Non-fatal on failure.
+	foldIdx, err := buildFoldedNameIndex(tx, userID)
+	if err != nil {
+		slog.Error("resolveContributionRows: folded name index build failed; continuing without accent tolerance", "error", err)
+		foldIdx = nil
+	}
+	for _, rec := range records {
+		row := ContributionImportRow{OriginalName: rec.PlayerName, Points: rec.Score}
+		_, resolvedScore, member, matchType := resolveOCRPlayer(tx, rec, userID, foldIdx)
+		row.Points = resolvedScore
+		if member == nil {
+			// Unresolved — surface candidates (if any) so the submitter can pick.
+			if len(rec.Candidates) > 0 {
+				row.Candidates = rec.Candidates
+			}
+			unresolved = append(unresolved, row)
+			continue
+		}
+		row.MemberID = member.ID
+		row.MemberName = member.Name
+		row.MemberRank = member.Rank
+		row.MatchType = matchType
+		matched = append(matched, row)
+	}
+	return matched, unresolved
+}
+
+// saveContributionTx upserts one member's value for the target's season, week and trackable.
+func saveContributionTx(tx *sql.Tx, t contributionTargetInfo, memberID int, points int64, userID int) error {
+	_, err := tx.Exec(`
+		INSERT INTO season_member_records
+		  (season_id, member_id, week_number, trackable_id, recorded_value, logged_by, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(season_id, member_id, week_number, trackable_id) DO UPDATE SET
+		  recorded_value = excluded.recorded_value,
+		  logged_by      = excluded.logged_by,
+		  updated_at     = CURRENT_TIMESTAMP`,
+		t.Season.ID, memberID, t.WeekNumber, t.TrackableID, points, userID)
+	return err
+}
+
 func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
 
@@ -1594,46 +1696,12 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	category := r.FormValue("category")
 	commit := r.FormValue("commit") == "true"
 
-	if seasonID == 0 {
-		http.Error(w, "season_id is required", http.StatusBadRequest)
+	target, status, msg := contributionTarget(seasonID, weekNumber, category)
+	if status != 0 {
+		http.Error(w, msg, status)
 		return
 	}
-	if category == "" {
-		http.Error(w, "category is required", http.StatusBadRequest)
-		return
-	}
-	// Season-total screenshots always land in the week_number=0 slot — canonical tie-breaker.
-	if strings.HasSuffix(category, "_season") {
-		weekNumber = 0
-	}
-
-	s, err := loadSeasonByID(seasonID)
-	if err == sql.ErrNoRows {
-		http.Error(w, "Season not found", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		slog.Error("handleContributionsImport: load season", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	if s.ArchivedAt != "" {
-		http.Error(w, "Season is archived and cannot be modified", http.StatusConflict)
-		return
-	}
-
-	// Derive trackable key from category by stripping the granularity suffix.
-	trackableKey := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(category, "_season"), "_weekly"), "_daily")
-	var trackableID int
-	if err := db.QueryRow(`SELECT id FROM season_trackables WHERE season_id = ? AND key = ?`,
-		seasonID, trackableKey).Scan(&trackableID); err == sql.ErrNoRows {
-		http.Error(w, "Invalid category for this season", http.StatusBadRequest)
-		return
-	} else if err != nil {
-		slog.Error("handleContributionsImport: lookup trackable", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
+	weekNumber = target.WeekNumber
 
 	files := r.MultipartForm.File["images[]"]
 	if len(files) == 0 {
@@ -1679,40 +1747,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	matched := []ContributionImportRow{}
-	unresolved := []ContributionImportRow{}
-
-	// Built once for the whole batch — resolveOCRPlayer's tier-3 folded fallback
-	// would otherwise rebuild it per candidate. Non-fatal on failure.
-	foldIdx, err := buildFoldedNameIndex(tx, user.ID)
-	if err != nil {
-		slog.Error("handleContributionsImport: folded name index build failed; continuing without accent tolerance", "error", err)
-		foldIdx = nil
-	}
-
-	for _, rec := range records {
-		row := ContributionImportRow{
-			OriginalName: rec.PlayerName,
-			Points:       rec.Score,
-		}
-
-		resolvedName, resolvedScore, member, matchType := resolveOCRPlayer(tx, rec, user.ID, foldIdx)
-		_ = resolvedName // original name kept in row.OriginalName for display
-		row.Points = resolvedScore
-		if member == nil {
-			// Unresolved — surface candidates (if any) so the submitter can pick.
-			if len(rec.Candidates) > 0 {
-				row.Candidates = rec.Candidates
-			}
-			unresolved = append(unresolved, row)
-			continue
-		}
-		row.MemberID = member.ID
-		row.MemberName = member.Name
-		row.MemberRank = member.Rank
-		row.MatchType = matchType
-		matched = append(matched, row)
-	}
+	matched, unresolved := resolveContributionRows(tx, records, user.ID)
 
 	if !commit {
 		tx.Rollback()
@@ -1744,15 +1779,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		if rm.MemberID == 0 {
 			continue
 		}
-		if _, err := tx.Exec(`
-			INSERT INTO season_member_records
-			  (season_id, member_id, week_number, trackable_id, recorded_value, logged_by, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-			ON CONFLICT(season_id, member_id, week_number, trackable_id) DO UPDATE SET
-			  recorded_value = excluded.recorded_value,
-			  logged_by      = excluded.logged_by,
-			  updated_at     = CURRENT_TIMESTAMP`,
-			seasonID, rm.MemberID, weekNumber, trackableID, rm.Points, user.ID); err != nil {
+		if err := saveContributionTx(tx, target, rm.MemberID, rm.Points, user.ID); err != nil {
 			slog.Error("handleContributionsImport: upsert resolved", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -1774,15 +1801,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 
 	// Commit: upsert into season_member_records for the resolved trackable.
 	for _, row := range matched {
-		if _, err := tx.Exec(`
-			INSERT INTO season_member_records
-			  (season_id, member_id, week_number, trackable_id, recorded_value, logged_by, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-			ON CONFLICT(season_id, member_id, week_number, trackable_id) DO UPDATE SET
-			  recorded_value = excluded.recorded_value,
-			  logged_by      = excluded.logged_by,
-			  updated_at     = CURRENT_TIMESTAMP`,
-			seasonID, row.MemberID, weekNumber, trackableID, row.Points, user.ID); err != nil {
+		if err := saveContributionTx(tx, target, row.MemberID, row.Points, user.ID); err != nil {
 			slog.Error("handleContributionsImport: upsert", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -1795,17 +1814,11 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	weekLabel := fmt.Sprintf("Week %d", weekNumber)
-	if weekNumber == 0 {
-		weekLabel = "Season Total"
-	}
 	details := fmt.Sprintf("%d committed, %d resolved", len(matched), resolvedCount)
 	if summary := summarizeOCRDiagnostics(ocrDiag); summary != "" {
 		details += " · " + summary
 	}
-	logActivity(user.ID, user.Username, "imported", "season_contributions",
-		fmt.Sprintf("%s — %s %s", s.Name, strings.ReplaceAll(category, "_", " "), weekLabel), false,
-		details)
+	logActivity(user.ID, user.Username, "imported", "season_contributions", target.activityName(), false, details)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
