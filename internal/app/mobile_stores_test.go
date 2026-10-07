@@ -169,7 +169,10 @@ func TestMobilePermissionsAreLive(t *testing.T) {
 		t.Errorf("R4 capabilities = %v", caps)
 	}
 
+	// The commit's gate is either permission (days follow manage_vs_points, member
+	// stats manage_members), so revoking both closes it.
 	setRankPerm(t, "R4", "manage_vs_points", false)
+	setRankPerm(t, "R4", "manage_members", false)
 	if w := serveMobile(t, "POST", "/api/mobile/commit", commit, tok); w.Code != http.StatusForbidden {
 		t.Errorf("after revoking: %d, want 403", w.Code)
 	}
@@ -179,6 +182,7 @@ func TestMobilePermissionsAreLive(t *testing.T) {
 		t.Errorf("capabilities after revoking = %v", caps)
 	}
 	setRankPerm(t, "R4", "manage_vs_points", true)
+	setRankPerm(t, "R4", "manage_members", true)
 	if w := serveMobile(t, "POST", "/api/mobile/commit", commit, tok); w.Code != http.StatusOK {
 		t.Errorf("after restoring: %d %s", w.Code, w.Body.String())
 	}

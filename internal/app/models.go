@@ -1629,7 +1629,9 @@ type MobileCommitResponse struct {
 	// count rows actually written.
 	RecordsSaved     map[string]int `json:"records_saved"`
 	RecordsUnchanged map[string]int `json:"records_unchanged"`
-	Errors           []string       `json:"errors"`
+	// SaturdayDerived counts members whose Saturday came from a weekly total.
+	SaturdayDerived int      `json:"saturday_derived"`
+	Errors          []string `json:"errors"`
 }
 
 // --- Allies Models ---

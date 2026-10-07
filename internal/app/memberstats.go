@@ -14,13 +14,20 @@ type memberStat struct {
 	Table  string
 	Column string
 	Min    int64
+	// NoDecrease refuses a reading below the member's latest: the game can't lower it,
+	// so a lower reading is a misread (HQ level).
+	NoDecrease bool
 }
 
 // memberStats maps a commit category to the history it writes. Every write goes through
 // recordHistoryIfChanged, so an unchanged reading adds no row.
 var memberStats = map[string]memberStat{
-	"power": {Table: "power_history", Column: "power", Min: 1},
-	"kills": {Table: "kill_history", Column: "kills", Min: 0},
+	"power":            {Table: "power_history", Column: "power", Min: 1},
+	"kills":            {Table: "kill_history", Column: "kills", Min: 0},
+	"hero_power":       {Table: "hero_power_history", Column: "power", Min: 1},
+	"squad_power":      {Table: "squad_power_history", Column: "power", Min: 1},
+	"hq_level":         {Table: "hq_level_history", Column: "hq_level", Min: 1, NoDecrease: true},
+	"profession_level": {Table: "profession_level_history", Column: "profession_level", Min: 1},
 }
 
 // checkMemberStat validates a reading against its category's rule, worded for errors[].

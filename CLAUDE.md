@@ -225,8 +225,27 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | POST | `/api/mobile/login` | `mobileLogin` | rate-limited | Issue JWT |
 | GET | `/api/mobile/members` | `getMobileMembers` | any user | Roster + aliases for client-side resolution |
 | GET | `/api/mobile/capabilities` | `getMobileCapabilities` | any user | What this server accepts, for this caller |
-| POST | `/api/mobile/preview` | `mobilePreview` | `manage_vs_points` | Resolve scanned entries to members; returns matched/unresolved split |
-| POST | `/api/mobile/commit` | `mobileCommit` | `manage_vs_points` | Persist confirmed scan data + optional alias mappings |
+| POST | `/api/mobile/preview` | `mobilePreview` | `manage_vs_points` or `manage_members` | Resolve scanned entries to members; returns matched/unresolved split |
+| POST | `/api/mobile/commit` | `mobileCommit` | as preview; per record by category | Persist confirmed scan data + optional alias mappings |
+
+### Commit categories (`mobileCategories`, `handlers_mobile.go`)
+
+Each record is checked against its category's permission — the gate of the web page that
+writes the same data — resolved before the transaction; a denied record lands in `errors[]`
+and the rest of the upload saves.
+
+| Category | Writes | Needs | Rule |
+|---|---|---|---|
+| `monday`–`saturday` | `vs_points` day column | `manage_vs_points` | upsert into the week |
+| `weekly` | `vs_points.saturday` | `manage_vs_points` | Saturday = total − Mon–Fri (`saturdayFromTotal`, shared with the web preview); never from an incomplete week |
+| `power`, `hero_power`, `squad_power` | their history tables | `manage_members` | > 0, change-only |
+| `kills` | `kill_history` | `manage_members` | ≥ 0, change-only |
+| `hq_level` | `hq_level_history` | `manage_members` | ≥ 1, never below the latest (a lower reading is a misread) |
+| `profession_level` | `profession_level_history` | `manage_members` | ≥ 1, change-only |
+
+Days follow the VS page's `manage_vs_points`, not the web import's stricter `manage_members`, so
+an officer who can type days in can upload them. A new category is a row in `mobileCategories`
+(and, for a member history, in `memberStats`); capabilities' `commit_categories` follows.
 
 ### Roster shape (`MobileMember` — see `models.go`)
 

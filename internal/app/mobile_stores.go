@@ -52,13 +52,16 @@ func mobileBaseRoutes() []mobileRoute {
 func mobileStores() []mobileStore {
 	return []mobileStore{
 		{
-			Key:        "scan_commit",
-			Tables:     []string{"vs_points", "power_history", "kill_history"},
-			ReadPerms:  []string{"manage_vs_points"},
-			WritePerms: []string{"manage_vs_points"},
+			Key: "scan_commit",
+			Tables: []string{"vs_points", "power_history", "kill_history", "hero_power_history",
+				"squad_power_history", "hq_level_history", "profession_level_history"},
+			// Days follow the VS page's gate, member stats the roster's; each record is
+			// checked against its own category's permission (mobileCategories).
+			ReadPerms:  []string{"manage_vs_points", "manage_members"},
+			WritePerms: []string{"manage_vs_points", "manage_members"},
 			Routes: []mobileRoute{
-				{Method: "POST", Path: "/api/mobile/preview", Perms: []string{"manage_vs_points"}, Handler: mobilePreview},
-				{Method: "POST", Path: "/api/mobile/commit", Perms: []string{"manage_vs_points"}, Handler: mobileCommit},
+				{Method: "POST", Path: "/api/mobile/preview", Perms: []string{"manage_vs_points", "manage_members"}, Handler: mobilePreview},
+				{Method: "POST", Path: "/api/mobile/commit", Perms: []string{"manage_vs_points", "manage_members"}, Handler: mobileCommit},
 			},
 		},
 	}
@@ -68,22 +71,18 @@ func mobileStores() []mobileStore {
 // reason. A table in neither this map nor a store fails mobile_stores_test.go.
 var mobileExcludedTables = map[string]string{
 	// Game-read stores this PR adds a route for in a later commit.
-	"hero_power_history":       "covered later in this PR (C6)",
-	"squad_power_history":      "covered later in this PR (C6)",
-	"hq_level_history":         "covered later in this PR (C6)",
-	"profession_level_history": "covered later in this PR (C6)",
-	"members":                  "covered later in this PR (C7)",
-	"prospects":                "covered later in this PR (C8)",
-	"season_member_records":    "covered later in this PR (C9)",
-	"participation_boards":     "covered later in this PR (C10)",
-	"participation_entries":    "covered later in this PR (C10)",
-	"participation_values":     "covered later in this PR (C10)",
-	"vs_league_weeks":          "covered later in this PR (C11)",
-	"vs_league_days":           "covered later in this PR (C11)",
-	"vs_league_matchups":       "covered later in this PR (C11)",
-	"train_logs":               "covered later in this PR (C12)",
-	"alliance_stats_history":   "covered later in this PR (C13)",
-	"external_alliances":       "covered later in this PR (C13)",
+	"members":                "covered later in this PR (C7)",
+	"prospects":              "covered later in this PR (C8)",
+	"season_member_records":  "covered later in this PR (C9)",
+	"participation_boards":   "covered later in this PR (C10)",
+	"participation_entries":  "covered later in this PR (C10)",
+	"participation_values":   "covered later in this PR (C10)",
+	"vs_league_weeks":        "covered later in this PR (C11)",
+	"vs_league_days":         "covered later in this PR (C11)",
+	"vs_league_matchups":     "covered later in this PR (C11)",
+	"train_logs":             "covered later in this PR (C12)",
+	"alliance_stats_history": "covered later in this PR (C13)",
+	"external_alliances":     "covered later in this PR (C13)",
 
 	// Officer judgement or app data: nothing the game shows.
 	"member_aliases":               "app data: officers' name-resolution mappings, written alongside scans by save_aliases",
@@ -195,10 +194,15 @@ func getMobileCapabilities(w http.ResponseWriter, r *http.Request) {
 // mobileCommitCategories maps every category /api/mobile/commit accepts to whether this
 // caller may write it.
 func mobileCommitCategories(user *AuthUser) map[string]bool {
-	canVS := userHasPermission(user, "manage_vs_points")
+	held := map[string]bool{}
 	out := map[string]bool{}
-	for c := range validMobileCategories {
-		out[c] = canVS
+	for c, mc := range mobileCategories {
+		ok, seen := held[mc.Perm]
+		if !seen {
+			ok = userHasPermission(user, mc.Perm)
+			held[mc.Perm] = ok
+		}
+		out[c] = ok
 	}
 	return out
 }

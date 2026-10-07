@@ -10,10 +10,29 @@ import (
 	"time"
 )
 
-var validMobileCategories = map[string]bool{
-	"monday": true, "tuesday": true, "wednesday": true,
-	"thursday": true, "friday": true, "saturday": true, "power": true,
-	"kills": true,
+// mobileCategory is one /api/mobile/commit category: what it writes and the permission
+// each record needs — the permission of the web page that writes the same data.
+type mobileCategory struct {
+	Perm   string
+	VSDay  bool // a vs_points day column, named by the category
+	Weekly bool // the Weekly Rank total: Saturday = total − Mon..Fri
+	Stat   bool // a member history, by memberStats[category]
+}
+
+var mobileCategories = map[string]mobileCategory{
+	"monday":           {Perm: "manage_vs_points", VSDay: true},
+	"tuesday":          {Perm: "manage_vs_points", VSDay: true},
+	"wednesday":        {Perm: "manage_vs_points", VSDay: true},
+	"thursday":         {Perm: "manage_vs_points", VSDay: true},
+	"friday":           {Perm: "manage_vs_points", VSDay: true},
+	"saturday":         {Perm: "manage_vs_points", VSDay: true},
+	"weekly":           {Perm: "manage_vs_points", Weekly: true},
+	"power":            {Perm: "manage_members", Stat: true},
+	"kills":            {Perm: "manage_members", Stat: true},
+	"hero_power":       {Perm: "manage_members", Stat: true},
+	"squad_power":      {Perm: "manage_members", Stat: true},
+	"hq_level":         {Perm: "manage_members", Stat: true},
+	"profession_level": {Perm: "manage_members", Stat: true},
 }
 
 // mobileRosterQuerier is the subset of *sql.DB / *sql.Tx that
@@ -182,7 +201,12 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	// userHasPermission reads through db, and the pool's one connection belongs to the
 	// transaction until it ends, so asking inside it would wait out the statement
 	// ceiling and answer 500.
-	canMembers := userHasPermission(getAuthUser(r), "manage_members")
+	user := getAuthUser(r)
+	held := map[string]bool{
+		"manage_vs_points": userHasPermission(user, "manage_vs_points"),
+		"manage_members":   userHasPermission(user, "manage_members"),
+	}
+	canMembers := held["manage_members"]
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -217,17 +241,19 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 
 	// Group VS records by member_id so we do one upsert per member.
-	// vsFields[memberID] = map of day -> score
-	type vsKey struct {
-		memberID int
-		name     string
-	}
+	// vsFields[memberID] = map of day -> score; weekly[memberID] = the Weekly Rank total.
 	vsFields := map[int]map[string]int{}
 	vsNames := map[int]string{}
+	weekly := map[int]int{}
 
 	for _, rec := range req.Records {
-		if !validCategories(rec.Category) {
+		cat, ok := mobileCategories[rec.Category]
+		if !ok {
 			commitErrors = append(commitErrors, fmt.Sprintf("invalid category %q for %s", rec.Category, rec.OriginalName))
+			continue
+		}
+		if !held[cat.Perm] {
+			commitErrors = append(commitErrors, fmt.Sprintf("%s (%s): %s permission required", rec.OriginalName, rec.Category, cat.Perm))
 			continue
 		}
 		if !validMemberIDs[rec.MemberID] {
@@ -235,10 +261,19 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		if st, ok := memberStats[rec.Category]; ok {
+		switch {
+		case cat.Stat:
+			st := memberStats[rec.Category]
 			if err := checkMemberStat(rec.Category, rec.Score); err != nil {
 				commitErrors = append(commitErrors, fmt.Sprintf("%s (%s): %v", rec.OriginalName, rec.Category, err))
 				continue
+			}
+			if st.NoDecrease {
+				if cur, ok := latestHistoryValue(tx, st.Table, st.Column, rec.MemberID); ok && rec.Score < int64(cur) {
+					commitErrors = append(commitErrors, fmt.Sprintf("%s (%s): %d is below the stored %d, which the game can't lower — likely a misread",
+						rec.OriginalName, rec.Category, rec.Score, cur))
+					continue
+				}
 			}
 			at, err := parseCapturedAt(rec.CapturedAt, now)
 			if err != nil {
@@ -255,13 +290,44 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 			default:
 				recordsUnchanged[rec.Category]++
 			}
-		} else {
+		case cat.Weekly:
+			weekly[rec.MemberID] = int(rec.Score)
+			vsNames[rec.MemberID] = rec.OriginalName
+		default:
 			if vsFields[rec.MemberID] == nil {
 				vsFields[rec.MemberID] = map[string]int{}
-				vsNames[rec.MemberID] = rec.OriginalName
 			}
+			vsNames[rec.MemberID] = rec.OriginalName
 			vsFields[rec.MemberID][rec.Category] = int(rec.Score)
 		}
+	}
+
+	// Weekly totals become Saturdays by the web preview's rule (saturdayFromTotal): never
+	// from an incomplete week, and every member it can't derive is named. A Saturday sent
+	// directly wins.
+	saturdayDerived := 0
+	for memberID, total := range weekly {
+		fields := vsFields[memberID]
+		if _, has := fields["saturday"]; has {
+			continue
+		}
+		stored, err := storedWeekDays(tx, memberID, req.WeekDate)
+		if err != nil {
+			slog.Error("mobileCommit: reading the stored week failed", "member_id", memberID, "error", err)
+			commitErrors = append(commitErrors, fmt.Sprintf("%s (weekly): the stored week could not be read", vsNames[memberID]))
+			continue
+		}
+		sat, err := saturdayFromTotal(total, fields, stored)
+		if err != nil {
+			commitErrors = append(commitErrors, fmt.Sprintf("%s (weekly): %v", vsNames[memberID], err))
+			continue
+		}
+		if fields == nil {
+			fields = map[string]int{}
+			vsFields[memberID] = fields
+		}
+		fields["saturday"] = sat
+		saturdayDerived++
 	}
 
 	// Upsert VS records
@@ -350,8 +416,17 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 		}
 		logActivity(claims.UserID, claims.Username, "imported", "vs_points", req.WeekDate, false, details)
 	}
-	if powerRecordsSaved > 0 {
-		logActivity(claims.UserID, claims.Username, "imported", "power_records", req.WeekDate, false, fmt.Sprintf("%d records", powerRecordsSaved))
+	// One power_records row for every member-stat category except kills, which keeps its
+	// own kill_count row, with a count per category.
+	var statParts []string
+	for _, c := range []string{"power", "hero_power", "squad_power", "hq_level", "profession_level"} {
+		if n := recordsSaved[c]; n > 0 {
+			statParts = append(statParts, fmt.Sprintf("%s %d", strings.ReplaceAll(c, "_", " "), n))
+		}
+	}
+	if len(statParts) > 0 {
+		logActivity(claims.UserID, claims.Username, "imported", "power_records", req.WeekDate, false,
+			strings.Join(statParts, ", ")+" records · via mobile")
 	}
 	if killRecordsSaved > 0 {
 		logActivity(claims.UserID, claims.Username, "imported", "kill_count", req.WeekDate, false, fmt.Sprintf("%d records", killRecordsSaved))
@@ -368,6 +443,7 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 		AliasesSaved:      aliasesSaved,
 		RecordsSaved:      recordsSaved,
 		RecordsUnchanged:  recordsUnchanged,
+		SaturdayDerived:   saturdayDerived,
 		Errors:            commitErrors,
 	}
 	if resp.Errors == nil {
@@ -376,9 +452,4 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
-}
-
-// validCategories returns true if cat is one of the accepted category values.
-func validCategories(cat string) bool {
-	return validMobileCategories[cat]
 }
