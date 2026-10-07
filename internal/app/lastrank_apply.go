@@ -36,7 +36,7 @@ func applyRankChange(tx *sql.Tx, memberID int, newRank string) (bool, error) {
 // that still use it keep resolving. The new primary may itself have been matched
 // via an OCR alias, which is now redundant — dropped, so the name isn't
 // simultaneously a member's primary and a background-guessed alias.
-func applyNameChange(tx *sql.Tx, memberID int, action, newName string) (bool, error) {
+func applyNameChange(tx *sql.Tx, actor aliasActor, memberID int, action, newName string) (bool, error) {
 	if memberID == 0 || strings.TrimSpace(newName) == "" {
 		return false, nil
 	}
@@ -52,12 +52,18 @@ func applyNameChange(tx *sql.Tx, memberID int, action, newName string) (bool, er
 			return false, nil
 		}
 		if oldName != "" && !strings.EqualFold(oldName, newName) {
-			addGlobalAliasOverwritingOCR(tx, memberID, oldName)
+			if err := addGlobalAliasOverwritingOCR(tx, actor, memberID, oldName); err != nil {
+				return false, err
+			}
 		}
-		tx.Exec(`DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND category = 'ocr'`, newName)
+		if _, err := deleteAliasesTx(tx, newName, []string{"ocr"}, actor); err != nil {
+			return false, err
+		}
 		return true, nil
 	case "alias":
-		addGlobalAliasOverwritingOCR(tx, memberID, newName)
+		if err := addGlobalAliasOverwritingOCR(tx, actor, memberID, newName); err != nil {
+			return false, err
+		}
 		return true, nil
 	}
 	return false, nil
@@ -118,7 +124,7 @@ type unmatchedOutcome struct {
 // applyStats carries the entry's power/hero/HQ onto the resolved member. It is
 // gated server-side by lastRankApplyPairedStats regardless of what the client
 // asked for, so accepting a pairing can never overwrite fresher local data.
-func applyUnmatchedAction(tx *sql.Tx, act LastRankUnmatchedAction, recordedAt, captureDate string) (unmatchedOutcome, error) {
+func applyUnmatchedAction(tx *sql.Tx, actor aliasActor, act LastRankUnmatchedAction, recordedAt, captureDate string) (unmatchedOutcome, error) {
 	var out unmatchedOutcome
 
 	switch act.Action {
@@ -126,7 +132,9 @@ func applyUnmatchedAction(tx *sql.Tx, act LastRankUnmatchedAction, recordedAt, c
 		if act.MemberID == 0 {
 			return out, nil
 		}
-		addGlobalAliasOverwritingOCR(tx, act.MemberID, act.LastRankName)
+		if err := addGlobalAliasOverwritingOCR(tx, actor, act.MemberID, act.LastRankName); err != nil {
+			return out, err
+		}
 		out.Aliased, out.MemberID = true, act.MemberID
 
 	case "rename":

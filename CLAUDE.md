@@ -59,11 +59,34 @@ For updates, fetch the old values **before** the UPDATE/Exec call, then compare 
 **Batching**: consecutive `"created"` calls for the same `entity_type` by the same user within 15 minutes are automatically merged (count increments). All other actions always create a new row.
 
 > **Exempt from batching**: entity types listed in `neverBatched` (`activity.go`) always get
-> their own row — currently `password_reset_link` and `invite`. Batching overwrites
+> their own row — currently `password_reset_link`, `invite`, the two participation types
+> and `alias`. Batching overwrites
 > `entity_name` with the most recent value and only bumps a counter, so three reset links
 > in a row collapsed to one row naming only the last recipient. For anything that grants
 > credentials or access, the audit trail has to answer "who was given access, and by
-> whom" — add the entity type to `neverBatched` rather than accepting the merge.
+> whom" — add the entity type to `neverBatched` rather than accepting the merge. `alias`
+> is there because a bulk save otherwise collapsed into one row naming only the last alias.
+>
+> **Writing the record inside the transaction.** `logActivity` goes through `db`, so it
+> must run after `Commit()` (inside a transaction it waits on the transaction's own
+> connection). Where a change and its record must land or fail together, use
+> `logActivityTx(tx, …)`, which returns the error so the caller rolls back. Only alias
+> writes do this today; every other write logs after commit, best effort.
+
+### Alias writes go through `aliases.go`
+
+`saveAliasTx`, `deleteAliasesTx` and `deleteAliasByIDTx` are the only code that writes
+`member_aliases`; never `INSERT`/`DELETE` it directly. They apply the scope rules — a
+**global** write replaces every global and OCR row with the same text; an **OCR** write
+replaces only OCR rows and is refused (`isAliasRefusal`) over a global alias for another
+member unless the caller passes `MayOverrideGlobal` (its `manage_members`, resolved
+before `db.Begin()`); a **personal** write replaces only its owner's rows — and no write
+touches another user's personal alias. Saving a mapping that already exists is a no-op,
+and a text's duplicate rows heal to one when it is next saved. Each change logs one
+`alias` row (`created` / `updated` / `deleted`, details `"<member> (<category>) · via
+<path>"`, plus "re-pointed from …" or "category ocr → global" on an update) through
+`logActivityTx`. There is no unique index on the text: another install may already hold
+duplicates, and choosing which mapping wins is a human's call.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
 `member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`
@@ -293,9 +316,10 @@ assert at **compile time** that its own ceiling clears it —
 lowering `allianceReportEnrichTimeout` below enrich + the limiter's one-second slack
 fails the build instead of silently cancelling the re-pull it asked for.
 
-**Adding a global alias** uses `addGlobalAliasOverwritingOCR` (member_aliases has
-no unique index): it deletes any same-named OCR/global alias first so global wins
-over background OCR, leaving per-user personal aliases alone.
+**Adding a global alias** uses `addGlobalAliasOverwritingOCR`, a wrapper over the one
+alias helper (`saveAliasTx`, see "Alias writes go through `aliases.go`"): a global write
+replaces any same-named OCR/global alias so global wins over background OCR, leaves
+per-user personal aliases alone, and logs the change inside the LastRank transaction.
 
 ## Scout Report (`handlers_alliance_report.go`)
 

@@ -1666,6 +1666,11 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Resolved before the transaction: userHasPermission reads through db, which would
+	// wait on the transaction's connection. An OCR alias may replace another member's
+	// global alias only with manage_members.
+	canMembers := userHasPermission(user, "manage_members")
+
 	tx, err := db.Begin()
 	if err != nil {
 		slog.Error("handleContributionsImport: begin tx", "error", err)
@@ -1733,6 +1738,8 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal([]byte(raw), &resolvedMappings)
 	}
 	resolvedCount := 0
+	actor := aliasActor{UserID: user.ID, Username: user.Username, Via: "Season Hub import"}
+	aliasErrors := []string{}
 	for _, rm := range resolvedMappings {
 		if rm.MemberID == 0 {
 			continue
@@ -1752,26 +1759,16 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 		}
 		resolvedCount++
 		if rm.AliasType != "" && rm.OriginalName != "" {
-			var isGlobal int
-			if rm.AliasType == "global" || rm.AliasType == "ocr" {
-				isGlobal = 1
+			_, err := saveAliasTx(tx, aliasWrite{MemberID: rm.MemberID, Alias: rm.OriginalName,
+				Category: rm.AliasType, Actor: actor, MayOverrideGlobal: canMembers})
+			if err != nil {
+				if !isAliasRefusal(err) {
+					slog.Error("handleContributionsImport: alias", "error", err)
+					http.Error(w, "Database error", http.StatusInternalServerError)
+					return
+				}
+				aliasErrors = append(aliasErrors, fmt.Sprintf("alias %q: %v", rm.OriginalName, err))
 			}
-			var aliasUserID *int
-			if rm.AliasType == "personal" {
-				aliasUserID = &user.ID
-			}
-			tx.Exec(`INSERT INTO member_aliases (member_id, alias, category, user_id)
-				VALUES (?, ?, ?, ?)
-				ON CONFLICT DO NOTHING`,
-				rm.MemberID, rm.OriginalName, func() string {
-					if rm.AliasType == "ocr" {
-						return "ocr"
-					}
-					if isGlobal == 1 {
-						return "global"
-					}
-					return "personal"
-				}(), aliasUserID)
 		}
 	}
 
@@ -1814,6 +1811,7 @@ func handleContributionsImport(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{
 		"committed": len(matched) + resolvedCount,
 		"resolved":  resolvedCount,
+		"errors":    aliasErrors,
 	})
 }
 

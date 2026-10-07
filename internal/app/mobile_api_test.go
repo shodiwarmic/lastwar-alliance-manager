@@ -30,6 +30,13 @@ type mobileFixture struct {
 func setupMobileTestDB(t *testing.T) mobileFixture {
 	t.Helper()
 	setupNameMatchTestDB(t)
+	return seedMobileFixture(t)
+}
+
+// seedMobileFixture seeds setupMobileTestDB's members and users into whatever database
+// db points at (setupOCRTestDB's, for a test that needs the OCR stub too).
+func seedMobileFixture(t *testing.T) mobileFixture {
+	t.Helper()
 	if store == nil {
 		initSessionStore()
 	}
@@ -324,10 +331,10 @@ func TestMobileCommitContract(t *testing.T) {
 	if n := countRows(t, `SELECT COUNT(*) FROM kill_history WHERE member_id = ? AND source = 'mobile'`, f.other); n != 1 {
 		t.Errorf("kill rows stamped mobile = %d", n)
 	}
-	// Pinned: today a global/OCR save deletes every alias with that text, another user's
-	// personal one included.
-	if n := countRows(t, `SELECT COUNT(*) FROM member_aliases WHERE LOWER(alias) = 'zedtext' AND category = 'personal'`); n != 0 {
-		t.Errorf("another user's personal alias survived (%d) — the pinned behaviour changed", n)
+	// A global/OCR save leaves other users' personal aliases alone (it deleted them
+	// before the one alias helper, private-docs 195).
+	if n := countRows(t, `SELECT COUNT(*) FROM member_aliases WHERE LOWER(alias) = 'zedtext' AND category = 'personal'`); n != 1 {
+		t.Errorf("another user's personal alias: %d rows, want it left in place", n)
 	}
 	if n := countRows(t, `SELECT COUNT(*) FROM member_aliases WHERE alias = 'ZEDTEXT' AND category = 'ocr' AND member_id = ?`, f.r3Member); n != 1 {
 		t.Errorf("ocr alias rows = %d", n)

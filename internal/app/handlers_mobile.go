@@ -290,37 +290,29 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Process save_aliases
+	// Process save_aliases through the one alias helper, which logs each change inside
+	// this transaction. A global alias needs manage_members; an OCR mapping replaces
+	// another member's global alias only with it too.
 	aliasesSaved := 0
+	canMembers := claims.ManageMembers || claims.IsAdmin
+	actor := aliasActor{UserID: claims.UserID, Username: claims.Username, Via: "mobile"}
 	for _, aliasReq := range req.SaveAliases {
-		if aliasReq.Category == "global" && !claims.ManageMembers && !claims.IsAdmin {
+		if aliasReq.Category == "global" && !canMembers {
 			commitErrors = append(commitErrors, fmt.Sprintf("cannot save global alias %q: manage_members permission required", aliasReq.FailedAlias))
 			continue
 		}
-
-		var aliasErr error
-		switch aliasReq.Category {
-		case "global", "ocr":
-			if _, err := tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?)", aliasReq.FailedAlias); err != nil {
-				commitErrors = append(commitErrors, fmt.Sprintf("failed to clear alias %q: database error", aliasReq.FailedAlias))
+		ch, err := saveAliasTx(tx, aliasWrite{MemberID: aliasReq.MemberID, Alias: aliasReq.FailedAlias,
+			Category: aliasReq.Category, Actor: actor, MayOverrideGlobal: canMembers})
+		if err != nil {
+			if isAliasRefusal(err) {
+				commitErrors = append(commitErrors, fmt.Sprintf("alias %q: %v", aliasReq.FailedAlias, err))
 				continue
 			}
-			_, aliasErr = tx.Exec("INSERT INTO member_aliases (member_id, category, alias) VALUES (?, ?, ?)", aliasReq.MemberID, aliasReq.Category, aliasReq.FailedAlias)
-		case "personal":
-			if _, err := tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND user_id = ?", aliasReq.FailedAlias, claims.UserID); err != nil {
-				commitErrors = append(commitErrors, fmt.Sprintf("failed to clear personal alias %q: database error", aliasReq.FailedAlias))
-				continue
-			}
-			_, aliasErr = tx.Exec("INSERT INTO member_aliases (member_id, user_id, category, alias) VALUES (?, ?, 'personal', ?)", aliasReq.MemberID, claims.UserID, aliasReq.FailedAlias)
-		default:
-			commitErrors = append(commitErrors, fmt.Sprintf("invalid alias category %q for %q", aliasReq.Category, aliasReq.FailedAlias))
-			continue
+			slog.Error("mobileCommit: alias save failed", "alias", aliasReq.FailedAlias, "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
 		}
-
-		if aliasErr != nil {
-			slog.Error("mobileCommit: alias insert failed", "alias", aliasReq.FailedAlias, "error", aliasErr)
-			commitErrors = append(commitErrors, fmt.Sprintf("alias insert failed for %q: database error", aliasReq.FailedAlias))
-		} else {
+		if ch != nil {
 			aliasesSaved++
 		}
 	}
