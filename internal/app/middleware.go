@@ -208,6 +208,24 @@ func requirePermission(permKey string, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// requireAnyPermission gates a handler behind holding any one of permKeys.
+func requireAnyPermission(permKeys []string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := getAuthUser(r)
+		if user == nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		for _, k := range permKeys {
+			if userHasPermission(user, k) {
+				next(w, r)
+				return
+			}
+		}
+		http.Error(w, "Forbidden: You do not have permission to access this feature.", http.StatusForbidden)
+	}
+}
+
 // adminMiddleware restricts a handler to admin users only.
 // Reads IsAdmin from the context set by authMiddleware — no session reads.
 func adminMiddleware(next http.HandlerFunc) http.HandlerFunc {

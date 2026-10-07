@@ -27,6 +27,12 @@
 6a. **Global utility check** — before adding any CSS to your page file, check if `styles.css` already provides what you need: `.card`/`.card-header`, `.data-table`, `.filter-chip`, `.tab-toolbar`, `.status-msg`, `.badge-*`, `.btn`, `.form-input`, `.tab-bar`, `.tab-btn`. For metric tiles use a grid of `.card`s (see docs/DESIGN_STANDARD.md → Cards), not a bespoke `.stat-card`. Page CSS is for page-specific layout only.
 7. **JS** — `static/feature.js`, loaded in `{{define "scripts"}}` as `<script src="{{asset "/feature.js"}}"></script>`. The `{{asset}}` wrapper is required — see "Static asset cache busting".
 8. **Activity log** — call `logActivity` for every write operation (see section below).
+9. **Mobile endpoint** — any new place that stores **game data** (something the game shows: a
+   score, a level, a ranking, a roster change) ships with a matching `/api/mobile/*` endpoint in
+   the same change, declared in the store registry (`mobile_stores.go`) with a `demoBlocked`
+   row, so scanner features never wait on a backend release. Any other new table goes in
+   `mobileExcludedTables` with the reason. `mobile_stores_test.go` fails the build otherwise —
+   see "Mobile API" below.
 
 ## Activity logging
 
@@ -178,14 +184,49 @@ once the user supplies the screen + tab.
 
 ## Mobile API (`/api/mobile/*`)
 
-Four endpoints serve the Android scanner (`lastwar-android-scanner` repo). All routes are wrapped in `mobileBearerMiddleware` — JWT bearer token in the `Authorization` header, claims fetched via `getMobileClaims(r)` inside handlers.
+Serves the Android scanner (`lastwar-android-scanner` repo), a separately released client: the
+JSON here is a versioned contract with its own tests (`mobile_api_test.go`), never a web
+handler's internal shape.
 
-| Method | Path | Handler | Purpose |
-|---|---|---|---|
-| POST | `/api/mobile/login` | `mobileLogin` | Issue JWT |
-| GET | `/api/mobile/members` | `getMobileMembers` | Roster + aliases for client-side resolution |
-| POST | `/api/mobile/preview` | `mobilePreview` | Resolve scanned entries to members; returns matched/unresolved split |
-| POST | `/api/mobile/commit` | `mobileCommit` | Persist confirmed scan data + optional alias mappings |
+**Permissions are live.** `mobileBearerMiddleware` checks the token (signature, issuer, the
+account still active, minted after the last password change), then loads the user with
+`loadUserFromDB` and stores it under `authUserKey` — the session path's key — so
+`getAuthUser`, `requirePermission` and `userHasPermission` work exactly as on the web. The
+token's permission claims stay in the token and the login response for old clients but are
+**never read for authorization**: a rank change or a matrix edit takes effect on the next
+request. Gates use real `RankPermissions` keys (`requirePermission`, or `requireAnyPermission`
+for an any-of gate).
+
+**No `db` call inside an open transaction.** A mobile write that needs a permission (or any
+other `db`-level read: `isOwnAlliance`, `logActivity`, …) resolves it **before** `db.Begin()`
+and passes a plain boolean into the shared write; the pool's one connection belongs to the
+transaction until it ends (see "One DB connection" below).
+
+**The contract reports itself.** `GET /api/mobile/capabilities` answers `api_version`,
+`app_version`, `stores` (`{"<store>": {"read", "write"}}`, computed live for the caller) and
+`commit_categories` (`{"<category>": bool}`); login also carries `api_version`. Changes are
+**additive only**: `api_version` rises when the capabilities grow, and clients test the maps'
+keys, not the number. The scanner parses with `org.json`'s `opt*` accessors, which ignore
+unknown keys; a client that rejected them would need a version gate instead. A server that
+answers 404 on capabilities speaks contract 1 (login, members, preview, commit; categories
+`monday`–`saturday`, `power`, `kills`).
+
+**Adding a store** (checklist step 9): declare it in `mobileStores()` (`mobile_stores.go`) —
+its tables, read/write permissions and routes; routes are registered from the registry by
+`registerMobileRoutes`, wrapped in `demoBlock` and the bearer middleware. Add each route's row
+to `demoBlocked` (`demo_mode_test.go`), its row to the table below, and its bullet to
+`docs/FEATURES.md`. `mobile_stores_test.go` fails the build if a table of a migrated database
+is neither a store's nor in `mobileExcludedTables` with a reason, if a registered
+`/api/mobile/` route is undeclared or not demo-blocked, or if a gate names a key that is not a
+`RankPermissions` JSON tag.
+
+| Method | Path | Handler | Gate (live) | Purpose |
+|---|---|---|---|---|
+| POST | `/api/mobile/login` | `mobileLogin` | rate-limited | Issue JWT |
+| GET | `/api/mobile/members` | `getMobileMembers` | any user | Roster + aliases for client-side resolution |
+| GET | `/api/mobile/capabilities` | `getMobileCapabilities` | any user | What this server accepts, for this caller |
+| POST | `/api/mobile/preview` | `mobilePreview` | `manage_vs_points` | Resolve scanned entries to members; returns matched/unresolved split |
+| POST | `/api/mobile/commit` | `mobileCommit` | `manage_vs_points` | Persist confirmed scan data + optional alias mappings |
 
 ### Roster shape (`MobileMember` — see `models.go`)
 
@@ -221,7 +262,10 @@ This intentionally differs from the OCR-service path, which sends `candidates[]`
 
 ### Activity logging
 
-`mobileCommit` already calls `logActivity` for each VS / power / kill record write (`vs_points`, `power_records`, `kill_count` entity types — same as the web import path). New mobile endpoints that write data must do the same.
+`mobileCommit` writes one activity row per store per upload — `vs_points`, `power_records`,
+`kill_count`, entity types shared with the web import — not one per record; each alias it saves
+gets its own row through the alias helper. New mobile endpoints that write data log with
+their web path's entity type and action, details ending "via mobile".
 
 ### Week date normalization
 

@@ -72,7 +72,9 @@ func mobileLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve permissions
+	// The permission flags are informational for the client (and kept in the token for
+	// older clients); no mobile route reads them for authorization — every request
+	// resolves the user's permissions live.
 	var manageVS, manageMembers bool
 	if user.IsAdmin {
 		manageVS = true
@@ -123,5 +125,6 @@ func mobileLogin(w http.ResponseWriter, r *http.Request) {
 			"manage_vs_points": manageVS,
 			"manage_members":   manageMembers,
 		},
+		"api_version": mobileAPIVersion,
 	})
 }
