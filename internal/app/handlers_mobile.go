@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var validMobileCategories = map[string]bool{
@@ -135,6 +136,7 @@ func mobilePreview(w http.ResponseWriter, r *http.Request) {
 			OriginalName: entry.Name,
 			Category:     entry.Category,
 			Score:        entry.Score,
+			CapturedAt:   entry.CapturedAt, // echoed from the request, never re-read
 		}
 		member, matchType, err := resolveMemberAliasWithIndex(tx, entry.Name, claims.UserID, foldIdx)
 		if err != nil {
@@ -212,6 +214,7 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	// per member-stat category.
 	recordsSaved := map[string]int{}
 	recordsUnchanged := map[string]int{}
+	now := time.Now()
 
 	// Group VS records by member_id so we do one upsert per member.
 	// vsFields[memberID] = map of day -> score
@@ -237,7 +240,12 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 				commitErrors = append(commitErrors, fmt.Sprintf("%s (%s): %v", rec.OriginalName, rec.Category, err))
 				continue
 			}
-			wrote, err := recordHistoryIfChanged(tx, st.Table, st.Column, rec.MemberID, rec.Score, "mobile")
+			at, err := parseCapturedAt(rec.CapturedAt, now)
+			if err != nil {
+				commitErrors = append(commitErrors, fmt.Sprintf("%s (%s): %v", rec.OriginalName, rec.Category, err))
+				continue
+			}
+			wrote, err := recordHistoryIfChanged(tx, st.Table, st.Column, rec.MemberID, rec.Score, "mobile", at)
 			switch {
 			case err != nil:
 				slog.Error("mobileCommit: history write failed", "category", rec.Category, "error", err)

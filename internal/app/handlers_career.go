@@ -38,18 +38,36 @@ type historyExecer interface {
 // the member's latest row, and reports whether it wrote. Callers validate the value
 // first (memberStats holds each category's rule). table and valueCol are fixed code
 // constants, never user input.
-func recordHistoryIfChanged(q historyExecer, table, valueCol string, memberID int, value int64, source string) (bool, error) {
+//
+// at is when the value was read (private-docs 202), in sqliteTimeLayout, UTC; "" means
+// now. With a time, the comparison is against the latest row at or before it, the row is
+// inserted with that recorded_at, and rows dated after it are left alone. Times are
+// compared in SQL — every history writer stores SQLite's layout — never as strings read
+// back, which the driver returns as RFC 3339.
+func recordHistoryIfChanged(q historyExecer, table, valueCol string, memberID int, value int64, source, at string) (bool, error) {
 	var cur int64
-	err := q.QueryRow("SELECT "+valueCol+" FROM "+table+" WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1",
-		memberID).Scan(&cur)
+	var err error
+	if at == "" {
+		err = q.QueryRow("SELECT "+valueCol+" FROM "+table+" WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1",
+			memberID).Scan(&cur)
+	} else {
+		err = q.QueryRow("SELECT "+valueCol+" FROM "+table+" WHERE member_id = ? AND datetime(recorded_at) <= datetime(?)"+
+			" ORDER BY datetime(recorded_at) DESC LIMIT 1", memberID, at).Scan(&cur)
+	}
 	switch {
 	case err == nil && cur == value:
 		return false, nil
 	case err != nil && err != sql.ErrNoRows:
 		return false, err
 	}
-	if _, err := q.Exec("INSERT INTO "+table+" (member_id, "+valueCol+", source) VALUES (?, ?, ?)",
-		memberID, value, source); err != nil {
+	if at == "" {
+		_, err = q.Exec("INSERT INTO "+table+" (member_id, "+valueCol+", source) VALUES (?, ?, ?)",
+			memberID, value, source)
+	} else {
+		_, err = q.Exec("INSERT INTO "+table+" (member_id, "+valueCol+", source, recorded_at) VALUES (?, ?, ?, ?)",
+			memberID, value, source, at)
+	}
+	if err != nil {
 		return false, err
 	}
 	return true, nil
