@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v2.3.0 — unreleased
+## v2.3.0 — 2026-10-07
 
 The scanner app can now send every kind of game data the alliance manager stores, so new
 scanner features no longer wait for a server release. Phone permissions now follow the
