@@ -79,6 +79,60 @@ func linkProspectSourceAlliance(prospectID int, sourceAlliance string) {
 		ORDER BY updated_at DESC LIMIT 1) WHERE id = ?`, s, s, prospectID)
 }
 
+// insertProspect inserts a prospect and returns its id — the web create and the mobile
+// create share it, so both get the same columns and defaults.
+func insertProspect(q execer, p Prospect) (int, error) {
+	result, err := q.Exec(`
+		INSERT INTO prospects
+			(name, server, source_alliance, power, rank_in_alliance,
+			 recruiter_id, status, notes,
+			 hero_power, seat_color, interested_in_r4,
+			 first_contacted, prospect_type)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.Server, p.SourceAlliance, p.Power, p.RankInAlliance,
+		p.RecruiterID, p.Status, p.Notes,
+		p.HeroPower, p.SeatColor, p.InterestedInR4,
+		p.FirstContacted, p.ProspectType,
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, err := result.LastInsertId()
+	return int(id), err
+}
+
+// prospectGameFields are the prospect fields the game shows — the ones a scan can read.
+type prospectGameFields struct {
+	Name, Server, SourceAlliance, RankInAlliance string
+	Power, HeroPower                             *int64
+}
+
+func optInt64String(v *int64) string {
+	if v == nil {
+		return ""
+	}
+	return strconv.FormatInt(*v, 10)
+}
+
+// prospectGameFieldChanges words a change to the game-read fields for the activity log,
+// as updateProspect always has; the mobile prospect update shares it.
+func prospectGameFieldChanges(old, cur prospectGameFields) []string {
+	var changes []string
+	for _, c := range []struct{ label, o, n string }{
+		{"name", old.Name, cur.Name},
+		{"server", old.Server, cur.Server},
+		{"source alliance", old.SourceAlliance, cur.SourceAlliance},
+		{"rank in alliance", old.RankInAlliance, cur.RankInAlliance},
+		{"power", optInt64String(old.Power), optInt64String(cur.Power)},
+		{"total hero power", optInt64String(old.HeroPower), optInt64String(cur.HeroPower)},
+	} {
+		if c.o != c.n {
+			changes = append(changes, c.label+": "+c.o+" → "+c.n)
+		}
+	}
+	return changes
+}
+
 func createProspect(w http.ResponseWriter, r *http.Request) {
 	var p Prospect
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
@@ -110,26 +164,13 @@ func createProspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.Exec(`
-		INSERT INTO prospects
-			(name, server, source_alliance, power, rank_in_alliance,
-			 recruiter_id, status, notes,
-			 hero_power, seat_color, interested_in_r4,
-			 first_contacted, prospect_type)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.Server, p.SourceAlliance, p.Power, p.RankInAlliance,
-		p.RecruiterID, p.Status, p.Notes,
-		p.HeroPower, p.SeatColor, p.InterestedInR4,
-		p.FirstContacted, p.ProspectType,
-	)
+	id, err := insertProspect(db, p)
 	if err != nil {
 		slog.Error("Failed to create prospect", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-
-	id, _ := result.LastInsertId()
-	p.ID = int(id)
+	p.ID = id
 	linkProspectSourceAlliance(p.ID, p.SourceAlliance)
 
 	if p.RecruiterID != nil {
@@ -239,42 +280,11 @@ func updateProspect(w http.ResponseWriter, r *http.Request) {
 
 	user := getAuthUser(r)
 	var prospectChanges []string
-	if oldName != p.Name {
-		prospectChanges = append(prospectChanges, "name: "+oldName+" → "+p.Name)
-	}
+	prospectChanges = append(prospectChanges, prospectGameFieldChanges(
+		prospectGameFields{oldName, oldServer, oldSourceAlliance, oldRankInAlliance, oldPower, oldHeroPower},
+		prospectGameFields{p.Name, p.Server, p.SourceAlliance, p.RankInAlliance, p.Power, p.HeroPower})...)
 	if oldStatus != p.Status {
 		prospectChanges = append(prospectChanges, "status: "+oldStatus+" → "+p.Status)
-	}
-	if oldServer != p.Server {
-		prospectChanges = append(prospectChanges, "server: "+oldServer+" → "+p.Server)
-	}
-	if oldSourceAlliance != p.SourceAlliance {
-		prospectChanges = append(prospectChanges, "source alliance: "+oldSourceAlliance+" → "+p.SourceAlliance)
-	}
-	if oldRankInAlliance != p.RankInAlliance {
-		prospectChanges = append(prospectChanges, "rank in alliance: "+oldRankInAlliance+" → "+p.RankInAlliance)
-	}
-	oldPowerStr := ""
-	if oldPower != nil {
-		oldPowerStr = strconv.FormatInt(*oldPower, 10)
-	}
-	newPowerStr := ""
-	if p.Power != nil {
-		newPowerStr = strconv.FormatInt(*p.Power, 10)
-	}
-	if oldPowerStr != newPowerStr {
-		prospectChanges = append(prospectChanges, "power: "+oldPowerStr+" → "+newPowerStr)
-	}
-	oldHeroPowerStr := ""
-	if oldHeroPower != nil {
-		oldHeroPowerStr = strconv.FormatInt(*oldHeroPower, 10)
-	}
-	newHeroPowerStr := ""
-	if p.HeroPower != nil {
-		newHeroPowerStr = strconv.FormatInt(*p.HeroPower, 10)
-	}
-	if oldHeroPowerStr != newHeroPowerStr {
-		prospectChanges = append(prospectChanges, "total hero power: "+oldHeroPowerStr+" → "+newHeroPowerStr)
 	}
 	oldRecruiterName := ""
 	if oldRecruiterID != nil {
