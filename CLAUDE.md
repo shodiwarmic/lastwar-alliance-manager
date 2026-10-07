@@ -229,6 +229,8 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | POST | `/api/mobile/commit` | `mobileCommit` | as preview; per record by category | Persist confirmed scan data + optional alias mappings |
 | POST | `/api/mobile/members/attributes` | `mobileMemberAttributes` | `manage_members` | Troop level, squad type, profession; only the fields sent change |
 | POST | `/api/mobile/roster/changes` | `mobileRosterChanges` | `manage_members` | Officer-confirmed rank, rename, join, rejoin, leave |
+| GET | `/api/mobile/prospects` | `getMobileProspects` | `view_recruiting` | Prospects' game-read fields, for matching a scanned profile |
+| POST | `/api/mobile/prospects` | `postMobileProspect` | `manage_recruiting` | Update by `prospect_id` (fields sent only), or create — 409 with the id on a same-name, same-server duplicate |
 
 ### Roster writes (`roster_apply.go`)
 
