@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -320,29 +321,22 @@ var vsCommitFields = map[string]bool{
 	"friday": true, "saturday": true, "power": true, "kills": true,
 }
 
-// deriveSaturday fills in Saturday from a row's Weekly total: total − (Mon..Fri).
-// A day counts as known when the import supplies it or the stored week has it
-// (a stored 0 is the column default, so it does not). With any of Monday–Friday
-// unknown the total is kept, nothing is derived, and the row says why: a
-// mid-week upload would otherwise "derive" a Saturday out of missing days.
-func deriveSaturday(tx *sql.Tx, row *VSImportRow, weekDate string) {
-	if row.Total == nil || row.MatchedMember == nil {
-		return
-	}
-	if _, has := row.UpdatedFields["saturday"]; has {
-		return
-	}
-	stored := make([]int, 5)
-	err := tx.QueryRow(`SELECT monday, tuesday, wednesday, thursday, friday FROM vs_points WHERE member_id = ? AND week_date = ?`,
-		row.MatchedMember.ID, weekDate).Scan(&stored[0], &stored[1], &stored[2], &stored[3], &stored[4])
-	if err != nil && err != sql.ErrNoRows {
-		slog.Error("VS import: reading the stored week failed", "error", err, "member_id", row.MatchedMember.ID)
-		row.Error = "Saturday not derived: the stored week could not be read"
-		return
-	}
+// errSaturdayIncomplete and errSaturdayNegative are saturdayFromTotal's refusals.
+var (
+	errSaturdayIncomplete = errors.New("Saturday not derived: Mon–Fri incomplete")
+	errSaturdayNegative   = errors.New("Total is less than the sum of Monday–Friday")
+)
+
+// saturdayFromTotal derives Saturday from the Weekly Rank total: total − (Mon..Fri),
+// each day taken from the upload or else the stored week. A day counts as known when
+// the upload supplies it or the stored week has it (a stored 0 is the column default,
+// so it does not). With any of Monday–Friday unknown nothing is derived: a mid-week
+// upload would otherwise "derive" a Saturday out of missing days. Pure, so the web
+// preview and the mobile commit apply one rule.
+func saturdayFromTotal(total int, upload map[string]int, stored [5]int) (int, error) {
 	sum := 0
 	for i, day := range vsDayColumns[:5] {
-		if v, ok := row.UpdatedFields[day]; ok {
+		if v, ok := upload[day]; ok {
 			sum += v
 			continue
 		}
@@ -350,12 +344,45 @@ func deriveSaturday(tx *sql.Tx, row *VSImportRow, weekDate string) {
 			sum += stored[i]
 			continue
 		}
-		row.Error = "Saturday not derived: Mon–Fri incomplete"
+		return 0, errSaturdayIncomplete
+	}
+	if total < sum {
+		return 0, errSaturdayNegative
+	}
+	return total - sum, nil
+}
+
+// storedWeekDays reads a member's stored Monday–Friday for a week (zeros when there is
+// no row yet).
+func storedWeekDays(q historyQuerier, memberID int, weekDate string) ([5]int, error) {
+	var d [5]int
+	err := q.QueryRow(`SELECT monday, tuesday, wednesday, thursday, friday FROM vs_points WHERE member_id = ? AND week_date = ?`,
+		memberID, weekDate).Scan(&d[0], &d[1], &d[2], &d[3], &d[4])
+	if err == sql.ErrNoRows {
+		err = nil
+	}
+	return d, err
+}
+
+// deriveSaturday fills in a preview row's Saturday from its Weekly total by
+// saturdayFromTotal. With the week incomplete the total is kept, nothing is derived,
+// and the row says why.
+func deriveSaturday(tx *sql.Tx, row *VSImportRow, weekDate string) {
+	if row.Total == nil || row.MatchedMember == nil {
 		return
 	}
-	sat := *row.Total - sum
-	if sat < 0 {
-		row.Error = "Total is less than the sum of Monday–Friday"
+	if _, has := row.UpdatedFields["saturday"]; has {
+		return
+	}
+	stored, err := storedWeekDays(tx, row.MatchedMember.ID, weekDate)
+	if err != nil {
+		slog.Error("VS import: reading the stored week failed", "error", err, "member_id", row.MatchedMember.ID)
+		row.Error = "Saturday not derived: the stored week could not be read"
+		return
+	}
+	sat, err := saturdayFromTotal(*row.Total, row.UpdatedFields, stored)
+	if err != nil {
+		row.Error = err.Error()
 		return
 	}
 	row.UpdatedFields["saturday"] = sat
