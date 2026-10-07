@@ -231,6 +231,9 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | POST | `/api/mobile/roster/changes` | `mobileRosterChanges` | `manage_members` | Officer-confirmed rank, rename, join, rejoin, leave |
 | GET | `/api/mobile/prospects` | `getMobileProspects` | `view_recruiting` | Prospects' game-read fields, for matching a scanned profile |
 | POST | `/api/mobile/prospects` | `postMobileProspect` | `manage_recruiting` | Update by `prospect_id` (fields sent only), or create — 409 with the id on a same-name, same-server duplicate |
+| GET | `/api/mobile/season-hub` | `getMobileSeasonHub` | `view_season_hub` | Active season, trackables, accepted categories |
+| POST | `/api/mobile/season-hub/contributions/preview` | `mobileContributionsPreview` | `manage_season_hub` | Resolve contribution rows (no OCR — the phone read them) |
+| POST | `/api/mobile/season-hub/contributions/commit` | `mobileContributionsCommit` | `manage_season_hub` | Save rows + aliases; the web import's target, resolution and upsert (`contributionTarget`, `resolveContributionRows`, `saveContributionTx`) |
 
 ### Roster writes (`roster_apply.go`)
 
