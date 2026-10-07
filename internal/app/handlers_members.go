@@ -950,24 +950,23 @@ func confirmMemberUpdates(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// HQ level is history-only; record it (deduped) with the import's provenance.
-		if member.Level > 0 && existingID > 0 {
-			recordHistoryIfChanged(db, "hq_level_history", "hq_level", existingID, member.Level, src)
-		}
-
-		if member.Power > 0 && existingID > 0 {
-			var currentPower int64 = -1
-			db.QueryRow("SELECT power FROM power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1", existingID).Scan(&currentPower)
-			if currentPower != member.Power {
-				db.Exec("INSERT INTO power_history (member_id, power, recorded_at, source) VALUES (?, ?, CURRENT_TIMESTAMP, ?)", existingID, member.Power, src)
-			}
-		}
-
-		if member.SquadPower > 0 && existingID > 0 {
-			var currentSquadPower int64 = -1
-			db.QueryRow("SELECT power FROM squad_power_history WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1", existingID).Scan(&currentSquadPower)
-			if currentSquadPower != member.SquadPower {
-				db.Exec("INSERT INTO squad_power_history (member_id, power, recorded_at, source) VALUES (?, ?, CURRENT_TIMESTAMP, ?)", existingID, member.SquadPower, src)
+		// History is change-only, written through the one writer with the import's
+		// provenance. Errors are logged rather than fatal, as the roster write above is.
+		if existingID > 0 {
+			for _, h := range []struct {
+				table, col string
+				val        int64
+			}{
+				{"hq_level_history", "hq_level", int64(member.Level)},
+				{"power_history", "power", member.Power},
+				{"squad_power_history", "power", member.SquadPower},
+			} {
+				if h.val <= 0 {
+					continue
+				}
+				if _, err := recordHistoryIfChanged(db, h.table, h.col, existingID, h.val, src); err != nil {
+					slog.Error("members import: history write failed", "table", h.table, "member_id", existingID, "error", err)
+				}
 			}
 		}
 	}

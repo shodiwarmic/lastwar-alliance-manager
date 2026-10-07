@@ -27,25 +27,32 @@ func latestHistoryValue(q historyQuerier, table, valueCol string, memberID int) 
 	return v, true
 }
 
-// recordHistoryIfChanged appends a manual history datapoint when the submitted
-// value differs from the latest stored one (dedup), skipping non-positive values.
-// Mirrors the power/hero/kill change-detection in updateMember. source is the
-// provenance to stamp ('manual' for UI edits, 'csv' for imports, etc.).
-func recordHistoryIfChanged(q interface {
+// historyExecer is a historyQuerier that can also write: *sql.Tx, or db.
+type historyExecer interface {
 	historyQuerier
 	Exec(string, ...any) (sql.Result, error)
-}, table, valueCol string, memberID, value int, source string) bool {
-	if value <= 0 {
-		return false
+}
+
+// recordHistoryIfChanged is the one change-only writer for the member history tables
+// (private-docs 203): it appends a datapoint stamped with source unless the value equals
+// the member's latest row, and reports whether it wrote. Callers validate the value
+// first (memberStats holds each category's rule). table and valueCol are fixed code
+// constants, never user input.
+func recordHistoryIfChanged(q historyExecer, table, valueCol string, memberID int, value int64, source string) (bool, error) {
+	var cur int64
+	err := q.QueryRow("SELECT "+valueCol+" FROM "+table+" WHERE member_id = ? ORDER BY recorded_at DESC LIMIT 1",
+		memberID).Scan(&cur)
+	switch {
+	case err == nil && cur == value:
+		return false, nil
+	case err != nil && err != sql.ErrNoRows:
+		return false, err
 	}
-	if cur, ok := latestHistoryValue(q, table, valueCol, memberID); ok && cur == value {
-		return false
+	if _, err := q.Exec("INSERT INTO "+table+" (member_id, "+valueCol+", source) VALUES (?, ?, ?)",
+		memberID, value, source); err != nil {
+		return false, err
 	}
-	_, err := q.Exec(
-		"INSERT INTO "+table+" (member_id, "+valueCol+", source) VALUES (?, ?, ?)",
-		memberID, value, source,
-	)
-	return err == nil
+	return true, nil
 }
 
 // getHQLevelHistory returns current HQ level + 7/30-day deltas for the Tracking

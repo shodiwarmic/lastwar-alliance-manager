@@ -208,8 +208,10 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 
 	var commitErrors []string
 	vsRecordsSaved := 0
-	powerRecordsSaved := 0
-	killRecordsSaved := 0
+	// Rows actually written, and readings equal to the member's latest row (skipped),
+	// per member-stat category.
+	recordsSaved := map[string]int{}
+	recordsUnchanged := map[string]int{}
 
 	// Group VS records by member_id so we do one upsert per member.
 	// vsFields[memberID] = map of day -> score
@@ -230,19 +232,20 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		if rec.Category == "power" {
-			if _, err := tx.Exec("INSERT INTO power_history (member_id, power, source) VALUES (?, ?, 'mobile')", rec.MemberID, rec.Score); err != nil {
-				slog.Error("mobileCommit: power insert failed", "error", err)
-				commitErrors = append(commitErrors, fmt.Sprintf("power insert failed for member_id %d: database error", rec.MemberID))
-			} else {
-				powerRecordsSaved++
+		if st, ok := memberStats[rec.Category]; ok {
+			if err := checkMemberStat(rec.Category, rec.Score); err != nil {
+				commitErrors = append(commitErrors, fmt.Sprintf("%s (%s): %v", rec.OriginalName, rec.Category, err))
+				continue
 			}
-		} else if rec.Category == "kills" {
-			if _, err := tx.Exec("INSERT INTO kill_history (member_id, kills, source) VALUES (?, ?, 'mobile')", rec.MemberID, rec.Score); err != nil {
-				slog.Error("mobileCommit: kills insert failed", "error", err)
-				commitErrors = append(commitErrors, fmt.Sprintf("kills insert failed for member_id %d: database error", rec.MemberID))
-			} else {
-				killRecordsSaved++
+			wrote, err := recordHistoryIfChanged(tx, st.Table, st.Column, rec.MemberID, rec.Score, "mobile")
+			switch {
+			case err != nil:
+				slog.Error("mobileCommit: history write failed", "category", rec.Category, "error", err)
+				commitErrors = append(commitErrors, fmt.Sprintf("%s insert failed for member_id %d: database error", rec.Category, rec.MemberID))
+			case wrote:
+				recordsSaved[rec.Category]++
+			default:
+				recordsUnchanged[rec.Category]++
 			}
 		} else {
 			if vsFields[rec.MemberID] == nil {
@@ -322,6 +325,9 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	powerRecordsSaved := recordsSaved["power"]
+	killRecordsSaved := recordsSaved["kills"]
+
 	if err := tx.Commit(); err != nil {
 		slog.Error("mobileCommit: tx commit failed", "error", err)
 		http.Error(w, "Failed to save changes", http.StatusInternalServerError)
@@ -352,6 +358,8 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 		PowerRecordsSaved: powerRecordsSaved,
 		KillRecordsSaved:  killRecordsSaved,
 		AliasesSaved:      aliasesSaved,
+		RecordsSaved:      recordsSaved,
+		RecordsUnchanged:  recordsUnchanged,
 		Errors:            commitErrors,
 	}
 	if resp.Errors == nil {

@@ -555,7 +555,13 @@ was created:
 | `mobile` | Submitted by the Android scanner app |
 
 Every new write path must stamp its true source; `provenanceSource()`
-normalizes a client-declared origin. No other history/state tables carry a
+normalizes a client-declared origin.
+
+**Scan and import writes to the member history tables are change-only.** They go through
+`recordHistoryIfChanged` (`handlers_career.go`), which skips a value equal to the member's
+latest row and reports it as unchanged; `memberStats` (`memberstats.go`) maps each commit
+category to its table, column and minimum. The mobile commit, the VS import commit and the
+Members CSV import use it — a repeat upload adds no rows. No other history/state tables carry a
 `source` column — don't assume one on tables outside this list.
 
 > **`alliance_stats_history` is keyed on `external_alliance_id`, not
