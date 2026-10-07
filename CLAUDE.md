@@ -241,6 +241,7 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | PUT | `/api/mobile/participation/boards/{eventID}` | `mobileParticipationBoardPut` | `manage_participation` | Entries and values only; roles, result, notes and exceptions kept |
 | GET | `/api/mobile/vs-league/current` | `getMobileVSLeagueCurrent` | `view_vs_points` | Active season, current week date, the current week's game-read fields, days and bracket |
 | POST | `/api/mobile/vs-league/week` | `postMobileVSLeagueWeek` | `manage_vs_points` | Week fields, days and bracket in one transaction (`upsertLeagueWeekTx`, `saveLeagueDaysTx`, `replaceLeagueMatchupsTx`, shared with the web); 409 with no active season |
+| POST | `/api/mobile/train-logs` | `postMobileTrainLog` | `manage_train` | Date, type, conductor, VIP; a retry within 10 minutes returns the first log (`duplicate`). Shares `writeTrainLogTx` with the web create and update |
 
 ### Roster writes (`roster_apply.go`)
 

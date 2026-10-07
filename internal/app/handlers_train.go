@@ -3,6 +3,7 @@
 package app
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"math/rand"
@@ -88,53 +89,140 @@ func getTrainLogs(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(logs)
 }
 
-func postTrainLog(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Date        string  `json:"date"`
-		TrainType   string  `json:"train_type"`
-		ConductorID int     `json:"conductor_id"`
-		VIPID       *int    `json:"vip_id"`
-		VIPType     *string `json:"vip_type"`
-		Notes       string  `json:"notes"`
+// trainLogRequest is a train log as the web and mobile routes send it.
+type trainLogRequest struct {
+	Date        string  `json:"date"`
+	TrainType   string  `json:"train_type"`
+	ConductorID int     `json:"conductor_id"`
+	VIPID       *int    `json:"vip_id"`
+	VIPType     *string `json:"vip_type"`
+	Notes       string  `json:"notes"`
+}
+
+// writeTrainLogTx creates (id 0) or updates a train log in the caller's transaction —
+// the one write behind the web POST and PUT and the mobile route, so neither can leave a
+// half-written row. Beyond validateTrainLogRequest: the date is YYYY-MM-DD and not after
+// today's game date, and the conductor and any VIP exist and are active (on an update, a
+// member the log already names may since have left). With dedupe (the mobile create), a
+// log identical in date, type, conductor and VIP, written by the same user within the
+// last 10 minutes, is returned instead of a second one: a retried upload, not a second
+// train. The lookup and the insert share the transaction, which the single connection
+// serialises. A non-zero status is a refusal with msg. Timestamps keep the web's format.
+func writeTrainLogTx(tx *sql.Tx, id int, req trainLogRequest, userID int, dedupe bool) (int, bool, int, string, error) {
+	if msg := validateTrainLogRequest(req.Date, req.TrainType, req.ConductorID, req.VIPID, req.VIPType); msg != "" {
+		return 0, false, http.StatusBadRequest, msg, nil
 	}
+	if _, err := time.Parse("2006-01-02", req.Date); err != nil {
+		return 0, false, http.StatusBadRequest, "date must be YYYY-MM-DD", nil
+	}
+	if req.Date > gameDate() {
+		return 0, false, http.StatusBadRequest, "date " + req.Date + " is after today's game date", nil
+	}
+	var storedConductor, storedVIP int
+	if id > 0 {
+		var vip sql.NullInt64
+		if err := tx.QueryRow(`SELECT conductor_id, vip_id FROM train_logs WHERE id = ?`, id).Scan(&storedConductor, &vip); err == sql.ErrNoRows {
+			return 0, false, http.StatusNotFound, "Train log not found", nil
+		} else if err != nil {
+			return 0, false, 0, "", err
+		}
+		storedVIP = int(vip.Int64)
+	}
+	check := func(memberID, stored int, role string) (int, string, error) {
+		var rank string
+		if err := tx.QueryRow(`SELECT rank FROM members WHERE id = ?`, memberID).Scan(&rank); err == sql.ErrNoRows {
+			return http.StatusBadRequest, "the " + role + " is not a member — reload and pick again", nil
+		} else if err != nil {
+			return 0, "", err
+		}
+		if rank == "EX" && memberID != stored {
+			return http.StatusBadRequest, "the " + role + " has left the alliance", nil
+		}
+		return 0, "", nil
+	}
+	if st, msg, err := check(req.ConductorID, storedConductor, "conductor"); st != 0 || err != nil {
+		return 0, false, st, msg, err
+	}
+	if req.VIPID != nil {
+		if st, msg, err := check(*req.VIPID, storedVIP, "VIP"); st != 0 || err != nil {
+			return 0, false, st, msg, err
+		}
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	if id > 0 {
+		_, err := tx.Exec(`UPDATE train_logs SET date=?, train_type=?, conductor_id=?, vip_id=?, vip_type=?, notes=?, updated_at=?
+			WHERE id=?`, req.Date, req.TrainType, req.ConductorID, req.VIPID, req.VIPType, req.Notes, now, id)
+		return id, false, 0, "", err
+	}
+	if dedupe {
+		var dup int
+		err := tx.QueryRow(`SELECT id FROM train_logs WHERE date = ? AND train_type = ? AND conductor_id = ?
+			AND vip_id IS ? AND created_by = ? AND datetime(created_at) >= datetime('now', '-10 minutes')
+			ORDER BY id DESC LIMIT 1`, req.Date, req.TrainType, req.ConductorID, req.VIPID, userID).Scan(&dup)
+		if err == nil {
+			return dup, true, 0, "", nil
+		} else if err != sql.ErrNoRows {
+			return 0, false, 0, "", err
+		}
+	}
+	res, err := tx.Exec(`
+		INSERT INTO train_logs (date, train_type, conductor_id, vip_id, vip_type, notes, created_by, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.Date, req.TrainType, req.ConductorID, req.VIPID, req.VIPType, req.Notes, userID, now, now)
+	if err != nil {
+		return 0, false, 0, "", err
+	}
+	n, _ := res.LastInsertId()
+	return int(n), false, 0, "", nil
+}
+
+// saveTrainLog runs writeTrainLogTx in its own transaction and answers the route, then
+// reads back the log and the daily-limit warning — after the commit, since both go
+// through db. It returns the saved log for the caller's activity row, or nil when it
+// has already answered with an error.
+func saveTrainLog(w http.ResponseWriter, id int, req trainLogRequest, userID int, dedupe bool) (*TrainLog, bool) {
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "saveTrainLog begin", err)
+		return nil, false
+	}
+	defer tx.Rollback()
+	id, duplicate, status, msg, err := writeTrainLogTx(tx, id, req, userID, dedupe)
+	if err != nil {
+		dbError(w, "saveTrainLog", err)
+		return nil, false
+	}
+	if status != 0 {
+		http.Error(w, msg, status)
+		return nil, false
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "saveTrainLog commit", err)
+		return nil, false
+	}
+	tl, err := fetchTrainLog(id)
+	if err != nil {
+		dbError(w, "saveTrainLog fetch", err)
+		return nil, false
+	}
+	return tl, duplicate
+}
+
+func postTrainLog(w http.ResponseWriter, r *http.Request) {
+	var req trainLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	if err := validateTrainLogRequest(req.Date, req.TrainType, req.ConductorID, req.VIPID, req.VIPType); err != "" {
-		http.Error(w, err, http.StatusBadRequest)
-		return
-	}
-
 	actor := getAuthUser(r)
-	userID := actor.ID
-	now := time.Now().UTC().Format(time.RFC3339)
-
-	res, err := db.Exec(`
-		INSERT INTO train_logs (date, train_type, conductor_id, vip_id, vip_type, notes, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		req.Date, req.TrainType, req.ConductorID, req.VIPID, req.VIPType, req.Notes, userID, now, now,
-	)
-	if err != nil {
-		slog.Error("postTrainLog insert failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
+	tl, _ := saveTrainLog(w, 0, req, actor.ID, false)
+	if tl == nil {
 		return
 	}
-	id, _ := res.LastInsertId()
-
-	tl, fetchErr := fetchTrainLog(int(id))
-	if fetchErr != nil {
-		slog.Error("postTrainLog fetch failed", "error", fetchErr, "id", id)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	limitWarning := checkDailyLimit(req.Date, req.TrainType, int(id))
-
-	logActivity(userID, actor.Username, "created", "train_log", req.Date+" "+req.TrainType, false, "conductor: "+tl.ConductorName)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	limitWarning := checkDailyLimit(req.Date, req.TrainType, tl.ID)
+	logActivity(actor.ID, actor.Username, "created", "train_log", req.Date+" "+req.TrainType, false, "conductor: "+tl.ConductorName)
+	writeJSON(w, map[string]interface{}{
 		"train_log":     tl,
 		"limit_warning": limitWarning,
 	})
@@ -146,54 +234,44 @@ func putTrainLog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-
-	var req struct {
-		Date        string  `json:"date"`
-		TrainType   string  `json:"train_type"`
-		ConductorID int     `json:"conductor_id"`
-		VIPID       *int    `json:"vip_id"`
-		VIPType     *string `json:"vip_type"`
-		Notes       string  `json:"notes"`
-	}
+	var req trainLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	if errMsg := validateTrainLogRequest(req.Date, req.TrainType, req.ConductorID, req.VIPID, req.VIPType); errMsg != "" {
-		http.Error(w, errMsg, http.StatusBadRequest)
-		return
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	_, dbErr := db.Exec(`
-		UPDATE train_logs SET date=?, train_type=?, conductor_id=?, vip_id=?, vip_type=?, notes=?, updated_at=?
-		WHERE id=?`,
-		req.Date, req.TrainType, req.ConductorID, req.VIPID, req.VIPType, req.Notes, now, id,
-	)
-	if dbErr != nil {
-		slog.Error("putTrainLog update failed", "error", dbErr, "id", id)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	tl, fetchErr := fetchTrainLog(id)
-	if fetchErr != nil {
-		slog.Error("putTrainLog fetch failed", "error", fetchErr, "id", id)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	limitWarning := checkDailyLimit(req.Date, req.TrainType, id)
-
 	actor := getAuthUser(r)
-	actorID, actorName := actor.ID, actor.Username
-	logActivity(actorID, actorName, "updated", "train_log", req.Date+" "+req.TrainType, false, "conductor: "+tl.ConductorName)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	tl, _ := saveTrainLog(w, id, req, actor.ID, false)
+	if tl == nil {
+		return
+	}
+	limitWarning := checkDailyLimit(req.Date, req.TrainType, id)
+	logActivity(actor.ID, actor.Username, "updated", "train_log", req.Date+" "+req.TrainType, false, "conductor: "+tl.ConductorName)
+	writeJSON(w, map[string]interface{}{
 		"train_log":     tl,
 		"limit_warning": limitWarning,
 	})
+}
+
+// POST /api/mobile/train-logs (manage_train): date, type, conductor and VIP. Notes and
+// "showed up" stay web-only. A retry within 10 minutes returns the first log with
+// "duplicate": true.
+func postMobileTrainLog(w http.ResponseWriter, r *http.Request) {
+	var req trainLogRequest
+	if !decodeMobileJSON(w, r, &req) {
+		return
+	}
+	req.Notes = ""
+	actor := getAuthUser(r)
+	tl, duplicate := saveTrainLog(w, 0, req, actor.ID, true)
+	if tl == nil {
+		return
+	}
+	limitWarning := checkDailyLimit(req.Date, req.TrainType, tl.ID)
+	if !duplicate {
+		logActivity(actor.ID, actor.Username, "created", "train_log", req.Date+" "+req.TrainType, false,
+			"conductor: "+tl.ConductorName+" · via mobile")
+	}
+	writeJSON(w, map[string]any{"train_log": tl, "limit_warning": limitWarning, "duplicate": duplicate})
 }
 
 func deleteTrainLog(w http.ResponseWriter, r *http.Request) {

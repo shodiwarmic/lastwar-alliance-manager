@@ -118,6 +118,15 @@ func mobileStores() []mobileStore {
 				{Method: "POST", Path: "/api/mobile/vs-league/week", Perms: []string{"manage_vs_points"}, Handler: postMobileVSLeagueWeek},
 			},
 		},
+		{
+			Key:        "train_logs",
+			Tables:     []string{"train_logs"},
+			ReadPerms:  []string{"view_train"},
+			WritePerms: []string{"manage_train"},
+			Routes: []mobileRoute{
+				{Method: "POST", Path: "/api/mobile/train-logs", Perms: []string{"manage_train"}, Handler: postMobileTrainLog},
+			},
+		},
 	}
 }
 
@@ -125,7 +134,6 @@ func mobileStores() []mobileStore {
 // reason. A table in neither this map nor a store fails mobile_stores_test.go.
 var mobileExcludedTables = map[string]string{
 	// Game-read stores this PR adds a route for in a later commit.
-	"train_logs":             "covered later in this PR (C12)",
 	"alliance_stats_history": "covered later in this PR (C13)",
 	"external_alliances":     "covered later in this PR (C13)",
 
