@@ -1174,6 +1174,28 @@ document.addEventListener('DOMContentLoaded', () => {
 // that switches the preview in place, and Exit. Both reload, because every permission the
 // page was rendered with belongs to the rank being left.
 (function () {
+    // Starting one: the rank chips in the user menu (rendered in both the desktop dropdown
+    // and the mobile More sheet, hence classes rather than ids). The preview starts on the
+    // dashboard, since the page it was started from may be one the rank cannot open.
+    document.querySelectorAll('.preview-rank-chip').forEach(chip => {
+        chip.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.preview-rank-chip').forEach(c => { c.disabled = true; });
+            try {
+                const res = await fetch('/api/preview-rank', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rank: chip.dataset.rank }),
+                });
+                if (!res.ok) throw new Error(await res.text());
+                window.location.href = '/';
+            } catch (err) {
+                showToast('Could not start the preview.', 'error');
+                document.querySelectorAll('.preview-rank-chip').forEach(c => { c.disabled = false; });
+            }
+        });
+    });
+
     const select = document.getElementById('preview-banner-rank');
     const exit = document.getElementById('preview-banner-exit');
     if (!select && !exit) return;

@@ -159,6 +159,13 @@
       <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-moon"/></svg>
       Dark
     </a>
+    {{if and .PreviewRanks (not .PreviewRank)}}
+    <div class="dropdown-divider"></div>
+    <div class="sidebar-section-label">Preview as rank</div>
+    <div class="preview-rank-chips">
+      {{range .PreviewRanks}}<button type="button" class="preview-rank-chip" data-rank="{{.}}">{{.}}</button>{{end}}
+    </div>
+    {{end}}
     <div class="dropdown-divider"></div>
     <a href="#" class="sidebar-link logout-btn">
       <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-logout"/></svg>
