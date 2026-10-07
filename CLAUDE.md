@@ -234,6 +234,11 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | GET | `/api/mobile/season-hub` | `getMobileSeasonHub` | `view_season_hub` | Active season, trackables, accepted categories |
 | POST | `/api/mobile/season-hub/contributions/preview` | `mobileContributionsPreview` | `manage_season_hub` | Resolve contribution rows (no OCR — the phone read them) |
 | POST | `/api/mobile/season-hub/contributions/commit` | `mobileContributionsCommit` | `manage_season_hub` | Save rows + aliases; the web import's target, resolution and upsert (`contributionTarget`, `resolveContributionRows`, `saveContributionTx`) |
+| GET | `/api/mobile/participation/types` | `getMobileParticipationTypes` | `view_` or `manage_participation` | Tracked types, absence rule, mail category, trackables |
+| POST | `/api/mobile/participation/preview` | `mobileParticipationPreview` | `manage_participation` | Rows the phone read (OCR wire shape, per frame) → the web import's answer |
+| POST | `/api/mobile/participation/import` | `mobileParticipationImport` | `manage_participation` | Frames (multipart, the web import's limits) → the same answer |
+| POST | `/api/mobile/participation/occurrences` | `mobileParticipationOccurrence` | `manage_participation` | Create the occurrence a board hangs on (the web body) |
+| PUT | `/api/mobile/participation/boards/{eventID}` | `mobileParticipationBoardPut` | `manage_participation` | Entries and values only; roles, result, notes and exceptions kept |
 
 ### Roster writes (`roster_apply.go`)
 
@@ -1152,6 +1157,15 @@ file, measured at ~10 ms for 300 such statements. A pre-fetch would reintroduce
 exactly the in-memory bookkeeping the paragraph above rules out.
 
 ## Participation framework (`participation.go`, `handlers_participation.go`)
+
+> **One import core, one board write.** The screenshot import is three pieces —
+> `readImportForm`, `readParticipationFrames` (the OCR half) and `participationImportCore`
+> (merge, resolve, suggest; it runs with **no transaction open**: `resolveBoardNames` opens
+> its own) — shared by the web import and the two mobile inputs. The board PUT's write is
+> `saveBoardTx`; its `keepJudgement` switch (the mobile save) keeps the board's roles, result
+> and notes instead of replacing them from the body, and every save keeps exceptions. A
+> role-rule board with **no roles** — one first saved from a phone — is offered the planner's
+> `roles_prefill` exactly as a new board is (`buildBoardDetail`, `participation.js`).
 
 Per-member results for the events that mail a ranked board after they finish, built
 **once over `schedule_events` occurrences** — not as a table pair per event, which is the

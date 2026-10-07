@@ -95,6 +95,19 @@ func mobileStores() []mobileStore {
 				{Method: "POST", Path: "/api/mobile/season-hub/contributions/commit", Perms: []string{"manage_season_hub"}, Handler: mobileContributionsCommit},
 			},
 		},
+		{
+			Key:        "participation",
+			Tables:     []string{"participation_boards", "participation_entries", "participation_values"},
+			ReadPerms:  []string{"view_participation", "manage_participation"},
+			WritePerms: []string{"manage_participation"},
+			Routes: []mobileRoute{
+				{Method: "GET", Path: "/api/mobile/participation/types", Perms: []string{"view_participation", "manage_participation"}, Handler: getMobileParticipationTypes},
+				{Method: "POST", Path: "/api/mobile/participation/preview", Perms: []string{"manage_participation"}, Handler: mobileParticipationPreview},
+				{Method: "POST", Path: "/api/mobile/participation/import", Perms: []string{"manage_participation"}, Handler: mobileParticipationImport},
+				{Method: "POST", Path: "/api/mobile/participation/occurrences", Perms: []string{"manage_participation"}, Handler: mobileParticipationOccurrence},
+				{Method: "PUT", Path: "/api/mobile/participation/boards/{eventID:[0-9]+}", Perms: []string{"manage_participation"}, Handler: mobileParticipationBoardPut},
+			},
+		},
 	}
 }
 
@@ -102,9 +115,6 @@ func mobileStores() []mobileStore {
 // reason. A table in neither this map nor a store fails mobile_stores_test.go.
 var mobileExcludedTables = map[string]string{
 	// Game-read stores this PR adds a route for in a later commit.
-	"participation_boards":   "covered later in this PR (C10)",
-	"participation_entries":  "covered later in this PR (C10)",
-	"participation_values":   "covered later in this PR (C10)",
 	"vs_league_weeks":        "covered later in this PR (C11)",
 	"vs_league_days":         "covered later in this PR (C11)",
 	"vs_league_matchups":     "covered later in this PR (C11)",

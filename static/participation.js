@@ -470,7 +470,9 @@ function resetWorkingCopy() {
     // An imported board keeps its own ranks when it is edited again.
     boardSource = detail.board && detail.board.source === 'import' ? 'import' : 'manual';
     rankMode = boardSource === 'import' ? 'own' : 'position';
-    const src = detail.board ? detail.roles : (detail.roles_prefill || []);
+    // A board saved without a lineup (one first saved from the phone carries entries
+    // only) is offered the planner's lineup to confirm, exactly as a new one is.
+    const src = detail.board && (detail.roles || []).length ? detail.roles : (detail.roles_prefill || []);
     roles = src.map(r => ({ member_id: r.member_id, member_name: r.member_name, role: r.role || 'starter', task_force: r.task_force || '' }));
     document.getElementById('pt-notes').value = detail.board ? detail.board.notes : '';
 }
