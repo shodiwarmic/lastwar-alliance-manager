@@ -214,7 +214,7 @@ func applyPendingChanges(req LastRankReviewActionRequest, user *AuthUser) (map[s
 			}
 			changed, err = applyNameChange(tx, actor, p.MemberID, action, p.ProposedValue)
 		case PendingKindArchive:
-			changed, err = applyArchive(tx, p.MemberID)
+			changed, err = applyArchive(tx, p.MemberID, leaveReasonLastRank)
 		case PendingKindUnmatched:
 			// Without a choice there is nothing to apply. Leave the row queued —
 			// dropping it would lose the decision entirely — and report it

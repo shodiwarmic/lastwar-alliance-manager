@@ -7,28 +7,15 @@ package app
 // inevitably drift, and the queue path is the one nobody watches.
 //
 // Each helper takes the caller's transaction, does exactly one decision, and
-// reports whether it changed anything. None of them log — callers summarise a
-// whole batch into a single activity row.
+// reports whether it changed anything. The member writes themselves — rank change,
+// rename, archive, add — are the shared roster primitives in roster_apply.go. None of
+// them log the member change — callers summarise a whole batch into a single activity
+// row — though alias changes are logged by the alias helper inside tx.
 
 import (
 	"database/sql"
 	"strings"
 )
-
-// applyRankChange sets a member's rank. Reports false when the member already has
-// it, which is how a queued proposal that reality overtook resolves as superseded
-// rather than as a spurious "applied".
-func applyRankChange(tx *sql.Tx, memberID int, newRank string) (bool, error) {
-	if newRank == "" || memberID == 0 {
-		return false, nil
-	}
-	res, err := tx.Exec(`UPDATE members SET rank = ? WHERE id = ? AND rank != ?`, newRank, memberID, newRank)
-	if err != nil {
-		return false, err
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
-}
 
 // applyNameChange renames a member or records the new name as a global alias.
 //
@@ -42,24 +29,7 @@ func applyNameChange(tx *sql.Tx, actor aliasActor, memberID int, action, newName
 	}
 	switch action {
 	case "rename":
-		var oldName string
-		tx.QueryRow(`SELECT name FROM members WHERE id = ?`, memberID).Scan(&oldName)
-		res, err := tx.Exec(`UPDATE members SET name = ? WHERE id = ?`, newName, memberID)
-		if err != nil {
-			return false, err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return false, nil
-		}
-		if oldName != "" && !strings.EqualFold(oldName, newName) {
-			if err := addGlobalAliasOverwritingOCR(tx, actor, memberID, oldName); err != nil {
-				return false, err
-			}
-		}
-		if _, err := deleteAliasesTx(tx, newName, []string{"ocr"}, actor); err != nil {
-			return false, err
-		}
-		return true, nil
+		return renameMemberTx(tx, actor, memberID, newName)
 	case "alias":
 		if err := addGlobalAliasOverwritingOCR(tx, actor, memberID, newName); err != nil {
 			return false, err
@@ -67,21 +37,6 @@ func applyNameChange(tx *sql.Tx, actor aliasActor, memberID int, action, newName
 		return true, nil
 	}
 	return false, nil
-}
-
-// applyArchive marks a member as departed. The guard on rank != 'EX' means
-// archiving someone already archived reports false rather than inflating counts.
-func applyArchive(tx *sql.Tx, memberID int) (bool, error) {
-	if memberID == 0 {
-		return false, nil
-	}
-	res, err := tx.Exec(`UPDATE members SET rank = 'EX', eligible = 0, leave_reason = ?
-		WHERE id = ? AND rank != 'EX'`, "Left alliance (via LastRank)", memberID)
-	if err != nil {
-		return false, err
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
 }
 
 // stampLastRankIdentity records the durable public_id link and advances
@@ -141,11 +96,11 @@ func applyUnmatchedAction(tx *sql.Tx, actor aliasActor, act LastRankUnmatchedAct
 		if act.MemberID == 0 {
 			return out, nil
 		}
-		res, err := tx.Exec(`UPDATE members SET name = ? WHERE id = ?`, act.LastRankName, act.MemberID)
+		ok, err := renameMemberTx(tx, actor, act.MemberID, act.LastRankName)
 		if err != nil {
 			return out, err
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
+		if !ok {
 			return out, nil
 		}
 		out.Renamed, out.MemberID = true, act.MemberID
@@ -157,23 +112,18 @@ func applyUnmatchedAction(tx *sql.Tx, actor aliasActor, act LastRankUnmatchedAct
 		}
 		// Blank or unparseable → today's GAME date (UTC−2), matching how every
 		// other join date in the app is defaulted.
-		joinDate := gameDate()
+		joinDate := ""
 		if act.JoinedAt != "" {
 			if d, err := parseDate(act.JoinedAt); err == nil {
 				joinDate = d.Format("2006-01-02")
 			}
 		}
-		var pubID any
-		if act.LastRankPublicID != 0 {
-			pubID = act.LastRankPublicID
-		}
-		res, err := tx.Exec(`INSERT INTO members (name, rank, eligible, lastrank_public_id, joined_at)
-			VALUES (?, ?, 1, ?, ?)`, act.LastRankName, rank, pubID, joinDate)
+		id, err := addMemberTx(tx, newMember{Name: act.LastRankName, Rank: rank, Eligible: true,
+			JoinedAt: joinDate, LastRankPublicID: act.LastRankPublicID})
 		if err != nil {
 			return out, err
 		}
-		id, _ := res.LastInsertId()
-		out.Added, out.MemberID = true, int(id)
+		out.Added, out.MemberID = true, id
 
 	default: // "ignore" or unknown
 		return out, nil

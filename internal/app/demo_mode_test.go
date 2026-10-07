@@ -46,6 +46,8 @@ var demoBlocked = []struct{ method, path string }{
 	{"POST", "/api/mobile/preview"},
 	{"POST", "/api/mobile/commit"},
 	{"GET", "/api/mobile/capabilities"},
+	{"POST", "/api/mobile/members/attributes"},
+	{"POST", "/api/mobile/roster/changes"},
 	{"POST", "/api/files/upload"},
 	{"POST", "/api/files/create"},
 	{"DELETE", "/api/files/1"},

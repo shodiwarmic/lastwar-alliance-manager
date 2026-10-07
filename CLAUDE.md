@@ -227,6 +227,27 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | GET | `/api/mobile/capabilities` | `getMobileCapabilities` | any user | What this server accepts, for this caller |
 | POST | `/api/mobile/preview` | `mobilePreview` | `manage_vs_points` or `manage_members` | Resolve scanned entries to members; returns matched/unresolved split |
 | POST | `/api/mobile/commit` | `mobileCommit` | as preview; per record by category | Persist confirmed scan data + optional alias mappings |
+| POST | `/api/mobile/members/attributes` | `mobileMemberAttributes` | `manage_members` | Troop level, squad type, profession; only the fields sent change |
+| POST | `/api/mobile/roster/changes` | `mobileRosterChanges` | `manage_members` | Officer-confirmed rank, rename, join, rejoin, leave |
+
+### Roster writes (`roster_apply.go`)
+
+Rank change, rename, archive, add and rejoin are **shared primitives** — the member modal,
+the former-member edit, LastRank's commit and review queue, and the mobile roster route all
+call them, so a rename means one thing everywhere: `renameMemberTx` makes the old name a
+global alias through the alias helper (re-pointing an existing one; a change of case alone
+writes none) and drops an OCR alias spelling the new name. `applyArchive` takes the leave
+reason (`leaveReasonLastRank`, `leaveReasonSeen`, or the officer's). The attribute diff
+wording is `memberAttributeChanges`, shared with My Profile.
+
+The mobile roster route takes **confirmed** changes only: every change carries the value the
+officer saw (`from`) and is refused if the roster no longer holds it, so a stale or blind
+change can't land. A batch runs in one transaction, each change checked against the roster
+as the batch has left it; a refused change is reported in `results[]` and doesn't stop the
+others. A `join` must resolve to nobody (tiers 1–3) — a former member's match points at
+`rejoin`. Squad type, profession and troop level are validated against the modal's lists
+(`ValidSquadTypes`, `ValidProfessions`, the keys of `TroopTierMinHQ`), and troop level never
+goes down; the web paths keep accepting what they accept.
 
 ### Commit categories (`mobileCategories`, `handlers_mobile.go`)
 
@@ -249,13 +270,18 @@ an officer who can type days in can upload them. A new category is a row in `mob
 
 ### Roster shape (`MobileMember` — see `models.go`)
 
-Both `getMobileMembers` and `mobilePreview` return members in this shape:
+Both `getMobileMembers` and `mobilePreview` return members in this shape. Active members only;
+`GET /api/mobile/members?include_former=true` adds former members (`"rank": "EX"`), which a
+roster `rejoin` names, and needs `manage_members`.
 
 ```json
 {
   "id": 42,
   "name": "ShodiWarmic",
   "rank": "R5",
+  "troop_level": 11,
+  "squad_type": "Tank",
+  "profession": "Engineer",
   "aliases": [
     {"alias": "ShodiW", "category": "personal"},
     {"alias": "Shodi",  "category": "global"}
