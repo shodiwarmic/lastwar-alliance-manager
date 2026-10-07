@@ -577,12 +577,39 @@ func loadImportCandidates(typeID int, mailDate string) ([]ptOccurrence, error) {
 // timestamp, a suggested occurrence and the candidates.
 func handleParticipationImport(w http.ResponseWriter, r *http.Request) {
 	u := getAuthUser(r)
+	files, typeID, eventID, tz, offset, ok := readImportForm(w, r)
+	if !ok {
+		return
+	}
+	t, status, msg := participationImportType(typeID, eventID)
+	if status != 0 {
+		http.Error(w, msg, status)
+		return
+	}
+	players, sections, summary, status, msg := readParticipationFrames(r.Context(), t, files)
+	if status != 0 {
+		http.Error(w, msg, status)
+		return
+	}
+	out, status, msg := participationImportCore(u, t, typeID, eventID, players, sections, tz, offset)
+	if status != 0 {
+		http.Error(w, msg, status)
+		return
+	}
+	out["frames"] = len(files)
+	out["ocr_summary"] = summary
+	writeJSON(w, out)
+}
+
+// readImportForm reads the import's multipart form within its limits (100 frames,
+// 150 MB), answering 400 itself on failure.
+func readImportForm(w http.ResponseWriter, r *http.Request) (files []*multipart.FileHeader, typeID, eventID int, tz string, offset int, ok bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, 150<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, "Unable to read the upload — at most 100 screenshots, 150 MB in all", http.StatusBadRequest)
 		return
 	}
-	files := r.MultipartForm.File["images"]
+	files = r.MultipartForm.File["images"]
 	if len(files) == 0 {
 		files = r.MultipartForm.File["images[]"]
 	}
@@ -594,35 +621,48 @@ func handleParticipationImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "At most "+strconv.Itoa(maxImportFrames)+" screenshots in one import", http.StatusBadRequest)
 		return
 	}
-	typeID, _ := strconv.Atoi(r.FormValue("event_type_id"))
-	eventID, _ := strconv.Atoi(r.FormValue("event_id"))
-	offset, _ := strconv.Atoi(r.FormValue("tz_offset"))
-	tz := strings.TrimSpace(r.FormValue("tz"))
+	typeID, _ = strconv.Atoi(r.FormValue("event_type_id"))
+	eventID, _ = strconv.Atoi(r.FormValue("event_id"))
+	offset, _ = strconv.Atoi(r.FormValue("tz_offset"))
+	tz = strings.TrimSpace(r.FormValue("tz"))
+	return files, typeID, eventID, tz, offset, true
+}
 
+// participationImportType checks the import's type has a readable mail and that a
+// chosen occurrence is of that type. A non-zero status is the refusal with msg.
+func participationImportType(typeID, eventID int) (*ptType, int, string) {
 	types, err := loadParticipationTypes(db)
 	if err != nil {
-		slog.Error("handleParticipationImport: types failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		slog.Error("participationImportType: types failed", "error", err)
+		return nil, http.StatusInternalServerError, "Database error"
 	}
 	t := types[typeID]
 	if t == nil {
-		http.Error(w, "That event type does not track participation", http.StatusBadRequest)
-		return
+		return nil, http.StatusBadRequest, "That event type does not track participation"
 	}
 	if t.OCRCategory == "" {
-		http.Error(w, t.Name+" has no mail that can be read from screenshots — use a CSV or add the rows by hand", http.StatusBadRequest)
-		return
+		return nil, http.StatusBadRequest, t.Name + " has no mail that can be read from screenshots — use a CSV or add the rows by hand"
 	}
 	if eventID > 0 {
 		var etype int
 		if err := db.QueryRow(`SELECT event_type_id FROM schedule_events WHERE id = ?`, eventID).Scan(&etype); err != nil || etype != typeID {
-			http.Error(w, "That occurrence is not a "+t.Name, http.StatusBadRequest)
-			return
+			return nil, http.StatusBadRequest, "That occurrence is not a " + t.Name
 		}
 	}
+	return t, 0, ""
+}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
+func mailLabel(t *ptType) string {
+	if label := mailLabels[t.OCRCategory]; label != "" {
+		return label
+	}
+	return t.OCRCategory
+}
+
+// readParticipationFrames is the import's OCR half: ask /health whether the service can
+// read this mail, then read the frames in chunks as its category.
+func readParticipationFrames(parent context.Context, t *ptType, files []*multipart.FileHeader) ([]OCRPlayer, []OCRSectionDiagnostic, string, int, string) {
+	ctx, cancel := context.WithTimeout(parent, 6*time.Minute)
 	defer cancel()
 
 	// Ask before uploading: an older service cannot read a mail, and says so only
@@ -630,22 +670,16 @@ func handleParticipationImport(w http.ResponseWriter, r *http.Request) {
 	info, err := ocrServiceInfo(ctx)
 	var down *OCRUnreachableError
 	if errors.As(err, &down) {
-		http.Error(w, "OCR service unreachable, try again", http.StatusServiceUnavailable)
-		return
+		return nil, nil, "", http.StatusServiceUnavailable, "OCR service unreachable, try again"
 	}
 	if err != nil {
-		slog.Error("handleParticipationImport: service info failed", "error", err)
-		http.Error(w, "OCR service unreachable, try again", http.StatusServiceUnavailable)
-		return
+		slog.Error("readParticipationFrames: service info failed", "error", err)
+		return nil, nil, "", http.StatusServiceUnavailable, "OCR service unreachable, try again"
 	}
-	label := mailLabels[t.OCRCategory]
-	if label == "" {
-		label = t.OCRCategory
-	}
+	label := mailLabel(t)
 	if !info.Speaks() || !info.Reads(t.OCRCategory) {
-		http.Error(w, fmt.Sprintf("This OCR service can't read %s mails yet; it needs an OCR service release that lists %s — v1.0.0 or later (it runs %s).",
-			label, t.OCRCategory, info.Version), http.StatusConflict)
-		return
+		return nil, nil, "", http.StatusConflict, fmt.Sprintf("This OCR service can't read %s mails yet; it needs an OCR service release that lists %s — v1.0.0 or later (it runs %s).",
+			label, t.OCRCategory, info.Version)
 	}
 
 	var players []OCRPlayer
@@ -656,12 +690,10 @@ func handleParticipationImport(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			var refusal *OCRServiceError
 			if errors.As(err, &refusal) {
-				http.Error(w, refusal.Message, http.StatusBadGateway)
-				return
+				return nil, nil, "", http.StatusBadGateway, refusal.Message
 			}
-			slog.Error("handleParticipationImport: OCR failed", "error", err)
-			http.Error(w, "The OCR service could not read the screenshots — try again", http.StatusBadGateway)
-			return
+			slog.Error("readParticipationFrames: OCR failed", "error", err)
+			return nil, nil, "", http.StatusBadGateway, "The OCR service could not read the screenshots — try again"
 		}
 		players = append(players, res[t.OCRCategory]...)
 		if diag != nil {
@@ -669,11 +701,20 @@ func handleParticipationImport(w http.ResponseWriter, r *http.Request) {
 			summaries = append(summaries, summarizeOCRDiagnostics(diag))
 		}
 	}
+	return players, sections, strings.Join(summaries, " · "), 0, ""
+}
 
+// participationImportCore turns read players into the import's answer: merged rows,
+// problems, the mail's timestamp, a suggested occurrence and the candidates. Shared by
+// the web import, the mobile frames import and the mobile rows preview. It runs with no
+// transaction open: resolveBoardNames opens its own, and loadImportCandidates and
+// taskForceByMembers read through db. A non-zero status is the refusal with msg.
+func participationImportCore(u *AuthUser, t *ptType, typeID, eventID int, players []OCRPlayer,
+	sections []OCRSectionDiagnostic, tz string, offset int) (map[string]any, int, string) {
+	label := mailLabel(t)
 	rows := mergeImportedRows(players, t.primaryKey())
 	if len(rows) == 0 {
-		http.Error(w, "No rows could be read from those screenshots — are they "+label+" mails?", http.StatusUnprocessableEntity)
-		return
+		return nil, http.StatusUnprocessableEntity, "No rows could be read from those screenshots — are they " + label + " mails?"
 	}
 	names := make([]string, len(rows))
 	for i, row := range rows {
@@ -681,9 +722,8 @@ func handleParticipationImport(w http.ResponseWriter, r *http.Request) {
 	}
 	matches, err := resolveBoardNames(u.ID, names)
 	if err != nil {
-		slog.Error("handleParticipationImport: resolve failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		slog.Error("participationImportCore: resolve failed", "error", err)
+		return nil, http.StatusInternalServerError, "Database error"
 	}
 	problems := importProblems(rows, t)
 	usedBy := map[int]string{}
@@ -719,9 +759,8 @@ func handleParticipationImport(w http.ResponseWriter, r *http.Request) {
 	}
 	candidates, err := loadImportCandidates(typeID, mailDate)
 	if err != nil {
-		slog.Error("handleParticipationImport: candidates failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		slog.Error("participationImportCore: candidates failed", "error", err)
+		return nil, http.StatusInternalServerError, "Database error"
 	}
 
 	suggested := ptSuggestion{Reason: tsReason}
@@ -735,7 +774,7 @@ func handleParticipationImport(w http.ResponseWriter, r *http.Request) {
 			// Two task forces at one time: settle it by who is on the board.
 			tf, err := taskForceByMembers(db, rows)
 			if err != nil {
-				slog.Error("handleParticipationImport: planner read failed", "error", err)
+				slog.Error("participationImportCore: planner read failed", "error", err)
 			}
 			var picked []ptOccurrence
 			for _, o := range near {
@@ -763,14 +802,12 @@ func handleParticipationImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, map[string]any{
+	return map[string]any{
 		"rows":           rows,
 		"problems":       problems,
 		"category":       t.OCRCategory,
 		"mail_timestamp": ts,
 		"suggested":      suggested,
 		"candidates":     candidates,
-		"frames":         len(files),
-		"ocr_summary":    strings.Join(summaries, " · "),
-	})
+	}, 0, ""
 }

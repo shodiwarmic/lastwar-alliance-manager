@@ -136,9 +136,11 @@ func buildBoardDetail(q rowQueryer, eventID int) (*ptBoardDetail, error) {
 		Statuses: statuses, Suggestions: store.suggestions(bd, statuses),
 		Roster: activeRoster(store.Roster), GameDate: gameDate(),
 	}
-	if bd.Type != nil && bd.Type.AbsenceRule == ruleRole && bd.Board == nil {
+	if bd.Type != nil && bd.Type.AbsenceRule == ruleRole && (bd.Board == nil || len(bd.Roles) == 0) {
 		// A battle belongs to one task force, so only that task force's lineup is
 		// offered; a legacy battle with none gets the whole planner to choose from.
+		// A board with no roles yet — one first saved from the phone, which carries
+		// entries only — is offered the lineup exactly as a new one is.
 		tf := ""
 		if bd.Event.TaskForce != nil {
 			tf = *bd.Event.TaskForce
@@ -874,10 +876,18 @@ func validateBoardPut(ev ptEvent, t *ptType, today string, body *ptPutBody) stri
 // entries → roles), since no cascade fires. Exceptions are kept: a re-save must
 // not throw away an excuse or a dismissal.
 func clearBoardChildren(tx *sql.Tx, boardID int, withExceptions bool) error {
+	return clearBoardRows(tx, boardID, true, withExceptions)
+}
+
+// clearBoardRows is clearBoardChildren with the roles optional: a save that keeps the
+// board's lineup (the mobile save) clears entries and values only.
+func clearBoardRows(tx *sql.Tx, boardID int, withRoles, withExceptions bool) error {
 	stmts := []string{
 		`DELETE FROM participation_values WHERE entry_id IN (SELECT id FROM participation_entries WHERE board_id = ?)`,
 		`DELETE FROM participation_entries WHERE board_id = ?`,
-		`DELETE FROM participation_roles WHERE board_id = ?`,
+	}
+	if withRoles {
+		stmts = append(stmts, `DELETE FROM participation_roles WHERE board_id = ?`)
 	}
 	if withExceptions {
 		stmts = append(stmts, `DELETE FROM participation_exceptions WHERE board_id = ?`)
@@ -888,6 +898,149 @@ func clearBoardChildren(tx *sql.Tx, boardID int, withExceptions bool) error {
 		}
 	}
 	return nil
+}
+
+// boardSave is what saveBoardTx did, for the caller's activity row and answer.
+type boardSave struct {
+	Action   string // created | updated
+	BoardID  int
+	Matched  int
+	Roles    int
+	Activity string // the activity row's entity name: "<type> <date>"
+}
+
+// saveBoardTx holds the board PUT's write: load the occurrence, validate, check every
+// member exists, then replace the board's rows. Shared by the web PUT and the mobile
+// save. keepJudgement is the mobile switch: the board's roles, result and notes are
+// officer judgement the phone does not carry, so they are kept as they are (body.Roles,
+// Result and Notes are ignored) rather than replaced from the body, as the web PUT does.
+// Both keep the board's exceptions, as every save always has. A non-zero status is a
+// refusal with msg; err is a database error. No db call is made: tx owns the connection.
+func saveBoardTx(tx *sql.Tx, userID, eventID int, body *ptPutBody, keepJudgement bool) (boardSave, int, string, error) {
+	var out boardSave
+	if keepJudgement {
+		body.Roles, body.Result, body.Notes = nil, nil, ""
+	}
+	types, err := loadParticipationTypes(tx)
+	if err != nil {
+		return out, 0, "", err
+	}
+	boards, err := loadBoards(tx, types, boardFilter{EventID: eventID})
+	if err != nil {
+		return out, 0, "", err
+	}
+	if len(boards) == 0 {
+		return out, http.StatusNotFound, "That event no longer exists", nil
+	}
+	bd := boards[0]
+	if msg := validateBoardPut(bd.Event, bd.Type, gameDate(), body); msg != "" {
+		return out, http.StatusBadRequest, msg, nil
+	}
+	out.Activity = bd.Event.TypeName + " " + bd.Event.EventDate
+
+	// Every referenced member must exist — the rows would otherwise be orphans the
+	// day they are written.
+	ids := map[int]bool{}
+	for _, e := range body.Entries {
+		if e.MemberID != nil {
+			ids[*e.MemberID] = true
+		}
+	}
+	for _, rl := range body.Roles {
+		ids[rl.MemberID] = true
+	}
+	for mid := range ids {
+		var one int
+		if err := tx.QueryRow(`SELECT 1 FROM members WHERE id = ?`, mid).Scan(&one); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return out, http.StatusBadRequest, "A matched member no longer exists — reload and match again", nil
+			}
+			return out, 0, "", err
+		}
+	}
+
+	result := "{}"
+	if len(body.Result) > 0 && string(body.Result) != "null" {
+		result = string(body.Result)
+	}
+	out.Action = "updated"
+	if bd.Board == nil {
+		out.Action = "created"
+		res, err := tx.Exec(`INSERT INTO participation_boards (schedule_event_id, source, result_json, notes, recorded_by)
+			VALUES (?, ?, ?, ?, ?)`, eventID, body.Source, result, body.Notes, userID)
+		if err != nil {
+			return out, 0, "", err
+		}
+		n, _ := res.LastInsertId()
+		out.BoardID = int(n)
+	} else {
+		out.BoardID = bd.Board.ID
+		if err := clearBoardRows(tx, out.BoardID, !keepJudgement, false); err != nil {
+			return out, 0, "", err
+		}
+		// Migration 081 wrote `missed` exceptions for a legacy board only because it
+		// had no entries to derive a miss from. Once the mail itself is imported,
+		// misses derive from its rows, and a stored one would contradict them.
+		// Excused and dismissed are judgements, and stay.
+		if bd.Board.Source == "legacy" && body.Source == "import" {
+			if _, err := tx.Exec(`DELETE FROM participation_exceptions WHERE board_id = ? AND kind = 'missed'`, out.BoardID); err != nil {
+				return out, 0, "", err
+			}
+		}
+		if keepJudgement {
+			_, err = tx.Exec(`UPDATE participation_boards SET source = ?, recorded_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+				body.Source, userID, out.BoardID)
+		} else {
+			_, err = tx.Exec(`UPDATE participation_boards SET source = ?, result_json = ?, notes = ?, recorded_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+				body.Source, result, body.Notes, userID, out.BoardID)
+		}
+		if err != nil {
+			return out, 0, "", err
+		}
+	}
+
+	trackIDs := bd.Type.trackableIDs()
+	for _, e := range body.Entries {
+		res, err := tx.Exec(`INSERT INTO participation_entries (board_id, member_id, name_snapshot, rank) VALUES (?, ?, ?, ?)`,
+			out.BoardID, e.MemberID, e.Name, e.Rank)
+		if err != nil {
+			return out, 0, "", err
+		}
+		if e.MemberID != nil {
+			out.Matched++
+		}
+		entryID, _ := res.LastInsertId()
+		for k, v := range e.Values {
+			if _, err := tx.Exec(`INSERT INTO participation_values (entry_id, trackable_id, value) VALUES (?, ?, ?)`,
+				entryID, trackIDs[k], *v); err != nil {
+				return out, 0, "", err
+			}
+		}
+	}
+	for _, rl := range body.Roles {
+		var tf any
+		if rl.TaskForce != "" {
+			tf = rl.TaskForce
+		}
+		if _, err := tx.Exec(`INSERT INTO participation_roles (board_id, member_id, role, task_force) VALUES (?, ?, ?, ?)`,
+			out.BoardID, rl.MemberID, rl.Role, tf); err != nil {
+			return out, 0, "", err
+		}
+	}
+	out.Roles = len(body.Roles)
+	return out, 0, "", nil
+}
+
+// boardSaveDetails is a board save's activity details.
+func boardSaveDetails(body *ptPutBody, sv boardSave) string {
+	details := strconv.Itoa(len(body.Entries)) + " rows, " + strconv.Itoa(sv.Matched) + " matched"
+	if body.Source == "import" {
+		details += ", imported from screenshots"
+	}
+	if sv.Roles > 0 {
+		details += ", " + strconv.Itoa(sv.Roles) + " roles"
+	}
+	return details
 }
 
 // PUT /api/participation/boards/{eventID} — replace the board in one transaction.
@@ -912,129 +1065,15 @@ func handleParticipationBoardPut(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	types, err := loadParticipationTypes(tx)
+	sv, status, msg, err := saveBoardTx(tx, u.ID, id, &body, false)
 	if err != nil {
-		slog.Error("handleParticipationBoardPut: types failed", "error", err)
+		slog.Error("handleParticipationBoardPut: save failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	boards, err := loadBoards(tx, types, boardFilter{EventID: id})
-	if err != nil {
-		slog.Error("handleParticipationBoardPut: load failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
+	if status != 0 {
+		http.Error(w, msg, status)
 		return
-	}
-	if len(boards) == 0 {
-		http.Error(w, "That event no longer exists", http.StatusNotFound)
-		return
-	}
-	bd := boards[0]
-	if msg := validateBoardPut(bd.Event, bd.Type, gameDate(), &body); msg != "" {
-		http.Error(w, msg, http.StatusBadRequest)
-		return
-	}
-
-	// Every referenced member must exist — the rows would otherwise be orphans the
-	// day they are written.
-	ids := map[int]bool{}
-	for _, e := range body.Entries {
-		if e.MemberID != nil {
-			ids[*e.MemberID] = true
-		}
-	}
-	for _, rl := range body.Roles {
-		ids[rl.MemberID] = true
-	}
-	for mid := range ids {
-		var one int
-		if err := tx.QueryRow(`SELECT 1 FROM members WHERE id = ?`, mid).Scan(&one); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				http.Error(w, "A matched member no longer exists — reload and match again", http.StatusBadRequest)
-				return
-			}
-			slog.Error("handleParticipationBoardPut: member check failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	result := "{}"
-	if len(body.Result) > 0 && string(body.Result) != "null" {
-		result = string(body.Result)
-	}
-	action := "updated"
-	var boardID int
-	if bd.Board == nil {
-		action = "created"
-		res, err := tx.Exec(`INSERT INTO participation_boards (schedule_event_id, source, result_json, notes, recorded_by)
-			VALUES (?, ?, ?, ?, ?)`, id, body.Source, result, body.Notes, u.ID)
-		if err != nil {
-			slog.Error("handleParticipationBoardPut: insert board failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-		n, _ := res.LastInsertId()
-		boardID = int(n)
-	} else {
-		boardID = bd.Board.ID
-		if err := clearBoardChildren(tx, boardID, false); err != nil {
-			slog.Error("handleParticipationBoardPut: clear failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-		// Migration 081 wrote `missed` exceptions for a legacy board only because it
-		// had no entries to derive a miss from. Once the mail itself is imported,
-		// misses derive from its rows, and a stored one would contradict them.
-		// Excused and dismissed are judgements, and stay.
-		if bd.Board.Source == "legacy" && body.Source == "import" {
-			if _, err := tx.Exec(`DELETE FROM participation_exceptions WHERE board_id = ? AND kind = 'missed'`, boardID); err != nil {
-				slog.Error("handleParticipationBoardPut: clear legacy misses failed", "error", err)
-				http.Error(w, "Database error", http.StatusInternalServerError)
-				return
-			}
-		}
-		if _, err := tx.Exec(`UPDATE participation_boards SET source = ?, result_json = ?, notes = ?, recorded_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-			body.Source, result, body.Notes, u.ID, boardID); err != nil {
-			slog.Error("handleParticipationBoardPut: update board failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	trackIDs := bd.Type.trackableIDs()
-	matched := 0
-	for _, e := range body.Entries {
-		res, err := tx.Exec(`INSERT INTO participation_entries (board_id, member_id, name_snapshot, rank) VALUES (?, ?, ?, ?)`,
-			boardID, e.MemberID, e.Name, e.Rank)
-		if err != nil {
-			slog.Error("handleParticipationBoardPut: insert entry failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-		if e.MemberID != nil {
-			matched++
-		}
-		entryID, _ := res.LastInsertId()
-		for k, v := range e.Values {
-			if _, err := tx.Exec(`INSERT INTO participation_values (entry_id, trackable_id, value) VALUES (?, ?, ?)`,
-				entryID, trackIDs[k], *v); err != nil {
-				slog.Error("handleParticipationBoardPut: insert value failed", "error", err)
-				http.Error(w, "Database error", http.StatusInternalServerError)
-				return
-			}
-		}
-	}
-	for _, rl := range body.Roles {
-		var tf any
-		if rl.TaskForce != "" {
-			tf = rl.TaskForce
-		}
-		if _, err := tx.Exec(`INSERT INTO participation_roles (board_id, member_id, role, task_force) VALUES (?, ?, ?, ?)`,
-			boardID, rl.MemberID, rl.Role, tf); err != nil {
-			slog.Error("handleParticipationBoardPut: insert role failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		slog.Error("handleParticipationBoardPut: commit failed", "error", err)
@@ -1042,14 +1081,7 @@ func handleParticipationBoardPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	details := strconv.Itoa(len(body.Entries)) + " rows, " + strconv.Itoa(matched) + " matched"
-	if body.Source == "import" {
-		details += ", imported from screenshots"
-	}
-	if len(body.Roles) > 0 {
-		details += ", " + strconv.Itoa(len(body.Roles)) + " roles"
-	}
-	logActivity(u.ID, u.Username, action, "participation_board", bd.Event.TypeName+" "+bd.Event.EventDate, false, details)
+	logActivity(u.ID, u.Username, sv.Action, "participation_board", sv.Activity, false, boardSaveDetails(&body, sv))
 
 	d, err := buildBoardDetail(db, id)
 	if err != nil || d == nil {
@@ -1119,33 +1151,40 @@ func handleParticipationOccurrence(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	var tracked int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM participation_types WHERE event_type_id = ?`, req.EventTypeID).Scan(&tracked); err != nil {
-		slog.Error("handleParticipationOccurrence: type check failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	if tracked == 0 {
-		http.Error(w, "That event type does not track participation", http.StatusBadRequest)
-		return
-	}
-	if req.EventDate > gameDate() {
-		http.Error(w, "A board can only be recorded after the event — pick a date that has already happened", http.StatusBadRequest)
-		return
-	}
-	req.Notes = ""
-	id, msg, code, err := insertScheduleEvent(getAuthUser(r), req)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	if msg != "" {
-		http.Error(w, msg, code)
+	id, status, msg := createParticipationOccurrence(getAuthUser(r), req)
+	if status != 0 {
+		http.Error(w, msg, status)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{"id": id})
+}
+
+// createParticipationOccurrence creates the occurrence a board will hang on — only for a
+// tracked type, and only on a date that has happened. Shared by the web and mobile
+// routes; a non-zero status is the refusal with msg.
+func createParticipationOccurrence(u *AuthUser, req scheduleEventCreate) (int64, int, string) {
+	var tracked int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM participation_types WHERE event_type_id = ?`, req.EventTypeID).Scan(&tracked); err != nil {
+		slog.Error("createParticipationOccurrence: type check failed", "error", err)
+		return 0, http.StatusInternalServerError, "Database error"
+	}
+	if tracked == 0 {
+		return 0, http.StatusBadRequest, "That event type does not track participation"
+	}
+	if req.EventDate > gameDate() {
+		return 0, http.StatusBadRequest, "A board can only be recorded after the event — pick a date that has already happened"
+	}
+	req.Notes = ""
+	id, msg, code, err := insertScheduleEvent(u, req)
+	if err != nil {
+		return 0, http.StatusInternalServerError, "Database error"
+	}
+	if msg != "" {
+		return 0, code, msg
+	}
+	return id, 0, ""
 }
 
 // strikeReason is the reason a confirmed suggestion's strike carries.
