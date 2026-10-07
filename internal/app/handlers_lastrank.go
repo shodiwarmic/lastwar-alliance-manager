@@ -98,13 +98,13 @@ func lastRankApplyPairedStats(tx *sql.Tx, memberID int, power, hero *int64, base
 	return
 }
 
-// addGlobalAliasOverwritingOCR adds a global alias, first removing any OCR or
-// stale global alias with the same name (member_aliases has no unique index, so
-// INSERT OR IGNORE can't dedupe). Global is authoritative over background OCR;
-// per-user personal aliases are left alone (they win via the resolution order).
-func addGlobalAliasOverwritingOCR(tx *sql.Tx, memberID int, alias string) {
-	tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND category IN ('ocr', 'global')", alias)
-	tx.Exec("INSERT INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", memberID, alias)
+// addGlobalAliasOverwritingOCR adds a global alias through the one alias helper, which
+// replaces any OCR or global row with the same text (global is authoritative over
+// background OCR), leaves personal aliases alone (they win via the resolution order),
+// and logs the change inside tx.
+func addGlobalAliasOverwritingOCR(tx *sql.Tx, actor aliasActor, memberID int, alias string) error {
+	_, err := saveAliasTx(tx, aliasWrite{MemberID: memberID, Alias: alias, Category: "global", Actor: actor})
+	return err
 }
 
 // lastRankInsertHistory appends a 'lastrank'-sourced datapoint. recordedAtSQLite
@@ -472,6 +472,7 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	var powerN, heroN, hqN, rankN, aliasN, renameN, addN, nameN int
+	actor := aliasActor{UserID: user.ID, Username: user.Username, Via: "LastRank"}
 
 	for _, m := range req.Members {
 		if m.MemberID == 0 {
@@ -480,7 +481,7 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 		// Name change disposition (matched-via-alias rename). Shared with the
 		// review-queue path so the two can never drift — see lastrank_apply.go.
 		if m.NameNew != "" {
-			if ok, err := applyNameChange(tx, m.MemberID, m.NameAction, m.NameNew); err != nil {
+			if ok, err := applyNameChange(tx, actor, m.MemberID, m.NameAction, m.NameNew); err != nil {
 				dbError(w, "lastRankCommit name change", err)
 				return
 			} else if ok {
@@ -514,7 +515,7 @@ func lastRankCommit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, u := range req.Unmatched {
-		out, err := applyUnmatchedAction(tx, u, recordedAt, req.CaptureDate)
+		out, err := applyUnmatchedAction(tx, actor, u, recordedAt, req.CaptureDate)
 		if err != nil {
 			dbError(w, "lastRankCommit unmatched action", err)
 			return

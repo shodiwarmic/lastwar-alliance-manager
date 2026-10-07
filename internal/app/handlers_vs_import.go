@@ -252,36 +252,24 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Process Saved Aliases
+	// 2. Process Saved Aliases — through the one alias helper, which logs each change
+	// inside this transaction. The route already requires manage_members, so an OCR
+	// mapping may replace another member's global alias.
 	aliasesReceived := len(req.SaveAliases)
+	actor := aliasActor{UserID: userID, Username: user.Username, Via: "VS import"}
 	for _, aliasReq := range req.SaveAliases {
-		if aliasReq.Category == "global" || aliasReq.Category == "ocr" {
-			_, err = tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?)", aliasReq.FailedAlias)
-			if err != nil {
-				dbErrors = append(dbErrors, fmt.Sprintf("Failed to clear old global alias: %v", err))
+		ch, err := saveAliasTx(tx, aliasWrite{MemberID: aliasReq.MemberID, Alias: aliasReq.FailedAlias,
+			Category: aliasReq.Category, Actor: actor, MayOverrideGlobal: true})
+		if err != nil {
+			if isAliasRefusal(err) {
+				dbErrors = append(dbErrors, fmt.Sprintf("Alias %q: %v", aliasReq.FailedAlias, err))
 				continue
 			}
-
-			_, err = tx.Exec("INSERT INTO member_aliases (member_id, category, alias) VALUES (?, ?, ?)", aliasReq.MemberID, aliasReq.Category, aliasReq.FailedAlias)
-			if err == nil {
-				aliasCount++
-			} else {
-				dbErrors = append(dbErrors, fmt.Sprintf("Alias Insert Error: %v", err))
-			}
-
-		} else if aliasReq.Category == "personal" {
-			_, err = tx.Exec("DELETE FROM member_aliases WHERE LOWER(alias) = LOWER(?) AND user_id = ?", aliasReq.FailedAlias, userID)
-			if err != nil {
-				dbErrors = append(dbErrors, fmt.Sprintf("Failed to clear old personal alias: %v", err))
-				continue
-			}
-
-			_, err = tx.Exec("INSERT INTO member_aliases (member_id, user_id, category, alias) VALUES (?, ?, 'personal', ?)", aliasReq.MemberID, userID, aliasReq.FailedAlias)
-			if err == nil {
-				aliasCount++
-			} else {
-				dbErrors = append(dbErrors, fmt.Sprintf("Alias Insert Error: %v", err))
-			}
+			dbError(w, "commitCSVImport alias", err)
+			return
+		}
+		if ch != nil {
+			aliasCount++
 		}
 	}
 

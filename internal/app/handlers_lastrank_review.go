@@ -195,6 +195,7 @@ func applyPendingChanges(req LastRankReviewActionRequest, user *AuthUser) (map[s
 	}
 
 	applied, superseded, needsInput := 0, 0, 0
+	actor := aliasActor{UserID: user.ID, Username: user.Username, Via: "LastRank review"}
 	var summary []string
 
 	for _, p := range pending {
@@ -211,7 +212,7 @@ func applyPendingChanges(req LastRankReviewActionRequest, user *AuthUser) (map[s
 			if action != "rename" {
 				action = "alias"
 			}
-			changed, err = applyNameChange(tx, p.MemberID, action, p.ProposedValue)
+			changed, err = applyNameChange(tx, actor, p.MemberID, action, p.ProposedValue)
 		case PendingKindArchive:
 			changed, err = applyArchive(tx, p.MemberID)
 		case PendingKindUnmatched:
@@ -224,7 +225,7 @@ func applyPendingChanges(req LastRankReviewActionRequest, user *AuthUser) (map[s
 				break
 			}
 			var out unmatchedOutcome
-			out, err = applyUnmatchedAction(tx, LastRankUnmatchedAction{
+			out, err = applyUnmatchedAction(tx, actor, LastRankUnmatchedAction{
 				LastRankName:     p.LastRankName,
 				LastRankPublicID: p.LastRankPublicID,
 				Action:           req.Resolve,

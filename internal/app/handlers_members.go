@@ -267,11 +267,14 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. If the name changed, save the old name as a Global Alias
+	// 3. If the name changed, save the old name as a Global Alias — re-pointing an
+	// existing one rather than adding a duplicate row beside it.
 	if m.Name != "" && old.Name != m.Name {
-		_, aliasErr := tx.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", id, old.Name)
-		if aliasErr != nil {
-			slog.Warn("Failed to auto-create global alias for name change", "member_id", id, "error", aliasErr)
+		u := getAuthUser(r)
+		if _, aliasErr := saveAliasTx(tx, aliasWrite{MemberID: id, Alias: old.Name, Category: "global",
+			Actor: aliasActor{UserID: u.ID, Username: u.Username, Via: "rename on the Members page"}}); aliasErr != nil {
+			dbError(w, "updateMember: rename alias", aliasErr)
+			return
 		}
 	}
 
@@ -597,18 +600,32 @@ func updateFormerMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Exec("UPDATE members SET name = ?, leave_reason = ? WHERE id = ? AND rank = 'EX'", req.Name, req.LeaveReason, id)
+	user := getAuthUser(r)
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "updateFormerMember begin", err)
+		return
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec("UPDATE members SET name = ?, leave_reason = ? WHERE id = ? AND rank = 'EX'", req.Name, req.LeaveReason, id)
 	if err != nil {
 		slog.Error("Failed to update former member", "member_id", id, "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
+	// The old name becomes a global alias, re-pointing an existing one rather than
+	// adding a duplicate row beside it.
 	if oldName != req.Name {
-		_, aliasErr := db.Exec("INSERT OR IGNORE INTO member_aliases (member_id, user_id, category, alias) VALUES (?, NULL, 'global', ?)", id, oldName)
-		if aliasErr != nil {
-			slog.Warn("Failed to auto-create global alias for former member name change", "member_id", id, "error", aliasErr)
+		if _, aliasErr := saveAliasTx(tx, aliasWrite{MemberID: id, Alias: oldName, Category: "global",
+			Actor: aliasActor{UserID: user.ID, Username: user.Username, Via: "rename on the Members page"}}); aliasErr != nil {
+			dbError(w, "updateFormerMember: rename alias", aliasErr)
+			return
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "updateFormerMember commit", err)
+		return
 	}
 
 	var changes []string
@@ -619,7 +636,6 @@ func updateFormerMember(w http.ResponseWriter, r *http.Request) {
 		changes = append(changes, "leave reason: "+oldLeaveReason+" → "+req.LeaveReason)
 	}
 	if len(changes) > 0 {
-		user := getAuthUser(r)
 		logActivity(user.ID, user.Username, "updated", "member", req.Name, false, strings.Join(changes, "; "))
 	}
 
@@ -1256,25 +1272,30 @@ func addMemberAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var err error
-	if req.IsGlobal {
-		_, err = db.Exec("INSERT INTO member_aliases (member_id, category, alias) VALUES (?, 'global', ?)", memberID, req.Alias)
-	} else {
-		_, err = db.Exec("INSERT INTO member_aliases (member_id, user_id, category, alias) VALUES (?, ?, 'personal', ?)", memberID, userID, req.Alias)
-	}
-
-	if err != nil {
-		http.Error(w, "Failed to save alias. It may already exist.", http.StatusInternalServerError)
-		return
-	}
-
-	var memberName string
-	db.QueryRow("SELECT name FROM members WHERE id = ?", memberID).Scan(&memberName)
 	category := "personal"
 	if req.IsGlobal {
 		category = "global"
 	}
-	logActivity(userID, user.Username, "created", "alias", req.Alias, false, memberName+" ("+category+")")
+	mid, _ := strconv.Atoi(memberID)
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "addMemberAlias begin", err)
+		return
+	}
+	defer tx.Rollback()
+	if _, err := saveAliasTx(tx, aliasWrite{MemberID: mid, Alias: req.Alias, Category: category,
+		Actor: aliasActor{UserID: userID, Username: user.Username, Via: "Members page"}}); err != nil {
+		if isAliasRefusal(err) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		dbError(w, "addMemberAlias", err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "addMemberAlias commit", err)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 }
@@ -1312,9 +1333,21 @@ func deleteMemberAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Exec("DELETE FROM member_aliases WHERE id = ?", aliasID)
-
-	logActivity(userID, user.Username, "deleted", "alias", aliasText, false, memberName+" ("+category+")")
+	id, _ := strconv.Atoi(aliasID)
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "deleteMemberAlias begin", err)
+		return
+	}
+	defer tx.Rollback()
+	if err := deleteAliasByIDTx(tx, id, aliasActor{UserID: userID, Username: user.Username, Via: "Members page"}); err != nil {
+		dbError(w, "deleteMemberAlias", err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "deleteMemberAlias commit", err)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 }

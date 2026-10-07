@@ -2,7 +2,10 @@
 
 package app
 
-import "log/slog"
+import (
+	"database/sql"
+	"log/slog"
+)
 
 // neverBatched lists entity types whose "created" events must always get their own
 // row, overriding the 15-minute merge below.
@@ -22,6 +25,9 @@ var neverBatched = map[string]bool{
 	"invite":                  true,
 	"participation_board":     true,
 	"participation_exception": true,
+	// One row per alias change: a bulk save collapsed into one row naming only the
+	// last alias, which is the record private-docs 195 exists to keep.
+	"alias": true,
 }
 
 // logActivity records an audit entry. When action is "created", consecutive writes
@@ -31,6 +37,26 @@ var neverBatched = map[string]bool{
 // For all other actions each call always inserts a new row.
 // An optional details string (first element of the variadic) provides extra context.
 func logActivity(userID int, username, action, entityType, entityName string, isSensitive bool, details ...string) {
+	if err := writeActivity(db, userID, username, action, entityType, entityName, isSensitive, details...); err != nil {
+		slog.Error("activity_log write failed", "error", err)
+	}
+}
+
+// logActivityTx is logActivity inside the caller's transaction, for a change whose
+// record must commit or fail with it (alias writes). logActivity itself can't be used
+// there: it goes through db, which waits on the open transaction's connection. The
+// error is returned so the caller rolls the change back with its record.
+func logActivityTx(tx *sql.Tx, userID int, username, action, entityType, entityName string, isSensitive bool, details ...string) error {
+	return writeActivity(tx, userID, username, action, entityType, entityName, isSensitive, details...)
+}
+
+// activityWriter is the subset of db and *sql.Tx the activity log writes through.
+type activityWriter interface {
+	QueryRow(query string, args ...any) *sql.Row
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func writeActivity(q activityWriter, userID int, username, action, entityType, entityName string, isSensitive bool, details ...string) error {
 	sensitive := 0
 	if isSensitive {
 		sensitive = 1
@@ -45,23 +71,21 @@ func logActivity(userID int, username, action, entityType, entityName string, is
 	// matches anyway. Skipping explicitly keeps the intent visible.
 	if action == "created" && !neverBatched[entityType] && userID > 0 {
 		var id int
-		err := db.QueryRow(`
+		err := q.QueryRow(`
 			SELECT id FROM activity_log
 			WHERE user_id = ? AND action = 'created' AND entity_type = ?
 			  AND updated_at > datetime('now', '-15 minutes')
 			ORDER BY updated_at DESC LIMIT 1
 		`, userID, entityType).Scan(&id)
 		if err == nil {
-			if _, err2 := db.Exec(`
+			_, err2 := q.Exec(`
 				UPDATE activity_log
 				SET entity_count = entity_count + 1,
 				    entity_name  = ?,
 				    updated_at   = CURRENT_TIMESTAMP
 				WHERE id = ?
-			`, entityName, id); err2 != nil {
-				slog.Error("activity_log batch update failed", "error", err2)
-			}
-			return
+			`, entityName, id)
+			return err2
 		}
 	}
 
@@ -74,10 +98,9 @@ func logActivity(userID int, username, action, entityType, entityName string, is
 	if userID > 0 {
 		actor = userID
 	}
-	if _, err := db.Exec(`
+	_, err := q.Exec(`
 		INSERT INTO activity_log (user_id, username, action, entity_type, entity_name, details, is_sensitive)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, actor, username, action, entityType, entityName, det, sensitive); err != nil {
-		slog.Error("activity_log insert failed", "error", err)
-	}
+	`, actor, username, action, entityType, entityName, det, sensitive)
+	return err
 }
