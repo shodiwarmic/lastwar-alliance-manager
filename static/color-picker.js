@@ -2,8 +2,8 @@
 //
 // Deliberately NOT in global.js. The upgrade needs Choices.js, which is a
 // per-template CDN script, and global.js is loaded on every page — so a helper
-// living there implies an availability it cannot promise. exportTableToXLSX is
-// the cautionary tale: it sits in global.js, depends on the per-template SheetJS
+// living there implies an availability it cannot promise. The XLSX export was
+// the cautionary tale: it sat in global.js, depended on the per-template SheetJS
 // tag, and shipped as a dead button on the Members page because the tag was
 // missing. Keeping this beside its dependency makes the requirement visible in
 // the template, and build-check.yml fails a page that loads one without the other.

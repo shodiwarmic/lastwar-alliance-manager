@@ -78,15 +78,16 @@
         }
         countEl.textContent = list.length + ' of ' + all.length;
         list.forEach(a => {
-            const tagCell = el('td', {});
+            // Export the bare tag: not the ↗ link glyph, and never a B/G-swapped "[2B]".
+            const tagCell = el('td', { 'data-export-text': a.tag || '' });
             tagCell.appendChild(el('span', { className: 'ext-tag', text: a.tag ? '[' + a.tag + ']' : '—' }));
             if (a.lastrank_id) tagCell.appendChild(el('a', { className: 'ext-lr', href: 'https://lastrank.fun/a/' + a.lastrank_id, target: '_blank', rel: 'noopener noreferrer', title: 'View on LastRank' }, '↗'));
             const cells = [
                 tagCell,
                 el('td', { text: a.name || '—' }),
                 el('td', { className: 'ext-num', text: a.server != null ? a.server : '—' }),
-                el('td', { className: 'ext-num', text: formatCompact(a.power) }),
-                el('td', { className: 'ext-num', text: formatCompact(a.kills) }),
+                el('td', { className: 'ext-num', text: formatCompact(a.power), 'data-export-value': a.power != null ? a.power : '' }),
+                el('td', { className: 'ext-num', text: formatCompact(a.kills), 'data-export-value': a.kills != null ? a.kills : '' }),
                 el('td', { className: 'ext-num', text: a.member_count != null ? a.member_count : '—' }),
                 el('td', {}, relBadges(a)),
                 el('td', { className: 'ext-num', text: (a.updated_at || '').slice(0, 10) || '—' }),

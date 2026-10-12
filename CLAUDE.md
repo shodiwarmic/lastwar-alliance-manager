@@ -1404,7 +1404,7 @@ If you need layout.html-level JS (e.g. mobile nav handlers), add it to `static/g
 
 ### XLSX export needs the SheetJS tag on that page template
 
-CSV export is self-contained in `global.js`; **XLSX is not**. `exportTableToXLSX`
+CSV export is self-contained in `table-utils.js`; **XLSX is not**. `TableExport.xlsx`
 depends on SheetJS, which is a per-template CDN script:
 
 ```html
@@ -1412,19 +1412,19 @@ depends on SheetJS, which is a per-template CDN script:
 ```
 
 The trap is that the button is wired up whether or not the lib is there:
-`global.js` auto-attaches **both** a CSV and an XLSX button to every
+`table-utils.js` auto-attaches **both** a CSV and an XLSX button to every
 `table[data-export-csv]`. Miss the script tag and CSV works while XLSX throws a
 `ReferenceError` — a dead button, no toast, nothing but a console line. The
 Members page shipped that way.
 
 So a page needs the tag if **either** is true:
 - it has a `data-export-csv` table (the buttons are auto-wired), or
-- its JS calls `exportTableToXLSX` / `XLSX.*` directly (e.g. `polls.js`, whose
+- its JS calls `TableExport.attach(` / `TableExport.xlsx(` / `XLSX.*` directly (e.g. `polls.js`, whose
   tag lives in `comms.html` — the template that loads it, which is not always
   the one named after it).
 
 `build-check.yml`'s **"XLSX export dependency check"** fails the PR on both
-cases. `exportTableToXLSX` also guards on the lib being absent and shows a toast,
+cases. `TableExport.xlsx` also guards on the lib being absent and shows a toast,
 so a miss degrades visibly rather than silently — but the check is what stops it
 reaching a user.
 
@@ -1487,7 +1487,7 @@ fails the build on that pattern.
 
 Apply it to surfaces whose text is an **identifier or a payload** — player and
 alliance names, tags, anything pasted into the game verbatim, and every table
-the CSV/XLSX helper can reach. `_extractTableData` (`global.js`) reads
+the CSV/XLSX helper can reach. The export (`table-utils.js`) reads
 `th.textContent` / `td.textContent`, so a translated table exports translated
 member names that no longer match on re-import. **Any new table given
 `data-export-csv` must also carry `translate="no"`** — and so must any template
@@ -1635,7 +1635,7 @@ Three things to know before extending it:
 2. **`attach` restructures the element.** The prose moves into a
    `<span class="tl-text">` so the control survives swapping text back and forth,
    and the element is stamped `data-export-text` with the **original**.
-   `_extractTableData` (`global.js`) prefers that attribute, so a translated cell
+   The export (`table-utils.js`) prefers that attribute, so a translated cell
    still exports its source text — without it, this feature would reintroduce
    precisely the export bug the rules above exist to prevent.
 3. **Detection is deliberately two-track.** A model download needs user
@@ -1713,9 +1713,9 @@ to render each option as the badge it produces instead of a swatch dot.
 
 > **Why not `global.js`:** the upgrade needs Choices.js, a per-template CDN
 > script, while `global.js` loads on every page — so a helper there implies an
-> availability it cannot promise. `exportTableToXLSX` is the cautionary tale in
-> the other direction (see "XLSX export needs the SheetJS tag"): it sits in
-> `global.js`, depends on the per-template SheetJS tag, and shipped as a dead
+> availability it cannot promise. The XLSX export was the cautionary tale in
+> the other direction (see "XLSX export needs the SheetJS tag"): it sat in
+> `global.js`, depended on the per-template SheetJS tag, and shipped as a dead
 > button on the Members page. Keep a CDN-dependent helper beside its dependency.
 >
 > `build-check.yml`'s **"Colour picker dependency check"** enforces it, failing a
@@ -2116,9 +2116,9 @@ These names appear in older code but are NOT defined in `styles.css`. They silen
   - `.form-input` — input/select/textarea styling (alias for `.form-group input`)
   - `.finder-*` — dropdown/head/item/name/meta/msg/err/action for the shared
     type-ahead combobox (`buildRemoteFinder` in `global.js`)
-  - `.filter-search-wrap` / `.quick-search` — the search box + clear (×) button,
-    used both inside the filter panel and standalone (`QuickSearch` in `global.js`)
-  - `.export-scope` — the "Filtered only" checkbox injected beside the export buttons
+  - `.filter-search-wrap` — the search box + clear (×) button, used both inside the
+    filter panel and by QuickSearch (its `.quick-search` modifiers, and the export
+    group's `.table-export-actions` / `.export-scope`, live in `table-utils.css`)
   - `.tab-count` — row-count text beside a toolbar search ("12 of 98")
 
 ### Compact numbers: `formatCompact`
@@ -2146,7 +2146,7 @@ page-level `function formatCompact`, in any page script.
 
 ### Searchable lists: use `QuickSearch`
 
-`QuickSearch` (`static/global.js`) is the shared list filter. Every member list in
+`QuickSearch` (`static/table-utils.js`) is the shared list filter. Every member list in
 the app goes through it, and **it folds diacritics** — a roster `Pàcha` matches a
 typed `Pacha`, the same equivalence `foldName` (`namematch.go`) enforces server-side.
 Hand-rolling `.toLowerCase().includes(...)` reintroduces the mismatch and **fails the
@@ -2185,12 +2185,35 @@ For pages that legitimately rebuild from their data array, `QuickSearch.match(te
 `.matcher(q)` and `.filter(list, q, pick)` are the folded predicates. `QuickSearch.widget()`
 builds the standard input + clear button for toolbars constructed in JS.
 
-**Export scope**: `_extractTableData` skips rows QuickSearch has hidden, so a
+`table-utils.js` is an opt-in module: a page using QuickSearch or an export links
+`table-utils.css` first in `head_tags` and loads `table-utils.js` before its page script
+(CI: "Opt-in module dependency check").
+
+**Export scope**: the export skips rows QuickSearch has hidden, so a
 `data-export-csv` table exports what the officer can see. A "Filtered only" checkbox
 appears beside the export buttons *only* while a filter is narrowing that table, and
 the button labels carry the row count. This is automatic for hide mode; a table
 filtered by re-rendering has no hidden rows to restore and would need to register a
 full-data provider.
+
+**Export options** (`TableExport`, `table-utils.js`). Every export group has an
+**Options** button: numbers **raw** (default — typed numbers a spreadsheet can sort
+and sum) or **as shown**, and which columns to include. Saved **per browser** per
+export key (the `data-export-csv` name without `.csv`) through `UserPrefs`
+(`exportSettings`) — `TableExport.settings` is the only code that touches storage.
+- A cell whose text isn't its raw value (anything from `formatCompact`, a
+  locale-formatted number) carries **`data-export-value="<raw>"`**. Plain and
+  comma-grouped numerals are parsed without one; `—` exports empty.
+- Columns are keyed by header text, so a header whose text **changes at run time**
+  (VS's Day 6 / Total, Season Hub's key-event and trackable columns) carries
+  **`data-export-key`** — or an excluded column comes back.
+- An identifier cell (a tag) carries `data-export-text` with the bare value.
+- CSV text fields beginning with `=` `+` `-` `@` TAB or CR get a leading `'`
+  (`TableExport.csvField`; OWASP CSV injection). Typed numbers never do, nor a lone `+`/`-`. Any other
+  CSV writer (`polls.js`) uses `csvField` too.
+- A list that isn't a table on screen calls `TableExport.attach({ bar, getRows, build })`
+  — `build(rows)` returns a detached table and `build([])` its header. Members passes
+  `numbers: 'raw-only'`: its CSV import reads the file back and strips non-digits.
 
 ### Type-ahead pickers: use `buildRemoteFinder`
 

@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
     <link rel="stylesheet" href="{{asset "/vs.css"}}">
     <link rel="stylesheet" href="{{asset "/vs-league.css"}}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -66,8 +67,8 @@
                     <th data-sort="wednesday">Day 3</th>
                     <th data-sort="thursday">Day 4</th>
                     <th data-sort="friday">Day 5</th>
-                    <th id="day6-header" data-sort="saturday">Day 6</th>
-                    <th id="total-header" data-sort="total">Total</th>
+                    <th id="day6-header" data-sort="saturday" data-export-key="day6">Day 6</th>
+                    <th id="total-header" data-sort="total" data-export-key="total">Total</th>
                 </tr>
             </thead>
             <tbody id="vs-tbody">
@@ -147,6 +148,7 @@
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/vs.js"}}"></script>
 <script src="{{asset "/vs-league.js"}}"></script>
 {{end}}

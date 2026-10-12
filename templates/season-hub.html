@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/season-hub.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
 <link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
@@ -67,7 +68,7 @@
                         <th data-sort="rank">Rank</th>
                         <th data-sort="participation_pct" class="sort-desc">Participation</th>
                         <th data-sort="contribution_pct">Contribution</th>
-                        <th data-sort="key_event_attendance" id="key-event-col-header">Key Event</th>
+                        <th data-sort="key_event_attendance" id="key-event-col-header" data-export-key="key-event">Key Event</th>
                         <th data-sort="class_tag">Tag</th>
                         <th data-sort="reward_tier">Reward Tier</th>
                     </tr>
@@ -101,7 +102,7 @@
                         <th>Member</th>
                         <th>Rank</th>
                         <th>Score</th>
-                        <th id="key-event-participation-header">Key Event</th>
+                        <th id="key-event-participation-header" data-export-key="key-event">Key Event</th>
                         <th>Note</th>
                         <th>Attack Note</th>
                         <th title="Member confirmed their response to the in-game attack poll">Attack Poll</th>
@@ -141,8 +142,8 @@
             <table class="data-table" id="contrib-manual-table" data-export-csv="contributions.csv" translate="no">
                 <thead>
                     <tr id="contrib-manual-thead-row">
-                        <th>Member</th>
-                        <th>Rank</th>
+                        <th data-export-key="member">Member</th>
+                        <th data-export-key="rank">Rank</th>
                         <!-- trackable columns injected by JS from season.trackables -->
                     </tr>
                 </thead>
@@ -209,6 +210,7 @@
     data-member-id="{{.MemberID}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
+<script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/color-picker.js"}}"></script>
 <script src="{{asset "/mail.js"}}"></script>
 <script src="{{asset "/season-hub.js"}}"></script>

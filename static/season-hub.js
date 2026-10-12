@@ -368,6 +368,8 @@
             : '—';
         wrap.append(bg, label);
         td.appendChild(wrap);
+        // The label is in the browser's locale; the export wants the number.
+        td.dataset.exportValue = m.contribution_total > 0 ? String(m.contribution_total) : '';
         return td;
     }
 
@@ -677,6 +679,8 @@
         (activeSeason ? activeSeason.trackables || [] : []).forEach(t => {
             const th = document.createElement('th');
             th.textContent = t.label;
+            // Labels are editable and needn't be unique; the trackable key is both stable and unique.
+            th.dataset.exportKey = 'trackable:' + t.key;
             headRow.appendChild(th);
         });
     }
@@ -937,6 +941,7 @@
             tdMatch.textContent = row.match_type;
             const tdPts = document.createElement('td');
             tdPts.textContent = (row.points || 0).toLocaleString();
+            tdPts.dataset.exportValue = String(row.points || 0);
             tr.append(tdOcr, tdMember, tdMatch, tdPts);
             return tr;
         });
@@ -956,6 +961,7 @@
 
                     const tdPts = document.createElement('td');
                     tdPts.textContent = (row.points || 0).toLocaleString();
+                    tdPts.dataset.exportValue = String(row.points || 0);
 
                     const tdMap = document.createElement('td');
                     const memberSel = document.createElement('select');

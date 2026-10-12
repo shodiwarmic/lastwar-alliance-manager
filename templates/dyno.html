@@ -1,4 +1,5 @@
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {{end}}
 
@@ -142,5 +143,6 @@
     data-username="{{.Username}}"
     data-can-manage="{{if .Permissions.ManageDyno}}true{{else}}false{{end}}"
     hidden></div>
+<script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/dyno.js"}}"></script>
 {{end}}

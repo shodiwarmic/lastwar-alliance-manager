@@ -318,21 +318,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadSkillRegistry();
     loadMembers();
 
+    // Raw-only: the CSV import reads this file back, and it strips non-digits from Power, so an
+    // "As shown" 123.46M would re-import as 12,346 (private-docs 184). Options offer columns only.
     const exportBar = document.getElementById('members-export-bar');
     if (exportBar) {
-        const exportCsvBtn = document.createElement('button');
-        exportCsvBtn.className = 'btn btn-secondary btn-sm';
-        exportCsvBtn.textContent = '↓ CSV';
-        exportCsvBtn.addEventListener('click', () =>
-            exportTableToCSV(buildExportTable(currentFilteredMembers), 'members.csv'));
-
-        const exportXlsxBtn = document.createElement('button');
-        exportXlsxBtn.className = 'btn btn-secondary btn-sm';
-        exportXlsxBtn.textContent = '↓ XLSX';
-        exportXlsxBtn.addEventListener('click', () =>
-            exportTableToXLSX(buildExportTable(currentFilteredMembers), 'members.xlsx'));
-
-        exportBar.append(exportCsvBtn, exportXlsxBtn);
+        TableExport.attach({
+            bar: exportBar, key: 'members', filename: 'members', numbers: 'raw-only',
+            getRows: () => currentFilteredMembers,
+            build: buildExportTable,
+        });
     }
 });
 

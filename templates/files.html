@@ -1,4 +1,5 @@
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/filter-panel.css"}}">
 <link rel="stylesheet" href="{{asset "/files.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
@@ -291,6 +292,7 @@
     data-can-upload="{{if .Permissions.UploadFiles}}true{{else}}false{{end}}"
     data-user-rank="{{.Rank}}"
     hidden></div>
+<script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/filter-panel.js"}}"></script>
 <script src="{{asset "/files.js"}}"></script>
 {{end}}

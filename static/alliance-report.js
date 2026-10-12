@@ -512,14 +512,14 @@
                 const cells = [
                     nameCell,
                     el('td', { text: rankLabel(r.alliance_rank) }),
-                    el('td', { className: 'rep-num', text: formatCompact(r.power) }),
-                    el('td', { className: 'rep-num', text: formatCompact(r.hero_power) }),
+                    el('td', { className: 'rep-num', text: formatCompact(r.power), 'data-export-value': r.power != null ? r.power : '' }),
+                    el('td', { className: 'rep-num', text: formatCompact(r.hero_power), 'data-export-value': r.hero_power != null ? r.hero_power : '' }),
                     el('td', { className: 'rep-num', text: r.base_level != null ? String(r.base_level) : '—' }),
                     el('td', { text: r.country || '—' }),
                 ];
                 if (hasExtended) {
                     cells.push(
-                        el('td', { className: 'rep-num', text: e ? formatCompact(e.kills) : '—' }),
+                        el('td', { className: 'rep-num', text: e ? formatCompact(e.kills) : '—', 'data-export-value': e && e.kills != null ? e.kills : '' }),
                         el('td', { text: (e && e.profession) || '—' }),
                         el('td', { className: 'rep-num', text: e && e.career_level ? String(e.career_level) : '—' }),
                         el('td', { className: 'rep-num', text: e ? dateOnly(e.last_seen_at) : '—' }),
@@ -533,7 +533,10 @@
         // The export buttons are auto-wired at page load, long before a report exists.
         // Leaving them live would hand back a header-only file.
         const exportable = filtered.length > 0;
-        document.querySelectorAll('.table-export-actions button').forEach(b => { b.disabled = !exportable; });
+        // Only this table's own export group — the Registry's sits on the same page. Downloads
+        // follow the rows; Options follows the header (TableExport's handle decides that).
+        const exportHandle = window.TableExport && TableExport.handleFor(document.getElementById('rep-table'));
+        if (exportHandle) exportHandle.setDownloads(exportable);
         if (exportHint) {
             exportHint.textContent = exportable
                 ? 'Exports the ' + filtered.length + ' row(s) shown.'

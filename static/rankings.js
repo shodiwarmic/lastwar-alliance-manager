@@ -447,9 +447,11 @@ function buildGrowthRow(m) {
 
     const td7d = document.createElement('td');
     td7d.appendChild(formatGrowth(m.growth_7d));
+    td7d.dataset.exportValue = m.growth_7d != null ? String(m.growth_7d) : '';
 
     const td30d = document.createElement('td');
     td30d.appendChild(formatGrowth(m.growth_30d));
+    td30d.dataset.exportValue = m.growth_30d != null ? String(m.growth_30d) : '';
 
     const tdHero = document.createElement('td');
     tdHero.style.fontWeight = '600';
@@ -464,6 +466,7 @@ function buildGrowthRow(m) {
     const tdHero7d = document.createElement('td');
     if (m.current_hero_power > 0) {
         tdHero7d.appendChild(formatGrowth(m.hero_growth_7d));
+        tdHero7d.dataset.exportValue = String(m.hero_growth_7d);
     } else {
         tdHero7d.style.color = 'var(--color-text-muted)';
         tdHero7d.textContent = '—';
@@ -472,6 +475,7 @@ function buildGrowthRow(m) {
     const tdHero30d = document.createElement('td');
     if (m.current_hero_power > 0) {
         tdHero30d.appendChild(formatGrowth(m.hero_growth_30d));
+        tdHero30d.dataset.exportValue = String(m.hero_growth_30d);
     } else {
         tdHero30d.style.color = 'var(--color-text-muted)';
         tdHero30d.textContent = '—';
@@ -582,6 +586,7 @@ function buildVSRow(v, idx) {
     const dayTds = days.map(d => {
         const td = document.createElement('td');
         td.textContent = formatCompact(d);
+        td.dataset.exportValue = d != null ? String(d) : '';   // raw for export
         return td;
     });
 

@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/filter-panel.css"}}">
 <link rel="stylesheet" href="{{asset "/train.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -124,6 +125,7 @@
 
 {{define "scripts"}}
 <div id="page-config" data-can-manage="{{if .Permissions.ManageTrain}}true{{else}}false{{end}}" hidden></div>
+<script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/filter-panel.js"}}"></script>
 <script src="{{asset "/train.js"}}"></script>

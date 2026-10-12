@@ -195,6 +195,7 @@ async function loadMembers() {
         vsSpan.className = m.below_threshold ? 'acc-vs--below' : 'acc-vs--ok';
         vsSpan.textContent = formatCompact(m.vs_total);
         tdVS.appendChild(vsSpan);
+        tdVS.dataset.exportValue = m.vs_total != null ? String(m.vs_total) : '';
 
         const tdActions = document.createElement('td');
         const actionWrap = document.createElement('div');

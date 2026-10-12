@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
@@ -89,6 +90,7 @@
     data-can-manage-polls="{{if .Permissions.ManagePolls}}true{{else}}false{{end}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
+<script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/mail.js"}}"></script>
 <script src="{{asset "/comms.js"}}"></script>
 <script src="{{asset "/member-picker.js"}}"></script>

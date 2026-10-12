@@ -126,8 +126,8 @@ jobs:
           print('Versioned static asset check passed.')
           EOF
 
-      # SheetJS is a per-template CDN script, but exportTableToXLSX lives in
-      # global.js and is auto-wired onto every data-export-csv table. A page
+      # SheetJS is a per-template CDN script, but the XLSX export lives in
+      # table-utils.js and is auto-wired onto every data-export-csv table. A page
       # that exports without loading the lib gets a dead button and a bare
       # ReferenceError -- the Members page shipped that way.
       # Runs as a step of this job rather than its own job, for the branch
@@ -138,15 +138,15 @@ jobs:
           import pathlib, re, sys
 
           # Real API/call forms only -- "CSV/XLSX export" in prose must not count.
-          USES = re.compile(r'\bXLSX\s*\.\s*(?:utils|write|read)|\bexportTableToXLSX\s*\(')
+          USES = re.compile(r'\bXLSX\s*\.\s*(?:utils|write|read)|\bTableExport\s*\.\s*(?:attach|xlsx)\s*\(')
           LOADS_JS = re.compile(r'\{\{\s*asset\s+"([^"]+\.js)"\s*\}\}')
           HAS_LIB = re.compile(r'<script[^>]+src="[^"]*\bxlsx[^"]*\.js"')
           BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.S)
           LINE_COMMENT = re.compile(r'(?<!:)//.*$', re.M)   # (?<!:) keeps https:// intact
 
-          # global.js DEFINES exportTableToXLSX and is loaded on every page via
-          # layout.html; counting it would demand the lib everywhere.
-          DEFINER = 'global.js'
+          # table-utils.js DEFINES the XLSX writer and is loaded by every page with a
+          # searchable list; counting it would demand the lib on all of them.
+          DEFINER = 'table-utils.js'
 
           def uses_xlsx(js_path):
               p = pathlib.Path('static') / js_path.lstrip('/')
@@ -163,7 +163,7 @@ jobs:
                   continue
 
               reasons = []
-              # 1. Auto-wired: global.js puts an XLSX button on these.
+              # 1. Auto-wired: table-utils.js puts an XLSX button on these.
               if 'data-export-csv' in html:
                   reasons.append('has a data-export-csv table')
               # 2. Explicit: page JS calls the exporter or SheetJS directly.
@@ -182,6 +182,71 @@ jobs:
               print('  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>')
               sys.exit(1)
           print('XLSX export dependency check passed.')
+          EOF
+
+      # Opt-in modules (table-utils.js, remote-finder.js, …) are loaded only by the pages that
+      # use them -- see CLAUDE.md -> "What belongs in global.js". A page whose scripts use one
+      # without loading it breaks silently (an undefined global behind a feature). So for every
+      # template: if a loaded script other than the module uses it, or the template carries the
+      # module's HTML marker, the template must load the module and its CSS; the module's tag
+      # must come before its first consumer's; and its CSS must come before the first
+      # page-specific stylesheet in head_tags, so page CSS can still adjust it.
+      - name: Opt-in module dependency check
+        run: |
+          python3 - <<'EOF'
+          import pathlib, re, sys
+
+          # (module js, module css or None, regex marking a use in a script, HTML marker or None)
+          MODULES = [
+              ('table-utils.js', 'table-utils.css',
+               r'\bQuickSearch\s*\.|\bTableExport\s*\.', 'data-export-csv'),
+          ]
+          LOADS_JS = re.compile(r'\{\{\s*asset\s+"([^"]+\.js)"\s*\}\}')
+          LOADS_CSS = re.compile(r'\{\{\s*asset\s+"([^"]+\.css)"\s*\}\}')
+          BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.S)
+          LINE_COMMENT = re.compile(r'(?<!:)//.*$', re.M)
+          MODULE_CSS = {m[1] for m in MODULES if m[1]}
+
+          def src(js):
+              p = pathlib.Path('static') / js.lstrip('/')
+              if not p.is_file():
+                  return ''   # the versioned-asset check reports missing files
+              return LINE_COMMENT.sub('', BLOCK_COMMENT.sub('', p.read_text(encoding='utf-8')))
+
+          fails = []
+          for path in sorted(pathlib.Path('templates').rglob('*.html')):
+              html = path.read_text(encoding='utf-8')
+              js = [pathlib.Path(j).name for j in LOADS_JS.findall(html)]
+              css = [pathlib.Path(c).name for c in LOADS_CSS.findall(html)]
+              for module, module_css, uses, marker in MODULES:
+                  rx = re.compile(uses)
+                  consumers = [j for j in LOADS_JS.findall(html)
+                               if pathlib.Path(j).name != module and rx.search(src(j))]
+                  needed = bool(consumers) or (marker and marker in html)
+                  if not needed:
+                      continue
+                  why = ', '.join(pathlib.Path(c).name for c in consumers) or marker
+                  if module not in js:
+                      fails.append(f'{path}: uses {module} ({why}) but does not load it')
+                      continue
+                  first = min((js.index(pathlib.Path(c).name) for c in consumers), default=None)
+                  if first is not None and js.index(module) > first:
+                      fails.append(f'{path}: loads {module} after its consumer {js[first]}')
+                  if module_css:
+                      if module_css not in css:
+                          fails.append(f'{path}: loads {module} but not {module_css}')
+                      else:
+                          page_css = [i for i, c in enumerate(css) if c not in MODULE_CSS]
+                          if page_css and css.index(module_css) > page_css[0]:
+                              fails.append(f'{path}: links {module_css} after page CSS {css[page_css[0]]}')
+
+          if fails:
+              print('Opt-in module dependency check failed:\n')
+              for f in fails:
+                  print('  ' + f)
+              print('\nLink the module CSS first in head_tags and load the module script before the page script.')
+              sys.exit(1)
+          print('Opt-in module dependency check passed.')
           EOF
 
       # color-picker.js upgrades a colour <select> to a Choices dropdown. Choices
@@ -267,7 +332,7 @@ jobs:
           # legitimately wrap <option> lists in {{if}} blocks.
           TEXTAREA = re.compile(r'<textarea\b[^>]*>\s*\{\{')
 
-          # _extractTableData (static/global.js) exports from td.textContent, so a
+          # table-utils.js's export reads td.textContent, so a
           # translated exportable table exports translated member names that no
           # longer match on re-import.
           TABLE_TAG = re.compile(r'<table\b[^>]*>')

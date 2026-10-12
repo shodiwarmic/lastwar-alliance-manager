@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/job-progress.css"}}">
 <link rel="stylesheet" href="{{asset "/recruiting.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -356,6 +357,7 @@
      data-has-former-tab="{{if .Permissions.ManageMembers}}true{{else}}false{{end}}"
      hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
+<script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/job-progress.js"}}"></script>
 <script src="{{asset "/recruiting.js"}}"></script>
 {{end}}

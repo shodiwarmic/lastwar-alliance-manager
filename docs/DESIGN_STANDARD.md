@@ -236,8 +236,8 @@ if (activeBtn) {
 
 Flex row for filter controls above a tab panel. Provides the right `gap` and `flex-wrap` without extra CSS.
 
-**Table export buttons** (CSV / XLSX) are auto-wired by `global.js` for any
-`<table data-export-csv="…">`: the two buttons are grouped in a right-aligned
+**Table export buttons** (Options / CSV / XLSX) are auto-wired by `table-utils.js` for any
+`<table data-export-csv="…">`: the buttons are grouped in a right-aligned
 `.table-export-actions` wrapper (`margin-left: auto`) and appended to the nearest preceding
 `.tab-toolbar`. So put a `.tab-toolbar` above the table — it can also hold that section's
 search/filter controls — and the export buttons land at its right end. A page that builds its

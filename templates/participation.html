@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/member-picker.css"}}">
 <link rel="stylesheet" href="{{asset "/participation.css"}}">
 {{end}}
@@ -172,6 +173,7 @@
 <div id="page-config"
      data-can-manage="{{if .Permissions.ManageParticipation}}true{{else}}false{{end}}"
      data-can-view-accountability="{{if .Permissions.ViewAccountability}}true{{else}}false{{end}}" hidden></div>
+<script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/member-picker.js"}}"></script>
 <script src="{{asset "/participation-parse.js"}}"></script>
 <script src="{{asset "/participation.js"}}"></script>

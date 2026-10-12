@@ -1,4 +1,5 @@
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
     <link rel="stylesheet" href="{{asset "/upload.css"}}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
     <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
@@ -159,5 +160,6 @@
 {{end}}
 
 {{define "scripts"}}
-    <script src="{{asset "/upload.js"}}"></script>
+    <script src="{{asset "/table-utils.js"}}"></script>
+<script src="{{asset "/upload.js"}}"></script>
 {{end}}

@@ -842,10 +842,22 @@ function buildExportTable(headers, rows) {
     const tbody = table.createTBody();
     rows.forEach(values => {
         const tr = tbody.insertRow();
-        values.forEach(value => { tr.insertCell().textContent = value; });
+        values.forEach(value => {
+            const td = tr.insertCell();
+            if (value && typeof value === 'object') {
+                // A number: shown compact, exported raw unless the officer picks "As shown".
+                td.textContent = value.text;
+                td.dataset.exportValue = value.raw;
+            } else {
+                td.textContent = value;
+            }
+        });
     });
     return table;
 }
+
+// A numeric export cell: compact on screen ("As shown"), the raw value otherwise.
+const exportNum = (n) => ({ text: formatCompact(n, { empty: '' }), raw: n != null ? String(n) : '' });
 
 // One builder for both tabs. Server and Seat Color are transfer-only concepts —
 // the add/edit form already hides them for prospects — so the prospects export
@@ -862,7 +874,7 @@ function buildProspectExportTable(items, includeTransferCols) {
         if (includeTransferCols) row.push(p.server || '');
         row.push(p.source_alliance || '');
         if (includeTransferCols) row.push(seatColorLabel(p.seat_color));
-        row.push(formatCompact(p.power, { empty: '' }), formatCompact(p.hero_power, { empty: '' }));
+        row.push(exportNum(p.power), exportNum(p.hero_power));
         return row;
     }));
 }
@@ -872,39 +884,18 @@ function buildFormerExportTable(members) {
         ['Name', 'Last Power', 'Train Runs', 'Last VS Week', 'Reason'],
         members.map(m => [
             m.name || '',
-            formatCompact(m.last_power, { empty: '' }),
+            exportNum(m.last_power),
             m.train_count || 0,
             m.last_vs_week || '',
             m.leave_reason || '',
         ]));
 }
 
-function exportButton(label, title, handler) {
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-secondary btn-sm';
-    btn.textContent = '↓ ' + label;
-    btn.title = title;
-    btn.addEventListener('click', handler);
-    return btn;
-}
-
 function attachExportBar(barId, filenameBase, getRows, buildTable) {
     const bar = document.getElementById(barId);
     if (!bar) return;   // Former Members only renders for manage_members
-
-    const onClick = (exportFn) => () => {
-        const rows = getRows();
-        if (!rows.length) { showToast('Nothing to export.', 'info'); return; }
-        exportFn(buildTable(rows));
-    };
-
-    // Both exporters are called by name rather than passed as references: CI's
-    // "XLSX export dependency check" greps for `exportTableToXLSX(`, and that
-    // literal is what keeps this page tied to its SheetJS script tag.
-    bar.appendChild(exportButton('CSV', 'Download as CSV',
-        onClick(table => exportTableToCSV(table, filenameBase + '.csv'))));
-    bar.appendChild(exportButton('XLSX', 'Download as Excel spreadsheet',
-        onClick(table => exportTableToXLSX(table, filenameBase + '.xlsx'))));
+    // build([]) gives the header-only table the Options dialog lists columns from.
+    TableExport.attach({ bar, key: filenameBase, filename: filenameBase, getRows, build: buildTable });
 }
 
 function setupExports() {

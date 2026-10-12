@@ -409,15 +409,11 @@ function buildPollSummaryText(pi, data) {
     return lines.join('\n');
 }
 
+// Fields go through TableExport.csvField (table-utils.js, loaded by comms.html) so a poll
+// answer that begins with = + - @ opens as text, not a spreadsheet formula. The BOM stays:
+// standing-decisions.md, "CSV exports deliberately begin with a UTF-8 BOM".
 function pollRowsToCSV(rows) {
-    return '﻿' + rows.map(row =>
-        row.map(val => {
-            const s = String(val ?? '');
-            return (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r'))
-                ? '"' + s.replace(/"/g, '""') + '"'
-                : s;
-        }).join(',')
-    ).join('\r\n');
+    return '\uFEFF' + rows.map(row => row.map(TableExport.csvField).join(',')).join('\r\n');
 }
 
 function exportPollRowsCSV(rows, filename) {
