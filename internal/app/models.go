@@ -712,7 +712,7 @@ type BackgroundJobItem struct {
 // stays a pointer, so "no alliance" and "alliance unknown" don't collapse into "".
 //
 // AllianceTag / AllianceName let the prospect form prefill the source alliance,
-// and PhotoURL feeds buildLastRankAvatar the same way the per-player endpoint does.
+// and PhotoURL feeds buildPlayerAvatar the same way the per-player endpoint does.
 type LastRankPlayerSearchResult struct {
 	PublicID     int     `json:"public_id"`
 	Name         string  `json:"name"`

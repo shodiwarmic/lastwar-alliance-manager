@@ -151,6 +151,8 @@ These exist in the legacy `html.theme-*` blocks and are still referenced by pre-
 | `--text-primary` / `--text-secondary` | `--color-text` / `--color-text-mid` |
 | `--border-color` | `--color-border` |
 
+One exception to the `--bg-secondary` row: for a fill that sits **on a card** and must stay visible (a loading avatar, a small button), use `--color-bg`. `--color-surface` and `--color-card` are both white in light mode, so a surface fill vanishes into the card (`.player-avatar`, `.order-btn`).
+
 ---
 
 ## CSS File Organisation

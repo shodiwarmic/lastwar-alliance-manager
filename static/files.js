@@ -215,7 +215,7 @@ function parseFileDate(s) {
 }
 
 // Short date for the visible "Updated" badge — app-wide style ("Jul 17, 2026"), matching
-// window.formatJoinDate. Local time, so it agrees with the tooltip.
+// Members' formatJoinDate (members.js). Local time, so it agrees with the tooltip.
 function fileDateShort(s) {
     const d = parseFileDate(s);
     return d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })

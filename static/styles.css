@@ -277,9 +277,9 @@ button,
     min-height: 0;
 }
 
-/* LastRank avatar (hotlinked from the game CDN). Rendering in production needs
+/* Player avatar (hotlinked from the game CDN; buildPlayerAvatar in global.js). Rendering in production needs
    the CDN hosts allowlisted in the reverse-proxy CSP img-src. */
-.lr-avatar {
+.player-avatar {
     /* Fluid: ~36px on a phone up to 52px on desktop. Rounded square to match the
        sidebar user tile, not a circle. */
     width: clamp(36px, 5.5vw, 52px);
@@ -287,8 +287,11 @@ button,
     border-radius: 12px;
     object-fit: cover;
     flex-shrink: 0;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    /* --color-bg, not --color-surface: the cards it sits on are white in light mode, so a surface
+       fill would vanish while the photo loads. --color-border is defined in both themes (the old
+       --border-color only in dark, so light mode drew no border). */
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
 }
 
 /* User Dropdown */
@@ -5539,78 +5542,6 @@ html.theme-dark .numInputWrapper span.arrowUp::after {
 html.theme-dark .numInputWrapper span.arrowDown::after {
     border-top-color: var(--color-text-muted);
 }
-/* ── Remote finder (shared type-ahead combobox) ───────────────────────────────
-   Backs buildRemoteFinder() in global.js: the Recruiting player picker, and the
-   External Alliances / VS League alliance pickers. Supersedes the older
-   .ext-find-* / .vsl-find-* blocks those pages still carry; migrating them is a
-   pending follow-up, but only their mechanics — their tokens are already fine.
-
-   Written on the canonical --color-* tokens (docs/DESIGN_STANDARD.md → Design Tokens).
-   The hover states use --color-accent-bg rather than a surface token: the literal
-   legacy mapping (--bg-secondary → --color-surface) resolves to #ffffff in light
-   mode, identical to the dropdown's own --color-card, so the hover would vanish.
-
-   The dropdown is absolutely positioned: give its container position:relative,
-   or pass a `position` callback to anchor it yourself. */
-.finder-dropdown {
-    position: absolute;
-    z-index: 30;
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    max-height: 280px;
-    overflow-y: auto;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-}
-
-.finder-head {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--color-text-muted);
-    padding: 8px 12px 4px;
-}
-
-.finder-item {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    width: 100%;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    border-top: 1px solid var(--color-border);
-    cursor: pointer;
-    text-align: left;
-    color: var(--color-text);
-}
-
-.finder-item:hover { background: var(--color-accent-bg); }
-.finder-head + .finder-item { border-top: none; }
-.finder-name { font-weight: 600; }
-.finder-meta { font-size: 0.8rem; color: var(--color-text-muted); }
-.finder-msg { font-size: 0.82rem; color: var(--color-text-muted); padding: 8px 12px; }
-.finder-err { color: var(--color-danger); font-weight: 600; }
-
-.finder-action {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    padding: 9px 12px;
-    background: none;
-    border: none;
-    border-top: 1px solid var(--color-border);
-    cursor: pointer;
-    text-align: left;
-    color: var(--color-accent);
-    font-weight: 600;
-}
-
-.finder-action:hover { background: var(--color-accent-bg); }
-
 /* ---- Inline translation control (translate.js) ----
    Attached to member-written prose (shout-out notes, mail bodies, ally and
    prospect notes, strike reasons). Quiet by default: this sits inside content,
@@ -5688,35 +5619,3 @@ html.theme-dark .numInputWrapper span.arrowDown::after {
    .tier-badge tones above stay here — tables render them with no picker
    involved. */
 
-/* Reorder controls for user-ordered lists (reward tiers). Small, icon-only,
-   and disabled at the ends so the boundary is visible rather than silent. */
-.order-btns {
-    display: inline-flex;
-    flex-direction: column;
-    gap: 1px;
-    vertical-align: middle;
-}
-
-.order-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 15px;
-    padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 3px;
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    cursor: pointer;
-}
-
-.order-btn:hover:not(:disabled) {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-}
-
-.order-btn:disabled {
-    opacity: 0.35;
-    cursor: default;
-}

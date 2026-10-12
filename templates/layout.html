@@ -205,7 +205,7 @@
 
       <!-- User row with theme/logout dropdown -->
       <div class="sidebar-user">
-        <div class="sidebar-user-avatar" data-lr-photo="{{.UserPhotoURL}}" data-lr-photo-failover="{{.UserPhotoFailover}}">{{printf "%.2s" .Username}}</div>
+        <div class="sidebar-user-avatar" data-photo="{{.UserPhotoURL}}" data-photo-failover="{{.UserPhotoFailover}}">{{printf "%.2s" .Username}}</div>
         <div style="flex:1;min-width:0">
           <div class="sidebar-user-name" translate="no">{{.Username}}</div>
           <div class="sidebar-user-role">{{.Rank}}{{if .PreviewRank}} <span class="sidebar-user-preview">(previewing)</span>{{end}}</div>

@@ -131,11 +131,11 @@
 
 /* Seat color carried as a ring around the prospect's avatar (transfers), in
    place of the separate dot. */
-.lr-avatar.seat-edge { border-width: 3px; border-style: solid; }
-.lr-avatar.seat-edge-gold   { border-color: #f1c40f; }
-.lr-avatar.seat-edge-purple { border-color: #9b59b6; }
-.lr-avatar.seat-edge-blue   { border-color: #3498db; }
-.lr-avatar.seat-edge-grey   { border-color: #95a5a6; }
+.player-avatar.seat-edge { border-width: 3px; border-style: solid; }
+.player-avatar.seat-edge-gold   { border-color: #f1c40f; }
+.player-avatar.seat-edge-purple { border-color: #9b59b6; }
+.player-avatar.seat-edge-blue   { border-color: #3498db; }
+.player-avatar.seat-edge-grey   { border-color: #95a5a6; }
 
 /* ── R4 Badge ─────────────────────────────────────────────────────────────── */
 

@@ -3,6 +3,18 @@
 (function () {
     'use strict';
 
+    // ---- Button loading state (moved from global.js — only Season Hub uses it) ----
+    function setButtonLoading(btn, loadingText = 'Saving…') {
+        btn.disabled = true;
+        btn._originalText = btn.textContent;
+        btn.textContent = loadingText;
+    }
+
+    function clearButtonLoading(btn) {
+        btn.disabled = false;
+        btn.textContent = btn._originalText ?? btn.textContent;
+    }
+
     function escapeHtml(s) {
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }

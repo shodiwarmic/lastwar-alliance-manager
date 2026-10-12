@@ -8,6 +8,7 @@
 
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/table-utils.css"}}">
+<link rel="stylesheet" href="{{asset "/order-buttons.css"}}">
 <link rel="stylesheet" href="{{asset "/accountability.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -217,6 +218,7 @@
      data-vs-imported-completed="{{.VSImportedCompleted}}"
      data-vs-fallback="{{if .VSFallbackActive}}true{{else}}false{{end}}" hidden></div>
 <script src="{{asset "/table-utils.js"}}"></script>
+<script src="{{asset "/order-buttons.js"}}"></script>
 <script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/strike-types.js"}}"></script>
 <script src="{{asset "/accountability.js"}}"></script>

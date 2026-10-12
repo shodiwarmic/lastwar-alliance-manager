@@ -1,4 +1,7 @@
-// static/global.js - Global JavaScript for handling mobile menu, user dropdown, and logout functionality
+// static/global.js — loaded on EVERY page (layout.html, and login.html), so every byte here is
+// downloaded everywhere and any edit invalidates every user's cached copy. It holds only layout
+// chrome and primitives most pages use. Code one page uses lives in that page; a widget a few
+// pages use is an opt-in module. See CLAUDE.md -> "What belongs in global.js" before adding.
 
 // ---- Game-time clock (single source of truth) ----
 // The game day rolls over at a FIXED 02:00 UTC (10PM EDT / 9PM EST) — a fixed UTC-2
@@ -194,26 +197,6 @@ window.desertStormDayError = (dateStr) => {
         + ' (next eligible date ' + next.toISOString().slice(0, 10) + ')';
 };
 
-// ---- Join-date helpers (anchored to today's GAME date) ----
-// Pure UTC date math so there's no local-timezone drift. "days ago" >= 0 = past.
-window.gameDaysAgoToISO = (n) => {
-    const d = new Date(window.gameDateStr() + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() - n);
-    return d.toISOString().slice(0, 10);
-};
-window.gameISOToDaysAgo = (iso) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
-    const then = new Date(iso + 'T00:00:00Z').getTime();
-    const today = new Date(window.gameDateStr() + 'T00:00:00Z').getTime();
-    return Math.round((today - then) / 86400000);
-};
-// Format a YYYY-MM-DD date-only string as e.g. "Jun 14 2026". Built from the parts
-// (not new Date(str)) so it isn't shifted a day by UTC parsing.
-window.formatJoinDate = (iso) => {
-    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
-    const [y, mo, d] = iso.split('-');
-    return new Date(+y, +mo - 1, +d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-};
 
 // ---- Per-user UI preferences ----
 // Currently localStorage-backed (persists per browser). The storage layer is isolated
@@ -238,57 +221,6 @@ window.formatJoinDate = (iso) => {
     window.UserPrefs = { get: read, set: write, defaults: PREF_DEFAULTS };
 })();
 
-// ---- Linked "joined [N] days ago · [date]" entry widget ----
-// Two-way bound: editing the days count fills the date and vice-versa, anchored to
-// today's game date. Used by the member edit modal and the CSV / LastRank import rows.
-// Returns { row, getISO, setISO, clear }. onChange(iso) fires on any user change.
-window.buildJoinDateField = function (initialISO, onChange) {
-    const row = document.createElement('span');
-    row.className = 'join-date-row';
-    const daysInput = document.createElement('input');
-    daysInput.type = 'number';
-    daysInput.min = '0';
-    daysInput.className = 'form-input join-days-input';
-    daysInput.placeholder = 'days';
-    const dateInput = document.createElement('input');
-    dateInput.type = 'text';
-    dateInput.className = 'form-input join-date-input';
-    dateInput.placeholder = 'YYYY-MM-DD';
-    row.append(
-        document.createTextNode('Joined '), daysInput,
-        document.createTextNode(' days ago · '), dateInput
-    );
-
-    let fp = null;
-    const setDate = (iso) => { if (fp) fp.setDate(iso || null, false); else dateInput.value = iso || ''; };
-    const fire = () => { if (onChange) onChange((dateInput.value || '').trim()); };
-
-    // User edits the days count → recompute the date (programmatic .value set on the
-    // days input below never re-fires 'input', so there's no feedback loop).
-    const fromDays = () => {
-        const n = parseInt(daysInput.value, 10);
-        if (Number.isFinite(n) && n >= 0) setDate(window.gameDaysAgoToISO(n));
-        else if (daysInput.value === '') setDate('');
-        fire();
-    };
-    const fromDate = () => {
-        const iso = (dateInput.value || '').trim();
-        daysInput.value = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? window.gameISOToDaysAgo(iso) : '';
-        fire();
-    };
-
-    if (window.flatpickr) fp = flatpickr(dateInput, { dateFormat: 'Y-m-d', allowInput: true, onChange: fromDate });
-    else dateInput.addEventListener('change', fromDate);
-    daysInput.addEventListener('input', fromDays);
-
-    const setISO = (iso) => {
-        setDate(iso || '');
-        daysInput.value = (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) ? window.gameISOToDaysAgo(iso) : '';
-    };
-    if (initialISO) setISO(initialISO);
-
-    return { row, getISO: () => (dateInput.value || '').trim(), setISO, clear: () => setISO('') };
-};
 
 // ---- Toast notifications ----
 function showToast(message, type = 'success', duration = 3500) {
@@ -354,157 +286,6 @@ function clearFieldError(fieldEl) {
     if (next?.classList.contains('field-error-message')) next.remove();
 }
 
-function clearAllFieldErrors(formEl) {
-    formEl.querySelectorAll('.field-error').forEach(el => clearFieldError(el));
-}
-
-// ---- Remote finder (type-ahead combobox) ----
-//
-// One dropdown, two sources: instant local matches as you type, plus a remote
-// lookup behind an explicit click. Shared by the External Alliances / VS League
-// alliance pickers and the Recruiting player picker.
-//
-// The remote lookup is NEVER fired per keystroke. Every remote source here is the
-// volunteer-run LastRank API behind a shared 1 req/sec limiter, so searching must
-// stay a deliberate act — debouncing would still turn one officer typing a name
-// into a burst of upstream calls.
-//
-// Options:
-//   inputs       [HTMLElement]  fields that drive the query (last focused wins)
-//   localSearch  q => [item]    synchronous, no network
-//   remoteSearch async q => [item]   omit for a local-only finder
-//   item         (obj, kind) => { label, meta, onPick }   kind: 'local' | 'remote'
-//   guard        q => string|null    non-null blocks the remote lookup with that message
-//   actionLabel  q => string
-//   position     () => void      optional; called on open for custom anchoring
-//   prefix       string          CSS class prefix (default 'finder')
-//
-// Returns { dropdown, refresh, close, runRemote } — insert `dropdown` yourself so
-// the caller controls where it sits in the DOM.
-function buildRemoteFinder(opts) {
-    const prefix = opts.prefix || 'finder';
-    const localSearch = opts.localSearch || (() => []);
-    const guard = opts.guard || (() => null);
-    const actionLabel = opts.actionLabel || (q => 'Look up “' + q + '” on LastRank');
-
-    const dropdown = document.createElement('div');
-    dropdown.className = prefix + '-dropdown';
-    dropdown.hidden = true;
-
-    let activeField = opts.inputs[0] || null;
-    const queryVal = () => (activeField ? activeField.value : '').trim();
-
-    const onDocDown = e => {
-        if (dropdown.contains(e.target)) return;
-        if (opts.inputs.some(f => f === e.target || f.contains?.(e.target))) return;
-        close();
-    };
-    function open() {
-        if (opts.position) opts.position(activeField);
-        dropdown.hidden = false;
-        document.addEventListener('mousedown', onDocDown);
-    }
-    function close() {
-        dropdown.hidden = true;
-        document.removeEventListener('mousedown', onDocDown);
-    }
-
-    function node(cls, text) {
-        const n = document.createElement('div');
-        n.className = prefix + '-' + cls;
-        n.textContent = text;
-        return n;
-    }
-
-    function entry(obj, kind) {
-        const spec = opts.item(obj, kind);
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = prefix + '-item';
-        const nameEl = document.createElement('span');
-        nameEl.className = prefix + '-name';
-        nameEl.textContent = spec.label;
-        noTranslate(nameEl);   // a player/alliance name, not prose
-        btn.appendChild(nameEl);
-        if (spec.meta) {
-            const metaEl = document.createElement('span');
-            metaEl.className = prefix + '-meta';
-            metaEl.textContent = spec.meta;
-            btn.appendChild(metaEl);
-        }
-        btn.addEventListener('click', () => { close(); spec.onPick(obj); });
-        return btn;
-    }
-
-    function render(locals, remotes, msg, isError, showAction) {
-        dropdown.replaceChildren();
-        if (locals && locals.length) {
-            if (opts.localHead) dropdown.appendChild(node('head', opts.localHead));
-            locals.forEach(x => dropdown.appendChild(entry(x, 'local')));
-        }
-        if (remotes && remotes.length) {
-            if (opts.remoteHead) dropdown.appendChild(node('head', opts.remoteHead));
-            remotes.forEach(x => dropdown.appendChild(entry(x, 'remote')));
-        }
-        if (msg) {
-            const m = node('msg', msg);
-            if (isError) m.classList.add(prefix + '-err');
-            dropdown.appendChild(m);
-        }
-        if (showAction && opts.remoteSearch) {
-            const act = document.createElement('button');
-            act.type = 'button';
-            act.className = prefix + '-action';
-            act.textContent = '🔎 ' + actionLabel(queryVal());
-            act.addEventListener('click', runRemote);
-            dropdown.appendChild(act);
-        }
-        if (dropdown.childNodes.length) open(); else close();
-    }
-
-    async function runRemote() {
-        const q = queryVal();
-        if (!q || !opts.remoteSearch) return;
-        const blocked = guard(q);
-        if (blocked) { render(localSearch(q), null, blocked, true, false); return; }
-        render(localSearch(q), null, 'Searching…', false, false);
-        try {
-            const list = await opts.remoteSearch(q);
-            render(localSearch(q), list, (list && list.length) ? null : 'No matches found.', false, false);
-        } catch (e) {
-            render(localSearch(q), null, e.message || 'Search failed.', true, false);
-        }
-    }
-
-    function refresh() {
-        const q = queryVal();
-        if (!q) { close(); return; }
-        render(localSearch(q), null, null, false, true);
-    }
-
-    opts.inputs.forEach(f => {
-        f.addEventListener('focus', () => { activeField = f; });
-        f.addEventListener('input', () => { activeField = f; refresh(); });
-        f.addEventListener('keydown', e => {
-            if (e.key === 'Escape') close();
-            else if (e.key === 'Enter' && !dropdown.hidden) { e.preventDefault(); runRemote(); }
-        });
-    });
-
-    return { dropdown, refresh, close, runRemote };
-}
-
-// ---- Button loading state ----
-function setButtonLoading(btn, loadingText = 'Saving…') {
-    btn.disabled = true;
-    btn._originalText = btn.textContent;
-    btn.textContent = loadingText;
-}
-
-function clearButtonLoading(btn) {
-    btn.disabled = false;
-    btn.textContent = btn._originalText ?? btn.textContent;
-}
 
 // ---- Clipboard ----
 // navigator.clipboard is unavailable on insecure origins (plain-HTTP LAN access is a
@@ -544,52 +325,41 @@ function svgIcon(name, size = 14) {
 }
 
 
-// Swap the sidebar user tile's initials for the logged-in user's LastRank photo
-// when present. Falls back to initials if the photo (and failover) fail to load
-// or are blocked by CSP, so production stays safe before the CDN is allowlisted.
-document.addEventListener('DOMContentLoaded', () => {
-    const su = document.querySelector('.sidebar-user-avatar');
-    if (!su || !su.dataset.lrPhoto) return;
-    const failover = su.dataset.lrPhotoFailover || '';
-    const initials = su.textContent.trim();
+// Player photo <img>, hotlinked from the game CDN, with one retry on the backup CDN host.
+// Lazy, so a photo in a hidden container (the sidebar on the mobile shell) is never fetched.
+// No inline onerror: the handler is attached here, so it stays CSP-safe once the CDN hosts are
+// allowlisted. The sidebar tile, Members and Recruiting all build their photos with it.
+//   opts.className  default 'player-avatar'
+//   opts.onFail     called when both hosts fail; default removes the image (no broken icon)
+function buildPlayerAvatar(primary, failover, opts) {
+    opts = opts || {};
     const img = document.createElement('img');
-    img.className = 'sidebar-user-photo';
-    img.alt = '';
-    let triedFailover = false;
-    img.addEventListener('error', () => {
-        if (!triedFailover && failover) {
-            triedFailover = true;
-            img.src = failover;
-        } else {
-            su.textContent = initials; // restore initials on total failure
-        }
-    });
-    img.src = su.dataset.lrPhoto;
-    su.textContent = '';
-    su.appendChild(img);
-});
-
-// LastRank avatar <img>, hotlinked from the game CDN. Falls over to the backup
-// CDN host on the first load error, then removes itself if that also fails (so a
-// blocked/dead image leaves no broken-icon artifact). No inline onerror — the
-// handler is attached here so it stays CSP-safe once the CDN hosts are allowlisted.
-function buildLastRankAvatar(primary, failover) {
-    const img = document.createElement('img');
-    img.className = 'lr-avatar';
+    img.className = opts.className || 'player-avatar';
     img.alt = '';
     img.loading = 'lazy';
     img.src = primary;
     let triedFailover = false;
     img.addEventListener('error', () => {
-        if (!triedFailover && failover) {
-            triedFailover = true;
-            img.src = failover;
-        } else {
-            img.remove();
-        }
+        if (!triedFailover && failover) { triedFailover = true; img.src = failover; }
+        else if (opts.onFail) opts.onFail(img);
+        else img.remove();
     });
     return img;
 }
+
+// Swap the sidebar user tile's initials for the logged-in user's photo when present. Falls back
+// to the initials if the photo (and failover) fail to load or are blocked by CSP.
+document.addEventListener('DOMContentLoaded', () => {
+    const su = document.querySelector('.sidebar-user-avatar');
+    if (!su || !su.dataset.photo) return;
+    const initials = su.textContent.trim();
+    const img = buildPlayerAvatar(su.dataset.photo, su.dataset.photoFailover, {
+        className: 'sidebar-user-photo',
+        onFail: () => { su.textContent = initials; },   // restore initials on total failure
+    });
+    su.textContent = '';
+    su.appendChild(img);
+});
 
 // Table-row action button: SVG icon + a label that collapses to icon-only on
 // narrow screens (.action-label is hidden ≤768px). title/aria-label keep the
@@ -609,65 +379,6 @@ function rowActionBtn(className, icon, label, onClick) {
     return btn;
 }
 
-// ── User-ordered lists ──────────────────────────────────────────────────────
-// Pure DOM, no external dependency — deliberately kept here rather than beside
-// the colour picker, which needs Choices. A list can be reorderable on a page
-// that has no Choices at all.
-
-// Up/down reorder buttons for a table row in a user-ordered list. Moves the row
-// among its siblings and calls onMove() so the caller can persist the new order.
-// Returns the container; call refreshOrderButtons(tbody) after any structural
-// change so the first/last rows disable the direction they can't go.
-function buildOrderButtons(tr, onMove) {
-    const wrap = document.createElement('span');
-    wrap.className = 'order-btns';
-
-    const mk = (icon, label, move) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'order-btn';
-        b.title = label;
-        b.setAttribute('aria-label', label);
-        b.appendChild(svgIcon(icon, 12));
-        b.addEventListener('click', () => {
-            const parent = tr.parentNode;
-            if (!parent) return;
-            move(parent);
-            refreshOrderButtons(parent);
-            if (onMove) onMove();
-        });
-        return b;
-    };
-
-    wrap.appendChild(mk('chevron-up', 'Move up', parent => {
-        const prev = tr.previousElementSibling;
-        if (prev) parent.insertBefore(tr, prev);
-    }));
-    wrap.appendChild(mk('chevron-down', 'Move down', parent => {
-        const next = tr.nextElementSibling;
-        if (next) parent.insertBefore(next, tr);
-    }));
-
-    return wrap;
-}
-
-// Disable the up button on the first row and the down button on the last, so
-// the ends of the list are visible rather than silently doing nothing.
-function refreshOrderButtons(tbody) {
-    const rows = Array.from(tbody.children);
-    rows.forEach((row, i) => {
-        const btns = row.querySelectorAll('.order-btn');
-        if (btns.length < 2) return;
-        btns[0].disabled = i === 0;
-        btns[1].disabled = i === rows.length - 1;
-    });
-}
-
-// Index of a row within its tbody — the value a user-ordered list persists as
-// sort_order. Not tr.rowIndex, which counts the header rows too.
-function rowPosition(tr) {
-    return tr.parentNode ? Array.prototype.indexOf.call(tr.parentNode.children, tr) : 0;
-}
 
 // Scroll affordance for horizontally-scrollable tab bars (mobile). Wraps each
 // .tab-bar in a positioned container and shows a fading chevron at whichever
@@ -790,7 +501,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 });
-
 
 
 // ---- LastRank review nudge ----

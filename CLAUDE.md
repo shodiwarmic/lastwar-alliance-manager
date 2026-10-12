@@ -571,8 +571,8 @@ Folding is **strictly additive** — it only runs after tiers 1 and 2 miss, so i
 turn a miss into a match but never change an existing match.
 
 **Avatars** are hotlinked from the game CDN (`lastwar-cdn.akamaized.net` /
-`lastwar-cdn.lastwarapp.net`) — built via `buildLastRankAvatar()` in `global.js`
-with host failover. These hosts MUST be in the reverse-proxy CSP `img-src`
+`lastwar-cdn.lastwarapp.net`) — built via `buildPlayerAvatar()` in `global.js`
+with host failover (Members, Recruiting and the sidebar user tile all use it). These hosts MUST be in the reverse-proxy CSP `img-src`
 (`deploy/Caddyfile`, the one template: `scripts/install.sh` renders it, and
 `scripts/manage.sh update` re-renders a deployed file whose revision is lower — so a CSP
 change there needs the revision bumped, or no existing install receives it). Without them
@@ -2114,8 +2114,6 @@ These names appear in older code but are NOT defined in `styles.css`. They silen
   - `.badge-hq` / `.badge-troop` / `.badge-profession` / `.badge-squad-type` — secondary member badges (used alongside `.member-rank`)
   - `.btn`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.btn-sm`
   - `.form-input` — input/select/textarea styling (alias for `.form-group input`)
-  - `.finder-*` — dropdown/head/item/name/meta/msg/err/action for the shared
-    type-ahead combobox (`buildRemoteFinder` in `global.js`)
   - `.filter-search-wrap` — the search box + clear (×) button, used both inside the
     filter panel and by QuickSearch (its `.quick-search` modifiers, and the export
     group's `.table-export-actions` / `.export-scope`, live in `table-utils.css`)
@@ -2217,9 +2215,10 @@ export key (the `data-export-csv` name without `.csv`) through `UserPrefs`
 
 ### Type-ahead pickers: use `buildRemoteFinder`
 
-`buildRemoteFinder(opts)` in `static/global.js` is the shared combobox: instant local
+`buildRemoteFinder(opts)` in `static/remote-finder.js` (an opt-in module, with its
+`.finder-*` styles in `remote-finder.css`) is the shared combobox: instant local
 matches as you type, plus a remote lookup behind an **explicit click**. Used by the
-Recruiting player picker.
+Recruiting player picker and the Scout Report's alliance finder.
 
 **Never fire the remote search per keystroke, debounced or otherwise.** Every remote
 source is the volunteer-run LastRank API behind the shared 1 req/sec limiter, so
@@ -2321,6 +2320,32 @@ they are not ours to publish and this repo is public. They live in the private
 `lastwar-private-docs` repo as `reference-*.md`, where they are actually version-controlled and
 backed up. The `.gitignore` entry for the old `docs/` path is retained deliberately, as a guard
 against one being re-added here. See `docs/README.md`.
+
+## What belongs in `global.js`
+
+`global.js` (and `styles.css`) load on **every** page, and both are content-hashed (below): any
+edit re-downloads the whole file for every user on every page. So code earns a place there by
+being needed everywhere, not by being shared. Count consumers **by page** (template), not by
+script: two scripts on one page are one consumer.
+
+- **Layout chrome and primitives most pages use** stay: the nav, logout, theme and Numbers
+  options, tab-strip scroll cues, the LastRank review nudge, admin preview, the demo banner;
+  `svgIcon`, `showToast`, `showConfirm`, the field-error helpers, the `noTranslate` family,
+  `foldSearch`, the game clock, `formatCompact`, `UserPrefs`, `rowActionBtn`,
+  `buildPlayerAvatar` (the layout's own sidebar photo uses it).
+- **Code one page uses lives in that page's own script and CSS** — a widget or a bare helper.
+  (The join-date field is `members.js`'s; Season Hub's button-loading helpers are its own.)
+- **A bare helper two pages use stays** — a few lines, no CSS, no dependency (`getVSTheme`,
+  `copyToClipboard`, `desertStormDayError`). Moving one churns two templates for nothing.
+- **A widget a few pages use is an opt-in module**: `static/<name>.js` + `static/<name>.css`,
+  its CSS moving with it. Today: `table-utils` (QuickSearch + export), `remote-finder`,
+  `order-buttons`, `filter-panel`, `tabs`, `member-picker`, `job-progress`, `color-picker`.
+- **Things that depend on each other stay together** — QuickSearch and the export that reads
+  its markers are one module; the game clock's helpers share its private shifted `Date`, so
+  `gameClock` (Storm only) stays with it.
+- A page using a module links its CSS **first** in `head_tags` (before page CSS, so page CSS
+  can adjust it) and loads its script **before** the page script. `build-check.yml`'s
+  **"Opt-in module dependency check"** enforces both; add a row there for a new module.
 
 ## Static asset cache busting
 

@@ -430,11 +430,11 @@ function buildProspectCard(p, typeContext) {
     nameGroup.className = 'inline-icon-actions';
     nameGroup.style.minWidth = '0';
 
-    // LastRank avatar (hotlinked; falls over to the backup CDN, then hides). When
+    // Player avatar (hotlinked; falls over to the backup CDN, then hides). When
     // the prospect has a seat color, it rings the avatar as a colored border
     // instead of a separate dot.
     if (p.lastrank_photo_url) {
-        const av = buildLastRankAvatar(p.lastrank_photo_url, p.lastrank_photo_failover);
+        const av = buildPlayerAvatar(p.lastrank_photo_url, p.lastrank_photo_failover);
         if (p.seat_color) {
             av.classList.add('seat-edge', `seat-edge-${p.seat_color}`);
             av.title = seatTitle;

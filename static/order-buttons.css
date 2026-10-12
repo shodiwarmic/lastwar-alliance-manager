@@ -1,0 +1,38 @@
+/* order-buttons.css — styling for order-buttons.js (and Officer Command's own buttons on the
+   same classes). Canonical tokens: the old --border-color was undefined in light mode, so the
+   buttons drew no border there; --color-bg rather than --color-surface for the fill, because
+   these sit on white cards where surface would vanish (docs/DESIGN_STANDARD.md → Legacy
+   tokens). */
+
+/* Reorder controls for user-ordered lists (reward tiers). Small, icon-only,
+   and disabled at the ends so the boundary is visible rather than silent. */
+.order-btns {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 1px;
+    vertical-align: middle;
+}
+
+.order-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 15px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    background: var(--color-bg);
+    color: var(--color-text-mid);
+    cursor: pointer;
+}
+
+.order-btn:hover:not(:disabled) {
+    background: var(--color-accent-bg);
+    color: var(--color-text);
+}
+
+.order-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}

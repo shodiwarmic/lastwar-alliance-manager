@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/order-buttons.css"}}">
 <link rel="stylesheet" href="{{asset "/settings.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -390,6 +391,7 @@
 <div id="page-config"
     data-can-manage="{{if .Permissions.ManageSettings}}true{{else}}false{{end}}"
     hidden></div>
+<script src="{{asset "/order-buttons.js"}}"></script>
 <script src="{{asset "/job-progress.js"}}"></script>
 <script src="{{asset "/settings.js"}}"></script>
 {{end}}
