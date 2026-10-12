@@ -55,6 +55,39 @@ jobs:
           print('Accent-folded search check passed.')
           EOF
 
+      # formatCompact (global.js) is the only compact-number formatter: one rule for
+      # every page, and the user's B/G choice. Page copies drifted three ways before it
+      # landed; a page-level `function formatCompact` would silently replace the shared
+      # one on that page (a classic script's top-level declaration overwrites window).
+      - name: Compact number check
+        run: |
+          python3 - <<'EOF'
+          import pathlib, re, sys
+
+          COPY = re.compile(r'''toFixed\([^)]*\)\s*\+\s*['"][KMBG]['"]|toFixed\([^)]*\)\}[KMBG]''')
+          SHADOW = re.compile(r'\bfunction\s+(formatCompact|setNumberSuffixes)\b'
+                              r'|\b(formatCompact|setNumberSuffixes)\s*=(?!=)')
+          DEFINER = 'global.js'
+
+          fails = []
+          for path in sorted(pathlib.Path('static').rglob('*.js')):
+              if path.name == DEFINER:
+                  continue
+              for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                  if COPY.search(line):
+                      fails.append(f'{path}:{n}: a local compact-number formatter -- use formatCompact')
+                  if SHADOW.search(line):
+                      fails.append(f'{path}:{n}: redefines the shared formatter -- remove it')
+
+          if fails:
+              print('Compact number check failed:\n')
+              for f in fails:
+                  print('  ' + f)
+              print('\nSee CLAUDE.md -> "Compact numbers: formatCompact".')
+              sys.exit(1)
+          print('Compact number check passed.')
+          EOF
+
       # Same-origin .js/.css in templates must go through {{asset "..."}} so the
       # URL carries a content-hash ?v= token. A bare src="/foo.js" still WORKS --
       # the static handler falls back to Cache-Control: no-cache -- but it costs a

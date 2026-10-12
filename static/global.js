@@ -102,6 +102,75 @@ function getVSTheme(dateStr) {
     return VS_THEMES[(d.getUTCDay() + 6) % 7];
 }
 
+// ---- Compact numbers (single source of truth) ----
+// 123456789 → "123.46M", -2500000 → "-2.5M", 452345 → "452.35K", 999995 → "1M", 999 → "999".
+// opts.decimals (0–3, default 2) sets the precision; trailing zeros are dropped either way,
+// so "2.5M", never "2.50M". Tier from |n|; no "+" — callers that want one add it.
+// opts.suffixes: 'short' (K/M/B) or 'metric' (K/M/G, as the game prints billions). Omitted, it
+// is the user's numberSuffixes preference (UserPrefs), read once and kept in step by
+// setNumberSuffixes, which switches what is already on the page in place (no reload).
+// opts.empty (default "—") is what null / non-numeric input returns.
+(function () {
+    let prefStyle = null;
+    const userStyle = () => prefStyle || (prefStyle =
+        (window.UserPrefs && window.UserPrefs.get('numberSuffixes')) === 'metric' ? 'metric' : 'short');
+    const billions = new Set();   // number parts this page has written at the billions tier
+
+    window.formatCompact = function (n, opts) {
+        opts = opts || {};
+        const empty = opts.empty !== undefined ? opts.empty : '—';
+        if (n === null || n === undefined || n === '') return empty;
+        const v = Number(n);
+        if (!Number.isFinite(v)) return empty;
+        const abs = Math.abs(v);
+        if (abs < 1000) return String(v);
+        const d = Number.isInteger(opts.decimals) && opts.decimals >= 0 && opts.decimals <= 3
+            ? opts.decimals : 2;
+        const style = (opts.suffixes === 'metric' || opts.suffixes === 'short') ? opts.suffixes : userStyle();
+        const f = Math.pow(10, d);
+        const tiers = [[1e3, 'K'], [1e6, 'M'], [1e9, style === 'metric' ? 'G' : 'B']];
+        let i = abs >= 1e9 ? 2 : abs >= 1e6 ? 1 : 0;
+        let r = Math.round(abs / tiers[i][0] * f) / f;
+        if (r >= 1000 && i < 2) { i++; r = Math.round(abs / tiers[i][0] * f) / f; }
+        // String(r), not r.toFixed(d): the shortest form, so trailing zeros never print.
+        const num = (v < 0 ? '-' : '') + String(r);
+        if (i === 2 && !opts.suffixes) billions.add(num);   // only the preference's output switches
+        return num + tiers[i][1];
+    };
+
+    // Switch the user's style in place: swap the billions letter on what this formatter has
+    // already written (text, title, aria-label), then let canvases redraw. No reload.
+    window.setNumberSuffixes = function (next) {
+        next = next === 'metric' ? 'metric' : 'short';
+        const prev = userStyle();
+        if (next === prev) return false;
+        prefStyle = next;
+        if (window.UserPrefs) window.UserPrefs.set('numberSuffixes', next);
+        const from = prev === 'metric' ? 'G' : 'B';
+        const to = next === 'metric' ? 'G' : 'B';
+        const re = new RegExp('(^|[^\\w.])(-?\\d+(?:\\.\\d+)?)' + from + '(?!\\w)', 'g');
+        const swap = s => s.replace(re, (m, pre, num) => (billions.has(num) ? pre + num + to : m));
+        const skip = 'script, style, textarea, [contenteditable], .tl-text, .number-style-option';
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+            acceptNode: t => (t.parentElement && t.parentElement.closest(skip))
+                ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+        });
+        for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+            const s = swap(t.nodeValue);
+            if (s !== t.nodeValue) t.nodeValue = s;
+        }
+        document.querySelectorAll('[title], [aria-label]').forEach(el => {
+            ['title', 'aria-label'].forEach(a => {
+                const v = el.getAttribute(a);
+                const s = v && swap(v);
+                if (s && s !== v) el.setAttribute(a, s);
+            });
+        });
+        window.dispatchEvent(new CustomEvent('numberstylechange', { detail: { suffixes: next } }));
+        return true;
+    };
+})();
+
 // Fold diacritics + lowercase for accent-insensitive search: "Pàcha" → "pacha".
 // Fuse's own `ignoreDiacritics` option is a no-op in fuse.js 7.0.0, so callers pre-fold
 // BOTH the indexed text and the query with this before handing them to Fuse.
@@ -154,6 +223,7 @@ window.formatJoinDate = (iso) => {
     const NS = 'amPref:';
     const PREF_DEFAULTS = {
         memberSinceDisplay: 'days', // 'days' (in-alliance days) | 'date' (join date)
+        numberSuffixes: 'short',    // 'short' (K/M/B) | 'metric' (K/M/G, as the game prints billions)
     };
     const read = (key) => {
         try {
@@ -1034,6 +1104,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Logout failed. Check the browser console for details.', 'error');
             }
         });
+    });
+
+    // Numbers: billions as B or G (the shared user menu, rendered in the gear dropdown AND
+    // the more-sheet). Switches in place via setNumberSuffixes — no reload, so unsaved input
+    // on the page survives. preventDefault matters: these are <a href="#"> like the theme
+    // options, and a navigation to "#" would send every hash-enabled tab page to its default.
+    const numberOptions = document.querySelectorAll('.number-style-option');
+    const markNumberStyle = () => {
+        const current = (window.UserPrefs && UserPrefs.get('numberSuffixes')) === 'metric' ? 'metric' : 'short';
+        numberOptions.forEach(o => o.classList.toggle('active', o.dataset.suffixes === current));
+    };
+    markNumberStyle();
+    numberOptions.forEach(option => {
+        option.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const style = option.dataset.suffixes === 'metric' ? 'metric' : 'short';
+            if (window.setNumberSuffixes(style)) {
+                showToast('Numbers now show billions as ' + (style === 'metric' ? 'G' : 'B') + '.', 'info');
+            }
+            markNumberStyle();
+        });
+    });
+    // Other tabs follow a change made here, and a page restored from the back-forward cache
+    // re-checks, so nothing needs a reload to catch up.
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'amPref:numberSuffixes') { window.setNumberSuffixes(e.newValue); markNumberStyle(); }
+    });
+    window.addEventListener('pageshow', (e) => {
+        if (e.persisted && window.UserPrefs) { window.setNumberSuffixes(UserPrefs.get('numberSuffixes')); markNumberStyle(); }
     });
 
     // More sheet open/close

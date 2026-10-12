@@ -1,13 +1,5 @@
 'use strict';
 
-function fmtNumber(n) {
-    if (n == null) return '—';
-    if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
-    if (n >= 1_000_000)     return (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 1_000)         return (n / 1_000).toFixed(1) + 'K';
-    return String(n);
-}
-
 function statCard(value, label) {
     const card = document.createElement('div');
     card.className = 'card';
@@ -71,7 +63,7 @@ async function boot() {
 
     // VS leaders
     const vsLeadersEl = document.getElementById('report-vs-leaders');
-    vsLeadersEl.replaceChildren(memberList(report.vs_leaders, fmtNumber));
+    vsLeadersEl.replaceChildren(memberList(report.vs_leaders, formatCompact));
 
     // VS underperformers (daily-minimum rule). Evaluated-week notes mirror the dashboard.
     const vsUnderEl = document.getElementById('report-vs-under');
@@ -81,7 +73,7 @@ async function boot() {
         p.append(svgIcon('check'), document.createTextNode(' All members are meeting the VS daily minimum.'));
         underNodes.push(p);
     } else {
-        underNodes.push(memberList(report.vs_underperformers, fmtNumber));
+        underNodes.push(memberList(report.vs_underperformers, formatCompact));
     }
     if (report.fallback_active || (report.imported_completed < report.completed)) {
         const note = document.createElement('p');
@@ -98,7 +90,7 @@ async function boot() {
 
     // Power growth
     const growthEl = document.getElementById('report-power-growth');
-    growthEl.replaceChildren(memberList(report.power_growth, v => '+' + fmtNumber(v)));
+    growthEl.replaceChildren(memberList(report.power_growth, v => (v > 0 ? '+' : '') + formatCompact(v)));
 
     // Tag counts
     const tagEl = document.getElementById('report-tag-counts');

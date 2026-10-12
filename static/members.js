@@ -736,7 +736,7 @@ function buildMemberCard(member) {
         const span = document.createElement('span');
         span.className = 'member-info-badge badge-power';
         span.title = `Overall Power: ${member.power.toLocaleString()}`;
-        span.textContent = formatPower(member.power);
+        span.textContent = formatCompact(member.power);
         info.appendChild(span);
     }
 
@@ -747,7 +747,7 @@ function buildMemberCard(member) {
         span.className = 'member-info-badge badge-power';
         span.title = `Squad Power: ${member.squad_power ? member.squad_power.toLocaleString() : 0}`;
         if (squadIconMap[member.squad_type]) span.append(svgIcon(squadIconMap[member.squad_type], 13), document.createTextNode(' '));
-        span.appendChild(document.createTextNode(formatPower(member.squad_power)));
+        span.appendChild(document.createTextNode(member.squad_power ? formatCompact(member.squad_power) : ''));
         info.appendChild(span);
     }
 
@@ -756,7 +756,7 @@ function buildMemberCard(member) {
         const span = document.createElement('span');
         span.className = 'member-info-badge badge-power';
         span.title = `Total Hero Power: ${member.hero_power.toLocaleString()}`;
-        span.append(svgIcon('user', 13), document.createTextNode(' ' + formatPower(member.hero_power)));
+        span.append(svgIcon('user', 13), document.createTextNode(' ' + formatCompact(member.hero_power)));
         info.appendChild(span);
     }
 
@@ -765,7 +765,7 @@ function buildMemberCard(member) {
         const span = document.createElement('span');
         span.className = 'member-info-badge badge-power';
         span.title = `Troop Kills: ${member.current_kills.toLocaleString()}`;
-        span.append(svgIcon('skull', 13), document.createTextNode(' ' + formatPower(member.current_kills)));
+        span.append(svgIcon('skull', 13), document.createTextNode(' ' + formatCompact(member.current_kills)));
         info.appendChild(span);
     }
 
@@ -1255,14 +1255,6 @@ window.resetLinkForMember = async function (memberId, memberName) {
     }
 };
 
-function formatPower(power) {
-    if (!power) return '';
-    if (power >= 1000000000) return (power / 1000000000).toFixed(2) + 'B';
-    if (power >= 1000000) return (power / 1000000).toFixed(2) + 'M';
-    if (power >= 1000) return (power / 1000).toFixed(1) + 'K';
-    return power.toString();
-}
-
 function updateMemberCount(count) {
     const heading = document.querySelector('.members-section h3');
     if (heading) heading.textContent = `Alliance Members (${count})`;
@@ -1526,14 +1518,14 @@ function showCSVPreview(result) {
             const s = document.createElement('span');
             s.className = 'member-power';
             s.style.cssText = 'font-size:0.85em;';
-            s.append(svgIcon('bolt', 12), document.createTextNode(` ${(member.power / 1000000).toFixed(1)}M`));
+            s.append(svgIcon('bolt', 12), document.createTextNode(' ' + formatCompact(member.power)));
             memberInfo.appendChild(s);
         }
         if (member.squad_power) {
             const s = document.createElement('span');
             s.className = 'member-power';
             s.style.cssText = 'font-size:0.85em;color:var(--color-accent);';
-            s.append(svgIcon('tank', 12), document.createTextNode(` ${(member.squad_power / 1000000).toFixed(1)}M`));
+            s.append(svgIcon('tank', 12), document.createTextNode(' ' + formatCompact(member.squad_power)));
             memberInfo.appendChild(s);
         }
 

@@ -29,14 +29,6 @@
         children.flat().forEach(c => { if (c != null) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
         return node;
     }
-    const fmtBig = n => {
-        if (n == null) return '—';
-        n = Number(n);
-        if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-        if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-        if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
-        return '' + n;
-    };
     async function api(method, url, body) {
         const opt = { method, headers: {} };
         if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
@@ -93,8 +85,8 @@
                 tagCell,
                 el('td', { text: a.name || '—' }),
                 el('td', { className: 'ext-num', text: a.server != null ? a.server : '—' }),
-                el('td', { className: 'ext-num', text: fmtBig(a.power) }),
-                el('td', { className: 'ext-num', text: fmtBig(a.kills) }),
+                el('td', { className: 'ext-num', text: formatCompact(a.power) }),
+                el('td', { className: 'ext-num', text: formatCompact(a.kills) }),
                 el('td', { className: 'ext-num', text: a.member_count != null ? a.member_count : '—' }),
                 el('td', {}, relBadges(a)),
                 el('td', { className: 'ext-num', text: (a.updated_at || '').slice(0, 10) || '—' }),
@@ -290,7 +282,7 @@
             if (snap.server_id) server.value = snap.server_id;
             power.value = snap.power; kills.value = snap.kills; members.value = snap.member_count;
             if (snap.alliance_id) lr.value = snap.alliance_id;
-            note.textContent = 'Power ' + fmtBig(snap.power) + ' · kills ' + fmtBig(snap.kills) + ' · ' + snap.member_count + '/100';
+            note.textContent = 'Power ' + formatCompact(snap.power) + ' · kills ' + formatCompact(snap.kills) + ' · ' + snap.member_count + '/100';
         }
 
         // Paste-a-URL/id fallback lookup.
@@ -340,8 +332,8 @@
         }
 
         function lrItem(r) {
-            const meta = [r.server != null ? 'S' + r.server : null, r.power != null ? fmtBig(r.power) + ' pw' : null,
-                r.kills != null ? fmtBig(r.kills) + ' k' : null].filter(Boolean).join(' · ');
+            const meta = [r.server != null ? 'S' + r.server : null, r.power != null ? formatCompact(r.power) + ' pw' : null,
+                r.kills != null ? formatCompact(r.kills) + ' k' : null].filter(Boolean).join(' · ');
             return el('button', { className: 'ext-find-item', type: 'button', onclick: async () => {
                 if (r.tag) tag.value = r.tag;
                 if (r.name) name.value = r.name;
@@ -352,7 +344,7 @@
                 closeDropdown();
                 note.textContent = 'Confirming…';
                 try { applySnapshot(await api('POST', '/api/external-alliances/lookup', { url: r.lastrank_id })); }
-                catch (e) { note.textContent = 'Selected — power ' + fmtBig(r.power) + ' · kills ' + fmtBig(r.kills); }
+                catch (e) { note.textContent = 'Selected — power ' + formatCompact(r.power) + ' · kills ' + formatCompact(r.kills); }
             } },
                 el('span', { className: 'ext-find-name', translate: 'no', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
                 meta ? el('span', { className: 'ext-find-meta', text: meta }) : null);

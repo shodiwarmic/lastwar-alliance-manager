@@ -299,20 +299,14 @@ function formatNumber(num) {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-function formatShortPower(power) {
-    if (power >= 1000000) return (power / 1000000).toFixed(1) + 'M';
-    if (power >= 1000) return (power / 1000).toFixed(0) + 'K';
-    return power.toString();
-}
-
 function formatGrowth(num) {
     const span = document.createElement('span');
     if (num > 0) {
         span.className = 'positive-growth';
-        span.textContent = '+' + formatShortPower(num);
+        span.textContent = '+' + formatCompact(num);
     } else if (num < 0) {
         span.style.color = 'var(--color-danger)';
-        span.textContent = formatShortPower(num);
+        span.textContent = formatCompact(num);
     } else {
         span.className = 'neutral-growth';
         span.textContent = '-';
@@ -587,7 +581,7 @@ function buildVSRow(v, idx) {
     const days = [v.monday, v.tuesday, v.wednesday, v.thursday, v.friday, v.saturday];
     const dayTds = days.map(d => {
         const td = document.createElement('td');
-        td.textContent = formatShortPower(d);
+        td.textContent = formatCompact(d);
         return td;
     });
 
@@ -649,7 +643,7 @@ function renderVSWeek(weekDate) {
                     stacked: true,
                     title: { display: true, text: 'VS Points', font: { weight: 'bold' } },
                     ticks: {
-                        callback: function(value) { return formatShortPower(value); }
+                        callback: function(value) { return formatCompact(value); }
                     }
                 }
             },
@@ -698,6 +692,12 @@ window.addEventListener('themechange', () => {
     const p = getChartPalette();
     Chart.defaults.color = p.text;
     if (rawGrowthData.length) renderCompositionCharts();
+    if (currentVsWeek) renderVSWeek(currentVsWeek);
+});
+
+// The VS chart's y-axis ticks are drawn on a canvas, which setNumberSuffixes' text swap can't
+// reach — redraw them when the user switches between B and G.
+window.addEventListener('numberstylechange', () => {
     if (currentVsWeek) renderVSWeek(currentVsWeek);
 });
 

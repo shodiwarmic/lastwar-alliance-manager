@@ -245,9 +245,9 @@
         const tiles = el('div', { className: 'vsl-tiles' });
         tiles.appendChild(tile('Weekly Match Score', st.our_points + ' – ' + st.opponent_points, 'first to 7 of 13'));
         tiles.appendChild(tile('Bracket Rank', wk.league_rank != null ? '#' + wk.league_rank : '—', wk.league_tier || (state.season && state.season.league_tier) || ''));
-        if (wk.our_power != null) tiles.appendChild(tile('Our Power', fmtBig(wk.our_power), 'kills ' + (wk.our_kills != null ? fmtBig(wk.our_kills) : '—')));
+        if (wk.our_power != null) tiles.appendChild(tile('Our Power', formatCompact(wk.our_power), 'kills ' + (wk.our_kills != null ? formatCompact(wk.our_kills) : '—')));
         if (wk.our_member_count != null) tiles.appendChild(tile('Our Members', wk.our_member_count + ' / 100', wk.our_server ? 'server ' + wk.our_server : ''));
-        if (wk.opponent_power != null) tiles.appendChild(tile('Opp Power', fmtBig(wk.opponent_power), 'kills ' + (wk.opponent_kills != null ? fmtBig(wk.opponent_kills) : '—')));
+        if (wk.opponent_power != null) tiles.appendChild(tile('Opp Power', formatCompact(wk.opponent_power), 'kills ' + (wk.opponent_kills != null ? formatCompact(wk.opponent_kills) : '—')));
         if (wk.opponent_member_count != null) tiles.appendChild(tile('Opp Members', wk.opponent_member_count + ' / 100', wk.opponent_server ? 'server ' + wk.opponent_server : ''));
         head.appendChild(tiles);
 
@@ -303,7 +303,7 @@
             tileEl.appendChild(el('div', { className: 'pts', text: (theme ? theme.points : vsLeagueDayPts(n)) + ' pt' + ((theme ? theme.points : 0) === 1 ? '' : 's') }));
             tileEl.appendChild(el('div', { className: 'res', text: oc === 'pending' ? '—' : oc.toUpperCase() }));
             if (d && d.our_score != null && d.opponent_score != null)
-                tileEl.appendChild(el('div', { className: 'raw', text: 'Raw ' + fmtBig(d.our_score) + ' – ' + fmtBig(d.opponent_score) }));
+                tileEl.appendChild(el('div', { className: 'raw', text: 'Raw ' + formatCompact(d.our_score) + ' – ' + formatCompact(d.opponent_score) }));
             if (d && d.mvp_name) tileEl.appendChild(el('div', { className: 'raw', translate: 'no', text: '★ ' + d.mvp_name + (d.mvp_is_ours ? '' : ' (opp)') }));
             grid.appendChild(tileEl);
         }
@@ -724,7 +724,7 @@
             dcard.appendChild(el('div', { className: 'vsl-analysis-row' },
                 el('div', { text: theme ? theme.icon + ' ' + theme.short : 'Day ' + d.day_number }),
                 bars,
-                el('div', { className: 'vsl-help', text: (d.avg_points != null ? fmtBig(Math.round(d.avg_points)) : '—') + ' · ' + (d.avg_per_player != null ? fmtBig(Math.round(d.avg_per_player)) + '/plyr' : '—') })));
+                el('div', { className: 'vsl-help', text: (d.avg_points != null ? formatCompact(Math.round(d.avg_points)) : '—') + ' · ' + (d.avg_per_player != null ? formatCompact(Math.round(d.avg_per_player)) + '/plyr' : '—') })));
         });
         if (!anyDay) dcard.appendChild(el('p', { className: 'vsl-empty', text: 'Import member VS points to see average points by theme day.' }));
         holder.appendChild(dcard);
@@ -747,7 +747,6 @@
         return el('div', { className: 'vsl-tile' }, el('div', { className: 'lbl', text: lbl }),
             el('div', { className: 'val', text: val }), sub ? el('div', { className: 'sub', text: sub }) : null);
     }
-    function fmtBig(n) { n = Number(n); if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B'; if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K'; return '' + n; }
     function vsLeagueDayPts(n) { return [1, 2, 2, 2, 2, 4][n - 1] || 0; }
     function todayISO() { return (window.gameDateStr ? window.gameDateStr() : new Date().toISOString().slice(0, 10)); }
 
@@ -948,7 +947,7 @@
             if (m.lastrank_id) {
                 lrInput.value = m.lastrank_id;
                 snap = { alliance_id: m.lastrank_id, tag: m.tag, name: m.name, server_id: m.server, power: m.power, kills: m.kills, member_count: m.member_count, last_seen_at: m.lastrank_seen_at };
-                snapNote.textContent = 'From saved lookup · power ' + fmtBig(m.power || 0) + ' · kills ' + fmtBig(m.kills || 0) + ' · ' + (m.member_count != null ? m.member_count : '?') + '/100';
+                snapNote.textContent = 'From saved lookup · power ' + formatCompact(m.power || 0) + ' · kills ' + formatCompact(m.kills || 0) + ' · ' + (m.member_count != null ? m.member_count : '?') + '/100';
                 fillOppSnapshot(m.power, m.kills, m.member_count);
             } else {
                 snap = null;
@@ -987,8 +986,8 @@
                 meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
         }
         function lrItem(r) {
-            const meta = [r.server != null ? 'S' + r.server : null, r.power != null ? fmtBig(r.power) + ' pw' : null,
-                r.kills != null ? fmtBig(r.kills) + ' k' : null].filter(Boolean).join(' · ');
+            const meta = [r.server != null ? 'S' + r.server : null, r.power != null ? formatCompact(r.power) + ' pw' : null,
+                r.kills != null ? formatCompact(r.kills) + ' k' : null].filter(Boolean).join(' · ');
             return el('button', { className: 'vsl-find-item', type: 'button', onclick: async () => {
                 oppTag.value = r.tag || ''; oppName.value = r.name || ''; if (r.server != null) oppServer.value = r.server;
                 lrInput.value = r.lastrank_id;
@@ -996,10 +995,10 @@
                 snapNote.textContent = 'Confirming…';
                 try {
                     snap = await api('POST', '/api/vs-league/opponent-lookup', { url: r.lastrank_id });
-                    snapNote.textContent = 'Power ' + fmtBig(snap.power) + ' · kills ' + fmtBig(snap.kills) + ' · ' + snap.member_count + '/100';
+                    snapNote.textContent = 'Power ' + formatCompact(snap.power) + ' · kills ' + formatCompact(snap.kills) + ' · ' + snap.member_count + '/100';
                 } catch (e) {
                     snap = { alliance_id: r.lastrank_id, tag: r.tag, name: r.name, server_id: r.server, power: r.power, kills: r.kills, member_count: null, last_seen_at: null };
-                    snapNote.textContent = 'Selected — power ' + fmtBig(r.power) + ' · kills ' + fmtBig(r.kills);
+                    snapNote.textContent = 'Selected — power ' + formatCompact(r.power) + ' · kills ' + formatCompact(r.kills);
                 }
                 fillOppSnapshot(snap.power, snap.kills, snap.member_count);
             } },
@@ -1052,7 +1051,7 @@
                 snap = await api('POST', '/api/vs-league/opponent-lookup', { url: lrInput.value });
                 if (!oppTag.value) oppTag.value = snap.tag; if (!oppName.value) oppName.value = snap.name; if (!oppServer.value) oppServer.value = snap.server_id;
                 fillOppSnapshot(snap.power, snap.kills, snap.member_count);
-                snapNote.textContent = 'Power ' + fmtBig(snap.power) + ' · kills ' + fmtBig(snap.kills) + ' · ' + snap.member_count + '/100';
+                snapNote.textContent = 'Power ' + formatCompact(snap.power) + ' · kills ' + formatCompact(snap.kills) + ' · ' + snap.member_count + '/100';
             } catch (e) { snapNote.textContent = e.message; }
         });
 
@@ -1134,7 +1133,7 @@
                 });
                 (oppRoster || []).filter(m => foldSearch(m.name).includes(q)).slice(0, 6).forEach((m, i) => {
                     if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: oppLabel }));
-                    dd.appendChild(item(m.name, m.power != null ? fmtBig(m.power) + ' pw' : '', false));
+                    dd.appendChild(item(m.name, m.power != null ? formatCompact(m.power) + ' pw' : '', false));
                 });
                 if (!dd.childNodes.length) { close(); return; }
                 open();
@@ -1315,7 +1314,7 @@
                     if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'LastRank' }));
                     dd.appendChild(el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick({ tag: a.tag, name: a.name, server: a.server }) },
                         el('span', { className: 'vsl-find-name', translate: 'no', text: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || '') }),
-                        el('span', { className: 'vsl-find-meta', text: [a.server != null ? 'S' + a.server : null, a.power != null ? fmtBig(a.power) + ' pw' : null].filter(Boolean).join(' · ') })));
+                        el('span', { className: 'vsl-find-meta', text: [a.server != null ? 'S' + a.server : null, a.power != null ? formatCompact(a.power) + ' pw' : null].filter(Boolean).join(' · ') })));
                 });
                 if (msg) dd.appendChild(el('div', { className: isErr ? 'vsl-find-msg vsl-find-err' : 'vsl-find-msg', text: msg }));
                 if (tagInput.value.trim()) dd.appendChild(el('button', { className: 'vsl-find-action', type: 'button', onclick: lookupLR }, '🔎 Look up on LastRank'));

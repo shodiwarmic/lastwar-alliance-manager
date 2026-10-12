@@ -2121,6 +2121,29 @@ These names appear in older code but are NOT defined in `styles.css`. They silen
   - `.export-scope` — the "Filtered only" checkbox injected beside the export buttons
   - `.tab-count` — row-count text beside a toolbar search ("12 of 98")
 
+### Compact numbers: `formatCompact`
+
+`formatCompact(n, opts)` (`static/global.js`) is the **only** compact-number formatter —
+`123456789` → `123.46M`. Never write a page copy: they drifted three ways before this landed,
+and `build-check.yml`'s "Compact number check" fails a `toFixed(…) + 'M'`-style formatter, or a
+page-level `function formatCompact`, in any page script.
+
+- **The rule:** two decimals with trailing zeros dropped (`2.5M`, never `2.50M`); the tier from
+  `Math.abs(n)`, so negatives abbreviate (`-2.5M`); a value that rounds to 1,000 of its tier moves
+  up (`999,995` → `1M`); below 1,000 the number as is. No `+` — a caller that wants one adds it,
+  sign-aware (`(v > 0 ? '+' : '') + formatCompact(v)`).
+- **`opts.decimals`** (0–3) for a page that needs another precision. No page passes it today.
+- **`opts.empty`** (default `—`) is what `null` / non-numeric input returns. `0` is a number and
+  prints `0`, so a field the API sends as `0` for "none" keeps its own truthiness guard.
+- **Billions as B or G.** `opts.suffixes` (`'short'` K/M/B, `'metric'` K/M/G as the game prints) —
+  normally omitted, so the user's `numberSuffixes` preference (`UserPrefs`, per browser; the
+  Numbers options in the user menu) decides. `setNumberSuffixes(style)` switches **in place**: it
+  swaps the letter on the billions this formatter has written to the page (text, `title`,
+  `aria-label`; never editable fields, `.tl-text` prose or the menu's own examples) and fires
+  `numberstylechange`. A page that draws compact numbers on a **canvas** must redraw on that
+  event, as `rankings.js` does for its VS chart ticks.
+- `participation-parse.js` only **parses** game strings (`81.20G`, `392.35M`); it formats nothing.
+
 ### Searchable lists: use `QuickSearch`
 
 `QuickSearch` (`static/global.js`) is the shared list filter. Every member list in

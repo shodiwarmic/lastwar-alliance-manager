@@ -136,7 +136,7 @@ function renderFormerMembers(members, container) {
         nameTd.textContent = m.name;
 
         const powerTd = tr.insertCell();
-        powerTd.textContent = m.last_power ? formatPower(m.last_power) : '—';
+        powerTd.textContent = m.last_power ? formatCompact(m.last_power) : '—';
 
         const trainTd = tr.insertCell();
         trainTd.textContent = m.train_count || 0;
@@ -484,8 +484,8 @@ function buildProspectCard(p, typeContext) {
     const detailItems = [];
     if (p.server) detailItems.push(['Server', p.server]);
     if (p.source_alliance) detailItems.push(['Alliance', p.source_alliance, true]);
-    if (p.power) detailItems.push(['Power', formatPower(p.power)]);
-    if (p.hero_power != null) detailItems.push(['Total Hero Power', formatPower(p.hero_power)]);
+    if (p.power) detailItems.push(['Power', formatCompact(p.power)]);
+    if (p.hero_power != null) detailItems.push(['Total Hero Power', formatCompact(p.hero_power)]);
     if (p.rank_in_alliance) detailItems.push(['Rank', p.rank_in_alliance]);
     if (p.recruiter_name) detailItems.push(['Recruiter', p.recruiter_name, true]);
     if (p.first_contacted) detailItems.push(['Contacted', p.first_contacted]);
@@ -779,14 +779,6 @@ function seatColorLabel(color) {
     return color ? color.charAt(0).toUpperCase() + color.slice(1) : '';
 }
 
-function formatPower(power) {
-    if (!power) return '';
-    if (power >= 1000000000) return (power / 1000000000).toFixed(2) + 'B';
-    if (power >= 1000000) return (power / 1000000).toFixed(2) + 'M';
-    if (power >= 1000) return (power / 1000).toFixed(1) + 'K';
-    return power.toString();
-}
-
 async function loadMembersForRecruiter() {
     try {
         const res = await fetch('/api/members');
@@ -870,7 +862,7 @@ function buildProspectExportTable(items, includeTransferCols) {
         if (includeTransferCols) row.push(p.server || '');
         row.push(p.source_alliance || '');
         if (includeTransferCols) row.push(seatColorLabel(p.seat_color));
-        row.push(formatPower(p.power), formatPower(p.hero_power));
+        row.push(formatCompact(p.power, { empty: '' }), formatCompact(p.hero_power, { empty: '' }));
         return row;
     }));
 }
@@ -880,7 +872,7 @@ function buildFormerExportTable(members) {
         ['Name', 'Last Power', 'Train Runs', 'Last VS Week', 'Reason'],
         members.map(m => [
             m.name || '',
-            formatPower(m.last_power),
+            formatCompact(m.last_power, { empty: '' }),
             m.train_count || 0,
             m.last_vs_week || '',
             m.leave_reason || '',
@@ -1116,8 +1108,8 @@ function ensureProspectFinder() {
             meta: [
                 r.server != null ? 'S' + r.server : null,
                 r.alliance_tag ? '[' + r.alliance_tag + ']' : null,
-                r.power != null ? formatPower(r.power) + ' pw' : null,
-                r.hero_power != null ? formatPower(r.hero_power) + ' hero' : null,
+                r.power != null ? formatCompact(r.power) + ' pw' : null,
+                r.hero_power != null ? formatCompact(r.hero_power) + ' hero' : null,
             ].filter(Boolean).join(' · '),
             // Picking fills the id and fetches straight away — the officer already
             // made the identifying choice, so a second click would be busywork.
@@ -1169,8 +1161,8 @@ async function doLastRankProspectFetch() {
         if (!res.ok) throw new Error((await res.text()) || 'Lookup failed');
         const d = await res.json();
         noTranslate(result);
-        result.textContent = `${d.lastrank_name}: ${formatPower(d.power)} power`
-            + (d.hero_power != null ? `, ${formatPower(d.hero_power)} hero power` : '')
+        result.textContent = `${d.lastrank_name}: ${formatCompact(d.power)} power`
+            + (d.hero_power != null ? `, ${formatCompact(d.hero_power)} hero power` : '')
             + (d.alliance_abbr ? ` · [${d.alliance_abbr}]` : '')
             + (d.server_id ? ` · Server ${d.server_id}` : '');
         showToast('Prospect updated from LastRank.');

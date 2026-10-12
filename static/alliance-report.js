@@ -61,14 +61,6 @@
         children.flat().forEach(c => { if (c != null) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
         return node;
     }
-    const fmtBig = n => {
-        if (n == null) return '—';
-        n = Number(n);
-        if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-        if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-        if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
-        return '' + n;
-    };
     async function api(method, url, body, signal) {
         const opt = { method, headers: {}, signal };
         if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
@@ -123,7 +115,7 @@
             // dozen different servers, so it is the only thing that tells them apart.
             const bits = [];
             bits.push(a.server != null ? 'Server ' + a.server : 'server unknown');
-            if (a.power != null) bits.push(fmtBig(a.power) + ' power');
+            if (a.power != null) bits.push(formatCompact(a.power) + ' power');
             bits.push(kind === 'local' ? 'in your registry' : 'LastRank');
             return {
                 label: tag + (a.name || ''),
@@ -289,15 +281,15 @@
 
         const tiles = [
             ['Members', alliance.member_count + (alliance.max_member ? ' / ' + alliance.max_member : '')],
-            ['Alliance power', fmtBig(alliance.power)],
-            ['Alliance kills', fmtBig(alliance.kills)],
-            ['Roster power', fmtBig(total)],
-            ['Average power', fmtBig(avg)],
-            ['Top power', fmtBig(powers.length ? Math.max(...powers) : null)],
+            ['Alliance power', formatCompact(alliance.power)],
+            ['Alliance kills', formatCompact(alliance.kills)],
+            ['Roster power', formatCompact(total)],
+            ['Average power', formatCompact(avg)],
+            ['Top power', formatCompact(powers.length ? Math.max(...powers) : null)],
             ['Highest HQ', hqs.length ? Math.max(...hqs) : '—'],
             ['Last seen', dateOnly(alliance.last_seen_at)],
         ];
-        if (kills.length) tiles.push(['Roster kills', fmtBig(kills.reduce((a, b) => a + b, 0))]);
+        if (kills.length) tiles.push(['Roster kills', formatCompact(kills.reduce((a, b) => a + b, 0))]);
 
         const header = el('div', { className: 'rep-alliance-head' },
             el('h3', { text: (alliance.tag ? '[' + alliance.tag + '] ' : '') + (alliance.name || 'Unknown alliance') }),
@@ -520,14 +512,14 @@
                 const cells = [
                     nameCell,
                     el('td', { text: rankLabel(r.alliance_rank) }),
-                    el('td', { className: 'rep-num', text: fmtBig(r.power) }),
-                    el('td', { className: 'rep-num', text: fmtBig(r.hero_power) }),
+                    el('td', { className: 'rep-num', text: formatCompact(r.power) }),
+                    el('td', { className: 'rep-num', text: formatCompact(r.hero_power) }),
                     el('td', { className: 'rep-num', text: r.base_level != null ? String(r.base_level) : '—' }),
                     el('td', { text: r.country || '—' }),
                 ];
                 if (hasExtended) {
                     cells.push(
-                        el('td', { className: 'rep-num', text: e ? fmtBig(e.kills) : '—' }),
+                        el('td', { className: 'rep-num', text: e ? formatCompact(e.kills) : '—' }),
                         el('td', { text: (e && e.profession) || '—' }),
                         el('td', { className: 'rep-num', text: e && e.career_level ? String(e.career_level) : '—' }),
                         el('td', { className: 'rep-num', text: e ? dateOnly(e.last_seen_at) : '—' }),

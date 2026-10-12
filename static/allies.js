@@ -670,14 +670,6 @@ function napEmptyState(message) {
     return p;
 }
 
-function formatCompact(n) {
-    if (n == null) return '—';
-    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-    return String(n);
-}
-
 // ── Sync from LastRank ───────────────────────────────────────────────────────
 //
 // Two actions, mirroring the Members page ("Fetch Alliance Data" / "Gather Extended Info") and the

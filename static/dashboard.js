@@ -26,14 +26,6 @@ const CARD_META = {
 
 // --- Formatting helpers ---
 
-function fmtNumber(n) {
-    if (n == null) return '—';
-    if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
-    if (n >= 1_000_000)     return (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 1_000)         return (n / 1_000).toFixed(1) + 'K';
-    return String(n);
-}
-
 function fmtPct(num, denom) {
     if (!denom) return '—';
     return Math.round((num / denom) * 100) + '%';
@@ -164,7 +156,7 @@ function renderHealth(card, members) {
 
     const grid = el('div', { className: 'dash-stat-grid' });
     grid.appendChild(statCell(String(active.length), 'Members'));
-    grid.appendChild(statCell(fmtNumber(totalPower), 'Total Power'));
+    grid.appendChild(statCell(formatCompact(totalPower), 'Total Power'));
     grid.appendChild(statCell(fmtPct(eligCount, active.length), 'Train-Eligible'));
 
     card.querySelector('.dash-card-loading')?.remove();
@@ -191,8 +183,8 @@ function renderVS(card, vsRows, members, joinedAtById, dayImported) {
     const onTrackLabel = importedCompletedCount(dayImported) === 0 ? '—' : fmtPct(onTrack, active.length);
 
     const grid = el('div', { className: 'dash-stat-grid' });
-    grid.appendChild(statCell(fmtNumber(weekTotal), 'Week Total'));
-    grid.appendChild(statCell(fmtNumber(avg), 'Avg/Member'));
+    grid.appendChild(statCell(formatCompact(weekTotal), 'Week Total'));
+    grid.appendChild(statCell(formatCompact(avg), 'Avg/Member'));
     grid.appendChild(statCell(onTrackLabel, 'On Track'));
 
     const topLabel = el('p', { className: 'dash-section-label', textContent: 'Top 3' });
@@ -200,7 +192,7 @@ function renderVS(card, vsRows, members, joinedAtById, dayImported) {
     totals.slice(0, 3).forEach(r => {
         const li = el('li');
         li.appendChild(noTranslate(el('span', { className: 'dash-list-name', textContent: r.name })));
-        li.appendChild(el('span', { className: 'dash-list-value', textContent: fmtNumber(r.total) }));
+        li.appendChild(el('span', { className: 'dash-list-value', textContent: formatCompact(r.total) }));
         topList.appendChild(li);
     });
 
@@ -209,7 +201,7 @@ function renderVS(card, vsRows, members, joinedAtById, dayImported) {
     totals.slice(-3).reverse().forEach(r => {
         const li = el('li');
         li.appendChild(noTranslate(el('span', { className: 'dash-list-name', textContent: r.name })));
-        li.appendChild(el('span', { className: 'dash-list-value', textContent: fmtNumber(r.total) }));
+        li.appendChild(el('span', { className: 'dash-list-value', textContent: formatCompact(r.total) }));
         botList.appendChild(li);
     });
 
@@ -312,7 +304,7 @@ function renderLeaderFlags(card, members, vsRows, joinedAtById, dayImported) {
     }
 
     const label = el('p', { className: 'dash-section-label' });
-    label.textContent = 'Below daily min (' + fmtNumber(VS_MINIMUM) + ') on ' + VS_FLAG_DAYS + '+ days';
+    label.textContent = 'Below daily min (' + formatCompact(VS_MINIMUM) + ') on ' + VS_FLAG_DAYS + '+ days';
     card.appendChild(label);
 
     const list = el('ul', { className: 'dash-list' });

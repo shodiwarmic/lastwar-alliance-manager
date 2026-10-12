@@ -5,14 +5,6 @@ const CAN_MANAGE = cfg.canManage === 'true';
 
 // --- Helpers ---
 
-function fmtNumber(n) {
-    if (n == null) return '—';
-    if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
-    if (n >= 1_000_000)     return (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 1_000)         return (n / 1_000).toFixed(1) + 'K';
-    return String(n);
-}
-
 function tagClass(tag) {
     if (tag === 'At Risk')           return 'acc-tag acc-tag--at-risk';
     if (tag === 'Needs Improvement') return 'acc-tag acc-tag--needs-improvement';
@@ -201,7 +193,7 @@ async function loadMembers() {
         const tdVS = document.createElement('td');
         const vsSpan = document.createElement('span');
         vsSpan.className = m.below_threshold ? 'acc-vs--below' : 'acc-vs--ok';
-        vsSpan.textContent = fmtNumber(m.vs_total);
+        vsSpan.textContent = formatCompact(m.vs_total);
         tdVS.appendChild(vsSpan);
 
         const tdActions = document.createElement('td');
@@ -564,7 +556,7 @@ async function loadReport() {
     );
 
     document.getElementById('report-vs-leaders').replaceChildren(
-        memberListEl(report.vs_leaders, fmtNumber)
+        memberListEl(report.vs_leaders, formatCompact)
     );
 
     const vsUnderEl = document.getElementById('report-vs-under');
@@ -573,11 +565,11 @@ async function loadReport() {
         p.append(svgIcon('check'), document.createTextNode(' All members meeting the VS daily minimum.'));
         vsUnderEl.replaceChildren(p);
     } else {
-        vsUnderEl.replaceChildren(memberListEl(report.vs_underperformers, fmtNumber));
+        vsUnderEl.replaceChildren(memberListEl(report.vs_underperformers, formatCompact));
     }
 
     document.getElementById('report-power-growth').replaceChildren(
-        memberListEl(report.power_growth, v => '+' + fmtNumber(v))
+        memberListEl(report.power_growth, v => (v > 0 ? '+' : '') + formatCompact(v))
     );
 
     const tagEl = document.getElementById('report-tag-counts');

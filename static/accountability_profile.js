@@ -7,14 +7,6 @@ const CAN_MANAGE = _cfg.canManage === 'true';
 // Flatpickr instance — initialised in DOMContentLoaded
 let strikeRefDateFP = null;
 
-function fmtNumber(n) {
-    if (n == null) return '—';
-    if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
-    if (n >= 1_000_000)     return (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 1_000)         return (n / 1_000).toFixed(1) + 'K';
-    return String(n);
-}
-
 function tagClass(tag) {
     if (tag === 'At Risk')           return 'acc-tag acc-tag--at-risk';
     if (tag === 'Needs Improvement') return 'acc-tag acc-tag--needs-improvement';
@@ -229,7 +221,7 @@ function renderVSHistory(vsHistory) {
         const tdWeek = document.createElement('td');
         tdWeek.textContent = v.week_date;
         const tdTotal = document.createElement('td');
-        tdTotal.textContent = fmtNumber(v.total);
+        tdTotal.textContent = formatCompact(v.total);
         tr.append(tdWeek, tdTotal);
         tbody.appendChild(tr);
     });

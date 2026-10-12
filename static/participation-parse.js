@@ -2,6 +2,9 @@
 // recording screen's score inputs: "81.20G", "392.35M", "1,234,567", "25".
 // Mirrors parseBoardAmount (handlers_participation.go), which reads the same values
 // out of an imported CSV; keep the two accepting the same forms.
+//
+// It PARSES only. Displaying a compact number goes through the shared formatCompact
+// (global.js), whose metric option prints the game's G; there is no second formatter here.
 (function (root) {
     'use strict';
 
@@ -20,17 +23,7 @@
         return Number.isFinite(n) ? n : null;
     }
 
-    // Compact display: 81200000000 → "81.2G". The raw integer is what is stored.
-    function formatAmount(n) {
-        if (n == null) return '';
-        const abs = Math.abs(n);
-        if (abs >= 1e9) return +(n / 1e9).toFixed(2) + 'G';
-        if (abs >= 1e6) return +(n / 1e6).toFixed(2) + 'M';
-        if (abs >= 1e4) return +(n / 1e3).toFixed(1) + 'K';
-        return String(n);
-    }
-
-    const api = { parseAmount, formatAmount };
+    const api = { parseAmount };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.ParticipationParse = api;
 })(typeof window !== 'undefined' ? window : this);
