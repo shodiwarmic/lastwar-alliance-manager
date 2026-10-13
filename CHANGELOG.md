@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v2.4.0 — unreleased
+## v2.4.0 — 2026-10-13
 
 Numbers read the same on every page, exports open in a spreadsheet as real numbers you can sort
 and sum, and every tabbed page takes `#tab` links. Behind that, a third of the code that loaded on
