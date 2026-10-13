@@ -9,6 +9,49 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v2.4.0 — unreleased
+
+Numbers read the same on every page, exports open in a spreadsheet as real numbers you can sort
+and sum, and every tabbed page takes `#tab` links. Behind that, a third of the code that loaded on
+every page now loads only where it's used.
+
+**Minor** — an image pull; nothing on the host changes, no `.env` needs editing, and there is no
+database migration.
+
+- **One number format everywhere.** Abbreviated numbers use two decimals with trailing zeros
+  dropped (`123.46M`, `2.5M`), negative values are abbreviated too (Rankings' Growth tab showed a
+  2.5M drop as `-2500000`), and billions show as `B` on every page (Rankings showed 1B as
+  `1000.0M`). Some pages gain a decimal; Members and Recruiting look as before.
+- **Billions as `B` or the game's `G`.** Choose under **Numbers** in the user menu (the gear on
+  desktop, More on a phone). It applies at once, without a reload, and is saved per browser. The
+  default stays `B`.
+- **Exports give real numbers.** CSV and Excel exports now default to raw numbers, so a
+  spreadsheet can sort and sum them — Excel exports used to hold every cell as text. If your
+  spreadsheet expected the on-screen text (`4.2B`), choose **As shown** under the new **Options**
+  button beside each table's export, which also lets you pick the columns to include. Options are
+  remembered per table, per browser. The Members export always keeps raw numbers, so its numbers
+  re-import cleanly.
+- **Safer CSV files.** A text cell beginning with `=`, `+`, `-` or `@` — a member note, a poll
+  answer — is written so a spreadsheet opens it as text, not as a formula.
+- **Deep links on every tabbed page**: Allies, Comms, Recruiting, Season Hub, Rankings and Desert
+  Storm now take `#tab` links, like the pages that already did.
+- **Fixes:**
+  - On External Alliances, a Scout Report with no rows no longer disables the Registry's export
+    buttons.
+  - The Registry export no longer includes the Edit/Del column or the LastRank arrow beside each
+    tag.
+  - Season Hub no longer shows one season's rewards or mail under another after a quick switch,
+    and a link straight to its Rewards tab now fills it.
+  - The alliance pickers (External Alliances, VS League) no longer show an old search's answer
+    over a newer one, or reopen after you close them. They also don't send a search twice when
+    Enter is pressed again while one is running.
+- **External Alliances' filter panel** now matches the one on Members, Train and Files. That
+  shared panel no longer runs into its right edge on a phone.
+- **The VS League and External Alliances pickers** behave and look like the rest. Their hover
+  highlight is now visible in light mode.
+- **Player avatars and reorder buttons** show their borders in light mode, which they never drew.
+  The sidebar photo isn't downloaded on a phone, where the sidebar is hidden.
+
 ## v2.3.0 — 2026-10-07
 
 The scanner app can now send every kind of game data the alliance manager stores, so new

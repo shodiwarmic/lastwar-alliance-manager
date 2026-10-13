@@ -13,11 +13,11 @@
 
 {{define "content"}}
     <div class="tab-bar">
-        <button class="tab-btn active" id="tab-btn-growth"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Commander Growth</button>
-        <button class="tab-btn" id="tab-btn-vs"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-swords"/></svg> VS Duel Activity</button>
-        <button class="tab-btn" id="tab-btn-kills"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-skull"/></svg> Troop Kills</button>
-        <button class="tab-btn" id="tab-btn-hq"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-home"/></svg> HQ Level</button>
-        <button class="tab-btn" id="tab-btn-profession"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg> Profession Level</button>
+        <button class="tab-btn active" data-tab="growth"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Commander Growth</button>
+        <button class="tab-btn" data-tab="vs"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-swords"/></svg> VS Duel Activity</button>
+        <button class="tab-btn" data-tab="kills"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-skull"/></svg> Troop Kills</button>
+        <button class="tab-btn" data-tab="hq"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-home"/></svg> HQ Level</button>
+        <button class="tab-btn" data-tab="profession"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg> Profession Level</button>
     </div>
 
     <div id="tab-growth" class="tab-content">
@@ -207,5 +207,6 @@
 {{define "scripts"}}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <script src="{{asset "/table-utils.js"}}"></script>
+<script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/rankings.js"}}"></script>
 {{end}}

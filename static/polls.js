@@ -42,7 +42,7 @@ function mountPollSearch(bodyEl, opts) {
     return wrap;
 }
 
-// ── Data loaders (exposed on window so comms.js switchTab can call them) ─────
+// ── Data loaders (exposed on window so comms.js's tab activation can call them) ─
 
 window.loadPollTemplates = async function () {
     if (pollLoaded['poll-templates']) return;
@@ -1218,7 +1218,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('new-poll-instance-btn')?.addEventListener('click', () => {
         showToast('Select a template and click "Launch Poll".', 'info');
         // Switch to poll-templates tab
-        if (typeof switchTab === 'function') switchTab('poll-templates');
+        window.commsTabs?.show('poll-templates');
     });
 
     // Poll template modal buttons

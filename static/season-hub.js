@@ -41,23 +41,26 @@
     let rankingsSortCol = 'rank_position';
     let rankingsSortAsc = true;
 
-    // ── Tab switching ─────────────────────────────────────────────────────────
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => { t.style.display = 'none'; });
-            btn.classList.add('active');
-            const target = document.getElementById('tab-' + btn.dataset.tab);
-            if (target) target.style.display = 'block';
-        });
-    });
+    // ── Request ownership ─────────────────────────────────────────────────────
+    // Each load takes a generation; only the newest response for it is used, and rewards /
+    // mail must also still belong to the season on screen. So a quick A→B→A switch, or a save
+    // overlapping a switch, can't paint one season's data under another.
+    const gen = { data: 0, rewards: 0, mail: 0 };
+    const inflight = { rewards: null, mail: null };   // season id of a load in flight
 
-    // Show initial active tab
-    const activeTabBtn = document.querySelector('.tab-btn.active');
-    if (activeTabBtn) {
-        const initial = document.getElementById('tab-' + activeTabBtn.dataset.tab);
-        if (initial) initial.style.display = 'block';
+    // ── Tabs (tabs.js), with #tab deep links ──────────────────────────────────
+    // Declared up here, BEFORE Tabs.init: it calls onActivate for the initial tab inside
+    // init(), so a `let` further down would throw (TDZ) and stop the whole page script.
+    let currentTab = null;
+    // Rewards and Season Mail load when their tab is shown (and again when the season changes
+    // while one is open — loadSeasonData). A load already in flight for this season isn't
+    // repeated.
+    function loadTabExtras() {
+        if (!activeSeason) return;
+        if (currentTab === 'rewards' && inflight.rewards !== activeSeason.id) loadRewards();
+        if (currentTab === 'season-mail' && inflight.mail !== activeSeason.id) loadSeasonMail();
     }
+    Tabs.init({ hash: true, defaultTab: 'rankings', onActivate: name => { currentTab = name; loadTabExtras(); } });
 
     // ── Load season list (for selector) ──────────────────────────────────────
     function loadSeasonList() {
@@ -103,9 +106,12 @@
     // ── Load season data ──────────────────────────────────────────────────────
     function loadSeasonData(seasonId) {
         const url = seasonId ? '/api/season-hub/data?season_id=' + seasonId : '/api/season-hub/data';
+        const mine = ++gen.data;
         fetch(url)
             .then(r => r.json())
             .then(data => {
+                if (mine !== gen.data) return;   // a newer season was asked for since
+                const prevId = activeSeason ? activeSeason.id : null;
                 activeSeason = data.season || null;
                 scoreLevels = (data.season && data.season.score_levels) || [];
                 allMembers = data.members || [];
@@ -122,6 +128,10 @@
                     renderManualTable();
                     populateOcrCategoryDropdown();
                 }
+                // A new season (or the first load, e.g. a #rewards deep link) with Rewards or
+                // Season Mail open: load it. A reload of the same season doesn't — the saves that
+                // trigger one already call loadRewards / loadSeasonMail themselves.
+                if ((activeSeason ? activeSeason.id : null) !== prevId) loadTabExtras();
             })
             .catch(() => showToast('Failed to load season data.', 'error'));
     }
@@ -1043,13 +1053,18 @@
 
     function loadRewards() {
         if (!activeSeason) return;
-        fetch('/api/season-hub/rewards?season_id=' + activeSeason.id)
+        const sid = activeSeason.id;
+        const mine = ++gen.rewards;
+        inflight.rewards = sid;
+        fetch('/api/season-hub/rewards?season_id=' + sid)
             .then(r => r.json())
             .then(data => {
+                if (mine !== gen.rewards || !activeSeason || activeSeason.id !== sid) return;
                 allRewards = data.rewards || [];
                 renderRewardsTable();
             })
-            .catch(() => showToast('Failed to load rewards.', 'error'));
+            .catch(() => { if (mine === gen.rewards) showToast('Failed to load rewards.', 'error'); })
+            .finally(() => { if (mine === gen.rewards) inflight.rewards = null; });
     }
 
     // One chip per configured tier showing how many of its slots are used.
@@ -1289,13 +1304,18 @@
     // ── Season Mail tab ───────────────────────────────────────────────────────
     function loadSeasonMail() {
         if (!activeSeason) return;
-        fetch('/api/comms/templates?type=mail&season_id=' + activeSeason.id)
+        const sid = activeSeason.id;
+        const mine = ++gen.mail;
+        inflight.mail = sid;
+        fetch('/api/comms/templates?type=mail&season_id=' + sid)
             .then(r => r.json())
             .then(data => {
+                if (mine !== gen.mail || !activeSeason || activeSeason.id !== sid) return;
                 allMailItems = data.items || [];
                 renderMailList();
             })
-            .catch(() => showToast('Failed to load season mail.', 'error'));
+            .catch(() => { if (mine === gen.mail) showToast('Failed to load season mail.', 'error'); })
+            .finally(() => { if (mine === gen.mail) inflight.mail = null; });
     }
 
     function renderMailList() {
@@ -2276,15 +2296,6 @@
     document.querySelectorAll('.modal').forEach(modal => {
         modal.addEventListener('click', e => {
             if (e.target === modal) modal.style.display = '';
-        });
-    });
-
-    // ── Load on tab focus ─────────────────────────────────────────────────────
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tab = btn.dataset.tab;
-            if (tab === 'rewards' && activeSeason) loadRewards();
-            if (tab === 'season-mail' && activeSeason) loadSeasonMail();
         });
     });
 

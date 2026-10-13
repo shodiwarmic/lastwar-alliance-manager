@@ -1328,26 +1328,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderAll();
     renderMyRegistration();
 
-    document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    const defaultTabBtn = document.querySelector('.tab-btn[data-tab="my-reg"]');
-    const defaultContent = document.getElementById('tab-my-reg');
-    if (defaultTabBtn) defaultTabBtn.classList.add('active');
-    if (defaultContent) defaultContent.classList.add('active');
-
-    document.querySelectorAll('.tab-btn').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            tab.classList.add('active');
-            const target = document.getElementById('tab-' + tab.dataset.tab);
-            if (target) {
-                target.classList.add('active');
-                if (tab.dataset.tab === 'planning') renderAll();
-                else if (tab.dataset.tab === 'reg-view') renderRegistrationView();
-                else if (tab.dataset.tab === 'my-reg') renderMyRegistration();
-            }
-        });
+    // tabs.js, with #tab deep links. Wired where it always was — after the loads above — so
+    // every tab's data exists before its first render; each tab re-renders when it's shown.
+    // Registration View is gated (manage_storm); a #reg-view link without it falls back.
+    Tabs.init({
+        hash: true, defaultTab: 'my-reg',
+        onActivate: name => {
+            if (name === 'planning') renderAll();
+            else if (name === 'reg-view') renderRegistrationView();
+            else if (name === 'my-reg') renderMyRegistration();
+        },
     });
 
     document.querySelectorAll('.filter-chip[data-tf]').forEach(chip => {

@@ -29,23 +29,10 @@ let recruiterChoices = null;
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
+// tabs.js, with #tab deep links. Former Members is gated (manage_members); a #former link
+// without it falls back to Transfers.
 function setupTabs() {
-    const tabs = document.querySelectorAll('.tab-btn');
-    tabs.forEach(btn => {
-        btn.addEventListener('click', () => {
-            tabs.forEach(t => t.classList.remove('active'));
-            btn.classList.add('active');
-            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-            const target = document.getElementById('tab-' + btn.dataset.tab);
-            if (target) target.style.display = 'block';
-        });
-    });
-    // Show the initially active tab (CSS hides all .tab-content by default)
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) {
-        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
-        if (target) target.style.display = 'block';
-    }
+    Tabs.init({ hash: true, defaultTab: 'transfers' });
 }
 
 // ── Capacity Header ───────────────────────────────────────────────────────────

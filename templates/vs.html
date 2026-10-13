@@ -30,7 +30,8 @@
         </button>
     </div>
 
-    <!-- #tab-points is rendered `active` server-side so vs.js measures a visible container (F-R06) -->
+    <!-- #tab-points is rendered `active` server-side so the Points tab shows before any JS runs
+         (F-R06). tabs.js takes over from there and keeps the class in step. -->
     <div id="tab-points" class="tab-content active">
     <section class="controls">
         <div class="week-selector">
@@ -151,6 +152,7 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/remote-finder.js"}}"></script>
+<script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/vs.js"}}"></script>
 <script src="{{asset "/vs-league.js"}}"></script>
 {{end}}

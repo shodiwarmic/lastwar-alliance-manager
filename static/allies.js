@@ -12,28 +12,13 @@ let includeInactive = false;
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Show initial active tab
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) {
-        const target = document.getElementById('tab-' + activeBtn.dataset.tab);
-        if (target) target.style.display = 'block';
-    }
-
-    // Tab switching
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => { t.style.display = 'none'; });
-            btn.classList.add('active');
-            const target = document.getElementById('tab-' + btn.dataset.tab);
-            if (target) target.style.display = 'block';
-
-            // Load the NAP the first time it's opened, not on every page load.
-            if (btn.dataset.tab === 'nap' && !napLoaded) {
-                napLoaded = true;
-                loadNap();
-            }
-        });
+    // Tabs (tabs.js), with #tab deep links. The NAP loads the first time it's opened —
+    // including straight from a #nap link — not on every page load.
+    Tabs.init({
+        hash: true, defaultTab: 'allies',
+        onActivate: name => {
+            if (name === 'nap' && !napLoaded) { napLoaded = true; loadNap(); }
+        },
     });
 
     const napRefreshBtn = document.getElementById('nap-refresh-btn');

@@ -51,15 +51,6 @@ Chart.defaults.plugins.tooltip.cornerRadius = 8;
 Chart.defaults.plugins.tooltip.titleFont = { size: 14, weight: 'bold' };
 Chart.defaults.plugins.tooltip.bodyFont = { size: 13 };
 
-// --- Tab Management ---
-function switchTab(tabId) {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
-
-    document.getElementById(`tab-btn-${tabId}`).classList.add('active');
-    document.getElementById(`tab-${tabId}`).style.display = 'block';
-}
-
 // --- Tab 3: Troop Kills ---
 async function loadKillData() {
     try {
@@ -709,12 +700,8 @@ window.addEventListener('numberstylechange', () => {
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('tab-growth')) {
-        document.getElementById('tab-growth').style.display = 'block';
-        document.getElementById('tab-btn-growth').addEventListener('click', () => switchTab('growth'));
-        document.getElementById('tab-btn-vs').addEventListener('click', () => switchTab('vs'));
-        document.getElementById('tab-btn-kills').addEventListener('click', () => switchTab('kills'));
-        document.getElementById('tab-btn-hq').addEventListener('click', () => switchTab('hq'));
-        document.getElementById('tab-btn-profession').addEventListener('click', () => switchTab('profession'));
+        // tabs.js, with #tab deep links (#vs, #kills, …). Every tab loads eagerly below.
+        Tabs.init({ hash: true, defaultTab: 'growth' });
         loadGrowthData();
         loadVSData();
         loadKillData();

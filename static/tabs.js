@@ -2,16 +2,16 @@
 //
 // For pages using the dominant convention: a `.tab-bar` of `.tab-btn[data-tab]`
 // buttons and matching `#tab-<name>` `.tab-content` panels, toggled via
-// `style.display` (the CLAUDE.md canonical mechanism). Train, admin,
-// external-alliances, accountability, accountability_profile and schedule consume
-// this; the other data-tab pages (season-hub, recruiting, allies, comms) still carry
-// local copies and are tracked to migrate here.
+// `style.display` (the CLAUDE.md canonical mechanism). EVERY tabbed page uses it:
+// accountability, accountability_profile, admin, allies, comms, external-alliances,
+// rankings, recruiting, schedule, season-hub, storm, train and vs (vs-league.js).
 //
-// Provenance: the hash / permission-guard / replaceState logic is generalized from
-// vs-league.js showTab; the visibility mechanic is train's setupTabs (inline
-// style.display). vs-league/storm instead drive visibility via an `.active` class and
-// carry lazy-load side effects (initLeague/renderAllTime) → those map to onActivate
-// and migrate separately.
+// show() also keeps `.active` on the panels in step with the inline display, so a page
+// that paints its first panel `active` server-side (vs.html, for a first paint before JS)
+// stays consistent; for every other page it's redundant with .tab-content.active.
+//
+// onActivate fires for the INITIAL tab too, synchronously inside init() — so anything
+// it touches must already be declared (a `let`/`const` lower down throws a TDZ error).
 //
 // Loaded ONLY on pages that opt in (not global.js, which loads everywhere).
 
@@ -31,7 +31,11 @@
             const first = document.querySelector(`${barSel} .tab-btn`);
             return first ? first.dataset.tab : '';
         };
-        const fallback = () => opts.defaultTab || firstTabName();
+        // defaultTab only if its button exists: a permission-gated default would otherwise
+        // leave no tab shown at all.
+        const fallback = () => (opts.defaultTab
+            && document.querySelector(`${barSel} .tab-btn[data-tab="${opts.defaultTab}"]`))
+            ? opts.defaultTab : firstTabName();
 
         function show(name) {
             // `name` may come from an untrusted URL hash — reject anything that isn't a
@@ -44,9 +48,12 @@
 
             document.querySelectorAll(`${barSel} .tab-btn`).forEach(b =>
                 b.classList.toggle('active', b.dataset.tab === valid));
-            document.querySelectorAll('.tab-content').forEach(c => { c.style.display = 'none'; });
+            document.querySelectorAll('.tab-content').forEach(c => {
+                c.style.display = 'none';
+                c.classList.remove('active');
+            });
             const panel = document.getElementById('tab-' + valid);
-            if (panel) panel.style.display = 'block';
+            if (panel) { panel.style.display = 'block'; panel.classList.add('active'); }
 
             if (opts.hash && ('#' + valid) !== location.hash) {
                 history.replaceState(null, '', '#' + valid);

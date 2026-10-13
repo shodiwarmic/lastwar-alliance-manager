@@ -46,27 +46,19 @@
     let allTimeFilter = 'newest'; // All-Time seasons list sort (newest/oldest/best/worst)
     const root = document.getElementById('vs-league-root');
 
-    // ===================== tab switching (points ↔ league) =====================
-    // First-paint visibility comes from the server-rendered `active` class (F-R06); here we
-    // only toggle the class (never inline display), and persist via URL hash.
-    function showTab(name) {
-        const valid = (name === 'league' || name === 'alltime') ? name : 'points';
-        document.querySelectorAll('#vs-tab-bar .tab-btn').forEach(b =>
-            b.classList.toggle('active', b.dataset.tab === valid));
-        ['points', 'league', 'alltime'].forEach(t => {
-            const elm = document.getElementById('tab-' + t);
-            if (elm) elm.classList.toggle('active', valid === t);
+    // ===================== tab switching (points ↔ league ↔ all-time) =====================
+    // tabs.js, with #tab deep links. vs.html still paints #tab-points `active` server-side, so
+    // the Points tab shows before any JS runs; tabs.js keeps that class in step from then on.
+    // The league loads the first time it's opened; All-Time re-renders on every visit.
+    document.addEventListener('DOMContentLoaded', () => {
+        Tabs.init({
+            barSelector: '#vs-tab-bar', hash: true, defaultTab: 'points',
+            onActivate: name => {
+                if (name === 'league' && !state.loaded) initLeague();
+                if (name === 'alltime') renderAllTime();
+            },
         });
-        if (('#' + valid) !== location.hash) history.replaceState(null, '', '#' + valid);
-        if (valid === 'league' && !state.loaded) initLeague();
-        if (valid === 'alltime') renderAllTime();
-    }
-    document.querySelectorAll('#vs-tab-bar .tab-btn').forEach(b =>
-        b.addEventListener('click', () => showTab(b.dataset.tab)));
-    const hashTab = () => location.hash === '#league' ? 'league' : location.hash === '#alltime' ? 'alltime' : 'points';
-    document.addEventListener('DOMContentLoaded', () => showTab(hashTab()));
-    // hash may already be set before DOMContentLoaded fires late — guard immediately too
-    if (document.readyState !== 'loading' && (location.hash === '#league' || location.hash === '#alltime')) showTab(hashTab());
+    });
 
     // ===================== league data =====================
     async function initLeague() {

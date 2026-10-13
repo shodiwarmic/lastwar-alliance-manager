@@ -1,6 +1,6 @@
 /* Storm uses the global tab components (.tab-bar / .tab-btn) — including the
-   horizontal scroll + scroll-cues from styles.css/global.js. Visibility is the
-   global .tab-content { display:none } / .tab-content.active { display:block }. */
+   horizontal scroll + scroll-cues from styles.css/global.js — switched by tabs.js
+   (inline display, with .active kept in step). */
 
 /* ── Battle configuration row ─────────────────────────────────────────────── */
 .storm-config-row {

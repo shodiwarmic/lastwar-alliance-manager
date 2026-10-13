@@ -9,16 +9,9 @@ const cache = {};
 // Track which tabs have been loaded
 const loaded = {};
 
-// ── Tab switching ────────────────────────────────────────────────────────────
+// ── Tabs: lazy-load each tab's data the first time it's shown ─────────────────
 
-const tabBtns = document.querySelectorAll('.tab-btn');
-const tabContents = document.querySelectorAll('.tab-content');
-
-function switchTab(tabName) {
-    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
-    tabContents.forEach(c => {
-        c.style.display = c.id === 'tab-' + tabName ? 'block' : 'none';
-    });
+function onTabActivated(tabName) {
     if (!loaded[tabName]) {
         loaded[tabName] = true;
         if (tabName === 'mail') loadTemplates('mail');
@@ -29,17 +22,12 @@ function switchTab(tabName) {
     }
 }
 
-tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-});
-
-// ── Initialise first tab ─────────────────────────────────────────────────────
-
 document.addEventListener('DOMContentLoaded', () => {
-    // Pick the first rendered tab rather than hardcoding 'mail' —
-    // a polls-only user may have the comms tabs gated out.
-    const firstTab = document.querySelector('.tab-btn');
-    if (firstTab) switchTab(firstTab.dataset.tab);
+    // tabs.js, with #tab deep links. NO defaultTab: the first rendered tab wins, because a
+    // polls-only user has the comms tabs gated out. Inside DOMContentLoaded because polls.js
+    // loads after this file — its loaders must exist before the first onActivate. The handle
+    // is on window for polls.js's "New poll" button.
+    window.commsTabs = Tabs.init({ hash: true, onActivate: onTabActivated });
 
     document.getElementById('new-mail-btn')?.addEventListener('click', () => openTemplateModal('mail'));
     document.getElementById('new-announcement-btn')?.addEventListener('click', () => openTemplateModal('announcement'));
