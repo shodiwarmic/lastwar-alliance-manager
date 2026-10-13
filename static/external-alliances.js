@@ -12,8 +12,7 @@
     const OUR_SERVER_ID = (cfg && parseInt(cfg.dataset.ourServerId, 10)) || 0;
     let all = [];
     let fuseInstance = null;
-    let sortField = 'updated';
-    let sortDir = 'desc';
+    const sortState = { field: 'updated', dir: 'desc' };   // FilterPanel.setupSortChips owns it
     const SORT_DEFAULTS = { tag: 'asc', name: 'asc', server: 'asc', power: 'desc', kills: 'desc', members: 'desc', vs: 'desc', updated: 'desc' };
     const SORT_LABELS = { tag: 'Tag', name: 'Name', server: 'Server', power: 'Power', kills: 'Kills', members: 'Members', vs: 'VS record', updated: 'Updated' };
 
@@ -43,7 +42,6 @@
 
     const tbody = document.getElementById('ext-tbody');
     const search = document.getElementById('ext-search');
-    const clearSearchBtn = document.getElementById('ext-clear-search');
     const countEl = document.getElementById('ext-count');
 
     function relBadges(a) {
@@ -128,7 +126,7 @@
 
     function sortCmp(a, b) {
         let d = 0;
-        switch (sortField) {
+        switch (sortState.field) {
             case 'tag': d = (a.tag || '').localeCompare(b.tag || ''); break;
             case 'name': d = (a.name || '').localeCompare(b.name || ''); break;
             case 'server': d = (a.server || 0) - (b.server || 0); break;
@@ -139,7 +137,7 @@
             case 'updated': d = (a.updated_at || '').localeCompare(b.updated_at || ''); break;
         }
         if (d === 0) d = (a.tag || a.name || '').localeCompare(b.tag || b.name || '');
-        return sortDir === 'asc' ? d : -d;
+        return sortState.dir === 'asc' ? d : -d;
     }
 
     function applyFilter() {
@@ -152,84 +150,21 @@
         base.sort(sortCmp);
 
         render(base);
-        updateActiveFilterBadge();
-        if (clearSearchBtn) clearSearchBtn.style.display = q ? 'flex' : 'none';
+        FilterPanel.updateActiveBadge(FILTER_GROUPS, { badgeId: 'ext-filter-count', clearId: 'ext-clear-filters' });
     }
 
     const FILTER_GROUPS = [['.ext-rel-chip', 'rel'], ['.ext-lr-chip', 'lr']];
 
-    function updateActiveFilterBadge() {
-        const count = FILTER_GROUPS.reduce((n, [sel, attr]) => {
-            const active = Array.from(document.querySelectorAll(sel + '.active'));
-            return n + (active.length > 0 && !active.some(c => c.dataset[attr] === 'all') ? 1 : 0);
-        }, 0);
-        const badge = document.getElementById('ext-filter-count');
-        if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
-        const clearBtn = document.getElementById('ext-clear-filters');
-        if (clearBtn) clearBtn.disabled = count === 0;
-    }
-
-    function clearAllFilters() {
-        FILTER_GROUPS.forEach(([sel, attr]) => {
-            document.querySelectorAll(sel).forEach(c => c.classList.toggle('active', c.dataset[attr] === 'all'));
-        });
-        applyFilter();
-    }
-
-    function updateSortChips() {
-        document.querySelectorAll('.ext-sort-chip').forEach(btn => {
-            const f = btn.dataset.sort;
-            const active = f === sortField;
-            btn.classList.toggle('active', active);
-            btn.textContent = SORT_LABELS[f] + (active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '');
-        });
-    }
-
-    // Multi-select chip group (mirrors setupChipGroup in members.js): clicking "All"
-    // resets the group; clicking another toggles it, and an empty group snaps back to "All".
-    function setupChipGroup(sel, attr) {
-        const chips = document.querySelectorAll(sel);
-        chips.forEach(chip => chip.addEventListener('click', () => {
-            const val = chip.dataset[attr];
-            if (val === 'all') {
-                chips.forEach(c => c.classList.remove('active'));
-                chip.classList.add('active');
-            } else {
-                document.querySelector(sel + '[data-' + attr + '="all"]').classList.remove('active');
-                chip.classList.toggle('active');
-                if (!document.querySelectorAll(sel + '.active').length) {
-                    document.querySelector(sel + '[data-' + attr + '="all"]').classList.add('active');
-                }
-            }
-            applyFilter();
-        }));
-    }
-
+    // The shared panel helpers (filter-panel.js), as on Members, Train and Files: chip groups,
+    // the collapsible panel and its Clear, the search box and the sort chips with direction.
     function setupControls() {
-        if (search) search.addEventListener('input', applyFilter);
-        if (clearSearchBtn) clearSearchBtn.addEventListener('click', () => { search.value = ''; applyFilter(); search.focus(); });
-
-        const toggle = document.getElementById('ext-toggle-filters');
-        const panel = document.getElementById('ext-filter-collapse');
-        if (toggle && panel) {
-            toggle.addEventListener('click', () => {
-                const open = !panel.classList.contains('open');
-                panel.classList.toggle('open', open);
-                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-            });
-        }
-        const clearBtn = document.getElementById('ext-clear-filters');
-        if (clearBtn) clearBtn.addEventListener('click', clearAllFilters);
-
-        FILTER_GROUPS.forEach(([sel, attr]) => setupChipGroup(sel, attr));
-
-        document.querySelectorAll('.ext-sort-chip').forEach(btn => btn.addEventListener('click', () => {
-            const f = btn.dataset.sort;
-            if (sortField === f) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-            else { sortField = f; sortDir = SORT_DEFAULTS[f] || 'asc'; }
-            updateSortChips();
-            applyFilter();
-        }));
+        FilterPanel.setupSearch('ext-search', 'ext-clear-search', applyFilter);
+        FilterPanel.setupToggle({
+            toggleId: 'ext-toggle-filters', panelId: 'ext-filter-collapse', clearId: 'ext-clear-filters',
+            onClear: () => { FilterPanel.clearChipGroups(FILTER_GROUPS); applyFilter(); },
+        });
+        FILTER_GROUPS.forEach(([sel, attr]) => FilterPanel.setupChipGroup(sel, attr, applyFilter));
+        FilterPanel.setupSortChips('.ext-sort-chip', sortState, SORT_LABELS, SORT_DEFAULTS, applyFilter);
     }
 
     async function load() {
@@ -439,6 +374,5 @@
     }
 
     setupControls();
-    updateSortChips();
     load();
 })();

@@ -71,25 +71,25 @@
     </section>
     {{end}}
 
-    <div class="ext-filter-controls">
-        <div class="ext-filter-top">
-            <div class="ext-search-wrap">
+    <div class="filter-sort-controls">
+        <div class="filter-sort-top">
+            <div class="filter-search-wrap">
                 <input type="text" id="ext-search" class="form-input" placeholder="Search tag or name…">
                 <button id="ext-clear-search" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
             </div>
-            <button type="button" id="ext-toggle-filters" class="btn btn-secondary btn-sm ext-filter-toggle" aria-expanded="false" aria-controls="ext-filter-collapse">
+            <button type="button" id="ext-toggle-filters" class="btn btn-secondary btn-sm filter-toggle" aria-expanded="false" aria-controls="ext-filter-collapse">
                 <svg width="14" height="14" aria-hidden="true" class="svg-icon chevron"><use href="/icons.svg#icon-chevron-down"/></svg>
                 Sort &amp; Filter
-                <span id="ext-filter-count" class="ext-filter-badge" hidden></span>
+                <span id="ext-filter-count" class="filter-count-badge" hidden></span>
             </button>
             <button type="button" id="ext-clear-filters" class="btn btn-ghost btn-sm" disabled>Clear</button>
             <span class="status-msg" id="ext-count" style="margin-left:auto;"></span>
         </div>
 
-        <div id="ext-filter-collapse" class="ext-filter-collapse">
-            <hr class="ext-filter-divider">
-            <div class="ext-filter-grid">
-                <div class="ext-filter-row">
+        <div id="ext-filter-collapse" class="filter-collapse">
+            <hr class="filter-sort-divider">
+            <div class="filter-sort-grid">
+                <div class="filter-row filter-row-full">
                     <span class="filter-chip-label">Sort:</span>
                     <button class="filter-chip ext-sort-chip active" data-sort="updated">Updated ↓</button>
                     <button class="filter-chip ext-sort-chip" data-sort="tag">Tag</button>
@@ -100,7 +100,7 @@
                     <button class="filter-chip ext-sort-chip" data-sort="members">Members</button>
                     <button class="filter-chip ext-sort-chip" data-sort="vs">VS record</button>
                 </div>
-                <div class="ext-filter-row">
+                <div class="filter-row">
                     <span class="filter-chip-label">Relationship:</span>
                     <button class="filter-chip ext-rel-chip active" data-rel="all">All</button>
                     <button class="filter-chip ext-rel-chip" data-rel="nap">In NAP</button>
@@ -111,7 +111,7 @@
                     <button class="filter-chip ext-rel-chip" data-rel="prospect">Prospect source</button>
                     <button class="filter-chip ext-rel-chip" data-rel="unlinked">No relationship</button>
                 </div>
-                <div class="ext-filter-row">
+                <div class="filter-row">
                     <span class="filter-chip-label">LastRank:</span>
                     <button class="filter-chip ext-lr-chip active" data-lr="all">All</button>
                     <button class="filter-chip ext-lr-chip" data-lr="linked">Linked</button>

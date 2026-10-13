@@ -1,8 +1,8 @@
 /* filter-panel.css — shared chrome for the collapsible search / sort / filter panel.
    The CSS counterpart to filter-panel.js: any page that uses the panel links this
    file and drives it through the FilterPanel helpers. Extracted from files.css /
-   members.css (which carried duplicate copies). Consumers today: Train, Files,
-   Members. External Alliances still carries a local copy — tracked to migrate here.
+   members.css (which carried duplicate copies). Consumers: Train, Files, Members,
+   External Alliances (its registry and its Scout Report tab).
 
    The pill primitive `.filter-chip` / `.filter-chip-label` is intentionally NOT here:
    it's a global utility in styles.css, used on pages with no filter panel (storm, etc.).
@@ -35,7 +35,9 @@
 
 .filter-sort-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    /* min(): on a phone the panel is narrower than 360px, and a fixed 360px track spilled into
+       the panel's right padding (Members, Train, Files, External Alliances). */
+    grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
     gap: 20px;
 }
 
