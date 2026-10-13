@@ -1,8 +1,8 @@
 /* ── Remote finder (shared type-ahead combobox) ───────────────────────────────
-   Backs buildRemoteFinder() in remote-finder.js: the Recruiting player picker and the
-   Scout Report's alliance finder. The older .ext-find-* / .vsl-find-* pickers on External
-   Alliances and VS League predate it and still carry their own blocks; migrating them is a
-   pending follow-up, but only their mechanics — their tokens are already fine.
+   Backs buildRemoteFinder() in remote-finder.js: every player and alliance picker — the
+   Recruiting player picker, the Scout Report's finder, External Alliances' add/edit picker and
+   VS League's opponent and bracket finders. VS League's MVP picker keeps its own mechanics
+   (two local roster groups, no remote search) but uses these classes.
 
    Written on the canonical --color-* tokens (docs/DESIGN_STANDARD.md → Design Tokens).
    The hover states use --color-accent-bg rather than a surface token: the literal

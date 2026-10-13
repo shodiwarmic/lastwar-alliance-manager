@@ -300,100 +300,61 @@
         const localMatches = q => (q && fuseInstance)
             ? fuseInstance.search(foldSearch(q)).map(r => r.item).filter(x => x.id !== a.id).slice(0, 6) : [];
 
-        const dropdown = el('div', { className: 'ext-find-dropdown', hidden: 'hidden' });
-        const idGrid = el('div', { className: 'vsl-form-grid ext-id-grid' },
-            field('Server', server), field('Tag', tag), field('Name', name), dropdown);
-        let activeField = null;
-        const queryVal = () => (activeField ? activeField.value : '').trim();
-
-        function positionDropdown() {
-            if (!activeField) return;
-            const cell = activeField.closest('.vsl-field') || activeField;
-            dropdown.style.left = cell.offsetLeft + 'px';
-            dropdown.style.top = (cell.offsetTop + cell.offsetHeight + 4) + 'px';
-            dropdown.style.minWidth = cell.offsetWidth + 'px';
-            dropdown.style.maxWidth = (idGrid.clientWidth - cell.offsetLeft) + 'px';
-        }
-
-        const onDocDown = e => {
-            if (dropdown.contains(e.target)) return;
-            if (activeField && (activeField.closest('.vsl-field') || activeField).contains(e.target)) return;
-            closeDropdown();
-        };
-        function openDropdown() { positionDropdown(); dropdown.hidden = false; document.addEventListener('mousedown', onDocDown); }
-        function closeDropdown() { dropdown.hidden = true; document.removeEventListener('mousedown', onDocDown); }
-
-        function localItem(x) {
-            const badge = x.ally_status === 'active' ? 'Ally' : x.ally_status === 'former' ? 'Former ally'
-                : x.is_opponent ? 'VS opponent' : x.prospect_count > 0 ? 'Prospect source' : '';
-            const meta = [x.server != null ? 'S' + x.server : null, badge || null].filter(Boolean).join(' · ');
-            return el('button', { className: 'ext-find-item', type: 'button', onclick: () => { closeDropdown(); if (modalApi.close) modalApi.close(); openModal(x); } },
-                el('span', { className: 'ext-find-name', translate: 'no', text: (x.tag ? '[' + x.tag + '] ' : '') + (x.name || '') }),
-                meta ? el('span', { className: 'ext-find-meta', text: meta }) : null);
-        }
-
-        function lrItem(r) {
-            const meta = [r.server != null ? 'S' + r.server : null, r.power != null ? formatCompact(r.power) + ' pw' : null,
-                r.kills != null ? formatCompact(r.kills) + ' k' : null].filter(Boolean).join(' · ');
-            return el('button', { className: 'ext-find-item', type: 'button', onclick: async () => {
-                if (r.tag) tag.value = r.tag;
-                if (r.name) name.value = r.name;
-                if (r.server != null) server.value = r.server;
-                if (r.power != null) power.value = r.power;
-                if (r.kills != null) kills.value = r.kills;
-                lastrankId = r.lastrank_id; lr.value = r.lastrank_id;
-                closeDropdown();
-                note.textContent = 'Confirming…';
-                try { applySnapshot(await api('POST', '/api/external-alliances/lookup', { url: r.lastrank_id })); }
-                catch (e) { note.textContent = 'Selected — power ' + formatCompact(r.power) + ' · kills ' + formatCompact(r.kills); }
-            } },
-                el('span', { className: 'ext-find-name', translate: 'no', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
-                meta ? el('span', { className: 'ext-find-meta', text: meta }) : null);
-        }
-
-        function renderDropdown(localList, lrList, msg, isError, showAction) {
-            dropdown.replaceChildren();
-            if (localList && localList.length) {
-                dropdown.appendChild(el('div', { className: 'ext-find-head', text: 'In your registry' }));
-                localList.forEach(x => dropdown.appendChild(localItem(x)));
-            }
-            if (lrList && lrList.length) {
-                dropdown.appendChild(el('div', { className: 'ext-find-head', text: 'From LastRank' }));
-                lrList.forEach(r => dropdown.appendChild(lrItem(r)));
-            }
-            if (msg) dropdown.appendChild(el('div', { className: isError ? 'ext-find-msg ext-find-err' : 'ext-find-msg', text: msg }));
-            if (showAction) {
-                dropdown.appendChild(el('button', { className: 'ext-find-action', type: 'button', onclick: runLastRankSearch },
-                    '🔎 Look up “' + queryVal() + '” on LastRank'));
-            }
-            if (dropdown.childNodes.length) openDropdown(); else closeDropdown();
-        }
-
-        async function runLastRankSearch() {
-            const q = queryVal();
-            const srv = server.value.trim();
-            if (!q) return;
-            if (!srv) { renderDropdown(localMatches(q), null, 'Enter the server number — LastRank search matches it strictly.', true, false); server.focus(); return; }
-            renderDropdown(localMatches(q), null, 'Searching LastRank…', false, false);
-            try {
-                const list = await api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q) + '&server=' + encodeURIComponent(srv));
-                renderDropdown(localMatches(q), list, (list && list.length) ? null : 'No LastRank matches on server ' + srv + '.', false, false);
-            } catch (e) { renderDropdown(localMatches(q), null, e.message, true, false); }
-        }
-
-        function refreshFind() {
-            const q = queryVal();
-            if (!q) { closeDropdown(); return; }
-            renderDropdown(localMatches(q), null, null, false, true);
-        }
-        [tag, name].forEach(f => {
-            f.addEventListener('focus', () => { activeField = f; });
-            f.addEventListener('input', () => { activeField = f; refreshFind(); });
-            f.addEventListener('keydown', e => {
-                if (e.key === 'Escape') closeDropdown();
-                else if (e.key === 'Enter' && !dropdown.hidden) { e.preventDefault(); runLastRankSearch(); }
-            });
+        // The shared combobox (remote-finder.js). The identity grid is its positioning context:
+        // the dropdown anchors under whichever of Tag / Name has focus.
+        const finder = buildRemoteFinder({
+            inputs: [tag, name],
+            localSearch: localMatches,
+            context: () => server.value.trim(),
+            guard: () => {
+                if (server.value.trim()) return null;
+                server.focus();
+                return 'Enter the server number — LastRank search matches it strictly.';
+            },
+            remoteSearch: q => api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q)
+                + '&server=' + encodeURIComponent(server.value.trim())).then(list => list || []),
+            localHead: 'In your registry',
+            remoteHead: 'From LastRank',
+            searchingText: 'Searching LastRank…',
+            emptyText: () => 'No LastRank matches on server ' + server.value.trim() + '.',
+            position: field => {
+                if (!field) return;
+                const cell = field.closest('.vsl-field') || field;
+                finder.dropdown.style.left = cell.offsetLeft + 'px';
+                finder.dropdown.style.top = (cell.offsetTop + cell.offsetHeight + 4) + 'px';
+                finder.dropdown.style.minWidth = cell.offsetWidth + 'px';
+                finder.dropdown.style.maxWidth = (idGrid.clientWidth - cell.offsetLeft) + 'px';
+            },
+            item: (x, kind) => {
+                if (kind === 'local') {
+                    const badge = x.ally_status === 'active' ? 'Ally' : x.ally_status === 'former' ? 'Former ally'
+                        : x.is_opponent ? 'VS opponent' : x.prospect_count > 0 ? 'Prospect source' : '';
+                    return {
+                        label: (x.tag ? '[' + x.tag + '] ' : '') + (x.name || ''),
+                        meta: [x.server != null ? 'S' + x.server : null, badge || null].filter(Boolean).join(' · '),
+                        onPick: () => { if (modalApi.close) modalApi.close(); openModal(x); },
+                    };
+                }
+                return {
+                    label: (x.tag ? '[' + x.tag + '] ' : '') + (x.name || x.lastrank_id.slice(0, 8)),
+                    meta: [x.server != null ? 'S' + x.server : null, x.power != null ? formatCompact(x.power) + ' pw' : null,
+                        x.kills != null ? formatCompact(x.kills) + ' k' : null].filter(Boolean).join(' · '),
+                    onPick: async r => {
+                        if (r.tag) tag.value = r.tag;
+                        if (r.name) name.value = r.name;
+                        if (r.server != null) server.value = r.server;
+                        if (r.power != null) power.value = r.power;
+                        if (r.kills != null) kills.value = r.kills;
+                        lastrankId = r.lastrank_id; lr.value = r.lastrank_id;
+                        note.textContent = 'Confirming…';
+                        try { applySnapshot(await api('POST', '/api/external-alliances/lookup', { url: r.lastrank_id })); }
+                        catch (e) { note.textContent = 'Selected — power ' + formatCompact(r.power) + ' · kills ' + formatCompact(r.kills); }
+                    },
+                };
+            },
         });
+        const idGrid = el('div', { className: 'vsl-form-grid ext-id-grid' },
+            field('Server', server), field('Tag', tag), field('Name', name), finder.dropdown);
 
         modalApi.close = modal(editing ? 'Edit alliance' : 'Add alliance', [
             idGrid,

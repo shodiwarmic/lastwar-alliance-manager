@@ -2217,23 +2217,32 @@ export key (the `data-export-csv` name without `.csv`) through `UserPrefs`
 
 `buildRemoteFinder(opts)` in `static/remote-finder.js` (an opt-in module, with its
 `.finder-*` styles in `remote-finder.css`) is the shared combobox: instant local
-matches as you type, plus a remote lookup behind an **explicit click**. Used by the
-Recruiting player picker and the Scout Report's alliance finder.
+matches as you type, plus a remote lookup behind an **explicit click**. **Every**
+player and alliance picker uses it: Recruiting, the Scout Report, External Alliances'
+add/edit modal, and VS League's opponent and bracket finders. Don't hand-roll a dropdown.
+
+- `context: () => serverInput.value` when the lookup depends on more than the typed
+  query — a response renders only if its query **and** context are still current, and
+  no `close()` (Escape, click outside) came since. So a stale answer never overwrites a
+  newer one or reopens a dismissed dropdown, and a lookup already in flight isn't sent
+  twice (Enter and the action do nothing until it returns).
+- `guard` blocks the lookup with a message (e.g. focus the empty server field and say why);
+  `searchingText` / `emptyText(q)` word the states; `localHead` / `remoteHead` head the groups.
+- VS League's MVP picker is the one exception: two local roster groups and no remote search,
+  which the finder's single local group can't express — so it keeps its mechanics but uses
+  the `.finder-*` classes.
 
 **Never fire the remote search per keystroke, debounced or otherwise.** Every remote
 source is the volunteer-run LastRank API behind the shared 1 req/sec limiter, so
 searching has to stay a deliberate act — one officer typing a name must not become a
 burst of upstream calls.
 
-> The older `.ext-find-*` (`external-alliances.css`) and `.vsl-find-*`
-> (`vs-league.css`) pickers predate this helper and still hand-roll the same
-> mechanics; migrating them is a pending follow-up — but only their mechanics.
-> Their **tokens are already correct**: they use `--color-text-muted`, which is
-> canonical and defined in `:root` and both `[data-theme]` blocks. An earlier
-> version of this note claimed that token was undefined and told you to "fix" it
-> to `--text-muted` / `--text-primary` / `--bg-primary`; that is backwards — those
-> are the deprecated names (docs/DESIGN_STANDARD.md → Legacy tokens). Migrate *to* the
-> `--color-*` names, never away from them.
+> `--color-text-muted` (used throughout `.finder-*`) is canonical and defined in
+> `:root` and both `[data-theme]` blocks. An earlier version of this note claimed it
+> was undefined and told you to "fix" it to `--text-muted` / `--text-primary` /
+> `--bg-primary`; that is backwards — those are the deprecated names
+> (docs/DESIGN_STANDARD.md → Legacy tokens). Migrate *to* the `--color-*` names,
+> never away from them.
 
 ## Demo seed (`internal/demo`, `cmd/demo-seed`)
 

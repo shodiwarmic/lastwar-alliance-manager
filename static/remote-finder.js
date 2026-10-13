@@ -14,22 +14,37 @@
 // into a burst of upstream calls.
 //
 // Options:
-//   inputs       [HTMLElement]  fields that drive the query (last focused wins)
-//   localSearch  q => [item]    synchronous, no network
-//   remoteSearch async q => [item]   omit for a local-only finder
-//   item         (obj, kind) => { label, meta, onPick }   kind: 'local' | 'remote'
-//   guard        q => string|null    non-null blocks the remote lookup with that message
-//   actionLabel  q => string
-//   position     () => void      optional; called on open for custom anchoring
-//   prefix       string          CSS class prefix (default 'finder')
+//   inputs        [HTMLElement]  fields that drive the query (last focused wins)
+//   localSearch   q => [item]    synchronous, no network
+//   remoteSearch  async q => [item]   omit for a local-only finder
+//   item          (obj, kind) => { label, meta, onPick }   kind: 'local' | 'remote'
+//   guard         q => string|null    non-null blocks the remote lookup with that message
+//   actionLabel   q => string
+//   position      (field) => void     optional; called on open for custom anchoring
+//   prefix        string          CSS class prefix (default 'finder')
+//   localHead     string          optional heading over the local matches
+//   remoteHead    string          optional heading over the remote results
+//   searchingText string          default 'Searching…'
+//   emptyText     q => string     shown when the lookup finds nothing (default 'No matches found.')
+//   context       () => string    the rest of the lookup's key (e.g. a server number)
 //
 // Returns { dropdown, refresh, close, runRemote } — insert `dropdown` yourself so
 // the caller controls where it sits in the DOM.
+//
+// Request ownership. A response renders only if it still belongs to what's on screen: the
+// same query and context it was asked for, and no close() (Escape, a click outside, a
+// field switch) since. So an older answer can't overwrite a newer query, a server change
+// discards a pending lookup, and a late answer can't reopen a dismissed dropdown — or one
+// whose modal has gone (the dropdown is no longer in the document). While a lookup for the
+// same query and context is in flight, Enter and the action do nothing, so repeat presses
+// can't spend the 1 req/sec budget twice.
 function buildRemoteFinder(opts) {
     const prefix = opts.prefix || 'finder';
     const localSearch = opts.localSearch || (() => []);
     const guard = opts.guard || (() => null);
     const actionLabel = opts.actionLabel || (q => 'Look up “' + q + '” on LastRank');
+    const searchingText = opts.searchingText || 'Searching…';
+    const emptyText = opts.emptyText || (() => 'No matches found.');
 
     const dropdown = document.createElement('div');
     dropdown.className = prefix + '-dropdown';
@@ -37,6 +52,10 @@ function buildRemoteFinder(opts) {
 
     let activeField = opts.inputs[0] || null;
     const queryVal = () => (activeField ? activeField.value : '').trim();
+    const lookupKey = () => queryVal() + '\u0000' + (opts.context ? String(opts.context() || '') : '');
+    let generation = 0;     // bumped by close(): anything asked before it is stale
+    let pending = null;     // lookupKey() of the lookup in flight
+    let searching = null;   // lookupKey() whose "Searching…" line is on screen
 
     const onDocDown = e => {
         if (dropdown.contains(e.target)) return;
@@ -44,11 +63,13 @@ function buildRemoteFinder(opts) {
         close();
     };
     function open() {
+        if (!dropdown.isConnected) return;   // its modal is gone
         if (opts.position) opts.position(activeField);
         dropdown.hidden = false;
         document.addEventListener('mousedown', onDocDown);
     }
     function close() {
+        generation++;
         dropdown.hidden = true;
         document.removeEventListener('mousedown', onDocDown);
     }
@@ -81,6 +102,7 @@ function buildRemoteFinder(opts) {
     }
 
     function render(locals, remotes, msg, isError, showAction) {
+        searching = null;
         dropdown.replaceChildren();
         if (locals && locals.length) {
             if (opts.localHead) dropdown.appendChild(node('head', opts.localHead));
@@ -100,6 +122,7 @@ function buildRemoteFinder(opts) {
             act.type = 'button';
             act.className = prefix + '-action';
             act.textContent = '🔎 ' + actionLabel(queryVal());
+            act.disabled = pending === lookupKey();
             act.addEventListener('click', runRemote);
             dropdown.appendChild(act);
         }
@@ -109,14 +132,26 @@ function buildRemoteFinder(opts) {
     async function runRemote() {
         const q = queryVal();
         if (!q || !opts.remoteSearch) return;
+        const key = lookupKey();
+        if (pending === key) return;   // already asking this exact question
         const blocked = guard(q);
         if (blocked) { render(localSearch(q), null, blocked, true, false); return; }
-        render(localSearch(q), null, 'Searching…', false, false);
+        const mine = generation;
+        pending = key;
+        render(localSearch(q), null, searchingText, false, false);
+        searching = key;
+        const current = () => mine === generation && key === lookupKey();
+        let answered = false;
         try {
             const list = await opts.remoteSearch(q);
-            render(localSearch(q), list, (list && list.length) ? null : 'No matches found.', false, false);
+            if (current()) { answered = true; render(localSearch(q), list, (list && list.length) ? null : emptyText(q), false, false); }
         } catch (e) {
-            render(localSearch(q), null, e.message || 'Search failed.', true, false);
+            if (current()) { answered = true; render(localSearch(q), null, e.message || 'Search failed.', true, false); }
+        } finally {
+            if (pending === key) pending = null;
+            // Discarded (the context changed under it) while still open: drop the "Searching…"
+            // line and offer the lookup again for what's on screen now.
+            if (!answered && searching === key && !dropdown.hidden) refresh();
         }
     }
 
@@ -127,7 +162,9 @@ function buildRemoteFinder(opts) {
     }
 
     opts.inputs.forEach(f => {
-        f.addEventListener('focus', () => { activeField = f; });
+        f.addEventListener('focus', () => {
+            if (activeField !== f) { activeField = f; generation++; }
+        });
         f.addEventListener('input', () => { activeField = f; refresh(); });
         f.addEventListener('keydown', e => {
             if (e.key === 'Escape') close();

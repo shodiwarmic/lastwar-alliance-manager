@@ -956,93 +956,61 @@
             }
         }
 
-        // Shared dropdown anchored under whichever of Opp tag / Opp name has focus.
-        const dropdown = el('div', { className: 'vsl-find-dropdown', hidden: 'hidden' });
-        const oppGrid = el('div', { className: 'vsl-form-grid vsl-opp-grid' },
-            field('Opp server', oppServer), field('Opp tag', oppTag), field('Opp name', oppName), dropdown);
-        let activeField = null;
-        const queryVal = () => (activeField ? activeField.value : '').trim();
-
-        function positionDropdown() {
-            if (!activeField) return;
-            const cell = activeField.closest('.vsl-field') || activeField;
-            dropdown.style.left = cell.offsetLeft + 'px';
-            dropdown.style.top = (cell.offsetTop + cell.offsetHeight + 4) + 'px';
-            dropdown.style.minWidth = cell.offsetWidth + 'px';
-            dropdown.style.maxWidth = (oppGrid.clientWidth - cell.offsetLeft) + 'px';
-        }
-        const onDocDown = e => {
-            if (dropdown.contains(e.target)) return;
-            if (activeField && (activeField.closest('.vsl-field') || activeField).contains(e.target)) return;
-            closeDropdown();
-        };
-        function openDropdown() { positionDropdown(); dropdown.hidden = false; document.addEventListener('mousedown', onDocDown); }
-        function closeDropdown() { dropdown.hidden = true; document.removeEventListener('mousedown', onDocDown); }
-
-        function localItem(m) {
-            const meta = [m.server != null ? 'S' + m.server : null, m.lastrank_id ? 'saved snapshot' : null].filter(Boolean).join(' · ');
-            return el('button', { className: 'vsl-find-item', type: 'button', onclick: () => { closeDropdown(); setSnapFromMatch(m); } },
-                el('span', { className: 'vsl-find-name', translate: 'no', text: (m.tag ? '[' + m.tag + '] ' : '') + (m.name || '') }),
-                meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
-        }
-        function lrItem(r) {
-            const meta = [r.server != null ? 'S' + r.server : null, r.power != null ? formatCompact(r.power) + ' pw' : null,
-                r.kills != null ? formatCompact(r.kills) + ' k' : null].filter(Boolean).join(' · ');
-            return el('button', { className: 'vsl-find-item', type: 'button', onclick: async () => {
-                oppTag.value = r.tag || ''; oppName.value = r.name || ''; if (r.server != null) oppServer.value = r.server;
-                lrInput.value = r.lastrank_id;
-                closeDropdown();
-                snapNote.textContent = 'Confirming…';
-                try {
-                    snap = await api('POST', '/api/vs-league/opponent-lookup', { url: r.lastrank_id });
-                    snapNote.textContent = 'Power ' + formatCompact(snap.power) + ' · kills ' + formatCompact(snap.kills) + ' · ' + snap.member_count + '/100';
-                } catch (e) {
-                    snap = { alliance_id: r.lastrank_id, tag: r.tag, name: r.name, server_id: r.server, power: r.power, kills: r.kills, member_count: null, last_seen_at: null };
-                    snapNote.textContent = 'Selected — power ' + formatCompact(r.power) + ' · kills ' + formatCompact(r.kills);
+        // The shared combobox (remote-finder.js), anchored under whichever of Opp tag / Opp name
+        // has focus; the opponent grid is its positioning context.
+        const finder = buildRemoteFinder({
+            inputs: [oppTag, oppName],
+            localSearch: localMatches,
+            context: () => oppServer.value.trim(),
+            guard: () => {
+                if (oppServer.value.trim()) return null;
+                oppServer.focus();
+                return 'Enter the opponent server number — LastRank search matches it strictly.';
+            },
+            remoteSearch: q => api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q)
+                + '&server=' + encodeURIComponent(oppServer.value.trim())).then(list => list || []),
+            localHead: 'In your registry',
+            remoteHead: 'From LastRank',
+            searchingText: 'Searching LastRank…',
+            emptyText: () => 'No LastRank matches on server ' + oppServer.value.trim() + '.',
+            position: f => {
+                if (!f) return;
+                const cell = f.closest('.vsl-field') || f;
+                finder.dropdown.style.left = cell.offsetLeft + 'px';
+                finder.dropdown.style.top = (cell.offsetTop + cell.offsetHeight + 4) + 'px';
+                finder.dropdown.style.minWidth = cell.offsetWidth + 'px';
+                finder.dropdown.style.maxWidth = (oppGrid.clientWidth - cell.offsetLeft) + 'px';
+            },
+            item: (m, kind) => {
+                if (kind === 'local') {
+                    return {
+                        label: (m.tag ? '[' + m.tag + '] ' : '') + (m.name || ''),
+                        meta: [m.server != null ? 'S' + m.server : null, m.lastrank_id ? 'saved snapshot' : null].filter(Boolean).join(' · '),
+                        onPick: () => setSnapFromMatch(m),
+                    };
                 }
-                fillOppSnapshot(snap.power, snap.kills, snap.member_count);
-            } },
-                el('span', { className: 'vsl-find-name', translate: 'no', text: (r.tag ? '[' + r.tag + '] ' : '') + (r.name || r.lastrank_id.slice(0, 8)) }),
-                meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
-        }
-        function renderDropdown(localList, lrList, msg, isError, showAction) {
-            clear(dropdown);
-            if (localList && localList.length) {
-                dropdown.appendChild(el('div', { className: 'vsl-find-head', text: 'In your registry' }));
-                localList.forEach(m => dropdown.appendChild(localItem(m)));
-            }
-            if (lrList && lrList.length) {
-                dropdown.appendChild(el('div', { className: 'vsl-find-head', text: 'From LastRank' }));
-                lrList.forEach(r => dropdown.appendChild(lrItem(r)));
-            }
-            if (msg) dropdown.appendChild(el('div', { className: isError ? 'vsl-find-msg vsl-find-err' : 'vsl-find-msg', text: msg }));
-            if (showAction) dropdown.appendChild(el('button', { className: 'vsl-find-action', type: 'button', onclick: runLastRankSearch }, '🔎 Look up “' + queryVal() + '” on LastRank'));
-            if (dropdown.childNodes.length) openDropdown(); else closeDropdown();
-        }
-        async function runLastRankSearch() {
-            const q = queryVal();
-            const srv = oppServer.value.trim();
-            if (!q) return;
-            if (!srv) { renderDropdown(localMatches(q), null, 'Enter the opponent server number — LastRank search matches it strictly.', true, false); oppServer.focus(); return; }
-            renderDropdown(localMatches(q), null, 'Searching LastRank…', false, false);
-            try {
-                const list = await api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q) + '&server=' + encodeURIComponent(srv));
-                renderDropdown(localMatches(q), list, (list && list.length) ? null : 'No LastRank matches on server ' + srv + '.', false, false);
-            } catch (e) { renderDropdown(localMatches(q), null, e.message, true, false); }
-        }
-        function refreshFind() {
-            const q = queryVal();
-            if (!q) { closeDropdown(); return; }
-            renderDropdown(localMatches(q), null, null, false, true);
-        }
-        [oppTag, oppName].forEach(f => {
-            f.addEventListener('focus', () => { activeField = f; });
-            f.addEventListener('input', () => { activeField = f; refreshFind(); });
-            f.addEventListener('keydown', e => {
-                if (e.key === 'Escape') closeDropdown();
-                else if (e.key === 'Enter' && !dropdown.hidden) { e.preventDefault(); runLastRankSearch(); }
-            });
+                return {
+                    label: (m.tag ? '[' + m.tag + '] ' : '') + (m.name || m.lastrank_id.slice(0, 8)),
+                    meta: [m.server != null ? 'S' + m.server : null, m.power != null ? formatCompact(m.power) + ' pw' : null,
+                        m.kills != null ? formatCompact(m.kills) + ' k' : null].filter(Boolean).join(' · '),
+                    onPick: async r => {
+                        oppTag.value = r.tag || ''; oppName.value = r.name || ''; if (r.server != null) oppServer.value = r.server;
+                        lrInput.value = r.lastrank_id;
+                        snapNote.textContent = 'Confirming…';
+                        try {
+                            snap = await api('POST', '/api/vs-league/opponent-lookup', { url: r.lastrank_id });
+                            snapNote.textContent = 'Power ' + formatCompact(snap.power) + ' · kills ' + formatCompact(snap.kills) + ' · ' + snap.member_count + '/100';
+                        } catch (e) {
+                            snap = { alliance_id: r.lastrank_id, tag: r.tag, name: r.name, server_id: r.server, power: r.power, kills: r.kills, member_count: null, last_seen_at: null };
+                            snapNote.textContent = 'Selected — power ' + formatCompact(r.power) + ' · kills ' + formatCompact(r.kills);
+                        }
+                        fillOppSnapshot(snap.power, snap.kills, snap.member_count);
+                    },
+                };
+            },
         });
+        const oppGrid = el('div', { className: 'vsl-form-grid vsl-opp-grid' },
+            field('Opp server', oppServer), field('Opp tag', oppTag), field('Opp name', oppName), finder.dropdown);
 
         const lookupBtn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Look up');
         lookupBtn.addEventListener('click', async () => {
@@ -1107,19 +1075,22 @@
         }
         const oppLabel = (wk.opponent_tag ? '[' + wk.opponent_tag + '] ' : 'Opponent ') + 'roster';
 
+        // The MVP picker keeps its own mechanics — two local groups (our roster, theirs) and no
+        // LastRank lookup, which buildRemoteFinder's single local group can't express — but uses
+        // the shared .finder-* classes, so it looks like every other picker.
         function mvpField(d) {
             const side = sel([['ours', 'Ours'], ['opp', 'Opp']], d.mvp_is_ours === false ? 'opp' : 'ours');
             side.className = 'form-input vsl-mvp-side';
             const input = inp('text', d.mvp_name || '', 'MVP name — search or type');
-            const dd = el('div', { className: 'vsl-find-dropdown vsl-mvp-dd', hidden: 'hidden' });
+            const dd = el('div', { className: 'finder-dropdown vsl-mvp-dd', hidden: 'hidden' });
             const wrap = el('div', { className: 'vsl-mvp-wrap' }, side, input, dd);
             const onDocDown = e => { if (!wrap.contains(e.target)) close(); };
             function open() { dd.hidden = false; document.addEventListener('mousedown', onDocDown); }
             function close() { dd.hidden = true; document.removeEventListener('mousedown', onDocDown); }
             const pick = (nm, isOurs) => { input.value = nm; side.value = isOurs ? 'ours' : 'opp'; close(); };
-            const item = (nm, meta, isOurs) => el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick(nm, isOurs) },
-                el('span', { className: 'vsl-find-name', translate: 'no', text: nm }),
-                meta ? el('span', { className: 'vsl-find-meta', text: meta }) : null);
+            const item = (nm, meta, isOurs) => el('button', { className: 'finder-item', type: 'button', onclick: () => pick(nm, isOurs) },
+                el('span', { className: 'finder-name', translate: 'no', text: nm }),
+                meta ? el('span', { className: 'finder-meta', text: meta }) : null);
             function render() {
                 // Folded on both sides: the opponent roster comes straight from
                 // LastRank and is the likeliest place in the app for accented
@@ -1128,11 +1099,11 @@
                 clear(dd);
                 if (!q) { close(); return; }
                 ourRoster.filter(m => foldSearch(m.name).includes(q)).slice(0, 6).forEach((m, i, arr) => {
-                    if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'Our roster' }));
+                    if (i === 0) dd.appendChild(el('div', { className: 'finder-head', text: 'Our roster' }));
                     dd.appendChild(item(m.name, m.rank || '', true));
                 });
                 (oppRoster || []).filter(m => foldSearch(m.name).includes(q)).slice(0, 6).forEach((m, i) => {
-                    if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: oppLabel }));
+                    if (i === 0) dd.appendChild(el('div', { className: 'finder-head', text: oppLabel }));
                     dd.appendChild(item(m.name, m.power != null ? formatCompact(m.power) + ' pw' : '', false));
                 });
                 if (!dd.childNodes.length) { close(); return; }
@@ -1289,12 +1260,7 @@
 
         // Per-tag alliance finder: registry type-ahead + LastRank lookup (needs the row's server).
         function attachFinder(tagInput, serverInput, row) {
-            const dd = el('div', { className: 'vsl-find-dropdown vsl-bracket-dd', hidden: 'hidden' });
-            const wrap = el('div', { className: 'vsl-tagwrap' }, tagInput, dd);
-            const onDoc = e => { if (!wrap.contains(e.target)) close(); };
-            function open() { dd.hidden = false; document.addEventListener('mousedown', onDoc); }
-            function close() { dd.hidden = true; document.removeEventListener('mousedown', onDoc); }
-            const pick = a => { tagInput.value = a.tag || ''; row.name = a.name || ''; if (a.server != null) serverInput.value = a.server; close(); };
+            const pick = a => { tagInput.value = a.tag || ''; row.name = a.name || ''; if (a.server != null) serverInput.value = a.server; };
             // Folds its own argument (foldSearch lowercases too), so callers pass raw
             // input and "pacha" still finds "[PÀCHA]".
             const localItems = raw => {
@@ -1302,45 +1268,42 @@
                 if (!q) return [];
                 return knownAlliances.filter(a => foldSearch(a.tag).includes(q) || foldSearch(a.name).includes(q)).slice(0, 6);
             };
-            function render(locals, lrs, msg, isErr) {
-                clear(dd);
-                (locals || []).forEach((a, i) => {
-                    if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'Registry' }));
-                    dd.appendChild(el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick(a) },
-                        el('span', { className: 'vsl-find-name', translate: 'no', text: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || '') }),
-                        a.server != null ? el('span', { className: 'vsl-find-meta', text: 'S' + a.server }) : null));
-                });
-                (lrs || []).forEach((a, i) => {
-                    if (i === 0) dd.appendChild(el('div', { className: 'vsl-find-head', text: 'LastRank' }));
-                    dd.appendChild(el('button', { className: 'vsl-find-item', type: 'button', onclick: () => pick({ tag: a.tag, name: a.name, server: a.server }) },
-                        el('span', { className: 'vsl-find-name', translate: 'no', text: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || '') }),
-                        el('span', { className: 'vsl-find-meta', text: [a.server != null ? 'S' + a.server : null, a.power != null ? formatCompact(a.power) + ' pw' : null].filter(Boolean).join(' · ') })));
-                });
-                if (msg) dd.appendChild(el('div', { className: isErr ? 'vsl-find-msg vsl-find-err' : 'vsl-find-msg', text: msg }));
-                if (tagInput.value.trim()) dd.appendChild(el('button', { className: 'vsl-find-action', type: 'button', onclick: lookupLR }, '🔎 Look up on LastRank'));
-                if (dd.childNodes.length) open(); else close();
-            }
-            async function lookupLR() {
-                const q = tagInput.value.trim(), srv = serverInput.value.trim();
-                if (!q) return;
-                if (!srv) { render(localItems(q), null, 'Enter this alliance’s server # to search LastRank.', true); serverInput.focus(); return; }
-                render(localItems(q), null, 'Searching LastRank…', false);
-                try {
-                    const list = await api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q) + '&server=' + encodeURIComponent(srv));
-                    render(localItems(q), list, (list && list.length) ? null : 'No matches on server ' + srv + '.', false);
-                } catch (e) { render(localItems(q), null, e.message, true); }
-            }
+            const finder = buildRemoteFinder({
+                inputs: [tagInput],
+                localSearch: localItems,
+                context: () => serverInput.value.trim(),
+                guard: () => {
+                    if (serverInput.value.trim()) return null;
+                    serverInput.focus();
+                    return 'Enter this alliance’s server # to search LastRank.';
+                },
+                remoteSearch: q => api('GET', '/api/external-alliances/search?q=' + encodeURIComponent(q)
+                    + '&server=' + encodeURIComponent(serverInput.value.trim())).then(list => list || []),
+                actionLabel: () => 'Look up on LastRank',
+                localHead: 'Registry',
+                remoteHead: 'LastRank',
+                searchingText: 'Searching LastRank…',
+                emptyText: () => 'No matches on server ' + serverInput.value.trim() + '.',
+                item: (a, kind) => ({
+                    label: (a.tag ? '[' + a.tag + '] ' : '') + (a.name || ''),
+                    meta: kind === 'local'
+                        ? (a.server != null ? 'S' + a.server : '')
+                        : [a.server != null ? 'S' + a.server : null, a.power != null ? formatCompact(a.power) + ' pw' : null].filter(Boolean).join(' · '),
+                    onPick: () => pick(kind === 'local' ? a : { tag: a.tag, name: a.name, server: a.server }),
+                }),
+            });
+            finder.dropdown.classList.add('vsl-bracket-dd');
+            const wrap = el('div', { className: 'vsl-tagwrap' }, tagInput, finder.dropdown);
+            // The finder's own input listener shows the matches; this one keeps the bracket's
+            // exact-tag autofill (name, and the server when it's empty) and the "ours" marking.
             tagInput.addEventListener('input', () => {
                 const q = foldSearch(tagInput.value.trim());
                 const exact = knownAlliances.find(a => foldSearch(a.tag) === q);
                 row.name = exact ? (exact.name || '') : '';
                 if (exact && exact.server != null && !serverInput.value) serverInput.value = exact.server;
-                if (!q) { close(); return; }
-                render(localItems(q), null, null, false);
                 markOurs();
             });
-            tagInput.addEventListener('focus', () => { const q = tagInput.value.trim(); if (q) render(localItems(q), null, null, false); });
-            tagInput.addEventListener('keydown', e => { if (e.key === 'Escape') close(); else if (e.key === 'Enter' && !dd.hidden) { e.preventDefault(); lookupLR(); } });
+            tagInput.addEventListener('focus', () => finder.refresh());
             return wrap;
         }
 
