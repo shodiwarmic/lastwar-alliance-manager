@@ -54,8 +54,9 @@ services:
     environment:
       # Trusts the external public domain requests
       - aliasgroup1=https://${APP_DOMAIN}
-      # Trusts the internal Docker network WOPI requests
-      - aliasgroup2=http://alliance-manager:8080
+      # Trusts the internal Docker network WOPI requests. Must name the same host the app
+      # puts in its WOPISrc, so both read WOPI_INTERNAL_HOST from .env with one default.
+      - aliasgroup2=http://${WOPI_INTERNAL_HOST:-alliance-manager:8080}
       - extra_params=--o:ssl.enable=false --o:ssl.termination=true
     extra_hosts:
       "${APP_DOMAIN}": "host-gateway"

@@ -859,10 +859,18 @@ func generateWOPIToken(w http.ResponseWriter, r *http.Request) {
 		collaboraDomain = "collabora." + strings.Split(r.Host, ":")[0]
 	}
 
-	// --- DOCKER NETWORKING FIX ---
-	// Generate the internal WOPISrc so Collabora talks directly to Go
-	// over the private Docker bridge network, bypassing the firewall entirely.
-	internalHost := "alliance-manager:8080"
+	// The WOPISrc is the address COLLABORA calls back on, not the browser: the app's name
+	// and port on the compose network, so the callbacks stay on the private bridge and
+	// never leave through the proxy or the firewall. WOPI_INTERNAL_HOST moves it — another
+	// service name, Collabora on another host, a changed internal port — and must match
+	// Collabora's aliasgroup2, which docker-compose.yml interpolates from the same .env
+	// key with the same default, so one line in .env moves both. The default stays 8080
+	// even when PORT differs: changing PORT means changing the compose file too
+	// (docs/DEPLOYMENT.md), and a default derived from PORT would disagree with compose's.
+	internalHost := os.Getenv("WOPI_INTERNAL_HOST")
+	if internalHost == "" {
+		internalHost = "alliance-manager:8080"
+	}
 	wopiSrc := fmt.Sprintf("http://%s/wopi/files/%d", internalHost, fileID)
 
 	w.Header().Set("Content-Type", "application/json")

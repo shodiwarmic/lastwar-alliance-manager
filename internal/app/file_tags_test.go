@@ -266,6 +266,38 @@ func TestWOPICollaboraPortPerHost(t *testing.T) {
 	check("http://10.7.1.16:8080/wt", "10.7.1.16:9980")
 }
 
+// TestWOPIInternalHost proves the WOPISrc names WOPI_INTERNAL_HOST, with the compose
+// network's alliance-manager:8080 when it is unset (docker-compose.yml's aliasgroup2 has the
+// same default).
+func TestWOPIInternalHost(t *testing.T) {
+	setupFileTagsTestDB(t)
+	res, _ := db.Exec(`INSERT INTO files (title, file_name, file_type, min_rank, min_edit_rank, owner_user_id, updated_at)
+		VALUES ('Doc', 'd.docx', 'document', 'R1', 'R4', 10, CURRENT_TIMESTAMP)`)
+	fileID, _ := res.LastInsertId()
+
+	wopiSrc := func() string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		generateWOPIToken(w, withVars(httptest.NewRequest(http.MethodGet, "/wt", nil), fileID, &AuthUser{ID: 1, Username: "admin", IsAdmin: true}))
+		if w.Code != http.StatusOK {
+			t.Fatalf("wopi-token: status %d", w.Code)
+		}
+		var out struct {
+			WOPISrc string `json:"wopi_src"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &out)
+		return out.WOPISrc
+	}
+	t.Setenv("WOPI_INTERNAL_HOST", "")
+	if got, want := wopiSrc(), fmt.Sprintf("http://alliance-manager:8080/wopi/files/%d", fileID); got != want {
+		t.Errorf("unset: wopi_src = %q, want %q", got, want)
+	}
+	t.Setenv("WOPI_INTERNAL_HOST", "am-blue:9090")
+	if got, want := wopiSrc(), fmt.Sprintf("http://am-blue:9090/wopi/files/%d", fileID); got != want {
+		t.Errorf("set: wopi_src = %q, want %q", got, want)
+	}
+}
+
 // TestFileUpdatedByRoundTrip proves an edit stamps updated_by and getFilesList resolves
 // it to the editor's username.
 func TestFileUpdatedByRoundTrip(t *testing.T) {
