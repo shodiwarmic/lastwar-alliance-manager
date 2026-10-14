@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v3.0.0 — unreleased
+## v3.0.0 — 2026-10-14
 
 Updates install from the Admin page. After this release has been installed once from a terminal,
 an administrator installs every later release — patch, minor or major — from **Admin → Security
