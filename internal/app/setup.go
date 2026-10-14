@@ -126,8 +126,10 @@ func ensureSetupKey(path string) error {
 
 // setupGate sends every request to /setup while the install is unclaimed. Static files stay
 // reachable (the setup page needs its CSS and JS, and they are served unauthenticated
-// anyway), and the mobile API gets a JSON error its client can show rather than an HTML
-// redirect. Once claimed it costs one atomic load.
+// anyway), the mobile API gets a JSON error its client can show rather than an HTML
+// redirect, and /api/health answers (a fresh install is healthy before it has an
+// administrator — the HEALTHCHECK and install.sh both wait on it). Once claimed it costs one
+// atomic load.
 func setupGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !installUnclaimed.Load() {
@@ -136,7 +138,7 @@ func setupGate(next http.Handler) http.Handler {
 		}
 		p := r.URL.Path
 		switch {
-		case p == "/setup" || p == "/api/setup":
+		case p == "/setup" || p == "/api/setup" || p == "/api/health":
 			next.ServeHTTP(w, r)
 		case strings.HasPrefix(p, "/api/mobile/"):
 			w.Header().Set("Content-Type", "application/json")

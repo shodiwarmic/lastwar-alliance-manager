@@ -388,8 +388,14 @@ level promises about an update is set out in [RELEASING.md](RELEASING.md).
 
 prints the install directory and its registry entry, the release of the image and of the host
 files, the deployed Caddyfile revision beside the one this release ships, the image the container
-is actually running, its startup line, and `docker compose ps`. The same versions are on
-**Admin → Security & API → About this install**. Quote both when reporting a problem.
+is actually running and its health, its startup line, and `docker compose ps`. The same versions
+are on **Admin → Security & API → About this install**. Quote both when reporting a problem.
+
+From v3.0.0 the image carries a Docker `HEALTHCHECK`: every 30 seconds the container probes its
+own `GET /api/health`, which answers `200 {"status":"ok"}` when the app is up and its database
+answers a query, and `503` otherwise. `docker ps` shows the state (`healthy`, `unhealthy`, or
+`starting` for the first 90 seconds, while migrations run). The route needs no login, says nothing
+else about the install, and is safe to point an external uptime monitor at.
 
 `./scripts/manage.sh backup` takes the pre-update backup on its own, at any time.
 

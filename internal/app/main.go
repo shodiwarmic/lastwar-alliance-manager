@@ -202,6 +202,12 @@ func renderTemplateStatus(w http.ResponseWriter, r *http.Request, tmplName strin
 // cmd/server so the repository root holds a handful of directories instead of eighty
 // Go files.
 func Main() {
+	// The image's HEALTHCHECK runs the binary as a probe (health.go). It reads nothing
+	// and starts nothing: the container's environment already carries PORT.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheck(healthcheckURL(), os.Stderr))
+	}
+
 	// 1. Load Environment Variables
 	if err := godotenv.Load(); err != nil {
 		slog.Info("No .env file found, relying on system environment variables")
@@ -374,6 +380,9 @@ func Main() {
 // registrations (the demo block list is asserted route by route against it).
 func buildRouter() *mux.Router {
 	router := mux.NewRouter()
+
+	// Liveness, unauthenticated and exempt from the setup gate (health.go).
+	router.HandleFunc("/api/health", healthHandler).Methods("GET")
 
 	// Auth routes (public)
 	router.HandleFunc("/api/login", login).Methods("POST")

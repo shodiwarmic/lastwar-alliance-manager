@@ -630,7 +630,7 @@ render_caddy() {
 # --- status ----------------------------------------------------------------------------------
 
 cmd_status() {
-    local name deployed template image line
+    local name deployed template image health line
     operator_app_dir
     require_install
     log "Install directory:  $APP_DIR"
@@ -650,6 +650,10 @@ cmd_status() {
     fi
     image=$(sudo docker inspect -f '{{.Config.Image}}' alliance-manager 2>/dev/null || true)
     log "Running image:             ${image:-(container not running)}"
+    if [ -n "$image" ]; then
+        health=$(sudo docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}no healthcheck (an image before v3.0.0){{end}}' alliance-manager 2>/dev/null || true)
+        log "Health:                    ${health:-unknown}"
+    fi
     line=$(dc logs --no-log-prefix alliance-manager 2>/dev/null | grep 'Initializing Alliance Manager server' | tail -n1 || true)
     [ -n "$line" ] && log "Startup line:              $line"
     log ""

@@ -660,3 +660,35 @@ test_backup_without_wal_or_shm() {
     assert_status 0
     assert_called "sudo chown --reference=$APP/data/alliance.db $APP/data/alliance.db-wal"
 }
+
+# --- status ----------------------------------------------------------------------------------
+
+test_status_shows_the_containers_health() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    stub_respond docker <<'SH'
+case "$*" in
+    *Config.Image*) echo ghcr.io/shodiwarmic/lastwar-alliance-manager:v9.9.9 ;;
+    *State.Health*) echo healthy ;;
+esac
+exit 0
+SH
+    run cmd_status
+    assert_status 0
+    assert_contains "$OUT" "Health:                    healthy"
+}
+
+test_status_says_when_the_container_is_not_running() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    stub_respond docker <<'SH'
+case "$*" in inspect*) exit 1 ;; esac
+exit 0
+SH
+    run cmd_status
+    assert_status 0
+    assert_contains "$OUT" "(container not running)"
+    assert_not_contains "$OUT" "Health:"
+}

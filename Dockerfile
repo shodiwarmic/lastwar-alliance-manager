@@ -78,5 +78,11 @@ RUN chmod +x /app/entrypoint.sh
 # then drops to appuser via gosu before exec'ing the binary.
 EXPOSE 8080
 
+# Liveness: the binary probes its own /api/health (the image has no curl or wget). The start
+# period is generous because migrations run before the listener opens. The host update agent
+# reads this state to decide whether an update worked.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD ["/app/alliance-manager", "healthcheck"]
+
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["./alliance-manager"]

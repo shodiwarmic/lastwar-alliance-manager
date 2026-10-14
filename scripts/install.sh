@@ -244,14 +244,13 @@ start_stack() {
     (cd "$APP_DIR" && sudo docker compose pull && sudo docker compose up -d)
 }
 
-# wait_for_app — until the app answers. A fresh install answers / with a redirect to /setup,
-# so the wait follows redirects and takes the FINAL status; a bare poll of /login would see
-# the redirect forever.
+# wait_for_app — until the app's health route answers 200. It is exempt from the setup gate,
+# so a fresh install (every page redirecting to /setup) answers it too.
 wait_for_app() {
     step "Waiting for the app to start"
     local code
     for _ in $(seq 1 "${AM_WAIT_TRIES:-45}"); do
-        code=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8080/ 2>/dev/null || true)
+        code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8080/api/health 2>/dev/null || true)
         [ "$code" = 200 ] && return 0
         sleep "${AM_WAIT_INTERVAL:-2}"
     done

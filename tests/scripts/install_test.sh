@@ -35,7 +35,8 @@ fi
 exit 0
 SH
     stub_respond curl <<'SH'
-case "$*" in *127.0.0.1:8080*) printf 200 ;; *) exit 7 ;; esac
+# Only the health route answers 200: every other path of a fresh install redirects to /setup.
+case "$*" in *127.0.0.1:8080/api/health*) echo "# probed /api/health" >> "$STUB_LOG"; printf 200 ;; *127.0.0.1:8080*) printf 302 ;; *) exit 7 ;; esac
 SH
     APP="$TEST_TMP/install"
     unpack_fake_asset "$APP" v9.9.9
@@ -49,6 +50,8 @@ test_fresh_non_interactive_install() {
     fake_host
     run main --non-interactive --domain app.warmic.test
     assert_status 0
+    grep -q '^# probed /api/health$' "$STUB_LOG" || _fail "wait_for_app should poll /api/health"
+    assert_not_contains "$OUT" "has not answered"
 
     ENV_FILE="$APP/.env"
     local key
