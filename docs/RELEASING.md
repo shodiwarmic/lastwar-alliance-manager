@@ -26,6 +26,24 @@ audits whether a feature "deserved" its minor. Choose between them by judgement 
 — getting it wrong costs nothing, whereas calling a host-affecting change a patch costs an
 operator a broken install.
 
+### Majors by judgement
+
+A host-file change **forces** a major, and CI checks that. Some changes should make a release a
+major even when the classifier is silent, because what they ask of the people receiving them is
+more than pulling an image:
+
+- **A breaking change to `/api/mobile/*`.** Two client apps — the scanner and the collector — sit
+  on members' phones, and they cannot be updated in step with the server. Removing a field,
+  changing a meaning or tightening a validation breaks them on the day the server moves.
+- **A migration that cannot be rolled back.** Where going back to the previous release would need
+  the pre-update backup rather than the previous image, say so with the level.
+- **Anything needing an operator decision** — a DNS record, a firewall port, a value only they
+  have. The image cannot supply it, so a pull alone is not the whole update.
+
+Declaring one needs no CI change: step 5 of the release-level check skips a major whatever its
+paths. The level table's "what the operator has to do" column is a floor, not a definition — a
+major promises at least that much work, not exactly that much.
+
 ### The host-files asset
 
 What an install needs besides the image — the files `.github/host-files.manifest` lists — ships

@@ -31,17 +31,19 @@ HOST_FILES = ('docker-compose.yml', 'docker-compose.local-ocr.yml',
 # host-affecting would force a major release for every CI tweak, which is how a guardrail
 # erodes by annoyance. tests/ holds the host scripts' test runner: CI-only.
 # deploy/demo/ is the public demo's own deployment (docs/DEMO.md): run by the project, shipped
-# to no operator, so neither image nor host.
-NEUTRAL_DIRS = ('docs/', '.github/', 'tests/', 'deploy/demo/')
+# to no operator, so neither image nor host. scripts/dev/ is the maintainers' dev tooling (the
+# production-to-dev database refresh): it sits under scripts/ only to be found, runs on a dev
+# box, and is shipped to nobody. It is checked before HOST_DIRS, so it wins over scripts/.
+NEUTRAL_DIRS = ('docs/', '.github/', 'tests/', 'deploy/demo/', 'scripts/dev/')
 NEUTRAL_FILES = ('README.md', 'CLAUDE.md', 'SECURITY.md', 'LICENSE',
                  'CHANGELOG.md', '.gitignore', '.dockerignore')
 
-# Host-classified, but deliberately NOT in the host-files asset -- each with its reason. The
-# manifest check fails on an entry here that is no longer tracked, so this list cannot rot.
-NOT_SHIPPED = {
-    'scripts/refresh-dev-db.sh': 'dev tooling: copies the production database to a dev box',
-    'scripts/refresh-dev-db.conf.example': 'dev tooling: the config for the line above',
-}
+# Host-classified, but deliberately NOT in the host-files asset -- each with its reason. Empty
+# today: the dev tooling that used to sit here moved to scripts/dev/, which is neutral, because
+# a host path in a release's diff forces a major whether or not the asset carries it. Kept for
+# the next host file that genuinely must not ship. The manifest check fails on an entry here
+# that is no longer tracked, so this list cannot rot.
+NOT_SHIPPED = {}
 
 
 def classify(path):

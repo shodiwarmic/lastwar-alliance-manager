@@ -536,7 +536,7 @@ jobs:
           shopt -s nullglob
           # Every script the host-files asset ships -- read from the manifest, so this can never
           # name a file that is not tracked -- plus the libraries, the asset builder and the tests.
-          # scripts/refresh-dev-db.sh is deliberately absent: dev tooling, not shipped.
+          # scripts/dev/ is deliberately absent: dev tooling, neutral, not shipped.
           mapfile -t shipped < <(sed 's/#.*//; s/[[:space:]]*$//' .github/host-files.manifest | grep '\.sh$')
           files=("${shipped[@]}" scripts/lib/*.sh .github/scripts/*.sh
                  tests/scripts/*.sh tests/scripts/lib/*.sh tests/scripts/lib/stubs/*)

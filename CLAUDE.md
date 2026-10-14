@@ -2428,7 +2428,11 @@ to change too. CI enforces exactly that on the tag by classifying every changed 
 means **a new top-level path in the repo needs adding to one of the three lists** in
 `.github/scripts/release_paths.py` (shared by the release-level check and the host-files
 manifest check); an unclassified path fails the release. A new **host** file also goes in
-`.github/host-files.manifest` or in `NOT_SHIPPED` — Build & Test fails until it does.
+`.github/host-files.manifest` or in `NOT_SHIPPED` — Build & Test fails until it does. Dev-only
+tooling goes in `scripts/dev/`, which is neutral: anywhere else under `scripts/` is host, and
+forces a major. Some changes are a major **by judgement** even when the classifier is silent — a
+breaking `/api/mobile/*` change, a migration that cannot be rolled back, anything needing an
+operator decision (`docs/RELEASING.md` → Majors by judgement).
 
 `main` publishes `:edge`; a version tag publishes `:vX.Y.Z` and `:vX.Y` plus a **draft** GitHub
 Release carrying `host-files.tar.gz`. `:latest` moves only when a human **publishes** that draft
