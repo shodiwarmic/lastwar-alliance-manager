@@ -14,7 +14,9 @@
 # Inputs the checks read, set by the caller: APP_DIR, PROXY (caddy|none), OCR (cloud|local),
 # DOMAIN, COLLAB_DOMAIN, RERUN (1 when this directory already holds this install), PF_TOOLS
 # (the binaries the `tools` check requires), PF_LOG (where ignored checks are recorded) and
-# IGNORE (comma-separated ids from --ignore).
+# IGNORE (comma-separated ids from --ignore). AM_NO_REMEDY=1 — set by the host update agent —
+# offers no remedy at all: a remediable failure is unresolved, so nothing runs apt-get or
+# systemctl enable because somebody pressed a button in the app.
 
 declare -gA PF_CLASS=() PF_IGNORABLE=() PF_REMEDY=()
 
@@ -83,7 +85,12 @@ pf_define not-root blocking 0
 check_not_root() {
     # Refuses ROOT. An ordinary user with sudo rights passes; the scripts call sudo exactly
     # where they need it, and files in the install directory stay the operator's.
+    # AM_ALLOW_ROOT=1 is the host update agent's exemption — it runs as root, from systemd, with
+    # no operator to own the run — and manage.sh then hands everything it created under the
+    # install directory back to that directory's owner (normalise_ownership), so the reason for
+    # the rule still holds. Nothing else sets it.
     [ "$(pf_euid)" -ne 0 ] && return 0
+    [ "${AM_ALLOW_ROOT:-0}" = 1 ] && return 0
     PF_MSG="running as root — run this as an ordinary user with sudo rights"
     return 1
 }
@@ -140,7 +147,8 @@ check_arch_ocr() {
 
 # The binary each tool comes from. Only the names that differ are listed; everything else
 # is installed under its own name.
-declare -gA PF_PACKAGE=([ss]=iproute2 [gpg]=gnupg [sha256sum]=coreutils [crontab]=cron)
+declare -gA PF_PACKAGE=([ss]=iproute2 [gpg]=gnupg [sha256sum]=coreutils [crontab]=cron
+                        [flock]=util-linux [setpriv]=util-linux [jq]=jq)
 
 # Where a tool may live that an ordinary user's PATH does not reach: Debian's default user PATH
 # has no sbin, so `command -v ufw` fails for the (deliberately non-root) operator even once ufw
@@ -384,7 +392,7 @@ preflight_run() {
                 continue
             fi
             if [ "$interactive" = 0 ]; then
-                if [ -n "$can_fix" ]; then
+                if [ -n "$can_fix" ] && [ "${AM_NO_REMEDY:-0}" != 1 ]; then
                     step "Fixing $id"
                     "${PF_REMEDY[$id]}"
                     remedied=1

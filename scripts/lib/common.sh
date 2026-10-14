@@ -17,6 +17,9 @@ AM_BACKUP_DIR=${AM_BACKUP_DIR:-/var/backups/lastwar}
 AM_BACKUP_HELPER=${AM_BACKUP_HELPER:-/usr/local/bin/backup-lastwar.sh}
 AM_LOG_DIR=${AM_LOG_DIR:-/var/log/lastwar}
 AM_CADDYFILE=${AM_CADDYFILE:-/etc/caddy/Caddyfile}
+# Root-owned state of the host update agent, one directory per registered install: the
+# journal, the claimed request's copy, receipts and the rollback bundle. The app never sees it.
+AM_STATE_DIR=${AM_STATE_DIR:-/var/lib/alliance-manager}
 
 # The first release that ships a host-files asset. Anything older can only be reached by
 # the manual pin path (set APP_VERSION, compose pull).
@@ -123,8 +126,9 @@ version_lt() {
 
 # resolve_latest_release — print the newest published release's tag, or nothing.
 # Never fails: no curl, no network and "no release yet" (the API's 404) all print nothing,
-# and the caller keeps whatever pin it had. jq is deliberately not a dependency: one known
-# key in a known payload is a sed away. [frozen — see the header]
+# and the caller keeps whatever pin it had. jq is not needed here: one known key in a known
+# payload is a sed away. (apply's data-mount check does need it, for compose's JSON.)
+# [frozen — see the header]
 resolve_latest_release() {
     local json
     command -v curl >/dev/null 2>&1 || return 0
@@ -226,8 +230,23 @@ for f in "\$REGISTRY_DIR"/*.conf; do
         echo "\$name: no database at \$db" >&2
         continue
     fi
+    # An update holds this lock from its first step to its last; a backup taken while one
+    # runs could copy a database half way through a migration or a restore. Skipped, not
+    # waited for: tomorrow night's run will take it. The lock is the install owner's file, so
+    # a run that has to create it hands it over.
+    lock="\$APP_DIR/.update.lock"
+    if [ ! -e "\$lock" ]; then
+        : >> "\$lock" && chown --reference="\$APP_DIR" "\$lock"
+    fi
     ts=\$(date +%Y%m%d_%H%M%S)
-    sqlite3 "\$db" ".backup '\$BACKUP_DIR/nightly_\${name}_\$ts.db'"
+    # 75 is flock's answer for "held"; anything else non-zero is the backup's own failure.
+    rc=0
+    flock -n -E 75 "\$lock" sqlite3 "\$db" ".backup '\$BACKUP_DIR/nightly_\${name}_\$ts.db'" || rc=\$?
+    if [ "\$rc" = 75 ]; then
+        echo "\$name: an update of this install is running (\$lock is held) — skipped tonight" >&2
+        continue
+    fi
+    [ "\$rc" = 0 ] || exit "\$rc"
     # Opening the database can create -wal/-shm as root while the container is down; hand
     # them back to the database's owner.
     for x in "\$db-wal" "\$db-shm"; do
@@ -243,11 +262,12 @@ find "\$BACKUP_DIR" -maxdepth 1 \( -name 'nightly_*.db' -o -name 'alliance_*.db'
 EOF
 }
 
-# ensure_backup_helper — install (or replace) the helper and root's crontab line. Prints one
-# line saying what it did. An existing helper that is neither ours nor the pre-v2.0.0 shape
-# is kept aside, dated, rather than silently overwritten.
+# ensure_backup_helper [--text-only] — install (or replace) the helper and root's crontab line.
+# Prints one line saying what it did. An existing helper that is neither ours nor the
+# pre-v2.0.0 shape is kept aside, dated, rather than silently overwritten. --text-only (every
+# update's refresh) rewrites the helper and leaves root's crontab alone.
 ensure_backup_helper() {
-    local tmp current outcome=written
+    local tmp current outcome=written text_only=${1:-}
     tmp=$(mktemp)
     backup_helper_text "$AM_REGISTRY_DIR" "$AM_BACKUP_DIR" > "$tmp"
     if [ -e "$AM_BACKUP_HELPER" ]; then
@@ -270,6 +290,10 @@ ensure_backup_helper() {
     fi
     rm -f "$tmp"
 
+    if [ "$text_only" = --text-only ]; then
+        log "Nightly backup helper: $outcome"
+        return 0
+    fi
     sudo mkdir -p "$AM_LOG_DIR" || return 1
     if ! sudo crontab -l 2>/dev/null | grep -qF "$AM_BACKUP_HELPER"; then
         { sudo crontab -l 2>/dev/null || true

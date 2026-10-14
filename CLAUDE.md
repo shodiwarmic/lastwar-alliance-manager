@@ -2502,7 +2502,29 @@ Rules that must hold:
   to `deploy/Caddyfile`, or no install re-renders. A rollback never lowers it.
 - **The nightly backup helper is root-owned and self-contained** — it runs from root's cron,
   so it must execute nothing from an install directory (operator-writable). Its text lives in
-  `backup_helper_text`; don't make it call `manage.sh`.
+  `backup_helper_text`; don't make it call `manage.sh`. It skips an install whose update lock
+  is held (below), and every update refreshes its text where it is installed.
+- **One updater per install.** Stage 1 takes `flock -n` on `$APP_DIR/.update.lock` and holds it
+  through the `exec` into `apply`; a second run dies with one line. The host update agent holds
+  the lock for its whole transaction and hands the descriptor down as `AM_UPDATE_LOCK_FD`, which
+  stage 1 reuses. The file is created owned by the install's owner and **never deleted** (a new
+  inode would be a second lock).
+- **Root only for the agent.** `check_not_root` refuses root unless `AM_ALLOW_ROOT=1`, which only
+  the agent sets; `AM_NO_REMEDY=1` (also the agent's) makes the preflight run no remedy, so no
+  `apt-get` runs from a button. Under root, `normalise_ownership` hands everything root created
+  under `$APP_DIR` back to the directory's owner — `data/`, `uploads/` and `.git` pruned,
+  anchored at `$APP_DIR` — on every way out of stage 1 and `apply`, the post-marker trap
+  included.
+- **The agent's hooks in `apply`**, all optional and frozen with the argument list:
+  `--receipt FILE` (`receipt-<id>`) names this run's backups after the request (`db_<ts>-<id>.db`),
+  hardlinks the database backup into `$AM_BACKUP_DIR/pinned/<id>.db` before the pull, and
+  rewrites the receipt atomically at each phase — `backed-up`, `armed`, `marker`, `up`;
+  `--offline` refuses unless every image of the stack is already local, pulls nothing and runs
+  `up -d --pull never`. Under `AM_UPDATE_LOCK_FD` the post-`up` image prune is skipped (the
+  agent's rollback still needs the previous images). And on every run, before anything changes,
+  `check_data_mount` refuses a merged stack whose most specific mount for
+  `/app/data/alliance.db` or `/app/data/update` is anything but the `./data` bind. It reads
+  compose's JSON with `jq`, which `apply` checks for itself: stage 1 is one release old.
 - **Tests:** `bash tests/scripts/run.sh` — plain bash, stubbed system commands, every system
   path redirected into a temp dir. CI runs it with `bash -n` and `shellcheck -x -S warning`
   (**Host scripts check**). The dev box has the same shellcheck as the runner (0.9.0, from apt),

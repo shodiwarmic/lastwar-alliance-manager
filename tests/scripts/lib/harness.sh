@@ -24,6 +24,7 @@ harness_setup() {
     export AM_BACKUP_HELPER="$TEST_TMP/sys/usr/local/bin/backup-lastwar.sh"
     export AM_LOG_DIR="$TEST_TMP/sys/var/log/lastwar"
     export AM_CADDYFILE="$TEST_TMP/sys/etc/caddy/Caddyfile"
+    export AM_STATE_DIR="$TEST_TMP/sys/var/lib/alliance-manager"
     export NON_INTERACTIVE=1
 }
 

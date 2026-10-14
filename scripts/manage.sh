@@ -5,6 +5,7 @@
 #   ./scripts/manage.sh update [--version vX.Y.Z | --asset FILE] [--yes]
 #       Move the install — host files AND image, together — to the newest release, or to the
 #       one named (which is also how to roll back). --asset takes a local host-files tarball.
+#       --receipt FILE and --offline are the host update agent's (see cmd_apply).
 #   ./scripts/manage.sh migrate [--asset FILE] [--name NAME] [--yes]
 #       Convert an install from before v2.0.0 (a git clone, or an SCP copy) to versioned host
 #       files, in place. Run it once, after `git pull`. Data is never moved.
@@ -26,10 +27,20 @@
 # unpack_asset in lib/common.sh.
 #
 #     apply --app-dir DIR --target TAG --staging DIR [--migrate] [--yes] [--name NAME]
+#           [--receipt FILE] [--offline]                                    (from v3.0.0)
 #
 # A release may ADD arguments but must keep accepting these. apply warns about and ignores
 # any argument it does not know, so a newer stage 1 driving an older apply — a rollback with
-# --version — still works.
+# --version — still works. --receipt and --offline are the host update agent's: the agent's
+# recovery runs a previous release's apply through this same list, from that release's own
+# copy, so they are frozen with the rest.
+#
+# ── One updater at a time ──
+# Stage 1 takes an exclusive flock on $APP_DIR/.update.lock and holds it through the exec
+# into apply, so an operator's terminal run and the host update agent can never interleave.
+# The agent holds the lock itself for its whole transaction and passes the descriptor down as
+# AM_UPDATE_LOCK_FD; stage 1 then uses it rather than contending. The file is created owned by
+# the install's owner and never deleted, so its inode stays the one everybody locks.
 #
 # ── Two anchors ──
 # The operator-invoked commands derive APP_DIR from this file's location. apply NEVER does:
@@ -111,6 +122,60 @@ operator_app_dir() {
     export APP_DIR
 }
 
+# am_stat_uid PATH — the uid owning PATH. A seam: the tests cannot create files owned by
+# anyone but themselves.
+am_stat_uid() { stat -c %u "$1"; }
+
+# normalise_ownership — hand back to the install directory's owner everything under it that
+# root created. A no-op unless this runs as root (only the host update agent does, under
+# AM_ALLOW_ROOT) and the directory is someone else's. A root-owned file left in the install —
+# a root-owned 0600 .env above all — would make the operator's next terminal run read the
+# install as broken. data/ and uploads/ are the container's and are not walked, nor is .git;
+# -path is anchored at $APP_DIR, so an install that itself sits under a directory named data
+# is still repaired. -h changes a symlink's own owner, never its target's. AM_ROOT_UID is a
+# test seam (the uid root's files carry).
+normalise_ownership() {
+    local owner
+    [ -n "${APP_DIR:-}" ] && [ -d "$APP_DIR" ] || return 0
+    [ "$(pf_euid)" -eq 0 ] || return 0
+    owner=$(am_stat_uid "$APP_DIR") || return 0
+    [ "$owner" != 0 ] || return 0
+    find "$APP_DIR" \( -path "$APP_DIR/data" -o -path "$APP_DIR/uploads" -o -path "$APP_DIR/.git" \) -prune \
+        -o -user "${AM_ROOT_UID:-0}" -exec chown -h --reference="$APP_DIR" {} + \
+        || warn "could not hand every file under $APP_DIR back to its owner; check with: find $APP_DIR -user 0"
+}
+
+# take_update_lock — the one-updater-per-install lock (see the header). Dies with one line if
+# another updater holds it.
+take_update_lock() {
+    local lock="$APP_DIR/.update.lock" fd=${AM_UPDATE_LOCK_FD:-}
+    [ -n "${AM_LOCK_FD:-}" ] && return 0   # already held by this run
+    command -v flock >/dev/null 2>&1 \
+        || die "flock is not installed; it is part of util-linux (sudo apt-get install util-linux)"
+    if [[ $fd =~ ^[0-9]+$ ]] && { : >&"$fd"; } 2>/dev/null; then
+        return 0   # inherited from the host update agent, which holds it
+    fi
+    if [ ! -e "$lock" ]; then
+        : >> "$lock" || die "could not create $lock"
+        if [ "$(pf_euid)" -eq 0 ]; then
+            chown --reference="$APP_DIR" "$lock"
+        fi
+    fi
+    exec {AM_LOCK_FD}>>"$lock" || die "could not open $lock"
+    flock -n "$AM_LOCK_FD" \
+        || die "another update of this install is running (it holds $lock); nothing changed"
+}
+
+# receipt_id FILE — the request id a receipt path names (receipt-<id>, the id 1–40 of
+# [A-Za-z0-9-]). Prints it, or fails.
+receipt_id() {
+    local base id
+    base=$(basename "$1")
+    id=${base#receipt-}
+    [ "receipt-$id" = "$base" ] && [[ $id =~ ^[A-Za-z0-9-]{1,40}$ ]] || return 1
+    printf '%s' "$id"
+}
+
 require_install() {
     if [ ! -f "$APP_DIR/docker-compose.yml" ] || [ ! -f "$APP_DIR/.env" ]; then
         die "$APP_DIR has no docker-compose.yml and .env, so it is not an install directory"
@@ -119,7 +184,9 @@ require_install() {
 
 # manage_preflight [EXTRA_TOOL...]
 manage_preflight() {
-    PF_TOOLS="curl tar sqlite3 sha256sum openssl $*"
+    # flock: the one-updater lock. setpriv and jq: the host update agent's spool I/O and
+    # apply's data-mount check, which reads compose's JSON.
+    PF_TOOLS="curl tar sqlite3 sha256sum openssl flock setpriv jq $*"
     PF_LOG="$APP_DIR/manage.log"
     preflight_run not-root sudo tools docker compose-v2 docker-running disk
 }
@@ -135,7 +202,7 @@ To return to releases: ./scripts/manage.sh update --version vX.Y.Z"
 
 # stage1 MIGRATE ARGS... — the part that is one release old. Keep it small.
 stage1() {
-    local migrate=$1 version='' asset='' yes=0 name='' tag staging dl
+    local migrate=$1 version='' asset='' yes=0 name='' receipt='' offline=0 tag staging dl
     shift
     while [ $# -gt 0 ]; do
         case $1 in
@@ -143,6 +210,8 @@ stage1() {
             --asset) asset=${2:-}; shift 2 ;;
             --yes|-y) yes=1; shift ;;
             --name) name=${2:-}; shift 2 ;;
+            --receipt) receipt=${2:-}; shift 2 ;;
+            --offline) offline=1; shift ;;
             -h|--help) usage; exit 0 ;;
             *) die "unknown option: $1 (see --help)" ;;
         esac
@@ -150,6 +219,16 @@ stage1() {
     if [ -n "$version" ] && [ -n "$asset" ]; then
         die "--version and --asset name two different targets; give one"
     fi
+    if [ "$offline" = 1 ] && [ -z "$asset" ]; then
+        die "--offline needs --asset: without a local tarball there is nothing to install"
+    fi
+    if [ -n "$receipt" ]; then
+        receipt_id "$receipt" >/dev/null || die "--receipt must name a file called receipt-<id>"
+    fi
+    # Every way out of stage 1 short of the handover leaves nothing root-owned behind (exec
+    # runs no EXIT trap; apply repairs ownership itself).
+    trap 'normalise_ownership' EXIT
+    take_update_lock
 
     if [ -n "$asset" ]; then
         [ -f "$asset" ] || die "no such file: $asset"
@@ -215,6 +294,8 @@ To run that release's image anyway, set APP_VERSION=$version in .env, then:
     [ "$migrate" = 1 ] && args+=(--migrate)
     [ "$yes" = 1 ] && args+=(--yes)
     [ -n "$name" ] && args+=(--name "$name")
+    [ -n "$receipt" ] && args+=(--receipt "$receipt")
+    [ "$offline" = 1 ] && args+=(--offline)
     log "Handing over to the $tag updater."
     am_exec "$staging/scripts/manage.sh" "${args[@]}"
 }
@@ -222,6 +303,9 @@ To run that release's image anyway, set APP_VERSION=$version in .env, then:
 cmd_update() {
     operator_app_dir
     require_install
+    # Before anything reads .env: while another updater runs, .env can be mid-rewrite — under
+    # the host update agent, briefly root's — and what it says is not yet true.
+    take_update_lock
     if ! env_has HOST_FILES_VERSION; then
         die "this install has not been migrated to versioned host files (v2.0.0). Run:
     git pull && ./scripts/manage.sh migrate
@@ -234,6 +318,7 @@ cmd_update() {
 cmd_migrate() {
     operator_app_dir
     require_install
+    take_update_lock
     if env_has HOST_FILES_VERSION; then
         die "this install is already migrated (host files $(env_get HOST_FILES_VERSION)) — use ./scripts/manage.sh update"
     fi
@@ -247,25 +332,38 @@ cmd_migrate() {
 
 # --- Backups ---------------------------------------------------------------------------------
 
-# backup_install — app_<ts>.tar.gz of the install directory (without .git, .staging and data/
-# — the database is covered by the consistent .backup beside it, and a tar of a live WAL
+# backup_install [ID] — app_<ts>.tar.gz of the install directory (without .git, .staging and
+# data/ — the database is covered by the consistent .backup beside it, and a tar of a live WAL
 # database is not; data/ can also hold gigabytes of OCR archive) and db_<ts>.db. uploads/
 # stays in: it is the alliance's files, and this is their only backup. Each pool keeps its
 # newest ten. The nightly pool is the root-owned helper's, not this.
+#
+# With ID (a host update agent request, from --receipt) the names carry it — db_<ts>-<ID>.db —
+# so no other backup, however close in time, can take the name, and the database backup is
+# hardlinked at once into pinned/<ID>.db, outside the newest-ten prune: the agent's restore
+# point is that exact file, held before anything is pulled. Sets BACKUP_APP and BACKUP_DB.
 backup_install() {
-    local ts db x prefix
+    local id=${1:-} ts db x prefix suffix=''
     ts=$(date +%Y%m%d_%H%M%S)
     BACKUP_TS=$ts
+    [ -n "$id" ] && suffix="-$id"
+    BACKUP_APP="$AM_BACKUP_DIR/app_$ts$suffix.tar.gz"
+    BACKUP_DB=''
     sudo mkdir -p "$AM_BACKUP_DIR"
     step "Backing up to $AM_BACKUP_DIR"
-    sudo tar -czf "$AM_BACKUP_DIR/app_$ts.tar.gz" -C "$APP_DIR" \
-        --exclude=./.git --exclude=./.staging --exclude=./data .
-    sudo chmod 600 "$AM_BACKUP_DIR/app_$ts.tar.gz"
+    sudo tar -czf "$BACKUP_APP" -C "$APP_DIR" \
+        --exclude=./.git --exclude=./.staging --exclude=./data --exclude=./.update.lock .
+    sudo chmod 600 "$BACKUP_APP"
     db="$APP_DIR/data/alliance.db"
     # sudo: the database belongs to the container's user, not the operator.
     if sudo test -f "$db"; then
-        sudo sqlite3 "$db" ".backup '$AM_BACKUP_DIR/db_$ts.db'"
-        sudo chmod 600 "$AM_BACKUP_DIR/db_$ts.db"
+        BACKUP_DB="$AM_BACKUP_DIR/db_$ts$suffix.db"
+        sudo sqlite3 "$db" ".backup '$BACKUP_DB'"
+        sudo chmod 600 "$BACKUP_DB"
+        if [ -n "$id" ]; then
+            sudo mkdir -p "$AM_BACKUP_DIR/pinned"
+            sudo ln -f "$BACKUP_DB" "$AM_BACKUP_DIR/pinned/$id.db"
+        fi
         # Opening the database can create -wal/-shm as root while the container is down.
         for x in "$db-wal" "$db-shm"; do
             if sudo test -e "$x"; then
@@ -277,10 +375,70 @@ backup_install() {
         sudo find "$AM_BACKUP_DIR" -maxdepth 1 -name "$prefix*" -printf '%T@ %p\n' \
             | sort -rn | tail -n +11 | cut -d' ' -f2- | xargs -r sudo rm -f
     done
-    log "  $AM_BACKUP_DIR/app_$ts.tar.gz"
-    if sudo test -f "$AM_BACKUP_DIR/db_$ts.db"; then
-        log "  $AM_BACKUP_DIR/db_$ts.db"
+    log "  $BACKUP_APP"
+    if [ -n "$BACKUP_DB" ]; then
+        log "  $BACKUP_DB"
     fi
+}
+
+# backup_schema_max FILE — the highest applied goose migration in a database file, or nothing.
+backup_schema_max() {
+    sudo sqlite3 "$1" "SELECT COALESCE(MAX(version_id), '') FROM goose_db_version WHERE is_applied = 1;" 2>/dev/null || true
+}
+
+# write_receipt PHASE — the host update agent's record of this run (--receipt), rewritten
+# atomically (temp beside it, then rename) at each phase, so a reader sees a whole receipt or
+# the previous one, never half of one. It names the exact backups this run took and the schema
+# maximum of that backup: the agent's only restore point. phase is how far apply got —
+# backed-up, armed (the rollback trap is set), marker (HOST_FILES_VERSION written: no
+# rollback from here), up (the containers started) — so a failure before the marker, which
+# apply's own trap put back, is told apart from one after it. FROZEN: the agent of a later
+# release reads it; add keys, never change one.
+write_receipt() {
+    [ -n "${RECEIPT:-}" ] || return 0
+    local tmp
+    tmp=$(mktemp "$RECEIPT.XXXXXX")
+    {
+        printf 'alliance-manager update receipt 1\n'
+        printf 'id=%s\n' "$RECEIPT_ID"
+        printf 'app_dir=%s\n' "$APP_DIR"
+        printf 'from=%s\n' "$RECEIPT_FROM"
+        printf 'to=%s\n' "$RECEIPT_TO"
+        printf 'db_backup=%s\n' "${BACKUP_DB:-}"
+        printf 'app_backup=%s\n' "${BACKUP_APP:-}"
+        printf 'pinned_db=%s\n' "$([ -n "${BACKUP_DB:-}" ] && printf '%s' "$AM_BACKUP_DIR/pinned/$RECEIPT_ID.db")"
+        printf 'schema_max=%s\n' "${RECEIPT_SCHEMA:-}"
+        printf 'phase=%s\n' "$1"
+    } > "$tmp"
+    sync -- "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$RECEIPT"
+}
+
+# check_data_mount — refuse, before anything changes, a stack whose next `up` would not give
+# the app its database and its update spool from $APP_DIR/data: the host update agent backs
+# up, restores and talks to the app through exactly those paths. For each of the two, the
+# most specific mount covering it — the longest target that is it or a parent of it — must
+# be the ./data bind; a named volume, another host path, or a file or directory mounted over
+# it beneath a correct parent all refuse. Read from compose's own merged view of the staged
+# stack (dc_staged), with sources resolved to absolute paths.
+check_data_mount() {
+    local json path verdict
+    json=$(dc_staged config --format json) \
+        || fail_apply "the $target compose files do not form a valid stack with this install's .env and overrides (above)"
+    for path in /app/data/alliance.db /app/data/update; do
+        verdict=$(jq -r --arg p "$path" --arg want "$APP_DIR/data" '
+            (.services["alliance-manager"].volumes // [])
+            | map(select(.target as $t | $p == $t or ($p | startswith(($t | rtrimstr("/")) + "/"))))
+            | sort_by(.target | length) | last
+            | if . == null then "no mount covers \($p)"
+              elif .type == "bind" and ((.source // "") | rtrimstr("/")) == $want then "ok"
+              else "\($p) is on a \(.type) mount of \(.source // "?") at \(.target)" end' <<<"$json") \
+            || fail_apply "could not read the $target stack's mounts (jq)"
+        [ -n "$verdict" ] || verdict="docker compose described no stack"
+        if [ "$verdict" != ok ]; then
+            fail_apply "the $target stack would not keep the app's data in $APP_DIR/data: $verdict. The update and its backups assume that bind (docker-compose.yml's ./data:/app/data); an override that moves it has to go first."
+        fi
+    done
 }
 
 cmd_backup() {
@@ -358,6 +516,7 @@ apply_on_exit() {
         "$AM_BACKUP_DIR" "${BACKUP_TS:-}" >&2
     rm -rf "$SNAP"
     remove_staging
+    normalise_ownership
 }
 
 # remove_staging — the unpacked release, once finished with. Only ever a directory under
@@ -443,7 +602,7 @@ preserve_git_changes() {
 }
 
 cmd_apply() {
-    local app_dir='' target='' staging='' migrate=0 yes=0 name=default
+    local app_dir='' target='' staging='' migrate=0 yes=0 name=default receipt='' offline=0
     while [ $# -gt 0 ]; do
         case $1 in
             --app-dir) app_dir=$2; shift 2 ;;
@@ -452,6 +611,8 @@ cmd_apply() {
             --migrate) migrate=1; shift ;;
             --yes) yes=1; shift ;;
             --name) name=$2; shift 2 ;;
+            --receipt) receipt=$2; shift 2 ;;
+            --offline) offline=1; shift ;;
             *) warn "apply: ignoring an argument this release does not know: $1"; shift ;;
         esac
     done
@@ -462,10 +623,22 @@ cmd_apply() {
     STAGING_DIR=$staging
     export APP_DIR
     cd "$APP_DIR"
-    # However this ends — a refusal below included — the unpacked release is not left behind.
-    trap 'remove_staging' EXIT
+    # However this ends — a refusal below included — the unpacked release is not left behind,
+    # and nothing root created is left root-owned.
+    trap 'remove_staging; normalise_ownership' EXIT
     AM_WRITER="manage.sh $target"
     registry_valid_name "$name" || die "--name may hold letters, digits, . _ and - only"
+    RECEIPT='' RECEIPT_ID='' RECEIPT_SCHEMA='' RECEIPT_TO=$target
+    RECEIPT_FROM=$(env_get APP_VERSION)
+    if [ -n "$receipt" ]; then
+        RECEIPT_ID=$(receipt_id "$receipt") || die "--receipt must name a file called receipt-<id>"
+        RECEIPT=$receipt
+    fi
+    # Stage 1 checked its own tools, and stage 1 is the previous release's: one from before
+    # v3.0.0 never asked for jq, which the data-mount check below needs.
+    if ! pf_tool_present jq; then
+        PF_TOOLS=jq PF_LOG="$APP_DIR/manage.log" preflight_run tools
+    fi
 
     local shipped previous p summary=() patches helper_out
     shipped=$(mktemp) previous=$(mktemp)
@@ -480,8 +653,15 @@ cmd_apply() {
         sort .host-files.list > "$previous"
     fi
 
+    # 0. Refuse, before anything changes, a stack that would move the app's data.
+    check_data_mount
+
     # 1. Backup.
-    backup_install
+    backup_install "$RECEIPT_ID"
+    if [ -n "$RECEIPT" ]; then
+        [ -n "$BACKUP_DB" ] && RECEIPT_SCHEMA=$(backup_schema_max "$BACKUP_DB")
+        write_receipt backed-up
+    fi
 
     # 2. Migrate only: refuse, or preserve, before anything changes.
     if [ "$migrate" = 1 ]; then
@@ -520,6 +700,7 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
     APPLY_ARMED=1
     trap 'apply_on_exit $?' EXIT
     trap 'exit 130' INT TERM
+    write_receipt armed
 
     # 3. Pin, before the pull: compose resolves ${APP_VERSION} from .env when it runs.
     env_set APP_VERSION "$target"
@@ -533,9 +714,24 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
     # (lastwar-private-docs#247). The merged stack is validated first, so a stack compose
     # refuses fails with compose's own reason rather than as a pull error; step 7 checks the
     # installed copy again.
-    step "Pulling the $target images"
+    # --offline (the agent's rollback, which must not need the registry) pulls nothing: every
+    # image the stack names has to be here already, or nothing moves.
     dc_staged config -q || fail_apply "the $target compose files do not form a valid stack with this install's .env and overrides (above)"
-    dc_staged pull || fail_apply "could not pull the $target images"
+    if [ "$offline" = 1 ]; then
+        step "Checking the $target images are already on this host (offline)"
+        local img
+        local -a missing=()
+        while IFS= read -r img; do
+            [ -n "$img" ] || continue
+            sudo docker image inspect "$img" >/dev/null 2>&1 || missing+=("$img")
+        done < <(dc_staged config --images)
+        if [ ${#missing[@]} -gt 0 ]; then
+            fail_apply "offline, and not on this host: ${missing[*]}"
+        fi
+    else
+        step "Pulling the $target images"
+        dc_staged pull || fail_apply "could not pull the $target images"
+    fi
 
     # 5 / 6. Remove what the previous release delivered and this one does not. Bounded to that
     # set, so a file the operator created is never a candidate.
@@ -591,6 +787,14 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
         fi
     fi
 
+    # The nightly backup helper's text belongs to the release too (from v3.0.0 it skips an
+    # install whose update lock is held), so an update refreshes it where one is installed.
+    # Its crontab line is the install's and migrate's business, not an update's.
+    if [ "$migrate" != 1 ] && [ -e "$AM_BACKUP_HELPER" ]; then
+        helper_out=$(ensure_backup_helper --text-only)
+        [ "$helper_out" = "Nightly backup helper: unchanged" ] || summary+=("$helper_out")
+    fi
+
     # 9. The proxy config, if this host runs our Caddy and the release ships a newer revision.
     render_caddy "$target"
 
@@ -603,23 +807,35 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
     # to be created sees it. An `up` that fails after this is retried by the next update.
     env_set HOST_FILES_VERSION "$target"
     APPLY_ARMED=0
-    trap 'remove_staging' EXIT
+    # Ownership is repaired on this way out too: a failed `up` below exits 1, and a root-owned
+    # .env left by it would make the operator's next terminal run read the install as
+    # unmigrated.
+    trap 'remove_staging; normalise_ownership' EXIT
     trap - INT TERM
     rm -rf "$SNAP"
+    write_receipt marker
 
     # 12. Start what was pulled.
     step "Starting $target"
-    if ! dc up -d; then
+    local -a up=(up -d)
+    [ "$offline" = 1 ] && up+=(--pull never)
+    if ! dc "${up[@]}"; then
         warn "the containers did not start. The install is on $target and consistent; see"
         warn "    cd $APP_DIR && sudo docker compose logs alliance-manager"
         warn "and run ./scripts/manage.sh update again to retry."
         exit 1
     fi
-    sudo docker image prune -f >/dev/null || true
+    write_receipt up
+    # Not under the host update agent, which still needs the previous release's images until
+    # it has verified this one (they are its offline rollback); it prunes when it is done.
+    if [ -z "${AM_UPDATE_LOCK_FD:-}" ]; then
+        sudo docker image prune -f >/dev/null || true
+    fi
 
     # 13. Tidy.
     remove_staging
     rm -f "$shipped" "$previous"
+    normalise_ownership
 
     log ""
     log "${C_GREEN}${C_BOLD}This install is on $target — host files and image.${C_NC}"

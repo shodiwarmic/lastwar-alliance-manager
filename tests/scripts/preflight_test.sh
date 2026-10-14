@@ -85,6 +85,23 @@ test_not_root_refuses_root_and_passes_a_user() {
     check_not_root || _fail "an ordinary user must pass not-root"
 }
 
+test_not_root_lets_the_update_agent_through_and_nobody_else() {
+    pf_euid() { echo 0; }
+    AM_ALLOW_ROOT=1
+    check_not_root || _fail "AM_ALLOW_ROOT=1 is the agent's exemption"
+    AM_ALLOW_ROOT=yes
+    ! check_not_root || _fail "only the exact value 1 exempts"
+    unset AM_ALLOW_ROOT
+    ! check_not_root || _fail "root without the exemption must still be refused"
+}
+
+test_no_remedy_leaves_a_remediable_failure_unresolved() {
+    AM_NO_REMEDY=1 run preflight_run fixable
+    assert_status 1
+    assert_no_file "$TEST_TMP/remedies" "no remedy may run from a button"
+    assert_contains "$OUT" "prerequisites not met: fixable"
+}
+
 test_os_accepts_debian_and_ubuntu_only() {
     export AM_OS_RELEASE="$TEST_TMP/os-release"
     printf 'ID=debian\nVERSION_CODENAME=bookworm\n' > "$AM_OS_RELEASE"

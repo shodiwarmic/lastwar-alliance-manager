@@ -77,6 +77,18 @@ case "$*" in
         [ -f "$TEST_TMP/fail-pull" ] && exit 1 ;;
     "compose "*"config -q")
         [ -f "$TEST_TMP/fail-config" ] && { echo "invalid compose project" >&2; exit 1; } ;;
+    "compose "*"config --format json")
+        # The merged stack's mounts: a test's own in mounts.json, else the ./data bind.
+        if [ -f "$TEST_TMP/mounts.json" ]; then cat "$TEST_TMP/mounts.json"; else
+            printf '{"services":{"alliance-manager":{"volumes":[{"type":"bind","source":"%s/data","target":"/app/data"},{"type":"bind","source":"%s/uploads","target":"/app/uploads"}]}}}\n' "$PWD" "$PWD"
+        fi ;;
+    "compose "*"config --images")
+        if [ -f "$TEST_TMP/images" ]; then cat "$TEST_TMP/images"; else
+            printf 'ghcr.io/shodiwarmic/lastwar-alliance-manager:%s\ncollabora/code@sha256:feed\n' "$(env_val APP_VERSION)"
+        fi ;;
+    "image inspect "*)
+        # Present unless a test listed it in absent-images.
+        [ -f "$TEST_TMP/absent-images" ] && grep -qxF "${3:-}" "$TEST_TMP/absent-images" && exit 1 ;;
     "compose up -d")
         echo "# up saw marker=$(env_val HOST_FILES_VERSION)" >> "$STUB_LOG"
         [ -f "$TEST_TMP/fail-up" ] && exit 1 ;;
@@ -145,7 +157,7 @@ test_migrate_needs_git_for_a_clone() {
     fake_host
     local bin="$TEST_TMP/nogit" t
     mkdir -p "$bin"
-    for t in dirname cat grep sed tr; do ln -s "$(command -v $t)" "$bin/$t"; done
+    for t in dirname cat grep sed tr flock; do ln -s "$(command -v $t)" "$bin/$t"; done
     PATH="$bin" run cmd_migrate
     assert_status 1
     assert_contains "$OUT" "git is not installed"
@@ -734,4 +746,351 @@ SH
     assert_status 0
     assert_contains "$OUT" "(container not running)"
     assert_not_contains "$OUT" "Health:"
+}
+
+# --- Driven unattended: the host update agent's hooks ------------------------------------------
+
+# migrated_install — a v9.9.9 install, migrated, with an empty stub log.
+migrated_install() {
+    make_clone
+    fake_host
+    apply_migrate
+    assert_status 0
+    : > "$STUB_LOG"
+}
+
+# apply_update [extra args] — stage 2 of an update to v9.9.10.
+apply_update() {
+    rm -rf "$TEST_TMP/stage"
+    make_staging "$TEST_TMP/stage" v9.9.10
+    run cmd_apply --app-dir "$APP" --target v9.9.10 --staging "$TEST_TMP/stage" "$@"
+}
+
+# as_root — run the scripts as the agent does: euid 0, under AM_ALLOW_ROOT, with $APP owned by
+# someone else. The tests cannot own a file as root, so the uid "root's" files carry is this
+# user's, and chown is logged (then really run, as the no-op it is here).
+as_root() {
+    pf_euid() { echo 0; }
+    am_stat_uid() { echo 4242; }
+    AM_ROOT_UID=$(id -u)
+    export AM_ALLOW_ROOT=1 AM_ROOT_UID
+    ln -sf "$TESTS_DIR/lib/stubs/stub" "$STUB_DIR/bin/chown"
+    stub_respond chown <<'SH'
+exec /usr/bin/chown "$@"
+SH
+}
+
+# chowned — the paths ownership repair handed back, relative to $APP, one per line.
+chowned() {
+    stub_calls chown | grep -- "-h --reference=$APP " | tr ' ' '\n' | grep "^$APP/" | sed "s|^$APP/||" | sort -u
+}
+
+receipt_dir() { mkdir -p "$AM_STATE_DIR/default"; printf '%s' "$AM_STATE_DIR/default"; }
+
+test_root_is_refused_without_the_agents_exemption() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    pf_euid() { echo 0; }
+    run cmd_update --asset "$(make_asset v9.9.10)"
+    assert_status 1
+    assert_contains "$OUT" "running as root"
+}
+
+test_the_agents_exemption_passes_preflight_and_reaches_the_handover() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    as_root
+    am_exec() { printf '%s\n' "$@" > "$TEST_TMP/exec-args"; }
+    run cmd_update --asset "$(make_asset v9.9.10)" --yes --receipt "$(receipt_dir)/receipt-abc-123" --offline
+    assert_status 0
+    assert_eq "$(sed -n '2,$p' "$TEST_TMP/exec-args" | tr '\n' ' ')" \
+        "apply --app-dir $APP --target v9.9.10 --staging $APP/.staging/v9.9.10 --yes --receipt $AM_STATE_DIR/default/receipt-abc-123 --offline " \
+        "stage 1 forwards --receipt and --offline"
+}
+
+test_stage1_refuses_offline_without_an_asset() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    run cmd_update --version v9.9.10 --offline
+    assert_status 1
+    assert_contains "$OUT" "--offline needs --asset"
+}
+
+test_stage1_refuses_a_receipt_that_names_no_id() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    run cmd_update --asset "$(make_asset v9.9.10)" --receipt "$TEST_TMP/receipt-../../etc"
+    assert_status 1
+    assert_contains "$OUT" "receipt-<id>"
+}
+
+test_stage1_takes_the_lock_and_refuses_while_it_is_held() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    local asset
+    asset=$(make_asset v9.9.10)
+    exec 8>>"$APP/.update.lock"
+    flock -n 8 || _fail "the test could not take the lock"
+    am_exec() { _fail "no handover while another updater holds the lock"; }
+    run cmd_update --asset "$asset"
+    assert_status 1
+    assert_contains "$OUT" "another update of this install is running"
+    assert_no_dir "$APP/.staging" "nothing staged"
+    exec 8>&-
+
+    am_exec() { echo handed-over; }
+    run cmd_update --asset "$asset"
+    assert_status 0
+    assert_contains "$OUT" handed-over
+    assert_file "$APP/.update.lock" "the lock file is never deleted"
+}
+
+test_a_held_lock_is_reported_before_anything_reads_env() {
+    # Mid-update under the agent, .env can be briefly root's and unreadable: the operator must
+    # be told an update is running, not that the install is unmigrated.
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    exec 8>>"$APP/.update.lock"
+    flock -n 8 || _fail "the test could not take the lock"
+    chmod 000 "$APP/.env"
+    run cmd_update --version v9.9.10
+    chmod 600 "$APP/.env"
+    exec 8>&-
+    assert_status 1
+    assert_contains "$OUT" "another update of this install is running"
+    assert_not_contains "$OUT" "not been migrated"
+}
+
+test_stage1_reuses_the_lock_the_agent_hands_down() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    local asset
+    asset=$(make_asset v9.9.10)
+    exec 9>>"$APP/.update.lock"
+    flock -n 9 || _fail "the test could not take the lock"
+    am_exec() { echo handed-over; }
+    AM_UPDATE_LOCK_FD=9 run cmd_update --asset "$asset"
+    assert_status 0
+    assert_contains "$OUT" handed-over
+    exec 9>&-
+}
+
+test_a_stage1_failure_as_root_leaves_nothing_root_owned() {
+    make_clone
+    fake_host
+    printf 'HOST_FILES_VERSION=v9.9.9\n' >> "$APP/.env"
+    as_root
+    stub_respond curl <<'SH'
+exit 22
+SH
+    run cmd_update --version v9.9.10 --yes
+    assert_status 1
+    assert_contains "$OUT" "could not download"
+    chowned | grep -qx '.update.lock' || _fail "the lock stage 1 created as root was not handed back: $(chowned | tr '\n' ' ')"
+    chowned | grep -qx '.env' || _fail ".env not covered"
+}
+
+test_ownership_repair_covers_the_install_and_skips_data_uploads_and_git() {
+    migrated_install
+    mkdir -p "$APP/.git" && touch "$APP/.git/HEAD"
+    as_root
+    apply_update
+    assert_status 0
+    local paths
+    paths=$(chowned)
+    grep -qx '.env' <<<"$paths" || _fail ".env not handed back: $paths"
+    grep -qx 'scripts/manage.sh' <<<"$paths" || _fail "the new scripts not handed back"
+    ! grep -qE '^(data|uploads|\.git)(/|$)' <<<"$paths" || _fail "walked the container's data or .git: $paths"
+}
+
+test_ownership_repair_runs_on_a_rollback_and_after_a_failed_up() {
+    migrated_install
+    as_root
+    touch "$TEST_TMP/fail-pull"
+    apply_update
+    assert_status 1
+    assert_contains "$OUT" "putting the install back"
+    chowned | grep -qx '.env' || _fail "a rollback left .env root-owned"
+    rm "$TEST_TMP/fail-pull"
+
+    : > "$STUB_LOG"
+    touch "$TEST_TMP/fail-up"
+    apply_update
+    assert_status 1
+    assert_contains "$OUT" "did not start"
+    chowned | grep -qx '.env' || _fail "a failed up after the marker left .env root-owned"
+}
+
+test_ownership_repair_reaches_an_install_under_a_directory_named_data() {
+    APP="$TEST_TMP/data/am"
+    mkdir -p "$APP"
+    make_staging "$APP" v9.9.9
+    mkdir -p "$APP/data" "$APP/uploads"
+    printf 'SESSION_KEY=x\nAPP_VERSION=v9.9.9\nHOST_FILES_VERSION=v9.9.9\nAPP_DOMAIN=app.warmic.test\nCOLLABORA_DOMAIN=c.warmic.test\n' > "$APP/.env"
+    echo db > "$APP/data/alliance.db"
+    ENV_FILE="$APP/.env"
+    fake_host
+    as_root
+    apply_update
+    assert_status 0
+    chowned | grep -qx '.env' || _fail "an install under .../data/ was skipped: $(chowned | tr '\n' ' ')"
+    ! chowned | grep -q '^data/' || _fail "its own data/ was walked"
+}
+
+test_ownership_repair_does_nothing_unless_root() {
+    migrated_install
+    ln -sf "$TESTS_DIR/lib/stubs/stub" "$STUB_DIR/bin/chown"
+    apply_update
+    assert_status 0
+    assert_eq "$(stub_calls chown | grep -c -- '--reference=' || true)" 0
+}
+
+# receipt_get FILE KEY
+receipt_get() { sed -n "s/^$2=//p" "$1"; }
+
+test_the_receipt_names_this_runs_backups_and_its_schema() {
+    migrated_install
+    echo 82 > "$APP/data/alliance.db.schema"
+    local r
+    r="$(receipt_dir)/receipt-req-1"
+    apply_update --receipt "$r"
+    assert_status 0
+    assert_file "$r"
+    assert_eq "$(head -n1 "$r")" "alliance-manager update receipt 1"
+    assert_eq "$(receipt_get "$r" id)" req-1
+    assert_eq "$(receipt_get "$r" app_dir)" "$APP"
+    assert_eq "$(receipt_get "$r" from)" v9.9.9
+    assert_eq "$(receipt_get "$r" to)" v9.9.10
+    assert_eq "$(receipt_get "$r" schema_max)" 82
+    assert_eq "$(receipt_get "$r" phase)" up
+    local db
+    db=$(receipt_get "$r" db_backup)
+    [[ $db == "$AM_BACKUP_DIR"/db_*-req-1.db ]] || _fail "the db backup is not named for the request: $db"
+    [[ $(receipt_get "$r" app_backup) == "$AM_BACKUP_DIR"/app_*-req-1.tar.gz ]] || _fail "app backup name"
+    assert_eq "$(receipt_get "$r" pinned_db)" "$AM_BACKUP_DIR/pinned/req-1.db"
+    [ "$db" -ef "$AM_BACKUP_DIR/pinned/req-1.db" ] || _fail "pinned/req-1.db is not a hardlink of the backup"
+    assert_no_file "$r".* "no temp file left beside the receipt"
+}
+
+test_the_pin_exists_before_the_pull_and_a_later_backup_leaves_it_alone() {
+    migrated_install
+    echo "before the update" > "$APP/data/alliance.db"
+    stub_respond docker <<'SH'
+case "$*" in
+    *"config --format json")
+        printf '{"services":{"alliance-manager":{"volumes":[{"type":"bind","source":"%s/data","target":"/app/data"}]}}}\n' "$PWD" ;;
+    "compose "*pull)
+        if [ -f "$AM_BACKUP_DIR/pinned/req-2.db" ]; then echo "# pinned before pull" >> "$STUB_LOG"; fi ;;
+esac
+exit 0
+SH
+    apply_update --receipt "$(receipt_dir)/receipt-req-2"
+    assert_status 0
+    grep -q '^# pinned before pull$' "$STUB_LOG" || _fail "the database pin did not exist when the pull ran"
+    echo "after the update" > "$APP/data/alliance.db"
+    run cmd_backup
+    assert_status 0
+    assert_eq "$(cat "$AM_BACKUP_DIR/pinned/req-2.db")" "before the update" "a later backup changed the restore point"
+    assert_eq "$(find "$AM_BACKUP_DIR" -maxdepth 1 -name 'db_*' | wc -l)" 3 "the migrate's, the update's and the later backup's"
+}
+
+test_the_receipt_records_how_far_apply_got() {
+    migrated_install
+    local r
+    r="$(receipt_dir)/receipt-req-3"
+    # Record each phase as the docker stub sees it: pull (armed), up (marker).
+    stub_respond docker <<SH
+case "\$*" in
+    *"config --format json")
+        printf '{"services":{"alliance-manager":{"volumes":[{"type":"bind","source":"%s/data","target":"/app/data"}]}}}\n' "\$PWD" ;;
+    "compose "*pull) echo "# pull phase=\$(sed -n 's/^phase=//p' "$r")" >> "\$STUB_LOG" ;;
+    "compose up -d") echo "# up phase=\$(sed -n 's/^phase=//p' "$r")" >> "\$STUB_LOG"; [ -f "$TEST_TMP/fail-up" ] && exit 1 ;;
+esac
+exit 0
+SH
+    apply_update --receipt "$r"
+    assert_status 0
+    grep -q '^# pull phase=armed$' "$STUB_LOG" || _fail "phase at the pull: $(grep '^# pull' "$STUB_LOG")"
+    grep -q '^# up phase=marker$' "$STUB_LOG" || _fail "phase at up: $(grep '^# up' "$STUB_LOG")"
+    assert_eq "$(receipt_get "$r" phase)" up
+
+    touch "$TEST_TMP/fail-up"
+    r="$(receipt_dir)/receipt-req-3"
+    apply_update --receipt "$r"
+    assert_status 1
+    assert_eq "$(receipt_get "$r" phase)" marker "a failed up stops at marker"
+}
+
+test_offline_refuses_a_missing_image_and_changes_nothing() {
+    migrated_install
+    local before
+    before=$(tree_state "$APP")
+    printf 'collabora/code@sha256:feed\n' > "$TEST_TMP/absent-images"
+    apply_update --offline
+    assert_status 1
+    assert_contains "$OUT" "offline, and not on this host: collabora/code@sha256:feed"
+    assert_eq "$(tree_state "$APP")" "$before"
+    assert_not_called "docker compose .* pull"
+    ! stub_calls docker | grep -q ' pull$' || _fail "offline pulled"
+}
+
+test_offline_with_every_image_present_pulls_nothing_and_never_pulls_on_up() {
+    migrated_install
+    apply_update --offline
+    assert_status 0
+    ! stub_calls docker | grep -q ' pull$' || _fail "offline pulled: $(stub_calls docker | tr '\n' '|')"
+    stub_calls docker | grep -qx 'compose up -d --pull never' || _fail "up should be --pull never: $(stub_calls docker | tr '\n' '|')"
+    stub_calls docker | grep -qx 'image inspect ghcr.io/shodiwarmic/lastwar-alliance-manager:v9.9.10' \
+        || _fail "the target app image was not checked"
+}
+
+test_no_prune_under_the_agent() {
+    migrated_install
+    exec 9>>"$APP/.update.lock"
+    AM_UPDATE_LOCK_FD=9 apply_update
+    assert_status 0
+    ! stub_calls docker | grep -q '^image prune' || _fail "pruned under the agent"
+    exec 9>&-
+    apply_update
+    stub_calls docker | grep -q '^image prune' || _fail "a terminal update should still prune"
+}
+
+test_a_stack_that_moves_the_data_is_refused_before_backup_or_pull() {
+    migrated_install
+    local before
+    before=$(tree_state "$APP")
+    for mounts in \
+        '{"services":{"alliance-manager":{"volumes":[{"type":"volume","source":"amdata","target":"/app/data"}]}}}' \
+        '{"services":{"alliance-manager":{"volumes":[{"type":"bind","source":"'"$APP"'/data","target":"/app/data"},{"type":"bind","source":"/srv/other.db","target":"/app/data/alliance.db"}]}}}' \
+        '{"services":{"alliance-manager":{"volumes":[{"type":"bind","source":"'"$APP"'/data","target":"/app/data"},{"type":"volume","source":"spool","target":"/app/data/update"}]}}}' \
+        '{"services":{"alliance-manager":{}}}'; do
+        printf '%s\n' "$mounts" > "$TEST_TMP/mounts.json"
+        : > "$STUB_LOG"
+        apply_update
+        assert_status 1
+        assert_contains "$OUT" "would not keep the app's data in $APP/data"
+        assert_not_called "sudo tar" "a backup was taken"
+        ! stub_calls docker | grep -q ' pull$' || _fail "pulled"
+        assert_eq "$(tree_state "$APP")" "$before"
+    done
+}
+
+test_apply_from_outside_the_install_acts_on_it() {
+    # The agent's recovery shape: a previous release's apply, unpacked in its state directory,
+    # driven with --app-dir and --staging pointing at that same directory.
+    migrated_install
+    local rec="$AM_STATE_DIR/default/recovery-req-4"
+    mkdir -p "$rec"
+    make_staging "$rec" v9.9.10
+    (cd "$TEST_TMP" && run "$rec/scripts/manage.sh" apply --app-dir "$APP" --target v9.9.10 --staging "$rec" --offline --yes
+     assert_status 0)
+    assert_eq "$(ENV_FILE="$APP/.env" env_get HOST_FILES_VERSION)" v9.9.10
+    assert_dir "$rec" "remove_staging touches only \$APP_DIR/.staging/"
 }

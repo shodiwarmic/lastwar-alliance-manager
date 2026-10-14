@@ -359,6 +359,12 @@ The update runs in two stages: the copy of `manage.sh` already on disk fetches a
 new release into `.staging/`, then hands over to the **new** release's own copy, which does the
 work. So a release's changes to the updater take effect in the run that delivers them.
 
+Only one update of an install runs at a time: the update holds a lock on `.update.lock` in the
+install directory from start to finish, and a second one started meanwhile — from another
+terminal, or from the Admin page — stops at once with *another update of this install is
+running*, changing nothing. The nightly backup skips an install while its update runs. Leave the
+file in place; it is empty.
+
 `./scripts/update.sh`, the updater before v2.0.0, still exists and simply runs
 `./scripts/manage.sh update` for you.
 

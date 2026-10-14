@@ -94,3 +94,29 @@ test_ensure_replaces_the_old_shape_and_keeps_a_foreign_file() {
     compgen -G "$AM_BACKUP_HELPER.backup_*" >/dev/null || _fail "the foreign helper was not kept"
     grep -q 'every registered Alliance Manager install' "$AM_BACKUP_HELPER" || _fail "helper not replaced"
 }
+
+test_skips_an_install_whose_update_lock_is_held() {
+    make_install "$TEST_TMP/a"
+    make_install "$TEST_TMP/b"
+    registry_write default "$TEST_TMP/a"
+    registry_write second "$TEST_TMP/b"
+    write_helper
+    exec 8>>"$TEST_TMP/a/.update.lock"
+    flock -n 8 || _fail "the test could not take the lock"
+    run "$AM_BACKUP_HELPER"
+    exec 8>&-
+    assert_status 0
+    assert_contains "$OUT" "default: an update of this install is running"
+    ! compgen -G "$AM_BACKUP_DIR/nightly_default_*.db" >/dev/null || _fail "backed up an install mid-update"
+    compgen -G "$AM_BACKUP_DIR/nightly_second_*.db" >/dev/null || _fail "the other install was skipped too"
+}
+
+test_creates_a_missing_lock_for_the_installs_owner() {
+    make_install "$TEST_TMP/a"
+    registry_write default "$TEST_TMP/a"
+    write_helper
+    run "$AM_BACKUP_HELPER"
+    assert_status 0
+    assert_file "$TEST_TMP/a/.update.lock"
+    assert_eq "$(stat -c %u "$TEST_TMP/a/.update.lock")" "$(stat -c %u "$TEST_TMP/a")"
+}
