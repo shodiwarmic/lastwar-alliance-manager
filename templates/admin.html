@@ -212,11 +212,23 @@
                     </div>
 
                     <div class="settings-group settings-group-divided-top">
-                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-info-circle"/></svg> About this install</h4>
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-info-circle"/></svg> About this install and updates</h4>
                         <p class="help-text">Which build this install is running &mdash; quote both when reporting a problem. The same pair is written to the startup log, so <code>docker compose logs alliance-manager</code> answers it without a login. <code>dev</code> means the image was built without a version stamp; <code>edge</code> means it was built from <code>main</code> rather than from a release.</p>
                         <p class="help-text">Version: <code translate="no">{{.AppVersion}}</code> &mdash; commit: <code translate="no">{{.AppCommit}}</code></p>
                         <p class="help-text">Host files: {{if .HostFilesVersion}}<code translate="no">{{.HostFilesVersion}}</code>{{else}}unknown &mdash; not yet migrated to versioned host files (run <code>./scripts/manage.sh migrate</code>){{end}}. The compose files, scripts and proxy template on the server, which <code>./scripts/manage.sh update</code> moves together with the image; <code>./scripts/manage.sh status</code> shows the same pair on the server.</p>
                         <p class="help-text" id="ocr-service-about">OCR service: <span id="ocr-service-about-text">checking&hellip;</span> The image-recognition service this install sends screenshots to (Admin &rarr; Security &amp; API), and the contract version it answers in; this app reads version 1.</p>
+                        <div class="update-about" id="update-about">
+                            <p class="help-text">Updates: <span id="update-about-text">checking&hellip;</span></p>
+                            <details class="update-notes" id="update-notes" hidden>
+                                <summary>Notes</summary>
+                                <div class="update-notes-text" id="update-notes-text"></div>
+                                <a class="update-notes-link" id="update-notes-link" target="_blank" rel="noopener noreferrer">Read on GitHub</a>
+                            </details>
+                            <div class="update-actions">
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-update-check" style="display:none"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-refresh"/></svg> Check now</button>
+                                <span id="update-check-status" class="status-msg"></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

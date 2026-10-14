@@ -30,6 +30,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Not awaited: a cold OCR service must never hold the page up.
         loadOCRServiceAbout();
+        loadUpdateState();
+        document.getElementById('btn-update-check')?.addEventListener('click', checkForUpdateNow);
 
         // Load initial data
         await loadUsers();
@@ -951,6 +953,106 @@ async function loadOCRServiceAbout() {
         }
     } catch (error) {
         out.textContent = 'could not be checked.';
+    }
+}
+
+// ---- About this install and updates: the release check (release_check.go) ----
+
+// A SQLite datetime('now') value ("YYYY-MM-DD HH:MM:SS", UTC) as "3h ago".
+function updateAgo(ts) {
+    const t = Date.parse(ts.replace(' ', 'T') + (ts.endsWith('Z') ? '' : 'Z'));
+    if (Number.isNaN(t)) return ts;
+    const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+    return `${Math.floor(s / 86400)} d ago`;
+}
+
+function updateCode(text) {
+    const el = document.createElement('code');
+    el.textContent = text;
+    el.setAttribute('translate', 'no');
+    return el;
+}
+
+// renderUpdateState fills the Updates line, the notes disclosure and the Check now button
+// from GET /api/admin/update's body.
+function renderUpdateState(st) {
+    const out = document.getElementById('update-about-text');
+    const notes = document.getElementById('update-notes');
+    const check = document.getElementById('btn-update-check');
+    if (!out) return;
+    out.replaceChildren();
+    notes.hidden = true;
+    // .btn sets display, which beats the hidden attribute: toggle the inline style instead.
+    check.style.display = st.check === 'on' ? 'inline-flex' : 'none';
+
+    if (st.check === 'off') {
+        out.append('checks are off on this install (', updateCode('UPDATE_CHECK=off'), ' in ', updateCode('.env'), ').');
+        return;
+    }
+    if (st.check === 'demo') {
+        out.append('not checked in the demo.');
+        return;
+    }
+    const latest = st.latest;
+    if (!latest) {
+        out.append(st.last_error ? `could not be checked (${st.last_error}).`
+            : 'not checked yet — the first check runs a minute after the server starts.');
+        return;
+    }
+    const running = st.running.version;
+    const isRelease = /^v\d+\.\d+\.\d+$/.test(running);
+    if (latest.level) {
+        const published = latest.published_at ? new Date(latest.published_at).toLocaleDateString() : '';
+        out.append(updateCode(latest.tag), ` (${latest.level}) was published${published ? ' ' + published : ''}.`);
+    } else if (!isRelease) {
+        out.append('the newest release is ', updateCode(latest.tag), '. This install runs a development build (',
+            updateCode(running), '), so no update level can be derived.');
+    } else {
+        out.append(updateCode(running), ' is the newest release.');
+    }
+    if (st.checked_at) out.append(` Checked ${updateAgo(st.checked_at)}.`);
+    if (st.last_error) out.append(` The last check failed (${st.last_error}).`);
+
+    if (latest.level && (latest.notes || latest.url)) {
+        const text = document.getElementById('update-notes-text');
+        text.textContent = (latest.notes || '') + (latest.notes_truncated ? '\n…' : '');
+        const link = document.getElementById('update-notes-link');
+        link.hidden = !latest.url;
+        if (latest.url) link.href = latest.url;
+        notes.hidden = false;
+    }
+}
+
+async function loadUpdateState() {
+    const out = document.getElementById('update-about-text');
+    if (!out) return;
+    try {
+        const res = await fetch('/api/admin/update');
+        if (!res.ok) throw new Error(res.statusText);
+        renderUpdateState(await res.json());
+    } catch (error) {
+        out.textContent = 'could not be read.';
+    }
+}
+
+async function checkForUpdateNow() {
+    const btn = document.getElementById('btn-update-check');
+    const status = document.getElementById('update-check-status');
+    btn.disabled = true;
+    status.textContent = 'Checking…';
+    try {
+        const res = await fetch('/api/admin/update/check', { method: 'POST' });
+        if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+        const st = await res.json();
+        renderUpdateState(st);
+        status.textContent = st.last_error ? '' : 'Checked.';
+    } catch (error) {
+        status.textContent = error.message;
+    } finally {
+        btn.disabled = false;
     }
 }
 

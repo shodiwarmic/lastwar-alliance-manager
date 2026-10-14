@@ -544,6 +544,31 @@ document.addEventListener('DOMContentLoaded', () => {
 })();
 
 
+// ---- Update nudge (release_check.go) ----
+//
+// An administrator's pages carry data-update-available when the daily release check has seen
+// a newer release than this install runs. One toast per session per release, keyed by the
+// tag, so a later release nudges again; the Admin page's "About this install and updates"
+// block carries the detail and is where the toast points. No server-side acknowledgement.
+(function () {
+    const cfg = document.getElementById('layout-config');
+    const tag = cfg && cfg.dataset.updateAvailable;
+    if (!tag) return;
+    const FLAG = 'update-nudged-' + tag;
+    try {
+        if (sessionStorage.getItem(FLAG)) return;
+        sessionStorage.setItem(FLAG, '1');
+    } catch (e) {
+        return; // storage blocked — better silent than nagging every page
+    }
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            showToast(`Alliance Manager ${tag} is available — see Admin → Security & API.`, 'info', 8000);
+        }, 1500);
+    });
+})();
+
+
 // ---- Admin preview as rank (175) ----
 //
 // The banner layout.html renders while an administrator previews a rank: a rank select

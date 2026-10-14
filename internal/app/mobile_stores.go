@@ -145,6 +145,7 @@ func mobileStores() []mobileStore {
 var mobileExcludedTables = map[string]string{
 
 	// Officer judgement or app data: nothing the game shows.
+	"release_state":                "app data: the release check's cache of GitHub's latest release",
 	"member_aliases":               "app data: officers' name-resolution mappings, written alongside scans by save_aliases",
 	"season_participation":         "officer judgement: participation levels, notes and poll votes",
 	"participation_roles":          "officer judgement: a board's lineup",

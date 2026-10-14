@@ -41,6 +41,7 @@ var demoBlocked = []struct{ method, path string }{
 	{"PUT", "/api/admin/security/translation"},
 	{"POST", "/api/admin/credentials"},
 	{"DELETE", "/api/admin/credentials/gcp_vision"},
+	{"POST", "/api/admin/update/check"},
 	{"POST", "/api/mobile/login"},
 	{"GET", "/api/mobile/members"},
 	{"POST", "/api/mobile/preview"},
@@ -130,7 +131,7 @@ func TestDemoKeepsReadsOpen(t *testing.T) {
 	}
 	t.Setenv("DEMO_MODE", "true")
 	admin := sessionCookie(t, 1, "")
-	for _, path := range []string{"/api/admin/users", "/api/lastrank/review/summary", "/api/admin/security/translation/usage", "/api/members"} {
+	for _, path := range []string{"/api/admin/users", "/api/lastrank/review/summary", "/api/admin/security/translation/usage", "/api/members", "/api/admin/update"} {
 		if w := serveRouter(t, "GET", path, "", admin); w.Code != http.StatusOK {
 			t.Errorf("GET %s in demo mode = %d %s", path, w.Code, w.Body.String())
 		}

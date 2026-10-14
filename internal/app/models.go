@@ -1464,6 +1464,10 @@ type PageData struct {
 	// Shown beside AppVersion so a host and an image on different releases are visible from
 	// inside the app. Empty on an install not yet migrated to versioned host files.
 	HostFilesVersion string
+	// UpdateAvailable is the newer release's tag when one exists and this is an
+	// administrator (release_check.go, updateAvailableFor); global.js toasts it once per
+	// session per tag. Empty otherwise — always, for a dev or edge build.
+	UpdateAvailable string
 	// PreviewRank is the rank an administrator is previewing the app as ("" when not).
 	// CanExitPreview is true while they are, and drives the banner's rank switcher and
 	// Exit; PreviewRanks lists the ranks either control offers (admins only).

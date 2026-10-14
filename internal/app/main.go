@@ -84,6 +84,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 			if user.IsAdmin {
 				data.IsAdmin = true
 				data.Permissions = allPermissionsTrue()
+				data.UpdateAvailable = updateAvailableFor(true)
 			} else if user.Rank != "" {
 				data.Permissions = getRankPermissions(user.Rank)
 			}
@@ -274,6 +275,10 @@ func Main() {
 	// Opt-in scheduled LastRank retrieval. The ticker always runs; it does nothing
 	// until an operator enables it in Settings.
 	startLastRankScheduler()
+
+	// The daily check for a newer release (release_check.go). Off under UPDATE_CHECK=off
+	// and in demo mode, where it makes no request at all.
+	startReleaseChecker()
 
 	router := buildRouter()
 
@@ -533,6 +538,8 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/admin/security/password-policy", demoBlock(authMiddleware(adminMiddleware(updatePasswordPolicy)))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/cv-worker", demoBlock(authMiddleware(adminMiddleware(updateCVWorkerURL)))).Methods("PUT")
 	router.HandleFunc("/api/admin/ocr-service", authMiddleware(adminMiddleware(getOCRServiceInfo))).Methods("GET")
+	router.HandleFunc("/api/admin/update", authMiddleware(adminMiddleware(getUpdateState))).Methods("GET")
+	router.HandleFunc("/api/admin/update/check", demoBlock(authMiddleware(adminMiddleware(checkForUpdateNow)))).Methods("POST")
 	router.HandleFunc("/api/admin/security/ocr-archive", demoBlock(authMiddleware(adminMiddleware(updateOCRArchiveSettings)))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/translation", demoBlock(authMiddleware(adminMiddleware(updateTranslationSettings)))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/translation/usage", authMiddleware(adminMiddleware(translationUsage))).Methods("GET")

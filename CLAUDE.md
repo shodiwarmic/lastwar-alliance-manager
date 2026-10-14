@@ -710,6 +710,25 @@ invariant).
 > My Profile, CSV import, prospect accept) and LastRank sync all append rows;
 > HQ never regresses (only a higher value is recorded).
 
+## Release check (`release_check.go`)
+
+The daily "is there a newer release?" check behind Admin → Security & API → **About this
+install and updates** and the admins' once-per-session toast. `startReleaseChecker()` starts it
+in `Main()` beside the LastRank scheduler: a minute after boot, then hourly, it calls GitHub
+only when `release_state.attempted_at` is over 23 hours old and any rate-limit reset GitHub
+named (`next_check_after`) has passed. Rules that must hold:
+
+- **`checkLatestRelease` is the one entry point.** The checker and `POST
+  /api/admin/update/check` both go through it, and it refuses before any request under
+  `UPDATE_CHECK=off` or `DEMO_MODE=true` — so the opt-out cannot be bypassed by a new caller.
+  A `TryLock` keeps two checks from running at once.
+- **`attempted_at` is written before the request**, so a failed or hung check waits a day too
+  (the LastRank "three timestamps" lesson). `checked_at` is every answer GitHub gave (200 or a
+  304 against the stored ETag).
+- **`release_state` is a singleton table of its own** (migration 083, `CHECK (id = 1)`), not
+  columns on `settings`, and is in `mobileExcludedTables` (app data, not game data).
+- **The notes render as text** (`textContent`, `pre-wrap`, capped), never as markdown.
+
 ## Scheduled LastRank retrieval (`lastrank_schedule.go`)
 
 Opt-in, off by default. A 15-minute ticker checks whether the current slot has been
