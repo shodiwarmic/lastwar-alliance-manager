@@ -42,6 +42,7 @@ var demoBlocked = []struct{ method, path string }{
 	{"POST", "/api/admin/credentials"},
 	{"DELETE", "/api/admin/credentials/gcp_vision"},
 	{"POST", "/api/admin/update/check"},
+	{"POST", "/api/admin/update"},
 	{"POST", "/api/mobile/login"},
 	{"GET", "/api/mobile/members"},
 	{"POST", "/api/mobile/preview"},

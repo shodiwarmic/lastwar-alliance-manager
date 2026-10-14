@@ -163,6 +163,9 @@ func checkLatestRelease(ctx context.Context) error {
 	if releaseCheckMode() != "on" {
 		return errReleaseCheckOff
 	}
+	if updateGateActive() {
+		return errUpdateInProgress
+	}
 	if !releaseCheckMu.TryLock() {
 		return errReleaseCheckBusy
 	}

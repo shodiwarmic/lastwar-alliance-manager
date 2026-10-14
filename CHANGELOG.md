@@ -9,6 +9,53 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v3.0.0 — unreleased
+
+Updates install from the Admin page. After this release has been installed once from a terminal,
+an administrator installs every later release — patch, minor or major — from **Admin → Security
+& API**, and the server checks it, and goes back by itself if it fails. The app also learns when a
+new release is out, and reports its own health to Docker.
+
+**Major** — run this once on the server, from the install directory:
+
+```bash
+./scripts/manage.sh update
+```
+
+It installs the host update agent (a root-owned script and a systemd timer) that does the work
+behind the Admin page's button. That is the last terminal run a release needs. Nothing in `.env`
+has to change.
+
+- **Install an update from the Admin page.** *About this install and updates* shows the newest
+  release with its notes and an **Install** button. The server backs up the database, installs
+  the release — host files and image together, as `./scripts/manage.sh update` does — and waits
+  for it to report healthy on the image it asked for. If it doesn't, the server returns to the
+  previous release by itself, without needing the network. The database goes back to the
+  pre-update backup only if a migration ran, and no change was accepted meanwhile: while an
+  update is being checked, the app saves nothing, and a banner says so. A major release's
+  confirmation says that it changes files on the server and to read its notes first. **Test the
+  host agent** checks the round trip without changing anything. Each request and its outcome are
+  in the activity log. See [Updating from the Admin page](docs/DEPLOYMENT.md#updating-from-the-admin-page).
+- **Learn that a new release exists.** Once a day the server asks GitHub for the newest release
+  (one request, carrying no version) and tells administrators: on the Admin page, and with one
+  toast per session. `UPDATE_CHECK=off` in `.env` turns it off.
+- **A health check.** `GET /api/health` answers `{"status":"ok"}` while the app and its database
+  answer, and the image's Docker `HEALTHCHECK` uses it, so `docker ps` and `./scripts/manage.sh
+  status` show `healthy`. It needs no login and discloses nothing else.
+- **Collabora moves to 26.04** (26.04.5.1.1, from 25.04.9.2.1), and the local OCR sidecar is pinned
+  to OCR `v1.0.0` instead of following `:local`. Both now move only with a release of ours, and
+  an update pulls them before anything on the server changes, so a failed pull rolls back.
+  `COLLABORA_IMAGE` and `OCR_LOCAL_IMAGE` in `.env` override the pins (see `.env.example`).
+- **`WOPI_INTERNAL_HOST`** in `.env` sets where Collabora reaches the app, for both the app and
+  Collabora's alias in `docker-compose.yml`; the default is unchanged.
+- **One update at a time.** A second `./scripts/manage.sh update` started while one runs stops at
+  once, and the nightly backup skips an install mid-update.
+- **Fixes:** the migrate summary says "Nightly backup helper: replaced" instead of a bare
+  "replaced"; `install.sh` waits on the health route.
+- **For maintainers:** dev tooling moved to `scripts/dev/` (so editing it no longer forces a
+  major), the dev stack's own `.env` entries are in `deploy/.env.dev.example`, and
+  `docs/RELEASING.md` names the changes that are majors by judgement.
+
 ## v2.4.0 — 2026-10-13
 
 Numbers read the same on every page, exports open in a spreadsheet as real numbers you can sort

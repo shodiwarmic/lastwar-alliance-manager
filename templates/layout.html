@@ -243,6 +243,12 @@
         <span>Demo — fictional data. Resets {{if ne .DemoResetHours "0"}}at least every {{.DemoResetHours}} hours and {{end}}on every cold start.</span>
       </div>
       {{end}}
+      {{if .UpdateInProgress}}
+      <div class="app-banner app-banner--update" role="status">
+        <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-refresh"/></svg>
+        <span>An update is being installed — changes are paused until it has been checked. Reload in a minute or two.</span>
+      </div>
+      {{end}}
       {{if .PreviewRank}}
       <div class="app-banner app-banner--preview" role="status">
         <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-eye"/></svg>

@@ -77,6 +77,10 @@ func startJobHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, msg, http.StatusConflict)
 			return
 		}
+		if errors.Is(err, errUpdateInProgress) {
+			http.Error(w, "An update is being installed; try again once it has finished.", http.StatusServiceUnavailable)
+			return
+		}
 		slog.Error("job start failed", "kind", req.Kind, "error", err)
 		http.Error(w, "Could not start the job", http.StatusInternalServerError)
 		return

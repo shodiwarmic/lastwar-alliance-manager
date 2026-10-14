@@ -460,6 +460,23 @@ To turn the agent off: `sudo systemctl disable --now alliance-manager-update.tim
 that choice; the Admin page then says the agent is not running, and updates go back to the
 terminal.
 
+On the Admin page, **About this install and updates** shows the agent (active, and when it was
+last seen; or stale, or not installed) and, when a newer release is out and the install is one the
+app can vouch for — a release build, `APP_VERSION` pinned to it, the default `DATABASE_PATH`, a
+fresh agent — an **Install** button; otherwise the reason it cannot. The confirmation says what
+happens: a backup, the download, about a minute of downtime, the health check, and the automatic
+return on failure. For a **major** it leads with what differs: the release changes files on the
+server, and may need a step only you can take, so read its notes first. Any level can be installed
+this way.
+
+**While an update is being checked, the app accepts no changes.** Every save answers *update in
+progress* and a banner says so; logging in still works, and an open document in the editor cannot
+be saved until the update ends. This is what lets the agent restore the pre-update database after
+a failed migration without losing anything: nothing was accepted after the backup. If the agent
+stops refreshing its hold for two minutes, the app gives up waiting, records that it did, and
+accepts changes again; the agent will then never restore the database for that request on its
+own. **Test the host agent** sends a request that changes nothing, to prove the round trip.
+
 ### Recovering from a failed update
 
 A failed update from the Admin page ends in one of three ways, and the Admin page says which:

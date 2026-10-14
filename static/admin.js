@@ -32,6 +32,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadOCRServiceAbout();
         loadUpdateState();
         document.getElementById('btn-update-check')?.addEventListener('click', checkForUpdateNow);
+        document.getElementById('btn-update-install')?.addEventListener('click', installUpdate);
+        document.getElementById('btn-update-test')?.addEventListener('click', testUpdateAgent);
+        document.getElementById('btn-update-reload')?.addEventListener('click', () => window.location.reload());
 
         // Load initial data
         await loadUsers();
@@ -1026,16 +1029,143 @@ function renderUpdateState(st) {
     }
 }
 
+// The last state read, and the poll that runs while a request is in progress.
+let updateState = null;
+let updatePoll = null;
+
+// renderUpdateAgent fills the Host agent line, the Install / Test buttons, and the progress
+// panel: the step and the log tail while a request runs, its outcome once it has finished.
+function renderUpdateAgent(st) {
+    const agentText = document.getElementById('update-agent-text');
+    if (!agentText) return;
+    const agent = st.agent || {};
+    agentText.replaceChildren();
+    if (!agent.present) {
+        agentText.append('not found — run ', updateCode('./scripts/manage.sh update'),
+            ' on the server once; that installs it.');
+    } else if (agent.stale) {
+        agentText.append(`stale: last seen ${updateAgo(new Date(agent.last_seen * 1000).toISOString())} — check `,
+            updateCode('systemctl status alliance-manager-update.timer'), ' on the server.');
+    } else {
+        agentText.append(`active, last seen ${updateAgo(new Date(agent.last_seen * 1000).toISOString())}, `,
+            updateCode(agent.release || '?'), '.');
+    }
+
+    const ahead = document.getElementById('update-schema-ahead');
+    ahead.hidden = !st.schema_ahead;
+    ahead.textContent = st.schema_ahead ? `Warning: ${st.schema_ahead}.` : '';
+
+    const install = document.getElementById('btn-update-install');
+    const test = document.getElementById('btn-update-test');
+    const reload = document.getElementById('btn-update-reload');
+    const reason = document.getElementById('update-install-reason');
+    const latest = st.latest;
+    install.style.display = st.can_install && latest ? 'inline-flex' : 'none';
+    if (st.can_install && latest) {
+        document.getElementById('btn-update-install-label').textContent = `Install ${latest.tag}`;
+    }
+    test.style.display = st.can_test ? 'inline-flex' : 'none';
+    reload.style.display = 'none';
+    // A reason is worth showing only when there is something it is the reason against.
+    // …and not when the Host agent line above has just said it.
+    const busy = !!(st.request && st.request.active);
+    const showReason = !st.can_install && st.install_reason && latest && latest.level && agent.present && !agent.stale && !busy;
+    reason.hidden = !showReason;
+    reason.textContent = showReason ? `Not installable from here: ${st.install_reason}.` : '';
+
+    const panel = document.getElementById('update-progress');
+    const text = document.getElementById('update-progress-text');
+    const log = document.getElementById('update-log');
+    const req = st.request;
+    panel.hidden = !req && !st.refused;
+    text.replaceChildren();
+    if (st.refused) {
+        text.textContent = `The host agent refused the last request: ${st.refused}`;
+    }
+    if (req && req.active) {
+        const what = req.kind === 'noop' ? 'Testing the host agent' : `Installing ${req.to || 'the update'}`;
+        text.textContent = `${req.step || what}…`;
+    } else if (req) {
+        const verb = {
+            installed: `${req.to} was installed`,
+            rolled_back: `${req.to} failed and ${req.from} is running again`,
+            failed: `the update to ${req.to} failed`,
+            refused: 'the host agent refused the request',
+            ok: 'the host agent answered',
+        }[req.outcome] || `the last request ended: ${req.outcome}`;
+        const when = req.finished_at ? ` (${updateAgo(new Date(req.finished_at * 1000).toISOString())})` : '';
+        text.textContent = `Last request: ${verb}${when}. ${req.message || ''}`;
+        if (req.outcome !== 'installed' && req.outcome !== 'ok' && req.log_path) {
+            text.append(' Full log on the server: ', updateCode(req.log_path));
+        }
+        if (req.outcome === 'installed' && req.to && st.running.version !== req.to) reload.style.display = 'inline-flex';
+    }
+    const lines = st.log || [];
+    log.hidden = lines.length === 0;
+    log.textContent = lines.join('\n');
+
+    const active = !!(req && req.active);
+    if (active && !updatePoll) {
+        updatePoll = setInterval(loadUpdateState, 5000);
+    } else if (!active && updatePoll) {
+        clearInterval(updatePoll);
+        updatePoll = null;
+    }
+}
+
 async function loadUpdateState() {
     const out = document.getElementById('update-about-text');
     if (!out) return;
     try {
         const res = await fetch('/api/admin/update');
         if (!res.ok) throw new Error(res.statusText);
-        renderUpdateState(await res.json());
+        updateState = await res.json();
+        renderUpdateState(updateState);
+        renderUpdateAgent(updateState);
     } catch (error) {
-        out.textContent = 'could not be read.';
+        // While the app restarts during an install, a poll can fail; the next one will tell.
+        if (!updatePoll) out.textContent = 'could not be read.';
     }
+}
+
+async function postUpdateRequest(version) {
+    const res = await fetch('/api/admin/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version }),
+    });
+    if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+}
+
+async function installUpdate() {
+    const st = updateState;
+    if (!st || !st.latest) return;
+    const latest = st.latest;
+    const common = `The server backs up the database, downloads ${latest.tag}, restarts the app on it and checks it is healthy; if anything fails it returns to ${st.running.version} by itself. Expect about a minute of downtime, and no changes can be saved until the check has finished — an open document cannot be saved meanwhile. The host agent picks the request up within 30 seconds.`;
+    let message = common;
+    let label = `Install ${latest.tag}`;
+    if (latest.level === 'major') {
+        message = `${latest.tag} is a major release: it changes files on the server (compose files, scripts, the proxy template, .env.example), which the update applies, and a major can need a step only the server's operator can take — a new .env value, a DNS record. Read its release notes first (Notes, above). ${common}`;
+        label = 'Install major release';
+    }
+    if (!await showConfirm(message, label, `Install ${latest.tag}?`)) return;
+    try {
+        await postUpdateRequest(latest.tag);
+        showToast(`Requested ${latest.tag}; the host agent will start within 30 seconds.`, 'info', 6000);
+    } catch (error) {
+        showToast(error.message, 'error', 8000);
+    }
+    loadUpdateState();
+}
+
+async function testUpdateAgent() {
+    try {
+        await postUpdateRequest('noop');
+        showToast('Test request written; the host agent answers within 30 seconds.', 'info', 5000);
+    } catch (error) {
+        showToast(error.message, 'error', 8000);
+    }
+    loadUpdateState();
 }
 
 async function checkForUpdateNow() {
@@ -1047,7 +1177,9 @@ async function checkForUpdateNow() {
         const res = await fetch('/api/admin/update/check', { method: 'POST' });
         if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
         const st = await res.json();
+        updateState = st;
         renderUpdateState(st);
+        renderUpdateAgent(st);
         status.textContent = st.last_error ? '' : 'Checked.';
     } catch (error) {
         status.textContent = error.message;

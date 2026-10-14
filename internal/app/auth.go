@@ -168,7 +168,14 @@ func trackLogin(userID int, username string, r *http.Request, success bool) {
 	ip := getClientIP(r)
 	userAgent := r.Header.Get("User-Agent")
 
+	// A login stays possible while an update is being installed, but its history row is a
+	// write: counted in (the update barrier waits for it) or, under the gate, logged instead.
+	if !beginWrite() {
+		slog.Info("Login while an update is installed; not recorded in login history", "username", username, "success", success)
+		return
+	}
 	go func() {
+		defer endWrite()
 		var country, city, isp *string
 
 		if geo, err := getIPGeolocation(ip); err == nil {

@@ -20,6 +20,11 @@ translates between `v1.2.3` and `1.2.3`.
 | **Minor** `v1.2.3 → v1.3.0` | Image only, with new functionality | Pull the new image. Nothing else. |
 | **Major** `v1.2.3 → v2.0.0` | Anything reaching outside the image — compose files, scripts, `.env.example`, the Caddyfile | Run `./scripts/manage.sh update` from a terminal: files on the host have to change, and it fetches them with the image. |
 
+From v3.0.0 an administrator can install any level from the Admin page, through the host update
+agent ([DEPLOYMENT.md → Updating from the Admin page](DEPLOYMENT.md#updating-from-the-admin-page)):
+the level now decides what the confirmation says, not whether there is a button. The terminal
+command stays for installs the app cannot verify, and for v3.0.0 itself, which delivers the agent.
+
 **The load-bearing distinction is image-only versus not**, and only that one is machine-checked
 (see below). Patch and minor are treated identically by every piece of tooling here; nothing
 audits whether a feature "deserved" its minor. Choose between them by judgement and don't agonise
@@ -132,7 +137,9 @@ becomes impossible, discovered mid-release.
 1. **The `CHANGELOG.md` entry rides in the PR**, written by whoever raises it — they have the
    context to say what changed and why, which a close-out reconstructing it from a diff does not.
    Its heading names the version being cut.
-2. **Merge the PR.** The **merge commit** is what gets tagged, not the PR's head commit.
+2. **Merge the PR.** The **merge commit** is what gets tagged, not the PR's head commit. A
+   rebase merge makes no merge commit: tag the PR's last commit as it landed on `main` — the
+   rebased tip, a new SHA — never its SHA on the branch.
 3. **Wait for the merge commit's checks to go green** on `main` — both `Build & Test` and
    `Docker Build`. The docker job alone takes a couple of minutes. This is a *different run* from
    the one that passed on the PR: a squash merge creates a new commit, and the release workflow

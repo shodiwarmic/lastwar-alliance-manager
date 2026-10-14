@@ -168,6 +168,10 @@ func runScheduledLastRankTick() {
 	if demoMode() {
 		return
 	}
+	// Nothing writes while an update is being installed (update_gate.go).
+	if updateGateActive() {
+		return
+	}
 	cfg := loadLastRankScheduleConfig()
 	if !cfg.Enabled {
 		return

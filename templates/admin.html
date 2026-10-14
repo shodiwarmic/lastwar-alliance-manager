@@ -228,6 +228,18 @@
                                 <button type="button" class="btn btn-secondary btn-sm" id="btn-update-check" style="display:none"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-refresh"/></svg> Check now</button>
                                 <span id="update-check-status" class="status-msg"></span>
                             </div>
+                            <p class="help-text update-schema-ahead" id="update-schema-ahead" hidden></p>
+                            <p class="help-text">Host agent: <span id="update-agent-text">checking&hellip;</span></p>
+                            <div class="update-actions">
+                                <button type="button" class="btn btn-primary btn-sm" id="btn-update-install" style="display:none"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-download"/></svg> <span id="btn-update-install-label">Install</span></button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-update-test" style="display:none">Test the host agent</button>
+                                <button type="button" class="btn btn-primary btn-sm" id="btn-update-reload" style="display:none">Reload</button>
+                            </div>
+                            <p class="help-text" id="update-install-reason" hidden></p>
+                            <div class="update-progress" id="update-progress" hidden>
+                                <p class="help-text" id="update-progress-text"></p>
+                                <div class="update-log" id="update-log" hidden></div>
+                            </div>
                         </div>
                     </div>
                 </div>

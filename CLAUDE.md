@@ -42,7 +42,7 @@ Every handler that creates, updates, or deletes data must call `logActivity`. Th
 logActivity(userID int, username, action, entityType, entityName string, isSensitive bool, details ...string)
 ```
 
-**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"deferred"`, `"deactivated"`, `"reactivated"`, `"reset"`, and `"started"` / `"ended"` (`rank_preview` only)
+**Actions**: `"created"`, `"updated"`, `"deleted"`, `"archived"`, `"unarchived"`, `"imported"`, `"accepted"`, `"deferred"`, `"deactivated"`, `"reactivated"`, `"reset"`, `"started"` / `"ended"` (`rank_preview` only), and `"requested"` / `"installed"` / `"failed"` (`update` only)
 
 > `"reset_password"` is retired — no handler emits it since the random-password flow was
 > removed. Historical rows keep it, which is harmless: `activity.js` renders actions verbatim.
@@ -95,7 +95,7 @@ and a text's duplicate rows heal to one when it is next saved. Each change logs 
 duplicates, and choosing which mapping wins is a human's call.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`, `update`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -709,6 +709,27 @@ invariant).
 > JSON fields are populated from those subqueries. Manual edits (member modal,
 > My Profile, CSV import, prospect accept) and LastRank sync all append rows;
 > HQ never regresses (only a higher value is recorded).
+
+## The update gate (`update_gate.go`, `handlers_update.go`)
+
+The app's half of installing an update from the Admin page; the host update agent
+(`scripts/lib/update-agent.sh`) is the other. They talk only through `data/update/` beside the
+database, in line-oriented `key=value` files whose first line names their kind and format.
+
+- **The gate is initialised straight after `initDB`**, before anything else that writes
+  (`initUpdateGate`), then re-read every 2 s: `running` plus a `status` naming the same request,
+  under two minutes old and not `kind=noop`, sets it. Under it `updateGateMiddleware` answers
+  every mutating request 503 except `/api/login` and `/api/logout`; `startJob`, the LastRank
+  scheduler and `checkLatestRelease` refuse; `trackLogin` counts its goroutine as a writer and
+  writes nothing.
+- **A new background writer must stand down under the gate**, or the agent's restore can lose its
+  write: check `updateGateActive()`, or count itself in with `beginWrite`/`endWrite`.
+- **The acknowledgement means stopped, not asked to stop.** `gate-ack` is written only when
+  in-flight writes are zero and `drainJobs` reports the runner exited; `startJob` admits and
+  `jobWG.Add`s under one hold of `jobMu` so a drain cannot miss a job.
+- **A lapsed lease writes `gate-released` before the gate opens**, and a failed write keeps it
+  shut. Outcomes reach the activity log once: `update_outcomes` (migration 084) and the activity
+  row in one transaction, then `result-<id>` → `done-<id>`.
 
 ## Release check (`release_check.go`)
 

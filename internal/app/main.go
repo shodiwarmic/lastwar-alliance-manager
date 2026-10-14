@@ -60,6 +60,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 		AppVersion:       appVersion,
 		AppCommit:        shortCommit(),
 		HostFilesVersion: os.Getenv("HOST_FILES_VERSION"),
+		UpdateInProgress: updateGateActive(),
 	}
 
 	session, _ := store.Get(r, "session")
@@ -244,6 +245,10 @@ func Main() {
 	}
 	defer db.Close()
 
+	// The update gate before anything else writes: a container started while the host update
+	// agent installs it must boot holding off every change (update_gate.go).
+	initUpdateGate()
+
 	// The public demo seeds an empty database before first-run setup is decided, so it
 	// never boots unclaimed. A seed failure exits: a failed revision is visible, a setup
 	// page whose key nobody can read is not.
@@ -333,7 +338,7 @@ func Main() {
 		port = "8080"
 	}
 
-	srv := &http.Server{Addr: ":" + port, Handler: gzipMiddleware(demoHeaders(setupGate(appHandler)))}
+	srv := &http.Server{Addr: ":" + port, Handler: gzipMiddleware(demoHeaders(setupGate(updateGateMiddleware(appHandler))))}
 
 	// Registered before the server starts: a SIGTERM that arrived between "listening" and
 	// this line would otherwise kill the process without the graceful shutdown below.
@@ -540,6 +545,7 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/admin/ocr-service", authMiddleware(adminMiddleware(getOCRServiceInfo))).Methods("GET")
 	router.HandleFunc("/api/admin/update", authMiddleware(adminMiddleware(getUpdateState))).Methods("GET")
 	router.HandleFunc("/api/admin/update/check", demoBlock(authMiddleware(adminMiddleware(checkForUpdateNow)))).Methods("POST")
+	router.HandleFunc("/api/admin/update", demoBlock(authMiddleware(adminMiddleware(requestUpdate)))).Methods("POST")
 	router.HandleFunc("/api/admin/security/ocr-archive", demoBlock(authMiddleware(adminMiddleware(updateOCRArchiveSettings)))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/translation", demoBlock(authMiddleware(adminMiddleware(updateTranslationSettings)))).Methods("PUT")
 	router.HandleFunc("/api/admin/security/translation/usage", authMiddleware(adminMiddleware(translationUsage))).Methods("GET")

@@ -28,6 +28,8 @@ var neverBatched = map[string]bool{
 	// One row per alias change: a bulk save collapsed into one row naming only the
 	// last alias, which is the record private-docs 195 exists to keep.
 	"alias": true,
+	// Updates installed from the Admin page: who asked for which release, and what came of it.
+	"update": true,
 }
 
 // logActivity records an audit entry. When action is "created", consecutive writes

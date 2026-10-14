@@ -1468,6 +1468,9 @@ type PageData struct {
 	// administrator (release_check.go, updateAvailableFor); global.js toasts it once per
 	// session per tag. Empty otherwise — always, for a dev or edge build.
 	UpdateAvailable string
+	// UpdateInProgress is the update gate (update_gate.go): the layout shows a banner while
+	// every change is held off.
+	UpdateInProgress bool
 	// PreviewRank is the rank an administrator is previewing the app as ("" when not).
 	// CanExitPreview is true while they are, and drives the banner's rank switcher and
 	// Exit; PreviewRanks lists the ranks either control offers (admins only).

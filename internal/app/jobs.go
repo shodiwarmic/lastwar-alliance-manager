@@ -160,7 +160,14 @@ func startJob(kind string, actor jobActor) (int64, error) {
 		return 0, fmt.Errorf("unknown job kind %q", kind)
 	}
 
+	// Admission, registration with jobWG and publication happen under one hold of jobMu, so
+	// the update barrier's drainJobs can never see a published job its wait group does not
+	// count, nor a job start slip in once the gate is set.
 	jobMu.Lock()
+	if updateGateActive() {
+		jobMu.Unlock()
+		return 0, errUpdateInProgress
+	}
 	if jobCurrent != nil {
 		jobMu.Unlock()
 		return 0, errJobBusy
@@ -180,9 +187,9 @@ func startJob(kind string, actor jobActor) (int64, error) {
 	// the whole point — the officer closes the tab and the sweep keeps going.
 	ctx, cancel := context.WithCancel(context.Background())
 	jobCurrent = &runningJob{ID: id, Kind: kind, StartedAt: time.Now(), cancel: cancel}
+	jobWG.Add(1)
 	jobMu.Unlock()
 
-	jobWG.Add(1)
 	go func() {
 		defer jobWG.Done()
 		defer cancel()
@@ -366,15 +373,18 @@ func reconcileInterruptedJobs() {
 	}
 }
 
-// drainJobs cancels the running job and waits, bounded, for it to notice.
+// drainJobs cancels the running job and waits, bounded, for it to notice. It reports
+// whether the runner actually exited — the update barrier writes its acknowledgement only
+// then — and is used at shutdown too.
 //
 // The wait is bounded because an in-flight enrich has its own 25s ceiling and we
 // cannot always outlast it. reconcileInterruptedJobs is the backstop: whatever is
 // still running when the process exits gets marked interrupted on the next boot.
-func drainJobs(timeout time.Duration) {
+func drainJobs(timeout time.Duration) bool {
 	jobMu.Lock()
-	if jobCurrent != nil {
-		slog.Info("cancelling running job for shutdown", "kind", jobCurrent.Kind, "job_id", jobCurrent.ID)
+	running := jobCurrent != nil
+	if running {
+		slog.Info("cancelling running job", "kind", jobCurrent.Kind, "job_id", jobCurrent.ID)
 		jobCurrent.cancel()
 	}
 	jobMu.Unlock()
@@ -383,9 +393,13 @@ func drainJobs(timeout time.Duration) {
 	go func() { jobWG.Wait(); close(done) }()
 	select {
 	case <-done:
-		slog.Info("background jobs drained")
+		if running {
+			slog.Info("background jobs drained")
+		}
+		return true
 	case <-time.After(timeout):
 		slog.Warn("background job drain timed out; it will be marked interrupted on next boot")
+		return false
 	}
 }
 

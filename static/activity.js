@@ -60,6 +60,7 @@ const ENTITY_LABELS = {
     lastrank_sync:         'LastRank Sync',
     lastrank_review:       'LastRank Review',
     rank_preview:          'rank preview',
+    update:                'update',
     vs_league_season:      'Duel League season',
     vs_league_week:        'Duel League week',
     external_alliance:     'external alliance',
