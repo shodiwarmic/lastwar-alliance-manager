@@ -326,6 +326,7 @@ main() {
     step "Registering the install"
     registry_write "$NAME" "$APP_DIR" || die "could not register the install (above)"
     ensure_backup_helper
+    ensure_update_agent "$(tr -d '[:space:]' < "$APP_DIR/HOST_FILES_VERSION")" || warn "the host update agent was not installed; ./scripts/manage.sh update installs it"
     wait_for_app || true
     finish
 }

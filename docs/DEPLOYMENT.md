@@ -414,11 +414,82 @@ else about the install, and is safe to point an external uptime monitor at.
 
 `./scripts/manage.sh backup` takes the pre-update backup on its own, at any time.
 
+### Updating from the Admin page
+
+From v3.0.0 an administrator can install a release from **Admin → Security & API**. The app
+cannot change the server itself — it has no access to Docker or to the host — so a small
+**host update agent** does it on the app's behalf. `./scripts/manage.sh update` (and
+`install.sh`) installs it; v3.0.0 itself is the last release that has to be installed from a
+terminal.
+
+What is on the server:
+
+| Path | What it is |
+|---|---|
+| `/usr/local/bin/alliance-manager-update.sh` | The agent. Root-owned, rewritten by every update. |
+| `/etc/systemd/system/alliance-manager-update.{service,timer}` | The timer runs the agent every 30 seconds. |
+| `/var/lib/alliance-manager/<install>/` | The agent's own state, root-only: the journal of the current request, a copy of it, the receipt the updater writes, the rollback bundle, and each request's full log (`update-<id>.log`). |
+| `data/update/` in the install directory | Where the app and the agent talk: the request, the agent's heartbeat and progress, each request's result and a tail of its log. |
+| `/var/backups/lastwar/pinned/<id>.db` | The pre-update database backup of a request, held outside the newest-ten rotation until the request is finished. |
+
+Each tick the agent writes a heartbeat (the Admin page shows the agent as active, with how long
+ago it was last seen) and looks for a request. A request runs `./scripts/manage.sh update
+--version <release>` — the same update a terminal runs, with the same backup and the same
+rollback of the files — as root, with the app holding off every change until the update is
+checked. Then the agent waits up to five minutes for the new release to report healthy and checks
+it is running the image it asked for (and, when the release moved Collabora or the OCR sidecar,
+that those came up). If anything fails, it puts the previous release back **without the network**,
+from a copy of the host files it took first and the previous images it held on to; the database
+is restored from the pre-update backup only when a migration had run and the app accepted no
+change meanwhile.
+
+The agent runs only the install's own `scripts/manage.sh`, and only after checking that it and
+everything it loads — and every directory above the install — belong to you or root and are
+not writable by anyone else; it refuses an install where they are, and says why on the Admin
+page and in its log. It never runs anything from `data/` or `uploads/`, which the app can write.
+
+Its log is in the system journal:
+
+```bash
+journalctl -u alliance-manager-update        # what the agent did, request by request
+sudo less /var/lib/alliance-manager/default/update-<id>.log   # one request in full
+./scripts/manage.sh status                    # the timer, the heartbeat, the last request
+```
+
+To turn the agent off: `sudo systemctl disable --now alliance-manager-update.timer`. Updates keep
+that choice; the Admin page then says the agent is not running, and updates go back to the
+terminal.
+
+### Recovering from a failed update
+
+A failed update from the Admin page ends in one of three ways, and the Admin page says which:
+
+- **Rolled back** — the previous release is running again and healthy. Nothing to do; the
+  request's backup, bundle and log are kept (the newest three failed requests, for 30 days) in
+  case you want to look. `./scripts/manage.sh status` lists them.
+- **Failed, the app running** — the agent could not prove the previous release healthy, or
+  nothing had changed yet. Look at the log, then run `./scripts/manage.sh status`; a terminal
+  `./scripts/manage.sh update --version <release>` moves it to any release you choose.
+- **Failed, the app stopped** — the database had been restored to the pre-update backup, and then
+  putting the previous release's files back failed. The agent leaves the app stopped, because
+  starting the newer release on the older database would migrate it again, and says so on every
+  tick (`journalctl -u alliance-manager-update`). To finish by hand, from the install directory:
+
+  ```bash
+  ./scripts/manage.sh status                         # which release the files are on now
+  ./scripts/manage.sh update --version <previous>    # the release you were on before
+  ```
+
+  The pre-update database backup is `/var/backups/lastwar/pinned/<id>.db` if you need it.
+  Once the install is running, clear the agent's record so the Admin page offers updates again:
+  `sudo rm /var/lib/alliance-manager/default/journal`.
+
 ### Where installs are recorded
 
 Each install is recorded in `/etc/alliance-manager/installs.d/<name>.conf` — a root-owned file
-holding one line, `APP_DIR="…"`. The first install is named `default`. The nightly backup reads
-this list, which is how it finds the database wherever you installed.
+holding `APP_DIR="…"` (and, from v3.0.0, `OWNER_UID="…"`, the account the install belongs to).
+The first install is named `default`. The nightly backup and the host update agent read this
+list, which is how they find the install wherever you put it.
 
 ### Moving an install
 

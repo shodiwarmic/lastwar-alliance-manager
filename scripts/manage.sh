@@ -512,6 +512,7 @@ apply_on_exit() {
     if [ "${CREATED_CRONTAB:-0}" = 1 ]; then
         sudo crontab -l 2>/dev/null | grep -vF "$AM_BACKUP_HELPER" | sudo crontab -
     fi
+    restore_update_agent
     printf 'Nothing else changed: the containers were not restarted. Backups: %s/*_%s*\n' \
         "$AM_BACKUP_DIR" "${BACKUP_TS:-}" >&2
     rm -rf "$SNAP"
@@ -798,6 +799,11 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
     # 9. The proxy config, if this host runs our Caddy and the release ships a newer revision.
     render_caddy "$target"
 
+    # 9b. The host update agent and its timer, this release's text (a rollback puts the
+    # previous one back).
+    helper_out=$(ensure_update_agent "$target") || fail_apply "could not install the host update agent (above)"
+    [ "$helper_out" = "Host update agent: unchanged" ] || summary+=("$helper_out")
+
     # 10. Migrate only: the history goes last, so every earlier failure still had it.
     if [ "$migrate" = 1 ] && [ -d .git ]; then
         rm -rf .git || warn "could not remove .git completely; remove what is left by hand"
@@ -812,7 +818,7 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
     # unmigrated.
     trap 'remove_staging; normalise_ownership' EXIT
     trap - INT TERM
-    rm -rf "$SNAP"
+    rm -rf "$SNAP" "${AGENT_SNAPSHOT:-}"
     write_receipt marker
 
     # 12. Start what was pulled.
@@ -927,8 +933,38 @@ cmd_status() {
     fi
     line=$(dc logs --no-log-prefix alliance-manager 2>/dev/null | grep 'Initializing Alliance Manager server' | tail -n1 || true)
     [ -n "$line" ] && log "Startup line:              $line"
+    status_update_agent "$name"
     log ""
     dc ps
+}
+
+# status_update_agent NAME — the host update agent as status sees it: the timer, the heartbeat's
+# age, and where the last request got to, with what it kept.
+status_update_agent() {
+    local timer seen age journal phase outcome hb="$APP_DIR/data/update/agent"
+    if [ ! -e "$AM_UPDATE_AGENT" ]; then
+        log "Update agent:              not installed (./scripts/manage.sh update installs it)"
+        return 0
+    fi
+    timer=$(systemctl is-active "$AM_UPDATE_UNIT.timer" 2>/dev/null || true)
+    timer+=", $(systemctl is-enabled "$AM_UPDATE_UNIT.timer" 2>/dev/null || true)"
+    seen=$(sudo sed -n 's/^seen_at=//p' "$hb" 2>/dev/null || true)
+    if [[ $seen =~ ^[0-9]+$ ]]; then
+        age="last heartbeat $(( $(date +%s) - seen ))s ago"
+    else
+        age="no heartbeat yet"
+    fi
+    log "Update agent:              timer $timer; $age"
+    journal="$AM_STATE_DIR/${1:-default}/journal"
+    if sudo test -f "$journal"; then
+        phase=$(sudo sed -n 's/^phase=//p' "$journal" | head -n1)
+        outcome=$(sudo sed -n 's/^outcome=//p' "$journal" | head -n1)
+        log "Last update request:       $(sudo sed -n 's/^id=//p' "$journal" | head -n1) — $phase${outcome:+ ($outcome)}"
+        [ "$phase" = needs-operator ] && warn "the last update needs you: $(sudo sed -n 's/^message=//p' "$journal" | head -n1)"
+    fi
+    if sudo test -s "$AM_STATE_DIR/${1:-default}/kept"; then
+        log "Kept for a failed update:  $(sudo cat "$AM_STATE_DIR/${1:-default}/kept" | tr '\n' ' ')— pinned backups in $AM_BACKUP_DIR/pinned/, bundles in $AM_STATE_DIR/${1:-default}/"
+    fi
 }
 
 main() {

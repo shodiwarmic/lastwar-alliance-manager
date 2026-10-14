@@ -14,7 +14,12 @@ if [ -n "$dest" ]; then
         cp "$db.schema" "$dest.schema"
     fi
 fi
+# A database file a test wrote may say its own schema (a line schema=N) and whether it is
+# corrupt; a plain copy of it carries both.
 case ${2:-} in
-    *goose_db_version*) [ -f "$db.schema" ] && cat "$db.schema" ;;
+    *goose_db_version*)
+        if [ -f "$db.schema" ]; then cat "$db.schema"; else sed -n 's/^schema=//p' "$db" 2>/dev/null; fi ;;
+    *integrity_check*)
+        if grep -q '^corrupt' "$db" 2>/dev/null; then echo "*** in database main ***"; else echo ok; fi ;;
 esac
 exit 0

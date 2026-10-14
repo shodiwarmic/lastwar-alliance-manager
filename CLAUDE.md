@@ -2477,6 +2477,7 @@ three libraries:
 | `scripts/lib/common.sh` | `.env` access (grep, **never `source`**), release resolution, asset download/verify/unpack, Caddyfile revision helpers, the nightly backup helper's text. |
 | `scripts/lib/registry.sh` | `/etc/alliance-manager/installs.d/<name>.conf`, one `APP_DIR="…"` line each. **Frozen format.** |
 | `scripts/lib/preflight.sh` | The check loop: each check blocking/advisory, ignorable or not, with an optional remedy; three passes at most. |
+| `scripts/lib/update-agent.sh` | The host update agent's **template**: `ensure_update_agent` (`common.sh`) fills its `@…@` values and writes it root-owned to `/usr/local/bin/alliance-manager-update.sh`, run by a 30-second systemd timer. Its header holds the request state machine. |
 
 Rules that must hold:
 
@@ -2525,6 +2526,16 @@ Rules that must hold:
   `check_data_mount` refuses a merged stack whose most specific mount for
   `/app/data/alliance.db` or `/app/data/update` is anything but the `./data` bind. It reads
   compose's JSON with `jq`, which `apply` checks for itself: stage 1 is one release old.
+- **The host update agent executes `manage.sh` and nothing else from an install directory** —
+  the forward update only, after the trust chain (`$APP_DIR`, `scripts/`, `scripts/lib/`,
+  `manage.sh`, every `lib/*.sh`, and every ancestor: owned by root or the recorded
+  `OWNER_UID`, not group/world-writable, no symlinks). Recovery runs the previous release's
+  `apply` from a root-owned bundle it took first, offline. **Spool I/O runs as the spool's
+  owner** (uid 1001, through `setpriv`, on a directory descriptor root opened after refusing
+  symlinks, so no ancestor has to be traversable by that uid); reads are bounded, writes are
+  temp-then-rename, nothing in the spool is chowned. Each phase is journaled before its step,
+  and every phase has a kill-point test (`tests/scripts/update_agent_test.sh`). The spool,
+  journal and receipt formats are frozen: additive only, a higher number refuses.
 - **Tests:** `bash tests/scripts/run.sh` — plain bash, stubbed system commands, every system
   path redirected into a temp dir. CI runs it with `bash -n` and `shellcheck -x -S warning`
   (**Host scripts check**). The dev box has the same shellcheck as the runner (0.9.0, from apt),

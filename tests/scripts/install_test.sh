@@ -6,8 +6,8 @@
 unpack_fake_asset() {
     local dir=$1 tag=$2
     mkdir -p "$dir/scripts/lib" "$dir/deploy"
-    cp "$REPO_ROOT"/scripts/install.sh "$REPO_ROOT"/scripts/lib/*.sh "$dir/scripts/" 2>/dev/null || true
-    mv "$dir"/scripts/common.sh "$dir"/scripts/registry.sh "$dir"/scripts/preflight.sh "$dir/scripts/lib/"
+    cp "$REPO_ROOT"/scripts/install.sh "$dir/scripts/"
+    cp "$REPO_ROOT"/scripts/lib/*.sh "$dir/scripts/lib/"
     cp "$REPO_ROOT/deploy/Caddyfile" "$dir/deploy/"
     cp "$REPO_ROOT/docker-compose.yml" "$REPO_ROOT/docker-compose.local-ocr.yml" "$REPO_ROOT/.env.example" "$dir/"
     echo "$tag" > "$dir/HOST_FILES_VERSION"
@@ -51,6 +51,8 @@ test_fresh_non_interactive_install() {
     run main --non-interactive --domain app.warmic.test
     assert_status 0
     grep -q '^# probed /api/health$' "$STUB_LOG" || _fail "wait_for_app should poll /api/health"
+    assert_file "$AM_UPDATE_AGENT" "install.sh installs the host update agent"
+    assert_called "systemctl enable --now alliance-manager-update.timer"
     assert_not_contains "$OUT" "has not answered"
 
     ENV_FILE="$APP/.env"

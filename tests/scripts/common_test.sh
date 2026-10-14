@@ -174,3 +174,55 @@ test_unpack_asset_rejects_something_else() {
     assert_status 0
     assert_file "$TEST_TMP/out2/scripts/manage.sh"
 }
+
+# --- ensure_update_agent ----------------------------------------------------------------------
+
+test_update_agent_written_then_unchanged_then_replaced() {
+    run ensure_update_agent v9.9.9
+    assert_status 0
+    assert_contains "$OUT" "Host update agent: written; alliance-manager-update.timer enabled"
+    assert_file "$AM_UPDATE_AGENT"
+    [ -x "$AM_UPDATE_AGENT" ] || _fail "the agent is not executable"
+    assert_contains "$(cat "$AM_UPDATE_AGENT")" "AGENT_RELEASE='v9.9.9'"
+    assert_contains "$(cat "$AM_UPDATE_AGENT")" "STATE_DIR='$AM_STATE_DIR'"
+    assert_not_contains "$(cat "$AM_UPDATE_AGENT")" "@STATE_DIR@"
+    assert_contains "$(cat "$AM_UNIT_DIR/alliance-manager-update.service")" "ExecStart=$AM_UPDATE_AGENT"
+    assert_contains "$(cat "$AM_UNIT_DIR/alliance-manager-update.service")" "TimeoutStartSec=90min"
+    assert_contains "$(cat "$AM_UNIT_DIR/alliance-manager-update.timer")" "OnUnitActiveSec=30s"
+    assert_called "systemctl daemon-reload"
+    assert_called "systemctl enable --now alliance-manager-update.timer"
+    bash -n "$AM_UPDATE_AGENT" || _fail "the installed agent does not parse"
+
+    : > "$STUB_LOG"
+    run ensure_update_agent v9.9.9
+    assert_contains "$OUT" "Host update agent: unchanged"
+    assert_not_called "systemctl daemon-reload"
+
+    : > "$STUB_LOG"
+    run ensure_update_agent v9.9.10
+    assert_contains "$OUT" "Host update agent: replaced"
+    assert_called "systemctl daemon-reload"
+    assert_not_called "systemctl enable" "a replaced timer keeps the state the operator left it in"
+}
+
+test_a_replaced_agent_is_restored_and_a_created_one_removed() {
+    ensure_update_agent v9.9.9 >/dev/null
+    local before
+    before=$(cat "$AM_UPDATE_AGENT")
+    CREATED_AGENT=0
+    ensure_update_agent v9.9.10 >/dev/null
+    assert_contains "$(cat "$AM_UPDATE_AGENT")" "v9.9.10"
+    restore_update_agent
+    assert_eq "$(cat "$AM_UPDATE_AGENT")" "$before" "the previous agent was not put back"
+
+    rm -f "$AM_UPDATE_AGENT" "$AM_UNIT_DIR"/alliance-manager-update.*
+    CREATED_AGENT=0
+    ensure_update_agent v9.9.10 >/dev/null
+    assert_eq "$CREATED_AGENT" 1
+    : > "$STUB_LOG"
+    restore_update_agent
+    assert_no_file "$AM_UPDATE_AGENT"
+    assert_no_file "$AM_UNIT_DIR/alliance-manager-update.timer"
+    assert_called "systemctl disable --now alliance-manager-update.timer"
+    assert_called "systemctl daemon-reload"
+}

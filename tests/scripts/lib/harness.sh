@@ -25,6 +25,8 @@ harness_setup() {
     export AM_LOG_DIR="$TEST_TMP/sys/var/log/lastwar"
     export AM_CADDYFILE="$TEST_TMP/sys/etc/caddy/Caddyfile"
     export AM_STATE_DIR="$TEST_TMP/sys/var/lib/alliance-manager"
+    export AM_UPDATE_AGENT="$TEST_TMP/sys/usr/local/bin/alliance-manager-update.sh"
+    export AM_UNIT_DIR="$TEST_TMP/sys/etc/systemd/system"
     export NON_INTERACTIVE=1
 }
 

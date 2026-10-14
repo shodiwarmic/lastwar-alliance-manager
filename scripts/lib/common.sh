@@ -303,3 +303,135 @@ ensure_backup_helper() {
     fi
     log "Nightly backup helper: $outcome"
 }
+
+# --- Host update agent --------------------------------------------------------------------
+# The root-run agent that installs a release an administrator chose on the Admin page. Its
+# text is lib/update-agent.sh with this host's paths and the release baked in; it is written
+# root-owned to AM_UPDATE_AGENT and run by a systemd timer every 30 seconds. Like the backup
+# helper it executes nothing from an install directory except, for the forward update, the
+# install's own manage.sh after checking the chain it sources — see the header of
+# lib/update-agent.sh for its trust rules and its state machine.
+AM_UPDATE_AGENT=${AM_UPDATE_AGENT:-/usr/local/bin/alliance-manager-update.sh}
+AM_UNIT_DIR=${AM_UNIT_DIR:-/etc/systemd/system}
+AM_UPDATE_UNIT=alliance-manager-update
+
+# update_agent_text RELEASE — the agent as installed: the template with its @...@ values filled.
+update_agent_text() {
+    local t
+    t=$(cat "$(dirname "${BASH_SOURCE[0]}")/update-agent.sh") || return 1
+    t=${t//@AGENT_RELEASE@/$1}
+    t=${t//@REGISTRY_DIR@/$AM_REGISTRY_DIR}
+    t=${t//@BACKUP_DIR@/$AM_BACKUP_DIR}
+    t=${t//@STATE_DIR@/$AM_STATE_DIR}
+    t=${t//@SPOOL_UID@/1001}
+    printf '%s\n' "$t"
+}
+
+# update_unit_text service|timer — the two systemd units.
+update_unit_text() {
+    case $1 in
+        service) cat <<EOT
+# Written by scripts/install.sh / scripts/manage.sh — edits are overwritten on the next update.
+[Unit]
+Description=Alliance Manager host update agent (installs updates requested on the Admin page)
+Documentation=https://github.com/$AM_REPO/blob/main/docs/DEPLOYMENT.md
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=$AM_UPDATE_AGENT
+# Two 30-minute updater runs (the update, then a rollback), two 5-minute health waits, and
+# the preparation around them.
+TimeoutStartSec=90min
+# An idle tick says nothing; progress is notice, problems warning.
+LogLevelMax=notice
+Environment=HOME=/root
+EOT
+        ;;
+        timer) cat <<EOT
+# Written by scripts/install.sh / scripts/manage.sh — edits are overwritten on the next update.
+# To stop the agent: sudo systemctl disable --now $AM_UPDATE_UNIT.timer (updates keep that choice).
+[Unit]
+Description=Run the Alliance Manager host update agent every 30 seconds
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=30s
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target
+EOT
+        ;;
+    esac
+}
+
+# ensure_update_agent RELEASE — install or replace the agent and its two units. Prints one line
+# saying what it did. A replaced file's previous bytes are kept in AGENT_SNAPSHOT (set here) so
+# a failed apply can put them back (restore_update_agent); CREATED_AGENT=1 when there was no
+# agent before. A new install's timer is enabled and started; a replaced one keeps whatever
+# state the operator left it in.
+ensure_update_agent() {
+    local tmp f outcome=unchanged existed=0 changed=0 enabled=0
+    tmp=$(mktemp -d)
+    update_agent_text "$1" > "$tmp/agent" || { rm -rf "$tmp"; warn "could not build the update agent"; return 1; }
+    update_unit_text service > "$tmp/$AM_UPDATE_UNIT.service"
+    update_unit_text timer > "$tmp/$AM_UPDATE_UNIT.timer"
+    [ -e "$AM_UPDATE_AGENT" ] && existed=1
+    AGENT_SNAPSHOT=$(mktemp -d)
+    for f in "$AM_UPDATE_AGENT:agent" "$AM_UNIT_DIR/$AM_UPDATE_UNIT.service:$AM_UPDATE_UNIT.service" \
+        "$AM_UNIT_DIR/$AM_UPDATE_UNIT.timer:$AM_UPDATE_UNIT.timer"; do
+        if [ -e "${f%%:*}" ]; then
+            cmp -s "${f%%:*}" "$tmp/${f##*:}" && continue
+            sudo cp -p "${f%%:*}" "$AGENT_SNAPSHOT/${f##*:}"
+        fi
+        changed=1
+    done
+    if [ "$changed" = 0 ]; then
+        rm -rf "$tmp" "$AGENT_SNAPSHOT"
+        AGENT_SNAPSHOT=''
+        log "Host update agent: unchanged"
+        return 0
+    fi
+    sudo systemctl is-enabled --quiet "$AM_UPDATE_UNIT.timer" 2>/dev/null && enabled=1
+    printf '%s\n' "$enabled" > "$AGENT_SNAPSHOT/enabled"
+    [ "$existed" = 0 ] && CREATED_AGENT=1
+    if ! sudo install -D -m 0755 "$tmp/agent" "$AM_UPDATE_AGENT" \
+        || ! sudo install -D -m 0644 "$tmp/$AM_UPDATE_UNIT.service" "$AM_UNIT_DIR/$AM_UPDATE_UNIT.service" \
+        || ! sudo install -D -m 0644 "$tmp/$AM_UPDATE_UNIT.timer" "$AM_UNIT_DIR/$AM_UPDATE_UNIT.timer"; then
+        rm -rf "$tmp"
+        warn "could not write the host update agent"
+        return 1
+    fi
+    rm -rf "$tmp"
+    sudo systemctl daemon-reload || { warn "systemctl daemon-reload failed"; return 1; }
+    if [ "$existed" = 0 ]; then
+        sudo systemctl enable --now "$AM_UPDATE_UNIT.timer" || { warn "could not enable $AM_UPDATE_UNIT.timer"; return 1; }
+        outcome="written; $AM_UPDATE_UNIT.timer enabled"
+    else
+        outcome=replaced
+    fi
+    log "Host update agent: $outcome"
+}
+
+# restore_update_agent — undo ensure_update_agent after a failed apply: the previous files back,
+# or, where there were none, the new ones removed and the timer stopped.
+restore_update_agent() {
+    local f
+    [ -n "${AGENT_SNAPSHOT:-}" ] && [ -d "$AGENT_SNAPSHOT" ] || return 0
+    if [ "${CREATED_AGENT:-0}" = 1 ]; then
+        sudo systemctl disable --now "$AM_UPDATE_UNIT.timer" 2>/dev/null
+        sudo rm -f "$AM_UPDATE_AGENT" "$AM_UNIT_DIR/$AM_UPDATE_UNIT.service" "$AM_UNIT_DIR/$AM_UPDATE_UNIT.timer"
+    else
+        [ -f "$AGENT_SNAPSHOT/agent" ] && sudo install -m 0755 "$AGENT_SNAPSHOT/agent" "$AM_UPDATE_AGENT"
+        for f in service timer; do
+            [ -f "$AGENT_SNAPSHOT/$AM_UPDATE_UNIT.$f" ] && sudo install -m 0644 "$AGENT_SNAPSHOT/$AM_UPDATE_UNIT.$f" "$AM_UNIT_DIR/$AM_UPDATE_UNIT.$f"
+        done
+    fi
+    sudo systemctl daemon-reload 2>/dev/null
+    rm -rf "$AGENT_SNAPSHOT"
+    AGENT_SNAPSHOT=''
+    return 0
+}

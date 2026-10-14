@@ -12,6 +12,7 @@ scripts/update.sh
 scripts/lib/common.sh
 scripts/lib/registry.sh
 scripts/lib/preflight.sh
+scripts/lib/update-agent.sh
 docker-compose.yml
 docker-compose.local-ocr.yml
 deploy/Caddyfile

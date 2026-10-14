@@ -1094,3 +1094,33 @@ test_apply_from_outside_the_install_acts_on_it() {
     assert_eq "$(ENV_FILE="$APP/.env" env_get HOST_FILES_VERSION)" v9.9.10
     assert_dir "$rec" "remove_staging touches only \$APP_DIR/.staging/"
 }
+
+test_apply_installs_the_update_agent_and_a_failed_apply_takes_it_back() {
+    migrated_install
+    assert_file "$AM_UPDATE_AGENT" "the migrate installed the agent"
+    local before
+    before=$(cat "$AM_UPDATE_AGENT")
+    # A failure after the agent was replaced (step 9b) but before the marker: the config check.
+    stub_respond docker <<'SH'
+case "$*" in
+    *"config --format json")
+        printf '{"services":{"alliance-manager":{"volumes":[{"type":"bind","source":"%s/data","target":"/app/data"}]}}}\n' "$PWD" ;;
+    "compose config -q") exit 1 ;;
+esac
+exit 0
+SH
+    apply_update
+    assert_status 1
+    assert_eq "$(cat "$AM_UPDATE_AGENT")" "$before" "the v9.9.10 agent survived a failed apply"
+    stub_respond docker <<'SH'
+case "$*" in
+    *"config --format json")
+        printf '{"services":{"alliance-manager":{"volumes":[{"type":"bind","source":"%s/data","target":"/app/data"}]}}}\n' "$PWD" ;;
+esac
+exit 0
+SH
+    apply_update
+    assert_status 0
+    assert_contains "$(cat "$AM_UPDATE_AGENT")" "AGENT_RELEASE='v9.9.10'"
+    assert_contains "$OUT" "Host update agent: replaced"
+}
