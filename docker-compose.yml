@@ -38,10 +38,20 @@ services:
       "${COLLABORA_DOMAIN}": "host-gateway"
 
   collabora:
-    # Pinned by digest to v25.04.9.2 (the version currently running).
-    # To upgrade: pull collabora/code:latest, get the new digest with
-    # `docker images collabora/code --digests`, then update this line.
-    image: collabora/code@sha256:cfbf62dbed7f3a2bebeb634235c606613813a1857f85111da3a97db316029bba
+    # The default is the Collabora this release was tested with: 26.04.5.1.1, pinned by
+    # its multi-arch digest so it cannot move under an install. It moves with our
+    # releases -- `./scripts/manage.sh update` brings the next release's pin with
+    # everything else -- and moving it is a release of ours: a compose change, so a
+    # major (docs/RELEASING.md -> Third-party images). To find a digest:
+    #   docker buildx imagetools inspect collabora/code:<version>
+    # (the "Digest:" line of the index, not a per-architecture one). A jump between
+    # series (25.04 -> 26.04) is checked against the Files editor -- open, edit and
+    # save a .docx and an .xlsx -- before the pin moves.
+    #
+    # COLLABORA_IMAGE in .env overrides the default. Nothing sets it today; it is
+    # there so a later release's updater can move this pin without editing a file
+    # every update replaces wholesale.
+    image: ${COLLABORA_IMAGE:-collabora/code@sha256:bb8f3c9c5c9016045f25fccb5f0649be94469ebc7c7cc379f3576e470cccf33d}
     container_name: collabora
     restart: unless-stopped
     cap_add:

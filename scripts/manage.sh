@@ -61,6 +61,51 @@ am_exec() { exec "$@"; }
 # dc — docker compose, run in the install directory, where it finds its files and .env.
 dc() { (cd "$APP_DIR" && sudo docker compose "$@"); }
 
+# effective_compose_files — the compose files the install's next `up` will read, one per line,
+# as absolute paths, with each file the staged release ships taken from staging instead
+# ($STAGING_DIR, and the census in $SHIPPED_LIST, both set by apply). The set is what compose
+# itself would pick: COMPOSE_FILE from .env when it is set (split on COMPOSE_PATH_SEPARATOR,
+# default ':'), else docker-compose.yml plus docker-compose.override.yml if there is one. An
+# entry the release does not ship — the operator's override, a file of their own — keeps its
+# install path.
+effective_compose_files() {
+    local list sep entry rel
+    local -a entries=()
+    list=$(env_get COMPOSE_FILE)
+    if [ -n "$list" ]; then
+        sep=$(env_get COMPOSE_PATH_SEPARATOR)
+        IFS="${sep:-:}" read -r -a entries <<<"$list"
+    else
+        entries=(docker-compose.yml)
+        [ -f "$APP_DIR/docker-compose.override.yml" ] && entries+=(docker-compose.override.yml)
+    fi
+    for entry in "${entries[@]}"; do
+        [ -n "$entry" ] || continue
+        rel=${entry#./}
+        case $rel in "$APP_DIR"/*) rel=${rel#"$APP_DIR"/} ;; esac
+        case $rel in
+            /*) printf '%s\n' "$rel" ;;
+            *) if grep -qxF "$rel" "$SHIPPED_LIST"; then
+                   printf '%s\n' "$STAGING_DIR/$rel"
+               else
+                   printf '%s\n' "$APP_DIR/$rel"
+               fi ;;
+        esac
+    done
+}
+
+# dc_staged ARGS... — docker compose over that file set, as the install's project:
+# --project-directory is what makes compose read the install's .env (for ${APP_VERSION} and
+# the third-party pins), resolve ./data against the install, and keep its project name.
+dc_staged() {
+    local f
+    local -a args=(--project-directory "$APP_DIR")
+    while IFS= read -r f; do
+        args+=(-f "$f")
+    done < <(effective_compose_files)
+    sudo docker compose "${args[@]}" "$@"
+}
+
 operator_app_dir() {
     APP_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
     export APP_DIR
@@ -424,6 +469,7 @@ cmd_apply() {
 
     local shipped previous p summary=() patches helper_out
     shipped=$(mktemp) previous=$(mktemp)
+    SHIPPED_LIST=$shipped
     # Paths relative to the staging root, as every set they are compared with is.
     (cd "$staging" && find . -type f | sed 's|^\./||' | sort) > "$shipped"
     if [ "$migrate" = 1 ]; then
@@ -478,9 +524,18 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
     # 3. Pin, before the pull: compose resolves ${APP_VERSION} from .env when it runs.
     env_set APP_VERSION "$target"
 
-    # 4. Nothing in the install changes until the target image is held locally.
+    # 4. Nothing in the install changes until every image the target names is held locally.
+    # The pull reads the STAGED compose files (dc_staged), not the installed ones: the files
+    # about to be installed are the ones that name the images — a Collabora digest or OCR
+    # sidecar tag this release moves, not only APP_VERSION — and pulling here, before the
+    # marker, is what lets a failed pull roll back. Pulled with the previous release's files,
+    # a moved pin would only be fetched by step 12's `up`, after the marker
+    # (lastwar-private-docs#247). The merged stack is validated first, so a stack compose
+    # refuses fails with compose's own reason rather than as a pull error; step 7 checks the
+    # installed copy again.
     step "Pulling the $target images"
-    dc pull || fail_apply "could not pull the $target images"
+    dc_staged config -q || fail_apply "the $target compose files do not form a valid stack with this install's .env and overrides (above)"
+    dc_staged pull || fail_apply "could not pull the $target images"
 
     # 5 / 6. Remove what the previous release delivered and this one does not. Bounded to that
     # set, so a file the operator created is never a candidate.

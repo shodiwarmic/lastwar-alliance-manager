@@ -18,8 +18,10 @@ IMAGE_DIRS = ('cmd/', 'internal/', 'templates/', 'static/', 'migrations/')
 IMAGE_FILES = ('go.mod', 'go.sum', 'Dockerfile', 'deploy/entrypoint.sh')
 
 # Delivered to the host. docker-compose.yml is host-affecting because an operator edits and
-# keeps it. If the third-party image pins ever move out of it into .env, that classification
-# has to be re-decided rather than assumed.
+# keeps it. The third-party image pins are still compose edits: each is the default of an .env
+# override (${COLLABORA_IMAGE:-...}), so moving the tested default remains a host change, and a
+# major. Should a pin's tested value ever live in .env itself, that has to be re-decided rather
+# than assumed.
 HOST_DIRS = ('scripts/',)
 HOST_FILES = ('docker-compose.yml', 'docker-compose.local-ocr.yml',
               'deploy/Caddyfile', 'deploy/docker-compose.override.yml.example',

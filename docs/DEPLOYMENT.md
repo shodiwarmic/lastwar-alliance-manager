@@ -347,6 +347,13 @@ back exactly as it was and the running containers are left alone. Files you adde
 directory yourself are never touched. If the script cannot reach GitHub it changes nothing,
 rather than silently moving your install onto something else.
 
+The update also moves the two third-party images the compose files pin — the Collabora document
+server and, on a local-OCR install, the OCR sidecar — to the versions the new release was tested
+with, and pulls them before anything on the host changes. Neither follows its publisher's
+`latest`: a release names the exact images it was tested with. `COLLABORA_IMAGE` and
+`OCR_LOCAL_IMAGE` in `.env` override those pins (see `.env.example`), and a value set there
+outlives every later release, so leave them unset unless you mean to own that choice.
+
 The update runs in two stages: the copy of `manage.sh` already on disk fetches and unpacks the
 new release into `.staging/`, then hands over to the **new** release's own copy, which does the
 work. So a release's changes to the updater take effect in the run that delivers them.

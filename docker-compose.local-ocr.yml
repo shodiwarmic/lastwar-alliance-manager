@@ -28,7 +28,13 @@ services:
       - OCR_BACKEND_HINT=local
 
   ocr-local:
-    image: ghcr.io/shodiwarmic/lastwar-ocr-service:local
+    # The default is the OCR release this app release was tested with. `:local` means
+    # the latest OCR *release* (an OCR tag promotes it), so an install following it
+    # would take a new OCR release at its next pull, a combination nobody had tested;
+    # this install deliberately does not follow it. The pin moves with our releases,
+    # and moving it is a release of ours (docs/RELEASING.md -> Third-party images).
+    # OCR_LOCAL_IMAGE in .env overrides it; nothing sets it today.
+    image: ${OCR_LOCAL_IMAGE:-ghcr.io/shodiwarmic/lastwar-ocr-service:v1.0.0-local}
     container_name: lastwar-ocr-local
     restart: unless-stopped
     environment:

@@ -44,6 +44,27 @@ Declaring one needs no CI change: step 5 of the release-level check skips a majo
 paths. The level table's "what the operator has to do" column is a floor, not a definition — a
 major promises at least that much work, not exactly that much.
 
+### Third-party images
+
+Two images in the stack are not ours: Collabora (`docker-compose.yml`) and the local OCR sidecar
+(`docker-compose.local-ocr.yml`, our OCR service's `-local` build, released on its own schedule).
+Each is pinned in its compose file to the version this release was tested with — Collabora by
+multi-arch digest, the sidecar by its release tag, never `:local`, which moves with every OCR
+release — as the default of an `.env` override (`${COLLABORA_IMAGE:-…}`, `${OCR_LOCAL_IMAGE:-…}`).
+
+- **A bump rides one of our releases.** `manage.sh update` pulls the new pin with everything else,
+  before the marker, so a failed pull rolls back. Nothing updates either image on its own.
+- **A bump is a major**, because it is a compose edit and the classifier says so. That is the
+  price of testing the combination before shipping it, and it is not worked around. The release
+  notes say which image moved and to what.
+- **A Collabora series jump** (25.04 → 26.04) gets the Files editor smoke test first: open, edit
+  and save a `.docx` and an `.xlsx` through WOPI on the dev stack, and check Collabora's log for
+  `aliasgroup` complaints. The likely breakage points are the alias groups and the CSP's
+  `frame-src` / `connect-src`.
+- **The `.env` keys exist for a later updater** that moves a pin without editing a file every
+  update replaces wholesale. Nothing sets them today, and a value an operator sets there outlives
+  every later release's default.
+
 ### The host-files asset
 
 What an install needs besides the image — the files `.github/host-files.manifest` lists — ships

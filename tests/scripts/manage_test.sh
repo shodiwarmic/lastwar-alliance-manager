@@ -72,10 +72,10 @@ SH
     stub_respond docker <<'SH'
 env_val() { grep -m1 "^$1=" .env 2>/dev/null | cut -d= -f2-; }
 case "$*" in
-    "compose pull")
+    "compose "*pull)
         echo "# pull saw APP_VERSION=$(env_val APP_VERSION) marker=$(env_val HOST_FILES_VERSION)" >> "$STUB_LOG"
         [ -f "$TEST_TMP/fail-pull" ] && exit 1 ;;
-    "compose config -q")
+    "compose "*"config -q")
         [ -f "$TEST_TMP/fail-config" ] && { echo "invalid compose project" >&2; exit 1; } ;;
     "compose up -d")
         echo "# up saw marker=$(env_val HOST_FILES_VERSION)" >> "$STUB_LOG"
@@ -290,7 +290,50 @@ test_migrate_orders_pin_pull_marker_up() {
     grep -q '^# pull saw APP_VERSION=v9.9.9 marker=$' "$STUB_LOG" \
         || _fail "the pull must see the new pin and no marker: $(grep '^# pull' "$STUB_LOG")"
     grep -q '^# up saw marker=v9.9.9$' "$STUB_LOG" || _fail "up must see the marker"
-    [ "$(line_of 'docker compose pull')" -lt "$(line_of 'docker compose config -q')" ] || _fail "files copied before the pull"
+    [ "$(line_of 'docker compose .* pull$')" -lt "$(line_of '^docker compose config -q')" ] || _fail "files copied before the pull"
+}
+
+# pull_call — the logged `docker compose … pull` call, arguments only.
+pull_call() { stub_calls docker | grep ' pull$' | head -n1; }
+
+test_apply_pulls_with_the_staged_compose_files() {
+    make_clone
+    fake_host
+    rm "$APP/docker-compose.override.yml"
+    apply_migrate
+    assert_status 0
+    assert_eq "$(pull_call)" "compose --project-directory $APP -f $TEST_TMP/stage/docker-compose.yml pull"
+    stub_calls docker | grep -q "^compose --project-directory $APP -f $TEST_TMP/stage/docker-compose.yml config -q$" \
+        || _fail "the staged stack should be validated before the pull: $(stub_calls docker | tr '\n' '|')"
+}
+
+test_apply_pulls_both_staged_files_of_a_local_ocr_install() {
+    make_clone
+    fake_host
+    printf 'COMPOSE_FILE=docker-compose.yml:docker-compose.local-ocr.yml\n' >> "$APP/.env"
+    apply_migrate
+    assert_status 0
+    assert_eq "$(pull_call)" "compose --project-directory $APP -f $TEST_TMP/stage/docker-compose.yml -f $TEST_TMP/stage/docker-compose.local-ocr.yml pull" \
+        "with COMPOSE_FILE set, the auto-loaded override is not part of the stack"
+}
+
+test_apply_pulls_with_the_operators_override_at_its_install_path() {
+    make_clone
+    fake_host
+    apply_migrate
+    assert_status 0
+    assert_eq "$(pull_call)" "compose --project-directory $APP -f $TEST_TMP/stage/docker-compose.yml -f $APP/docker-compose.override.yml pull"
+}
+
+test_apply_keeps_an_operator_owned_compose_file_at_its_install_path() {
+    make_clone
+    fake_host
+    printf 'services: {}\n' > "$APP/my-extra.yml"
+    printf 'COMPOSE_FILE=./docker-compose.yml:my-extra.yml:%s/docker-compose.local-ocr.yml\n' "$APP" >> "$APP/.env"
+    apply_migrate
+    assert_status 0
+    assert_eq "$(pull_call)" "compose --project-directory $APP -f $TEST_TMP/stage/docker-compose.yml -f $APP/my-extra.yml -f $TEST_TMP/stage/docker-compose.local-ocr.yml pull" \
+        "shipped entries come from staging however they are spelled; the operator's stays put"
 }
 
 test_migrate_pull_failure_changes_nothing() {
