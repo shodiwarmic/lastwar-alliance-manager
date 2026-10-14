@@ -278,6 +278,8 @@ test_migrate_prunes_exactly_what_git_delivered_and_the_asset_does_not() {
     assert_file "$AM_BACKUP_HELPER"
     assert_eq "$(grep -c backup-lastwar "$STUB_DIR/crontab")" 1
     assert_contains "$OUT" "removed"
+    # The summary line keeps its subject: not a bare "written".
+    assert_contains "$OUT" "  - Nightly backup helper: written; crontab line added"
 }
 
 test_migrate_orders_pin_pull_marker_up() {

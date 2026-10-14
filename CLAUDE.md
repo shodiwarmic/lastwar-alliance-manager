@@ -2505,10 +2505,21 @@ Migrations run automatically on startup via `initDB()`.
 stack) and every page redirects to `/setup` until the first administrator exists. The dev
 database is a production copy and has users, so this only shows on a scratch database.
 
-**The dev stack needs `BIND_ADDR=0.0.0.0` in `.env`.** `docker-compose.yml` publishes 8080 and
-9980 on `127.0.0.1` only (a production install is reached through its proxy), so without it
-the stack is unreachable at the WSL LAN IP from Windows or a phone — and so is Collabora, which
-the dev override serves at that IP via `COLLABORA_PORT`.
+**The dev stack's `.env` is `.env.example` plus `deploy/.env.dev.example`.** This is the one
+place that says how to build it:
+
+```bash
+cp deploy/docker-compose.override.yml.example docker-compose.override.yml   # then set its LAN IPs
+{ grep -vE '^(PRODUCTION|HTTPS)=' .env.example; cat deploy/.env.dev.example; } > .env
+# then set SESSION_KEY and CREDENTIAL_ENCRYPTION_KEY: openssl rand -hex 32 for each
+```
+
+The dev file carries the entries a production `.env` must not have, each with its reason:
+`BIND_ADDR=0.0.0.0` (`docker-compose.yml` publishes 8080 and 9980 on `127.0.0.1` only, so without
+it the stack is unreachable at the WSL LAN IP from Windows or a phone — and so is Collabora,
+which the dev override serves at that IP via `COLLABORA_PORT`), `HOST_FILES_VERSION=dev` (the
+Admin page shows it; a checkout is not a release download), and `PRODUCTION` / `HTTPS` off.
+It is in `NEUTRAL_FILES`: shipped to nobody.
 
 **Static asset caching:** in non-production (`PRODUCTION != "true"`) the server sends
 `Cache-Control: no-store` for `static/` files (see `main.go`), so JS/CSS/SVG edits reload

@@ -35,8 +35,10 @@ HOST_FILES = ('docker-compose.yml', 'docker-compose.local-ocr.yml',
 # production-to-dev database refresh): it sits under scripts/ only to be found, runs on a dev
 # box, and is shipped to nobody. It is checked before HOST_DIRS, so it wins over scripts/.
 NEUTRAL_DIRS = ('docs/', '.github/', 'tests/', 'deploy/demo/', 'scripts/dev/')
+# deploy/.env.dev.example is the dev stack's .env entries (CLAUDE.md -> Running locally):
+# dev-only, shipped to nobody. deploy/ is classified file by file, so it is listed here.
 NEUTRAL_FILES = ('README.md', 'CLAUDE.md', 'SECURITY.md', 'LICENSE',
-                 'CHANGELOG.md', '.gitignore', '.dockerignore')
+                 'CHANGELOG.md', '.gitignore', '.dockerignore', 'deploy/.env.dev.example')
 
 # Host-classified, but deliberately NOT in the host-files asset -- each with its reason. Empty
 # today: the dev tooling that used to sit here moved to scripts/dev/, which is neutral, because

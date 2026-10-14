@@ -522,7 +522,7 @@ re-run with --yes to continue:  ./scripts/manage.sh migrate --yes"
         [ -e "$AM_BACKUP_HELPER" ] || CREATED_HELPER=1
         sudo crontab -l 2>/dev/null | grep -qF "$AM_BACKUP_HELPER" || CREATED_CRONTAB=1
         helper_out=$(ensure_backup_helper)
-        summary+=("${helper_out#Nightly backup helper: }")
+        summary+=("$helper_out")
         # Only under PRODUCTION=true: a plain-HTTP LAN install with no proxy is exactly where
         # 1 is wrong, and there the app's default of 0 applies.
         if [ "$(env_get PRODUCTION)" = true ] && ! env_has TRUSTED_PROXY_COUNT; then
