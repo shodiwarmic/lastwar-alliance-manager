@@ -124,10 +124,13 @@ func handleAccountability(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Evaluated-week context for the page-config notes (matches the members API).
-	_, completed, _, importedCompleted, fallbackActive := vsEvalContext()
+	weekDate, completed, _, importedCompleted, fallbackActive := vsEvalContext()
 	data.VSCompletedDays = completed
 	data.VSImportedCompleted = importedCompleted
 	data.VSFallbackActive = fallbackActive
+	if m, err := vsMinimumForWeek(db, weekDate); err == nil {
+		data.VSMinimumPoints, data.VSMinimumSource = m.Points, m.Source
+	}
 	renderTemplate(w, r, "accountability.html", data)
 }
 
@@ -182,9 +185,17 @@ func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vsMin, vsFlagDays := getVSAccountabilitySettings()
+	_, vsFlagDays := getVSAccountabilitySettings()
 	weekDate, completed, dayImported, importedCompleted, _ := vsEvalContext()
 	thresholds := loadStrikeThresholds()
+	// The evaluated week's own minimum, read before the rows cursor opens.
+	weekMin, err := vsMinimumForWeek(db, weekDate)
+	if err != nil {
+		slog.Error("VS minimum for week failed", "error", err, "week", weekDate)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	vsMin := weekMin.Points
 
 	rows, err := db.Query(`
 		SELECT
@@ -401,9 +412,17 @@ func handleAccountabilitySummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vsMin, vsFlagDays := getVSAccountabilitySettings()
+	_, vsFlagDays := getVSAccountabilitySettings()
 	weekDate, completed, dayImported, importedCompleted, _ := vsEvalContext()
 	thresholds := loadStrikeThresholds()
+	// The evaluated week's own minimum, read before the rows cursor opens.
+	weekMin, err := vsMinimumForWeek(db, weekDate)
+	if err != nil {
+		slog.Error("VS minimum for week failed", "error", err, "week", weekDate)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	vsMin := weekMin.Points
 
 	rows, err := db.Query(`
 		SELECT

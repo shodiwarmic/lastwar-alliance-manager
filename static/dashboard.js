@@ -2,6 +2,8 @@
 
 const cfg        = document.getElementById('page-config').dataset;
 const VS_MINIMUM = Number(cfg.vsMinimum) || 2500000;
+// 'override' when an officer set this week's minimum; it is always named where shown.
+const VS_MINIMUM_OVERRIDDEN = cfg.vsMinimumSource === 'override';
 const USER_RANK  = cfg.userRank || '';
 const IS_ADMIN   = cfg.isAdmin === 'true';
 
@@ -304,7 +306,8 @@ function renderLeaderFlags(card, members, vsRows, joinedAtById, dayImported) {
     }
 
     const label = el('p', { className: 'dash-section-label' });
-    label.textContent = 'Below daily min (' + formatCompact(VS_MINIMUM) + ') on ' + VS_FLAG_DAYS + '+ days';
+    label.textContent = 'Below daily min (' + formatCompact(VS_MINIMUM)
+        + (VS_MINIMUM_OVERRIDDEN ? ", this week's override" : '') + ') on ' + VS_FLAG_DAYS + '+ days';
     card.appendChild(label);
 
     const list = el('ul', { className: 'dash-list' });

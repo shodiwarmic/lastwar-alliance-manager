@@ -41,6 +41,8 @@
 .vsl-strat.worked { color: var(--color-success); background: var(--color-success-bg); }
 .vsl-strat.failed { color: var(--color-danger); background: var(--color-danger-bg); }
 .vsl-strat.mixed  { color: var(--color-warning); background: var(--color-warning-bg); }
+/* The week's VS daily minimum override: a number, so no capitalising. */
+.vsl-strat.vsl-min-override { color: var(--color-warning); background: var(--color-warning-bg); text-transform: none; }
 
 /* Day theme tiles (current week) */
 .vsl-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 8px 0 4px; }

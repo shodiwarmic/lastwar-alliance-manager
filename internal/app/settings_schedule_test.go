@@ -54,6 +54,7 @@ func setupSettingsTestDB(t *testing.T) {
 func baseSettings() map[string]any {
 	return map[string]any{
 		"vs_flag_days_threshold": 2,
+		"vs_minimum_points":      2500000,
 		"nap_size":               10,
 		"nap_import_limit":       15,
 	}

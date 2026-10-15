@@ -215,6 +215,8 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <div id="page-config" data-can-manage="{{if .Permissions.ManageAccountability}}true{{else}}false{{end}}"
      data-vs-completed="{{.VSCompletedDays}}"
+     data-vs-minimum="{{.VSMinimumPoints}}"
+     data-vs-minimum-source="{{.VSMinimumSource}}"
      data-vs-imported-completed="{{.VSImportedCompleted}}"
      data-vs-fallback="{{if .VSFallbackActive}}true{{else}}false{{end}}" hidden></div>
 <script src="{{asset "/table-utils.js"}}"></script>

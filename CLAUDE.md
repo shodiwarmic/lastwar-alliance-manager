@@ -95,7 +95,7 @@ and a text's duplicate rows heal to one when it is next saved. Each change logs 
 duplicates, and choosing which mapping wins is a human's call.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`, `update`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`, `update`, `vs_week_minimum`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -1364,6 +1364,26 @@ func run<Name>Report(q rowQueryer, p <Name>Params, now time.Time) (*<Name>Report
 `reports.html` (export tables as template skeletons with `data-export-csv` and
 `translate="no"` — `table-utils.js` wires them at load, so the renderer only fills
 `<tbody>` and calls `exportReady`); a renderer in `reports.js`'s `REPORTS`.
+
+### The VS daily minimum is per week (`vs_week_minimums`, `reports_vs.go`)
+
+A week is judged against the minimum that applied to *it*, not today's. `vsMinimumForWeek(q,
+week)` resolves, in order: the week's **override** (an officer's value, set in the VS League
+week modal — and only there); else the **setting** row with the greatest `week_date <=` the
+week (the Settings save writes the current game week's row, in one transaction with the
+settings UPDATE); else **today's setting**, with source `current_setting`, which reports
+label "no record for this week". `vsMinimumsForWeeks` does the same for many weeks in two
+reads. Every current-week surface (dashboard, Accountability members/summary, the weekly
+summary) reads the evaluated week's minimum through it, so none disagrees with a report.
+
+- A minimum is always **≥ 1**: schema `CHECK`, Settings and the League payload refuse less;
+  `0` on the League payload means *clear the override*.
+- An override **follows its week**: a League week's date correction moves it, a week delete
+  removes it, both in the week's own transaction. A week outside any league season has no
+  override UI.
+- An override is **always named** where a minimum is shown ("5.0M, this week's override").
+- `getVSAccountabilitySettings` still returns today's setting and the flag-days threshold;
+  call `vsMinimumForWeek` **before** opening a rows cursor, never inside one.
 
 **Print** is `@media print` in `reports.css` (a device query, not a width breakpoint): it
 hides the chrome and un-scrolls `.content-scroll` and the 100vh shell, without which a

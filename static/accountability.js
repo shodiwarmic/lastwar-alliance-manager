@@ -98,6 +98,13 @@ async function saveStrike() {
 function applyVSWeekNotes() {
     const heading = document.getElementById('vs-flag-heading');
     if (!heading) return;
+    // An officer's override for this week is always named, so it can't act unseen.
+    if (cfg.vsMinimumSource === 'override') {
+        const s = document.createElement('span');
+        s.className = 'acc-week-note';
+        s.textContent = ` (${formatCompact(Number(cfg.vsMinimum))}, this week's override)`;
+        heading.appendChild(s);
+    }
     if (cfg.vsFallback === 'true') {
         const s = document.createElement('span');
         s.className = 'acc-week-note';

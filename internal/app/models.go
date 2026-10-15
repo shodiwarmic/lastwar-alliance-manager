@@ -600,6 +600,9 @@ type VSLeagueWeek struct {
 	StrategyLabel  *string `json:"strategy_label,omitempty"`
 	StrategyResult *string `json:"strategy_result,omitempty"`
 	Notes          *string `json:"notes,omitempty"`
+	// This week's VS daily minimum override (vs_week_minimums), and who set it.
+	VSMinimum      *int    `json:"vs_minimum,omitempty"`
+	VSMinimumSetBy *string `json:"vs_minimum_set_by,omitempty"`
 	// Derived + children.
 	Standing    VSLeagueWeekStanding `json:"standing"`     // computed from days (or summary fields when no day rows)
 	SummaryOnly bool                 `json:"summary_only"` // true = no day rows; our_points/opponent_points are stored inputs
@@ -1439,6 +1442,9 @@ type PageData struct {
 	HasGCPCredentials bool
 	OCRPipelineReady  bool
 	VSMinimumPoints   int
+	// VSMinimumSource says where VSMinimumPoints came from: override | recorded |
+	// current_setting (vsMinimumForWeek). Pages name an override wherever they show it.
+	VSMinimumSource string
 	// Reports holds the reports the user may run (the Reports page's tabs).
 	Reports []reportDef
 	// VS daily-minimum flagging (server-authoritative evaluated week — see vsEvalContext).
