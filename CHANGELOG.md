@@ -9,6 +9,55 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v3.1.0 — unreleased
+
+A **Reports** page: the weekly summary, a VS-misses report and a participation grid, each to read,
+download and print. VS days are judged against the minimum that applied that week, saving on the VS
+page can no longer wipe out an import, and power growth no longer counts a new member's whole power.
+([#121](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/121))
+
+**Minor** — an image pull; nothing on the host changes and no `.env` needs editing. One database
+migration (085) adds a table and three permission keys.
+
+- **The Reports page** (`/reports`, in the menu after Accountability). One tab per report, each with
+  its own permission under **Reports** in the permissions matrix: *Weekly summary*, *VS misses* and
+  *Participation grid*. The update gives all three to every rank that can see the Accountability
+  page, and never overwrites a choice made since. Dated reports take the last 1, 2, 4 or 8 complete
+  VS weeks, the whole history or custom dates, optionally with this week so far, and print the dates
+  they used. **Print** gives the report alone, at full length, in the light theme; CSV and Excel per
+  table.
+- **Weekly summary.** The Accountability page's Report tab moved here. `/accountability/report`
+  redirects to it; the tab and `/api/accountability/report-data` are gone.
+- **VS misses.** Every day a member scored below the VS daily minimum over a range, for everyone or
+  one member, with the minimum each week was judged against, days nobody imported, a table by member
+  and one row per miss.
+- **Participation grid.** Every member against every participation board recorded in a range — present,
+  zero, missed or excused, blank where the board says nothing about them — with totals and a VS
+  column. Only recorded boards appear.
+- **The VS daily minimum is per week.** From the week this version is installed, each change in
+  Alliance Settings is remembered for its week (a change applies to the whole current week), so past
+  weeks keep the minimum they had. A Duel League week can override it (**Daily minimum for this
+  week** in the week's settings). An override is named wherever it applies. Weeks from before this
+  version are judged against today's setting, and the reports say so.
+- **Saving VS points writes only what you changed.** The VS page used to save every member's whole
+  week from the copy it loaded, so a page left open across an import put the imported days back to
+  zero. If a value you edited was changed underneath to something else, nothing is saved and a review
+  asks which to keep.
+- **A member with no VS points for a week has no score that week, not six zeros.** The dashboard and
+  Accountability flags, and the reports, no longer count those days as misses; the reports list them
+  as *No score*.
+- **Power growth needs a starting reading.** A member without a reading old enough (a new joiner)
+  shows "—" instead of their whole power as growth, and is left out of the weekly top five, which
+  says how many were. The windows are chosen on each page (7 and 30 days by default) and remembered
+  per browser; the weekly summary's growth is now 30-day, not 28. Tracking lists every active
+  member — it used to leave out anyone marked ineligible for trains — and its data route now
+  requires the Tracking permission, as the page did.
+- **For operators:** rolling back to v3.0.0 keeps working, with one caveat: a save of the permissions
+  matrix made while on v3.0.0 drops the three report keys, and coming back to v3.1.0 does not grant
+  them again. If you roll back and will edit permissions meanwhile, roll back with the pre-update
+  backup instead.
+- **Removed:** the unused `/api/member-timelines` route.
+
 ## v3.0.0 — 2026-10-14
 
 Updates install from the Admin page. After this release has been installed once from a terminal,
