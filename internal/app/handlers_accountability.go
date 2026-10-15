@@ -117,10 +117,21 @@ func vsEvalContextAt(q rowQuerier, now time.Time) (weekDate string, completed in
 	return weekDate, completed, dayImported, importedCompleted, fallbackActive, err
 }
 
-// vsDaysBelow counts how many completed, imported, post-join days the member scored
-// below the daily minimum. Mirrors the JS countDaysBelowMinimum.
-func vsDaysBelow(scores [6]int, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) int {
-	n := 0
+// vsDayStatus is one VS day's verdict for one member.
+type vsDayStatus int
+
+const (
+	vsDaySkipped vsDayStatus = iota // not completed, not imported, or before the member joined
+	vsDayMet                        // evaluated, at or above the minimum
+	vsDayBelow                      // evaluated, below the minimum
+)
+
+// vsDayStatuses judges each of a week's six days for one member: a day is evaluated
+// only when it is completed (i < completed), imported, and on or after the member's
+// join date. Rank is not its business — callers choose the members. vsDaysBelow and
+// the VS-misses report (reports_vs.go) both read it, so the two cannot drift.
+func vsDayStatuses(scores [6]int, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) [6]vsDayStatus {
+	var out [6]vsDayStatus
 	for i := 0; i < completed && i < 6; i++ {
 		if !dayImported[i] {
 			continue // day not imported yet
@@ -129,6 +140,20 @@ func vsDaysBelow(scores [6]int, joinedAt, weekDate string, completed int, dayImp
 			continue // before the member joined
 		}
 		if scores[i] < vsMin {
+			out[i] = vsDayBelow
+		} else {
+			out[i] = vsDayMet
+		}
+	}
+	return out
+}
+
+// vsDaysBelow counts how many completed, imported, post-join days the member scored
+// below the daily minimum. Mirrors the JS countDaysBelowMinimum.
+func vsDaysBelow(scores [6]int, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) int {
+	n := 0
+	for _, st := range vsDayStatuses(scores, joinedAt, weekDate, completed, dayImported, vsMin) {
+		if st == vsDayBelow {
 			n++
 		}
 	}

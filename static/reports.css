@@ -164,6 +164,56 @@
     color: var(--color-danger);
 }
 
+/* --- Tables ------------------------------------------------------------------------- */
+.report-controls--secondary {
+    margin-top: 0;
+}
+
+.report-summary {
+    margin-bottom: 1rem;
+}
+
+.report-summary-lead {
+    font-weight: 600;
+    margin: 0 0 6px;
+}
+
+.report-summary-list {
+    margin: 0 0 6px;
+    padding-left: 1.2em;
+    font-size: 0.9em;
+}
+
+.report-note {
+    font-size: 0.85em;
+    color: var(--color-text-muted);
+    margin: 4px 0;
+}
+
+.report-table-title {
+    font-size: 1rem;
+    margin: 1.25rem 0 0.25rem;
+}
+
+.report-table td {
+    white-space: nowrap;
+}
+
+.report-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The misses table is long-format; a rule marks where each member's rows start. */
+.report-table tr.report-group-start td {
+    border-top: 2px solid var(--color-border);
+}
+
+.report-empty {
+    color: var(--color-text-muted);
+    text-align: center;
+}
+
 /* Shown only on paper: the report's title, range, rule and when it was generated. */
 .report-print-header {
     display: none;

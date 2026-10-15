@@ -55,8 +55,55 @@
     <div id="tab-vs-misses" class="tab-content">
         <div class="report-print-header"><h2>VS misses</h2><p class="report-print-meta"></p></div>
         {{template "report_range_controls"}}
+        <div class="report-controls report-controls--secondary">
+            <label class="report-field">Member
+                <select class="form-input" id="vs-misses-member" translate="no">
+                    <option value="">Everyone</option>
+                </select>
+            </label>
+            <label class="report-check"><input type="checkbox" id="vs-misses-show-clean"> Show members with no misses</label>
+        </div>
         <p class="status-msg report-status">Loading…</p>
-        <div class="report-body"></div>
+        <div class="report-body" style="display:none">
+            <div class="report-summary" id="vs-misses-summary"></div>
+
+            <h3 class="report-table-title">By member</h3>
+            <div class="tab-toolbar"></div>
+            <div class="table-scroll">
+                <table class="data-table report-table" id="vs-misses-summary-table" data-export-csv="vs-misses-summary.csv" translate="no">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Rank</th>
+                            <th>Days evaluated</th>
+                            <th>Misses</th>
+                            <th>Worst day</th>
+                            <th>Avg shortfall</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <h3 class="report-table-title">Every miss</h3>
+            <div class="tab-toolbar"></div>
+            <div class="table-scroll">
+                <table class="data-table report-table" id="vs-misses-table" data-export-csv="vs-misses.csv" translate="no">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Rank</th>
+                            <th>Date</th>
+                            <th>Day</th>
+                            <th>Week minimum</th>
+                            <th>Points</th>
+                            <th>Shortfall</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
     </div>
     {{end}}
 

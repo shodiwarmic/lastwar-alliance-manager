@@ -194,6 +194,104 @@
     }
     REPORTS.weekly = { run: runWeekly };
 
+    // --- VS misses (GET /api/reports/vs-misses) --------------------------------------
+
+    let vsMissesData = null;
+
+    // A cell showing `text` that exports `raw` (table-utils reads data-export-value).
+    function numCell(text, raw) {
+        return el('td', { className: 'num', dataset: { exportValue: String(raw) }, text });
+    }
+
+    async function loadMemberPicker() {
+        const sel = document.getElementById('vs-misses-member');
+        if (!sel || sel.dataset.loaded) return;
+        sel.dataset.loaded = '1';
+        try {
+            const res = await fetch('/api/members');
+            if (!res.ok) return;
+            const members = (await res.json()).filter(m => m.rank !== 'EX')
+                .sort((a, b) => a.name.localeCompare(b.name));
+            members.forEach(m => sel.appendChild(el('option', { value: m.id, text: m.name })));
+        } catch { /* the picker stays at Everyone */ }
+    }
+
+    function renderVSMissesSummaryRows() {
+        const table = document.getElementById('vs-misses-summary-table');
+        const showClean = document.getElementById('vs-misses-show-clean').checked;
+        const rows = vsMissesData.members.filter(m => showClean || m.misses > 0).map(m => el('tr', {},
+            el('td', { text: m.name }),
+            el('td', {}, el('span', { className: 'member-rank rank-' + m.rank, text: m.rank })),
+            numCell(String(m.days_evaluated), m.days_evaluated),
+            numCell(String(m.misses), m.misses),
+            m.worst ? el('td', { dataset: { exportValue: m.worst.date } },
+                fmtDate(m.worst.date) + ' · ' + formatCompact(m.worst.points)) : el('td', { text: '—' }),
+            m.misses ? numCell(formatCompact(m.avg_shortfall), m.avg_shortfall) : el('td', { text: '—' })));
+        if (!rows.length) {
+            rows.push(el('tr', {}, el('td', { colspan: '6', className: 'report-empty', text: 'Nobody missed the minimum in this range.' })));
+        }
+        table.tBodies[0].replaceChildren(...rows);
+        exportReady(table);
+    }
+
+    function renderVSMisses(panel, rep) {
+        vsMissesData = rep;
+        const cov = rep.coverage;
+        const missers = rep.members.filter(m => m.misses > 0);
+        const totalMisses = missers.reduce((n, m) => n + m.misses, 0);
+
+        // The rules the figures rest on, in words: each week's minimum, the days not
+        // evaluated, and who is left out.
+        const summary = [el('p', { className: 'report-summary-lead',
+            text: `${totalMisses} ${totalMisses === 1 ? 'miss' : 'misses'} by ${missers.length} of ${cov.members_evaluated} members, over ${cov.days_evaluated} evaluated VS days.` })];
+        const weekList = el('ul', { className: 'report-summary-list' }, rep.weeks.map(w =>
+            el('li', {}, 'Week of ' + fmtDate(w.week_date) + ': daily minimum ' + minimumLabel(w.minimum.points, w.minimum.source))));
+        summary.push(weekList);
+        if (cov.days_not_imported.length) {
+            summary.push(el('p', { className: 'report-note', text: 'Not imported, so not evaluated: '
+                + cov.days_not_imported.map(d => fmtDate(d)).join(', ') + '.' }));
+        }
+        summary.push(el('p', { className: 'report-note', text: 'A day counts once it is over and imported, from the member\'s join date.'
+            + (cov.members_excluded_ex ? ` Former members are not included (${cov.members_excluded_ex} had points in this range).` : '') }));
+        document.getElementById('vs-misses-summary').replaceChildren(...summary);
+
+        renderVSMissesSummaryRows();
+
+        const table = document.getElementById('vs-misses-table');
+        const rows = [];
+        missers.forEach(m => m.days.forEach((d, i) => rows.push(el('tr', { className: i === 0 ? 'report-group-start' : null },
+            el('td', { text: m.name }),
+            el('td', {}, el('span', { className: 'member-rank rank-' + m.rank, text: m.rank })),
+            el('td', { dataset: { exportValue: d.date }, text: fmtDate(d.date, true) }),
+            el('td', { text: d.weekday }),
+            numCell(formatCompact(d.minimum), d.minimum),
+            numCell(formatCompact(d.points), d.points),
+            numCell(formatCompact(d.shortfall), d.shortfall)))));
+        if (!rows.length) {
+            rows.push(el('tr', {}, el('td', { colspan: '7', className: 'report-empty', text: 'No misses in this range.' })));
+        }
+        table.tBodies[0].replaceChildren(...rows);
+        exportReady(table);
+
+        setMeta(panel, [fmtRange(rep.from, rep.to), 'Generated ' + fmtGenerated(rep.generated_at)]);
+        showBody(panel);
+    }
+
+    async function runVSMisses(panel) {
+        loadMemberPicker();
+        setStatus(panel, 'Loading…');
+        const params = rangeQuery(panel);
+        const member = document.getElementById('vs-misses-member').value;
+        if (member) params.set('member_id', member);
+        try {
+            renderVSMisses(panel, await fetchReport('/api/reports/vs-misses?' + params));
+        } catch (e) {
+            panel.querySelector('.report-body').style.display = 'none';
+            setStatus(panel, 'Could not run the report: ' + e.message, true);
+        }
+    }
+    REPORTS['vs-misses'] = { run: runVSMisses };
+
     // --- Page ----------------------------------------------------------------------
 
     const ran = {};
@@ -225,6 +323,11 @@
             wireRangeControls(panel, () => runReport(name));
         });
         document.querySelectorAll('.report-print').forEach(b => b.addEventListener('click', () => window.print()));
+        // Export buttons stay off until a report has filled their table.
+        document.querySelectorAll('table[data-export-csv]').forEach(exportReady);
+        document.getElementById('vs-misses-show-clean')?.addEventListener('change', () => {
+            if (vsMissesData) renderVSMissesSummaryRows();
+        });
         Tabs.init({ hash: true, onActivate: (name) => { if (!ran[name]) runReport(name); } });
     });
 })();

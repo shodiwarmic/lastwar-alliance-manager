@@ -88,3 +88,23 @@ func handleWeeklySummaryReport(w http.ResponseWriter, r *http.Request) {
 		return runWeeklySummaryReport(q, weeklySummaryParams{}, time.Now())
 	})
 }
+
+// handleVSMissesReport is GET /api/reports/vs-misses?from=&to=&weeks=&current=&member_id=
+// (view_report_vs_misses).
+func handleVSMissesReport(w http.ResponseWriter, r *http.Request) {
+	rng, err := reportRangeParamsFromQuery(r.URL.Query())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	p := vsMissesParams{Range: rng}
+	if v := r.URL.Query().Get("member_id"); v != "" {
+		if p.MemberID, err = strconv.Atoi(v); err != nil || p.MemberID < 0 {
+			http.Error(w, "member_id must be a member's id", http.StatusBadRequest)
+			return
+		}
+	}
+	serveReport(w, "vs-misses", func(q rowQueryer) (any, error) {
+		return runVSMissesReport(q, p, time.Now())
+	})
+}
