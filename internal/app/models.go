@@ -1313,6 +1313,19 @@ type TrainLog struct {
 	UpdatedAt     string  `json:"updated_at"`
 }
 
+// TrainAllocation summarises completed historic logs for one current roster member.
+// Missing dates are null; guest records have no separate attendance flag.
+type TrainAllocation struct {
+	MemberID   int     `json:"member_id"`
+	Name       string  `json:"name"`
+	Rank       string  `json:"rank"`
+	LastTrain  *string `json:"last_train"`
+	Trains     int     `json:"trains"`
+	FreeTrains int     `json:"free_trains"`
+	LastGuest  *string `json:"last_guest"`
+	GuestSpots int     `json:"guest_spots"`
+}
+
 type EligibilityRule struct {
 	ID              int             `json:"id"`
 	Name            string          `json:"name"`
