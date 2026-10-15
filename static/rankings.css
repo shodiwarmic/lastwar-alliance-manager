@@ -1,0 +1,21 @@
+/* rankings.css — the Tracking page (rankings.html / rankings.js). */
+
+/* Growth windows (days): chosen on the page, remembered per browser. */
+.growth-windows {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+}
+
+.growth-window {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9em;
+    color: var(--color-text-mid);
+}
+
+.growth-window .form-input {
+    width: 5.5em;
+}

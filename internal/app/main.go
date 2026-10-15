@@ -770,8 +770,7 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/dyno-recommendations/{id:[0-9]+}", authMiddleware(updateDynoRecommendation)).Methods("PUT")
 
 	// Rankings & Timelines
-	router.HandleFunc("/api/rankings", authMiddleware(getMemberRankings)).Methods("GET")
-	router.HandleFunc("/api/member-timelines", authMiddleware(getMemberTimelines)).Methods("GET")
+	router.HandleFunc("/api/rankings", authMiddleware(requirePermission("view_rankings", getMemberRankings))).Methods("GET")
 
 	// Storm & Power History
 	router.HandleFunc("/api/storm-assignments", authMiddleware(getStormAssignments)).Methods("GET")

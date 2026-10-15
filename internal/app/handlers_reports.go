@@ -84,8 +84,13 @@ func serveReport(w http.ResponseWriter, name string, run func(q rowQueryer) (any
 
 // handleWeeklySummaryReport is GET /api/reports/weekly (view_report_weekly).
 func handleWeeklySummaryReport(w http.ResponseWriter, r *http.Request) {
+	window, err := growthWindowParam(r.URL.Query().Get("window"), growthWindowLongDefault)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	serveReport(w, "weekly", func(q rowQueryer) (any, error) {
-		return runWeeklySummaryReport(q, weeklySummaryParams{}, time.Now())
+		return runWeeklySummaryReport(q, weeklySummaryParams{GrowthWindowDays: window}, time.Now())
 	})
 }
 

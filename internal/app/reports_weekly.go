@@ -7,9 +7,8 @@
 package app
 
 import (
+	"sort"
 	"time"
-
-	"lastwar-alliance/internal/gametime"
 )
 
 // ReportTopMember is one row of a weekly-summary list.
@@ -20,8 +19,11 @@ type ReportTopMember struct {
 	Value int    `json:"value"`
 }
 
-// weeklySummaryParams: the report is the evaluated week by definition, so it takes no range.
-type weeklySummaryParams struct{}
+// weeklySummaryParams: the report is the evaluated week by definition, so it takes no
+// range; only the power-growth window (days, default 30).
+type weeklySummaryParams struct {
+	GrowthWindowDays int `json:"window,omitempty"`
+}
 
 type weeklySummaryReport struct {
 	WeekDate          string            `json:"week_date"`
@@ -29,10 +31,13 @@ type weeklySummaryReport struct {
 	VSLeaders         []ReportTopMember `json:"vs_leaders"`
 	VSUnderperformers []ReportTopMember `json:"vs_underperformers"`
 	PowerGrowth       []ReportTopMember `json:"power_growth"`
-	TagCounts         map[string]int    `json:"tag_counts"`
-	TotalStrikes      int               `json:"total_strikes"`
-	VSMin             int               `json:"vs_min"`
-	VSMinSource       string            `json:"vs_min_source"`
+	// The growth window, and how many members had no reading that old (left out).
+	GrowthWindowDays    int            `json:"growth_window_days"`
+	PowerGrowthExcluded int            `json:"power_growth_excluded"`
+	TagCounts           map[string]int `json:"tag_counts"`
+	TotalStrikes        int            `json:"total_strikes"`
+	VSMin               int            `json:"vs_min"`
+	VSMinSource         string         `json:"vs_min_source"`
 	// Evaluated-week context for the notes (mirrors the dashboard page-config).
 	Completed         int  `json:"completed"`
 	ImportedCompleted int  `json:"imported_completed"`
@@ -104,41 +109,30 @@ func runWeeklySummaryReport(q rowQueryer, p weeklySummaryParams, now time.Time) 
 		return nil, err
 	}
 
-	// Power growth: latest reading minus the latest reading 28 days before now.
-	cutoff := now.UTC().AddDate(0, 0, -28).Format(gametime.SQLiteLayout)
-	growthRows, err := q.Query(`
-		SELECT m.id, m.name, m.rank,
-		       COALESCE(latest.power, 0) - COALESCE(older.power, 0) AS growth
-		FROM members m
-		LEFT JOIN (
-			SELECT member_id, power FROM power_history ph1
-			WHERE recorded_at = (SELECT MAX(recorded_at) FROM power_history WHERE member_id = ph1.member_id)
-		) latest ON latest.member_id = m.id
-		LEFT JOIN (
-			SELECT member_id, power FROM power_history ph2
-			WHERE recorded_at = (
-				SELECT MAX(recorded_at) FROM power_history
-				WHERE member_id = ph2.member_id AND recorded_at <= ?
-			)
-		) older ON older.member_id = m.id
-		WHERE m.rank != 'EX'
-		ORDER BY growth DESC
-		LIMIT 5
-	`, cutoff)
+	// Power growth over the window: the top five among members with a reading that old.
+	window := p.GrowthWindowDays
+	if window == 0 {
+		window = growthWindowLongDefault
+	}
+	growth, err := powerGrowth(q, growthParams{Table: histPower, WindowDays: window, AsOf: now})
 	if err != nil {
 		return nil, err
 	}
-	for growthRows.Next() {
-		var m ReportTopMember
-		if err := growthRows.Scan(&m.ID, &m.Name, &m.Rank, &m.Value); err != nil {
-			growthRows.Close()
-			return nil, err
+	rep.GrowthWindowDays = window
+	var withBaseline []memberGrowth
+	for _, g := range growth {
+		if g.Growth == nil {
+			rep.PowerGrowthExcluded++
+			continue
 		}
-		rep.PowerGrowth = append(rep.PowerGrowth, m)
+		withBaseline = append(withBaseline, g)
 	}
-	growthRows.Close()
-	if err := growthRows.Err(); err != nil {
-		return nil, err
+	sort.SliceStable(withBaseline, func(i, j int) bool { return *withBaseline[i].Growth > *withBaseline[j].Growth })
+	for i, g := range withBaseline {
+		if i == 5 {
+			break
+		}
+		rep.PowerGrowth = append(rep.PowerGrowth, ReportTopMember{ID: g.MemberID, Name: g.Name, Rank: g.Rank, Value: int(*g.Growth)})
 	}
 
 	// Members by tag, and active strikes.

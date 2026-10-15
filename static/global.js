@@ -208,6 +208,9 @@ window.desertStormDayError = (dateStr) => {
         memberSinceDisplay: 'days', // 'days' (in-alliance days) | 'date' (join date)
         numberSuffixes: 'short',    // 'short' (K/M/B) | 'metric' (K/M/G, as the game prints billions)
         exportSettings: '{}',       // JSON per export key: { numbers: 'raw'|'shown', exclude: [colKey] } (table-utils.js)
+        growthWindowShort: '7',     // Tracking's short power-growth window, days (1–365)
+        growthWindowLong: '30',     // Tracking's long power-growth window, days (1–365)
+        weeklyGrowthWindow: '30',   // the Reports page weekly summary's growth window, days
     };
     const read = (key) => {
         try {

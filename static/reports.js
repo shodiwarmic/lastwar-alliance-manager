@@ -141,11 +141,20 @@
                 el('span', { className: 'report-list-value', text: fmt(m.value) }))));
     }
 
+    // The growth window: remembered per browser (UserPrefs), clamped to 1–365.
+    function weeklyWindow() {
+        const n = parseInt(document.getElementById('weekly-growth-window').value, 10);
+        return Number.isFinite(n) ? Math.min(365, Math.max(1, n)) : 30;
+    }
+
     async function runWeekly(panel) {
         setStatus(panel, 'Loading…');
+        const input = document.getElementById('weekly-growth-window');
+        input.value = weeklyWindow();
+        UserPrefs.set('weeklyGrowthWindow', input.value);
         let rep;
         try {
-            rep = await fetchReport('/api/reports/weekly');
+            rep = await fetchReport('/api/reports/weekly?window=' + input.value);
         } catch (e) {
             setStatus(panel, 'Failed to load the report: ' + e.message, true);
             return;
@@ -176,8 +185,14 @@
         if (bits.length) under.push(el('p', { className: 'report-week-note', text: 'Flags ' + bits.join('; ') + '.' }));
         document.getElementById('weekly-vs-under').replaceChildren(...under);
 
-        document.getElementById('weekly-power-growth').replaceChildren(
-            memberList(rep.power_growth, v => (v > 0 ? '+' : '') + formatCompact(v)));
+        const days = rep.growth_window_days;
+        document.getElementById('weekly-growth-heading').textContent = days + '-day power growth';
+        const growth = [memberList(rep.power_growth, v => (v > 0 ? '+' : '') + formatCompact(v))];
+        if (rep.power_growth_excluded) {
+            growth.push(el('p', { className: 'report-week-note',
+                text: `${rep.power_growth_excluded} ${rep.power_growth_excluded === 1 ? 'member has' : 'members have'} no reading ${days} days old, so no growth to rank.` }));
+        }
+        document.getElementById('weekly-power-growth').replaceChildren(...growth);
 
         document.getElementById('weekly-tag-counts').replaceChildren(...[
             ['Reliable', 'report-tag--reliable'], ['Needs Improvement', 'report-tag--needs-improvement'], ['At Risk', 'report-tag--at-risk'],
@@ -323,6 +338,11 @@
             wireRangeControls(panel, () => runReport(name));
         });
         document.querySelectorAll('.report-print').forEach(b => b.addEventListener('click', () => window.print()));
+        const weeklyWin = document.getElementById('weekly-growth-window');
+        if (weeklyWin) {
+            weeklyWin.value = UserPrefs.get('weeklyGrowthWindow');
+            weeklyWin.addEventListener('change', () => runReport('weekly'));
+        }
         // Export buttons stay off until a report has filled their table.
         document.querySelectorAll('table[data-export-csv]').forEach(exportReady);
         document.getElementById('vs-misses-show-clean')?.addEventListener('change', () => {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -43,6 +44,10 @@ func TestWeeklySummaryMatchesTheOldReport(t *testing.T) {
 	json.Unmarshal(golden, &want)
 	b, _ := json.Marshal(rep)
 	json.Unmarshal(b, &got)
+	// power_growth is the one field that changed on purpose (241, C6): a member with no
+	// reading 30 days old has no growth, so the new joiner the old report ranked first
+	// is left out and counted. TestWeeklySummaryGrowth pins the new list.
+	delete(want, "power_growth")
 	for k, v := range want {
 		if !reflect.DeepEqual(got[k], v) {
 			t.Errorf("%s:\n got %v\nwant %v", k, got[k], v)
@@ -102,5 +107,24 @@ func TestWeeklySummaryRoutes(t *testing.T) {
 	}
 	if w := serveRouter(t, "GET", "/api/accountability/report-data", "", admin); w.Code != http.StatusNotFound {
 		t.Errorf("old data route: %d, want 404", w.Code)
+	}
+}
+
+// 241: Charlie joined with 150M and has no reading 30 days old — not 150M of growth.
+func TestWeeklySummaryGrowth(t *testing.T) {
+	setupPreviewTestDB(t)
+	seedWeeklyFixture(t)
+	rep := runWeeklyOnSeparateConn(t, weeklyGoldenNow)
+	var got []string
+	for _, m := range rep.PowerGrowth {
+		got = append(got, m.Name+":"+strconv.Itoa(m.Value))
+	}
+	want := []string{"Alpha:30000000", "Delta:5000000", "Echo:1000000", "Bravo:-10000000"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("top growth %v, want %v", got, want)
+	}
+	// Charlie, and the two seeded members with no power history at all.
+	if rep.PowerGrowthExcluded != 3 || rep.GrowthWindowDays != 30 {
+		t.Errorf("excluded %d window %d", rep.PowerGrowthExcluded, rep.GrowthWindowDays)
 	}
 }

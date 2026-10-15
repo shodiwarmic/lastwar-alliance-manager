@@ -23,6 +23,12 @@
     <div id="tab-weekly" class="tab-content">
         <div class="report-print-header"><h2>Weekly summary</h2><p class="report-print-meta"></p></div>
         <div class="report-controls">
+            <label class="report-field">Power growth window (days)
+                <input type="number" id="weekly-growth-window" class="form-input" min="1" max="365" list="growth-window-presets">
+            </label>
+            <datalist id="growth-window-presets">
+                <option value="7"></option><option value="14"></option><option value="28"></option><option value="30"></option><option value="90"></option>
+            </datalist>
             <button type="button" class="btn btn-secondary report-print"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-printer"/></svg> Print</button>
         </div>
         <p class="report-range-line"></p>
@@ -39,7 +45,7 @@
                     <div id="weekly-vs-under"></div>
                 </div>
                 <div class="report-section">
-                    <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> <span id="weekly-growth-heading">Power growth</span></h3>
+                    <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> <span id="weekly-growth-heading">30-day power growth</span></h3>
                     <div id="weekly-power-growth"></div>
                 </div>
                 <div class="report-section">

@@ -306,13 +306,56 @@ function formatGrowth(num) {
 }
 
 // --- Tab 1: Growth Analytics ---
+
+// The two growth windows, in days: chosen on the page, remembered per browser (UserPrefs),
+// clamped to what the server accepts (1–365).
+let growthWindows = { short: 7, long: 30 };
+
+function clampWindow(v, def) {
+    const n = parseInt(v, 10);
+    if (!Number.isFinite(n)) return def;
+    return Math.min(365, Math.max(1, n));
+}
+
+function initGrowthWindows() {
+    const s = document.getElementById('growth-window-short');
+    const l = document.getElementById('growth-window-long');
+    if (!s || !l) return;
+    growthWindows = {
+        short: clampWindow(UserPrefs.get('growthWindowShort'), 7),
+        long: clampWindow(UserPrefs.get('growthWindowLong'), 30),
+    };
+    s.value = growthWindows.short;
+    l.value = growthWindows.long;
+    const apply = () => {
+        growthWindows = { short: clampWindow(s.value, 7), long: clampWindow(l.value, 30) };
+        s.value = growthWindows.short;
+        l.value = growthWindows.long;
+        UserPrefs.set('growthWindowShort', String(growthWindows.short));
+        UserPrefs.set('growthWindowLong', String(growthWindows.long));
+        loadGrowthData();
+    };
+    s.addEventListener('change', apply);
+    l.addEventListener('change', apply);
+}
+
+function setGrowthHeaders(shortDays, longDays) {
+    const set = (id, text) => { const th = document.getElementById(id); if (th) th.textContent = text; };
+    set('growth-short-header', `${shortDays}-Day Growth`);
+    set('growth-long-header', `${longDays}-Day Growth`);
+    set('hero-growth-short-header', `Hero Power ${shortDays}-Day`);
+    set('hero-growth-long-header', `Hero Power ${longDays}-Day`);
+}
+
 async function loadGrowthData() {
     try {
-        const response = await fetch(`${API_BASE}/rankings`);
+        const response = await fetch(`${API_BASE}/rankings?short=${growthWindows.short}&long=${growthWindows.long}`);
         if (!response.ok) throw new Error('Failed to load growth data');
 
         const data = await response.json();
         rawGrowthData = data.growth_data || [];
+        growthWindows = { short: data.short_days || growthWindows.short, long: data.long_days || growthWindows.long };
+        setGrowthHeaders(growthWindows.short, growthWindows.long);
 
         renderCompositionCharts();
         renderGrowthTable(rawGrowthData);
@@ -416,6 +459,21 @@ function renderCompositionCharts() {
     });
 }
 
+// A growth cell: null means no reading that old, so there is no figure (never 0).
+function growthCell(value, days) {
+    const td = document.createElement('td');
+    if (value == null) {
+        td.className = 'neutral-growth';
+        td.textContent = '—';
+        td.title = `No reading ${days} days old`;
+        td.dataset.exportValue = '';
+        return td;
+    }
+    td.appendChild(formatGrowth(value));
+    td.dataset.exportValue = String(value);
+    return td;
+}
+
 function buildGrowthRow(m) {
     const tr = document.createElement('tr');
     tr.dataset.search = m.name + ' ' + m.rank;
@@ -434,15 +492,10 @@ function buildGrowthRow(m) {
     const tdPower = document.createElement('td');
     tdPower.style.fontWeight = '600';
     tdPower.style.color = 'var(--color-text)';
-    tdPower.textContent = formatNumber(m.current_power);
+    tdPower.textContent = m.current_power != null ? formatNumber(m.current_power) : '—';
 
-    const td7d = document.createElement('td');
-    td7d.appendChild(formatGrowth(m.growth_7d));
-    td7d.dataset.exportValue = m.growth_7d != null ? String(m.growth_7d) : '';
-
-    const td30d = document.createElement('td');
-    td30d.appendChild(formatGrowth(m.growth_30d));
-    td30d.dataset.exportValue = m.growth_30d != null ? String(m.growth_30d) : '';
+    const tdShort = growthCell(m.growth_short, growthWindows.short);
+    const tdLong = growthCell(m.growth_long, growthWindows.long);
 
     const tdHero = document.createElement('td');
     tdHero.style.fontWeight = '600';
@@ -454,25 +507,10 @@ function buildGrowthRow(m) {
         tdHero.textContent = '—';
     }
 
-    const tdHero7d = document.createElement('td');
-    if (m.current_hero_power > 0) {
-        tdHero7d.appendChild(formatGrowth(m.hero_growth_7d));
-        tdHero7d.dataset.exportValue = String(m.hero_growth_7d);
-    } else {
-        tdHero7d.style.color = 'var(--color-text-muted)';
-        tdHero7d.textContent = '—';
-    }
+    const tdHeroShort = growthCell(m.hero_growth_short, growthWindows.short);
+    const tdHeroLong = growthCell(m.hero_growth_long, growthWindows.long);
 
-    const tdHero30d = document.createElement('td');
-    if (m.current_hero_power > 0) {
-        tdHero30d.appendChild(formatGrowth(m.hero_growth_30d));
-        tdHero30d.dataset.exportValue = String(m.hero_growth_30d);
-    } else {
-        tdHero30d.style.color = 'var(--color-text-muted)';
-        tdHero30d.textContent = '—';
-    }
-
-    tr.append(tdName, tdRank, tdPower, td7d, td30d, tdHero, tdHero7d, tdHero30d);
+    tr.append(tdName, tdRank, tdPower, tdShort, tdLong, tdHero, tdHeroShort, tdHeroLong);
     return tr;
 }
 
@@ -702,6 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('tab-growth')) {
         // tabs.js, with #tab deep links (#vs, #kills, …). Every tab loads eagerly below.
         Tabs.init({ hash: true, defaultTab: 'growth' });
+        initGrowthWindows();
         loadGrowthData();
         loadVSData();
         loadKillData();

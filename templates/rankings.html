@@ -1,5 +1,6 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/table-utils.css"}}">
+<link rel="stylesheet" href="{{asset "/rankings.css"}}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 {{end}}
 
@@ -38,6 +39,17 @@
         <section class="rankings-section">
             <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Power Growth Leaderboard</h3>
             <div class="tab-toolbar">
+                <div class="growth-windows">
+                    <label class="growth-window">Short window
+                        <input type="number" id="growth-window-short" class="form-input" min="1" max="365" list="growth-window-presets" aria-label="Short growth window in days"> days
+                    </label>
+                    <label class="growth-window">Long window
+                        <input type="number" id="growth-window-long" class="form-input" min="1" max="365" list="growth-window-presets" aria-label="Long growth window in days"> days
+                    </label>
+                    <datalist id="growth-window-presets">
+                        <option value="7"></option><option value="14"></option><option value="28"></option><option value="30"></option><option value="90"></option>
+                    </datalist>
+                </div>
                 <div class="filter-search-wrap quick-search">
                     <input type="text" id="growth-search" class="form-input" placeholder="Search commander..." aria-label="Search commander..." autocomplete="off">
                     <button type="button" id="growth-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
@@ -51,11 +63,11 @@
                             <th>Commander</th>
                             <th>Rank</th>
                             <th>Overall Power</th>
-                            <th>7-Day Growth</th>
-                            <th>30-Day Growth</th>
+                            <th id="growth-short-header" data-export-key="growth_short">7-Day Growth</th>
+                            <th id="growth-long-header" data-export-key="growth_long">30-Day Growth</th>
                             <th>Total Hero Power</th>
-                            <th>Hero Power 7-Day</th>
-                            <th>Hero Power 30-Day</th>
+                            <th id="hero-growth-short-header" data-export-key="hero_growth_short">Hero Power 7-Day</th>
+                            <th id="hero-growth-long-header" data-export-key="hero_growth_long">Hero Power 30-Day</th>
                         </tr>
                     </thead>
                     <tbody id="growth-tbody">
