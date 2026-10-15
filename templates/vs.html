@@ -92,6 +92,35 @@
 {{end}}
 
 {{define "modals"}}
+<!-- Save conflict review: cells that changed underneath since the page loaded (209) -->
+<div id="vs-conflict-modal" class="modal">
+    <div class="modal-content modal-lg">
+        <h2>Some values changed since you loaded this week</h2>
+        <p class="hint"><span id="vs-conflict-count">0</span> value(s) were changed by someone else (or an import) after this page loaded, and you typed something different. Choose which to keep. Nothing has been saved yet.</p>
+        <div class="table-scroll">
+            <table class="data-table" id="vs-conflict-table" translate="no">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Day</th>
+                        <th>Loaded</th>
+                        <th>Now</th>
+                        <th>You typed</th>
+                        <th>Keep</th>
+                    </tr>
+                </thead>
+                <tbody id="vs-conflict-body"></tbody>
+            </table>
+        </div>
+        <div class="modal-actions mt-4 vs-conflict-actions">
+            <button class="btn btn-secondary" id="vs-conflict-mine-btn">Keep all mine</button>
+            <button class="btn btn-secondary" id="vs-conflict-current-btn">Take all current</button>
+            <button class="btn btn-secondary" id="vs-conflict-cancel-btn">Cancel</button>
+            <button class="btn btn-primary" id="vs-conflict-save-btn">Save</button>
+        </div>
+    </div>
+</div>
+
 <!-- CSV Import Preview Modal -->
 <div id="import-preview-modal" class="modal">
     <div class="modal-content modal-lg">
