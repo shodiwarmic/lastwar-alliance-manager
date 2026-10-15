@@ -904,6 +904,8 @@ type RankPermissions struct {
 	Rank                 string `json:"rank"`
 	ViewTrain            bool   `json:"view_train"`
 	ManageTrain          bool   `json:"manage_train"`
+	ViewTrainSchedule    bool   `json:"view_train_schedule"`
+	ManageTrainSchedule  bool   `json:"manage_train_schedule"`
 	ViewAwards           bool   `json:"view_awards"`
 	ManageAwards         bool   `json:"manage_awards"`
 	ViewRecs             bool   `json:"view_recs"`
@@ -973,6 +975,8 @@ var PermissionGroups = []PermissionGroup{
 	{Feature: "Train Tracker", Rows: []PermissionRow{
 		{Key: "view_train", Label: "View"},
 		{Key: "manage_train", Label: "Manage"},
+		{Key: "view_train_schedule", Label: "View upcoming schedule"},
+		{Key: "manage_train_schedule", Label: "Manage upcoming schedule"},
 	}},
 	{Feature: "Shoutouts", Rows: []PermissionRow{
 		{Key: "view_dyno", Label: "View"},
@@ -1311,6 +1315,26 @@ type TrainLog struct {
 	CreatedBy     int     `json:"created_by"`
 	CreatedAt     string  `json:"created_at"`
 	UpdatedAt     string  `json:"updated_at"`
+}
+
+// TrainScheduleEntry keeps planned assignments separate from actual train_logs.
+type TrainScheduleEntry struct {
+	ID             int     `json:"id"`
+	Date           string  `json:"date"`
+	TrainType      string  `json:"train_type"`
+	ConductorID    *int    `json:"conductor_id"`
+	ConductorName  string  `json:"conductor_name"`
+	VIPID          *int    `json:"vip_id"`
+	VIPName        string  `json:"vip_name"`
+	VIPType        *string `json:"vip_type"`
+	Notes          string  `json:"notes"`
+	CompletedLogID *int    `json:"completed_log_id"`
+	CancelledAt    *string `json:"cancelled_at"`
+	CancelledBy    *int    `json:"cancelled_by"`
+	CreatedBy      *int    `json:"created_by"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+	Status         string  `json:"status"` // derived: planned | completed | cancelled
 }
 
 type EligibilityRule struct {

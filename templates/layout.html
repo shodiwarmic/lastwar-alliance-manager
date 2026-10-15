@@ -51,7 +51,7 @@
       Schedule
     </a>
     {{end}}
-    {{if .Permissions.ViewTrain}}
+    {{if or .Permissions.ViewTrain .Permissions.ViewTrainSchedule .Permissions.ManageTrainSchedule}}
     <a href="/train" class="sidebar-link {{if eq .ActivePage "train"}}active{{end}}">
       <svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-train"/></svg>
       Train

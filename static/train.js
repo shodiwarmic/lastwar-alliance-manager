@@ -6,6 +6,7 @@ function escapeHtml(s) {
 
 const cfg = document.getElementById('page-config').dataset;
 const CAN_MANAGE = cfg.canManage === 'true';
+const CAN_VIEW_TRAIN = cfg.canViewTrain === 'true';
 
 // ── Game-time helpers ─────────────────────────────────────────────────────────
 // gameDateStr() is the shared game-time (UTC-2) date helper from global.js.
@@ -45,22 +46,25 @@ document.addEventListener('DOMContentLoaded', () => {
         emptyText: 'No members match your search.',
     });
 
-    logDateFP    = flatpickr('#log-date',    { dateFormat: 'Y-m-d', allowInput: true });
-    filterFromFP = flatpickr('#filter-from', { dateFormat: 'Y-m-d', allowInput: true });
-    filterToFP   = flatpickr('#filter-to',   { dateFormat: 'Y-m-d', allowInput: true });
+    if (CAN_MANAGE) {
+        logDateFP    = flatpickr('#log-date',    { dateFormat: 'Y-m-d', allowInput: true });
 
-    conductorChoices = noTranslateChoices(new Choices('#log-conductor', {
-        searchEnabled: true, searchPlaceholderValue: 'Search…',
-        itemSelectText: '', shouldSort: false, allowHTML: true,
-    }));
-    vipChoices = noTranslateChoices(new Choices('#log-vip', {
-        searchEnabled: true, searchPlaceholderValue: 'Search…',
-        itemSelectText: '', shouldSort: false, allowHTML: true,
-    }));
 
-    trainTabs = Tabs.init({ hash: true, defaultTab: 'logs' });
-    loadMembers().then(() => {
-        loadTrainLogs();
+        conductorChoices = noTranslateChoices(new Choices('#log-conductor', {
+            searchEnabled: true, searchPlaceholderValue: 'Search…',
+            itemSelectText: '', shouldSort: false, allowHTML: true,
+        }));
+        vipChoices = noTranslateChoices(new Choices('#log-vip', {
+            searchEnabled: true, searchPlaceholderValue: 'Search…',
+            itemSelectText: '', shouldSort: false, allowHTML: true,
+        }));
+
+    }
+    trainTabs = Tabs.init({ hash: true, defaultTab: cfg.canViewSchedule === 'true' ? 'upcoming' : 'logs',
+        onActivate: name => { if (name === 'upcoming') TrainSchedule.load(); },
+    });
+    if (CAN_VIEW_TRAIN || CAN_MANAGE) loadMembers().then(() => {
+        if (CAN_VIEW_TRAIN) loadTrainLogs();
         if (CAN_MANAGE) {
             loadRules();
         }
@@ -93,11 +97,15 @@ document.addEventListener('DOMContentLoaded', () => {
         FilterPanel.setupSearch('rule-search', 'clear-rule-search', applyRuleFilters);
     }
 
-    // Client-side filter panel (search + type chips + date range) over the loaded set.
-    dateCtl = FilterPanel.setupDateRange('filter-from', 'filter-to', applyLogFilters);
-    FilterPanel.setupSearch('log-search', 'clear-log-search', applyLogFilters);
-    FilterPanel.setupChipGroup('.log-type-chip', 'ttype', applyLogFilters);
-    FilterPanel.setupToggle({ onClear: clearFilters });
+    if (CAN_VIEW_TRAIN) {
+        filterFromFP = flatpickr('#filter-from', { dateFormat: 'Y-m-d', allowInput: true });
+        filterToFP = flatpickr('#filter-to', { dateFormat: 'Y-m-d', allowInput: true });
+        // Client-side filter panel (search + type chips + date range) over the loaded set.
+        dateCtl = FilterPanel.setupDateRange('filter-from', 'filter-to', applyLogFilters);
+        FilterPanel.setupSearch('log-search', 'clear-log-search', applyLogFilters);
+        FilterPanel.setupChipGroup('.log-type-chip', 'ttype', applyLogFilters);
+        FilterPanel.setupToggle({ onClear: clearFilters });
+    }
 });
 
 // ── Members ───────────────────────────────────────────────────────────────────

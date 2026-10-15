@@ -21,6 +21,7 @@ import (
 // event": two boards recorded in fifteen minutes are two events, and five excusals in
 // a row are five members, each of which a merged row would reduce to the last one.
 var neverBatched = map[string]bool{
+	"train_schedule_entry":    true, // each plan retains its own assignment context
 	"password_reset_link":     true,
 	"invite":                  true,
 	"participation_board":     true,

@@ -269,3 +269,18 @@
     text-align: center;
     padding: 32px 0;
 }
+
+/* Upcoming train plans use the same scrolling table and modal components. */
+.train-schedule-table { min-width: 780px; }
+.train-schedule-table td { vertical-align: top; }
+.train-schedule-status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; white-space: nowrap; }
+.train-schedule-status--planned { background: var(--color-info-bg); color: var(--color-info); }
+.train-schedule-status--overdue { background: var(--color-warning-bg); color: var(--color-warning); }
+.train-schedule-status--completed { background: var(--color-success-bg); color: var(--color-success); }
+.train-schedule-status--cancelled { background: var(--color-surface); color: var(--color-text-muted); }
+#tab-upcoming .quick-search { max-width: 420px; margin-bottom: 16px; }
+#schedule-notes { width: 100%; resize: vertical; }
+
+.train-schedule-table td:nth-child(1),
+.train-schedule-table td:nth-child(2),
+.train-schedule-table td:nth-child(5) { white-space: nowrap; }

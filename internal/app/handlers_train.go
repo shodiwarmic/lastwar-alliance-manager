@@ -292,6 +292,11 @@ func deleteTrainLog(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+	// Mirror ON DELETE SET NULL while foreign_keys is off (database.go).
+	if _, err := tx.Exec(`UPDATE train_schedule_entries SET completed_log_id = NULL, updated_at=CURRENT_TIMESTAMP WHERE completed_log_id = ?`, id); err != nil {
+		dbError(w, "deleteTrainLog reopen plan", err)
+		return
+	}
 	if _, err := tx.Exec(`DELETE FROM train_logs WHERE id = ?`, id); err != nil {
 		slog.Error("deleteTrainLog exec failed", "error", err, "id", id)
 		http.Error(w, "Database error", http.StatusInternalServerError)

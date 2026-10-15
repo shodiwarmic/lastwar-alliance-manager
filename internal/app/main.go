@@ -626,6 +626,12 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/admin/advanced/storm-slots", authMiddleware(adminMiddleware(putAdvancedStormSlots))).Methods("PUT")
 
 	// Train Tracker API
+	// Upcoming plans: ordinary history keeps its own permissions and date rules.
+	router.HandleFunc("/api/train-schedule", authMiddleware(requireAnyPermission([]string{"view_train_schedule", "manage_train_schedule"}, getTrainSchedule))).Methods("GET")
+	router.HandleFunc("/api/train-schedule", demoBlock(authMiddleware(requirePermission("manage_train_schedule", postTrainSchedule)))).Methods("POST")
+	router.HandleFunc("/api/train-schedule/{id:[0-9]+}", demoBlock(authMiddleware(requirePermission("manage_train_schedule", putTrainSchedule)))).Methods("PUT")
+	router.HandleFunc("/api/train-schedule/{id:[0-9]+}/cancel", demoBlock(authMiddleware(requirePermission("manage_train_schedule", cancelTrainSchedule)))).Methods("POST")
+	router.HandleFunc("/api/train-schedule/{id:[0-9]+}/complete", demoBlock(authMiddleware(requirePermission("manage_train_schedule", completeTrainSchedule)))).Methods("POST")
 	router.HandleFunc("/api/train-logs", authMiddleware(requirePermission("view_train", getTrainLogs))).Methods("GET")
 	router.HandleFunc("/api/train-logs", authMiddleware(requirePermission("manage_train", postTrainLog))).Methods("POST")
 	router.HandleFunc("/api/train-logs/{id:[0-9]+}", authMiddleware(requirePermission("manage_train", putTrainLog))).Methods("PUT")
@@ -946,7 +952,7 @@ func buildRouter() *mux.Router {
 				"admin":              data.IsAdmin,
 				"schedule":           data.Permissions.ViewSchedule,
 				"officer-command":    data.Permissions.ViewOfficerCommand,
-				"train":              data.Permissions.ViewTrain,
+				"train":              data.Permissions.ViewTrain || data.Permissions.ViewTrainSchedule || data.Permissions.ManageTrainSchedule,
 				"recruiting":         data.Permissions.ViewRecruiting,
 				"allies":             data.Permissions.ViewAllies,
 				"external-alliances": data.Permissions.ViewAllies,
