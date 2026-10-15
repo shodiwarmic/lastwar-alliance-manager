@@ -317,6 +317,32 @@ function clampWindow(v, def) {
     return Math.min(365, Math.max(1, n));
 }
 
+// A growth-window control: a select of presets (works on every phone, unlike a
+// datalist on a number input) and a number field for any other value, shown only for
+// Custom. The number field holds the value either way; onChange fires when it changes.
+function windowControl(input, value, onChange) {
+    const select = document.getElementById(input.id + '-select');
+    const isPreset = v => [...select.options].some(o => o.value === String(v));
+    const show = (v) => {
+        input.value = v;
+        select.value = isPreset(v) ? String(v) : 'custom';
+        input.style.display = select.value === 'custom' ? '' : 'none';
+    };
+    show(value);
+    select.addEventListener('change', () => {
+        if (select.value === 'custom') {
+            input.style.display = '';
+            input.focus();
+            return;
+        }
+        input.value = select.value;
+        input.style.display = 'none';
+        onChange();
+    });
+    input.addEventListener('change', onChange);
+    return { show };
+}
+
 function initGrowthWindows() {
     const s = document.getElementById('growth-window-short');
     const l = document.getElementById('growth-window-long');
@@ -325,18 +351,17 @@ function initGrowthWindows() {
         short: clampWindow(UserPrefs.get('growthWindowShort'), 7),
         long: clampWindow(UserPrefs.get('growthWindowLong'), 30),
     };
-    s.value = growthWindows.short;
-    l.value = growthWindows.long;
+    let sCtl, lCtl;
     const apply = () => {
         growthWindows = { short: clampWindow(s.value, 7), long: clampWindow(l.value, 30) };
-        s.value = growthWindows.short;
-        l.value = growthWindows.long;
+        sCtl.show(growthWindows.short);
+        lCtl.show(growthWindows.long);
         UserPrefs.set('growthWindowShort', String(growthWindows.short));
         UserPrefs.set('growthWindowLong', String(growthWindows.long));
         loadGrowthData();
     };
-    s.addEventListener('change', apply);
-    l.addEventListener('change', apply);
+    sCtl = windowControl(s, growthWindows.short, apply);
+    lCtl = windowControl(l, growthWindows.long, apply);
 }
 
 function setGrowthHeaders(shortDays, longDays) {

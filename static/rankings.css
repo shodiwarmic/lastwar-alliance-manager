@@ -16,6 +16,10 @@
     color: var(--color-text-mid);
 }
 
-.growth-window .form-input {
+.growth-window select.form-input {
+    width: auto;
+}
+
+.growth-window .growth-window-custom {
     width: 5.5em;
 }

@@ -141,6 +141,33 @@
                 el('span', { className: 'report-list-value', text: fmt(m.value) }))));
     }
 
+// A growth-window control: a select of presets (works on every phone, unlike a
+    // datalist on a number input) and a number field for any other value, shown only for
+    // Custom. The number field holds the value either way; onChange fires when it changes.
+    function windowControl(input, value, onChange) {
+        const select = document.getElementById(input.id + '-select');
+        const isPreset = v => [...select.options].some(o => o.value === String(v));
+        const show = (v) => {
+            input.value = v;
+            select.value = isPreset(v) ? String(v) : 'custom';
+            input.style.display = select.value === 'custom' ? '' : 'none';
+        };
+        show(value);
+        select.addEventListener('change', () => {
+            if (select.value === 'custom') {
+                input.style.display = '';
+                input.focus();
+                return;
+            }
+            input.value = select.value;
+            input.style.display = 'none';
+            onChange();
+        });
+        input.addEventListener('change', onChange);
+        return { show };
+    }
+    let weeklyWindowCtl = null;
+
     // The growth window: remembered per browser (UserPrefs), clamped to 1–365.
     function weeklyWindow() {
         const n = parseInt(document.getElementById('weekly-growth-window').value, 10);
@@ -150,7 +177,7 @@
     async function runWeekly(panel) {
         setStatus(panel, 'Loading…');
         const input = document.getElementById('weekly-growth-window');
-        input.value = weeklyWindow();
+        if (weeklyWindowCtl) weeklyWindowCtl.show(weeklyWindow());
         UserPrefs.set('weeklyGrowthWindow', input.value);
         let rep;
         try {
@@ -238,12 +265,13 @@
             el('td', { text: m.name }),
             el('td', {}, el('span', { className: 'member-rank rank-' + m.rank, text: m.rank })),
             numCell(String(m.days_evaluated), m.days_evaluated),
+            numCell(m.no_score_days ? String(m.no_score_days) : '—', m.no_score_days),
             numCell(String(m.misses), m.misses),
             m.worst ? el('td', { dataset: { exportValue: m.worst.date } },
                 fmtDate(m.worst.date) + ' · ' + formatCompact(m.worst.points)) : el('td', { text: '—' }),
             m.misses ? numCell(formatCompact(m.avg_shortfall), m.avg_shortfall) : el('td', { text: '—' })));
         if (!rows.length) {
-            rows.push(el('tr', {}, el('td', { colspan: '6', className: 'report-empty', text: 'Nobody missed the minimum in this range.' })));
+            rows.push(el('tr', {}, el('td', { colspan: '7', className: 'report-empty', text: 'Nobody missed the minimum in this range.' })));
         }
         table.tBodies[0].replaceChildren(...rows);
         exportReady(table);
@@ -265,6 +293,9 @@
         if (cov.days_not_imported.length) {
             summary.push(el('p', { className: 'report-note', text: 'Not imported, so not evaluated: '
                 + cov.days_not_imported.map(d => fmtDate(d)).join(', ') + '.' }));
+        }
+        if (cov.no_score_days) {
+            summary.push(el('p', { className: 'report-note', text: `No score recorded on ${cov.no_score_days} member-days (the member has no VS points for that week): shown under "No score", not counted as misses.` }));
         }
         summary.push(el('p', { className: 'report-note', text: 'A day counts once it is over and imported, from the member\'s join date.'
             + (cov.members_excluded_ex ? ` Former members are not included (${cov.members_excluded_ex} had points in this range).` : '') }));
@@ -340,8 +371,7 @@
         document.querySelectorAll('.report-print').forEach(b => b.addEventListener('click', () => window.print()));
         const weeklyWin = document.getElementById('weekly-growth-window');
         if (weeklyWin) {
-            weeklyWin.value = UserPrefs.get('weeklyGrowthWindow');
-            weeklyWin.addEventListener('change', () => runReport('weekly'));
+            weeklyWindowCtl = windowControl(weeklyWin, UserPrefs.get('weeklyGrowthWindow'), () => runReport('weekly'));
         }
         // Export buttons stay off until a report has filled their table.
         document.querySelectorAll('table[data-export-csv]').forEach(exportReady);

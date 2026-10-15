@@ -25,6 +25,15 @@
     flex-wrap: wrap;
 }
 
+.report-window {
+    display: inline-flex;
+    gap: 6px;
+}
+
+.report-window-custom {
+    width: 5.5em;
+}
+
 .report-check {
     display: inline-flex;
     align-items: center;
