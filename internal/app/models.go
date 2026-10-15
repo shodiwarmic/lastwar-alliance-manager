@@ -942,6 +942,11 @@ type RankPermissions struct {
 	ManageComms          bool   `json:"manage_comms"`
 	ViewPolls            bool   `json:"view_polls"`
 	ManagePolls          bool   `json:"manage_polls"`
+
+	// One key per report on the Reports page (reports.go → reportDefs).
+	ViewReportWeekly        bool `json:"view_report_weekly"`
+	ViewReportVSMisses      bool `json:"view_report_vs_misses"`
+	ViewReportParticipation bool `json:"view_report_participation"`
 }
 
 // ValidSkillKeys is the canonical list of skill keys. Adding a new skill = add here only.
@@ -1024,6 +1029,11 @@ var PermissionGroups = []PermissionGroup{
 	{Feature: "Accountability", Rows: []PermissionRow{
 		{Key: "view_accountability", Label: "View"},
 		{Key: "manage_accountability", Label: "Manage"},
+	}},
+	{Feature: "Reports", Rows: []PermissionRow{
+		{Key: "view_report_weekly", Label: "Weekly summary"},
+		{Key: "view_report_vs_misses", Label: "VS misses"},
+		{Key: "view_report_participation", Label: "Participation grid"},
 	}},
 	{Feature: "Season Hub", Rows: []PermissionRow{
 		{Key: "view_season_hub", Label: "View"},
@@ -1429,6 +1439,8 @@ type PageData struct {
 	HasGCPCredentials bool
 	OCRPipelineReady  bool
 	VSMinimumPoints   int
+	// Reports holds the reports the user may run (the Reports page's tabs).
+	Reports []reportDef
 	// VS daily-minimum flagging (server-authoritative evaluated week — see vsEvalContext).
 	VsFlagDaysThreshold int
 	VSEvalWeek          string

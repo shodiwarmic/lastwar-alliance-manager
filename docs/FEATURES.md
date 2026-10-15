@@ -71,6 +71,10 @@ and operations, see [DEPLOYMENT.md](DEPLOYMENT.md) and [QUICKSTART.md](QUICKSTAR
 - **Historical Integrity**: Overall Power, Squad Power, and Total Hero Power are all tracked chronologically, preventing data loss and enabling long-term growth analysis.
 - **Audit / Activity Log**: A structured, chronological audit trail of all write operations across the app — member changes, recruits, allies, storm, OC, awards, files, imports, and more. Consecutive creates of the same entity type by the same user within 15 minutes are batched into a single entry. Update events include a field-level diff (e.g. `status: interested → pending`). Accessible to R4/R5 by default via a dedicated `/activity` page with user and limit filters. Sensitive events (user accounts, permissions, settings, credentials, invitations) are visible to admins only.
 
+### 📊 Reports
+
+The **Reports** page gathers the alliance's reports in one place, each on its own tab, to read on screen, download as CSV or Excel, and print (or save as PDF) without the app's menus. Each report has its own permission under **Reports** in the permissions matrix — *Weekly summary*, *VS misses* and *Participation grid* — and the page shows only the reports a rank holds. On upgrade, every rank that could see the Accountability page gets all three. Dated reports take a range: the last 1, 2, 4 or 8 complete VS weeks (Monday to Saturday, ending last Saturday), the whole history, or custom dates, with an option to add the current week so far; the page prints the dates it resolved.
+
 ### 🗡️ VS Duel League
 
 ![A VS Duel League week — a fictional alliance](img/vs-duel-league.png)

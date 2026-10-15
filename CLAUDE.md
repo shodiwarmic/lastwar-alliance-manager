@@ -1326,6 +1326,49 @@ it passes exactly the same rules and returns exactly the same messages. It needs
 `participation_board` and `participation_exception` are in `neverBatched`: two boards
 recorded in fifteen minutes are two events, and five excusals are five members.
 
+## Reporting layer (`reports_*.go`)
+
+The Reports page (`/reports`) and every report on it sit on one layer, and that layer is
+also the boundary a non-web caller (the planned MCP adapter) uses — so the rule is about
+signatures, not packages:
+
+```go
+func run<Name>Report(q rowQueryer, p <Name>Params, now time.Time) (*<Name>Report, error)
+```
+
+- **No HTTP types, no session, no global `db`, no `time.Now()`** inside a `reports_*.go`
+  function. The web handler passes a read transaction, a test a temp DB, an adapter its own
+  transaction. Helpers the layer needs take `q`/`now` (`…Q(q, …)`, `…At(q, now)`), with the
+  old zero-argument names kept as wrappers over `db` and `time.Now()` for existing callers.
+  Today's game date is `gametime.DateOf(now)`, never `gameDate()`.
+- **Params are plain structs** that decode from JSON or a query string; **results are plain
+  structs** carrying member ids, explicit `from`/`to` game dates and `generated_at`.
+- **Ranges resolve server-side** in `resolveReportRange` (`reports.go`): `weeks=N` is the N
+  most recent *complete* VS weeks, ending the last Saturday before today's game date;
+  `current=1` adds the current partial week; `weeks=all` starts at the earliest
+  `vs_points` week; or explicit `from`/`to`, clamped at today. No span cap. Cutoffs that
+  need a time are computed in Go, in UTC, and bound as `gametime.SQLiteLayout` strings —
+  no `datetime('now', …)` in report SQL.
+- **The registry is `reportDefs`** (`reports.go`): key → title → permission key. Web
+  handlers and any adapter authorise with `userHasPermission(user, def.Permission)`. Each
+  report has its own key (`view_report_*`, the `Reports` group); the page opens for anyone
+  holding one and renders only the tabs they hold. No rank comparisons anywhere.
+- **Handlers are thin** (`handlers_reports.go`): parse → permission (on the route) →
+  `serveReport`, which opens a read transaction and runs the report on it, so a report's
+  several queries see one snapshot (`tx.*` calls are not guarded; the transaction ends when
+  the handler returns). A `reportParamError` becomes a 400, anything else a logged 500.
+
+**Adding a report:** a def in `reportDefs` and a key in `RankPermissions` +
+`PermissionGroups`; a `run…Report` in a `reports_*.go` with its test; a handler calling
+`serveReport` behind `requirePermission(def.Permission, …)`; a tab and panel in
+`reports.html` (export tables as template skeletons with `data-export-csv` and
+`translate="no"` — `table-utils.js` wires them at load, so the renderer only fills
+`<tbody>` and calls `exportReady`); a renderer in `reports.js`'s `REPORTS`.
+
+**Print** is `@media print` in `reports.css` (a device query, not a width breakpoint): it
+hides the chrome and un-scrolls `.content-scroll` and the 100vh shell, without which a
+print is one viewport tall.
+
 ## Known gotchas
 
 ### One DB connection — a query issued while a cursor is open DEADLOCKS

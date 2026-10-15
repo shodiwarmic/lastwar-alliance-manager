@@ -1,0 +1,85 @@
+/* reports.css — the Reports page (reports.html / reports.js). */
+
+.report-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px 14px;
+    margin: 14px 0 6px;
+}
+
+.report-field {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.85em;
+    color: var(--color-text-muted);
+}
+
+.report-field .form-input {
+    min-width: 0;
+}
+
+.report-custom {
+    gap: 10px 14px;
+    flex-wrap: wrap;
+}
+
+.report-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9em;
+    padding-bottom: 8px;
+}
+
+.report-range-line {
+    color: var(--color-text-muted);
+    font-size: 0.85em;
+    margin: 4px 0 12px;
+}
+
+.report-status.status-error {
+    color: var(--color-danger);
+}
+
+/* Shown only on paper: the report's title, range, rule and when it was generated. */
+.report-print-header {
+    display: none;
+}
+
+/* --- Print: the report alone, every row, no app chrome ------------------------------ */
+/* @media print is a device query, not a width breakpoint. The layout scrolls an inner
+   .content-scroll inside a 100vh shell; without un-scrolling both, a print is one
+   viewport tall. */
+@media print {
+    .sidebar, .mobile-header, .bottom-tabs, .more-sheet, .topbar, .app-banner,
+    .tab-bar, .report-controls, .table-export-actions, .tab-toolbar,
+    .btn, #toast-container, .toast {
+        display: none !important;
+    }
+    body, .app-shell, .content-area, .content-scroll, main {
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+    }
+    .table-scroll, .table-wrapper {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    .report-print-header {
+        display: block;
+    }
+    .report-print-header h2 {
+        margin: 0 0 4px;
+    }
+    .report-range-line {
+        display: none;
+    }
+    thead {
+        display: table-header-group;
+    }
+    tr {
+        break-inside: avoid;
+    }
+}

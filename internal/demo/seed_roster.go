@@ -192,4 +192,11 @@ func (s *seeder) vsPoints() {
 				m.ID, s.monday(w), d[0], d[1], d[2], d[3], d[4], d[5], at, at)
 		}
 	}
+	// The VS minimum as recorded from the earliest seeded week, so the demo's reports
+	// judge every week against a recorded minimum. Migration 085 seeds a row only when
+	// vs_points has rows, which it never does before the seed; the delete keeps the
+	// fingerprint stable should that change (its set_at is the migration's clock).
+	s.exec(`DELETE FROM vs_week_minimums WHERE kind = 'setting'`)
+	s.exec(`INSERT INTO vs_week_minimums (week_date, kind, minimum_points, set_at) VALUES (?, 'setting', ?, ?)`,
+		s.monday(vsWeeks-1), 2_500_000, s.ts(float64(7*(vsWeeks-1))+0.1))
 }

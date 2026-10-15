@@ -425,6 +425,9 @@ func buildRouter() *mux.Router {
 
 	// Accountability
 	router.HandleFunc("/accountability", authMiddleware(handleAccountability)).Methods("GET")
+	// Reports page: any one report key opens it; each report's data route has its own.
+	router.HandleFunc("/reports", authMiddleware(handleReportsPage)).Methods("GET")
+	router.HandleFunc("/api/reports", authMiddleware(handleReportsList)).Methods("GET")
 	router.HandleFunc("/accountability/report", authMiddleware(handleAccountabilityReport)).Methods("GET")
 	router.HandleFunc("/accountability/{id:[0-9]+}", authMiddleware(handleAccountabilityProfile)).Methods("GET")
 	router.HandleFunc("/api/accountability/summary", authMiddleware(handleAccountabilitySummary)).Methods("GET")
