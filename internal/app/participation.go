@@ -444,6 +444,7 @@ type boardFilter struct {
 	EventID  int  // one occurrence, board or not
 	TypeID   int  // recorded boards of one type
 	Recorded bool // only occurrences that have a board
+	From, To string // event_date within [From, To] when set (the participation grid)
 }
 
 // loadBoards reads occurrences and everything recorded against them in a fixed
@@ -461,6 +462,14 @@ func loadBoards(q rowQueryer, types map[int]*ptType, f boardFilter) ([]*ptBoardD
 	}
 	if f.Recorded {
 		where = append(where, "b.id IS NOT NULL")
+	}
+	if f.From != "" {
+		where = append(where, "se.event_date >= ?")
+		args = append(args, f.From)
+	}
+	if f.To != "" {
+		where = append(where, "se.event_date <= ?")
+		args = append(args, f.To)
 	}
 	rows, err := q.Query(`
 		SELECT se.id, se.event_date, se.event_time, se.all_day, se.event_type_id,

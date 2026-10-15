@@ -218,6 +218,26 @@
     border-top: 2px solid var(--color-border);
 }
 
+/* Participation grid: one narrow column per board. */
+.report-grid-board {
+    text-align: center;
+    white-space: nowrap;
+    font-size: 0.85em;
+}
+
+.report-grid-date {
+    font-weight: 400;
+    opacity: 0.85;
+}
+
+.report-grid-cell {
+    text-align: center;
+}
+
+.report-legend .pt-badge {
+    margin: 0 2px;
+}
+
 .report-empty {
     color: var(--color-text-muted);
     text-align: center;

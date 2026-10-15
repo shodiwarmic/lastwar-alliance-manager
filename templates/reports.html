@@ -8,6 +8,7 @@
 
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/table-utils.css"}}">
+<link rel="stylesheet" href="{{asset "/participation.css"}}">
 <link rel="stylesheet" href="{{asset "/reports.css"}}">
 {{end}}
 
@@ -122,7 +123,33 @@
         <div class="report-print-header"><h2>Participation grid</h2><p class="report-print-meta"></p></div>
         {{template "report_range_controls"}}
         <p class="status-msg report-status">Loading…</p>
-        <div class="report-body"></div>
+        <div class="report-body" style="display:none">
+            <div class="report-summary" id="participation-summary"></div>
+            <p class="report-note report-legend">
+                <span class="pt-badge pt-badge--present">P</span> present ·
+                <span class="pt-badge pt-badge--zero">0</span> on the board with a zero score ·
+                <span class="pt-badge pt-badge--missed">M</span> missed ·
+                <span class="pt-badge pt-badge--excused">E</span> excused ·
+                blank: the board says nothing about the member. Missed counts M and 0.
+                Only recorded boards are shown; an event nobody recorded says nothing about anyone.
+            </p>
+            <div class="tab-toolbar"></div>
+            <div class="table-scroll">
+                <table class="data-table report-table report-grid-table" id="participation-table" data-export-csv="participation-grid.csv" translate="no">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Rank</th>
+                            <th>Boards</th>
+                            <th>Missed</th>
+                            <th>Excused</th>
+                            <th data-export-key="vs">VS misses / days</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
     </div>
     {{end}}
 </div>

@@ -338,6 +338,82 @@
     }
     REPORTS['vs-misses'] = { run: runVSMisses };
 
+    // --- Participation grid (GET /api/reports/participation) -------------------------
+
+    const GRID_LETTER = { present: 'P', zero: '0', missed: 'M', excused: 'E' };
+    const GRID_RULE = {
+        absent: 'not on the board = missed',
+        zero: 'on the board with 0 = missed; not on it is blameless',
+        role: 'a starter not on the board = missed; subs are never penalised',
+    };
+
+    function gridCellTitle(c) {
+        if (c.status === 'excused') return 'Excused' + (c.reason ? ': ' + c.reason : '');
+        if (c.status === 'missed') return 'Missed';
+        const bits = [];
+        if (c.rank != null) bits.push('rank ' + c.rank);
+        if (c.score != null) bits.push('score ' + Number(c.score).toLocaleString());
+        return (c.status === 'zero' ? 'Zero score' : 'Present') + (bits.length ? ' · ' + bits.join(', ') : '');
+    }
+
+    function renderParticipation(panel, rep) {
+        const table = document.getElementById('participation-table');
+        const headRow = table.tHead.rows[0];
+        headRow.querySelectorAll('th[data-board]').forEach(th => th.remove());
+        rep.boards.forEach(b => headRow.appendChild(el('th', {
+            className: 'report-grid-board',
+            dataset: { board: String(b.event_id), exportKey: 'board-' + b.event_id },
+            title: `${b.type_name} · ${GRID_RULE[b.absence_rule] || b.absence_rule} · ${b.entries} on the board, ${b.missed} missed, ${b.excused} excused`,
+        }, (b.type_icon ? b.type_icon + ' ' : '') + b.type_short + (b.task_force ? ' ' + b.task_force : ''),
+            ' ', el('br'), el('span', { className: 'report-grid-date', text: fmtDate(b.event_date) }))));
+
+        const rows = rep.members.map(m => {
+            const vs = m.vs
+                ? el('td', { className: 'num', dataset: { exportValue: `${m.vs.misses}/${m.vs.days_evaluated}` },
+                    title: m.vs.no_score_days ? `${m.vs.no_score_days} days with no score recorded` : null,
+                    text: `${m.vs.misses} / ${m.vs.days_evaluated}` })
+                : el('td', { dataset: { exportValue: '' }, title: 'Former member: not in the VS report', text: '—' });
+            return el('tr', {},
+                el('td', { text: m.name }),
+                el('td', {}, el('span', { className: 'member-rank rank-' + m.rank, text: m.rank })),
+                numCell(String(m.boards), m.boards),
+                numCell(String(m.missed), m.missed),
+                numCell(String(m.excused), m.excused),
+                vs,
+                ...rep.boards.map(b => {
+                    const c = m.cells[b.event_id];
+                    if (!c) return el('td', { className: 'report-grid-cell', dataset: { exportValue: '' } });
+                    return el('td', { className: 'report-grid-cell', title: gridCellTitle(c), dataset: { exportValue: c.status } },
+                        el('span', { className: 'pt-badge pt-badge--' + c.status, text: GRID_LETTER[c.status] || c.status }));
+                }));
+        });
+        if (!rows.length) rows.push(el('tr', {}, el('td', { colspan: '6', className: 'report-empty', text: 'No members.' })));
+        table.tBodies[0].replaceChildren(...rows);
+        exportReady(table);
+
+        const byType = {};
+        rep.boards.forEach(b => { byType[b.type_short] = (byType[b.type_short] || 0) + 1; });
+        const types = Object.entries(byType).map(([k, n]) => `${k} ${n}`).join(', ');
+        document.getElementById('participation-summary').replaceChildren(
+            el('p', { className: 'report-summary-lead', text: rep.boards.length
+                ? `${rep.boards.length} recorded ${rep.boards.length === 1 ? 'board' : 'boards'} (${types}), ${rep.members.length} members.`
+                : 'No board was recorded in this range.' }),
+            el('p', { className: 'report-note', text: 'VS misses / days: days below that week\'s VS daily minimum over the evaluated VS days in the same range, as in the VS misses report.' }));
+        setMeta(panel, [fmtRange(rep.from, rep.to), 'Generated ' + fmtGenerated(rep.generated_at)]);
+        showBody(panel);
+    }
+
+    async function runParticipation(panel) {
+        setStatus(panel, 'Loading…');
+        try {
+            renderParticipation(panel, await fetchReport('/api/reports/participation?' + rangeQuery(panel)));
+        } catch (e) {
+            panel.querySelector('.report-body').style.display = 'none';
+            setStatus(panel, 'Could not run the report: ' + e.message, true);
+        }
+    }
+    REPORTS.participation = { run: runParticipation };
+
     // --- Page ----------------------------------------------------------------------
 
     const ran = {};

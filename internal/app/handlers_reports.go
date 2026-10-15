@@ -113,3 +113,16 @@ func handleVSMissesReport(w http.ResponseWriter, r *http.Request) {
 		return runVSMissesReport(q, p, time.Now())
 	})
 }
+
+// handleParticipationGridReport is GET /api/reports/participation?from=&to=&weeks=&current=
+// (view_report_participation).
+func handleParticipationGridReport(w http.ResponseWriter, r *http.Request) {
+	rng, err := reportRangeParamsFromQuery(r.URL.Query())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	serveReport(w, "participation", func(q rowQueryer) (any, error) {
+		return runParticipationGrid(q, participationGridParams{Range: rng}, time.Now())
+	})
+}
