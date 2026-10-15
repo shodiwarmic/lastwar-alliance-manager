@@ -23,7 +23,6 @@
         {{if .Permissions.ViewParticipation}}
         <button class="tab-btn" data-tab="participation">Participation</button>
         {{end}}
-        <button class="tab-btn" data-tab="report">Report</button>
     </div>
 
     <!-- ── Members ───────────────────────────────────────────────────────── -->
@@ -126,31 +125,6 @@
         </div>
     </div>
     {{end}}
-
-    <!-- ── Report ────────────────────────────────────────────────────────── -->
-    <div id="tab-report" class="tab-content">
-        <div id="report-stat-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem;">
-            <p class="loading-msg">Loading…</p>
-        </div>
-        <div class="acc-report-grid">
-            <div class="acc-report-section">
-                <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-swords"/></svg> Top VS Performers</h3>
-                <div id="report-vs-leaders"><p class="loading-msg">Loading…</p></div>
-            </div>
-            <div class="acc-report-section">
-                <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> VS Underperformers</h3>
-                <div id="report-vs-under"><p class="loading-msg">Loading…</p></div>
-            </div>
-            <div class="acc-report-section">
-                <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Power Growth</h3>
-                <div id="report-power-growth"><p class="loading-msg">Loading…</p></div>
-            </div>
-            <div class="acc-report-section">
-                <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tag"/></svg> Members by Tag</h3>
-                <div id="report-tag-counts"><p class="loading-msg">Loading…</p></div>
-            </div>
-        </div>
-    </div>
 
 </div>
 {{end}}

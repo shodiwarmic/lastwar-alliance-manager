@@ -75,6 +75,8 @@ and operations, see [DEPLOYMENT.md](DEPLOYMENT.md) and [QUICKSTART.md](QUICKSTAR
 
 The **Reports** page gathers the alliance's reports in one place, each on its own tab, to read on screen, download as CSV or Excel, and print (or save as PDF) without the app's menus. Each report has its own permission under **Reports** in the permissions matrix — *Weekly summary*, *VS misses* and *Participation grid* — and the page shows only the reports a rank holds. On upgrade, every rank that could see the Accountability page gets all three. Dated reports take a range: the last 1, 2, 4 or 8 complete VS weeks (Monday to Saturday, ending last Saturday), the whole history, or custom dates, with an option to add the current week so far; the page prints the dates it resolved.
 
+- **Weekly summary** *(`view_report_weekly`)*: The week being evaluated — this week, or last week on a Monday — at a glance: member and tag totals, the top five VS performers, everyone below the VS daily minimum on enough days to be flagged (judged against that week's minimum, which the header names), the top power growth, and members by accountability tag. It was the Accountability page's Report tab.
+
 ### 🗡️ VS Duel League
 
 ![A VS Duel League week — a fictional alliance](img/vs-duel-league.png)
@@ -205,7 +207,7 @@ A central hub for all alliance-wide mail templates, announcements, and reference
 - **Suggested strikes, never automatic ones**: Saving a board lists the strikes its rule would produce. Each can be **struck** (filed under that event's strike category, dated the event day), **excused** with a reason, or **dismissed** so it is not offered again; **Strike all** asks first and names the count. A member already holding that strike for that day is never suggested twice, even if two officers confirm at the same moment.
 - **Participation tab**: The Accountability page's Participation tab lists every recorded board — date, event, rows, missed, excused, strikes still to decide, and who recorded it — filterable by event and exportable. The **Record board** button starts a new one.
 - **Member Profile**: Each member has a dedicated accountability profile showing their current tag and strike count, full strike history (with excuse/delete controls for officers), VS history for the last 8 weeks, participation on every recorded board (with the status each board gives them), and train log.
-- **Weekly Report**: A summary page showing top VS performers, members below the VS daily minimum, top power growth, and a breakdown of members by tag.
+- **Weekly Report**: Moved to the **Reports** page as the *Weekly summary*; the old address redirects there.
 - **Dashboard Card**: An Accountability card on the dashboard surfaces the At Risk / Needs Improvement / Reliable counts and the three members with the most active strikes at a glance.
 - **Permission-Gated Access**: `view_accountability` and `manage_accountability` default to R4/R5. Members cannot view their own accountability profile.
 

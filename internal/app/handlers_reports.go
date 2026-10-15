@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 // handleReportsPage serves /reports to anyone holding at least one report key.
@@ -79,4 +80,11 @@ func serveReport(w http.ResponseWriter, name string, run func(q rowQueryer) (any
 		return
 	}
 	writeJSON(w, result)
+}
+
+// handleWeeklySummaryReport is GET /api/reports/weekly (view_report_weekly).
+func handleWeeklySummaryReport(w http.ResponseWriter, r *http.Request) {
+	serveReport(w, "weekly", func(q rowQueryer) (any, error) {
+		return runWeeklySummaryReport(q, weeklySummaryParams{}, time.Now())
+	})
 }

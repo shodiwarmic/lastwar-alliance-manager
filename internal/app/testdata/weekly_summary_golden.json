@@ -1,0 +1,103 @@
+{
+  "vs_leaders": [
+    {
+      "id": 11,
+      "name": "Alpha",
+      "rank": "R4",
+      "value": 24000000
+    },
+    {
+      "id": 15,
+      "name": "Echo",
+      "rank": "R1",
+      "value": 15000000
+    },
+    {
+      "id": 12,
+      "name": "Bravo",
+      "rank": "R3",
+      "value": 13000000
+    },
+    {
+      "id": 13,
+      "name": "Charlie",
+      "rank": "R3",
+      "value": 6000000
+    },
+    {
+      "id": 14,
+      "name": "Delta",
+      "rank": "R2",
+      "value": 3000000
+    }
+  ],
+  "vs_underperformers": [
+    {
+      "id": 12,
+      "name": "Bravo",
+      "rank": "R3",
+      "value": 13000000
+    },
+    {
+      "id": 14,
+      "name": "Delta",
+      "rank": "R2",
+      "value": 3000000
+    },
+    {
+      "id": 1,
+      "name": "Leader",
+      "rank": "R5",
+      "value": 0
+    },
+    {
+      "id": 2,
+      "name": "Officer",
+      "rank": "R3",
+      "value": 0
+    }
+  ],
+  "power_growth": [
+    {
+      "id": 13,
+      "name": "Charlie",
+      "rank": "R3",
+      "value": 150000000
+    },
+    {
+      "id": 11,
+      "name": "Alpha",
+      "rank": "R4",
+      "value": 30000000
+    },
+    {
+      "id": 14,
+      "name": "Delta",
+      "rank": "R2",
+      "value": 5000000
+    },
+    {
+      "id": 15,
+      "name": "Echo",
+      "rank": "R1",
+      "value": 1000000
+    },
+    {
+      "id": 1,
+      "name": "Leader",
+      "rank": "R5",
+      "value": 0
+    }
+  ],
+  "tag_counts": {
+    "At Risk": 1,
+    "Needs Improvement": 1,
+    "Reliable": 5
+  },
+  "total_strikes": 4,
+  "vs_min": 5000000,
+  "completed": 3,
+  "imported_completed": 3,
+  "fallback_active": false
+}
+

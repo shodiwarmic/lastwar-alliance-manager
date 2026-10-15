@@ -43,6 +43,127 @@
     color: var(--color-danger);
 }
 
+/* --- Weekly summary --------------------------------------------------------------- */
+.report-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.report-stat {
+    margin-bottom: 0;
+    text-align: center;
+}
+
+.report-stat-value {
+    font-size: 2em;
+    font-weight: bold;
+    line-height: 1;
+    color: var(--color-text);
+}
+
+.report-stat-label {
+    font-size: 0.85em;
+    color: var(--color-text-mid);
+    margin-top: 5px;
+}
+
+.report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.report-section {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+
+.report-section h3 {
+    font-size: 0.95rem;
+    margin: 0 0 10px 0;
+    color: var(--color-text);
+}
+
+.report-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.report-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.875rem;
+}
+
+.report-list li:last-child {
+    border-bottom: none;
+}
+
+.report-list-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.report-list-value {
+    flex-shrink: 0;
+    color: var(--color-text-mid);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Muted import-lag / last-week note under the VS underperformers list. */
+.report-week-note {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin: 0.4rem 0 0;
+}
+
+.report-tag-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.report-tag-count {
+    font-weight: 600;
+}
+
+.report-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.report-tag--reliable {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.report-tag--needs-improvement {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+}
+
+.report-tag--at-risk {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
 /* Shown only on paper: the report's title, range, rule and when it was generated. */
 .report-print-header {
     display: none;

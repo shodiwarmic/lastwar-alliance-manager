@@ -50,12 +50,6 @@
     color: var(--text-muted);
 }
 
-/* Muted import-lag / last-week note under the report's VS underperformers list. */
-.report-week-note {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin: 0.4rem 0 0;
-}
 
 /* --- Tag badges --- */
 .acc-tag {
@@ -140,23 +134,6 @@ tr.acc-row--below-vs {
     text-decoration: line-through;
 }
 
-/* --- Report page --- */
-.acc-report-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1rem;
-}
-.acc-report-section {
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 14px 16px;
-}
-.acc-report-section h3 {
-    font-size: 0.95rem;
-    margin: 0 0 10px 0;
-    color: var(--color-text);
-}
 
 
 /* --- Strike categories modal --- */

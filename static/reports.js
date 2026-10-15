@@ -111,6 +111,89 @@
     // name → { run(panel) }. Filled per report below.
     const REPORTS = {};
 
+    // A week's VS minimum and where it came from (vsMinimumForWeek's source).
+    function minimumLabel(points, source) {
+        const v = formatCompact(points);
+        if (source === 'override') return v + ", this week's override";
+        if (source === 'current_setting') return v + " (today's setting — no record for this week)";
+        return v;
+    }
+
+    function showBody(panel) {
+        setStatus(panel, '');
+        panel.querySelector('.report-body').style.display = 'block';
+    }
+
+    // --- Weekly summary (GET /api/reports/weekly) ------------------------------------
+
+    function statCard(value, label) {
+        return el('div', { className: 'card report-stat' },
+            el('div', { className: 'report-stat-value', text: value }),
+            el('div', { className: 'report-stat-label', text: label }));
+    }
+
+    function memberList(members, fmt) {
+        if (!members || !members.length) return el('p', { className: 'report-empty', text: 'No data.' });
+        return el('ul', { className: 'report-list' }, members.map(m =>
+            el('li', {},
+                el('span', { className: 'report-list-name', translate: 'no' }, m.name + ' ',
+                    el('span', { className: 'member-rank rank-' + m.rank, text: m.rank })),
+                el('span', { className: 'report-list-value', text: fmt(m.value) }))));
+    }
+
+    async function runWeekly(panel) {
+        setStatus(panel, 'Loading…');
+        let rep;
+        try {
+            rep = await fetchReport('/api/reports/weekly');
+        } catch (e) {
+            setStatus(panel, 'Failed to load the report: ' + e.message, true);
+            return;
+        }
+        const tags = rep.tag_counts || {};
+        const total = (tags['At Risk'] || 0) + (tags['Needs Improvement'] || 0) + (tags['Reliable'] || 0);
+        const reliablePct = total ? Math.round(((tags['Reliable'] || 0) / total) * 100) + '%' : '—';
+        document.getElementById('weekly-stat-cards').replaceChildren(
+            statCard(String(total), 'Total members'),
+            statCard(reliablePct, 'Reliable'),
+            statCard(String(tags['Needs Improvement'] || 0), 'Needs improvement'),
+            statCard(String(tags['At Risk'] || 0), 'At risk'),
+            statCard(String(rep.total_strikes), 'Active strikes'));
+
+        document.getElementById('weekly-vs-leaders').replaceChildren(memberList(rep.vs_leaders, formatCompact));
+
+        const under = [];
+        if (!rep.vs_underperformers || !rep.vs_underperformers.length) {
+            under.push(el('p', {}, svgIcon('check'), ' All members are meeting the VS daily minimum.'));
+        } else {
+            under.push(memberList(rep.vs_underperformers, formatCompact));
+        }
+        const bits = [];
+        if (rep.fallback_active) bits.push('showing last week');
+        if (rep.imported_completed < rep.completed) {
+            bits.push(`based on ${rep.imported_completed} of ${rep.completed} completed days imported so far`);
+        }
+        if (bits.length) under.push(el('p', { className: 'report-week-note', text: 'Flags ' + bits.join('; ') + '.' }));
+        document.getElementById('weekly-vs-under').replaceChildren(...under);
+
+        document.getElementById('weekly-power-growth').replaceChildren(
+            memberList(rep.power_growth, v => (v > 0 ? '+' : '') + formatCompact(v)));
+
+        document.getElementById('weekly-tag-counts').replaceChildren(...[
+            ['Reliable', 'report-tag--reliable'], ['Needs Improvement', 'report-tag--needs-improvement'], ['At Risk', 'report-tag--at-risk'],
+        ].map(([tag, cls]) => el('div', { className: 'report-tag-row' },
+            el('span', { className: 'report-tag ' + cls, text: tag }),
+            el('span', { className: 'report-tag-count', text: String(tags[tag] || 0) }))));
+
+        setMeta(panel, [
+            'Week of ' + fmtDate(rep.week_date, true),
+            'VS daily minimum ' + minimumLabel(rep.vs_min, rep.vs_min_source),
+            'Generated ' + fmtGenerated(rep.generated_at),
+        ]);
+        showBody(panel);
+    }
+    REPORTS.weekly = { run: runWeekly };
+
     // --- Page ----------------------------------------------------------------------
 
     const ran = {};
@@ -121,6 +204,19 @@
         ran[name] = true;
         r.run(panel);
     }
+
+    // Paper is white: print in the light theme whatever the screen uses (the dark
+    // tokens hang off html.theme-dark / html.theme-auto), then put it back.
+    let printThemes = [];
+    window.addEventListener('beforeprint', () => {
+        const c = document.documentElement.classList;
+        printThemes = [...c].filter(x => x === 'theme-dark' || x === 'theme-auto');
+        printThemes.forEach(x => c.remove(x));
+    });
+    window.addEventListener('afterprint', () => {
+        printThemes.forEach(x => document.documentElement.classList.add(x));
+        printThemes = [];
+    });
 
     document.addEventListener('DOMContentLoaded', () => {
         Object.keys(REPORTS).forEach(name => {
