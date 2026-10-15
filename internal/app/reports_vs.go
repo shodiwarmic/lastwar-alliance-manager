@@ -183,6 +183,7 @@ type vsMissesMember struct {
 	Name          string      `json:"name"`
 	Rank          string      `json:"rank"`
 	DaysEvaluated int         `json:"days_evaluated"`
+	NoScoreDays   int         `json:"no_score_days"` // evaluable days with no row that week: not misses
 	Misses        int         `json:"misses"`
 	AvgShortfall  int         `json:"avg_shortfall"`
 	Worst         *vsMissDay  `json:"worst"`
@@ -202,6 +203,7 @@ type vsMissesCoverage struct {
 	DaysNotImported    []string `json:"days_not_imported"`    // in range, before today, no import
 	WeeksWithoutRecord []string `json:"weeks_without_record"` // judged against today's setting
 	MembersExcludedEX  int      `json:"members_excluded_ex"`  // former members with points in range
+	NoScoreDays        int      `json:"no_score_days"`        // member-days with no score recorded
 }
 
 type vsMissesReport struct {
@@ -217,8 +219,10 @@ type vsMissesReport struct {
 // below the minimum that applied to that day's week. A day is evaluated iff it is in
 // [from, to], before today's game date, imported (any member non-zero that day), on or
 // after the member's join date, and the member is not EX (the app records no departure
-// date, so a former member is not shown for any week). Members evaluated on at least
-// one day are listed, those with no misses included, most misses first.
+// date, so a former member is not shown for any week). A member with no vs_points row
+// for a week has nothing recorded that week: those days are counted as NoScoreDays,
+// not misses. Members evaluated (or unrecorded) on at least one day are listed, those
+// with no misses included, most misses first.
 func runVSMissesReport(q rowQueryer, p vsMissesParams, now time.Time) (*vsMissesReport, error) {
 	rng, err := resolveReportRange(q, p.Range, now)
 	if err != nil {
@@ -370,10 +374,14 @@ func runVSMissesReport(q rowQueryer, p vsMissesParams, now time.Time) (*vsMisses
 		total := 0
 		for _, w := range weekDates {
 			c := ctx[w]
-			sc := points[m.id][w] // no row: every imported post-join day is a 0
-			statuses := vsDayStatuses(sc, m.jd, w, c.completed, masks[w], mins[w].Points)
+			sc, hasRow := points[m.id][w]
+			statuses := vsDayStatuses(sc, hasRow, m.jd, w, c.completed, masks[w], mins[w].Points)
 			for i, st := range statuses {
 				if st == vsDaySkipped || !c.inRange[i] {
+					continue
+				}
+				if st == vsDayNoScore {
+					out.NoScoreDays++ // nothing was read for them: not a miss, but shown
 					continue
 				}
 				out.DaysEvaluated++
@@ -389,7 +397,8 @@ func runVSMissesReport(q rowQueryer, p vsMissesParams, now time.Time) (*vsMisses
 				}
 			}
 		}
-		if out.DaysEvaluated == 0 {
+		rep.Coverage.NoScoreDays += out.NoScoreDays
+		if out.DaysEvaluated == 0 && out.NoScoreDays == 0 {
 			continue
 		}
 		out.Misses = len(out.Days)

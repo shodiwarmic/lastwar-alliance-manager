@@ -124,13 +124,20 @@ const (
 	vsDaySkipped vsDayStatus = iota // not completed, not imported, or before the member joined
 	vsDayMet                        // evaluated, at or above the minimum
 	vsDayBelow                      // evaluated, below the minimum
+	vsDayNoScore                    // would be evaluated, but the member has no row that week
 )
 
 // vsDayStatuses judges each of a week's six days for one member: a day is evaluated
 // only when it is completed (i < completed), imported, and on or after the member's
 // join date. Rank is not its business — callers choose the members. vsDaysBelow and
 // the VS-misses report (reports_vs.go) both read it, so the two cannot drift.
-func vsDayStatuses(scores [6]int, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) [6]vsDayStatus {
+//
+// hasRow is whether the member has a vs_points row for the week at all. Without one,
+// nothing was read for them — an import writes a row for every member it matched, a
+// real 0 included (the results screens show zero scorers) — so their days are
+// vsDayNoScore, never a miss at 0 (owner, 2026-10-15). A day inside a row that was
+// never read still reads as the column's 0: the schema cannot say "blank".
+func vsDayStatuses(scores [6]int, hasRow bool, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) [6]vsDayStatus {
 	var out [6]vsDayStatus
 	for i := 0; i < completed && i < 6; i++ {
 		if !dayImported[i] {
@@ -139,7 +146,9 @@ func vsDayStatuses(scores [6]int, joinedAt, weekDate string, completed int, dayI
 		if joinedAt != "" && dayDate(weekDate, i) < joinedAt {
 			continue // before the member joined
 		}
-		if scores[i] < vsMin {
+		if !hasRow {
+			out[i] = vsDayNoScore
+		} else if scores[i] < vsMin {
 			out[i] = vsDayBelow
 		} else {
 			out[i] = vsDayMet
@@ -149,10 +158,10 @@ func vsDayStatuses(scores [6]int, joinedAt, weekDate string, completed int, dayI
 }
 
 // vsDaysBelow counts how many completed, imported, post-join days the member scored
-// below the daily minimum. Mirrors the JS countDaysBelowMinimum.
-func vsDaysBelow(scores [6]int, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) int {
+// below the daily minimum; none without a row. Mirrors the JS countDaysBelowMinimum.
+func vsDaysBelow(scores [6]int, hasRow bool, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) int {
 	n := 0
-	for _, st := range vsDayStatuses(scores, joinedAt, weekDate, completed, dayImported, vsMin) {
+	for _, st := range vsDayStatuses(scores, hasRow, joinedAt, weekDate, completed, dayImported, vsMin) {
 		if st == vsDayBelow {
 			n++
 		}
@@ -245,7 +254,8 @@ func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
 			COALESCE(SUM(CASE WHEN s.status='active' THEN 1 ELSE 0 END), 0) AS active_strikes,
 			COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total,
 			COALESCE(vp.monday,0), COALESCE(vp.tuesday,0), COALESCE(vp.wednesday,0),
-			COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0)
+			COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0),
+			MAX(vp.id) IS NOT NULL AS has_row
 		FROM members m
 		LEFT JOIN accountability_strikes s ON s.member_id = m.id
 		LEFT JOIN vs_points vp ON vp.member_id = m.id AND vp.week_date = ?
@@ -265,8 +275,9 @@ func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
 		var m AccountabilityMember
 		var joinedAt string
 		var scores [6]int
+		var hasRow bool
 		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &joinedAt, &m.ActiveStrikes, &m.VSTotal,
-			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5]); err != nil {
+			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5], &hasRow); err != nil {
 			slog.Error("handleAccountabilityMembers: scan failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -275,7 +286,7 @@ func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
 		// Below the daily minimum on N+ completed, imported, post-join days. When no
 		// completed day is imported yet, importedCompleted==0 → nobody is flagged.
 		if importedCompleted > 0 {
-			m.BelowThreshold = vsDaysBelow(scores, joinedAt, weekDate, completed, dayImported, vsMin) >= vsFlagDays
+			m.BelowThreshold = vsDaysBelow(scores, hasRow, joinedAt, weekDate, completed, dayImported, vsMin) >= vsFlagDays
 		}
 		members = append(members, m)
 	}
@@ -472,7 +483,8 @@ func handleAccountabilitySummary(w http.ResponseWriter, r *http.Request) {
 			COALESCE(SUM(CASE WHEN s.status='active' THEN 1 ELSE 0 END), 0) AS active_strikes,
 			COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total,
 			COALESCE(vp.monday,0), COALESCE(vp.tuesday,0), COALESCE(vp.wednesday,0),
-			COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0)
+			COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0),
+			MAX(vp.id) IS NOT NULL AS has_row
 		FROM members m
 		LEFT JOIN accountability_strikes s ON s.member_id = m.id
 		LEFT JOIN vs_points vp ON vp.member_id = m.id AND vp.week_date = ?
@@ -492,15 +504,16 @@ func handleAccountabilitySummary(w http.ResponseWriter, r *http.Request) {
 		var m AccountabilityMember
 		var joinedAt string
 		var scores [6]int
+		var hasRow bool
 		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &joinedAt, &m.ActiveStrikes, &m.VSTotal,
-			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5]); err != nil {
+			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5], &hasRow); err != nil {
 			slog.Error("handleAccountabilitySummary: scan failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 		m.Tag = memberTag(m.ActiveStrikes, thresholds)
 		if importedCompleted > 0 {
-			m.BelowThreshold = vsDaysBelow(scores, joinedAt, weekDate, completed, dayImported, vsMin) >= vsFlagDays
+			m.BelowThreshold = vsDaysBelow(scores, hasRow, joinedAt, weekDate, completed, dayImported, vsMin) >= vsFlagDays
 		}
 		switch m.Tag {
 		case "At Risk":

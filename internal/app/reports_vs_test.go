@@ -205,7 +205,7 @@ func TestLeagueWeekOverride(t *testing.T) {
 // Three weeks seen on Thursday 2026-10-15. W1 has no recorded minimum (today's 4M), W2 a
 // recorded 5M with Thu–Sat never imported, W3 (this week) an override of 3M. Alpha is
 // ordinary, Bravo joined on W2's Wednesday, Charlie is a former member, Delta has no row
-// for W1 although W1 was imported.
+// for W1 although W1 was imported (no score recorded: not misses).
 const vsMissesNow = "2026-10-15T12:00:00Z"
 
 func seedVSMisses(t *testing.T) {
@@ -258,7 +258,7 @@ func TestVSMissesReport(t *testing.T) {
 		t.Errorf("range %s – %s", rep.From, rep.To)
 	}
 	by := missesByName(rep)
-	want := map[string][2]int{"Alpha": {12, 3}, "Bravo": {4, 1}, "Delta": {12, 7}} // days evaluated, misses
+	want := map[string][2]int{"Alpha": {12, 3}, "Bravo": {4, 1}, "Delta": {6, 1}} // days evaluated, misses
 	for name, w := range want {
 		if m := by[name]; m.DaysEvaluated != w[0] || m.Misses != w[1] {
 			t.Errorf("%s: evaluated %d misses %d, want %v", name, m.DaysEvaluated, m.Misses, w)
@@ -267,7 +267,7 @@ func TestVSMissesReport(t *testing.T) {
 	if _, ok := by["Charlie"]; ok {
 		t.Error("a former member is listed")
 	}
-	if names := []string{rep.Members[0].Name, rep.Members[1].Name, rep.Members[2].Name}; names[0] != "Delta" || names[1] != "Alpha" || names[2] != "Bravo" {
+	if names := []string{rep.Members[0].Name, rep.Members[1].Name, rep.Members[2].Name}; names[0] != "Alpha" || names[1] != "Bravo" || names[2] != "Delta" {
 		t.Errorf("order %v", names)
 	}
 
@@ -284,12 +284,12 @@ func TestVSMissesReport(t *testing.T) {
 	if b := by["Bravo"]; len(b.Days) != 1 || b.Days[0].Date != "2026-10-07" {
 		t.Errorf("Bravo (joined 10-07) misses %+v", b.Days)
 	}
-	if d := by["Delta"]; d.Worst == nil || d.Worst.Shortfall != 4000000 || d.AvgShortfall != (6*4000000+2000000)/7 {
-		t.Errorf("Delta worst %+v avg %d", d.Worst, d.AvgShortfall)
+	if d := by["Delta"]; d.NoScoreDays != 6 || d.Worst == nil || d.Worst.Date != "2026-10-14" || d.AvgShortfall != 2000000 {
+		t.Errorf("Delta no-score %d worst %+v avg %d", d.NoScoreDays, d.Worst, d.AvgShortfall)
 	}
 
 	cov := rep.Coverage
-	if cov.DaysEvaluated != 12 || cov.MembersEvaluated != 3 || cov.MembersExcludedEX != 1 {
+	if cov.DaysEvaluated != 12 || cov.MembersEvaluated != 3 || cov.MembersExcludedEX != 1 || cov.NoScoreDays != 6 {
 		t.Errorf("coverage %+v", cov)
 	}
 	if !reflect.DeepEqual(cov.DaysNotImported, []string{"2026-10-08", "2026-10-09", "2026-10-10"}) {
@@ -332,10 +332,13 @@ func TestVSMissesOneMember(t *testing.T) {
 	}
 }
 
-// vsDaysBelow is the count of vsDayStatuses' below days, and both agree with the rule
-// as it was written before the split.
+// vsDaysBelow is the count of vsDayStatuses' below days, and agrees with the rule as it
+// was written before the split — for a member with a row. Without one it is always 0.
 func TestVSDayStatusesMatchTheOldRule(t *testing.T) {
-	old := func(scores [6]int, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) int {
+	old := func(scores [6]int, hasRow bool, joinedAt, weekDate string, completed int, dayImported [6]bool, vsMin int) int {
+		if !hasRow {
+			return 0
+		}
 		n := 0
 		for i := 0; i < completed && i < 6; i++ {
 			if !dayImported[i] || (joinedAt != "" && dayDate(weekDate, i) < joinedAt) {
@@ -359,8 +362,8 @@ func TestVSDayStatusesMatchTheOldRule(t *testing.T) {
 		if r.Intn(2) == 0 {
 			joined = dayDate("2026-10-12", r.Intn(9)-1)
 		}
-		completed, minimum := r.Intn(7), (r.Intn(9)+1)*1000000
-		if got, want := vsDaysBelow(sc, joined, "2026-10-12", completed, imp, minimum), old(sc, joined, "2026-10-12", completed, imp, minimum); got != want {
+		completed, minimum, hasRow := r.Intn(7), (r.Intn(9)+1)*1000000, r.Intn(5) > 0
+		if got, want := vsDaysBelow(sc, hasRow, joined, "2026-10-12", completed, imp, minimum), old(sc, hasRow, joined, "2026-10-12", completed, imp, minimum); got != want {
 			t.Fatalf("case %d: %d, old rule %d", k, got, want)
 		}
 	}

@@ -77,7 +77,8 @@ func runWeeklySummaryReport(q rowQueryer, p weeklySummaryParams, now time.Time) 
 		SELECT m.id, m.name, m.rank, COALESCE(m.joined_at, ''),
 		       COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total,
 		       COALESCE(vp.monday,0), COALESCE(vp.tuesday,0), COALESCE(vp.wednesday,0),
-		       COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0)
+		       COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0),
+		       vp.id IS NOT NULL AS has_row
 		FROM members m
 		LEFT JOIN vs_points vp ON vp.member_id = m.id AND vp.week_date = ?
 		WHERE m.rank != 'EX'
@@ -91,8 +92,9 @@ func runWeeklySummaryReport(q rowQueryer, p weeklySummaryParams, now time.Time) 
 		var m ReportTopMember
 		var joinedAt string
 		var scores [6]int
+		var hasRow bool
 		if err := vsRows.Scan(&m.ID, &m.Name, &m.Rank, &joinedAt, &m.Value,
-			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5]); err != nil {
+			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5], &hasRow); err != nil {
 			vsRows.Close()
 			return nil, err
 		}
@@ -100,7 +102,7 @@ func runWeeklySummaryReport(q rowQueryer, p weeklySummaryParams, now time.Time) 
 			rep.VSLeaders = append(rep.VSLeaders, m)
 		}
 		n++
-		if importedCompleted > 0 && vsDaysBelow(scores, joinedAt, weekDate, completed, dayImported, weekMin.Points) >= flagDays {
+		if importedCompleted > 0 && vsDaysBelow(scores, hasRow, joinedAt, weekDate, completed, dayImported, weekMin.Points) >= flagDays {
 			rep.VSUnderperformers = append(rep.VSUnderperformers, m)
 		}
 	}

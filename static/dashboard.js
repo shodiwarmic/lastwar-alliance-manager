@@ -48,13 +48,15 @@ function dayImportedForWeek(vsRows) {
 }
 
 // countDaysBelowMinimum counts completed + imported + post-join days below the daily
-// minimum. A missing row counts those applicable days as 0 (→ below). Mirrors Go vsDaysBelow.
+// minimum. A missing row counts nothing: no score was read (owner, 2026-10-15). Mirrors Go vsDaysBelow.
 function countDaysBelowMinimum(row, min, joinedAt, dayImported) {
+    // No row that week: nothing was read for them, which is not a 0 (vsDayStatuses).
+    if (!row) return 0;
     let count = 0;
     for (let i = 0; i < VS_COMPLETED; i++) {
         if (!dayImported[i]) continue;                                 // not imported yet
         if (joinedAt && addGameDays(VS_WEEK, i) < joinedAt) continue;  // before the member joined
-        const v = row ? (row[VS_DAYS[i]] ?? 0) : 0;
+        const v = row[VS_DAYS[i]] ?? 0;
         if (v < min) count++;
     }
     return count;

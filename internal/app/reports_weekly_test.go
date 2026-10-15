@@ -48,6 +48,12 @@ func TestWeeklySummaryMatchesTheOldReport(t *testing.T) {
 	// reading 30 days old has no growth, so the new joiner the old report ranked first
 	// is left out and counted. TestWeeklySummaryGrowth pins the new list.
 	delete(want, "power_growth")
+	// vs_underperformers changed on purpose too (owner, 2026-10-15): the old report
+	// flagged the two seeded members who have no row that week at all. Without a row
+	// nothing was read for them, so they are no longer flagged.
+	under := want["vs_underperformers"].([]any)
+	want["vs_underperformers"] = under[:2] // Bravo, Delta
+
 	for k, v := range want {
 		if !reflect.DeepEqual(got[k], v) {
 			t.Errorf("%s:\n got %v\nwant %v", k, got[k], v)

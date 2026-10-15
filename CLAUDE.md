@@ -1382,6 +1382,12 @@ summary) reads the evaluated week's minimum through it, so none disagrees with a
   removes it, both in the week's own transaction. A week outside any league season has no
   override UI.
 - An override is **always named** where a minimum is shown ("5.0M, this week's override").
+- **No row is no score, not a 0** (owner, 2026-10-15). `vsDayStatuses` takes `hasRow`: a
+  member with no `vs_points` row for the week had nothing read (imports write a row for every
+  member they match, real 0s included), so those days are `vsDayNoScore` — never a miss, on
+  the dashboard (`countDaysBelowMinimum` in `dashboard.js`), Accountability or the reports,
+  which list them as "No score". A never-read day *inside* a row still reads as the column's
+  `0`: the day columns are `NOT NULL DEFAULT 0` and cannot say "blank".
 - `getVSAccountabilitySettings` still returns today's setting and the flag-days threshold;
   call `vsMinimumForWeek` **before** opening a rows cursor, never inside one.
 
