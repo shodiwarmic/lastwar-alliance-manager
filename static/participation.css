@@ -12,6 +12,7 @@
     white-space: nowrap;
 }
 .pt-badge--present { background: var(--color-success-bg); color: var(--color-success); }
+.pt-badge--late    { background: var(--color-info-bg); color: var(--color-info); }
 .pt-badge--zero    { background: var(--color-warning-bg); color: var(--color-warning); }
 .pt-badge--missed  { background: var(--color-danger-bg);  color: var(--color-danger); }
 .pt-badge--excused { background: var(--color-info-bg);    color: var(--color-info); }

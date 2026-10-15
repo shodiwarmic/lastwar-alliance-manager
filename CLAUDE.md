@@ -1236,14 +1236,14 @@ that exists. Do not add a "missing boards" view or count.
 
 **Status is derived, never stored.** A board stores what the mail said (entries +
 values), the roles for that battle, and the officer's judgements (exceptions).
-`deriveBoard` is the ONE function that turns those into present / zero / missed /
+`deriveBoard` is the ONE function that turns those into present / late / zero / missed /
 excused under the type's declared `absence_rule` — nothing else decides status:
 
 | Rule | Types | Missed means |
 |---|---|---|
 | `absent` | Marshal's Guard, Large Sandworm | an eligible roster member with no entry (appearing means you attacked) |
 | `zero` | Zombie Siege | an entry whose primary value is **present and 0** — absence is blameless (the game picks who is attacked) |
-| `role` | Desert Storm | a **starter** with no entry — an absent sub is never counted |
+| `role` | Desert Storm | a **starter** with no entry — an absent sub is ignored unless manually marked missed |
 
 The rule is a declared property of the type (`participation_types`), because getting it
 wrong manufactures accusations automatically. A **missing value is not a zero**: the
@@ -1255,8 +1255,12 @@ type's `strike_type` on `ref_date = event_date` **inside one transaction** — w
 connection that is the serialisation point, which `handleStrikeCreate`'s
 check-then-insert lacks. Dismissing (`dismissed`) and excusing (`excused` + reason +
 author) are stored per `(board, member)` so a re-save never resurfaces them.
-`missed` exceptions are written **only by migration 081** for legacy
-`storm_attendance` no-shows, which have no role to derive a miss from.
+`missed` exceptions represent legacy `storm_attendance` no-shows (081) or an
+explicit officer mark for an absent substitute on a current role-based Desert Storm
+board (085). `manual_missed` retains that underlying judgement across Excuse / Dismiss;
+undoing either restores Missed, and Undo missed removes the manual mark. Legacy misses
+remain protected. `late` is an informational judgement for a saved DS results entry;
+undo restores Present. Late preserves rank, score and role and never suggests a strike.
 
 **Reads gate on `canViewParticipation`** (`view_participation` OR
 `manage_participation`): `userHasPermission` reads one key and manage does not imply

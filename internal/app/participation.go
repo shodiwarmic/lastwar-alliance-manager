@@ -18,7 +18,7 @@ import (
 //
 // Status is never stored. A board stores what the mail said (entries + values),
 // the roles for that battle, and the human judgements (exceptions); deriveBoard
-// turns those into present / zero / missed / excused under the type's rule.
+// turns those into present / late / zero / missed / excused under the type's rule.
 // Suggestions are derived again on every read, so recording, excusing, dismissing
 // or striking never leaves a stale list behind.
 
@@ -108,12 +108,13 @@ type ptRole struct {
 }
 
 type ptException struct {
-	MemberID   int    `json:"member_id"`
-	MemberName string `json:"member_name"`
-	Kind       string `json:"kind"` // excused | dismissed | missed
-	Reason     string `json:"reason"`
-	RecordedBy string `json:"recorded_by"`
-	CreatedAt  string `json:"created_at"`
+	ManualMissed bool   `json:"manual_missed,omitempty"` // underlying DS sub miss, retained through excuse/dismiss
+	MemberID     int    `json:"member_id"`
+	MemberName   string `json:"member_name"`
+	Kind         string `json:"kind"` // excused | dismissed | missed | late
+	Reason       string `json:"reason"`
+	RecordedBy   string `json:"recorded_by"`
+	CreatedAt    string `json:"created_at"`
 }
 
 type ptRosterMember struct {
@@ -127,7 +128,7 @@ type ptRosterMember struct {
 type ptStatus struct {
 	MemberID  int               `json:"member_id"`
 	Name      string            `json:"name"`
-	Status    string            `json:"status"` // present | zero | missed | excused
+	Status    string            `json:"status"` // present | late | zero | missed | excused
 	Rank      *int              `json:"rank"`
 	Values    map[string]*int64 `json:"values,omitempty"`
 	Role      string            `json:"role,omitempty"`
@@ -174,13 +175,14 @@ func eligibleRoster(roster []ptRosterMember, eventDate string) []ptRosterMember 
 //   - present: an entry matched to the member. Under 'zero', an entry whose primary
 //     value is PRESENT AND 0 is 'zero'; a missing value is not a zero.
 //   - missed:  'absent' → every roster member with no entry; 'role' → every starter
-//     with no entry; any rule → a stored 'missed' exception (legacy) with no entry.
+//     with no entry; a stored miss (legacy or manual DS sub) with no entry.
+//   - late: a role-rule entry with an explicit late judgement; never an absence.
 //   - excused: an excuse overrides anything that is not present.
 //   - dismissed keeps the derived status and only takes the member off the
 //     suggestion list.
 //
 // A member the rule says nothing about — absent under 'zero', an absent sub — is
-// not listed at all: they were not expected, so the board has nothing to say.
+// not listed unless explicitly marked: the board normally has nothing to say.
 func deriveBoard(rule, primaryKey string, roster []ptRosterMember, entries []ptEntry,
 	roles []ptRole, exceptions []ptException) []ptStatus {
 
@@ -229,18 +231,18 @@ func deriveBoard(rule, primaryKey string, roster []ptRosterMember, entries []ptE
 	}
 
 	for _, x := range exceptions {
-		switch x.Kind {
-		case "missed":
-			if !entered[x.MemberID] {
-				get(x.MemberID, x.MemberName).Status = "missed"
-			}
+		if (x.Kind == "missed" || x.ManualMissed) && !entered[x.MemberID] {
+			get(x.MemberID, x.MemberName).Status = "missed"
+		}
+		if x.Kind == "late" && rule == ruleRole && entered[x.MemberID] {
+			byMember[x.MemberID].Status = "late"
 		}
 	}
 	for _, x := range exceptions {
 		switch x.Kind {
 		case "excused":
 			s := get(x.MemberID, x.MemberName)
-			if s.Status != "present" {
+			if s.Status != "present" && s.Status != "late" {
 				s.Status, s.Reason = "excused", x.Reason
 			}
 		case "dismissed":
@@ -272,9 +274,9 @@ func deriveBoard(rule, primaryKey string, roster []ptRosterMember, entries []ptE
 func sortStatuses(ss []ptStatus) {
 	group := func(s ptStatus) int {
 		switch {
-		case (s.Status == "present" || s.Status == "zero") && s.Rank != nil:
+		case (s.Status == "present" || s.Status == "late" || s.Status == "zero") && s.Rank != nil:
 			return 0
-		case s.Status == "present" || s.Status == "zero":
+		case s.Status == "present" || s.Status == "late" || s.Status == "zero":
 			return 1
 		case s.Status == "missed":
 			return 2
@@ -600,7 +602,7 @@ func loadBoards(q rowQueryer, types map[int]*ptType, f boardFilter) ([]*ptBoardD
 	// cleared by every user-delete path (decision 21).
 	rows, err = q.Query(`
 		SELECT x.board_id, x.member_id, COALESCE(m.name,''), x.kind, x.reason,
-		       COALESCE(u.username,''), COALESCE(x.created_at,'')
+		       COALESCE(u.username,''), COALESCE(x.created_at,''), x.manual_missed
 		FROM participation_exceptions x
 		LEFT JOIN members m ON m.id = x.member_id
 		LEFT JOIN users u ON u.id = x.recorded_by
@@ -612,7 +614,7 @@ func loadBoards(q rowQueryer, types map[int]*ptType, f boardFilter) ([]*ptBoardD
 	for rows.Next() {
 		var x ptException
 		var boardID int
-		if err := rows.Scan(&boardID, &x.MemberID, &x.MemberName, &x.Kind, &x.Reason, &x.RecordedBy, &x.CreatedAt); err != nil {
+		if err := rows.Scan(&boardID, &x.MemberID, &x.MemberName, &x.Kind, &x.Reason, &x.RecordedBy, &x.CreatedAt, &x.ManualMissed); err != nil {
 			return nil, err
 		}
 		byBoard[boardID].Exceptions = append(byBoard[boardID].Exceptions, x)
