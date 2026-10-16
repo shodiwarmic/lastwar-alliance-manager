@@ -53,6 +53,7 @@ Everything is permission-gated by in-game rank (R1–R5), so officers see what t
 Debian/Ubuntu. The script checks the host, installs Docker, generates secrets, configures Caddy with SSL, and pulls the pre-built containers. Install into any directory you like:
 
 ```bash
+umask 022                                                 # see "Updating from the Admin page" below
 mkdir -p ~/alliance-manager && cd ~/alliance-manager      # any directory you like
 curl -fsSL -o host-files.tar.gz \
   https://github.com/shodiwarmic/lastwar-alliance-manager/releases/latest/download/host-files.tar.gz
@@ -61,6 +62,16 @@ tar -xzf host-files.tar.gz && rm host-files.tar.gz
 ```
 
 You will need a Linux server and two DNS records pointing at it — one for the app, one for the document server. No Go, OCR libraries or SQLite on the host: the stack runs from pre-built images.
+
+### Updating from the Admin page
+
+From v3.0.0, administrators install new releases from **Admin → Security & API** ([how it works](docs/DEPLOYMENT.md#updating-from-the-admin-page)). The host agent that does this refuses an install whose directories anyone but the owner can write to. **Known issue:** on hosts whose default umask is `0002` (Ubuntu's default), the install directory and its `scripts/` directories are created group-writable (mode `775`), so every Admin-page update is refused with *"… is group- or world-writable (mode 775)"*, even though **Test the host agent** succeeds. The fix needs no new release. Run this once in the install directory, then press **Install** again:
+
+```bash
+chmod 755 . scripts scripts/lib
+```
+
+The `umask 022` line above avoids it on a new install. A later release will set these modes itself.
 
 ## Documentation
 

@@ -477,6 +477,26 @@ stops refreshing its hold for two minutes, the app gives up waiting, records tha
 accepts changes again; the agent will then never restore the database for that request on its
 own. **Test the host agent** sends a request that changes nothing, to prove the round trip.
 
+#### Install is refused: "… is group- or world-writable (mode 775)"
+
+A known issue up to and including v3.1.0. The agent refuses to run an install whose directories
+— the install directory, `scripts/` and `scripts/lib/`, or any directory above it — can be written
+by anyone but the owner, as `sudo` does. On hosts whose default umask is `0002` (Ubuntu's default,
+with a private group per user), the install steps create exactly those directories with mode
+`775`, so every request from the Admin page ends with this refusal, and nothing on the server
+changes. **Test the host agent** still succeeds: it does not run this check.
+
+The fix needs no new release. In the install directory:
+
+```bash
+chmod 755 . scripts scripts/lib
+```
+
+then press **Install** again. `journalctl -u alliance-manager-update` names the path it refused.
+A new install avoids it by running `umask 022` before creating the directory and unpacking the
+host files (see the [README](../README.md#quick-install)). A later release will create these
+directories with safe modes and report a refusal on the Admin page before you press Install.
+
 ### Recovering from a failed update
 
 A failed update from the Admin page ends in one of three ways, and the Admin page says which:
