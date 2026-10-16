@@ -392,8 +392,8 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(m)
 }
 
-// clearUserReferences nulls the participation columns that point at a user who is
-// about to be deleted. The schema says ON DELETE SET NULL, but foreign_keys is off
+// clearUserReferences nulls the participation and VS-minimum columns that point at a
+// user who is about to be deleted. The schema says ON DELETE SET NULL, but foreign_keys is off
 // app-wide so it never fires; readers already tolerate a dangling id, and this keeps
 // one from being written in the first place. q is a tx or db.
 func clearUserReferences(q interface {
@@ -403,6 +403,10 @@ func clearUserReferences(q interface {
 		if _, err := q.Exec(`UPDATE `+tbl+` SET recorded_by = NULL WHERE recorded_by IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
 			return err
 		}
+	}
+	// The rows stay: a week's minimum is history whoever set it.
+	if _, err := q.Exec(`UPDATE vs_week_minimums SET set_by = NULL WHERE set_by IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
+		return err
 	}
 	return nil
 }

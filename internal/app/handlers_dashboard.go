@@ -41,8 +41,7 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vsMin, vsFlagDays := getVSAccountabilitySettings()
-	data.VSMinimumPoints = vsMin
+	_, vsFlagDays := getVSAccountabilitySettings()
 	data.VsFlagDaysThreshold = vsFlagDays
 
 	// Server-authoritative evaluated week (Monday fallback) so the dashboard and
@@ -51,6 +50,13 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	data.VSEvalWeek = weekDate
 	data.VSCompletedDays = completed
 	data.VSFallbackActive = fallbackActive
+	// That week's own minimum (an override, the recorded setting, or today's).
+	if m, err := vsMinimumForWeek(db, weekDate); err == nil {
+		data.VSMinimumPoints, data.VSMinimumSource = m.Points, m.Source
+	} else {
+		slog.Error("dashboard: VS minimum for week failed", "error", err, "week", weekDate)
+		data.VSMinimumPoints, _ = getVSAccountabilitySettings()
+	}
 
 	renderTemplate(w, r, "dashboard.html", data)
 }

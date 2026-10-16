@@ -69,21 +69,51 @@ func getVSPoints(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(vsPoints)
 }
 
-// Save VS points for a week (bulk operation)
+// vsDayColumn matches a requested day against vsDayColumns, so a cell's day
+// joins the SQL as a fixed column name, never as request text.
+func vsDayColumn(day string) (string, bool) {
+	for _, c := range vsDayColumns {
+		if c == day {
+			return c, true
+		}
+	}
+	return "", false
+}
+
+// vsSaveCell is one edited cell of the VS page: the value the page loaded and
+// the value the officer typed. Overridden marks a cell resubmitted after a
+// conflict review chose "keep mine".
+type vsSaveCell struct {
+	MemberID   int    `json:"member_id"`
+	Day        string `json:"day"`
+	Loaded     int    `json:"loaded"`
+	Value      int    `json:"value"`
+	Overridden bool   `json:"overridden,omitempty"`
+}
+
+type vsSaveConflict struct {
+	MemberID int    `json:"member_id"`
+	Name     string `json:"name"`
+	Day      string `json:"day"`
+	Loaded   int    `json:"loaded"`
+	Current  int    `json:"current"`
+	Typed    int    `json:"typed"`
+}
+
+// saveVSPoints writes only the cells the officer changed (209). Each cell carries
+// the value the page loaded; the handler reads every requested cell's current
+// value in the same transaction and compares by value:
+//
+//	current == loaded            → written
+//	current != loaded, == typed  → skipped (the database already holds it)
+//	current != loaded, != typed  → conflict: 409 with the list, nothing written
+//
+// so a page loaded before an import can no longer zero the days the import filled.
 func saveVSPoints(w http.ResponseWriter, r *http.Request) {
 	var data struct {
-		WeekDate string `json:"week_date"`
-		Points   []struct {
-			MemberID  int `json:"member_id"`
-			Monday    int `json:"monday"`
-			Tuesday   int `json:"tuesday"`
-			Wednesday int `json:"wednesday"`
-			Thursday  int `json:"thursday"`
-			Friday    int `json:"friday"`
-			Saturday  int `json:"saturday"`
-		} `json:"points"`
+		WeekDate string       `json:"week_date"`
+		Cells    []vsSaveCell `json:"cells"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -97,6 +127,34 @@ func saveVSPoints(w http.ResponseWriter, r *http.Request) {
 	}
 	data.WeekDate = normWeek
 
+	if len(data.Cells) == 0 {
+		http.Error(w, "Nothing to save", http.StatusBadRequest)
+		return
+	}
+	var cells []vsSaveCell
+	memberIDs := map[int]bool{}
+	for _, c := range data.Cells {
+		col, ok := vsDayColumn(c.Day)
+		if !ok {
+			http.Error(w, "Invalid day: "+c.Day, http.StatusBadRequest)
+			return
+		}
+		if c.Value < 0 || c.Loaded < 0 {
+			http.Error(w, "VS points cannot be negative", http.StatusBadRequest)
+			return
+		}
+		if c.MemberID <= 0 {
+			http.Error(w, "Invalid member_id", http.StatusBadRequest)
+			return
+		}
+		c.Day = col
+		memberIDs[c.MemberID] = true
+		if c.Value == c.Loaded {
+			continue // a no-op cell: nothing changed on the page
+		}
+		cells = append(cells, c)
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -104,45 +162,110 @@ func saveVSPoints(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	for _, point := range data.Points {
-		var existingID int
-		err = tx.QueryRow("SELECT id FROM vs_points WHERE member_id = ? AND week_date = ?",
-			point.MemberID, data.WeekDate).Scan(&existingID)
-
-		if err == sql.ErrNoRows {
-			_, err = tx.Exec(`
-				INSERT INTO vs_points (member_id, week_date, monday, tuesday, wednesday, thursday, friday, saturday, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-				point.MemberID, data.WeekDate, point.Monday, point.Tuesday, point.Wednesday,
-				point.Thursday, point.Friday, point.Saturday)
-		} else if err == nil {
-			_, err = tx.Exec(`
-				UPDATE vs_points 
-				SET monday = ?, tuesday = ?, wednesday = ?, thursday = ?, friday = ?, saturday = ?, updated_at = CURRENT_TIMESTAMP
-				WHERE member_id = ? AND week_date = ?`,
-				point.Monday, point.Tuesday, point.Wednesday, point.Thursday, point.Friday, point.Saturday,
-				point.MemberID, data.WeekDate)
+	// Read first: every member in the request, with its row for the week if any.
+	// The cursor is drained and closed before any write.
+	type current struct {
+		name string
+		days map[string]int
+	}
+	ids := make([]any, 0, len(memberIDs)+1)
+	ids = append(ids, data.WeekDate)
+	for id := range memberIDs {
+		ids = append(ids, id)
+	}
+	rows, err := tx.Query(`
+		SELECT m.id, m.name, COALESCE(vp.monday, 0), COALESCE(vp.tuesday, 0), COALESCE(vp.wednesday, 0),
+		       COALESCE(vp.thursday, 0), COALESCE(vp.friday, 0), COALESCE(vp.saturday, 0)
+		FROM members m
+		LEFT JOIN vs_points vp ON vp.member_id = m.id AND vp.week_date = ?
+		WHERE m.id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(memberIDs)), ",")+`)`, ids...)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	found := map[int]current{}
+	for rows.Next() {
+		var id int
+		var name string
+		v := make([]int, 6)
+		if err := rows.Scan(&id, &name, &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]); err != nil {
+			rows.Close()
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
 		}
-
-		if err != nil {
-			tx.Rollback()
-			http.Error(w, "Failed to save VS points", http.StatusInternalServerError)
+		days := map[string]int{}
+		for i, col := range vsDayColumns {
+			days[col] = v[i]
+		}
+		found[id] = current{name: name, days: days}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	for id := range memberIDs {
+		if _, ok := found[id]; !ok {
+			http.Error(w, "Unknown member_id: "+strconv.Itoa(id), http.StatusBadRequest)
 			return
 		}
 	}
 
-	err = tx.Commit()
-	if err != nil {
+	var conflicts []vsSaveConflict
+	var writes []vsSaveCell
+	for _, c := range cells {
+		cur := found[c.MemberID].days[c.Day]
+		switch {
+		case cur == c.Value:
+			// The database already holds what was typed: nothing to write.
+		case cur != c.Loaded:
+			conflicts = append(conflicts, vsSaveConflict{
+				MemberID: c.MemberID, Name: found[c.MemberID].name, Day: c.Day,
+				Loaded: c.Loaded, Current: cur, Typed: c.Value,
+			})
+		default:
+			writes = append(writes, c)
+		}
+	}
+	if len(conflicts) > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]any{"conflicts": conflicts})
+		return
+	}
+
+	written := map[int]bool{}
+	overridden := 0
+	for _, c := range writes {
+		// c.Day is one of vsDayColumns, never request text.
+		if _, err := tx.Exec(`
+			INSERT INTO vs_points (member_id, week_date, `+c.Day+`, updated_at)
+			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(member_id, week_date) DO UPDATE SET `+c.Day+` = excluded.`+c.Day+`, updated_at = CURRENT_TIMESTAMP`,
+			c.MemberID, data.WeekDate, c.Value); err != nil {
+			http.Error(w, "Failed to save VS points", http.StatusInternalServerError)
+			return
+		}
+		written[c.MemberID] = true
+		if c.Overridden {
+			overridden++
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		http.Error(w, "Failed to save changes", http.StatusInternalServerError)
 		return
 	}
 
-	actor := getAuthUser(r)
-	actorID, actorName := actor.ID, actor.Username
-	logActivity(actorID, actorName, "updated", "vs_points", data.WeekDate, false, strconv.Itoa(len(data.Points))+" members")
+	if len(writes) > 0 {
+		actor := getAuthUser(r)
+		details := fmt.Sprintf("%d cells, %d members", len(writes), len(written))
+		if overridden > 0 {
+			details += fmt.Sprintf(", %d conflicts overridden", overridden)
+		}
+		logActivity(actor.ID, actor.Username, "updated", "vs_points", data.WeekDate, false, details)
+	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "VS points saved successfully"})
+	writeJSON(w, map[string]any{"message": "VS points saved successfully", "saved": len(writes)})
 }
 
 // Delete VS points for a specific week

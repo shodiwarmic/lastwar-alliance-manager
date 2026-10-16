@@ -1,0 +1,285 @@
+/* reports.css — the Reports page (reports.html / reports.js). */
+
+.report-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px 14px;
+    margin: 14px 0 6px;
+}
+
+.report-field {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.85em;
+    color: var(--color-text-muted);
+}
+
+.report-field .form-input {
+    min-width: 0;
+}
+
+.report-custom {
+    gap: 10px 14px;
+    flex-wrap: wrap;
+}
+
+.report-window {
+    display: inline-flex;
+    gap: 6px;
+}
+
+.report-window-custom {
+    width: 5.5em;
+}
+
+.report-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9em;
+    padding-bottom: 8px;
+}
+
+.report-range-line {
+    color: var(--color-text-muted);
+    font-size: 0.85em;
+    margin: 4px 0 12px;
+}
+
+.report-status.status-error {
+    color: var(--color-danger);
+}
+
+/* --- Weekly summary --------------------------------------------------------------- */
+.report-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.report-stat {
+    margin-bottom: 0;
+    text-align: center;
+}
+
+.report-stat-value {
+    font-size: 2em;
+    font-weight: bold;
+    line-height: 1;
+    color: var(--color-text);
+}
+
+.report-stat-label {
+    font-size: 0.85em;
+    color: var(--color-text-mid);
+    margin-top: 5px;
+}
+
+.report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.report-section {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+
+.report-section h3 {
+    font-size: 0.95rem;
+    margin: 0 0 10px 0;
+    color: var(--color-text);
+}
+
+.report-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.report-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.875rem;
+}
+
+.report-list li:last-child {
+    border-bottom: none;
+}
+
+.report-list-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.report-list-value {
+    flex-shrink: 0;
+    color: var(--color-text-mid);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Muted import-lag / last-week note under the VS underperformers list. */
+.report-week-note {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin: 0.4rem 0 0;
+}
+
+.report-tag-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.report-tag-count {
+    font-weight: 600;
+}
+
+.report-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.report-tag--reliable {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.report-tag--needs-improvement {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+}
+
+.report-tag--at-risk {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+/* --- Tables ------------------------------------------------------------------------- */
+.report-controls--secondary {
+    margin-top: 0;
+}
+
+.report-summary {
+    margin-bottom: 1rem;
+}
+
+.report-summary-lead {
+    font-weight: 600;
+    margin: 0 0 6px;
+}
+
+.report-summary-list {
+    margin: 0 0 6px;
+    padding-left: 1.2em;
+    font-size: 0.9em;
+}
+
+.report-note {
+    font-size: 0.85em;
+    color: var(--color-text-muted);
+    margin: 4px 0;
+}
+
+.report-table-title {
+    font-size: 1rem;
+    margin: 1.25rem 0 0.25rem;
+}
+
+.report-table td {
+    white-space: nowrap;
+}
+
+.report-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The misses table is long-format; a rule marks where each member's rows start. */
+.report-table tr.report-group-start td {
+    border-top: 2px solid var(--color-border);
+}
+
+/* Participation grid: one narrow column per board. */
+.report-grid-board {
+    text-align: center;
+    white-space: nowrap;
+    font-size: 0.85em;
+}
+
+.report-grid-date {
+    font-weight: 400;
+    opacity: 0.85;
+}
+
+.report-grid-cell {
+    text-align: center;
+}
+
+.report-legend .pt-badge {
+    margin: 0 2px;
+}
+
+.report-empty {
+    color: var(--color-text-muted);
+    text-align: center;
+}
+
+/* Shown only on paper: the report's title, range, rule and when it was generated. */
+.report-print-header {
+    display: none;
+}
+
+/* --- Print: the report alone, every row, no app chrome ------------------------------ */
+/* @media print is a device query, not a width breakpoint. The layout scrolls an inner
+   .content-scroll inside a 100vh shell; without un-scrolling both, a print is one
+   viewport tall. */
+@media print {
+    .sidebar, .mobile-header, .bottom-tabs, .more-sheet, .topbar, .app-banner,
+    .tab-bar, .report-controls, .table-export-actions, .tab-toolbar,
+    .btn, #toast-container, .toast {
+        display: none !important;
+    }
+    body, .app-shell, .content-area, .content-scroll, main {
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+    }
+    .table-scroll, .table-wrapper {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    .report-print-header {
+        display: block;
+    }
+    .report-print-header h2 {
+        margin: 0 0 4px;
+    }
+    .report-range-line {
+        display: none;
+    }
+    thead {
+        display: table-header-group;
+    }
+    tr {
+        break-inside: avoid;
+    }
+}

@@ -85,7 +85,11 @@
             await ensureFourWeeks();
         }
         if (state.currentWeekDate == null) {
-            try { const cur = await api('GET', '/api/vs-league/current'); state.currentWeekDate = cur.current_week_date; }
+            try {
+                const cur = await api('GET', '/api/vs-league/current');
+                state.currentWeekDate = cur.current_week_date;
+                state.currentVSMinimum = cur.current_vs_minimum;
+            }
             catch { state.currentWeekDate = null; }
         }
         render();
@@ -244,10 +248,15 @@
         head.appendChild(tiles);
 
         // strategy badges
-        if (wk.strategy_label || wk.strategy_result || wk.notes) {
+        if (wk.strategy_label || wk.strategy_result || wk.notes || wk.vs_minimum != null) {
             const strat = el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px;' });
             if (wk.strategy_label) strat.appendChild(el('span', { className: 'vsl-strat ' + wk.strategy_label, text: wk.strategy_label + ' week' }));
             if (wk.strategy_result) strat.appendChild(el('span', { className: 'vsl-strat ' + wk.strategy_result, text: wk.strategy_result }));
+            // This week's VS daily minimum override — always named where it applies.
+            if (wk.vs_minimum != null) strat.appendChild(el('span', {
+                className: 'vsl-strat vsl-min-override', text: 'min ' + formatCompact(wk.vs_minimum) + ' (override)',
+                title: 'VS daily minimum for this week' + (wk.vs_minimum_set_by ? ', set by ' + wk.vs_minimum_set_by : '')
+            }));
             head.appendChild(strat);
             if (wk.notes) head.appendChild(el('p', { className: 'vsl-help', text: wk.notes }));
         }
@@ -870,6 +879,12 @@
         const stratLabel = sel([['', '—'], ['push', 'Push'], ['save', 'Save'], ['normal', 'Normal'], ['test', 'Test'], ['recovery', 'Recovery']], wk && wk.strategy_label || '');
         const stratResult = sel([['', '—'], ['worked', 'Worked'], ['failed', 'Failed'], ['mixed', 'Mixed']], wk && wk.strategy_result || '');
         const notes = el('textarea', { className: 'form-input', rows: '2', placeholder: 'leadership context…' }); if (wk && wk.notes) notes.value = wk.notes;
+        // This week's VS daily minimum override (blank = the alliance setting).
+        const initMin = wk && wk.vs_minimum != null ? wk.vs_minimum : null;
+        const minInput = inp('number', initMin != null ? String(initMin) : '', 'alliance setting');
+        minInput.min = '1';
+        const minHelp = 'Blank = the alliance setting' + (state.currentVSMinimum ? ' (' + formatCompact(state.currentVSMinimum) + ')' : '')
+            + '. Applies to this week\'s VS flags and reports.';
 
         // ---- opponent identity + finder (server → tag → name, matching the in-game display) ----
         const oppServer = inp('number', wk ? wk.opponent_server : '', 'server #');
@@ -1030,9 +1045,13 @@
             ourSnapNote,
             el('div', { className: 'vsl-form-grid' }, field('Opp power', oppPower), field('Opp kills', oppKills), field('Opp members', oppMembers)),
             el('div', { className: 'vsl-form-grid' }, field('Strategy', stratLabel), field('Result', stratResult)),
+            field('Daily minimum for this week', minInput),
+            el('span', { className: 'vsl-help', text: minHelp }),
             field('Notes', notes)
         ], async () => {
             const ourRank = numOrNull(rankInput.value);
+            const minVal = numOrNull(minInput.value);
+            if (minVal != null && !(minVal >= 1)) throw new Error('The daily minimum must be at least 1, or blank for the alliance setting');
             if (ourRank != null && (ourRank < 1 || ourRank > 16)) throw new Error('Our rank must be between 1 and 16');
             const payload = {
                 season_id: state.seasonId, week_number: derived.num, week_date: derived.date, league_rank: ourRank,
@@ -1045,6 +1064,8 @@
             // Stamp snapshot times only when the numbers are newly captured or changed.
             if (payload.opponent_power != null && (payload.opponent_power !== initOpp.p || payload.opponent_kills !== initOpp.k || payload.opponent_member_count !== initOpp.m)) payload.snapshot_now = true;
             if (payload.our_power != null && (payload.our_power !== initOur.p || payload.our_kills !== initOur.k || payload.our_member_count !== initOur.m)) payload.our_snapshot_now = true;
+            // Sent only when changed: 0 clears the override.
+            if (minVal !== initMin) payload.vs_minimum = minVal == null ? 0 : minVal;
             if (wk) await api('PUT', '/api/vs-league/weeks/' + wk.id, payload);
             else await api('POST', '/api/vs-league/weeks', payload);
             await selectSeason(state.seasonId);

@@ -6,6 +6,10 @@ const MEMBERS_URL = '/api/members';
 let currentWeekDate = null;
 let allMembers = [];
 let currentVSPoints = {};
+// Cells edited since the last load, keyed "memberId|day" → { loaded, value, overridden }.
+// Save sends only these (209), each with the value the page loaded, so the server can
+// refuse a cell that changed underneath instead of overwriting it.
+let dirtyCells = new Map();
 let canEditVS = false;
 let isTotalMode = false;
 
@@ -89,6 +93,7 @@ async function loadVSPoints() {
         const vsPoints = await response.json();
 
         currentVSPoints = {};
+        dirtyCells = new Map();
         if (vsPoints && Array.isArray(vsPoints)) {
             vsPoints.forEach(point => {
                 currentVSPoints[point.member_id] = point;
@@ -97,6 +102,8 @@ async function loadVSPoints() {
         renderTable();
     } catch (error) {
         console.error('Error loading VS points:', error);
+        currentVSPoints = {};
+        dirtyCells = new Map();
         renderTable();
     }
 }
@@ -263,6 +270,12 @@ function updateCurrentVSPoints(memberId, day, value) {
             monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0
         };
     }
+    // The first edit of a cell records what was loaded; typing it back drops the cell.
+    const key = memberId + '|' + day;
+    const entry = dirtyCells.get(key) || { loaded: parseInt(currentVSPoints[memberId][day]) || 0 };
+    entry.value = value;
+    if (entry.value === entry.loaded && !entry.overridden) dirtyCells.delete(key);
+    else dirtyCells.set(key, entry);
     currentVSPoints[memberId][day] = value;
 }
 
@@ -312,26 +325,29 @@ function handleSort(e) {
 
 async function saveVSPoints() {
     const weekDate = formatDate(currentWeekDate);
-    const points = allMembers.map(member => {
-        const vsPoint = currentVSPoints[member.id] || {};
-        return {
-            member_id: member.id,
-            monday: parseInt(vsPoint.monday) || 0,
-            tuesday: parseInt(vsPoint.tuesday) || 0,
-            wednesday: parseInt(vsPoint.wednesday) || 0,
-            thursday: parseInt(vsPoint.thursday) || 0,
-            friday: parseInt(vsPoint.friday) || 0,
-            saturday: parseInt(vsPoint.saturday) || 0
-        };
+    const cells = [...dirtyCells].map(([key, c]) => {
+        const [memberId, day] = key.split('|');
+        const cell = { member_id: parseInt(memberId), day, loaded: c.loaded, value: c.value };
+        if (c.overridden) cell.overridden = true;
+        return cell;
     });
+    if (cells.length === 0) {
+        showToast('Nothing to save.');
+        return;
+    }
 
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ week_date: weekDate, points })
+            body: JSON.stringify({ week_date: weekDate, cells })
         });
-        if (!response.ok) throw new Error('Failed to save');
+        if (response.status === 409) {
+            const body = await response.json();
+            openConflictModal(body.conflicts || []);
+            return;
+        }
+        if (!response.ok) throw new Error((await response.text()).trim() || 'Failed to save');
         showToast('VS Points saved.');
         await loadVSPoints();
     } catch (error) {
@@ -339,13 +355,82 @@ async function saveVSPoints() {
     }
 }
 
+/**
+ * 5a. SAVE CONFLICT REVIEW — a cell changed underneath (an import, another officer)
+ * and the officer typed something else again: ask, one row per cell.
+ */
+
+const DAY_LABELS = { monday: 'Day 1', tuesday: 'Day 2', wednesday: 'Day 3', thursday: 'Day 4', friday: 'Day 5', saturday: 'Day 6' };
+let pendingConflicts = [];
+
+function openConflictModal(conflicts) {
+    pendingConflicts = conflicts;
+    const rows = conflicts.map((c, i) => {
+        const tr = document.createElement('tr');
+        const td = (text) => { const cell = document.createElement('td'); cell.textContent = text; return cell; };
+        const choice = document.createElement('td');
+        choice.translate = true;
+        choice.className = 'vs-conflict-choice';
+        [['mine', 'Mine'], ['current', 'Current']].forEach(([val, text]) => {
+            const label = document.createElement('label');
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'vs-conflict-' + i;
+            radio.value = val;
+            radio.checked = val === 'mine';
+            label.append(radio, ' ' + text);
+            choice.appendChild(label);
+        });
+        tr.append(td(c.name), td(DAY_LABELS[c.day] || c.day),
+            td(Number(c.loaded).toLocaleString()), td(Number(c.current).toLocaleString()), td(Number(c.typed).toLocaleString()), choice);
+        return tr;
+    });
+    document.getElementById('vs-conflict-body').replaceChildren(...rows);
+    document.getElementById('vs-conflict-count').textContent = conflicts.length;
+    document.getElementById('vs-conflict-modal').style.display = 'flex';
+}
+
+function closeConflictModal() {
+    document.getElementById('vs-conflict-modal').style.display = '';
+    pendingConflicts = [];
+}
+
+function setAllConflictChoices(val) {
+    document.querySelectorAll('#vs-conflict-body input[type="radio"]').forEach(r => { r.checked = r.value === val; });
+}
+
+async function resolveConflicts() {
+    pendingConflicts.forEach((c, i) => {
+        const key = c.member_id + '|' + c.day;
+        const picked = document.querySelector(`#vs-conflict-body input[name="vs-conflict-${i}"]:checked`);
+        if (picked && picked.value === 'current') {
+            dirtyCells.delete(key);
+        } else {
+            // Keep mine: resubmit against the value just shown, so a further change
+            // meanwhile is caught again rather than overwritten.
+            const entry = dirtyCells.get(key) || { value: c.typed };
+            entry.loaded = c.current;
+            entry.overridden = true;
+            dirtyCells.set(key, entry);
+        }
+    });
+    closeConflictModal();
+    if (dirtyCells.size === 0) {
+        showToast('Kept the current values.');
+        await loadVSPoints();
+        return;
+    }
+    await saveVSPoints();
+}
+
 async function clearVSPoints() {
     const weekDate = formatDate(currentWeekDate);
     if (!await showConfirm('Clear all points for this week?', 'Clear Week')) return;
     try {
         await fetch(`${API_URL}/${weekDate}`, { method: 'DELETE' });
-        currentVSPoints = {};
-        renderTable();
+        // Reload rather than empty in place, so what was loaded is the cleared week
+        // and a clear-then-type save is not a wall of conflicts.
+        await loadVSPoints();
         showToast('Points cleared.');
     } catch (error) { showToast('Error: ' + error.message, 'error'); }
 }
@@ -405,6 +490,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (canEditVS) {
             document.getElementById('save-btn')?.addEventListener('click', saveVSPoints);
             document.getElementById('clear-btn')?.addEventListener('click', clearVSPoints);
+            document.getElementById('vs-conflict-mine-btn').addEventListener('click', () => setAllConflictChoices('mine'));
+            document.getElementById('vs-conflict-current-btn').addEventListener('click', () => setAllConflictChoices('current'));
+            document.getElementById('vs-conflict-save-btn').addEventListener('click', resolveConflicts);
+            document.getElementById('vs-conflict-cancel-btn').addEventListener('click', closeConflictModal);
 
             const toggleBtn = document.getElementById('toggle-mode-btn');
             if (toggleBtn) {

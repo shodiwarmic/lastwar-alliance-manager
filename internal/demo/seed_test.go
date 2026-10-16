@@ -42,7 +42,7 @@ func count(t *testing.T, db *sql.DB, q string, args ...any) int {
 var seededTables = []string{
 	"members", "users", "member_aliases", "member_skills",
 	"power_history", "hero_power_history", "kill_history", "squad_power_history",
-	"hq_level_history", "profession_level_history", "vs_points",
+	"hq_level_history", "profession_level_history", "vs_points", "vs_week_minimums",
 	"vs_league_seasons", "vs_league_weeks", "vs_league_days", "vs_league_matchups",
 	"schedule_events", "seasons", "season_score_levels", "season_reward_tiers", "season_trackables",
 	"season_participation", "season_member_records", "season_rewards",

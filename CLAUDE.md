@@ -95,7 +95,7 @@ and a text's duplicate rows heal to one when it is next saved. Each change logs 
 duplicates, and choosing which mapping wins is a human's call.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`, `update`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`, `update`, `vs_week_minimum`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -1325,6 +1325,75 @@ it passes exactly the same rules and returns exactly the same messages. It needs
 
 `participation_board` and `participation_exception` are in `neverBatched`: two boards
 recorded in fifteen minutes are two events, and five excusals are five members.
+
+## Reporting layer (`reports_*.go`)
+
+The Reports page (`/reports`) and every report on it sit on one layer, and that layer is
+also the boundary a non-web caller (the planned MCP adapter) uses — so the rule is about
+signatures, not packages:
+
+```go
+func run<Name>Report(q rowQueryer, p <Name>Params, now time.Time) (*<Name>Report, error)
+```
+
+- **No HTTP types, no session, no global `db`, no `time.Now()`** inside a `reports_*.go`
+  function. The web handler passes a read transaction, a test a temp DB, an adapter its own
+  transaction. Helpers the layer needs take `q`/`now` (`…Q(q, …)`, `…At(q, now)`), with the
+  old zero-argument names kept as wrappers over `db` and `time.Now()` for existing callers.
+  Today's game date is `gametime.DateOf(now)`, never `gameDate()`.
+- **Params are plain structs** that decode from JSON or a query string; **results are plain
+  structs** carrying member ids, explicit `from`/`to` game dates and `generated_at`.
+- **Ranges resolve server-side** in `resolveReportRange` (`reports.go`): `weeks=N` is the N
+  most recent *complete* VS weeks, ending the last Saturday before today's game date;
+  `current=1` adds the current partial week; `weeks=all` starts at the earliest
+  `vs_points` week; or explicit `from`/`to`, clamped at today. No span cap. Cutoffs that
+  need a time are computed in Go, in UTC, and bound as `gametime.SQLiteLayout` strings —
+  no `datetime('now', …)` in report SQL.
+- **The registry is `reportDefs`** (`reports.go`): key → title → permission key. Web
+  handlers and any adapter authorise with `userHasPermission(user, def.Permission)`. Each
+  report has its own key (`view_report_*`, the `Reports` group); the page opens for anyone
+  holding one and renders only the tabs they hold. No rank comparisons anywhere.
+- **Handlers are thin** (`handlers_reports.go`): parse → permission (on the route) →
+  `serveReport`, which opens a read transaction and runs the report on it, so a report's
+  several queries see one snapshot (`tx.*` calls are not guarded; the transaction ends when
+  the handler returns). A `reportParamError` becomes a 400, anything else a logged 500.
+
+**Adding a report:** a def in `reportDefs` and a key in `RankPermissions` +
+`PermissionGroups`; a `run…Report` in a `reports_*.go` with its test; a handler calling
+`serveReport` behind `requirePermission(def.Permission, …)`; a tab and panel in
+`reports.html` (export tables as template skeletons with `data-export-csv` and
+`translate="no"` — `table-utils.js` wires them at load, so the renderer only fills
+`<tbody>` and calls `exportReady`); a renderer in `reports.js`'s `REPORTS`.
+
+### The VS daily minimum is per week (`vs_week_minimums`, `reports_vs.go`)
+
+A week is judged against the minimum that applied to *it*, not today's. `vsMinimumForWeek(q,
+week)` resolves, in order: the week's **override** (an officer's value, set in the VS League
+week modal — and only there); else the **setting** row with the greatest `week_date <=` the
+week (the Settings save writes the current game week's row, in one transaction with the
+settings UPDATE); else **today's setting**, with source `current_setting`, which reports
+label "no record for this week". `vsMinimumsForWeeks` does the same for many weeks in two
+reads. Every current-week surface (dashboard, Accountability members/summary, the weekly
+summary) reads the evaluated week's minimum through it, so none disagrees with a report.
+
+- A minimum is always **≥ 1**: schema `CHECK`, Settings and the League payload refuse less;
+  `0` on the League payload means *clear the override*.
+- An override **follows its week**: a League week's date correction moves it, a week delete
+  removes it, both in the week's own transaction. A week outside any league season has no
+  override UI.
+- An override is **always named** where a minimum is shown ("5.0M, this week's override").
+- **No row is no score, not a 0** (owner, 2026-10-15). `vsDayStatuses` takes `hasRow`: a
+  member with no `vs_points` row for the week had nothing read (imports write a row for every
+  member they match, real 0s included), so those days are `vsDayNoScore` — never a miss, on
+  the dashboard (`countDaysBelowMinimum` in `dashboard.js`), Accountability or the reports,
+  which list them as "No score". A never-read day *inside* a row still reads as the column's
+  `0`: the day columns are `NOT NULL DEFAULT 0` and cannot say "blank".
+- `getVSAccountabilitySettings` still returns today's setting and the flag-days threshold;
+  call `vsMinimumForWeek` **before** opening a rows cursor, never inside one.
+
+**Print** is `@media print` in `reports.css` (a device query, not a width breakpoint): it
+hides the chrome and un-scrolls `.content-scroll` and the 100vh shell, without which a
+print is one viewport tall.
 
 ## Known gotchas
 

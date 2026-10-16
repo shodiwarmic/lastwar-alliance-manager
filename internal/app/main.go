@@ -425,14 +425,19 @@ func buildRouter() *mux.Router {
 
 	// Accountability
 	router.HandleFunc("/accountability", authMiddleware(handleAccountability)).Methods("GET")
-	router.HandleFunc("/accountability/report", authMiddleware(handleAccountabilityReport)).Methods("GET")
+	// Reports page: any one report key opens it; each report's data route has its own.
+	router.HandleFunc("/reports", authMiddleware(handleReportsPage)).Methods("GET")
+	router.HandleFunc("/api/reports", authMiddleware(handleReportsList)).Methods("GET")
+	router.HandleFunc("/api/reports/weekly", authMiddleware(requirePermission("view_report_weekly", handleWeeklySummaryReport))).Methods("GET")
+	router.HandleFunc("/api/reports/vs-misses", authMiddleware(requirePermission("view_report_vs_misses", handleVSMissesReport))).Methods("GET")
+	router.HandleFunc("/api/reports/participation", authMiddleware(requirePermission("view_report_participation", handleParticipationGridReport))).Methods("GET")
+	router.HandleFunc("/accountability/report", handleAccountabilityReport).Methods("GET") // 301 → /reports#weekly
 	router.HandleFunc("/accountability/{id:[0-9]+}", authMiddleware(handleAccountabilityProfile)).Methods("GET")
 	router.HandleFunc("/api/accountability/summary", authMiddleware(handleAccountabilitySummary)).Methods("GET")
 	router.HandleFunc("/api/accountability/strikes", authMiddleware(handleAllStrikes)).Methods("GET")
 	router.HandleFunc("/api/accountability/strike-types", authMiddleware(handleStrikeTypes)).Methods("GET")
 	router.HandleFunc("/api/accountability/members", authMiddleware(handleAccountabilityMembers)).Methods("GET")
 	router.HandleFunc("/api/accountability/members/{id:[0-9]+}", authMiddleware(handleAccountabilityMemberProfile)).Methods("GET")
-	router.HandleFunc("/api/accountability/report-data", authMiddleware(handleAccountabilityReportData)).Methods("GET")
 	router.HandleFunc("/api/accountability/strikes", authMiddleware(requirePermission("manage_accountability", handleStrikeCreate))).Methods("POST")
 	router.HandleFunc("/api/accountability/strikes/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeUpdate))).Methods("PUT")
 	router.HandleFunc("/api/accountability/strikes/{id:[0-9]+}", authMiddleware(requirePermission("manage_accountability", handleStrikeDelete))).Methods("DELETE")
@@ -766,8 +771,7 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/dyno-recommendations/{id:[0-9]+}", authMiddleware(updateDynoRecommendation)).Methods("PUT")
 
 	// Rankings & Timelines
-	router.HandleFunc("/api/rankings", authMiddleware(getMemberRankings)).Methods("GET")
-	router.HandleFunc("/api/member-timelines", authMiddleware(getMemberTimelines)).Methods("GET")
+	router.HandleFunc("/api/rankings", authMiddleware(requirePermission("view_rankings", getMemberRankings))).Methods("GET")
 
 	// Storm & Power History
 	router.HandleFunc("/api/storm-assignments", authMiddleware(getStormAssignments)).Methods("GET")

@@ -1,0 +1,187 @@
+{{define "header_text"}}
+    <h1>
+        <svg width="18" height="18" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-report-analytics"/></svg>
+        Reports
+    </h1>
+    <h2>Alliance reports to read, export and print</h2>
+{{end}}
+
+{{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/table-utils.css"}}">
+<link rel="stylesheet" href="{{asset "/participation.css"}}">
+<link rel="stylesheet" href="{{asset "/reports.css"}}">
+{{end}}
+
+{{define "content"}}
+<div id="reports-page">
+    <!-- One tab per report the user may run (reports.go → reportDefs); each report's
+         data route checks its own key as well. -->
+    <div class="tab-bar">
+        {{range .Reports}}<button class="tab-btn" data-tab="{{.Key}}">{{.Title}}</button>{{end}}
+    </div>
+
+    {{if .Permissions.ViewReportWeekly}}
+    <div id="tab-weekly" class="tab-content">
+        <div class="report-print-header"><h2>Weekly summary</h2><p class="report-print-meta"></p></div>
+        <div class="report-controls">
+            <label class="report-field">Power growth window
+                <span class="report-window">
+                    <select id="weekly-growth-window-select" class="form-input">
+                        <option value="7">7 days</option><option value="14">14 days</option><option value="28">28 days</option>
+                        <option value="30">30 days</option><option value="90">90 days</option><option value="custom">Custom…</option>
+                    </select>
+                    <input type="number" id="weekly-growth-window" class="form-input report-window-custom" min="1" max="365" inputmode="numeric" aria-label="Power growth window, custom days" style="display:none">
+                </span>
+            </label>
+            <button type="button" class="btn btn-secondary report-print"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-printer"/></svg> Print</button>
+        </div>
+        <p class="report-range-line"></p>
+        <p class="status-msg report-status">Loading…</p>
+        <div class="report-body" style="display:none">
+            <div class="report-stat-grid" id="weekly-stat-cards"></div>
+            <div class="report-grid">
+                <div class="report-section">
+                    <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-swords"/></svg> Top VS performers</h3>
+                    <div id="weekly-vs-leaders"></div>
+                </div>
+                <div class="report-section">
+                    <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-alert-triangle"/></svg> VS underperformers</h3>
+                    <div id="weekly-vs-under"></div>
+                </div>
+                <div class="report-section">
+                    <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> <span id="weekly-growth-heading">30-day power growth</span></h3>
+                    <div id="weekly-power-growth"></div>
+                </div>
+                <div class="report-section">
+                    <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tag"/></svg> Members by tag</h3>
+                    <div id="weekly-tag-counts"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {{end}}
+
+    {{if .Permissions.ViewReportVSMisses}}
+    <div id="tab-vs-misses" class="tab-content">
+        <div class="report-print-header"><h2>VS misses</h2><p class="report-print-meta"></p></div>
+        {{template "report_range_controls"}}
+        <div class="report-controls report-controls--secondary">
+            <label class="report-field">Member
+                <select class="form-input" id="vs-misses-member" translate="no">
+                    <option value="">Everyone</option>
+                </select>
+            </label>
+            <label class="report-check"><input type="checkbox" id="vs-misses-show-clean"> Show members with no misses</label>
+        </div>
+        <p class="status-msg report-status">Loading…</p>
+        <div class="report-body" style="display:none">
+            <div class="report-summary" id="vs-misses-summary"></div>
+
+            <h3 class="report-table-title">By member</h3>
+            <div class="tab-toolbar"></div>
+            <div class="table-scroll">
+                <table class="data-table report-table" id="vs-misses-summary-table" data-export-csv="vs-misses-summary.csv" translate="no">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Rank</th>
+                            <th>Days evaluated</th>
+                            <th>No score</th>
+                            <th>Misses</th>
+                            <th>Worst day</th>
+                            <th>Avg shortfall</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <h3 class="report-table-title">Every miss</h3>
+            <div class="tab-toolbar"></div>
+            <div class="table-scroll">
+                <table class="data-table report-table" id="vs-misses-table" data-export-csv="vs-misses.csv" translate="no">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Rank</th>
+                            <th>Date</th>
+                            <th>Day</th>
+                            <th>Week minimum</th>
+                            <th>Points</th>
+                            <th>Shortfall</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {{end}}
+
+    {{if .Permissions.ViewReportParticipation}}
+    <div id="tab-participation" class="tab-content">
+        <div class="report-print-header"><h2>Participation grid</h2><p class="report-print-meta"></p></div>
+        {{template "report_range_controls"}}
+        <p class="status-msg report-status">Loading…</p>
+        <div class="report-body" style="display:none">
+            <div class="report-summary" id="participation-summary"></div>
+            <p class="report-note report-legend">
+                <span class="pt-badge pt-badge--present">P</span> present ·
+                <span class="pt-badge pt-badge--zero">0</span> on the board with a zero score ·
+                <span class="pt-badge pt-badge--missed">M</span> missed ·
+                <span class="pt-badge pt-badge--excused">E</span> excused ·
+                blank: the board says nothing about the member. Missed counts M and 0.
+                Only recorded boards are shown; an event nobody recorded says nothing about anyone.
+            </p>
+            <div class="tab-toolbar"></div>
+            <div class="table-scroll">
+                <table class="data-table report-table report-grid-table" id="participation-table" data-export-csv="participation-grid.csv" translate="no">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Rank</th>
+                            <th>Boards</th>
+                            <th>Missed</th>
+                            <th>Excused</th>
+                            <th data-export-key="vs">VS misses / days</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* The range picker every dated report shares; reports.js reads it into from/to/weeks. */}}
+{{define "report_range_controls"}}
+        <div class="report-controls">
+            <label class="report-field">Range
+                <select class="form-input report-range">
+                    <option value="1">Last complete week</option>
+                    <option value="2">Last 2 weeks</option>
+                    <option value="4" selected>Last 4 weeks</option>
+                    <option value="8">Last 8 weeks</option>
+                    <option value="all">Whole range</option>
+                    <option value="custom">Custom dates</option>
+                </select>
+            </label>
+            <span class="report-custom" style="display:none">
+                <label class="report-field">From <input type="date" class="form-input report-from"></label>
+                <label class="report-field">To <input type="date" class="form-input report-to"></label>
+            </span>
+            <label class="report-check"><input type="checkbox" class="report-current"> Include this week so far</label>
+            <button type="button" class="btn btn-primary report-run">Run</button>
+            <button type="button" class="btn btn-secondary report-print"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-printer"/></svg> Print</button>
+        </div>
+        <p class="report-range-line"></p>
+{{end}}
+
+{{define "scripts"}}
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
+<script src="{{asset "/table-utils.js"}}"></script>
+<script src="{{asset "/tabs.js"}}"></script>
+<script src="{{asset "/reports.js"}}"></script>
+{{end}}

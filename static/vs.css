@@ -125,3 +125,17 @@
     .vs-input { width: 50px; padding: 4px 6px; font-size: 12px; }
     #vs-table th, #vs-table td { padding: 8px 6px; font-size: 13px; }
 }
+
+/* Save conflict review (209) */
+.vs-conflict-choice label {
+    margin-right: 12px;
+    white-space: nowrap;
+}
+
+.vs-conflict-actions {
+    flex-wrap: wrap;
+}
+
+#vs-conflict-table td:not(:first-child) {
+    white-space: nowrap;
+}

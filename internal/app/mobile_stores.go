@@ -146,6 +146,7 @@ var mobileExcludedTables = map[string]string{
 
 	// Officer judgement or app data: nothing the game shows.
 	"release_state":                "app data: the release check's cache of GitHub's latest release",
+	"vs_week_minimums":             "configuration: the VS daily minimum that applied to each week (officer judgement)",
 	"update_outcomes":              "app data: which host-update results reached the activity log",
 	"member_aliases":               "app data: officers' name-resolution mappings, written alongside scans by save_aliases",
 	"season_participation":         "officer judgement: participation levels, notes and poll votes",

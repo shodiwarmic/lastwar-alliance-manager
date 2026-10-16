@@ -735,6 +735,13 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 
 	actor := getAuthUser(r)
 
+	// The VS daily minimum is always at least 1: a zero would flag nobody, and the
+	// per-week history (vs_week_minimums) refuses it.
+	if settings.VSMinimumPoints < 1 {
+		http.Error(w, "The VS daily minimum must be at least 1", http.StatusBadRequest)
+		return
+	}
+
 	// VS flag-days threshold must be 1–6 (a member can fall below the daily minimum on
 	// at most the 6 VS days). Reject out-of-range rather than silently clamping.
 	if settings.VsFlagDaysThreshold < 1 || settings.VsFlagDaysThreshold > 6 {
@@ -865,11 +872,23 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		db.QueryRow(`SELECT COALESCE(login_message, '') FROM settings WHERE id = 1`).Scan(&settings.LoginMessage)
 	}
 
+	// The minimum is recorded per week (vs_week_minimums) in the same transaction as
+	// the settings UPDATE, so two interleaved saves cannot leave the history
+	// disagreeing with the setting.
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	var prevVSMinimum int
+	tx.QueryRow(`SELECT COALESCE(vs_minimum_points, 0) FROM settings WHERE id = 1`).Scan(&prevVSMinimum)
+
 	// Note: current_season and season_start_date are no longer editable here —
 	// and never read either: see getSettings, which derives both from the seasons
 	// table (owned by Season Hub). The settings columns of those names are dead
 	// schema; see CLAUDE.md -> "Dead schema".
-	_, err := db.Exec(`UPDATE settings SET
+	_, err = tx.Exec(`UPDATE settings SET
 		schedule_message_template = ?,
 		daily_message_template = ?, power_tracking_enabled = ?, storm_timezones = ?,
 		storm_respect_dst = ?, login_message = ?, max_hq_level = ?, squad_tracking_enabled = ?,
@@ -930,6 +949,23 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to update settings", "error", err)
 		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
 		return
+	}
+	minWeek := currentVSWeekMonday()
+	if settings.VSMinimumPoints != prevVSMinimum {
+		if err := recordVSMinimumSetting(tx, minWeek, settings.VSMinimumPoints, actor.ID); err != nil {
+			slog.Error("failed to record the VS minimum for the week", "error", err)
+			http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		slog.Error("failed to commit settings", "error", err)
+		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+		return
+	}
+	if settings.VSMinimumPoints != prevVSMinimum {
+		logActivity(actor.ID, actor.Username, "updated", "vs_week_minimum", minWeek, false,
+			fmt.Sprintf("setting: %d → %d", prevVSMinimum, settings.VSMinimumPoints))
 	}
 
 	// The scheduler reads its config through a short-TTL cache; drop it so a

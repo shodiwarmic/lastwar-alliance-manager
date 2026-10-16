@@ -269,6 +269,20 @@ func scanVSLeagueWeek(row interface{ Scan(...any) error }, canManage bool) (*VSL
 		return nil, err
 	}
 	wk.Days = days
+	// The week's minimum override, if any (no cursor is open here).
+	var minPts int
+	var setBy sql.NullString
+	switch err := db.QueryRow(`SELECT v.minimum_points, u.username FROM vs_week_minimums v
+		LEFT JOIN users u ON u.id = v.set_by WHERE v.week_date = ? AND v.kind = 'override'`, wk.WeekDate).Scan(&minPts, &setBy); err {
+	case nil:
+		wk.VSMinimum = &minPts
+		if setBy.Valid {
+			wk.VSMinimumSetBy = &setBy.String
+		}
+	case sql.ErrNoRows:
+	default:
+		return nil, err
+	}
 	if len(days) > 0 {
 		var arr [6]string
 		for i := range arr {
@@ -632,10 +646,16 @@ func getVSLeagueCurrent(w http.ResponseWriter, r *http.Request) {
 		dbError(w, "getVSLeagueCurrent weeks", err)
 		return
 	}
+	currentMin, err := currentVSMinimumSetting(db)
+	if err != nil {
+		dbError(w, "getVSLeagueCurrent minimum", err)
+		return
+	}
 	writeJSON(w, map[string]any{
-		"season":            season,
-		"weeks":             weeks,
-		"current_week_date": currentVSWeekMonday(),
+		"season":             season,
+		"weeks":              weeks,
+		"current_week_date":  currentVSWeekMonday(),
+		"current_vs_minimum": currentMin,
 	})
 }
 
@@ -669,6 +689,9 @@ type vsLeagueWeekPayload struct {
 	StrategyLabel  *string `json:"strategy_label"`
 	StrategyResult *string `json:"strategy_result"`
 	Notes          *string `json:"notes"`
+	// This week's VS daily minimum override: omitted = unchanged, 0 = clear. Web only:
+	// the mobile week POST does not carry it (officer judgement, like strategy).
+	VSMinimum *int `json:"vs_minimum"`
 }
 
 var validStrategyLabel = map[string]bool{"push": true, "save": true, "normal": true, "test": true, "recovery": true}
@@ -696,7 +719,33 @@ func (p *vsLeagueWeekPayload) validate() string {
 	if p.OpponentPoints != nil && (*p.OpponentPoints < 0 || *p.OpponentPoints > 13) {
 		return "opponent_points must be 0-13"
 	}
+	if p.VSMinimum != nil && *p.VSMinimum < 0 {
+		return "vs_minimum must be a positive number, or 0 to clear the override"
+	}
 	return ""
+}
+
+// applyWeekOverrideTx sets or clears weekDate's VS minimum override inside the week
+// write's transaction, and returns the activity detail for a change ("" when the
+// payload left it alone or it already held that value).
+func applyWeekOverrideTx(tx *sql.Tx, weekDate string, points *int, userID int) (string, error) {
+	if points == nil {
+		return "", nil
+	}
+	var prev int
+	if err := tx.QueryRow(`SELECT minimum_points FROM vs_week_minimums WHERE week_date = ? AND kind = 'override'`, weekDate).Scan(&prev); err != nil && err != sql.ErrNoRows {
+		return "", err
+	}
+	if prev == *points {
+		return "", nil
+	}
+	if err := setVSWeekOverride(tx, weekDate, points, userID); err != nil {
+		return "", err
+	}
+	if *points == 0 {
+		return "override cleared", nil
+	}
+	return "override: " + strconv.Itoa(*points), nil
 }
 
 func weekHasDayRows(weekID int) (bool, error) {
@@ -794,7 +843,13 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := upsertLeagueWeekTx(db, p, weekDate)
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "createVSLeagueWeek begin", err)
+		return
+	}
+	defer tx.Rollback()
+	id, err := upsertLeagueWeekTx(tx, p, weekDate)
 	if err != nil {
 		if isUniqueConflict(err) {
 			http.Error(w, "That week number is already used in this season", http.StatusConflict)
@@ -803,7 +858,19 @@ func createVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		dbError(w, "createVSLeagueWeek upsert", err)
 		return
 	}
+	minDetail, err := applyWeekOverrideTx(tx, weekDate, p.VSMinimum, user.ID)
+	if err != nil {
+		dbError(w, "createVSLeagueWeek minimum", err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "createVSLeagueWeek commit", err)
+		return
+	}
 	logActivity(user.ID, user.Username, "updated", entityVSLeagueWeek, weekLabel(p.WeekNumber, weekDate), false)
+	if minDetail != "" {
+		logActivity(user.ID, user.Username, "updated", "vs_week_minimum", weekDate, false, minDetail)
+	}
 	writeJSON(w, map[string]any{"id": id, "week_date": weekDate})
 }
 
@@ -879,7 +946,15 @@ func updateVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		newWeekDate = &nd
 	}
 
-	_, err = db.Exec(`UPDATE vs_league_weeks SET
+	// The week and its minimum override change together: a date correction carries the
+	// override to the new date (it follows its week).
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "updateVSLeagueWeek begin", err)
+		return
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(`UPDATE vs_league_weeks SET
 		week_number = COALESCE(?, week_number),
 		week_date = COALESCE(?, week_date),
 		league_tier = COALESCE(?, league_tier),
@@ -919,7 +994,28 @@ func updateVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 		dbError(w, "updateVSLeagueWeek", err)
 		return
 	}
+	effectiveDate := weekDate
+	if newWeekDate != nil && *newWeekDate != weekDate {
+		effectiveDate = *newWeekDate
+		if _, err := tx.Exec(`UPDATE OR REPLACE vs_week_minimums SET week_date = ? WHERE week_date = ? AND kind = 'override'`,
+			effectiveDate, weekDate); err != nil {
+			dbError(w, "updateVSLeagueWeek move minimum", err)
+			return
+		}
+	}
+	minDetail, err := applyWeekOverrideTx(tx, effectiveDate, p.VSMinimum, user.ID)
+	if err != nil {
+		dbError(w, "updateVSLeagueWeek minimum", err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		dbError(w, "updateVSLeagueWeek commit", err)
+		return
+	}
 	logActivity(user.ID, user.Username, "updated", entityVSLeagueWeek, weekLabel(weekNum, weekDate), false)
+	if minDetail != "" {
+		logActivity(user.ID, user.Username, "updated", "vs_week_minimum", effectiveDate, false, minDetail)
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -952,6 +1048,11 @@ func deleteVSLeagueWeek(w http.ResponseWriter, r *http.Request) {
 			dbError(w, "deleteVSLeagueWeek exec", err)
 			return
 		}
+	}
+	// The week's minimum override goes with it; the recorded setting row stays.
+	if _, err := tx.Exec(`DELETE FROM vs_week_minimums WHERE week_date = ? AND kind = 'override'`, weekDate); err != nil {
+		dbError(w, "deleteVSLeagueWeek minimum", err)
+		return
 	}
 	if err := tx.Commit(); err != nil {
 		dbError(w, "deleteVSLeagueWeek commit", err)
