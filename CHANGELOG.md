@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v3.1.0 — unreleased
+## v3.1.0 — 2026-10-15
 
 A **Reports** page: the weekly summary, a VS-misses report and a participation grid, each to read,
 download and print. VS days are judged against the minimum that applied that week, saving on the VS
