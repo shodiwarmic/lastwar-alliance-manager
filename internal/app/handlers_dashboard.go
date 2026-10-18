@@ -14,6 +14,9 @@ func allowedCards(data PageData) []DashboardCard {
 	if data.Permissions.ViewVSPoints {
 		cards = append(cards, DashboardCard{ID: "vs", Visible: true})
 	}
+	if data.Permissions.ViewRankings {
+		cards = append(cards, DashboardCard{ID: "donations", Visible: true})
+	}
 	if data.Permissions.ViewSchedule {
 		cards = append(cards, DashboardCard{ID: "schedule", Visible: true})
 	}

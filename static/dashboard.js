@@ -19,6 +19,7 @@ const VS_FALLBACK  = cfg.vsFallback === 'true';
 const CARD_META = {
     'health':       { label: 'Alliance Health',  icon: 'shield' },
     'vs':           { label: 'VS Performance',   icon: 'swords' },
+    'donations':    { label: 'Donations',        icon: 'gift' },
     'schedule':     { label: 'Schedule',         icon: 'calendar' },
     'diplomacy':    { label: 'Diplomacy',        icon: 'heart' },
     'leader-flags':    { label: 'Leader Flags',    icon: 'alert-triangle' },
@@ -402,6 +403,46 @@ function relTimeShort(iso) {
     return Math.round(hrs / 24) + 'd ago';
 }
 
+// The donation card: this week so far, and last week's weekly verdict when last week had
+// a weekly minimum (a minimum switched off this week does not un-judge last week). Both
+// weeks are resolved on the server; the browser computes no Monday.
+function renderDonations(card, thisWeek, lastWeek) {
+    card.querySelector('.dash-card-loading')?.remove();
+    const read = thisWeek.members.filter(m => m.total.status !== 'blank');
+    const active = thisWeek.members.length;
+    const lastWeeklyOn = lastWeek && lastWeek.minimums.weekly > 0;
+    const belowWeekly = lastWeeklyOn ? lastWeek.members.filter(m => m.below_weekly).length : 0;
+
+    if (!read.length) {
+        card.appendChild(el('p', { textContent: 'No donation readings for this week yet.' }));
+    } else {
+        const weekTotal = read.reduce((s, m) => s + m.total.amount, 0);
+        const grid = el('div', { className: 'dash-stat-grid' });
+        grid.appendChild(statCell(weekTotal.toLocaleString('en-US'), 'Week Total (so far)'));
+        grid.appendChild(statCell(read.length + '/' + active, 'Members Read'));
+        if (thisWeek.minimums.daily > 0) {
+            grid.appendChild(statCell(String(thisWeek.members.filter(m => m.below_daily).length), 'Below Daily'));
+        }
+        if (lastWeeklyOn) grid.appendChild(statCell(String(belowWeekly), 'Below Weekly (last week)'));
+        card.appendChild(grid);
+
+        card.appendChild(el('p', { className: 'dash-section-label', textContent: 'Top 3' }));
+        const list = el('ul', { className: 'dash-list' });
+        read.slice(0, 3).forEach(m => {
+            const li = el('li');
+            li.appendChild(noTranslate(el('span', { className: 'dash-list-name', textContent: m.name })));
+            li.appendChild(el('span', { className: 'dash-list-value', textContent: m.total.amount.toLocaleString('en-US') }));
+            list.appendChild(li);
+        });
+        card.appendChild(list);
+    }
+    if (!read.length && lastWeeklyOn) {
+        card.appendChild(el('p', { className: 'dash-week-note',
+            textContent: `Last week: ${belowWeekly} below the weekly minimum.` }));
+    }
+    card.appendChild(el('a', { href: '/rankings#donations', className: 'dash-card-link', textContent: 'Open Donations →' }));
+}
+
 function renderAccountability(card, data) {
     const grid = el('div', { className: 'dash-stat-grid' });
     grid.appendChild(statCell(String(data.at_risk),           'At Risk'));
@@ -543,6 +584,7 @@ async function boot() {
     const needSchedule      = visibleIds.has('schedule');
     const needAllies        = visibleIds.has('diplomacy');
     const needAccountability = visibleIds.has('accountability');
+    const needDonations     = visibleIds.has('donations');
     const needLastRankReview = visibleIds.has('lastrank-review');
 
     // Render card shells in prefs order (visible only)
@@ -568,6 +610,10 @@ async function boot() {
     if (needAllies) {
         fetches.allies = fetch('/api/allies').then(r => r.ok ? r.json() : Promise.reject());
         fetches.agreementTypes = fetch('/api/ally-agreement-types').then(r => r.ok ? r.json() : Promise.reject());
+    }
+    if (needDonations) {
+        fetches.donations = fetch('/api/donations').then(r => r.ok ? r.json() : Promise.reject());
+        fetches.donationsPrev = fetch('/api/donations?week=previous').then(r => r.ok ? r.json() : Promise.reject());
     }
     if (needAccountability) fetches.accountability = fetch('/api/accountability/summary').then(r => r.ok ? r.json() : Promise.reject());
     if (needLastRankReview) fetches.lastrankReview = fetch('/api/lastrank/review/summary').then(r => r.ok ? r.json() : Promise.reject());
@@ -603,6 +649,10 @@ async function boot() {
     if (cardEls['leader-flags']) {
         if (results.members && results.vs) renderLeaderFlags(cardEls['leader-flags'], results.members, results.vs, joinedAtById, dayImported);
         else { cardEls['leader-flags'].querySelector('.dash-card-loading')?.remove(); cardEls['leader-flags'].appendChild(errorEl('Failed to load leader flag data.')); }
+    }
+    if (cardEls['donations']) {
+        if (results.donations) renderDonations(cardEls['donations'], results.donations, results.donationsPrev);
+        else { cardEls['donations'].querySelector('.dash-card-loading')?.remove(); cardEls['donations'].appendChild(errorEl('Failed to load donations.')); }
     }
     if (cardEls['accountability']) {
         if (results.accountability) renderAccountability(cardEls['accountability'], results.accountability);
