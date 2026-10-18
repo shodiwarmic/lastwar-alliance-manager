@@ -257,7 +257,7 @@ function renderDonationHistory(history) {
     };
     history.forEach(w => {
         const tr = document.createElement('tr');
-        const tdWeek = Object.assign(document.createElement('td'), { textContent: w.week_date });
+        const tdWeek = Object.assign(document.createElement('td'), { textContent: w.week_date, className: 'don-week' });
         const tdTotal = DonationMarks.totalCell(w.total, w);
         if (w.below_daily) {
             tdTotal.appendChild(Object.assign(document.createElement('span'), {

@@ -592,8 +592,8 @@ func recordDonationMinimums(q historyExecer, week string, weekly, daily, userID 
 // donationJudgement is one member's week judged against its minimums.
 //
 // The weekly rule judges only a final total (a Sunday reading, the week over): below the
-// weekly minimum is a miss; a week with no Sunday reading is "not read to the end", never
-// a miss. The daily rule judges exact days, and Sunday once the week is over, on or after
+// weekly minimum is a miss; a week read but not on Sunday is "not read to the end", never
+// a miss, and a week never read is neither. The daily rule judges exact days, and Sunday once the week is over, on or after
 // the member joined: below the daily minimum on FlagDays or more is a miss. A member who
 // joined after the week's Monday is not judged on the weekly rule. A minimum of 0 is off.
 type donationJudgement struct {
@@ -611,9 +611,12 @@ func judgeDonationWeek(w donationWeek, mins donationMinimums, joinedAt string) d
 	var j donationJudgement
 	j.JoinedMidWeek = joinedAt != "" && joinedAt > w.WeekDate
 	if mins.Weekly > 0 && w.WeekOver && !j.JoinedMidWeek {
-		if w.Total.Status == donationFinal {
+		switch {
+		case w.Total.Status == donationFinal:
 			j.BelowWeekly = w.Total.Amount < int64(mins.Weekly)
-		} else {
+		case w.LastReadDay >= 0:
+			// Read, but not on Sunday. A week with no reading at all was simply not
+			// read — like a VS week with no row, it says nothing about the member.
 			j.NotReadToEnd = true
 		}
 	}

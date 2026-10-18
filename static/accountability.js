@@ -139,12 +139,30 @@ function renderDonationBanner(members, ctx) {
     const note = document.getElementById('donation-flag-note');
     const targets = donationStrikeTargets(members);
     names.replaceChildren();
-    targets.forEach((t, i) => {
+    // One entry per member, naming each rule and the week it judged.
+    const flagged = members.filter(m => (m.donation_strikes || []).length);
+    flagged.forEach((m, i) => {
         if (i) names.appendChild(document.createTextNode(', '));
-        names.appendChild(noTranslate(Object.assign(document.createElement('span'), { textContent: t.member.name })));
-        const rules = t.rules.map(r => r === 'daily' ? `daily, ${t.member.donation_days_below} days` : r);
-        names.appendChild(document.createTextNode(` (${rules.join(' and ')}, week of ${shortWeek(t.week)})`));
+        names.appendChild(noTranslate(Object.assign(document.createElement('span'), { textContent: m.name })));
+        const parts = m.donation_strikes.map(t => t.rules
+            .map(r => r === 'daily' ? `daily, ${m.donation_days_below} days` : r).join(' and ') + `, week of ${shortWeek(t.week)}`);
+        names.appendChild(document.createTextNode(` (${parts.join('; ')})`));
     });
+    // A minimum nobody recorded for its week is today's setting: say so, as an override is named.
+    const heading = document.getElementById('donation-flag-heading');
+    heading.querySelectorAll('.acc-week-note').forEach(n => n.remove());
+    const unrecorded = [];
+    if (ctx.donation_weekly_minimums.weekly > 0 && ctx.donation_weekly_minimums.source === 'current_setting') {
+        unrecorded.push(`week of ${shortWeek(ctx.donation_weekly_week)}`);
+    }
+    if (ctx.donation_daily_minimums.daily > 0 && ctx.donation_daily_minimums.source === 'current_setting'
+        && ctx.donation_daily_week !== ctx.donation_weekly_week) {
+        unrecorded.push(`week of ${shortWeek(ctx.donation_daily_week)}`);
+    }
+    if (unrecorded.length) {
+        heading.appendChild(Object.assign(document.createElement('span'), { className: 'acc-week-note',
+            textContent: ` (${unrecorded.join(' and ')}: no minimum recorded then, judged against today's)` }));
+    }
     const dailyOn = ctx.donation_daily_minimums.daily > 0;
     note.textContent = dailyOn && ctx.donation_judged_days === 0
         ? 'Daily rule: no exact day yet — readings on two consecutive days make a day exact.'
@@ -157,7 +175,9 @@ function renderDonationBanner(members, ctx) {
 // The Donations column names the daily rule's week, which is the week its total is for.
 function applyDonationColumnHeading(ctx) {
     const th = document.getElementById('donations-col-head');
-    if (th) th.textContent = `Donations (week of ${shortWeek(ctx.donation_daily_week)})`;
+    if (!th) return;
+    th.textContent = `Donations (${shortWeek(ctx.donation_daily_week)})`;
+    th.title = `The week of ${shortWeek(ctx.donation_daily_week)} so far. A "weekly" badge is about last week's total.`;
 }
 
 function donationCell(m) {

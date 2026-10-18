@@ -195,8 +195,12 @@
         const parts = [
             el('h4', { className: 'report-subhead', text: 'Top donors' }),
             memberList(d.leaders, pts),
-            el('h4', { className: 'report-subhead', text: 'Below the weekly minimum (' + donationMinLabel(d.minimum.weekly, d.minimum.source) + ')' }),
+            el('h4', { className: 'report-subhead', text: d.minimum.weekly > 0
+                ? 'Below the weekly minimum of ' + d.minimum.weekly.toLocaleString('en-US') : 'Below the weekly minimum' }),
         ];
+        if (d.minimum.weekly > 0 && d.minimum.source === 'current_setting') {
+            parts.push(el('p', { className: 'report-week-note', text: "Today's setting: no minimum was recorded for that week." }));
+        }
         if (!(d.minimum.weekly > 0)) {
             parts.push(el('p', { className: 'report-empty', text: 'No weekly minimum was set for that week.' }));
         } else if (!d.below.length) {
@@ -472,9 +476,11 @@
         const daily = rep.members.filter(m => m.weeks_below_daily > 0).length;
         const summary = [el('p', { className: 'report-summary-lead',
             text: `${weekly} of ${cov.members_evaluated} members below the weekly minimum in at least one week, ${daily} below the daily minimum. Monday–Sunday weeks.` })];
+        const plain = v => v > 0 ? v.toLocaleString('en-US') : 'off';
         summary.push(el('ul', { className: 'report-summary-list' }, rep.weeks.map(w =>
-            el('li', {}, 'Week of ' + fmtDate(w.week_date) + ': weekly ' + donationMinLabel(w.minimums.weekly, w.minimums.source)
-                + ', daily ' + donationMinLabel(w.minimums.daily, w.minimums.source)
+            el('li', {}, 'Week of ' + fmtDate(w.week_date) + ': weekly ' + plain(w.minimums.weekly)
+                + ', daily ' + plain(w.minimums.daily)
+                + (w.minimums.source === 'current_setting' ? " (today's settings — no record for this week)" : '')
                 + ` · ${w.members_read} read, ${w.members_read_to_end} to the end` + (w.over ? '' : ' (still running)')))));
         if (cov.weeks_without_sunday_reading.length) {
             summary.push(el('p', { className: 'report-note', text: 'Nobody was read on the Sunday of: '

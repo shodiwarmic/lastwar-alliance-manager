@@ -414,6 +414,10 @@ func TestJudgeDonationWeek(t *testing.T) {
 	if j := judgeDonationWeek(w2, mins, ""); j.BelowWeekly || !j.NotReadToEnd {
 		t.Errorf("no Sunday: %+v", j)
 	}
+	// Never read at all: neither below nor "not read to the end" (no row is no score).
+	if j := judgeDonationWeek(deriveDonationWeek("2026-10-12", [7]donationDayReadings{}, over), mins, ""); j.BelowWeekly || j.NotReadToEnd || j.JudgedDays != 0 {
+		t.Errorf("never read: %+v", j)
+	}
 	// The week still running: Sunday is not judged and the weekly rule waits.
 	during := deriveDonationWeek("2026-10-12", workedDonationWeek(), time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
 	if j := judgeDonationWeek(during, mins, ""); j.BelowWeekly || j.NotReadToEnd || j.JudgedDays != 4 {

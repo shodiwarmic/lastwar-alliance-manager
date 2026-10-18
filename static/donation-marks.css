@@ -1,12 +1,14 @@
 /* donation-marks.css — the donation day and total marks (donation-marks.js), and the
    rule badges, shared by Rankings, Accountability, the member profile and Reports. */
-.don-so-far { color: var(--text-muted); }
-.don-blank { color: var(--text-muted); }
-.don-below { color: var(--color-danger); font-weight: 600; }
+/* td-qualified so a table's own cell colour (.analytics-table td, .data-table td) does not
+   win over them. */
+.don-so-far, td.don-so-far { color: var(--text-muted); }
+.don-blank, td.don-blank { color: var(--text-muted); }
+.don-below, td.don-below { color: var(--color-danger); font-weight: 600; }
 .don-badge {
     display: inline-block;
-    margin-left: 6px;
-    padding: 1px 6px;
+    margin-left: 4px;
+    padding: 1px 5px;
     border-radius: 10px;
     font-size: 0.72rem;
     font-weight: 600;
@@ -14,6 +16,8 @@
     background: var(--color-warning-bg);
     color: var(--color-warning);
 }
+/* A week's date (YYYY-MM-DD) stays on one line in a narrow table. */
+td.don-week { white-space: nowrap; }
 .don-legend {
     margin: 8px 0 0;
     font-size: 0.82rem;

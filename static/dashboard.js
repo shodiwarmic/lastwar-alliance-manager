@@ -418,7 +418,7 @@ function renderDonations(card, thisWeek, lastWeek) {
     } else {
         const weekTotal = read.reduce((s, m) => s + m.total.amount, 0);
         const grid = el('div', { className: 'dash-stat-grid' });
-        grid.appendChild(statCell(weekTotal.toLocaleString('en-US'), 'Week Total (so far)'));
+        grid.appendChild(statCell(formatCompact(weekTotal), 'Week Total (so far)'));
         grid.appendChild(statCell(read.length + '/' + active, 'Members Read'));
         if (thisWeek.minimums.daily > 0) {
             grid.appendChild(statCell(String(thisWeek.members.filter(m => m.below_daily).length), 'Below Daily'));

@@ -1365,7 +1365,7 @@ never derived figures.
   `week_date <=` it, else today's settings (`current_setting`). 0 is a real value — off — so
   the Settings payload's two minimums are pointers (absent keeps them).
 - **One judgement** (`judgeDonationWeek`) for every surface. The weekly rule judges only a
-  final total; no Sunday reading is "not read to the end", never below. The daily rule
+  final total; read but not on Sunday is "not read to the end", never below; never read is neither. The daily rule
   judges exact days (and Sunday once the week is over) from the join date, N+ days below.
 - **Accountability judges two weeks**: weekly on the last complete week, daily on the current
   one (or the last while the current has no judged day). `/api/accountability/members`

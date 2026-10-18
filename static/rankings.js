@@ -761,17 +761,20 @@ function donationsStatusText(m, weekOver) {
 function donationsMinimumsText(min) {
     const part = (label, v) => v > 0 ? `${label} ${DonationMarks.amount(v)}` : `${label} off`;
     const src = min.source === 'current_setting' ? ' (no record for this week: today\'s settings)' : '';
-    return `Minimums for this week: ${part('weekly', min.weekly)}, ${part('daily', min.daily)}` +
+    return `Minimums for the week: ${part('weekly', min.weekly)}, ${part('daily', min.daily)}` +
         (min.daily > 0 ? `, flag after ${min.flag_days} day${min.flag_days !== 1 ? 's' : ''} below` : '') + src + '.';
 }
 
 function buildDonationsRow(m, idx, weekOver) {
     const tr = document.createElement('tr');
     tr.dataset.search = m.name;
-    const tdIdx = document.createElement('td');
-    tdIdx.style.cssText = 'color: var(--color-text-muted); font-size: 0.9em;';
-    tdIdx.textContent = m.total.status === 'blank' ? '' : `#${idx + 1}`;
+    // The commander is the first column, so it is the one the narrow layout pins; the
+    // position is a muted prefix in the same cell, and the export carries the bare name.
     const tdName = document.createElement('td');
+    tdName.dataset.exportText = m.name;
+    if (m.total.status !== 'blank') {
+        tdName.appendChild(Object.assign(document.createElement('span'), { className: 'donations-pos', textContent: `${idx + 1}. ` }));
+    }
     const strong = document.createElement('strong');
     strong.textContent = m.name;
     tdName.appendChild(strong);
@@ -783,7 +786,7 @@ function buildDonationsRow(m, idx, weekOver) {
         const badge = Object.assign(document.createElement('span'), { className: 'don-badge', textContent: `${m.days_below_daily} days below daily` });
         tdStatus.appendChild(badge);
     }
-    tr.append(tdIdx, tdName, ...days, tdTotal, tdStatus);
+    tr.append(tdName, ...days, tdTotal, tdStatus);
     return tr;
 }
 
@@ -805,7 +808,7 @@ async function loadDonations(week) {
         document.getElementById('donations-minimums').textContent = donationsMinimumsText(data.minimums);
         if (!data.members.length) {
             const tr = document.createElement('tr');
-            const td = Object.assign(document.createElement('td'), { colSpan: 11, className: 'empty-state', textContent: 'No active members.' });
+            const td = Object.assign(document.createElement('td'), { colSpan: 10, className: 'empty-state', textContent: 'No active members.' });
             tr.appendChild(td);
             tbody.replaceChildren(tr);
         } else {
@@ -815,7 +818,7 @@ async function loadDonations(week) {
     } catch (err) {
         console.error('loadDonations:', err);
         const tr = document.createElement('tr');
-        const td = Object.assign(document.createElement('td'), { colSpan: 11, className: 'error', textContent: 'Failed to load donations.' });
+        const td = Object.assign(document.createElement('td'), { colSpan: 10, className: 'error', textContent: 'Failed to load donations.' });
         td.style.cssText = 'text-align: center; color: var(--color-danger); padding: 20px;';
         tr.appendChild(td);
         tbody.replaceChildren(tr);

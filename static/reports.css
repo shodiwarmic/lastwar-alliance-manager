@@ -130,6 +130,17 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* A label over a list inside a section (the Weekly summary's donation result). */
+.report-subhead {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-mid);
+    margin: 0.75rem 0 0.25rem;
+}
+.report-section h3 + div > .report-subhead:first-child { margin-top: 0; }
+
 /* Muted import-lag / last-week note under the VS underperformers list. */
 .report-week-note {
     font-size: 0.8rem;
