@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v3.2.0 — unreleased
+## v3.2.0 — 2026-10-18
 
 **Donations tracking**: the members' tech donations, read from the Donation screen's Daily and
 Weekly tabs by screenshot upload or the Android scanner, worked out into daily amounts, judged
