@@ -375,12 +375,17 @@ func addDays(date string, n int) string {
 // Members with no reading in a week have no entry for it; callers show them blank. It is
 // the one reader, so every surface derives alike.
 func loadDonationWeeks(q rowQueryer, from, to string, now time.Time) (map[int]map[string]donationWeek, error) {
+	return loadDonationWeeksOf(q, 0, from, to, now)
+}
+
+// loadDonationWeeksOf is loadDonationWeeks for one member (memberID 0: every member).
+func loadDonationWeeksOf(q rowQueryer, memberID int, from, to string, now time.Time) (map[int]map[string]donationWeek, error) {
 	first, last := donationWeekMonday(from), addDays(donationWeekMonday(to), 6)
 	if first == "" || last == "" {
 		return nil, fmt.Errorf("loadDonationWeeks: bad range %q–%q", from, to)
 	}
 	rows, err := q.Query(`SELECT member_id, game_date, kind, amount, captured_at FROM donation_readings
-		WHERE game_date BETWEEN ? AND ?`, first, last)
+		WHERE game_date BETWEEN ? AND ? AND (? = 0 OR member_id = ?)`, first, last, memberID, memberID)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +451,12 @@ func daysBetween(a, b string) (int, error) {
 
 // donationWeeksAvailable lists the Mondays of every week holding a reading, newest first.
 func donationWeeksAvailable(q rowQueryer) ([]string, error) {
-	rows, err := q.Query(`SELECT DISTINCT game_date FROM donation_readings`)
+	return donationWeeksAvailableOf(q, 0)
+}
+
+// donationWeeksAvailableOf is donationWeeksAvailable for one member (0: every member).
+func donationWeeksAvailableOf(q rowQueryer, memberID int) ([]string, error) {
+	rows, err := q.Query(`SELECT DISTINCT game_date FROM donation_readings WHERE ? = 0 OR member_id = ?`, memberID, memberID)
 	if err != nil {
 		return nil, err
 	}
@@ -685,4 +695,46 @@ func shortWeekName(week string) string {
 		return week
 	}
 	return t.Format("2 Jan")
+}
+
+// donationHistoryWeek is one week of a member's donation history (the profile tab, the
+// report): the derived days and total, the minimums that applied to that week, and the
+// verdict against them.
+type donationHistoryWeek struct {
+	WeekDate string            `json:"week_date"`
+	Days     [7]donationDay    `json:"days"`
+	Total    donationWeekTotal `json:"total"`
+	WeekOver bool              `json:"week_over"`
+	Minimums donationMinimums  `json:"minimums"`
+	donationJudgement
+}
+
+// memberDonationHistory is a member's last `limit` weeks with any reading, newest first,
+// each judged against its own week's minimums.
+func memberDonationHistory(q rowQueryer, memberID int, joinedAt string, limit int, now time.Time) ([]donationHistoryWeek, error) {
+	weeks, err := donationWeeksAvailableOf(q, memberID)
+	if err != nil {
+		return nil, err
+	}
+	out := []donationHistoryWeek{}
+	if len(weeks) == 0 {
+		return out, nil
+	}
+	if len(weeks) > limit {
+		weeks = weeks[:limit]
+	}
+	derived, err := loadDonationWeeksOf(q, memberID, weeks[len(weeks)-1], weeks[0], now)
+	if err != nil {
+		return nil, err
+	}
+	mins, err := donationMinimumsForWeeks(q, weeks)
+	if err != nil {
+		return nil, err
+	}
+	for _, week := range weeks {
+		w := derived[memberID][week]
+		out = append(out, donationHistoryWeek{WeekDate: week, Days: w.Days, Total: w.Total, WeekOver: w.WeekOver,
+			Minimums: mins[week], donationJudgement: judgeDonationWeek(w, mins[week], joinedAt)})
+	}
+	return out, nil
 }

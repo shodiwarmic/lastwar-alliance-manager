@@ -441,6 +441,8 @@ type MemberProfileData struct {
 	Strikes       []AccountabilityStrike `json:"strikes"`
 	VSHistory     []VSWeekRecord         `json:"vs_history"`
 	TrainHistory  []TrainLogRecord       `json:"train_history"`
+	// DonationHistory: the last eight weeks with any reading, newest first (Project 20).
+	DonationHistory []donationHistoryWeek `json:"donation_history"`
 }
 
 func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
@@ -459,8 +461,9 @@ func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
 	profile.ID = id
 
 	// Member base info
-	if err := db.QueryRow(`SELECT name, rank, COALESCE(notes,'') FROM members WHERE id = ?`, id).
-		Scan(&profile.Name, &profile.Rank, &profile.Notes); err != nil {
+	var joinedAt string
+	if err := db.QueryRow(`SELECT name, rank, COALESCE(notes,''), COALESCE(joined_at, '') FROM members WHERE id = ?`, id).
+		Scan(&profile.Name, &profile.Rank, &profile.Notes, &joinedAt); err != nil {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
@@ -551,6 +554,15 @@ func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		t.ShowedUp = showedUpInt == 1
 		profile.TrainHistory = append(profile.TrainHistory, t)
+	}
+	trainRows.Close()
+
+	// Donations — the last eight weeks with any reading, each against its own minimums.
+	profile.DonationHistory, err = memberDonationHistory(db, id, joinedAt, 8, time.Now())
+	if err != nil {
+		slog.Error("handleAccountabilityMemberProfile: donation history failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

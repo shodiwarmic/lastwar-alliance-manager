@@ -229,6 +229,51 @@ function renderVSHistory(vsHistory) {
     appendScrollTable(container, table);
 }
 
+// Donations tab: the last eight weeks with any reading, each day marked as on the
+// Tracking page's Donations tab and each week judged against the minimums it had.
+function renderDonationHistory(history) {
+    const container = document.getElementById('tab-donations');
+    container.replaceChildren();
+    if (!history || !history.length) {
+        container.appendChild(Object.assign(document.createElement('p'), { textContent: 'No donations on record.' }));
+        return;
+    }
+    const table = document.createElement('table');
+    table.className = 'data-table';
+    table.setAttribute('translate', 'no');
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ['Week', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Total', 'Weekly min', 'Daily min'].forEach(h => {
+        headerRow.appendChild(Object.assign(document.createElement('th'), { textContent: h }));
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    const minCell = (v, source) => {
+        const td = document.createElement('td');
+        td.textContent = v > 0 ? DonationMarks.amount(v) : 'off';
+        if (source === 'current_setting') td.title = "No record for this week: today's setting";
+        return td;
+    };
+    history.forEach(w => {
+        const tr = document.createElement('tr');
+        const tdWeek = Object.assign(document.createElement('td'), { textContent: w.week_date });
+        const tdTotal = DonationMarks.totalCell(w.total, w);
+        if (w.below_daily) {
+            tdTotal.appendChild(Object.assign(document.createElement('span'), {
+                className: 'don-badge', textContent: `${w.days_below_daily} days`,
+                title: 'Below the daily minimum on this many days',
+            }));
+        }
+        tr.append(tdWeek, ...w.days.map(DonationMarks.dayCell), tdTotal,
+            minCell(w.minimums.weekly, w.minimums.source), minCell(w.minimums.daily, w.minimums.source));
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    appendScrollTable(container, table);
+    container.appendChild(DonationMarks.legend());
+}
+
 // Participation tab: every recorded board that concerns this member, derived by
 // the server under each event's own rule. Loaded separately from the profile so a
 // failure here leaves the other tabs working.
@@ -307,6 +352,7 @@ async function boot() {
     renderHeader(profile);
     renderStrikes(profile.strikes);
     renderVSHistory(profile.vs_history);
+    renderDonationHistory(profile.donation_history);
     renderTrainHistory(profile.train_history);
     loadParticipationHistory();
 }

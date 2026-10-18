@@ -91,3 +91,40 @@ func TestDonationsWeek(t *testing.T) {
 		t.Errorf("R3 without view_rankings: %d", w.Code)
 	}
 }
+
+// The profile's donation history: at most eight weeks with any reading, newest first, each
+// judged against its own week's minimums (261).
+func TestMemberDonationHistory(t *testing.T) {
+	setupPreviewTestDB(t)
+	m := seedMember(t, "Alder", "R3")
+	mustExec(t, `INSERT INTO donation_week_minimums (week_date, weekly_minimum, daily_minimum) VALUES ('2026-08-03', 10000, 0), ('2026-09-28', 30000, 0)`)
+	// Ten Sundays, 20,000 each: below the newer minimum, above the older.
+	for i := 0; i < 10; i++ {
+		sunday := addDays("2026-08-09", 7*i)
+		donationDayAt(t, m, sunday, 2000, 20000)
+	}
+	hist, err := memberDonationHistory(db, m, "", 8, time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hist) != 8 || hist[0].WeekDate != "2026-10-05" || hist[7].WeekDate != "2026-08-17" {
+		t.Fatalf("%d weeks, %s … %s", len(hist), hist[0].WeekDate, hist[len(hist)-1].WeekDate)
+	}
+	for _, w := range hist {
+		newer := w.WeekDate >= "2026-09-28"
+		if w.BelowWeekly != newer || (newer && w.Minimums.Weekly != 30000) || (!newer && w.Minimums.Weekly != 10000) {
+			t.Errorf("%s: below %v minimums %+v", w.WeekDate, w.BelowWeekly, w.Minimums)
+		}
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "/api/accountability/members/"+itoaTest(m), nil)
+	r.AddCookie(sessionCookie(t, 1, ""))
+	w := httptest.NewRecorder()
+	buildRouter().ServeHTTP(w, r)
+	var body struct {
+		DonationHistory []donationHistoryWeek `json:"donation_history"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || len(body.DonationHistory) != 8 {
+		t.Errorf("profile route: %d %v (%d weeks)", w.Code, err, len(body.DonationHistory))
+	}
+}
