@@ -23,3 +23,28 @@
 .growth-window .growth-window-custom {
     width: 5.5em;
 }
+
+/* Donations tab: the week picker sits beside the search and wraps under it on a phone. */
+.donations-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+}
+
+.donations-week {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9em;
+}
+
+.donations-week select.form-input {
+    width: auto;
+}
+
+.donations-minimums {
+    margin: 4px 0 10px;
+    font-size: 0.85em;
+    color: var(--text-muted);
+}

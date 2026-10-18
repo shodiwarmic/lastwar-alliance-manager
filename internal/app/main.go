@@ -773,6 +773,7 @@ func buildRouter() *mux.Router {
 
 	// Rankings & Timelines
 	router.HandleFunc("/api/rankings", authMiddleware(requirePermission("view_rankings", getMemberRankings))).Methods("GET")
+	router.HandleFunc("/api/donations", authMiddleware(requirePermission("view_rankings", getDonations))).Methods("GET")
 
 	// Storm & Power History
 	router.HandleFunc("/api/storm-assignments", authMiddleware(getStormAssignments)).Methods("GET")

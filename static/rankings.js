@@ -746,6 +746,87 @@ QuickSearch.attach({
     emptyText: 'No commanders match your search.',
 });
 
+// --- Donations tab ---
+
+const DAY_STATUS_LABEL = { final: 'final', so_far: 'so far', blank: '—' };
+
+function donationsStatusText(m, weekOver) {
+    if (m.below_weekly) return 'below the weekly minimum';
+    if (m.not_read_to_end) return 'not read to the end';
+    if (m.joined_mid_week) return 'joined this week';
+    if (m.total.status === 'so_far' && !weekOver) return 'so far';
+    return DAY_STATUS_LABEL[m.total.status] || m.total.status;
+}
+
+function donationsMinimumsText(min) {
+    const part = (label, v) => v > 0 ? `${label} ${DonationMarks.amount(v)}` : `${label} off`;
+    const src = min.source === 'current_setting' ? ' (no record for this week: today\'s settings)' : '';
+    return `Minimums for this week: ${part('weekly', min.weekly)}, ${part('daily', min.daily)}` +
+        (min.daily > 0 ? `, flag after ${min.flag_days} day${min.flag_days !== 1 ? 's' : ''} below` : '') + src + '.';
+}
+
+function buildDonationsRow(m, idx, weekOver) {
+    const tr = document.createElement('tr');
+    tr.dataset.search = m.name;
+    const tdIdx = document.createElement('td');
+    tdIdx.style.cssText = 'color: var(--color-text-muted); font-size: 0.9em;';
+    tdIdx.textContent = m.total.status === 'blank' ? '' : `#${idx + 1}`;
+    const tdName = document.createElement('td');
+    const strong = document.createElement('strong');
+    strong.textContent = m.name;
+    tdName.appendChild(strong);
+    const days = m.days.map(DonationMarks.dayCell);
+    const tdTotal = DonationMarks.totalCell(m.total, m);
+    const tdStatus = document.createElement('td');
+    tdStatus.textContent = donationsStatusText(m, weekOver);
+    if (m.below_daily) {
+        const badge = Object.assign(document.createElement('span'), { className: 'don-badge', textContent: `${m.days_below_daily} days below daily` });
+        tdStatus.appendChild(badge);
+    }
+    tr.append(tdIdx, tdName, ...days, tdTotal, tdStatus);
+    return tr;
+}
+
+async function loadDonations(week) {
+    const tbody = document.getElementById('donations-tbody');
+    if (!tbody) return;
+    const select = document.getElementById('donations-week-select');
+    try {
+        const res = await fetch(`${API_BASE}/donations` + (week ? `?week=${encodeURIComponent(week)}` : ''));
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        select.replaceChildren(...data.weeks.map((w, i) => {
+            const opt = document.createElement('option');
+            opt.value = w;
+            opt.textContent = i === 0 ? `Week of ${w} (this week)` : `Week of ${w}`;
+            return opt;
+        }));
+        select.value = data.week_date;
+        document.getElementById('donations-minimums').textContent = donationsMinimumsText(data.minimums);
+        if (!data.members.length) {
+            const tr = document.createElement('tr');
+            const td = Object.assign(document.createElement('td'), { colSpan: 11, className: 'empty-state', textContent: 'No active members.' });
+            tr.appendChild(td);
+            tbody.replaceChildren(tr);
+        } else {
+            tbody.replaceChildren(...data.members.map((m, i) => buildDonationsRow(m, i, data.week_over)));
+        }
+        QuickSearch.apply('donations-search');
+    } catch (err) {
+        console.error('loadDonations:', err);
+        const tr = document.createElement('tr');
+        const td = Object.assign(document.createElement('td'), { colSpan: 11, className: 'error', textContent: 'Failed to load donations.' });
+        td.style.cssText = 'text-align: center; color: var(--color-danger); padding: 20px;';
+        tr.appendChild(td);
+        tbody.replaceChildren(tr);
+    }
+}
+
+QuickSearch.attach({
+    input: 'donations-search', container: 'donations-tbody', rows: 'tr',
+    emptyText: 'No commanders match your search.',
+});
+
 // --- Theme adaptation ---
 window.addEventListener('themechange', () => {
     const p = getChartPalette();
@@ -771,5 +852,8 @@ document.addEventListener('DOMContentLoaded', () => {
         loadKillData();
         loadHQData();
         loadProfessionData();
+        loadDonations();
+        document.getElementById('donations-legend')?.appendChild(DonationMarks.legend());
+        document.getElementById('donations-week-select')?.addEventListener('change', e => loadDonations(e.target.value));
     }
 });

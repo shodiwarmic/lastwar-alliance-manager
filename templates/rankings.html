@@ -1,5 +1,6 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/table-utils.css"}}">
+<link rel="stylesheet" href="{{asset "/donation-marks.css"}}">
 <link rel="stylesheet" href="{{asset "/rankings.css"}}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 {{end}}
@@ -19,6 +20,7 @@
         <button class="tab-btn" data-tab="kills"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-skull"/></svg> Troop Kills</button>
         <button class="tab-btn" data-tab="hq"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-home"/></svg> HQ Level</button>
         <button class="tab-btn" data-tab="profession"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-settings"/></svg> Profession Level</button>
+        <button class="tab-btn" data-tab="donations"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-gift"/></svg> Donations</button>
     </div>
 
     <div id="tab-growth" class="tab-content">
@@ -219,11 +221,51 @@
             </div>
         </section>
     </div>
+
+    <div id="tab-donations" class="tab-content">
+        <section class="rankings-section">
+            <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-gift"/></svg> Tech Donations</h3>
+            <div class="tab-toolbar donations-toolbar">
+                <div class="filter-search-wrap quick-search">
+                    <input type="text" id="donations-search" class="form-input" placeholder="Search commander..." aria-label="Search commander..." autocomplete="off">
+                    <button type="button" id="donations-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+                </div>
+                <label for="donations-week-select" class="icon-label donations-week"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Week:
+                    <select id="donations-week-select" class="form-input"></select>
+                </label>
+            </div>
+            <p id="donations-minimums" class="donations-minimums"></p>
+            <div style="overflow-x: auto;">
+                <table class="analytics-table" id="donations-table" data-export-csv="donations.csv" translate="no">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Commander</th>
+                            <th>Mon</th>
+                            <th>Tue</th>
+                            <th>Wed</th>
+                            <th>Thu</th>
+                            <th>Fri</th>
+                            <th>Sat</th>
+                            <th>Sun</th>
+                            <th>Week</th>
+                            <th>Week status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="donations-tbody">
+                        <tr><td colspan="11" class="loading-msg">Loading donations...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="donations-legend"></div>
+        </section>
+    </div>
 {{end}}
 
 {{define "scripts"}}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/tabs.js"}}"></script>
+<script src="{{asset "/donation-marks.js"}}"></script>
 <script src="{{asset "/rankings.js"}}"></script>
 {{end}}
