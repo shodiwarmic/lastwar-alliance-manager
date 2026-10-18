@@ -1354,6 +1354,11 @@ never derived figures.
   yesterday's today beside the new week's 0); a member whose *today* exceeds their *week* in one
   request when the today half was read no later than the week half. A time the server made up
   (the web upload) is clamped out of the reset window instead.
+- **The web upload has no capture time** (no EXIF, no file time reaches the server), so the
+  page asks which game day the screens were read on (`donation_date`, `parseDonationDate`:
+  today or up to 30 days back). Its halves are dated `donationUploadInstant`: today → the
+  upload instant clamped past the reset window; a past day → `D 02:10:00` UTC, the day's
+  earliest accepted instant, so any timed reading of that day wins over it.
 - **Member delete** removes the readings (`deleteMemberTx`); `foreign_keys` is off.
 
 ## Reporting layer (`reports_*.go`)

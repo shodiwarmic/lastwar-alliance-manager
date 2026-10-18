@@ -1456,6 +1456,9 @@ type PageData struct {
 	VSImportedCompleted int
 	VSFallbackActive    bool
 	MemberID            int
+	// GameToday is today's game date (UTC−2), for a page that defaults a date control to
+	// it — never computed by the browser.
+	GameToday string
 	// OCRBackendMode is "cloud" (default — Cloud Vision auto-detect) or
 	// "local" (PaddleOCR sidecar; user picks scene per batch). Templates
 	// use this to swap help text and conditionally disable the
@@ -1564,6 +1567,9 @@ type VSImportCommitRequest struct {
 	// "ocr" (upload.js) or "csv" (vs.js). Threaded into the history-table inserts.
 	// Falls back to "import" when absent/unrecognized (old clients).
 	Source string `json:"source,omitempty"`
+	// DonationDate is the game day the donation screens were read on (the upload page's
+	// "Donation screens taken on", echoed from the preview). Absent means today.
+	DonationDate string `json:"donation_date,omitempty"`
 }
 
 // --- Mobile API Payloads ---

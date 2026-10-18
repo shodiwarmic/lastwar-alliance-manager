@@ -61,6 +61,7 @@ func getPageData(r *http.Request, title, activePage string) PageData {
 		AppCommit:        shortCommit(),
 		HostFilesVersion: os.Getenv("HOST_FILES_VERSION"),
 		UpdateInProgress: updateGateActive(),
+		GameToday:        gameDate(),
 	}
 
 	session, _ := store.Get(r, "session")

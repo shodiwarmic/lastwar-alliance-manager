@@ -127,6 +127,40 @@ func clampOutOfDonationResetWindow(t time.Time) time.Time {
 	return time.Date(u.Year(), u.Month(), u.Day(), 2, 0, 0, 0, time.UTC).Add(donationResetWindow)
 }
 
+// parseDonationDate reads the web upload's "Donation screens taken on" game day:
+// absent is today's, and it may be neither after today nor more than 30 days back. The
+// error is worded for the page.
+func parseDonationDate(raw string, now time.Time) (string, error) {
+	today := gametime.DateOf(now)
+	if raw == "" {
+		return today, nil
+	}
+	d, err := time.Parse(gametime.DateLayout, raw)
+	if err != nil {
+		return "", fmt.Errorf("donation date %q is not a YYYY-MM-DD date", raw)
+	}
+	t, _ := time.Parse(gametime.DateLayout, today)
+	switch {
+	case d.After(t):
+		return "", fmt.Errorf("donation date %s is after today's game date (%s)", raw, today)
+	case d.Before(t.AddDate(0, 0, -30)):
+		return "", fmt.Errorf("donation date %s is more than 30 days ago", raw)
+	}
+	return raw, nil
+}
+
+// donationUploadInstant is the captured_at a web upload's halves get, since nothing in
+// an upload says when a screenshot was taken. Today: the upload instant, moved past the
+// reset window. A past day: its earliest accepted instant, D 02:10:00 UTC — so any timed
+// reading of that day (the scanner's) beats it, while an equal re-upload still replaces it.
+func donationUploadInstant(gameDay string, now time.Time) time.Time {
+	if gameDay == gametime.DateOf(now) {
+		return clampOutOfDonationResetWindow(now)
+	}
+	d, _ := time.Parse(gametime.DateLayout, gameDay)
+	return time.Date(d.Year(), d.Month(), d.Day(), 2, 0, 0, 0, time.UTC).Add(donationResetWindow)
+}
+
 // donationHalfIn is one half on its way in, validated and dated.
 type donationHalfIn struct {
 	MemberID int

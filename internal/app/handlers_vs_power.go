@@ -556,10 +556,8 @@ func postKillHistory(w http.ResponseWriter, r *http.Request) {
 func vsUploadSkipReason(category string) (string, bool) {
 	switch category {
 	case "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
-		"weekly", "power", "kills":
+		"weekly", "power", "kills", "donation_daily", "donation_weekly":
 		return "", false
-	case "donation_daily", "donation_weekly":
-		return "not stored yet — see the roadmap", true
 	}
 	return "not a VS or Strength ranking — use the Participation page", true
 }
@@ -607,6 +605,15 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	forceCategory := r.FormValue("force_category")
+
+	// The game day the donation screens were read on: nothing in an upload says when a
+	// screenshot was taken, so the page asks (private-docs 259). Checked before the OCR
+	// call, so a bad date costs nothing.
+	donationDate, err := parseDonationDate(r.FormValue("donation_date"), time.Now())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Dispatch through the configured backend (cloud Vision worker OR the local
 	// PaddleOCR sidecar) instead of calling the cloud worker directly, so the
@@ -747,6 +754,7 @@ func processSmartScreenshot(w http.ResponseWriter, r *http.Request) {
 		"matched":          response.Matched,
 		"unresolved":       response.Unresolved,
 		"week_date":        weekDate,
+		"donation_date":    donationDate,
 		// Compact OCR diagnostics summary; the client echoes it back on commit so
 		// commitCSVImport can enrich the activity-log entry (empty on legacy OCR).
 		"ocr_summary": summarizeOCRDiagnostics(ocrDiag),
