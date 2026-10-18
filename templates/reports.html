@@ -9,6 +9,7 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/participation.css"}}">
+<link rel="stylesheet" href="{{asset "/donation-marks.css"}}">
 <link rel="stylesheet" href="{{asset "/reports.css"}}">
 {{end}}
 
@@ -55,6 +56,10 @@
                 <div class="report-section">
                     <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-tag"/></svg> Members by tag</h3>
                     <div id="weekly-tag-counts"></div>
+                </div>
+                <div class="report-section">
+                    <h3 class="icon-heading"><svg width="16" height="16" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-gift"/></svg> <span id="weekly-donations-heading">Donations</span></h3>
+                    <div id="weekly-donations"></div>
                 </div>
             </div>
         </div>
@@ -114,6 +119,68 @@
                     <tbody></tbody>
                 </table>
             </div>
+        </div>
+    </div>
+    {{end}}
+
+    {{if .Permissions.ViewReportDonations}}
+    <div id="tab-donations" class="tab-content">
+        <div class="report-print-header"><h2>Donations</h2><p class="report-print-meta"></p></div>
+        {{template "report_range_controls"}}
+        <div class="report-controls report-controls--secondary">
+            <label class="report-field">Member
+                <select class="form-input" id="donations-member" translate="no">
+                    <option value="">Everyone</option>
+                </select>
+            </label>
+        </div>
+        <p class="status-msg report-status">Loading…</p>
+        <div class="report-body" style="display:none">
+            <div class="report-summary" id="donations-summary"></div>
+
+            <h3 class="report-table-title">By member</h3>
+            <div class="tab-toolbar"></div>
+            <div class="table-scroll">
+                <table class="data-table report-table" id="donations-summary-table" data-export-csv="donations-summary.csv" translate="no">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Rank</th>
+                            <th>Weeks</th>
+                            <th>Below weekly</th>
+                            <th>Below daily</th>
+                            <th>Not read to end</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <h3 class="report-table-title">Every week</h3>
+            <div class="tab-toolbar"></div>
+            <div class="table-scroll">
+                <table class="data-table report-table" id="donations-weeks-table" data-export-csv="donations-weeks.csv" translate="no">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Week</th>
+                            <th>Mon</th>
+                            <th>Tue</th>
+                            <th>Wed</th>
+                            <th>Thu</th>
+                            <th>Fri</th>
+                            <th>Sat</th>
+                            <th>Sun</th>
+                            <th>Total</th>
+                            <th>Weekly min</th>
+                            <th>Daily min</th>
+                            <th>Below</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="donations-legend"></div>
         </div>
     </div>
     {{end}}
@@ -183,5 +250,6 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/tabs.js"}}"></script>
+<script src="{{asset "/donation-marks.js"}}"></script>
 <script src="{{asset "/reports.js"}}"></script>
 {{end}}

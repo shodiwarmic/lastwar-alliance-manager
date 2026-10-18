@@ -1396,7 +1396,9 @@ func run<Name>Report(q rowQueryer, p <Name>Params, now time.Time) (*<Name>Report
 - **Ranges resolve server-side** in `resolveReportRange` (`reports.go`): `weeks=N` is the N
   most recent *complete* VS weeks, ending the last Saturday before today's game date;
   `current=1` adds the current partial week; `weeks=all` starts at the earliest
-  `vs_points` week; or explicit `from`/`to`, clamped at today. No span cap. Cutoffs that
+  `vs_points` week; or explicit `from`/`to`, clamped at today. No span cap. A report in
+  donation weeks calls `resolveReportRangeFor(…, reportWeekDonation)`: Monday–Sunday,
+  ending on `lastCompleteSunday`, `all` from the earliest donation reading's Monday. Cutoffs that
   need a time are computed in Go, in UTC, and bound as `gametime.SQLiteLayout` strings —
   no `datetime('now', …)` in report SQL.
 - **The registry is `reportDefs`** (`reports.go`): key → title → permission key. Web

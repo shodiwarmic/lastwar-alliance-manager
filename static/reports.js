@@ -174,6 +174,41 @@
         return Number.isFinite(n) ? Math.min(365, Math.max(1, n)) : 30;
     }
 
+    // The weekly donation result: last complete Monday–Sunday week, named, because it is
+    // not the VS week the rest of the summary reports (on every day but Monday).
+    function donationMinLabel(v, source) {
+        const t = v > 0 ? v.toLocaleString('en-US') : 'off';
+        return source === 'current_setting' ? t + " (today's setting — no record for this week)" : t;
+    }
+
+    function renderWeeklyDonations(d) {
+        const heading = document.getElementById('weekly-donations-heading');
+        const box = document.getElementById('weekly-donations');
+        if (!heading || !box) return;
+        if (!d) {
+            heading.textContent = 'Donations';
+            box.replaceChildren(el('p', { className: 'report-empty', text: 'No donation readings for last week.' }));
+            return;
+        }
+        heading.textContent = 'Donations, week of ' + fmtDate(d.week_date);
+        const pts = v => Number(v).toLocaleString('en-US');
+        const parts = [
+            el('h4', { className: 'report-subhead', text: 'Top donors' }),
+            memberList(d.leaders, pts),
+            el('h4', { className: 'report-subhead', text: 'Below the weekly minimum (' + donationMinLabel(d.minimum.weekly, d.minimum.source) + ')' }),
+        ];
+        if (!(d.minimum.weekly > 0)) {
+            parts.push(el('p', { className: 'report-empty', text: 'No weekly minimum was set for that week.' }));
+        } else if (!d.below.length) {
+            parts.push(el('p', {}, svgIcon('check'), ' Everyone read to the end met it.'));
+        } else {
+            parts.push(memberList(d.below, pts));
+        }
+        parts.push(el('p', { className: 'report-week-note',
+            text: `${d.members_read} members read, ${d.read_to_end} read to the end (a Sunday reading). Only those read to the end are judged.` }));
+        box.replaceChildren(...parts);
+    }
+
     async function runWeekly(panel) {
         setStatus(panel, 'Loading…');
         const input = document.getElementById('weekly-growth-window');
@@ -226,6 +261,8 @@
         ].map(([tag, cls]) => el('div', { className: 'report-tag-row' },
             el('span', { className: 'report-tag ' + cls, text: tag }),
             el('span', { className: 'report-tag-count', text: String(tags[tag] || 0) }))));
+
+        renderWeeklyDonations(rep.donations, rep.generated_at);
 
         setMeta(panel, [
             'Week of ' + fmtDate(rep.week_date, true),
@@ -413,6 +450,93 @@
         }
     }
     REPORTS.participation = { run: runParticipation };
+
+    // --- Donations (GET /api/reports/donations) --------------------------------------
+
+    async function loadDonationsMemberPicker() {
+        const sel = document.getElementById('donations-member');
+        if (!sel || sel.dataset.loaded) return;
+        sel.dataset.loaded = '1';
+        try {
+            const res = await fetch('/api/members');
+            if (!res.ok) return;
+            const members = (await res.json()).filter(m => m.rank !== 'EX')
+                .sort((a, b) => a.name.localeCompare(b.name));
+            members.forEach(m => sel.appendChild(el('option', { value: m.id, text: m.name })));
+        } catch { /* the picker stays at Everyone */ }
+    }
+
+    function renderDonations(panel, rep) {
+        const cov = rep.coverage;
+        const weekly = rep.members.filter(m => m.weeks_below_weekly > 0).length;
+        const daily = rep.members.filter(m => m.weeks_below_daily > 0).length;
+        const summary = [el('p', { className: 'report-summary-lead',
+            text: `${weekly} of ${cov.members_evaluated} members below the weekly minimum in at least one week, ${daily} below the daily minimum. Monday–Sunday weeks.` })];
+        summary.push(el('ul', { className: 'report-summary-list' }, rep.weeks.map(w =>
+            el('li', {}, 'Week of ' + fmtDate(w.week_date) + ': weekly ' + donationMinLabel(w.minimums.weekly, w.minimums.source)
+                + ', daily ' + donationMinLabel(w.minimums.daily, w.minimums.source)
+                + ` · ${w.members_read} read, ${w.members_read_to_end} to the end` + (w.over ? '' : ' (still running)')))));
+        if (cov.weeks_without_sunday_reading.length) {
+            summary.push(el('p', { className: 'report-note', text: 'Nobody was read on the Sunday of: '
+                + cov.weeks_without_sunday_reading.map(d => fmtDate(d)).join(', ') + ' — those weeks are not judged on the weekly rule.' }));
+        }
+        summary.push(el('p', { className: 'report-note', text: 'The weekly rule judges a total read on Sunday once the week is over; the daily rule judges days known exactly (readings on two days in a row), from the member\'s join date.'
+            + (cov.members_excluded_ex ? ` Former members are not included (${cov.members_excluded_ex} had readings in this range).` : '') }));
+        document.getElementById('donations-summary').replaceChildren(...summary);
+
+        const sumTable = document.getElementById('donations-summary-table');
+        const sumRows = rep.members.map(m => el('tr', {},
+            el('td', { text: m.name }),
+            el('td', {}, el('span', { className: 'member-rank rank-' + m.rank, text: m.rank })),
+            numCell(String(m.weeks.length), m.weeks.length),
+            numCell(String(m.weeks_below_weekly), m.weeks_below_weekly),
+            numCell(String(m.weeks_below_daily), m.weeks_below_daily),
+            numCell(String(m.weeks_not_read), m.weeks_not_read)));
+        if (!sumRows.length) sumRows.push(el('tr', {}, el('td', { colspan: '6', className: 'report-empty', text: 'No members.' })));
+        sumTable.tBodies[0].replaceChildren(...sumRows);
+        exportReady(sumTable);
+
+        const minsByWeek = Object.fromEntries(rep.weeks.map(w => [w.week_date, w.minimums]));
+        const weekTable = document.getElementById('donations-weeks-table');
+        const rows = [];
+        rep.members.forEach(m => m.weeks.forEach((w, i) => {
+            const mins = minsByWeek[w.week_date] || {};
+            const below = [w.below_weekly ? 'weekly' : '', w.below_daily ? `daily (${w.days_below_daily} days)` : '', w.not_read_to_end ? 'not read to end' : '']
+                .filter(Boolean).join(', ');
+            rows.push(el('tr', { className: i === 0 ? 'report-group-start' : null },
+                el('td', { text: m.name }),
+                el('td', { dataset: { exportValue: w.week_date }, text: fmtDate(w.week_date, true) }),
+                ...w.days.map(DonationMarks.dayCell),
+                DonationMarks.totalCell(w.total, w),
+                numCell(mins.weekly > 0 ? mins.weekly.toLocaleString('en-US') : 'off', mins.weekly || 0),
+                numCell(mins.daily > 0 ? mins.daily.toLocaleString('en-US') : 'off', mins.daily || 0),
+                el('td', { text: below })));
+        }));
+        if (!rows.length) rows.push(el('tr', {}, el('td', { colspan: '13', className: 'report-empty', text: 'No weeks in this range.' })));
+        weekTable.tBodies[0].replaceChildren(...rows);
+        exportReady(weekTable);
+
+        const legend = document.getElementById('donations-legend');
+        if (legend && !legend.childElementCount) legend.appendChild(DonationMarks.legend());
+
+        setMeta(panel, [fmtRange(rep.from, rep.to) + ' (Monday–Sunday weeks)', 'Generated ' + fmtGenerated(rep.generated_at)]);
+        showBody(panel);
+    }
+
+    async function runDonations(panel) {
+        loadDonationsMemberPicker();
+        setStatus(panel, 'Loading…');
+        const params = rangeQuery(panel);
+        const member = document.getElementById('donations-member').value;
+        if (member) params.set('member_id', member);
+        try {
+            renderDonations(panel, await fetchReport('/api/reports/donations?' + params));
+        } catch (e) {
+            panel.querySelector('.report-body').style.display = 'none';
+            setStatus(panel, 'Could not run the report: ' + e.message, true);
+        }
+    }
+    REPORTS.donations = { run: runDonations };
 
     // --- Page ----------------------------------------------------------------------
 

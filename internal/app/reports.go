@@ -31,6 +31,7 @@ type reportDef struct {
 var reportDefs = []reportDef{
 	{Key: "weekly", Title: "Weekly summary", Permission: "view_report_weekly"},
 	{Key: "vs-misses", Title: "VS misses", Permission: "view_report_vs_misses"},
+	{Key: "donations", Title: "Donations", Permission: "view_report_donations"},
 	{Key: "participation", Title: "Participation grid", Permission: "view_report_participation"},
 }
 
@@ -99,14 +100,49 @@ func lastCompleteSaturday(now time.Time) string {
 	return formatDateString(today.AddDate(0, 0, -back))
 }
 
+// reportWeekKind is which week a report's ranges count in: VS's Monday–Saturday, or the
+// donation week's Monday–Sunday. Only the end of a complete week and the earliest data
+// differ; the rest of the resolution is one rule.
+type reportWeekKind int
+
+const (
+	reportWeekVS reportWeekKind = iota
+	reportWeekDonation
+)
+
+// lastCompleteSunday is the most recent Sunday strictly before today's game date: the end
+// of the last donation week that is over (yesterday on a Monday, a week back on a Sunday).
+func lastCompleteSunday(now time.Time) string {
+	today, _ := parseDate(gametime.DateOf(now))
+	dow := (int(today.Weekday()) + 6) % 7 // Mon=0 … Sun=6
+	back := (dow - 6 + 7) % 7
+	if back == 0 {
+		back = 7
+	}
+	return formatDateString(today.AddDate(0, 0, -back))
+}
+
 // resolveReportRange turns params into explicit game dates, so the page, the exports
 // and an adapter resolve "last 4 weeks" identically. The end is never after today's
 // game date; nothing reads the wall clock. There is no span cap: report queries are
-// bounded by stored rows, not by the span asked for.
+// bounded by stored rows, not by the span asked for. VS weeks; resolveReportRangeFor
+// takes the kind.
 func resolveReportRange(q rowQuerier, p reportRangeParams, now time.Time) (reportRange, error) {
+	return resolveReportRangeFor(q, p, now, reportWeekVS)
+}
+
+// resolveReportRangeFor is resolveReportRange in kind's weeks: weeks=N ends on the last
+// complete Saturday (VS) or Sunday (donations); all starts at the earliest vs_points week
+// or donation reading.
+func resolveReportRangeFor(q rowQuerier, p reportRangeParams, now time.Time, kind reportWeekKind) (reportRange, error) {
 	today := gametime.DateOf(now)
-	lastSat := lastCompleteSaturday(now)
-	end := lastSat
+	lastEnd, weekDays := lastCompleteSaturday(now), 6
+	earliestSQL, noneMsg := `SELECT MIN(week_date) FROM vs_points`, "no VS points are recorded yet"
+	if kind == reportWeekDonation {
+		lastEnd, weekDays = lastCompleteSunday(now), 7
+		earliestSQL, noneMsg = `SELECT MIN(game_date) FROM donation_readings`, "no donation readings are recorded yet"
+	}
+	end := lastEnd
 	if p.Current {
 		end = today
 	}
@@ -115,20 +151,23 @@ func resolveReportRange(q rowQuerier, p reportRangeParams, now time.Time) (repor
 	case p.Weeks < 0:
 		return reportRange{}, badReportParam("weeks must be positive")
 	case p.Weeks > 0:
-		sat, _ := parseDate(lastSat)
-		from := formatDateString(sat.AddDate(0, 0, -5-7*(p.Weeks-1)))
+		last, _ := parseDate(lastEnd)
+		from := formatDateString(last.AddDate(0, 0, -(weekDays-1)-7*(p.Weeks-1)))
 		return reportRange{From: from, To: end}, nil
 	case p.All:
 		var earliest sql.NullString
-		if err := q.QueryRow(`SELECT MIN(week_date) FROM vs_points`).Scan(&earliest); err != nil {
+		if err := q.QueryRow(earliestSQL).Scan(&earliest); err != nil {
 			return reportRange{}, err
 		}
 		if !earliest.Valid || earliest.String == "" {
-			return reportRange{}, badReportParam("no VS points are recorded yet")
+			return reportRange{}, badReportParam(noneMsg)
 		}
-		return reportRange{From: earliest.String, To: end}, nil
+		from := earliest.String
+		if kind == reportWeekDonation {
+			from = donationWeekMonday(from)
+		}
+		return reportRange{From: from, To: end}, nil
 	}
-
 	if p.From == "" || p.To == "" {
 		return reportRange{}, badReportParam("give weeks, all, or both from and to")
 	}

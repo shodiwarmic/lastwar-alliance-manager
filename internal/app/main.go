@@ -431,6 +431,7 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/reports", authMiddleware(handleReportsList)).Methods("GET")
 	router.HandleFunc("/api/reports/weekly", authMiddleware(requirePermission("view_report_weekly", handleWeeklySummaryReport))).Methods("GET")
 	router.HandleFunc("/api/reports/vs-misses", authMiddleware(requirePermission("view_report_vs_misses", handleVSMissesReport))).Methods("GET")
+	router.HandleFunc("/api/reports/donations", authMiddleware(requirePermission("view_report_donations", handleDonationsReport))).Methods("GET")
 	router.HandleFunc("/api/reports/participation", authMiddleware(requirePermission("view_report_participation", handleParticipationGridReport))).Methods("GET")
 	router.HandleFunc("/accountability/report", handleAccountabilityReport).Methods("GET") // 301 → /reports#weekly
 	router.HandleFunc("/accountability/{id:[0-9]+}", authMiddleware(handleAccountabilityProfile)).Methods("GET")
