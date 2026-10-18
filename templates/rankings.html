@@ -233,7 +233,17 @@
                 <label for="donations-week-select" class="icon-label donations-week"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-calendar"/></svg> Week:
                     <select id="donations-week-select" class="form-input"></select>
                 </label>
+                {{if .Permissions.ManageMembers}}
+                <div class="donations-edit-actions">
+                    <button type="button" id="donations-edit-btn" class="btn btn-secondary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-pencil"/></svg> Enter by hand</button>
+                    <button type="button" id="donations-save-btn" class="btn btn-primary btn-sm" style="display:none">Save</button>
+                    <button type="button" id="donations-cancel-btn" class="btn btn-secondary btn-sm" style="display:none">Cancel</button>
+                    <button type="button" id="donations-import-btn" class="btn btn-secondary btn-sm"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-upload"/></svg> Import CSV</button>
+                    <input type="file" id="donations-import-file" accept=".csv,text/csv" style="display:none">
+                </div>
+                {{end}}
             </div>
+            <p id="donations-edit-hint" class="donations-minimums" style="display:none">Type what each member gave on each day. A typed day is exact and replaces what the screenshots worked out for it; clear a cell to go back to them. Blank cells show the screenshots' figure as a hint. Only the cells you change are saved.</p>
             <p id="donations-minimums" class="donations-minimums"></p>
             <div style="overflow-x: auto;">
                 <table class="analytics-table" id="donations-table" data-export-csv="donations.csv" translate="no">
@@ -267,4 +277,26 @@
 <script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/donation-marks.js"}}"></script>
 <script src="{{asset "/rankings.js"}}"></script>
+{{end}}
+
+{{define "modals"}}
+{{if .Permissions.ManageMembers}}
+<div id="donations-import-modal" class="modal">
+    <div class="modal-content modal-lg">
+        <h2>Import donations</h2>
+        <p class="help-text">Each row is a member's days from the file. Map any name that was not recognised, or leave it unmapped to skip it. Importing replaces what is entered for those days.</p>
+        <div id="donations-import-errors" class="import-row-warning" style="display:none"></div>
+        <div class="table-scroll">
+            <table class="data-table" translate="no">
+                <thead><tr><th>Member in file</th><th>Member</th><th>Days</th><th>Total</th></tr></thead>
+                <tbody id="donations-import-tbody"></tbody>
+            </table>
+        </div>
+        <div class="modal-actions">
+            <button type="button" id="donations-import-cancel" class="btn btn-secondary">Cancel</button>
+            <button type="button" id="donations-import-confirm" class="btn btn-primary">Import</button>
+        </div>
+    </div>
+</div>
+{{end}}
 {{end}}

@@ -5,6 +5,7 @@
 .don-so-far, td.don-so-far { color: var(--text-muted); }
 .don-blank, td.don-blank { color: var(--text-muted); }
 .don-below, td.don-below { color: var(--color-danger); font-weight: 600; }
+.don-entered, td.don-entered { text-decoration: underline dotted; text-underline-offset: 3px; }
 .don-badge {
     display: inline-block;
     margin-left: 4px;

@@ -24,7 +24,10 @@ const DonationMarks = (() => {
         }
         td.textContent = amount(day.amount);
         td.dataset.exportValue = String(day.amount);
-        if (day.status === 'so_far') {
+        if (day.entered) {
+            td.className = 'don-entered';
+            td.title = 'Entered by hand';
+        } else if (day.status === 'so_far') {
             td.className = 'don-so-far';
             td.title = day.note
                 ? `So far — this day's readings were ${day.note}`
@@ -64,6 +67,7 @@ const DonationMarks = (() => {
         const mark = (cls, text) => Object.assign(document.createElement('span'), { className: cls, textContent: text });
         p.append(
             'Days: plain = exact (readings on two days in a row pin it); ',
+            mark('don-entered', 'dotted'), ' = entered by hand; ',
             mark('don-so-far', 'muted'), ' = so far (that day\'s own reading only); ',
             mark('don-blank', '—'), ' = not read. ',
             'Sunday is never exact — the week restarts on Monday — so its last reading counts once the week is over. ',

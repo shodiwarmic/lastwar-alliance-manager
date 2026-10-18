@@ -218,14 +218,20 @@ type donationHalf struct {
 	CapturedAt string
 }
 
-// donationDayReadings is what is stored for one member on one game day.
-type donationDayReadings struct{ Today, Week *donationHalf }
+// donationDayReadings is what is stored for one member on one game day: the two halves a
+// screen gave, and the amount an officer entered by hand (donation_day_entries), if any.
+type donationDayReadings struct {
+	Today, Week *donationHalf
+	Entered     *int64
+}
 
 // donationDay is one derived day. Note names an incoherent or conflicting pair.
 type donationDay struct {
 	Amount int64  `json:"amount"`
 	Status string `json:"status"` // exact | so_far | blank
 	Note   string `json:"note,omitempty"`
+	// Entered marks an amount an officer typed or imported: exact, whatever the readings say.
+	Entered bool `json:"entered,omitempty"`
 }
 
 // donationWeekTotal is the week's total: the latest week half of the week.
@@ -317,11 +323,15 @@ func deriveDonationWeek(weekDate string, days [7]donationDayReadings, now time.T
 
 	for d := 0; d < 7; d++ {
 		r := days[d]
-		if r.Today != nil || r.Week != nil {
+		if r.Today != nil || r.Week != nil || r.Entered != nil {
 			out.LastReadDay = d
 		}
 		day := donationDay{Status: donationBlank, Note: notes[d]}
 		switch {
+		case r.Entered != nil:
+			// An officer's amount for the day: exact, and it replaces the derived one. The
+			// readings' chain is untouched, so the days around it derive as before.
+			day = donationDay{Amount: *r.Entered, Status: donationExact, Entered: true}
 		case conflict[d]:
 			// blank, with the note
 		case d < 6 && known[d] && known[d+1]:
@@ -337,6 +347,21 @@ func deriveDonationWeek(weekDate string, days [7]donationDayReadings, now time.T
 	}
 
 	out.Total = donationWeekTotal{Status: donationBlank}
+	// A week entered by hand on every day totals its days: final once the week is over.
+	entered, sum := 0, int64(0)
+	for d := 0; d < 7; d++ {
+		if days[d].Entered != nil {
+			entered++
+			sum += *days[d].Entered
+		}
+	}
+	if entered == 7 {
+		out.Total = donationWeekTotal{Amount: sum, Status: donationSoFar}
+		if out.WeekOver {
+			out.Total.Status = donationFinal
+		}
+		return out
+	}
 	for d := 6; d >= 0; d-- {
 		if w := days[d].Week; w != nil {
 			out.Total.Amount = w.Amount
@@ -426,6 +451,38 @@ func loadDonationWeeksOf(q rowQueryer, memberID int, from, to string, now time.T
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	entries, err := q.Query(`SELECT member_id, game_date, amount FROM donation_day_entries
+		WHERE game_date BETWEEN ? AND ? AND (? = 0 OR member_id = ?)`, first, last, memberID, memberID)
+	if err != nil {
+		return nil, err
+	}
+	for entries.Next() {
+		var memberID int
+		var gameDate string
+		var amount int64
+		if err := entries.Scan(&memberID, &gameDate, &amount); err != nil {
+			entries.Close()
+			return nil, err
+		}
+		week := donationWeekMonday(gameDate)
+		d, err := daysBetween(week, gameDate)
+		if err != nil || d < 0 || d > 6 {
+			continue
+		}
+		if readings[memberID] == nil {
+			readings[memberID] = map[string]*[7]donationDayReadings{}
+		}
+		w := readings[memberID][week]
+		if w == nil {
+			w = &[7]donationDayReadings{}
+			readings[memberID][week] = w
+		}
+		a := amount
+		w[d].Entered = &a
+	}
+	if err := entries.Close(); err != nil {
+		return nil, err
+	}
 	out := make(map[int]map[string]donationWeek, len(readings))
 	for memberID, weeks := range readings {
 		out[memberID] = make(map[string]donationWeek, len(weeks))
@@ -456,7 +513,8 @@ func donationWeeksAvailable(q rowQueryer) ([]string, error) {
 
 // donationWeeksAvailableOf is donationWeeksAvailable for one member (0: every member).
 func donationWeeksAvailableOf(q rowQueryer, memberID int) ([]string, error) {
-	rows, err := q.Query(`SELECT DISTINCT game_date FROM donation_readings WHERE ? = 0 OR member_id = ?`, memberID, memberID)
+	rows, err := q.Query(`SELECT game_date FROM donation_readings WHERE ? = 0 OR member_id = ?
+		UNION SELECT game_date FROM donation_day_entries WHERE ? = 0 OR member_id = ?`, memberID, memberID, memberID, memberID)
 	if err != nil {
 		return nil, err
 	}
@@ -740,4 +798,103 @@ func memberDonationHistory(q rowQueryer, memberID int, joinedAt string, limit in
 			Minimums: mins[week], donationJudgement: judgeDonationWeek(w, mins[week], joinedAt)})
 	}
 	return out, nil
+}
+
+// --- entered days -------------------------------------------------------------------------
+
+// donationEntryCell is one day cell from the Donations tab or a CSV: Amount nil clears the
+// entry. Was is the entered amount the page loaded (nil: none); a manual save is refused for a
+// cell whose stored entry no longer matches it, so an officer never overwrites a change made
+// underneath. A CSV import passes CheckWas false: importing is an intent to replace.
+type donationEntryCell struct {
+	MemberID int    `json:"member_id"`
+	GameDate string `json:"game_date"`
+	Amount   *int64 `json:"amount"`
+	Was      *int64 `json:"was"`
+}
+
+type donationEntryConflict struct {
+	MemberID int    `json:"member_id"`
+	GameDate string `json:"game_date"`
+	Stored   *int64 `json:"stored"`
+	Wanted   *int64 `json:"wanted"`
+}
+
+type donationEntryResult struct {
+	Saved     int                     `json:"saved"`
+	Cleared   int                     `json:"cleared"`
+	Unchanged int                     `json:"unchanged"`
+	Conflicts []donationEntryConflict `json:"conflicts"`
+	Errors    []string                `json:"errors"`
+}
+
+func sameAmount(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+// saveDonationEntriesTx writes entered days in one transaction the caller commits. Each cell is
+// validated (an active member, a date no later than today's game date, an amount ≥ 0) and
+// refused into Errors otherwise; the rest are written. source is manual or csv.
+func saveDonationEntriesTx(tx historyExecer, cells []donationEntryCell, source string, checkWas bool, userID int, now time.Time) (donationEntryResult, error) {
+	res := donationEntryResult{Conflicts: []donationEntryConflict{}, Errors: []string{}}
+	today := gametime.DateOf(now)
+	for _, c := range cells {
+		if _, err := time.Parse(gametime.DateLayout, c.GameDate); err != nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("member %d: %q is not a YYYY-MM-DD date", c.MemberID, c.GameDate))
+			continue
+		}
+		if c.GameDate > today {
+			res.Errors = append(res.Errors, fmt.Sprintf("member %d, %s: after today's game date", c.MemberID, c.GameDate))
+			continue
+		}
+		if c.Amount != nil && *c.Amount < 0 {
+			res.Errors = append(res.Errors, fmt.Sprintf("member %d, %s: %d is below 0", c.MemberID, c.GameDate, *c.Amount))
+			continue
+		}
+		var rank string
+		if err := tx.QueryRow(`SELECT rank FROM members WHERE id = ?`, c.MemberID).Scan(&rank); err != nil || rank == "EX" {
+			if err != nil && err != sql.ErrNoRows {
+				return res, err
+			}
+			res.Errors = append(res.Errors, fmt.Sprintf("member %d: not an active member", c.MemberID))
+			continue
+		}
+		var stored *int64
+		var v int64
+		switch err := tx.QueryRow(`SELECT amount FROM donation_day_entries WHERE member_id = ? AND game_date = ?`,
+			c.MemberID, c.GameDate).Scan(&v); err {
+		case nil:
+			stored = &v
+		case sql.ErrNoRows:
+		default:
+			return res, err
+		}
+		if sameAmount(stored, c.Amount) {
+			res.Unchanged++
+			continue
+		}
+		if checkWas && !sameAmount(stored, c.Was) {
+			res.Conflicts = append(res.Conflicts, donationEntryConflict{MemberID: c.MemberID, GameDate: c.GameDate, Stored: stored, Wanted: c.Amount})
+			continue
+		}
+		if c.Amount == nil {
+			if _, err := tx.Exec(`DELETE FROM donation_day_entries WHERE member_id = ? AND game_date = ?`, c.MemberID, c.GameDate); err != nil {
+				return res, err
+			}
+			res.Cleared++
+			continue
+		}
+		if _, err := tx.Exec(`INSERT INTO donation_day_entries (member_id, game_date, amount, source, entered_by)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(member_id, game_date) DO UPDATE SET amount = excluded.amount, source = excluded.source,
+				entered_by = excluded.entered_by, updated_at = CURRENT_TIMESTAMP`,
+			c.MemberID, c.GameDate, *c.Amount, source, nullUserID(userID)); err != nil {
+			return res, err
+		}
+		res.Saved++
+	}
+	return res, nil
 }

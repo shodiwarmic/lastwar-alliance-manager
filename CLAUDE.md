@@ -1374,7 +1374,14 @@ never derived figures.
   week, reason naming every rule). **Strikes take their week from the response, never from
   the browser** (private-docs 266). `handleStrikeCreate`'s one-per-week guard covers
   `vs_below_threshold` and `donation_below_minimum` and runs in the insert's transaction.
-- **Member delete** removes the readings (`deleteMemberTx`); `foreign_keys` is off.
+- **Days entered by hand** (`donation_day_entries`, migration 087, private-docs 290) are a second
+  fact beside the readings: an officer's amount for a member and day, typed on Tracking →
+  Donations or imported from CSV. An entered day is exact (`entered: true`) and replaces the
+  derived amount for that day only; a week with all seven days entered totals their sum. Written
+  only by `saveDonationEntriesTx`: changed cells only, each with the value the page loaded
+  (`was`) — a manual save refuses a cell changed underneath, a CSV confirm replaces. In
+  `mobileExcludedTables`: phones send readings.
+- **Member delete** removes the readings and entries (`deleteMemberTx`); `foreign_keys` is off.
 
 ## Reporting layer (`reports_*.go`)
 

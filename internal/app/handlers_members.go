@@ -405,6 +405,9 @@ func clearUserReferences(q interface {
 		}
 	}
 	// The rows stay: a week's minimum is history whoever set it.
+	if _, err := q.Exec(`UPDATE donation_day_entries SET entered_by = NULL WHERE entered_by IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
+		return err
+	}
 	for _, tbl := range []string{"vs_week_minimums", "donation_week_minimums"} {
 		if _, err := q.Exec(`UPDATE `+tbl+` SET set_by = NULL WHERE set_by IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
 			return err
@@ -433,6 +436,7 @@ func deleteMemberTx(tx *sql.Tx, id int) error {
 		{"hero power history", `DELETE FROM hero_power_history WHERE member_id = ?`},
 		{"kill history", `DELETE FROM kill_history WHERE member_id = ?`},
 		{"donation readings", `DELETE FROM donation_readings WHERE member_id = ?`},
+		{"donation day entries", `DELETE FROM donation_day_entries WHERE member_id = ?`},
 	}
 	for _, s := range steps {
 		if _, err := tx.Exec(s.q, id); err != nil {

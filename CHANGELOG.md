@@ -18,7 +18,7 @@ a Donations report, the Weekly summary and the dashboard.
 ([#127](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/127))
 
 **Minor** — an image pull; nothing on the host changes and no `.env` needs editing. One database
-migration (086) adds two tables, three settings columns, a strike category and a permission key.
+migrations (086, 087) add three tables, three settings columns, a strike category and a permission key.
 
 - **Donations are recorded.** The game shows each member's donation *today* and *this week* (Monday
   to Sunday), both so far. Readings from two days in a row make a day exact; a day with only its own
@@ -29,6 +29,10 @@ migration (086) adds two tables, three settings columns, a strike category and a
   asks which game day the screens were taken on, today by default. **Needs the OCR service v1.0.1 or
   later**, which tells the Donation tabs apart from Power: earlier versions read every Donation
   screenshot as Power.
+- **Entered by hand, or from a CSV.** On Tracking → Donations, officers with roster management can
+  type each member's daily donation (correcting a misread, or filling in someone nobody scanned) and
+  import a CSV of them, previewed before it saves. A typed day replaces the screenshots' figure for
+  that day.
 - **The Android scanner** can send both tabs through the mobile API (`donation_daily`,
   `donation_weekly`; `api_version` 3). The scanner release that uses it comes separately.
 - **Minimums and strikes.** Alliance Settings → Donations: a weekly and a daily minimum, each

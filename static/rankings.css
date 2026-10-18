@@ -53,3 +53,17 @@
     color: var(--text-muted);
     font-size: 0.85em;
 }
+
+/* Entering donations by hand: the actions sit with the week picker; the inputs fit a day column. */
+.donations-edit-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.donations-input {
+    width: 6.5em;
+    min-width: 4.5em;
+    padding: 4px 6px;
+    text-align: right;
+}
