@@ -15,7 +15,7 @@ needs only a new image, while a **major** changes something outside the image. F
 Weekly tabs by screenshot upload or the Android scanner, worked out into daily amounts, judged
 against a weekly and a daily minimum, and shown on Tracking, Accountability, each member's profile,
 a Donations report, the Weekly summary and the dashboard.
-([#PR](https://github.com/shodiwarmic/lastwar-alliance-manager/pulls))
+([#127](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/127))
 
 **Minor** — an image pull; nothing on the host changes and no `.env` needs editing. One database
 migration (086) adds two tables, three settings columns, a strike category and a permission key.
