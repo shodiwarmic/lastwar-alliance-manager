@@ -9,6 +9,7 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/order-buttons.css"}}">
+<link rel="stylesheet" href="{{asset "/donation-marks.css"}}">
 <link rel="stylesheet" href="{{asset "/accountability.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -43,6 +44,15 @@
             {{end}}
         </div>
 
+        <div id="donation-flag-banner" style="display:none" class="acc-flag-banner acc-flag-banner--donation">
+            <strong class="icon-label"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-gift"/></svg> <span id="donation-flag-heading">Members below the donation minimum:</span></strong>
+            <span id="donation-flag-names"></span>
+            {{if .Permissions.ManageAccountability}}
+            <button id="btn-add-donation-strikes" class="btn btn-warning btn-sm" style="margin-left:8px;"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-flag"/></svg> Add Donation Strikes</button>
+            {{end}}
+            <span id="donation-flag-note" class="acc-week-note"></span>
+        </div>
+
         <div class="table-wrapper">
             <table class="data-table" id="members-table" data-export-csv="accountability.csv" translate="no">
                 <thead>
@@ -52,11 +62,12 @@
                         <th>Tag</th>
                         <th>Active Strikes</th>
                         <th>VS This Week</th>
+                        <th id="donations-col-head" data-export-key="donations">Donations</th>
                         <th data-no-export></th>
                     </tr>
                 </thead>
                 <tbody id="members-tbody">
-                    <tr><td colspan="6" class="loading-msg">Loading…</td></tr>
+                    <tr><td colspan="7" class="loading-msg">Loading…</td></tr>
                 </tbody>
             </table>
         </div>
@@ -187,12 +198,7 @@
 
 {{define "scripts"}}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
-<div id="page-config" data-can-manage="{{if .Permissions.ManageAccountability}}true{{else}}false{{end}}"
-     data-vs-completed="{{.VSCompletedDays}}"
-     data-vs-minimum="{{.VSMinimumPoints}}"
-     data-vs-minimum-source="{{.VSMinimumSource}}"
-     data-vs-imported-completed="{{.VSImportedCompleted}}"
-     data-vs-fallback="{{if .VSFallbackActive}}true{{else}}false{{end}}" hidden></div>
+<div id="page-config" data-can-manage="{{if .Permissions.ManageAccountability}}true{{else}}false{{end}}" hidden></div>
 <script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/order-buttons.js"}}"></script>
 <script src="{{asset "/tabs.js"}}"></script>

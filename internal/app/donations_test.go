@@ -1,8 +1,11 @@
 package app
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -125,10 +128,10 @@ func TestDeriveDonationWeekEdges(t *testing.T) {
 func TestDonationResetWindow(t *testing.T) {
 	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	for raw, refused := range map[string]bool{
-		"2026-10-14T01:59:59Z": false,
-		"2026-10-14T02:00:00Z": true,
-		"2026-10-14T02:09:59Z": true,
-		"2026-10-14T02:10:00Z": false,
+		"2026-10-14T01:59:59Z":      false,
+		"2026-10-14T02:00:00Z":      true,
+		"2026-10-14T02:09:59Z":      true,
+		"2026-10-14T02:10:00Z":      false,
 		"2026-10-14T00:05:00-02:00": true, // the same instant written in game time
 	} {
 		_, err := parseDonationCapturedAt(raw, now)
@@ -296,5 +299,281 @@ func TestDonationsMigrationFreshInstall(t *testing.T) {
 	var sys int
 	if err := conn.QueryRow(`SELECT is_system FROM strike_types WHERE key = 'donation_below_minimum'`).Scan(&sys); err != nil || sys != 1 {
 		t.Errorf("strike row: %d, %v", sys, err)
+	}
+}
+
+// The Settings save records the week's donation minimums, as it does VS's: an unchanged
+// save writes nothing; two saves in one week leave one row; 0 is a real value; an omitted
+// minimum keeps the stored one; the day count is 1–7; a failing history write rolls back.
+func TestSettingsSaveRecordsTheWeeksDonationMinimums(t *testing.T) {
+	setupSettingsTestDB(t)
+	with := func(weekly, daily any, flag int) map[string]any {
+		s := baseSettings()
+		s["donation_weekly_minimum"], s["donation_daily_minimum"], s["donation_flag_days_threshold"] = weekly, daily, flag
+		if weekly == nil {
+			delete(s, "donation_weekly_minimum")
+		}
+		return s
+	}
+	if w := putSettings(t, with(0, 0, 2)); w.Code != http.StatusOK {
+		t.Fatalf("unchanged: %d %s", w.Code, w.Body)
+	}
+	if n := countRows(t, `SELECT COUNT(*) FROM donation_week_minimums`); n != 0 {
+		t.Errorf("unchanged minimums wrote %d rows", n)
+	}
+	putSettings(t, with(40000, 2000, 3))
+	putSettings(t, with(50000, 2000, 3))
+	var n, weekly, daily int
+	var week string
+	db.QueryRow(`SELECT COUNT(*), MAX(week_date), MAX(weekly_minimum), MAX(daily_minimum) FROM donation_week_minimums`).Scan(&n, &week, &weekly, &daily)
+	if n != 1 || week != currentVSWeekMonday() || weekly != 50000 || daily != 2000 {
+		t.Errorf("rows %d week %s weekly %d daily %d", n, week, weekly, daily)
+	}
+	var details string
+	db.QueryRow(`SELECT details FROM activity_log WHERE entity_type = 'donation_week_minimum' ORDER BY id DESC LIMIT 1`).Scan(&details)
+	if details != "weekly: 40000 → 50000; daily: 2000 → 2000" {
+		t.Errorf("activity details %q", details)
+	}
+	var flag int
+	db.QueryRow(`SELECT donation_flag_days_threshold FROM settings WHERE id = 1`).Scan(&flag)
+	if flag != 3 {
+		t.Errorf("flag days = %d", flag)
+	}
+
+	// Omitted weekly minimum: kept. 0 daily: recorded as off.
+	putSettings(t, with(nil, 0, 0))
+	db.QueryRow(`SELECT weekly_minimum, daily_minimum FROM donation_week_minimums`).Scan(&weekly, &daily)
+	db.QueryRow(`SELECT donation_flag_days_threshold FROM settings WHERE id = 1`).Scan(&flag)
+	if weekly != 50000 || daily != 0 || flag != 3 {
+		t.Errorf("after an omitted weekly and a 0 daily: weekly %d daily %d flag %d", weekly, daily, flag)
+	}
+
+	for _, bad := range []map[string]any{with(-1, 0, 2), with(0, -5, 2), with(0, 0, 8)} {
+		if w := putSettings(t, bad); w.Code != http.StatusBadRequest {
+			t.Errorf("%v: status %d, want 400", bad, w.Code)
+		}
+	}
+
+	mustExec(t, `DROP TABLE donation_week_minimums`)
+	if w := putSettings(t, with(60000, 0, 3)); w.Code != http.StatusInternalServerError {
+		t.Errorf("failing history write: status %d", w.Code)
+	}
+	db.QueryRow(`SELECT donation_weekly_minimum FROM settings WHERE id = 1`).Scan(&weekly)
+	if weekly != 50000 {
+		t.Errorf("setting = %d after a failed save, want 50000", weekly)
+	}
+}
+
+func TestDonationMinimumsResolve(t *testing.T) {
+	setupSettingsTestDB(t)
+	mustExec(t, `UPDATE settings SET donation_weekly_minimum = 9, donation_daily_minimum = 1, donation_flag_days_threshold = 4 WHERE id = 1`)
+	mustExec(t, `INSERT INTO donation_week_minimums (week_date, weekly_minimum, daily_minimum) VALUES ('2026-09-28', 30000, 1000), ('2026-10-12', 0, 2000)`)
+	got, err := donationMinimumsForWeeks(db, []string{"2026-09-21", "2026-10-05", "2026-10-12", "2026-10-19"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]donationMinimums{
+		"2026-09-21": {9, 1, 4, vsMinSourceCurrent},
+		"2026-10-05": {30000, 1000, 4, vsMinSourceRecorded},
+		"2026-10-12": {0, 2000, 4, vsMinSourceRecorded},
+		"2026-10-19": {0, 2000, 4, vsMinSourceRecorded},
+	}
+	for w, m := range want {
+		if got[w] != m {
+			t.Errorf("%s = %+v, want %+v", w, got[w], m)
+		}
+		one, _ := donationMinimumsForWeek(db, w)
+		if one != m {
+			t.Errorf("single %s = %+v, want %+v", w, one, m)
+		}
+	}
+}
+
+func TestJudgeDonationWeek(t *testing.T) {
+	over := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	w := deriveDonationWeek("2026-10-12", workedDonationWeek(), over) // total 6,400 final; Mon 2500 Thu 900 Fri 1000 Sat 900 exact, Sun 400
+	mins := donationMinimums{Weekly: 7000, Daily: 950, FlagDays: 3}
+
+	j := judgeDonationWeek(w, mins, "2025-01-01")
+	// Judged: Mon, Thu, Fri, Sat (exact) and Sunday (week over) = 5; below 950: Thu 900, Sat 900, Sun 400.
+	if !j.BelowWeekly || j.NotReadToEnd || j.JudgedDays != 5 || j.DaysBelowDaily != 3 || !j.BelowDaily {
+		t.Errorf("judgement %+v", j)
+	}
+	// Tuesday's so-far 500 is never judged; minimum 0 flags nobody.
+	if j := judgeDonationWeek(w, donationMinimums{FlagDays: 1}, ""); j.BelowWeekly || j.BelowDaily || j.NotReadToEnd {
+		t.Errorf("minimums off: %+v", j)
+	}
+	// Joined on the Thursday: not judged weekly; Mon is before joining.
+	if j := judgeDonationWeek(w, mins, "2026-10-15"); j.BelowWeekly || !j.JoinedMidWeek || j.JudgedDays != 4 {
+		t.Errorf("joined mid-week: %+v", j)
+	}
+	// No Sunday reading: not read to the end, never below.
+	days := workedDonationWeek()
+	days[6] = donationDayReadings{}
+	w2 := deriveDonationWeek("2026-10-12", days, over)
+	if j := judgeDonationWeek(w2, mins, ""); j.BelowWeekly || !j.NotReadToEnd {
+		t.Errorf("no Sunday: %+v", j)
+	}
+	// The week still running: Sunday is not judged and the weekly rule waits.
+	during := deriveDonationWeek("2026-10-12", workedDonationWeek(), time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
+	if j := judgeDonationWeek(during, mins, ""); j.BelowWeekly || j.NotReadToEnd || j.JudgedDays != 4 {
+		t.Errorf("week running: %+v", j)
+	}
+}
+
+// donationDayAt stores both halves of one day, read at 20:00 UTC (that game day).
+func donationDayAt(t *testing.T, member int, date string, today, week int64) {
+	t.Helper()
+	for _, h := range []struct {
+		kind   string
+		amount int64
+	}{{"today", today}, {"week", week}} {
+		mustExec(t, `INSERT INTO donation_readings (member_id, game_date, kind, amount, captured_at, source)
+			VALUES (?, ?, ?, ?, ? || ' 20:00:00', 'ocr')`, member, date, h.kind, h.amount, date)
+	}
+}
+
+// The members API judges both donation rules on the right weeks and says which, and the
+// strike targets come with the verdicts (258, 266, decision 23).
+func TestAccountabilityMembersJudgesDonations(t *testing.T) {
+	setupSettingsTestDB(t)
+	a := seedMember(t, "Alder", "R3")   // last week's total below the weekly minimum
+	b := seedMember(t, "Birch", "R3")   // this week below the daily minimum on two days
+	c := seedMember(t, "Cedar", "R3")   // last week never read on Sunday
+	d := seedMember(t, "Dogwood", "R3") // nothing read at all
+	mustExec(t, `UPDATE settings SET donation_flag_days_threshold = 2 WHERE id = 1`)
+	mustExec(t, `INSERT INTO donation_week_minimums (week_date, weekly_minimum, daily_minimum) VALUES ('2026-10-05', 25000, 2000)`)
+	donationDayAt(t, a, "2026-10-11", 1000, 20000)
+	donationDayAt(t, b, "2026-10-11", 4000, 30000)
+	donationDayAt(t, c, "2026-10-08", 3000, 12000)
+	donationDayAt(t, b, "2026-10-12", 1000, 1000)
+	donationDayAt(t, b, "2026-10-13", 500, 1500)
+	donationDayAt(t, b, "2026-10-14", 300, 1800)
+
+	wed := time.Date(2026, 10, 14, 21, 0, 0, 0, time.UTC)
+	resp, err := loadAccountabilityMembers(db, wed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := resp.Context
+	if ctx.DonationWeeklyWeek != "2026-10-05" || ctx.DonationDailyWeek != "2026-10-12" || ctx.DonationJudgedDays != 2 {
+		t.Errorf("context %+v", ctx)
+	}
+	if ctx.DonationWeeklyMinimums.Weekly != 25000 || ctx.DonationDailyMinimums.Daily != 2000 || ctx.DonationDailyMinimums.Source != vsMinSourceRecorded {
+		t.Errorf("minimums %+v / %+v", ctx.DonationWeeklyMinimums, ctx.DonationDailyMinimums)
+	}
+	by := map[int]AccountabilityMember{}
+	for _, m := range resp.Members {
+		by[m.ID] = m
+	}
+	if m := by[a]; !m.DonationBelowWeekly || m.DonationBelowDaily || len(m.DonationStrikes) != 1 ||
+		m.DonationStrikes[0].Week != "2026-10-05" || m.DonationStrikes[0].Reason != "weekly 20,000 < 25,000 (week of 5 Oct)" {
+		t.Errorf("Alder %+v", m)
+	}
+	if m := by[b]; m.DonationBelowWeekly || !m.DonationBelowDaily || m.DonationDaysBelow != 2 || len(m.DonationStrikes) != 1 ||
+		m.DonationStrikes[0].Week != "2026-10-12" || m.DonationStrikes[0].Reason != "daily below 2,000 on 2 days (week of 12 Oct)" ||
+		m.DonationTotal != 1800 || m.DonationTotalStatus != donationSoFar {
+		t.Errorf("Birch %+v", m)
+	}
+	if m := by[c]; m.DonationBelowWeekly || m.DonationBelowDaily || len(m.DonationStrikes) != 0 {
+		t.Errorf("Cedar (not read to the end) %+v", m)
+	}
+	if m := by[d]; m.DonationTotalStatus != donationBlank || len(m.DonationStrikes) != 0 {
+		t.Errorf("Dogwood %+v", m)
+	}
+
+	// On a game-Monday: the VS week is the fallback, the same week vsEvalContextAt gives,
+	// and with no judged day yet this week the daily rule judges last week too — so a
+	// member below both rules there gets one target naming both.
+	mustExec(t, `DELETE FROM donation_readings WHERE game_date >= '2026-10-12'`)
+	for i, day := range []string{"2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10"} {
+		donationDayAt(t, a, day, 100, int64(100*(i+1)))
+	}
+	mon := time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
+	resp, err = loadAccountabilityMembers(db, mon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantWeek, _, _, _, _, _ := vsEvalContextAt(db, mon)
+	if resp.Context.VSWeek != wantWeek || wantWeek != "2026-10-05" || !resp.Context.VSFallback {
+		t.Errorf("Monday VS week %q fallback %v, want %q", resp.Context.VSWeek, resp.Context.VSFallback, wantWeek)
+	}
+	if resp.Context.DonationDailyWeek != "2026-10-05" {
+		t.Errorf("Monday daily week %q", resp.Context.DonationDailyWeek)
+	}
+	for _, m := range resp.Members {
+		if m.ID != a {
+			continue
+		}
+		if len(m.DonationStrikes) != 1 || strings.Join(m.DonationStrikes[0].Rules, ",") != "weekly,daily" ||
+			!strings.Contains(m.DonationStrikes[0].Reason, "; daily below") {
+			t.Errorf("Alder on Monday %+v", m.DonationStrikes)
+		}
+	}
+}
+
+func TestDonationStrikeTargets(t *testing.T) {
+	below := donationJudgement{BelowWeekly: true}
+	daily := donationJudgement{BelowDaily: true, DaysBelowDaily: 1}
+	none := donationJudgement{}
+	cases := []struct {
+		name               string
+		weekly, dailyJ     donationJudgement
+		weeklyWeek, dailyW string
+		want               []string // week:rules
+	}{
+		{"weekly only", below, none, "2026-10-05", "2026-10-12", []string{"2026-10-05:weekly"}},
+		{"daily only", none, daily, "2026-10-05", "2026-10-12", []string{"2026-10-12:daily"}},
+		{"both, one week", below, daily, "2026-10-05", "2026-10-05", []string{"2026-10-05:weekly+daily"}},
+		{"both, two weeks", below, daily, "2026-10-05", "2026-10-12", []string{"2026-10-05:weekly", "2026-10-12:daily"}},
+	}
+	for _, c := range cases {
+		var got []string
+		for _, tg := range donationStrikeTargets(c.weeklyWeek, c.weekly, 1000, 2000, c.dailyW, c.dailyJ, 500) {
+			got = append(got, tg.Week+":"+strings.Join(tg.Rules, "+"))
+		}
+		if strings.Join(got, " ") != strings.Join(c.want, " ") {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+	if s := donationStrikeTargets("2026-10-05", none, 0, 0, "2026-10-12", daily, 500)[0].Reason; s != "daily below 500 on 1 day (week of 12 Oct)" {
+		t.Errorf("reason %q", s)
+	}
+}
+
+// One donation strike per member and week: a second is 409, and two officers filing at
+// once leave one row (the check and the insert share a transaction).
+func TestStrikeCreateOnePerWeek(t *testing.T) {
+	setupSettingsTestDB(t)
+	member := seedMember(t, "Elm", "R3")
+	post := func(key, week string) int {
+		rr := httptest.NewRecorder()
+		handleStrikeCreate(rr, strikeTypeRequest(http.MethodPost, "/", map[string]any{
+			"member_id": member, "strike_type": key, "reason": "test", "ref_date": week,
+		}, 0))
+		return rr.Code
+	}
+	if c := post("donation_below_minimum", "2026-10-05"); c != http.StatusOK {
+		t.Fatalf("first: %d", c)
+	}
+	if c := post("donation_below_minimum", "2026-10-05"); c != http.StatusConflict {
+		t.Errorf("second for the week: %d, want 409", c)
+	}
+	if c := post("donation_below_minimum", "2026-10-12"); c != http.StatusOK {
+		t.Errorf("another week: %d", c)
+	}
+	if c := post("vs_below_threshold", "2026-10-05"); c != http.StatusOK {
+		t.Errorf("a VS strike the same week: %d", c)
+	}
+
+	var wg sync.WaitGroup
+	codes := make([]int, 8)
+	for i := range codes {
+		wg.Add(1)
+		go func(i int) { defer wg.Done(); codes[i] = post("vs_below_threshold", "2026-10-19") }(i)
+	}
+	wg.Wait()
+	if n := countRows(t, `SELECT COUNT(*) FROM accountability_strikes WHERE strike_type = 'vs_below_threshold' AND ref_date = '2026-10-19'`); n != 1 {
+		t.Errorf("concurrent creates left %d rows (codes %v)", n, codes)
 	}
 }

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+
+	"lastwar-alliance/internal/gametime"
 )
 
 // VS week selection + day import detection live in helpers.go (gameWeekStart,
@@ -181,14 +183,8 @@ func handleAccountability(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	// Evaluated-week context for the page-config notes (matches the members API).
-	weekDate, completed, _, importedCompleted, fallbackActive := vsEvalContext()
-	data.VSCompletedDays = completed
-	data.VSImportedCompleted = importedCompleted
-	data.VSFallbackActive = fallbackActive
-	if m, err := vsMinimumForWeek(db, weekDate); err == nil {
-		data.VSMinimumPoints, data.VSMinimumSource = m.Points, m.Source
-	}
+	// The evaluated weeks and their notes come with the members API's context, so they
+	// cannot go stale while the page is open.
 	renderTemplate(w, r, "accountability.html", data)
 }
 
@@ -227,28 +223,84 @@ type AccountabilityMember struct {
 	Tag            string `json:"tag"`
 	VSTotal        int    `json:"vs_total"`
 	BelowThreshold bool   `json:"below_threshold"`
+	// Donations (Project 20). The total is the daily rule's week (context.donation_daily_week),
+	// which the column names; below_weekly is about context.donation_weekly_week, the last
+	// complete week. Status is final | so_far | blank.
+	DonationTotal       int64  `json:"donation_total"`
+	DonationTotalStatus string `json:"donation_total_status"`
+	DonationBelowWeekly bool   `json:"donation_below_weekly"`
+	DonationBelowDaily  bool   `json:"donation_below_daily"`
+	DonationDaysBelow   int    `json:"donation_days_below"`
+	// DonationStrikes are the strikes Add Donation Strikes files for this member: one
+	// per judged week, dated by the server (private-docs 266).
+	DonationStrikes []donationStrikeTarget `json:"donation_strikes"`
 }
 
-func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
-	data := getPageData(r, "", "")
-	if !data.IsAuthenticated || !data.Permissions.ViewAccountability {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+// accountabilityContext is what the members' verdicts were judged on. It travels with
+// them, so a page left open across an upload or a reset can never pair fresh flags with
+// stale weeks, and strikes take their week from here, never from the browser
+// (private-docs 266).
+type accountabilityContext struct {
+	VSWeek              string `json:"vs_week"`
+	VSCompleted         int    `json:"vs_completed"`
+	VSImportedCompleted int    `json:"vs_imported_completed"`
+	VSFallback          bool   `json:"vs_fallback"`
+	VSMinimum           int    `json:"vs_minimum"`
+	VSMinimumSource     string `json:"vs_minimum_source"`
+	// The weekly donation rule judges the last complete Monday–Sunday week; the daily rule
+	// the current week, or the last one while the current week has no judged day yet.
+	DonationWeeklyWeek     string           `json:"donation_weekly_week"`
+	DonationDailyWeek      string           `json:"donation_daily_week"`
+	DonationWeeklyMinimums donationMinimums `json:"donation_weekly_minimums"`
+	DonationDailyMinimums  donationMinimums `json:"donation_daily_minimums"`
+	// DonationJudgedDays is the most days any member has judged in the daily week: 0 means
+	// no exact day yet, and the page says why nobody is flagged.
+	DonationJudgedDays int `json:"donation_judged_days"`
+}
 
-	_, vsFlagDays := getVSAccountabilitySettings()
-	weekDate, completed, dayImported, importedCompleted, _ := vsEvalContext()
-	thresholds := loadStrikeThresholds()
-	// The evaluated week's own minimum, read before the rows cursor opens.
-	weekMin, err := vsMinimumForWeek(db, weekDate)
+type accountabilityMembersResponse struct {
+	Context accountabilityContext  `json:"context"`
+	Members []AccountabilityMember `json:"members"`
+}
+
+// donationEvalWeeks are the two weeks the Accountability page judges donations on at now:
+// the last complete Monday–Sunday week and the current one.
+func donationEvalWeeks(now time.Time) (lastComplete, current string) {
+	t, _ := time.Parse(gametime.DateLayout, gametime.DateOf(now))
+	monday := gametime.MondayOf(t)
+	return monday.AddDate(0, 0, -7).Format(gametime.DateLayout), monday.Format(gametime.DateLayout)
+}
+
+// loadAccountabilityMembers judges every active member at now, on q. Every read the
+// verdicts need is made before the member cursor opens.
+func loadAccountabilityMembers(q rowQueryer, now time.Time) (accountabilityMembersResponse, error) {
+	var out accountabilityMembersResponse
+	_, vsFlagDays := getVSAccountabilitySettingsQ(q)
+	weekDate, completed, dayImported, importedCompleted, fallback, err := vsEvalContextAt(q, now)
 	if err != nil {
-		slog.Error("VS minimum for week failed", "error", err, "week", weekDate)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return out, err
 	}
-	vsMin := weekMin.Points
+	thresholds := loadStrikeThresholdsQ(q)
+	weekMin, err := vsMinimumForWeek(q, weekDate)
+	if err != nil {
+		return out, err
+	}
+	lastWeek, thisWeek := donationEvalWeeks(now)
+	donWeeks, err := loadDonationWeeks(q, lastWeek, thisWeek, now)
+	if err != nil {
+		return out, err
+	}
+	donMins, err := donationMinimumsForWeeks(q, []string{lastWeek, thisWeek})
+	if err != nil {
+		return out, err
+	}
+	out.Context = accountabilityContext{
+		VSWeek: weekDate, VSCompleted: completed, VSImportedCompleted: importedCompleted,
+		VSFallback: fallback, VSMinimum: weekMin.Points, VSMinimumSource: weekMin.Source,
+		DonationWeeklyWeek: lastWeek, DonationWeeklyMinimums: donMins[lastWeek],
+	}
 
-	rows, err := db.Query(`
+	rows, err := q.Query(`
 		SELECT
 			m.id, m.name, m.rank, COALESCE(m.joined_at, ''),
 			COALESCE(SUM(CASE WHEN s.status='active' THEN 1 ELSE 0 END), 0) AS active_strikes,
@@ -264,13 +316,10 @@ func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
 		ORDER BY active_strikes DESC, m.name ASC
 	`, weekDate)
 	if err != nil {
-		slog.Error("handleAccountabilityMembers: query failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return out, err
 	}
-	defer rows.Close()
-
 	members := []AccountabilityMember{}
+	var joined []string
 	for rows.Next() {
 		var m AccountabilityMember
 		var joinedAt string
@@ -278,21 +327,81 @@ func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
 		var hasRow bool
 		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &joinedAt, &m.ActiveStrikes, &m.VSTotal,
 			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5], &hasRow); err != nil {
-			slog.Error("handleAccountabilityMembers: scan failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
+			rows.Close()
+			return out, err
 		}
 		m.Tag = memberTag(m.ActiveStrikes, thresholds)
 		// Below the daily minimum on N+ completed, imported, post-join days. When no
 		// completed day is imported yet, importedCompleted==0 → nobody is flagged.
 		if importedCompleted > 0 {
-			m.BelowThreshold = vsDaysBelow(scores, hasRow, joinedAt, weekDate, completed, dayImported, vsMin) >= vsFlagDays
+			m.BelowThreshold = vsDaysBelow(scores, hasRow, joinedAt, weekDate, completed, dayImported, weekMin.Points) >= vsFlagDays
 		}
 		members = append(members, m)
+		joined = append(joined, joinedAt)
+	}
+	if err := rows.Close(); err != nil {
+		return out, err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(members)
+	// Donations: the week a member has no reading for derives blank.
+	weekOf := func(id int, week string) donationWeek {
+		if w, ok := donWeeks[id][week]; ok {
+			return w
+		}
+		return deriveDonationWeek(week, [7]donationDayReadings{}, now)
+	}
+	// The daily rule's week: the current one once anybody has a judged day in it.
+	dailyWeek := lastWeek
+	for i, m := range members {
+		if judgeDonationWeek(weekOf(m.ID, thisWeek), donMins[thisWeek], joined[i]).JudgedDays > 0 {
+			dailyWeek = thisWeek
+			break
+		}
+	}
+	out.Context.DonationDailyWeek = dailyWeek
+	out.Context.DonationDailyMinimums = donMins[dailyWeek]
+	for i := range members {
+		m := &members[i]
+		weekly := weekOf(m.ID, lastWeek)
+		daily := weekOf(m.ID, dailyWeek)
+		jw := judgeDonationWeek(weekly, donMins[lastWeek], joined[i])
+		jd := judgeDonationWeek(daily, donMins[dailyWeek], joined[i])
+		m.DonationBelowWeekly = jw.BelowWeekly
+		m.DonationBelowDaily, m.DonationDaysBelow = jd.BelowDaily, jd.DaysBelowDaily
+		m.DonationStrikes = donationStrikeTargets(lastWeek, jw, weekly.Total.Amount, donMins[lastWeek].Weekly,
+			dailyWeek, jd, donMins[dailyWeek].Daily)
+		if m.DonationStrikes == nil {
+			m.DonationStrikes = []donationStrikeTarget{}
+		}
+		m.DonationTotal, m.DonationTotalStatus = daily.Total.Amount, daily.Total.Status
+		if jd.JudgedDays > out.Context.DonationJudgedDays {
+			out.Context.DonationJudgedDays = jd.JudgedDays
+		}
+	}
+	out.Members = members
+	return out, nil
+}
+
+func handleAccountabilityMembers(w http.ResponseWriter, r *http.Request) {
+	data := getPageData(r, "", "")
+	if !data.IsAuthenticated || !data.Permissions.ViewAccountability {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	// One read transaction, so the verdicts and the weeks they were judged on are one
+	// snapshot.
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "handleAccountabilityMembers: begin", err)
+		return
+	}
+	defer tx.Rollback()
+	resp, err := loadAccountabilityMembers(tx, time.Now())
+	if err != nil {
+		dbError(w, "handleAccountabilityMembers", err)
+		return
+	}
+	writeJSON(w, resp)
 }
 
 // --- API: single member profile data ---
@@ -455,6 +564,7 @@ type AccountabilitySummary struct {
 	NeedsImprovement int                    `json:"needs_improvement"`
 	Reliable         int                    `json:"reliable"`
 	BelowVS          int                    `json:"below_vs"`
+	BelowDonation    int                    `json:"below_donation"`
 	TopAtRisk        []AccountabilityMember `json:"top_at_risk"`
 }
 
@@ -464,57 +574,20 @@ func handleAccountabilitySummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-
-	_, vsFlagDays := getVSAccountabilitySettings()
-	weekDate, completed, dayImported, importedCompleted, _ := vsEvalContext()
-	thresholds := loadStrikeThresholds()
-	// The evaluated week's own minimum, read before the rows cursor opens.
-	weekMin, err := vsMinimumForWeek(db, weekDate)
+	tx, err := db.Begin()
 	if err != nil {
-		slog.Error("VS minimum for week failed", "error", err, "week", weekDate)
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		dbError(w, "handleAccountabilitySummary: begin", err)
 		return
 	}
-	vsMin := weekMin.Points
-
-	rows, err := db.Query(`
-		SELECT
-			m.id, m.name, m.rank, COALESCE(m.joined_at, ''),
-			COALESCE(SUM(CASE WHEN s.status='active' THEN 1 ELSE 0 END), 0) AS active_strikes,
-			COALESCE(vp.monday+vp.tuesday+vp.wednesday+vp.thursday+vp.friday+vp.saturday, 0) AS vs_total,
-			COALESCE(vp.monday,0), COALESCE(vp.tuesday,0), COALESCE(vp.wednesday,0),
-			COALESCE(vp.thursday,0), COALESCE(vp.friday,0), COALESCE(vp.saturday,0),
-			MAX(vp.id) IS NOT NULL AS has_row
-		FROM members m
-		LEFT JOIN accountability_strikes s ON s.member_id = m.id
-		LEFT JOIN vs_points vp ON vp.member_id = m.id AND vp.week_date = ?
-		WHERE m.rank != 'EX'
-		GROUP BY m.id
-		ORDER BY active_strikes DESC
-	`, weekDate)
+	defer tx.Rollback()
+	resp, err := loadAccountabilityMembers(tx, time.Now())
 	if err != nil {
-		slog.Error("handleAccountabilitySummary: query failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		dbError(w, "handleAccountabilitySummary", err)
 		return
 	}
-	defer rows.Close()
 
 	summary := AccountabilitySummary{TopAtRisk: []AccountabilityMember{}}
-	for rows.Next() {
-		var m AccountabilityMember
-		var joinedAt string
-		var scores [6]int
-		var hasRow bool
-		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &joinedAt, &m.ActiveStrikes, &m.VSTotal,
-			&scores[0], &scores[1], &scores[2], &scores[3], &scores[4], &scores[5], &hasRow); err != nil {
-			slog.Error("handleAccountabilitySummary: scan failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-		m.Tag = memberTag(m.ActiveStrikes, thresholds)
-		if importedCompleted > 0 {
-			m.BelowThreshold = vsDaysBelow(scores, hasRow, joinedAt, weekDate, completed, dayImported, vsMin) >= vsFlagDays
-		}
+	for _, m := range resp.Members { // ordered by active strikes, most first
 		switch m.Tag {
 		case "At Risk":
 			summary.AtRisk++
@@ -529,13 +602,18 @@ func handleAccountabilitySummary(w http.ResponseWriter, r *http.Request) {
 		if m.BelowThreshold {
 			summary.BelowVS++
 		}
+		if m.DonationBelowWeekly || m.DonationBelowDaily {
+			summary.BelowDonation++
+		}
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(summary)
+	writeJSON(w, summary)
 }
 
 // --- API: strike CRUD ---
+
+// perWeekStrikeTypes are the categories a member gets at most one of per week (ref_date
+// is the week's Monday): the VS minimum, and the donation minimums (both rules, one strike).
+var perWeekStrikeTypes = map[string]bool{"vs_below_threshold": true, "donation_below_minimum": true}
 
 func handleStrikeCreate(w http.ResponseWriter, r *http.Request) {
 	actor := getAuthUser(r)
@@ -575,19 +653,30 @@ func handleStrikeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prevent duplicate VS-below-threshold strikes for the same week
-	if body.StrikeType == "vs_below_threshold" && body.RefDate != "" {
+	// One strike per member and week for the per-week categories. The check and the
+	// insert share one transaction — with one connection, that is the serialisation point,
+	// so two officers clicking at once cannot file one week twice.
+	tx, err := db.Begin()
+	if err != nil {
+		dbError(w, "handleStrikeCreate: begin", err)
+		return
+	}
+	defer tx.Rollback()
+	if perWeekStrikeTypes[body.StrikeType] && body.RefDate != "" {
 		var existing int
-		db.QueryRow(`SELECT COUNT(*) FROM accountability_strikes
-			WHERE member_id = ? AND strike_type = 'vs_below_threshold' AND ref_date = ?`,
-			body.MemberID, body.RefDate).Scan(&existing)
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM accountability_strikes
+			WHERE member_id = ? AND strike_type = ? AND ref_date = ?`,
+			body.MemberID, body.StrikeType, body.RefDate).Scan(&existing); err != nil {
+			dbError(w, "handleStrikeCreate: duplicate check", err)
+			return
+		}
 		if existing > 0 {
-			http.Error(w, "VS strike already exists for this member and week", http.StatusConflict)
+			http.Error(w, "A strike of this category already exists for this member and week", http.StatusConflict)
 			return
 		}
 	}
 
-	res, err := db.Exec(`
+	res, err := tx.Exec(`
 		INSERT INTO accountability_strikes (member_id, strike_type, reason, ref_date, created_by)
 		VALUES (?, ?, ?, NULLIF(?, ''), ?)
 	`, body.MemberID, body.StrikeType, body.Reason, body.RefDate, userID)
@@ -597,6 +686,10 @@ func handleStrikeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
+	if err := tx.Commit(); err != nil {
+		dbError(w, "handleStrikeCreate: commit", err)
+		return
+	}
 
 	logActivity(userID, username, "created", "accountability_strike", memberName, false,
 		"type: "+body.StrikeType+"; reason: "+body.Reason)

@@ -53,10 +53,13 @@ func setupSettingsTestDB(t *testing.T) {
 // cases fail on the scheduler band rather than on something incidental.
 func baseSettings() map[string]any {
 	return map[string]any{
-		"vs_flag_days_threshold": 2,
-		"vs_minimum_points":      2500000,
-		"nap_size":               10,
-		"nap_import_limit":       15,
+		"vs_flag_days_threshold":       2,
+		"vs_minimum_points":            2500000,
+		"nap_size":                     10,
+		"nap_import_limit":             15,
+		"donation_weekly_minimum":      0,
+		"donation_daily_minimum":       0,
+		"donation_flag_days_threshold": 2,
 	}
 }
 

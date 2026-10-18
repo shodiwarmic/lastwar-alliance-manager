@@ -350,10 +350,10 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 		"message":             message,
 		"donations_saved":     donationsSavedN,
 		"donations_unchanged": donationsUnchangedN,
-		"imported":         successCount,
-		"unchanged":        unchangedCount,
-		"aliases_saved":    aliasCount,
-		"aliases_received": aliasesReceived,
+		"imported":            successCount,
+		"unchanged":           unchangedCount,
+		"aliases_saved":       aliasCount,
+		"aliases_received":    aliasesReceived,
 	}
 
 	if len(dbErrors) > 0 {

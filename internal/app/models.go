@@ -333,15 +333,20 @@ type Settings struct {
 	// TranslationMonthlyCharCap bounds monthly upstream spend (0 disables the
 	// guard). Summed from translation_cache.char_count — which is why cache
 	// rows are never deleted.
-	TranslationMonthlyCharCap       int    `json:"translation_monthly_char_cap"`
-	TrainFreeDailyLimit             int    `json:"train_free_daily_limit"`
-	TrainPurchasedDailyLimit        int    `json:"train_purchased_daily_limit"`
-	AllianceMaxMembers              int    `json:"alliance_max_members"`
-	JoinRequirements                string `json:"join_requirements"`
-	VSMinimumPoints                 int    `json:"vs_minimum_points"`
-	VsFlagDaysThreshold             int    `json:"vs_flag_days_threshold"`
-	StrikeNeedsImprovementThreshold int    `json:"strike_needs_improvement_threshold"`
-	StrikeAtRiskThreshold           int    `json:"strike_at_risk_threshold"`
+	TranslationMonthlyCharCap int    `json:"translation_monthly_char_cap"`
+	TrainFreeDailyLimit       int    `json:"train_free_daily_limit"`
+	TrainPurchasedDailyLimit  int    `json:"train_purchased_daily_limit"`
+	AllianceMaxMembers        int    `json:"alliance_max_members"`
+	JoinRequirements          string `json:"join_requirements"`
+	VSMinimumPoints           int    `json:"vs_minimum_points"`
+	VsFlagDaysThreshold       int    `json:"vs_flag_days_threshold"`
+	// The donation minimums (0 = off) and the daily rule's day count. The minimums are
+	// pointers so a PUT that omits them keeps the stored values: 0 is a real value here.
+	DonationWeeklyMinimum           *int `json:"donation_weekly_minimum"`
+	DonationDailyMinimum            *int `json:"donation_daily_minimum"`
+	DonationFlagDaysThreshold       int  `json:"donation_flag_days_threshold"`
+	StrikeNeedsImprovementThreshold int  `json:"strike_needs_improvement_threshold"`
+	StrikeAtRiskThreshold           int  `json:"strike_at_risk_threshold"`
 	// Schedule defaults.
 	//
 	// The four level fields (mg_baseline / zs_baseline / max_mg_level /

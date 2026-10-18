@@ -206,6 +206,7 @@ jobs:
                r'\b(?:buildOrderButtons|refreshOrderButtons|rowPosition)\s*\(', None),
               ('tabs.js', None, r'\bTabs\s*\.\s*init\s*\(', None),
               ('filter-panel.js', 'filter-panel.css', r'\bFilterPanel\s*\.', None),
+              ('donation-marks.js', 'donation-marks.css', r'\bDonationMarks\s*\.', None),
           ]
           LOADS_JS = re.compile(r'\{\{\s*asset\s+"([^"]+\.js)"\s*\}\}')
           LOADS_CSS = re.compile(r'\{\{\s*asset\s+"([^"]+\.css)"\s*\}\}')

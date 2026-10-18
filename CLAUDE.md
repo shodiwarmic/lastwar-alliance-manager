@@ -1359,6 +1359,21 @@ never derived figures.
   today or up to 30 days back). Its halves are dated `donationUploadInstant`: today → the
   upload instant clamped past the reset window; a past day → `D 02:10:00` UTC, the day's
   earliest accepted instant, so any timed reading of that day wins over it.
+- **Minimums are dated per week** (`donation_week_minimums`, one row holding both): the
+  Settings save records the current game week's row when either changes, in the settings
+  transaction; `donationMinimumsForWeek(s)` resolve a week to the row with the greatest
+  `week_date <=` it, else today's settings (`current_setting`). 0 is a real value — off — so
+  the Settings payload's two minimums are pointers (absent keeps them).
+- **One judgement** (`judgeDonationWeek`) for every surface. The weekly rule judges only a
+  final total; no Sunday reading is "not read to the end", never below. The daily rule
+  judges exact days (and Sunday once the week is over) from the join date, N+ days below.
+- **Accountability judges two weeks**: weekly on the last complete week, daily on the current
+  one (or the last while the current has no judged day). `/api/accountability/members`
+  returns `{context, members}`: the weeks, the minimums and the VS evaluated week travel with
+  the verdicts, and each member carries its `donation_strikes` (one per member and judged
+  week, reason naming every rule). **Strikes take their week from the response, never from
+  the browser** (private-docs 266). `handleStrikeCreate`'s one-per-week guard covers
+  `vs_below_threshold` and `donation_below_minimum` and runs in the insert's transaction.
 - **Member delete** removes the readings (`deleteMemberTx`); `foreign_keys` is off.
 
 ## Reporting layer (`reports_*.go`)

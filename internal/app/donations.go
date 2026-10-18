@@ -33,10 +33,10 @@ const (
 	donationResetWindow = 10 * time.Minute
 
 	// Day statuses and week-total statuses, as the API reports them.
-	donationExact  = "exact"
-	donationSoFar  = "so_far"
-	donationBlank  = "blank"
-	donationFinal  = "final"
+	donationExact = "exact"
+	donationSoFar = "so_far"
+	donationBlank = "blank"
+	donationFinal = "final"
 )
 
 // donationCategoryKinds maps the two commit categories to the half each carries.
@@ -482,4 +482,207 @@ func dateSpan(dates []string) string {
 		return s[0]
 	}
 	return s[0] + " – " + s[len(s)-1]
+}
+
+// --- minimums ---------------------------------------------------------------------------
+
+// donationMinimums are the minimums a week is judged against. Source is "recorded" (a
+// donation_week_minimums row at or before the week) or "current_setting" (none: today's
+// settings). FlagDays is always today's setting: it is a dial, not history.
+type donationMinimums struct {
+	Weekly   int    `json:"weekly"`
+	Daily    int    `json:"daily"`
+	FlagDays int    `json:"flag_days"`
+	Source   string `json:"source"`
+}
+
+// donationSettings reads today's donation settings.
+func donationSettings(q rowQuerier) (weekly, daily, flagDays int, err error) {
+	err = q.QueryRow(`SELECT COALESCE(donation_weekly_minimum, 0), COALESCE(donation_daily_minimum, 0),
+		COALESCE(donation_flag_days_threshold, 2) FROM settings WHERE id = 1`).Scan(&weekly, &daily, &flagDays)
+	if err == sql.ErrNoRows {
+		return 0, 0, 2, nil
+	}
+	return weekly, daily, flagDays, err
+}
+
+// donationMinimumsForWeek resolves one week: the row with the greatest week_date <= W,
+// else today's settings.
+func donationMinimumsForWeek(q rowQuerier, week string) (donationMinimums, error) {
+	weekly, daily, flag, err := donationSettings(q)
+	if err != nil {
+		return donationMinimums{}, err
+	}
+	m := donationMinimums{FlagDays: flag}
+	err = q.QueryRow(`SELECT weekly_minimum, daily_minimum FROM donation_week_minimums WHERE week_date <= ?
+		ORDER BY week_date DESC LIMIT 1`, week).Scan(&m.Weekly, &m.Daily)
+	switch {
+	case err == nil:
+		m.Source = vsMinSourceRecorded
+	case err == sql.ErrNoRows:
+		m.Weekly, m.Daily, m.Source = weekly, daily, vsMinSourceCurrent
+	default:
+		return m, err
+	}
+	return m, nil
+}
+
+// donationMinimumsForWeeks resolves many weeks in two reads.
+func donationMinimumsForWeeks(q rowQueryer, weeks []string) (map[string]donationMinimums, error) {
+	weekly, daily, flag, err := donationSettings(q)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.Query(`SELECT week_date, weekly_minimum, daily_minimum FROM donation_week_minimums ORDER BY week_date`)
+	if err != nil {
+		return nil, err
+	}
+	type row struct {
+		week          string
+		weekly, daily int
+	}
+	var recorded []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.week, &r.weekly, &r.daily); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		recorded = append(recorded, r)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	out := make(map[string]donationMinimums, len(weeks))
+	for _, w := range weeks {
+		m := donationMinimums{Weekly: weekly, Daily: daily, FlagDays: flag, Source: vsMinSourceCurrent}
+		for _, r := range recorded { // ascending: the last one at or before w wins
+			if r.week <= w {
+				m.Weekly, m.Daily, m.Source = r.weekly, r.daily, vsMinSourceRecorded
+			}
+		}
+		out[w] = m
+	}
+	return out, nil
+}
+
+// recordDonationMinimums records both minimums as of week, replacing that week's row. The
+// Settings save calls it for the current game week, in its own transaction.
+func recordDonationMinimums(q historyExecer, week string, weekly, daily, userID int) error {
+	_, err := q.Exec(`INSERT INTO donation_week_minimums (week_date, weekly_minimum, daily_minimum, set_by, set_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(week_date) DO UPDATE SET weekly_minimum = excluded.weekly_minimum,
+			daily_minimum = excluded.daily_minimum, set_by = excluded.set_by, set_at = CURRENT_TIMESTAMP`,
+		week, weekly, daily, nullUserID(userID))
+	return err
+}
+
+// --- the judgement ----------------------------------------------------------------------
+
+// donationJudgement is one member's week judged against its minimums.
+//
+// The weekly rule judges only a final total (a Sunday reading, the week over): below the
+// weekly minimum is a miss; a week with no Sunday reading is "not read to the end", never
+// a miss. The daily rule judges exact days, and Sunday once the week is over, on or after
+// the member joined: below the daily minimum on FlagDays or more is a miss. A member who
+// joined after the week's Monday is not judged on the weekly rule. A minimum of 0 is off.
+type donationJudgement struct {
+	BelowWeekly    bool `json:"below_weekly"`
+	NotReadToEnd   bool `json:"not_read_to_end"`
+	JoinedMidWeek  bool `json:"joined_mid_week"`
+	DaysBelowDaily int  `json:"days_below_daily"`
+	JudgedDays     int  `json:"judged_days"`
+	BelowDaily     bool `json:"below_daily"`
+}
+
+// judgeDonationWeek judges w; joinedAt is the member's join date (YYYY-MM-DD, "" when
+// unknown, which counts as before the week).
+func judgeDonationWeek(w donationWeek, mins donationMinimums, joinedAt string) donationJudgement {
+	var j donationJudgement
+	j.JoinedMidWeek = joinedAt != "" && joinedAt > w.WeekDate
+	if mins.Weekly > 0 && w.WeekOver && !j.JoinedMidWeek {
+		if w.Total.Status == donationFinal {
+			j.BelowWeekly = w.Total.Amount < int64(mins.Weekly)
+		} else {
+			j.NotReadToEnd = true
+		}
+	}
+	for d := 0; d < 7; d++ {
+		day := w.Days[d]
+		judged := day.Status == donationExact || (d == 6 && w.WeekOver && day.Status == donationSoFar)
+		if !judged || (joinedAt != "" && addDays(w.WeekDate, d) < joinedAt) {
+			continue
+		}
+		j.JudgedDays++
+		if mins.Daily > 0 && day.Amount < int64(mins.Daily) {
+			j.DaysBelowDaily++
+		}
+	}
+	j.BelowDaily = mins.Daily > 0 && mins.FlagDays > 0 && j.DaysBelowDaily >= mins.FlagDays
+	return j
+}
+
+// donationStrikeTarget is one strike Add Donation Strikes files: one per member and judged
+// week, whatever rules the member failed that week (decision 23). Rules names them for the
+// banner; Reason is the strike's text.
+type donationStrikeTarget struct {
+	Week   string   `json:"week"`
+	Rules  []string `json:"rules"`
+	Reason string   `json:"reason"`
+}
+
+// donationStrikeTargets builds a member's targets from its two verdicts: the weekly rule
+// on weeklyWeek, the daily rule on dailyWeek. The two weeks coincide on a Monday and a
+// Tuesday before a reading, and then both rules make one target.
+func donationStrikeTargets(weeklyWeek string, weekly donationJudgement, weeklyTotal int64, weeklyMin int,
+	dailyWeek string, daily donationJudgement, dailyMin int) []donationStrikeTarget {
+	var out []donationStrikeTarget
+	add := func(week, rule, reason string) {
+		for i := range out {
+			if out[i].Week == week {
+				out[i].Rules = append(out[i].Rules, rule)
+				out[i].Reason += "; " + reason
+				return
+			}
+		}
+		out = append(out, donationStrikeTarget{Week: week, Rules: []string{rule}, Reason: reason})
+	}
+	if weekly.BelowWeekly {
+		add(weeklyWeek, "weekly", fmt.Sprintf("weekly %s < %s (week of %s)",
+			groupDigits(weeklyTotal), groupDigits(int64(weeklyMin)), shortWeekName(weeklyWeek)))
+	}
+	if daily.BelowDaily {
+		days := "days"
+		if daily.DaysBelowDaily == 1 {
+			days = "day"
+		}
+		add(dailyWeek, "daily", fmt.Sprintf("daily below %s on %d %s (week of %s)",
+			groupDigits(int64(dailyMin)), daily.DaysBelowDaily, days, shortWeekName(dailyWeek)))
+	}
+	return out
+}
+
+// groupDigits writes n with thousands separators: 31000 → "31,000".
+func groupDigits(n int64) string {
+	s := fmt.Sprintf("%d", n)
+	neg := n < 0
+	if neg {
+		s = s[1:]
+	}
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	if neg {
+		s = "-" + s
+	}
+	return s
+}
+
+// shortWeekName names a week by its Monday: "2026-10-06" → "6 Oct".
+func shortWeekName(week string) string {
+	t, err := time.Parse(gametime.DateLayout, week)
+	if err != nil {
+		return week
+	}
+	return t.Format("2 Jan")
 }

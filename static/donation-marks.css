@@ -1,0 +1,23 @@
+/* donation-marks.css — the donation day and total marks (donation-marks.js), and the
+   rule badges, shared by Rankings, Accountability, the member profile and Reports. */
+.don-so-far { color: var(--text-muted); }
+.don-blank { color: var(--text-muted); }
+.don-below { color: var(--color-danger); font-weight: 600; }
+.don-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+}
+.don-legend {
+    margin: 8px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+.don-legend .don-below { font-weight: 600; }

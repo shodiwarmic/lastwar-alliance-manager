@@ -629,7 +629,9 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
         COALESCE(nap_auto_refresh_enabled, 0), COALESCE(prospect_auto_refresh_enabled, 0),
         COALESCE(translation_backend_mode, 'ondevice'), COALESCE(translation_monthly_char_cap, 400000),
         COALESCE(sector_start, 0), COALESCE(sector_end, 0),
-        COALESCE(announce_window_start, '00:00'), COALESCE(announce_window_end, '23:59')
+        COALESCE(announce_window_start, '00:00'), COALESCE(announce_window_end, '23:59'),
+        COALESCE(donation_weekly_minimum, 0), COALESCE(donation_daily_minimum, 0),
+        COALESCE(donation_flag_days_threshold, 2)
         FROM settings WHERE id = 1`).Scan(
 		&s.ID, &s.ScheduleMessageTemplate,
 		&s.DailyMessageTemplate, &s.PowerTrackingEnabled,
@@ -657,6 +659,8 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 		&s.TranslationBackendMode, &s.TranslationMonthlyCharCap,
 		&s.SectorStart, &s.SectorEnd,
 		&s.AnnounceWindowStart, &s.AnnounceWindowEnd,
+		&s.DonationWeeklyMinimum, &s.DonationDailyMinimum,
+		&s.DonationFlagDaysThreshold,
 	)
 
 	if err != nil {
@@ -746,6 +750,19 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 	// at most the 6 VS days). Reject out-of-range rather than silently clamping.
 	if settings.VsFlagDaysThreshold < 1 || settings.VsFlagDaysThreshold > 6 {
 		http.Error(w, "VS flag days threshold must be between 1 and 6", http.StatusBadRequest)
+		return
+	}
+
+	// Donations: the minimums are 0 (off) or more; an omitted one keeps its stored value.
+	// The daily rule's day count is 1–7 (a donation week has seven days); 0 means "not
+	// supplied" and keeps it, as the NAP sizes below do.
+	if (settings.DonationWeeklyMinimum != nil && *settings.DonationWeeklyMinimum < 0) ||
+		(settings.DonationDailyMinimum != nil && *settings.DonationDailyMinimum < 0) {
+		http.Error(w, "Donation minimums cannot be negative (0 turns one off)", http.StatusBadRequest)
+		return
+	}
+	if settings.DonationFlagDaysThreshold < 0 || settings.DonationFlagDaysThreshold > 7 {
+		http.Error(w, "Donation flag days threshold must be between 1 and 7", http.StatusBadRequest)
 		return
 	}
 
@@ -881,8 +898,9 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	var prevVSMinimum int
-	tx.QueryRow(`SELECT COALESCE(vs_minimum_points, 0) FROM settings WHERE id = 1`).Scan(&prevVSMinimum)
+	var prevVSMinimum, prevDonWeekly, prevDonDaily int
+	tx.QueryRow(`SELECT COALESCE(vs_minimum_points, 0), COALESCE(donation_weekly_minimum, 0),
+		COALESCE(donation_daily_minimum, 0) FROM settings WHERE id = 1`).Scan(&prevVSMinimum, &prevDonWeekly, &prevDonDaily)
 
 	// Note: current_season and season_start_date are no longer editable here —
 	// and never read either: see getSettings, which derives both from the seasons
@@ -915,7 +933,10 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		sector_start = NULLIF(?, 0),
 		sector_end   = NULLIF(?, 0),
 		announce_window_start = ?,
-		announce_window_end   = ?
+		announce_window_end   = ?,
+		donation_weekly_minimum = COALESCE(?, donation_weekly_minimum),
+		donation_daily_minimum  = COALESCE(?, donation_daily_minimum),
+		donation_flag_days_threshold = COALESCE(NULLIF(?, 0), donation_flag_days_threshold)
 		WHERE id = 1`,
 		settings.ScheduleMessageTemplate,
 		settings.DailyMessageTemplate, settings.PowerTrackingEnabled, settings.StormTimezones,
@@ -944,6 +965,8 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 		// field cannot arrive here as an accidental 0.
 		settings.SectorStart, settings.SectorEnd,
 		settings.AnnounceWindowStart, settings.AnnounceWindowEnd,
+		settings.DonationWeeklyMinimum, settings.DonationDailyMinimum,
+		settings.DonationFlagDaysThreshold,
 	)
 	if err != nil {
 		slog.Error("failed to update settings", "error", err)
@@ -958,6 +981,23 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// The donation minimums as of this week, when either changed (the Monday is the same
+	// for the Monday–Sunday donation week: gameWeekStart maps a Sunday back to its Monday).
+	var donWeekly, donDaily int
+	if err := tx.QueryRow(`SELECT COALESCE(donation_weekly_minimum, 0), COALESCE(donation_daily_minimum, 0)
+		FROM settings WHERE id = 1`).Scan(&donWeekly, &donDaily); err != nil {
+		slog.Error("failed to read the donation minimums back", "error", err)
+		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+		return
+	}
+	donationChanged := donWeekly != prevDonWeekly || donDaily != prevDonDaily
+	if donationChanged {
+		if err := recordDonationMinimums(tx, minWeek, donWeekly, donDaily, actor.ID); err != nil {
+			slog.Error("failed to record the donation minimums for the week", "error", err)
+			http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+			return
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		slog.Error("failed to commit settings", "error", err)
 		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
@@ -966,6 +1006,10 @@ func updateSettings(w http.ResponseWriter, r *http.Request) {
 	if settings.VSMinimumPoints != prevVSMinimum {
 		logActivity(actor.ID, actor.Username, "updated", "vs_week_minimum", minWeek, false,
 			fmt.Sprintf("setting: %d → %d", prevVSMinimum, settings.VSMinimumPoints))
+	}
+	if donationChanged {
+		logActivity(actor.ID, actor.Username, "updated", "donation_week_minimum", minWeek, false,
+			fmt.Sprintf("weekly: %d → %d; daily: %d → %d", prevDonWeekly, donWeekly, prevDonDaily, donDaily))
 	}
 
 	// The scheduler reads its config through a short-TTL cache; drop it so a
