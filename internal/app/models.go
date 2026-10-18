@@ -949,6 +949,7 @@ type RankPermissions struct {
 	// One key per report on the Reports page (reports.go → reportDefs).
 	ViewReportWeekly        bool `json:"view_report_weekly"`
 	ViewReportVSMisses      bool `json:"view_report_vs_misses"`
+	ViewReportDonations     bool `json:"view_report_donations"`
 	ViewReportParticipation bool `json:"view_report_participation"`
 }
 
@@ -1036,6 +1037,7 @@ var PermissionGroups = []PermissionGroup{
 	{Feature: "Reports", Rows: []PermissionRow{
 		{Key: "view_report_weekly", Label: "Weekly summary"},
 		{Key: "view_report_vs_misses", Label: "VS misses"},
+		{Key: "view_report_donations", Label: "Donations"},
 		{Key: "view_report_participation", Label: "Participation grid"},
 	}},
 	{Feature: "Season Hub", Rows: []PermissionRow{

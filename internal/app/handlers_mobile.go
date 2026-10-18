@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"lastwar-alliance/internal/gametime"
 )
 
 // mobileCategory is one /api/mobile/commit category: what it writes and the permission
@@ -17,6 +19,9 @@ type mobileCategory struct {
 	VSDay  bool // a vs_points day column, named by the category
 	Weekly bool // the Weekly Rank total: Saturday = total − Mon..Fri
 	Stat   bool // a member history, by memberStats[category]
+	// Donation is a donation half (donations.go): today for donation_daily, the week for
+	// donation_weekly, dated by captured_at's game day.
+	Donation bool
 }
 
 var mobileCategories = map[string]mobileCategory{
@@ -33,6 +38,8 @@ var mobileCategories = map[string]mobileCategory{
 	"squad_power":      {Perm: "manage_members", Stat: true},
 	"hq_level":         {Perm: "manage_members", Stat: true},
 	"profession_level": {Perm: "manage_members", Stat: true},
+	"donation_daily":   {Perm: "manage_members", Donation: true},
+	"donation_weekly":  {Perm: "manage_members", Donation: true},
 }
 
 // mobileRosterQuerier is the subset of *sql.DB / *sql.Tx that
@@ -258,6 +265,9 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	vsFields := map[int]map[string]int{}
 	vsNames := map[int]string{}
 	weekly := map[int]int{}
+	// Donation halves are collected first, so a member's two halves of one day are checked
+	// as a pair before either is written.
+	var donationHalves []donationHalfIn
 
 	for _, rec := range req.Records {
 		cat, ok := mobileCategories[rec.Category]
@@ -275,6 +285,18 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 		}
 
 		switch {
+		case cat.Donation:
+			if rec.Score < 0 {
+				commitErrors = append(commitErrors, fmt.Sprintf("%s (%s): %d is below 0", rec.OriginalName, rec.Category, rec.Score))
+				continue
+			}
+			at, err := parseDonationCapturedAt(rec.CapturedAt, now)
+			if err != nil {
+				commitErrors = append(commitErrors, fmt.Sprintf("%s (%s): %v", rec.OriginalName, rec.Category, err))
+				continue
+			}
+			donationHalves = append(donationHalves, donationHalfIn{MemberID: rec.MemberID, Name: rec.OriginalName,
+				Category: rec.Category, Kind: donationCategoryKinds[rec.Category], Amount: rec.Score, Captured: at})
 		case cat.Stat:
 			st := memberStats[rec.Category]
 			if err := checkMemberStat(rec.Category, rec.Score); err != nil {
@@ -313,6 +335,26 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 			vsNames[rec.MemberID] = rec.OriginalName
 			vsFields[rec.MemberID][rec.Category] = int(rec.Score)
 		}
+	}
+
+	donationHalves, pairErrs := refuseImpossibleDonationPairs(donationHalves)
+	commitErrors = append(commitErrors, pairErrs...)
+	var donationDates []string
+	for _, h := range donationHalves {
+		gameDate := gametime.DateOf(h.Captured)
+		wrote, err := recordDonationReading(tx, donationReadingWrite{MemberID: h.MemberID, GameDate: gameDate,
+			Kind: h.Kind, Amount: h.Amount, CapturedAt: h.Captured.UTC().Format(sqliteTimeLayout), Source: "mobile"})
+		switch {
+		case err != nil:
+			slog.Error("mobileCommit: donation write failed", "category", h.Category, "error", err)
+			commitErrors = append(commitErrors, fmt.Sprintf("%s insert failed for member_id %d: database error", h.Category, h.MemberID))
+			continue
+		case wrote:
+			recordsSaved[h.Category]++
+		default:
+			recordsUnchanged[h.Category]++
+		}
+		donationDates = append(donationDates, gameDate)
 	}
 
 	// Weekly totals become Saturdays by the web preview's rule (saturdayFromTotal): never
@@ -443,6 +485,10 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	if killRecordsSaved > 0 {
 		logActivity(claims.UserID, claims.Username, "imported", "kill_count", req.WeekDate, false, fmt.Sprintf("%d records", killRecordsSaved))
+	}
+	if d, w := recordsSaved["donation_daily"], recordsSaved["donation_weekly"]; d+w > 0 {
+		logActivity(claims.UserID, claims.Username, "imported", "donations", dateSpan(donationDates), false,
+			fmt.Sprintf("daily %d, weekly %d readings · via mobile", d, w))
 	}
 
 	msg := fmt.Sprintf("Import successful. Saved VS data for %d member(s), power data for %d member(s), kill data for %d member(s), registered %d new alias(es).",
