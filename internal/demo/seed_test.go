@@ -43,6 +43,7 @@ var seededTables = []string{
 	"members", "users", "member_aliases", "member_skills",
 	"power_history", "hero_power_history", "kill_history", "squad_power_history",
 	"hq_level_history", "profession_level_history", "vs_points", "vs_week_minimums",
+	"donation_readings", "donation_week_minimums",
 	"vs_league_seasons", "vs_league_weeks", "vs_league_days", "vs_league_matchups",
 	"schedule_events", "seasons", "season_score_levels", "season_reward_tiers", "season_trackables",
 	"season_participation", "season_member_records", "season_rewards",
@@ -108,6 +109,7 @@ func TestSeedNeverDatesHistoryAfterTheAnchor(t *testing.T) {
 		"power_history": "recorded_at", "kill_history": "recorded_at", "hq_level_history": "recorded_at",
 		"activity_log": "created_at", "accountability_strikes": "created_at", "train_logs": "date",
 		"participation_boards": "created_at", "season_participation": "created_at",
+		"donation_readings": "captured_at", "donation_week_minimums": "set_at",
 	} {
 		if n := count(t, db, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s > ?`, tbl, col), limit); n != 0 {
 			t.Errorf("%s: %d rows dated after the anchor", tbl, n)

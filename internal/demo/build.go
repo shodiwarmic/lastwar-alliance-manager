@@ -150,6 +150,18 @@ func vsScore(m member, weeksAgo, day int) int64 {
 	return roundStat(r, v)
 }
 
+// donationDay is a member's tech donation on one day (0 = Monday) of the Monday–Sunday
+// week weeksAgo back. Deterministic per (member, week, day), like vsScore; some days are
+// 0, more often for a less engaged member.
+func donationDay(m member, weeksAgo, day int) int64 {
+	r := rand.New(rand.NewPCG(seed^0xd0, uint64(m.ID)<<16|uint64(weeksAgo)<<4|uint64(day)))
+	if r.Float64() < 0.12*(1.6-m.Engagement*0.6) {
+		return 0
+	}
+	v := donationDailyMedian * m.Engagement * rankPowerRatio[m.Rank] * (0.5 + r.Float64())
+	return int64(math.Round(v/50) * 50) // the game's donation points come in 50s
+}
+
 // topBy returns up to n active members sorted by score descending, ties by id.
 func topBy(ms []member, n int, score func(member) int64) []member {
 	out := append([]member(nil), ms...)

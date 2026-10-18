@@ -147,3 +147,14 @@ type weighted struct {
 	Value  string
 	Weight float64
 }
+
+// Donations (Project 20). Not measured: no install held donation data before v3.2.0,
+// so these are a rough order of magnitude, with points in 50s as the game prints them.
+// Replace them with an aggregate and its query once a real alliance has a few weeks
+// recorded. The two minimums are what an officer might
+// set: about two-thirds of a typical week, and a modest daily floor.
+const (
+	donationDailyMedian   = 6000
+	donationWeeklyMinimum = 25_000
+	donationDailyMinimum  = 2_000
+)

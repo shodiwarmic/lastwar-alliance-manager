@@ -167,3 +167,41 @@ func TestDemoRosterServesThroughTheAPI(t *testing.T) {
 		}
 	}
 }
+
+// The generator inserts donation halves directly, so this proves they read as the app
+// derives them: the anchor is a Monday, so the current week is empty and last week
+// (2026-09-28 … 10-04) is whole — six exact days, Sunday so far, and a final total for
+// every active member who was here all week.
+func TestDemoDonationsDeriveCoherently(t *testing.T) {
+	setupDemoSeedTestDB(t)
+	now := time.Date(2026, 10, 5, 22, 0, 0, 0, time.UTC)
+	weeks, err := loadDonationWeeks(db, "2026-09-28", "2026-10-05", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(weeks) < 50 {
+		t.Fatalf("only %d members have donation readings", len(weeks))
+	}
+	whole := 0
+	for id, byWeek := range weeks {
+		if _, ok := byWeek["2026-10-05"]; ok {
+			t.Errorf("member %d has readings in the anchor's own week", id)
+		}
+		w, ok := byWeek["2026-09-28"]
+		if !ok || w.Days[0].Status == donationBlank {
+			continue // joined during the week
+		}
+		whole++
+		for d := 0; d < 6; d++ {
+			if w.Days[d].Status != donationExact {
+				t.Errorf("member %d day %d = %+v", id, d, w.Days[d])
+			}
+		}
+		if w.Days[6].Status != donationSoFar || w.Total.Status != donationFinal {
+			t.Errorf("member %d Sunday %+v total %+v", id, w.Days[6], w.Total)
+		}
+	}
+	if whole < 50 {
+		t.Errorf("only %d whole weeks", whole)
+	}
+}
