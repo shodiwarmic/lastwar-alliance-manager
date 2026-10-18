@@ -80,16 +80,26 @@ func TestSaveDonationEntries(t *testing.T) {
 	if r := save([]donationEntryCell{{MemberID: a, GameDate: "2026-10-13", Amount: i64(900), Was: nil}}, "manual", true); r.Unchanged != 1 {
 		t.Errorf("repeat %+v", r)
 	}
-	if r := save([]donationEntryCell{{MemberID: a, GameDate: "2026-10-13", Amount: i64(950), Was: nil}}, "manual", true); len(r.Conflicts) != 1 || r.Saved != 0 {
+	// A stale `was` beside a good cell: a conflict, and the save writes nothing at all (the VS
+	// page's rule, 209) — the good cell waits for the officer's choice too.
+	r = save([]donationEntryCell{
+		{MemberID: a, GameDate: "2026-10-13", Amount: i64(950), Was: nil},
+		{MemberID: a, GameDate: "2026-10-12", Amount: i64(10), Was: nil},
+	}, "manual", true)
+	if len(r.Conflicts) != 1 || r.Saved != 0 || r.Conflicts[0].Name != "Alder" || *r.Conflicts[0].Current != 900 || r.Conflicts[0].Loaded != nil || *r.Conflicts[0].Typed != 950 {
 		t.Errorf("stale was %+v", r)
 	}
 	if v, _, _ := stored(); v != 900 {
 		t.Errorf("a conflict overwrote: %d", v)
 	}
-	// With the loaded value, it saves; a CSV replaces whatever the page loaded.
-	if r := save([]donationEntryCell{{MemberID: a, GameDate: "2026-10-13", Amount: i64(950), Was: i64(900)}}, "manual", true); r.Saved != 1 {
-		t.Errorf("good was %+v", r)
+	if n := countRows(t, `SELECT COUNT(*) FROM donation_day_entries WHERE game_date = '2026-10-12'`); n != 0 {
+		t.Errorf("the good cell of a conflicting save was written")
 	}
+	// "Keep mine": resubmitted against the value the review showed — saved and counted.
+	if r := save([]donationEntryCell{{MemberID: a, GameDate: "2026-10-13", Amount: i64(950), Was: i64(900), Overridden: true}}, "manual", true); r.Saved != 1 || r.Overridden != 1 {
+		t.Errorf("keep mine %+v", r)
+	}
+	// A CSV replaces whatever the page loaded.
 	if r := save([]donationEntryCell{{MemberID: a, GameDate: "2026-10-13", Amount: i64(1200)}}, "csv", false); r.Saved != 1 {
 		t.Errorf("csv %+v", r)
 	}
@@ -172,6 +182,13 @@ func TestDonationEntryRoutes(t *testing.T) {
 	}
 	if n := countRows(t, `SELECT COUNT(*) FROM activity_log WHERE entity_type = 'donations' AND action = 'updated' AND details = '1 day entered, 0 cleared · by hand'`); n != 1 {
 		t.Errorf("activity rows %d", n)
+	}
+	// Someone else changes it; a save from the stale page is 409 with the conflict.
+	stale := `{"source":"manual","cells":[{"member_id":` + itoaTest(a) + `,"game_date":"` + today + `","amount":500,"was":null}]}`
+	w = serveRouter(t, "PUT", "/api/donations/entries", stale, sessionCookie(t, 1, ""))
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if w.Code != http.StatusConflict || len(res.Conflicts) != 1 || *res.Conflicts[0].Current != 800 {
+		t.Errorf("stale save: %d %s", w.Code, w.Body)
 	}
 
 	var buf bytes.Buffer

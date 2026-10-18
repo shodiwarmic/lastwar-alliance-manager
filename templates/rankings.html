@@ -281,6 +281,34 @@
 
 {{define "modals"}}
 {{if .Permissions.ManageMembers}}
+<!-- Save conflict review, as on the VS page (209): cells changed since the page loaded -->
+<div id="donations-conflict-modal" class="modal">
+    <div class="modal-content modal-lg">
+        <h2>Some donations changed since you loaded this week</h2>
+        <p class="hint"><span id="donations-conflict-count">0</span> value(s) were changed by someone else (or an import) after this page loaded, and you typed something different. Choose which to keep. Nothing has been saved yet.</p>
+        <div class="table-scroll">
+            <table class="data-table" id="donations-conflict-table" translate="no">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Day</th>
+                        <th>Loaded</th>
+                        <th>Now</th>
+                        <th>You typed</th>
+                        <th>Keep</th>
+                    </tr>
+                </thead>
+                <tbody id="donations-conflict-body"></tbody>
+            </table>
+        </div>
+        <div class="modal-actions mt-4 donations-conflict-actions">
+            <button type="button" class="btn btn-secondary" id="donations-conflict-mine-btn">Keep all mine</button>
+            <button type="button" class="btn btn-secondary" id="donations-conflict-current-btn">Take all current</button>
+            <button type="button" class="btn btn-secondary" id="donations-conflict-cancel-btn">Cancel</button>
+            <button type="button" class="btn btn-primary" id="donations-conflict-save-btn">Save</button>
+        </div>
+    </div>
+</div>
 <div id="donations-import-modal" class="modal">
     <div class="modal-content modal-lg">
         <h2>Import donations</h2>

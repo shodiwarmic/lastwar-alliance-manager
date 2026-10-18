@@ -150,8 +150,9 @@ type donationEntriesRequest struct {
 }
 
 // PUT /api/donations/entries — manage_members. Writes the changed day cells in one
-// transaction. A manual save is refused, cell by cell, where the stored entry is no longer
-// what the page loaded (conflicts); a CSV confirm replaces.
+// transaction. A manual save follows the VS page's rule: a cell changed underneath to
+// something other than what was typed is a conflict, answered 409 with the list and nothing
+// written; the page asks which to keep and resubmits. A CSV confirm replaces.
 func putDonationEntries(w http.ResponseWriter, r *http.Request) {
 	var req donationEntriesRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -178,6 +179,13 @@ func putDonationEntries(w http.ResponseWriter, r *http.Request) {
 		dbError(w, "putDonationEntries", err)
 		return
 	}
+	if len(res.Conflicts) > 0 {
+		// As the VS page: nothing written; the page asks, cell by cell, which to keep.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(res)
+		return
+	}
 	if err := tx.Commit(); err != nil {
 		dbError(w, "putDonationEntries: commit", err)
 		return
@@ -191,8 +199,11 @@ func putDonationEntries(w http.ResponseWriter, r *http.Request) {
 		if req.Source == "csv" {
 			action, how = "imported", "from CSV"
 		}
-		logActivity(user.ID, user.Username, action, "donations", dateSpan(dates), false,
-			fmt.Sprintf("%s entered, %d cleared · %s", plural(res.Saved, "day", "days"), res.Cleared, how))
+		details := fmt.Sprintf("%s entered, %d cleared", plural(res.Saved, "day", "days"), res.Cleared)
+		if res.Overridden > 0 {
+			details += fmt.Sprintf(", %d conflicts overridden", res.Overridden)
+		}
+		logActivity(user.ID, user.Username, action, "donations", dateSpan(dates), false, details+" · "+how)
 	}
 	writeJSON(w, res)
 }

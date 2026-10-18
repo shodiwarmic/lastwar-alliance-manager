@@ -869,11 +869,13 @@ function parseAmountInput(v) {
     return /^\d+$/.test(t) ? { ok: true, value: Number(t) } : { ok: false };
 }
 
+// A 409 (a cell changed underneath) resolves with { conflict: body } rather than throwing.
 async function putDonationEntries(source, cells) {
     const res = await fetch(`${API_BASE}/donations/entries`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source, cells }),
     });
+    if (res.status === 409) return { conflict: await res.json() };
     if (!res.ok) throw new Error((await res.text()).trim() || ('HTTP ' + res.status));
     return res.json();
 }
@@ -881,9 +883,79 @@ async function putDonationEntries(source, cells) {
 function reportEntryResult(r) {
     const parts = [`${r.saved} saved`];
     if (r.cleared) parts.push(`${r.cleared} cleared`);
-    if (r.conflicts.length) parts.push(`${r.conflicts.length} changed by someone else meanwhile — not saved, reloaded`);
     if (r.errors.length) parts.push(`${r.errors.length} refused: ${r.errors.slice(0, 3).join('; ')}`);
-    showToast('Donations: ' + parts.join(', ') + '.', r.conflicts.length || r.errors.length ? 'error' : 'success', 6000);
+    showToast('Donations: ' + parts.join(', ') + '.', r.errors.length ? 'error' : 'success', 6000);
+}
+
+// The cells of the save in flight, kept so the conflict review can resubmit them.
+let pendingDonationCells = [];
+
+async function submitDonationCells(cells) {
+    pendingDonationCells = cells;
+    try {
+        const r = await putDonationEntries('manual', cells);
+        if (r.conflict) { openDonationConflicts(r.conflict.conflicts); return; }
+        reportEntryResult(r);
+        pendingDonationCells = [];
+        setDonationsEditing(false);
+    } catch (e) {
+        showToast('Could not save donations: ' + e.message, 'error');
+    }
+}
+
+// Save conflict review, as on the VS page (209): a cell changed underneath (another officer,
+// an import) and the officer typed something else again. Nothing was saved; ask per cell.
+let pendingDonationConflicts = [];
+
+function openDonationConflicts(conflicts) {
+    pendingDonationConflicts = conflicts;
+    const show = v => v === null || v === undefined ? '—' : DonationMarks.amount(v);
+    const rows = conflicts.map((c, i) => {
+        const tr = document.createElement('tr');
+        const td = text => Object.assign(document.createElement('td'), { textContent: text });
+        const choice = document.createElement('td');
+        choice.translate = true;
+        choice.className = 'donations-conflict-choice';
+        [['mine', 'Mine'], ['current', 'Current']].forEach(([val, text]) => {
+            const label = document.createElement('label');
+            const radio = Object.assign(document.createElement('input'), { type: 'radio', name: 'donations-conflict-' + i, value: val, checked: val === 'mine' });
+            label.append(radio, ' ' + text);
+            choice.appendChild(label);
+        });
+        tr.append(td(c.name), td(c.game_date), td(show(c.loaded)), td(show(c.current)), td(show(c.typed)), choice);
+        return tr;
+    });
+    document.getElementById('donations-conflict-body').replaceChildren(...rows);
+    document.getElementById('donations-conflict-count').textContent = conflicts.length;
+    document.getElementById('donations-conflict-modal').style.display = 'flex';
+}
+
+function closeDonationConflicts() {
+    document.getElementById('donations-conflict-modal').style.display = '';
+    pendingDonationConflicts = [];
+}
+
+async function resolveDonationConflicts() {
+    const key = c => c.member_id + '|' + c.game_date;
+    const byKey = new Map(pendingDonationCells.map(c => [key(c), c]));
+    pendingDonationConflicts.forEach((c, i) => {
+        const picked = document.querySelector(`#donations-conflict-body input[name="donations-conflict-${i}"]:checked`);
+        if (picked && picked.value === 'current') {
+            byKey.delete(key(c));
+        } else {
+            // Keep mine: resubmit against the value just shown, so a further change
+            // meanwhile is caught again rather than overwritten.
+            const cell = byKey.get(key(c)) || { member_id: c.member_id, game_date: c.game_date, amount: c.typed };
+            byKey.set(key(c), { ...cell, was: c.current, overridden: true });
+        }
+    });
+    closeDonationConflicts();
+    if (byKey.size === 0) {
+        showToast('Kept the current values.');
+        setDonationsEditing(false);
+        return;
+    }
+    await submitDonationCells([...byKey.values()]);
 }
 
 async function saveDonationEntries() {
@@ -898,12 +970,7 @@ async function saveDonationEntries() {
     });
     if (bad) { showToast(`${bad} cell${bad !== 1 ? 's are' : ' is'} not a whole number.`, 'error'); return; }
     if (!cells.length) { setDonationsEditing(false); return; }
-    try {
-        reportEntryResult(await putDonationEntries('manual', cells));
-        setDonationsEditing(false);
-    } catch (e) {
-        showToast('Could not save donations: ' + e.message, 'error');
-    }
+    await submitDonationCells(cells);
 }
 
 // --- CSV import: preview, map names, confirm -------------------------------------------
@@ -989,6 +1056,11 @@ function wireDonationsEditing() {
         document.getElementById('donations-import-modal').style.display = '';
     });
     document.getElementById('donations-import-confirm').addEventListener('click', confirmDonationsImport);
+    const setAll = val => document.querySelectorAll('#donations-conflict-body input[type="radio"]').forEach(r => { r.checked = r.value === val; });
+    document.getElementById('donations-conflict-mine-btn').addEventListener('click', () => setAll('mine'));
+    document.getElementById('donations-conflict-current-btn').addEventListener('click', () => setAll('current'));
+    document.getElementById('donations-conflict-cancel-btn').addEventListener('click', closeDonationConflicts);
+    document.getElementById('donations-conflict-save-btn').addEventListener('click', resolveDonationConflicts);
 }
 
 QuickSearch.attach({

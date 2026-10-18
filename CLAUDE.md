@@ -1379,7 +1379,10 @@ never derived figures.
   Donations or imported from CSV. An entered day is exact (`entered: true`) and replaces the
   derived amount for that day only; a week with all seven days entered totals their sum. Written
   only by `saveDonationEntriesTx`: changed cells only, each with the value the page loaded
-  (`was`) — a manual save refuses a cell changed underneath, a CSV confirm replaces. In
+  (`was`). A manual save follows the VS page's rule (209): stored == `was` → written; stored ==
+  typed → skipped; otherwise a conflict — 409 with every conflict, **nothing written**, and the
+  page's review resubmits "keep mine" against the value it showed (`overridden`). A CSV confirm
+  replaces. In
   `mobileExcludedTables`: phones send readings.
 - **Member delete** removes the readings and entries (`deleteMemberTx`); `foreign_keys` is off.
 

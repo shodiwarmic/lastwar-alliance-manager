@@ -803,29 +803,39 @@ func memberDonationHistory(q rowQueryer, memberID int, joinedAt string, limit in
 // --- entered days -------------------------------------------------------------------------
 
 // donationEntryCell is one day cell from the Donations tab or a CSV: Amount nil clears the
-// entry. Was is the entered amount the page loaded (nil: none); a manual save is refused for a
-// cell whose stored entry no longer matches it, so an officer never overwrites a change made
-// underneath. A CSV import passes CheckWas false: importing is an intent to replace.
+// entry. Was is the entered amount the page loaded (nil: none). A manual save follows the VS
+// page's rule (private-docs 209): stored == Was → written; stored == Amount → nothing to do;
+// otherwise the cell changed underneath and the officer typed something else again — a
+// conflict, and the whole save writes nothing until the officer chooses. Overridden marks a
+// cell resubmitted after the review chose "keep mine" (Was is then the value just shown, so a
+// further change is caught again). A CSV import does not check: importing is an intent to
+// replace.
 type donationEntryCell struct {
-	MemberID int    `json:"member_id"`
-	GameDate string `json:"game_date"`
-	Amount   *int64 `json:"amount"`
-	Was      *int64 `json:"was"`
+	MemberID   int    `json:"member_id"`
+	GameDate   string `json:"game_date"`
+	Amount     *int64 `json:"amount"`
+	Was        *int64 `json:"was"`
+	Overridden bool   `json:"overridden,omitempty"`
 }
 
+// donationEntryConflict is one cell for the review: what the page loaded, what is stored
+// now, and what the officer typed (nil: blank).
 type donationEntryConflict struct {
 	MemberID int    `json:"member_id"`
+	Name     string `json:"name"`
 	GameDate string `json:"game_date"`
-	Stored   *int64 `json:"stored"`
-	Wanted   *int64 `json:"wanted"`
+	Loaded   *int64 `json:"loaded"`
+	Current  *int64 `json:"current"`
+	Typed    *int64 `json:"typed"`
 }
 
 type donationEntryResult struct {
-	Saved     int                     `json:"saved"`
-	Cleared   int                     `json:"cleared"`
-	Unchanged int                     `json:"unchanged"`
-	Conflicts []donationEntryConflict `json:"conflicts"`
-	Errors    []string                `json:"errors"`
+	Saved      int                     `json:"saved"`
+	Cleared    int                     `json:"cleared"`
+	Unchanged  int                     `json:"unchanged"`
+	Overridden int                     `json:"overridden"`
+	Conflicts  []donationEntryConflict `json:"conflicts"`
+	Errors     []string                `json:"errors"`
 }
 
 func sameAmount(a, b *int64) bool {
@@ -837,10 +847,13 @@ func sameAmount(a, b *int64) bool {
 
 // saveDonationEntriesTx writes entered days in one transaction the caller commits. Each cell is
 // validated (an active member, a date no later than today's game date, an amount ≥ 0) and
-// refused into Errors otherwise; the rest are written. source is manual or csv.
+// refused into Errors otherwise. With checkWas, every cell is classified before anything is
+// written: if any is a conflict, the result carries the conflicts and nothing is written (the
+// caller answers 409). source is manual or csv.
 func saveDonationEntriesTx(tx historyExecer, cells []donationEntryCell, source string, checkWas bool, userID int, now time.Time) (donationEntryResult, error) {
 	res := donationEntryResult{Conflicts: []donationEntryConflict{}, Errors: []string{}}
 	today := gametime.DateOf(now)
+	var toWrite []donationEntryCell
 	for _, c := range cells {
 		if _, err := time.Parse(gametime.DateLayout, c.GameDate); err != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("member %d: %q is not a YYYY-MM-DD date", c.MemberID, c.GameDate))
@@ -854,8 +867,8 @@ func saveDonationEntriesTx(tx historyExecer, cells []donationEntryCell, source s
 			res.Errors = append(res.Errors, fmt.Sprintf("member %d, %s: %d is below 0", c.MemberID, c.GameDate, *c.Amount))
 			continue
 		}
-		var rank string
-		if err := tx.QueryRow(`SELECT rank FROM members WHERE id = ?`, c.MemberID).Scan(&rank); err != nil || rank == "EX" {
+		var rank, name string
+		if err := tx.QueryRow(`SELECT rank, name FROM members WHERE id = ?`, c.MemberID).Scan(&rank, &name); err != nil || rank == "EX" {
 			if err != nil && err != sql.ErrNoRows {
 				return res, err
 			}
@@ -872,13 +885,22 @@ func saveDonationEntriesTx(tx historyExecer, cells []donationEntryCell, source s
 		default:
 			return res, err
 		}
-		if sameAmount(stored, c.Amount) {
-			res.Unchanged++
-			continue
+		switch {
+		case sameAmount(stored, c.Amount):
+			res.Unchanged++ // already what was typed
+		case checkWas && !sameAmount(stored, c.Was):
+			res.Conflicts = append(res.Conflicts, donationEntryConflict{MemberID: c.MemberID, Name: name,
+				GameDate: c.GameDate, Loaded: c.Was, Current: stored, Typed: c.Amount})
+		default:
+			toWrite = append(toWrite, c)
 		}
-		if checkWas && !sameAmount(stored, c.Was) {
-			res.Conflicts = append(res.Conflicts, donationEntryConflict{MemberID: c.MemberID, GameDate: c.GameDate, Stored: stored, Wanted: c.Amount})
-			continue
+	}
+	if len(res.Conflicts) > 0 {
+		return res, nil // nothing written until the officer chooses
+	}
+	for _, c := range toWrite {
+		if c.Overridden {
+			res.Overridden++
 		}
 		if c.Amount == nil {
 			if _, err := tx.Exec(`DELETE FROM donation_day_entries WHERE member_id = ? AND game_date = ?`, c.MemberID, c.GameDate); err != nil {

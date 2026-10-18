@@ -67,3 +67,17 @@
     padding: 4px 6px;
     text-align: right;
 }
+
+/* Save conflict review, as on the VS page (209). */
+.donations-conflict-choice label {
+    margin-right: 12px;
+    white-space: nowrap;
+}
+
+.donations-conflict-actions {
+    flex-wrap: wrap;
+}
+
+#donations-conflict-table td:not(:first-child) {
+    white-space: nowrap;
+}
