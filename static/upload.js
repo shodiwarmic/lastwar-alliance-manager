@@ -170,6 +170,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             formData.append('week', document.getElementById('vs-week').value);
             formData.append('force_category', document.getElementById('force-category').value);
+            formData.append('donation_date', document.getElementById('donation-date')?.value || '');
 
             // Append manual mappings if we are retrying
             if (Object.keys(manualCategories).length > 0) {
@@ -255,6 +256,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             currentImportPayload = result;
             currentWeekDate = result.week_date;
+            currentDonationDate = result.donation_date || '';
             manualCategories = {};
 
             // Show any hard OCR chunking errors before popping the modal
@@ -332,6 +334,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 let allMembers = [];
 let currentImportPayload = null;
 let currentWeekDate = null;
+let currentDonationDate = '';
 
 // Fetch members on load and wire preview modal buttons
 document.addEventListener('DOMContentLoaded', async () => {
@@ -346,10 +349,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('upload-preview-confirm-btn')?.addEventListener('click', commitImport);
 });
 
+// The donation halves' names in the preview: the tab each came from, and its day.
+const FIELD_LABELS = {
+    donation_daily: 'Donation (Daily)',
+    donation_weekly: 'Donation (Weekly)',
+};
+
 // The fields a row will save, plus the Weekly total it came from and any reason
 // it will not save as shown.
 function fillUpdatesCell(td, row) {
-    const parts = Object.entries(row.updated_fields).map(([k, v]) => `${k}: ${v}`);
+    const parts = Object.entries(row.updated_fields).map(([k, v]) =>
+        FIELD_LABELS[k] ? `${FIELD_LABELS[k]} ${currentDonationDate}: ${v}` : `${k}: ${v}`);
     if (row.total !== undefined && row.total !== null) parts.push(`weekly total: ${row.total}`);
     td.textContent = parts.join(', ') + (row.calculated_sat ? ' (Saturday calculated)' : '');
     if (row.error) {
@@ -547,7 +557,8 @@ async function commitImport() {
         // Echo the OCR diagnostics summary from the preview so the server can
         // enrich the activity-log entry (absent/empty on legacy OCR responses).
         ocr_summary: currentImportPayload?.ocr_summary || '',
-        source: 'ocr' // datapoint provenance for power/kill history rows
+        source: 'ocr', // datapoint provenance for power/kill history rows
+        donation_date: currentDonationDate // the game day the donation screens were read on
     };
 
     try {

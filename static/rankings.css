@@ -23,3 +23,61 @@
 .growth-window .growth-window-custom {
     width: 5.5em;
 }
+
+/* Donations tab: the week picker sits beside the search and wraps under it on a phone. */
+.donations-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+}
+
+.donations-week {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9em;
+}
+
+.donations-week select.form-input {
+    width: auto;
+}
+
+.donations-minimums {
+    margin: 4px 0 10px;
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.donations-pos {
+    color: var(--text-muted);
+    font-size: 0.85em;
+}
+
+/* Entering donations by hand: the actions sit with the week picker; the inputs fit a day column. */
+.donations-edit-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.donations-input {
+    width: 6.5em;
+    min-width: 4.5em;
+    padding: 4px 6px;
+    text-align: right;
+}
+
+/* Save conflict review, as on the VS page (209). */
+.donations-conflict-choice label {
+    margin-right: 12px;
+    white-space: nowrap;
+}
+
+.donations-conflict-actions {
+    flex-wrap: wrap;
+}
+
+#donations-conflict-table td:not(:first-child) {
+    white-space: nowrap;
+}

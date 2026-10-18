@@ -392,7 +392,7 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(m)
 }
 
-// clearUserReferences nulls the participation and VS-minimum columns that point at a
+// clearUserReferences nulls the participation and VS- and donation-minimum columns that point at a
 // user who is about to be deleted. The schema says ON DELETE SET NULL, but foreign_keys is off
 // app-wide so it never fires; readers already tolerate a dangling id, and this keeps
 // one from being written in the first place. q is a tx or db.
@@ -405,8 +405,13 @@ func clearUserReferences(q interface {
 		}
 	}
 	// The rows stay: a week's minimum is history whoever set it.
-	if _, err := q.Exec(`UPDATE vs_week_minimums SET set_by = NULL WHERE set_by IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
+	if _, err := q.Exec(`UPDATE donation_day_entries SET entered_by = NULL WHERE entered_by IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
 		return err
+	}
+	for _, tbl := range []string{"vs_week_minimums", "donation_week_minimums"} {
+		if _, err := q.Exec(`UPDATE `+tbl+` SET set_by = NULL WHERE set_by IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -430,6 +435,8 @@ func deleteMemberTx(tx *sql.Tx, id int) error {
 		{"squad power history", `DELETE FROM squad_power_history WHERE member_id = ?`},
 		{"hero power history", `DELETE FROM hero_power_history WHERE member_id = ?`},
 		{"kill history", `DELETE FROM kill_history WHERE member_id = ?`},
+		{"donation readings", `DELETE FROM donation_readings WHERE member_id = ?`},
+		{"donation day entries", `DELETE FROM donation_day_entries WHERE member_id = ?`},
 	}
 	for _, s := range steps {
 		if _, err := tx.Exec(s.q, id); err != nil {

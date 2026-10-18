@@ -77,6 +77,17 @@
 tr.acc-row--below-vs {
     background: color-mix(in srgb, var(--color-danger) 6%, transparent) !important;
 }
+/* Below a donation minimum: the warning tint, so it reads apart from VS's. A member
+   below both shows VS's. */
+tr.acc-row--below-donation {
+    background: color-mix(in srgb, var(--color-warning) 8%, transparent) !important;
+}
+
+/* The donation banner: warning, not danger, to match its rows. */
+.acc-flag-banner--donation {
+    background: var(--color-warning-bg);
+    border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
 
 /* --- VS value colouring --- */
 .acc-vs--below {

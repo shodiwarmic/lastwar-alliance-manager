@@ -14,7 +14,7 @@ import "net/http"
 // mobileAPIVersion is reported by login and capabilities. It rises whenever the
 // capabilities grow; it is informational — clients test the capability maps' keys.
 // A server answering 404 on /api/mobile/capabilities speaks contract 1.
-const mobileAPIVersion = 2
+const mobileAPIVersion = 3
 
 // mobileRoute is one /api/mobile/ route. Perms is an any-of gate resolved live on every
 // request; empty means any signed-in user.
@@ -54,7 +54,7 @@ func mobileStores() []mobileStore {
 		{
 			Key: "scan_commit",
 			Tables: []string{"vs_points", "power_history", "kill_history", "hero_power_history",
-				"squad_power_history", "hq_level_history", "profession_level_history"},
+				"squad_power_history", "hq_level_history", "profession_level_history", "donation_readings"},
 			// Days follow the VS page's gate, member stats the roster's; each record is
 			// checked against its own category's permission (mobileCategories).
 			ReadPerms:  []string{"manage_vs_points", "manage_members"},
@@ -147,6 +147,8 @@ var mobileExcludedTables = map[string]string{
 	// Officer judgement or app data: nothing the game shows.
 	"release_state":                "app data: the release check's cache of GitHub's latest release",
 	"vs_week_minimums":             "configuration: the VS daily minimum that applied to each week (officer judgement)",
+	"donation_week_minimums":       "configuration: the donation minimums that applied to each week (officer judgement)",
+	"donation_day_entries":         "officer entry: daily donations typed or imported on the web; phones send readings (donation_readings)",
 	"update_outcomes":              "app data: which host-update results reached the activity log",
 	"member_aliases":               "app data: officers' name-resolution mappings, written alongside scans by save_aliases",
 	"season_participation":         "officer judgement: participation levels, notes and poll votes",

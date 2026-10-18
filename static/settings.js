@@ -126,6 +126,9 @@ async function loadSettings() {
         document.getElementById('join-requirements').value = settings.join_requirements ?? '';
         document.getElementById('vs-minimum-points').value = settings.vs_minimum_points ?? 2500000;
         document.getElementById('vs-flag-days').value = settings.vs_flag_days_threshold ?? 2;
+        document.getElementById('donation-weekly-minimum').value = settings.donation_weekly_minimum ?? 0;
+        document.getElementById('donation-daily-minimum').value = settings.donation_daily_minimum ?? 0;
+        document.getElementById('donation-flag-days').value = settings.donation_flag_days_threshold ?? 2;
         document.getElementById('strike-needs-improvement-threshold').value = settings.strike_needs_improvement_threshold ?? 1;
         document.getElementById('strike-at-risk-threshold').value = settings.strike_at_risk_threshold ?? 3;
 
@@ -381,6 +384,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 join_requirements: document.getElementById('join-requirements').value.trim(),
                 vs_minimum_points: parseInt(document.getElementById('vs-minimum-points').value, 10) || 2500000,
                 vs_flag_days_threshold: parseInt(document.getElementById('vs-flag-days').value, 10) || 2,
+                donation_weekly_minimum: Math.max(0, parseInt(document.getElementById('donation-weekly-minimum').value, 10) || 0),
+                donation_daily_minimum: Math.max(0, parseInt(document.getElementById('donation-daily-minimum').value, 10) || 0),
+                donation_flag_days_threshold: parseInt(document.getElementById('donation-flag-days').value, 10) || 2,
                 strike_needs_improvement_threshold: parseInt(document.getElementById('strike-needs-improvement-threshold').value, 10) || 1,
                 strike_at_risk_threshold: parseInt(document.getElementById('strike-at-risk-threshold').value, 10) || 3,
             });

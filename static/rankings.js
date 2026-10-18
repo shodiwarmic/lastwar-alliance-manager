@@ -746,6 +746,328 @@ QuickSearch.attach({
     emptyText: 'No commanders match your search.',
 });
 
+// --- Donations tab ---
+
+const DAY_STATUS_LABEL = { final: 'final', so_far: 'so far', blank: '—' };
+
+function donationsStatusText(m, weekOver) {
+    if (m.below_weekly) return 'below the weekly minimum';
+    if (m.not_read_to_end) return 'not read to the end';
+    if (m.joined_mid_week) return 'joined this week';
+    if (m.total.status === 'so_far' && !weekOver) return 'so far';
+    return DAY_STATUS_LABEL[m.total.status] || m.total.status;
+}
+
+function donationsMinimumsText(min) {
+    const part = (label, v) => v > 0 ? `${label} ${DonationMarks.amount(v)}` : `${label} off`;
+    const src = min.source === 'current_setting' ? ' (no record for this week: today\'s settings)' : '';
+    return `Minimums for the week: ${part('weekly', min.weekly)}, ${part('daily', min.daily)}` +
+        (min.daily > 0 ? `, flag after ${min.flag_days} day${min.flag_days !== 1 ? 's' : ''} below` : '') + src + '.';
+}
+
+// Entering by hand (private-docs 290): the day cells become inputs for officers with
+// manage_members. A cell holds what was entered (blank when nothing was); the screenshots'
+// figure is its placeholder. Save sends only the changed cells, each with the value it was
+// loaded with, so an entry changed underneath is reported rather than overwritten.
+let donationsData = null;
+let donationsEditing = false;
+
+function donationInputCell(m, day, date) {
+    const td = document.createElement('td');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.inputMode = 'numeric';
+    input.className = 'form-input donations-input';
+    input.setAttribute('aria-label', `${m.name}, ${date}`);
+    input.dataset.memberId = m.id;
+    input.dataset.date = date;
+    input.dataset.was = day.entered ? String(day.amount) : '';
+    input.value = input.dataset.was;
+    if (!day.entered && day.status !== 'blank') input.placeholder = DonationMarks.amount(day.amount);
+    td.appendChild(input);
+    return td;
+}
+
+function buildDonationsRow(m, idx, weekOver) {
+    const tr = document.createElement('tr');
+    tr.dataset.search = m.name;
+    // The commander is the first column, so it is the one the narrow layout pins; the
+    // position is a muted prefix in the same cell, and the export carries the bare name.
+    const tdName = document.createElement('td');
+    tdName.dataset.exportText = m.name;
+    if (m.total.status !== 'blank') {
+        tdName.appendChild(Object.assign(document.createElement('span'), { className: 'donations-pos', textContent: `${idx + 1}. ` }));
+    }
+    const strong = document.createElement('strong');
+    strong.textContent = m.name;
+    tdName.appendChild(strong);
+    const days = donationsEditing
+        ? m.days.map((d, i) => donationInputCell(m, d, donationsData.days[i]))
+        : m.days.map(DonationMarks.dayCell);
+    const tdTotal = DonationMarks.totalCell(m.total, m);
+    const tdStatus = document.createElement('td');
+    tdStatus.textContent = donationsStatusText(m, weekOver);
+    if (m.below_daily) {
+        const badge = Object.assign(document.createElement('span'), { className: 'don-badge', textContent: `${m.days_below_daily} days below daily` });
+        tdStatus.appendChild(badge);
+    }
+    tr.append(tdName, ...days, tdTotal, tdStatus);
+    return tr;
+}
+
+async function loadDonations(week) {
+    const tbody = document.getElementById('donations-tbody');
+    if (!tbody) return;
+    const select = document.getElementById('donations-week-select');
+    try {
+        const res = await fetch(`${API_BASE}/donations` + (week ? `?week=${encodeURIComponent(week)}` : ''));
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        donationsData = data;
+        select.replaceChildren(...data.weeks.map((w, i) => {
+            const opt = document.createElement('option');
+            opt.value = w;
+            opt.textContent = i === 0 ? `Week of ${w} (this week)` : `Week of ${w}`;
+            return opt;
+        }));
+        select.value = data.week_date;
+        document.getElementById('donations-minimums').textContent = donationsMinimumsText(data.minimums);
+        if (!data.members.length) {
+            const tr = document.createElement('tr');
+            const td = Object.assign(document.createElement('td'), { colSpan: 10, className: 'empty-state', textContent: 'No active members.' });
+            tr.appendChild(td);
+            tbody.replaceChildren(tr);
+        } else {
+            tbody.replaceChildren(...data.members.map((m, i) => buildDonationsRow(m, i, data.week_over)));
+        }
+        QuickSearch.apply('donations-search');
+    } catch (err) {
+        console.error('loadDonations:', err);
+        const tr = document.createElement('tr');
+        const td = Object.assign(document.createElement('td'), { colSpan: 10, className: 'error', textContent: 'Failed to load donations.' });
+        td.style.cssText = 'text-align: center; color: var(--color-danger); padding: 20px;';
+        tr.appendChild(td);
+        tbody.replaceChildren(tr);
+    }
+}
+
+function setDonationsEditing(on) {
+    donationsEditing = on;
+    const show = (id, v) => { const e = document.getElementById(id); if (e) e.style.display = v ? '' : 'none'; };
+    show('donations-edit-btn', !on);
+    show('donations-import-btn', !on);
+    show('donations-save-btn', on);
+    show('donations-cancel-btn', on);
+    show('donations-edit-hint', on);
+    document.getElementById('donations-week-select').disabled = on;
+    if (donationsData) loadDonations(donationsData.week_date);
+}
+
+function parseAmountInput(v) {
+    const t = v.replace(/[,\s]/g, '');
+    if (t === '') return { ok: true, value: null };
+    return /^\d+$/.test(t) ? { ok: true, value: Number(t) } : { ok: false };
+}
+
+// A 409 (a cell changed underneath) resolves with { conflict: body } rather than throwing.
+async function putDonationEntries(source, cells) {
+    const res = await fetch(`${API_BASE}/donations/entries`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, cells }),
+    });
+    if (res.status === 409) return { conflict: await res.json() };
+    if (!res.ok) throw new Error((await res.text()).trim() || ('HTTP ' + res.status));
+    return res.json();
+}
+
+function reportEntryResult(r) {
+    const parts = [`${r.saved} saved`];
+    if (r.cleared) parts.push(`${r.cleared} cleared`);
+    if (r.errors.length) parts.push(`${r.errors.length} refused: ${r.errors.slice(0, 3).join('; ')}`);
+    showToast('Donations: ' + parts.join(', ') + '.', r.errors.length ? 'error' : 'success', 6000);
+}
+
+// The cells of the save in flight, kept so the conflict review can resubmit them.
+let pendingDonationCells = [];
+
+async function submitDonationCells(cells) {
+    pendingDonationCells = cells;
+    try {
+        const r = await putDonationEntries('manual', cells);
+        if (r.conflict) { openDonationConflicts(r.conflict.conflicts); return; }
+        reportEntryResult(r);
+        pendingDonationCells = [];
+        setDonationsEditing(false);
+    } catch (e) {
+        showToast('Could not save donations: ' + e.message, 'error');
+    }
+}
+
+// Save conflict review, as on the VS page (209): a cell changed underneath (another officer,
+// an import) and the officer typed something else again. Nothing was saved; ask per cell.
+let pendingDonationConflicts = [];
+
+function openDonationConflicts(conflicts) {
+    pendingDonationConflicts = conflicts;
+    const show = v => v === null || v === undefined ? '—' : DonationMarks.amount(v);
+    const rows = conflicts.map((c, i) => {
+        const tr = document.createElement('tr');
+        const td = text => Object.assign(document.createElement('td'), { textContent: text });
+        const choice = document.createElement('td');
+        choice.translate = true;
+        choice.className = 'donations-conflict-choice';
+        [['mine', 'Mine'], ['current', 'Current']].forEach(([val, text]) => {
+            const label = document.createElement('label');
+            const radio = Object.assign(document.createElement('input'), { type: 'radio', name: 'donations-conflict-' + i, value: val, checked: val === 'mine' });
+            label.append(radio, ' ' + text);
+            choice.appendChild(label);
+        });
+        tr.append(td(c.name), td(c.game_date), td(show(c.loaded)), td(show(c.current)), td(show(c.typed)), choice);
+        return tr;
+    });
+    document.getElementById('donations-conflict-body').replaceChildren(...rows);
+    document.getElementById('donations-conflict-count').textContent = conflicts.length;
+    document.getElementById('donations-conflict-modal').style.display = 'flex';
+}
+
+function closeDonationConflicts() {
+    document.getElementById('donations-conflict-modal').style.display = '';
+    pendingDonationConflicts = [];
+}
+
+async function resolveDonationConflicts() {
+    const key = c => c.member_id + '|' + c.game_date;
+    const byKey = new Map(pendingDonationCells.map(c => [key(c), c]));
+    pendingDonationConflicts.forEach((c, i) => {
+        const picked = document.querySelector(`#donations-conflict-body input[name="donations-conflict-${i}"]:checked`);
+        if (picked && picked.value === 'current') {
+            byKey.delete(key(c));
+        } else {
+            // Keep mine: resubmit against the value just shown, so a further change
+            // meanwhile is caught again rather than overwritten.
+            const cell = byKey.get(key(c)) || { member_id: c.member_id, game_date: c.game_date, amount: c.typed };
+            byKey.set(key(c), { ...cell, was: c.current, overridden: true });
+        }
+    });
+    closeDonationConflicts();
+    if (byKey.size === 0) {
+        showToast('Kept the current values.');
+        setDonationsEditing(false);
+        return;
+    }
+    await submitDonationCells([...byKey.values()]);
+}
+
+async function saveDonationEntries() {
+    const cells = [];
+    let bad = 0;
+    document.querySelectorAll('#donations-tbody .donations-input').forEach(input => {
+        const p = parseAmountInput(input.value);
+        if (!p.ok) { bad++; setFieldError(input, 'A whole number'); return; }
+        clearFieldError(input);
+        const was = input.dataset.was === '' ? null : Number(input.dataset.was);
+        if (p.value !== was) cells.push({ member_id: Number(input.dataset.memberId), game_date: input.dataset.date, amount: p.value, was });
+    });
+    if (bad) { showToast(`${bad} cell${bad !== 1 ? 's are' : ' is'} not a whole number.`, 'error'); return; }
+    if (!cells.length) { setDonationsEditing(false); return; }
+    await submitDonationCells(cells);
+}
+
+// --- CSV import: preview, map names, confirm -------------------------------------------
+
+let donationsImportRows = [];
+
+async function previewDonationsImport(file) {
+    const fd = new FormData();
+    fd.append('csv_file', file);
+    fd.append('week', document.getElementById('donations-week-select').value);
+    let data;
+    try {
+        const res = await fetch(`${API_BASE}/donations/import/preview`, { method: 'POST', body: fd });
+        if (!res.ok) throw new Error((await res.text()).trim());
+        data = await res.json();
+    } catch (e) {
+        showToast(e.message || 'Could not read the file.', 'error', 6000);
+        return;
+    }
+    donationsImportRows = data.rows;
+    const active = (donationsData ? donationsData.members : []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    const tbody = document.getElementById('donations-import-tbody');
+    tbody.replaceChildren(...data.rows.map((row, i) => {
+        const tr = document.createElement('tr');
+        const tdFile = Object.assign(document.createElement('td'), { textContent: row.original_name });
+        const tdMember = document.createElement('td');
+        if (row.matched_member) {
+            tdMember.textContent = row.matched_member.name;
+        } else {
+            const sel = document.createElement('select');
+            sel.className = 'form-input';
+            sel.dataset.row = i;
+            sel.appendChild(Object.assign(document.createElement('option'), { value: '', textContent: '— skip —' }));
+            active.forEach(m => sel.appendChild(Object.assign(document.createElement('option'), { value: m.id, textContent: m.name })));
+            tdMember.appendChild(sel);
+        }
+        const dates = row.cells.map(c => c.game_date);
+        const tdDays = Object.assign(document.createElement('td'), {
+            textContent: dates.length === 1 ? dates[0] : `${dates.length} days, ${dates[0]} – ${dates[dates.length - 1]}`,
+        });
+        const total = row.cells.reduce((s, c) => s + (c.amount || 0), 0);
+        const tdTotal = Object.assign(document.createElement('td'), { textContent: DonationMarks.amount(total) });
+        tr.append(tdFile, tdMember, tdDays, tdTotal);
+        return tr;
+    }));
+    const errBox = document.getElementById('donations-import-errors');
+    errBox.textContent = data.errors.length ? `Skipped: ${data.errors.join('; ')}` : '';
+    errBox.style.display = data.errors.length ? '' : 'none';
+    document.getElementById('donations-import-modal').style.display = 'flex';
+}
+
+async function confirmDonationsImport() {
+    const cells = [];
+    donationsImportRows.forEach((row, i) => {
+        let id = row.matched_member ? row.matched_member.id : null;
+        if (!id) {
+            const sel = document.querySelector(`#donations-import-tbody select[data-row="${i}"]`);
+            id = sel && sel.value ? Number(sel.value) : null;
+        }
+        if (!id) return;
+        row.cells.forEach(c => cells.push({ member_id: id, game_date: c.game_date, amount: c.amount }));
+    });
+    document.getElementById('donations-import-modal').style.display = '';
+    if (!cells.length) { showToast('Nothing to import.', 'info'); return; }
+    try {
+        reportEntryResult(await putDonationEntries('csv', cells));
+        if (donationsData) loadDonations(donationsData.week_date);
+    } catch (e) {
+        showToast('Could not import: ' + e.message, 'error');
+    }
+}
+
+function wireDonationsEditing() {
+    const edit = document.getElementById('donations-edit-btn');
+    if (!edit) return; // read-only: no manage_members
+    edit.addEventListener('click', () => setDonationsEditing(true));
+    document.getElementById('donations-cancel-btn').addEventListener('click', () => setDonationsEditing(false));
+    document.getElementById('donations-save-btn').addEventListener('click', saveDonationEntries);
+    const file = document.getElementById('donations-import-file');
+    document.getElementById('donations-import-btn').addEventListener('click', () => file.click());
+    file.addEventListener('change', () => { if (file.files[0]) previewDonationsImport(file.files[0]); file.value = ''; });
+    document.getElementById('donations-import-cancel').addEventListener('click', () => {
+        document.getElementById('donations-import-modal').style.display = '';
+    });
+    document.getElementById('donations-import-confirm').addEventListener('click', confirmDonationsImport);
+    const setAll = val => document.querySelectorAll('#donations-conflict-body input[type="radio"]').forEach(r => { r.checked = r.value === val; });
+    document.getElementById('donations-conflict-mine-btn').addEventListener('click', () => setAll('mine'));
+    document.getElementById('donations-conflict-current-btn').addEventListener('click', () => setAll('current'));
+    document.getElementById('donations-conflict-cancel-btn').addEventListener('click', closeDonationConflicts);
+    document.getElementById('donations-conflict-save-btn').addEventListener('click', resolveDonationConflicts);
+}
+
+QuickSearch.attach({
+    input: 'donations-search', container: 'donations-tbody', rows: 'tr',
+    emptyText: 'No commanders match your search.',
+});
+
 // --- Theme adaptation ---
 window.addEventListener('themechange', () => {
     const p = getChartPalette();
@@ -771,5 +1093,9 @@ document.addEventListener('DOMContentLoaded', () => {
         loadKillData();
         loadHQData();
         loadProfessionData();
+        loadDonations();
+        document.getElementById('donations-legend')?.appendChild(DonationMarks.legend());
+        document.getElementById('donations-week-select')?.addEventListener('change', e => loadDonations(e.target.value));
+        wireDonationsEditing();
     }
 });

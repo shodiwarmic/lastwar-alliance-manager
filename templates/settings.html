@@ -288,6 +288,25 @@
                     </div>
 
                     <div class="settings-group">
+                        <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-gift"/></svg> Donations</h4>
+                        <div class="form-group">
+                            <label for="donation-weekly-minimum">Weekly Donation Minimum:</label>
+                            <input type="number" id="donation-weekly-minimum" class="form-input" min="0" step="1000" required>
+                            <span class="help-text">Tech donation points expected per member per week (Monday–Sunday). Judged once the week is over, against the member's Sunday reading. 0 turns it off.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="donation-daily-minimum">Daily Donation Minimum:</label>
+                            <input type="number" id="donation-daily-minimum" class="form-input" min="0" step="100" required>
+                            <span class="help-text">Tech donation points expected per member per day. Only days known exactly (readings on two days in a row) are judged. 0 turns it off.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="donation-flag-days">Flag After N Days Below the Daily Minimum:</label>
+                            <input type="number" id="donation-flag-days" class="form-input" min="1" max="7" required>
+                            <span class="help-text">Members are flagged when they fall below the daily minimum on this many judged days in a donation week (1–7).</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
                         <h4 class="icon-heading"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-scale"/></svg> Accountability Strike Thresholds</h4>
                         <div class="form-group">
                             <label for="strike-needs-improvement-threshold">Needs Improvement (strikes ≥):</label>

@@ -120,8 +120,9 @@ func Manifest() ManifestData {
 	})
 	md.Boards["power"] = board(func(m member) int64 { return m.Power })
 	md.Boards["kills"] = board(func(m member) int64 { return m.Kills })
-	// The rest are boards the app does not store (donations, the Alliance Contribution
-	// tabs) or mails: scaled from engagement so the same members lead them.
+	// The rest are scaled from engagement so the same members lead them: boards with no
+	// distribution of their own (donations — whose seeded readings these do not mirror —
+	// the Alliance Contribution tabs) and the mails.
 	scaled := map[string]float64{
 		"donation_daily": 9e3, "donation_weekly": 60e3,
 		"mutual_assistance_daily": 40, "mutual_assistance_weekly": 260, "mutual_assistance_season": 1900,

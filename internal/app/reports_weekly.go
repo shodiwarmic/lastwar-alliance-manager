@@ -42,6 +42,22 @@ type weeklySummaryReport struct {
 	Completed         int  `json:"completed"`
 	ImportedCompleted int  `json:"imported_completed"`
 	FallbackActive    bool `json:"fallback_active"`
+	// Donations is the weekly donation result for the last complete Monday–Sunday week —
+	// not the VS week above, which differs on every day but Monday. Nil with no reading.
+	Donations *weeklyDonations `json:"donations"`
+}
+
+// weeklyDonations is the Weekly summary's donations section (decision 15): the top five
+// final totals and everyone below the weekly minimum, judged by the one rule
+// (judgeDonationWeek). No per-day figures and no daily rule: those are the Donations
+// report's.
+type weeklyDonations struct {
+	WeekDate    string            `json:"week_date"`
+	MembersRead int               `json:"members_read"`
+	ReadToEnd   int               `json:"read_to_end"`
+	Minimum     donationMinimums  `json:"minimum"`
+	Leaders     []ReportTopMember `json:"leaders"`
+	Below       []ReportTopMember `json:"below"`
 }
 
 // runWeeklySummaryReport builds the summary for the VS week evaluated at now (the current
@@ -158,5 +174,72 @@ func runWeeklySummaryReport(q rowQueryer, p weeklySummaryParams, now time.Time) 
 		rep.TotalStrikes += strikes
 	}
 	tagRows.Close()
-	return rep, tagRows.Err()
+	if err := tagRows.Err(); err != nil {
+		return nil, err
+	}
+	if rep.Donations, err = weeklySummaryDonations(q, now); err != nil {
+		return nil, err
+	}
+	return rep, nil
+}
+
+// weeklySummaryDonations is the donations section for the last complete donation week, or
+// nil when nobody was read that week.
+func weeklySummaryDonations(q rowQueryer, now time.Time) (*weeklyDonations, error) {
+	week, _ := donationEvalWeeks(now)
+	derived, err := loadDonationWeeks(q, week, week, now)
+	if err != nil {
+		return nil, err
+	}
+	if len(derived) == 0 {
+		return nil, nil
+	}
+	mins, err := donationMinimumsForWeek(q, week)
+	if err != nil {
+		return nil, err
+	}
+	out := &weeklyDonations{WeekDate: week, Minimum: mins, Leaders: []ReportTopMember{}, Below: []ReportTopMember{}}
+	rows, err := q.Query(`SELECT id, name, rank, COALESCE(joined_at, '') FROM members WHERE rank != 'EX' ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	type finalTotal struct {
+		m     ReportTopMember
+		below bool
+	}
+	var finals []finalTotal
+	for rows.Next() {
+		var m ReportTopMember
+		var joined string
+		if err := rows.Scan(&m.ID, &m.Name, &m.Rank, &joined); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		w, ok := derived[m.ID][week]
+		if !ok {
+			continue
+		}
+		out.MembersRead++
+		if w.Total.Status != donationFinal {
+			continue
+		}
+		out.ReadToEnd++
+		m.Value = int(w.Total.Amount)
+		finals = append(finals, finalTotal{m, judgeDonationWeek(w, mins, joined).BelowWeekly})
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(finals, func(i, j int) bool { return finals[i].m.Value > finals[j].m.Value })
+	for i, f := range finals {
+		if i < 5 {
+			out.Leaders = append(out.Leaders, f.m)
+		}
+	}
+	for i := len(finals) - 1; i >= 0; i-- { // worst first
+		if finals[i].below {
+			out.Below = append(out.Below, finals[i].m)
+		}
+	}
+	return out, nil
 }

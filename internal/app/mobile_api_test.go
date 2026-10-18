@@ -12,6 +12,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+
+	"lastwar-alliance/internal/gametime"
 )
 
 // The mobile API is a contract with a separately released client (the Android scanner), so
@@ -353,5 +355,85 @@ func TestMobileCommitContract(t *testing.T) {
 	out = decodeObject(t, w)
 	if out["aliases_saved"].(float64) != 0 || len(out["errors"].([]any)) != 1 {
 		t.Errorf("global alias without manage_members: %v", out)
+	}
+}
+
+// Donations (Project 20): both halves of a day in one commit, dated by captured_at's game
+// day (UTC−2, so 01:30 UTC is still yesterday), stamped mobile, counted per category and
+// logged once.
+func TestMobileCommitDonations(t *testing.T) {
+	f := setupMobileTestDB(t)
+	now := time.Now().UTC()
+	// A capture an hour ago, clear of the reset window either side of it.
+	at := now.Add(-time.Hour)
+	if inDonationResetWindow(at) || inDonationResetWindow(now) {
+		at = now.Add(-3 * time.Hour)
+	}
+	atRaw := at.Format(time.RFC3339)
+	gameDate := gametime.DateOf(at)
+	id := strconv.Itoa(f.other)
+	body := `{"week_date":"2026-10-05","records":[
+		{"member_id":` + id + `,"original_name":"Zed Player","category":"donation_daily","score":900,"captured_at":"` + atRaw + `"},
+		{"member_id":` + id + `,"original_name":"Zed Player","category":"donation_weekly","score":4100,"captured_at":"` + atRaw + `"},
+		{"member_id":` + strconv.Itoa(f.r3Member) + `,"original_name":"Member Three","category":"donation_daily","score":300},
+		{"member_id":` + strconv.Itoa(f.r4Member) + `,"original_name":"Officer Four","category":"donation_daily","score":800,"captured_at":"` + atRaw + `"},
+		{"member_id":` + strconv.Itoa(f.r4Member) + `,"original_name":"Officer Four","category":"donation_weekly","score":700,"captured_at":"` + atRaw + `"}]}`
+	w := serveMobile(t, "POST", "/api/mobile/commit", body, mobileToken(t, 2))
+	if w.Code != http.StatusOK {
+		t.Fatalf("commit: %d %s", w.Code, w.Body.String())
+	}
+	out := decodeObject(t, w)
+	saved := out["records_saved"].(map[string]any)
+	if saved["donation_daily"] != float64(2) || saved["donation_weekly"] != float64(1) {
+		t.Errorf("records_saved = %v", saved)
+	}
+	if errs := out["errors"].([]any); len(errs) != 1 || !strings.Contains(errs[0].(string), "Officer Four") {
+		t.Errorf("errors = %v, want Officer Four's impossible pair", errs)
+	}
+	if n := countRows(t, `SELECT COUNT(*) FROM donation_readings WHERE member_id = ? AND game_date = ? AND source = 'mobile'
+		AND captured_at = ?`, f.other, gameDate, at.Format(sqliteTimeLayout)); n != 2 {
+		t.Errorf("Zed's rows = %d, want both halves on %s", n, gameDate)
+	}
+	// No captured_at: filed on now's game day, never an empty time.
+	var date, capAt string
+	db.QueryRow(`SELECT game_date, captured_at FROM donation_readings WHERE member_id = ?`, f.r3Member).Scan(&date, &capAt)
+	if date != gametime.DateOf(time.Now()) || capAt == "" {
+		t.Errorf("no captured_at: game_date %q captured_at %q", date, capAt)
+	}
+	if n := countRows(t, `SELECT COUNT(*) FROM donation_readings WHERE member_id = ?`, f.r4Member); n != 0 {
+		t.Errorf("the refused pair stored %d rows", n)
+	}
+	if n := countRows(t, `SELECT COUNT(*) FROM activity_log WHERE entity_type = 'donations' AND action = 'imported'
+		AND details LIKE 'daily 2, weekly 1 readings · via mobile'`); n != 1 {
+		t.Errorf("donations activity rows = %d", n)
+	}
+
+	// The same upload again: unchanged.
+	w = serveMobile(t, "POST", "/api/mobile/commit", body, mobileToken(t, 2))
+	out = decodeObject(t, w)
+	if u := out["records_unchanged"].(map[string]any); u["donation_daily"] != float64(2) || u["donation_weekly"] != float64(1) {
+		t.Errorf("repeat: records_unchanged = %v (saved %v)", u, out["records_saved"])
+	}
+
+	// A capture across the 02:00 UTC boundary files on the game day it was read on.
+	yesterday := time.Date(now.Year(), now.Month(), now.Day(), 1, 30, 0, 0, time.UTC)
+	if yesterday.After(now) {
+		yesterday = yesterday.AddDate(0, 0, -1)
+	}
+	w = serveMobile(t, "POST", "/api/mobile/commit", `{"week_date":"2026-10-05","records":[
+		{"member_id":`+id+`,"original_name":"Zed Player","category":"donation_daily","score":5,"captured_at":"`+yesterday.Format(time.RFC3339)+`"}]}`,
+		mobileToken(t, 2))
+	if n := countRows(t, `SELECT COUNT(*) FROM donation_readings WHERE member_id = ? AND game_date = ?`,
+		f.other, yesterday.AddDate(0, 0, -1).Format("2006-01-02")); n != 1 {
+		t.Errorf("01:30 UTC filed on the wrong game day: %s", w.Body.String())
+	}
+
+	// Donations are manage_members': a token holding only manage_vs_points is refused per record.
+	mustExec(t, `UPDATE rank_permissions SET permissions = json_set(permissions, '$.manage_members', json('false')) WHERE rank = 'R4'`)
+	w = serveMobile(t, "POST", "/api/mobile/commit", `{"week_date":"2026-10-05","records":[
+		{"member_id":`+id+`,"original_name":"Zed Player","category":"donation_daily","score":1}]}`, mobileToken(t, 2))
+	out = decodeObject(t, w)
+	if errs := out["errors"].([]any); len(errs) != 1 || !strings.Contains(errs[0].(string), "manage_members") {
+		t.Errorf("manage_vs_points only: errors = %v", errs)
 	}
 }

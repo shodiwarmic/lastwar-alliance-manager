@@ -95,7 +95,7 @@ and a text's duplicate rows heal to one when it is next saved. Each change logs 
 duplicates, and choosing which mapping wins is a human's call.
 
 **`entity_type` values** (use these exact strings — they map to human labels in `activity.js`):
-`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`, `update`, `vs_week_minimum`
+`member`, `alias`, `user`, `prospect`, `ally`, `agreement_type`, `train_log`, `eligibility_rule`, `oc_category`, `oc_responsibility`, `oc_assignee`, `award_type`, `awards`, `file`, `file_tag`, `schedule`, `storm_assignments`, `storm_config`, `storm_group`, `invite`, `password_reset_link`, `vs_points`, `power_records`, `permissions`, `settings`, `credentials`, `accountability_strike`, `strike_type`, `participation_board`, `participation_exception`, `storm_attendance`, `poll_template`, `poll_instance`, `lastrank_sync`, `lastrank_review`, `season_reward_tier`, `rank_preview`, `update`, `vs_week_minimum`, `donations`, `donation_week_minimum`
 
 When adding a new entity type, also add it to the `ENTITY_LABELS` (and `ENTITY_LABELS_PLURAL` if applicable) maps in `static/activity.js`.
 
@@ -277,6 +277,7 @@ and the rest of the upload saves.
 | `kills` | `kill_history` | `manage_members` | ≥ 0, change-only |
 | `hq_level` | `hq_level_history` | `manage_members` | ≥ 1, never below the latest (a lower reading is a misread) |
 | `profession_level` | `profession_level_history` | `manage_members` | ≥ 1, change-only |
+| `donation_daily`, `donation_weekly` | `donation_readings` (`today` / `week` half) | `manage_members` | ≥ 0, dated by `captured_at`'s game day; see "Donations" below |
 
 Days follow the VS page's `manage_vs_points`, not the web import's stricter `manage_members`, so
 an officer who can type days in can upload them. A new category is a row in `mobileCategories`
@@ -319,7 +320,8 @@ Scanner → backend payload is `{name, score, category}` per entry, plus an opti
 `captured_at` (RFC 3339: when the phone read the screen) — **no `candidates[]` array**. The
 preview echoes `captured_at` from the request; the commit dates a member-stat record by it
 (`parseCapturedAt`: refused more than 10 minutes ahead or 30 days back, naming the phone's
-clock; absent means now). VS days are keyed by `week_date` and take no time. The scanner runs its own crash-token disambiguation (using the cached roster + the same Exact → Personal → Global → OCR alias hierarchy as `resolveMemberAlias`) before sending. The backend's `resolveMemberAlias` runs once per received name as a final safety net, but cannot fix a wrong score because by the time the entry hits the API only one `(name, score)` pair survives.
+clock; absent means now). A donation half is filed on `captured_at`'s game day
+(`parseDonationCapturedAt`: the same window, plus the reset window; absent means now). VS days are keyed by `week_date` and take no time. The scanner runs its own crash-token disambiguation (using the cached roster + the same Exact → Personal → Global → OCR alias hierarchy as `resolveMemberAlias`) before sending. The backend's `resolveMemberAlias` runs once per received name as a final safety net, but cannot fix a wrong score because by the time the entry hits the API only one `(name, score)` pair survives.
 
 This intentionally differs from the OCR-service path, which sends `candidates[]` because it has no roster access. Both paths converge on the same backend disambiguation rules — see the "Name resolution" section of `lastwar-screen-definitions/README.md` for the canonical algorithm both implementations must agree on.
 
@@ -627,7 +629,9 @@ category to its table, column and minimum. The mobile commit, the VS import comm
 Members CSV import use it — a repeat upload adds no rows. Its `at` argument dates a
 reading (the mobile `captured_at`): the comparison is then against the latest row at or
 before it, the row is inserted with that `recorded_at`, and later rows are left alone. No other history/state tables carry a
-`source` column — don't assume one on tables outside this list.
+`source` column — don't assume one on tables outside this list, with one exception of a different shape:
+`donation_readings` stamps `source` per row too, but it is one row per member, game day and half
+(latest reading wins, `recordDonationReading`), not an append-only history — see "Donations".
 
 > **`alliance_stats_history` is keyed on `external_alliance_id`, not
 > `lastrank_id`.** LastRank is *a source, not a required service*: a datapoint may
@@ -1326,6 +1330,62 @@ it passes exactly the same rules and returns exactly the same messages. It needs
 `participation_board` and `participation_exception` are in `neverBatched`: two boards
 recorded in fifteen minutes are two events, and five excusals are five members.
 
+## Donations (`donations.go`)
+
+The game shows two numbers per member on the Donation screen, both "so far": **today** (since
+the 02:00 UTC reset) and **week** (since Monday, game time — the donation week is
+**Monday–Sunday**, unlike VS's Monday–Saturday). Each is a **half**; the store holds halves,
+never derived figures.
+
+- **One row per member, game day and half** (`donation_readings`, `UNIQUE(member_id,
+  game_date, kind)`), written only by `recordDonationReading`: a guarded upsert whose
+  `captured_at >=` comparison is in SQL, so an older screenshot never overwrites a newer
+  reading; an equal amount still advances `captured_at` (Sunday's last reading is what makes a
+  week final) but reports *unchanged*. `captured_at` is `TEXT` in `SQLiteLayout`.
+- **The days are derived on read, once**: `deriveDonationWeek` over `loadDonationWeeks`, the one
+  reader every surface uses. Day *d* is **exact** when what was given by the end of *d−1* and of
+  *d* are both known — each from the next day's pair, `week − today`, Monday starting at 0 —
+  else **so far** at its own *today*, else **blank**. A pair counts only when its two halves
+  were read **within 15 minutes** of each other; an incoherent pair says nothing about the day
+  before and is noted on its day. Sunday is never exact (Monday's week restarts); its last
+  reading is final once the week is over (`week_over`). The week total is the latest *week*
+  half; `final` only from a Sunday reading after the week.
+- **Refused, never guessed**: a supplied `captured_at` in 02:00–02:09:59 UTC (lists then carry
+  yesterday's today beside the new week's 0); a member whose *today* exceeds their *week* in one
+  request when the today half was read no later than the week half. A time the server made up
+  (the web upload) is clamped out of the reset window instead.
+- **The web upload has no capture time** (no EXIF, no file time reaches the server), so the
+  page asks which game day the screens were read on (`donation_date`, `parseDonationDate`:
+  today or up to 30 days back). Its halves are dated `donationUploadInstant`: today → the
+  upload instant clamped past the reset window; a past day → `D 02:10:00` UTC, the day's
+  earliest accepted instant, so any timed reading of that day wins over it.
+- **Minimums are dated per week** (`donation_week_minimums`, one row holding both): the
+  Settings save records the current game week's row when either changes, in the settings
+  transaction; `donationMinimumsForWeek(s)` resolve a week to the row with the greatest
+  `week_date <=` it, else today's settings (`current_setting`). 0 is a real value — off — so
+  the Settings payload's two minimums are pointers (absent keeps them).
+- **One judgement** (`judgeDonationWeek`) for every surface. The weekly rule judges only a
+  final total; read but not on Sunday is "not read to the end", never below; never read is neither. The daily rule
+  judges exact days (and Sunday once the week is over) from the join date, N+ days below.
+- **Accountability judges two weeks**: weekly on the last complete week, daily on the current
+  one (or the last while the current has no judged day). `/api/accountability/members`
+  returns `{context, members}`: the weeks, the minimums and the VS evaluated week travel with
+  the verdicts, and each member carries its `donation_strikes` (one per member and judged
+  week, reason naming every rule). **Strikes take their week from the response, never from
+  the browser** (private-docs 266). `handleStrikeCreate`'s one-per-week guard covers
+  `vs_below_threshold` and `donation_below_minimum` and runs in the insert's transaction.
+- **Days entered by hand** (`donation_day_entries`, migration 087, private-docs 290) are a second
+  fact beside the readings: an officer's amount for a member and day, typed on Tracking →
+  Donations or imported from CSV. An entered day is exact (`entered: true`) and replaces the
+  derived amount for that day only; a week with all seven days entered totals their sum. Written
+  only by `saveDonationEntriesTx`: changed cells only, each with the value the page loaded
+  (`was`). A manual save follows the VS page's rule (209): stored == `was` → written; stored ==
+  typed → skipped; otherwise a conflict — 409 with every conflict, **nothing written**, and the
+  page's review resubmits "keep mine" against the value it showed (`overridden`). A CSV confirm
+  replaces. In
+  `mobileExcludedTables`: phones send readings.
+- **Member delete** removes the readings and entries (`deleteMemberTx`); `foreign_keys` is off.
+
 ## Reporting layer (`reports_*.go`)
 
 The Reports page (`/reports`) and every report on it sit on one layer, and that layer is
@@ -1346,7 +1406,9 @@ func run<Name>Report(q rowQueryer, p <Name>Params, now time.Time) (*<Name>Report
 - **Ranges resolve server-side** in `resolveReportRange` (`reports.go`): `weeks=N` is the N
   most recent *complete* VS weeks, ending the last Saturday before today's game date;
   `current=1` adds the current partial week; `weeks=all` starts at the earliest
-  `vs_points` week; or explicit `from`/`to`, clamped at today. No span cap. Cutoffs that
+  `vs_points` week; or explicit `from`/`to`, clamped at today. No span cap. A report in
+  donation weeks calls `resolveReportRangeFor(…, reportWeekDonation)`: Monday–Sunday,
+  ending on `lastCompleteSunday`, `all` from the earliest donation reading's Monday. Cutoffs that
   need a time are computed in Go, in UTC, and bound as `gametime.SQLiteLayout` strings —
   no `datetime('now', …)` in report SQL.
 - **The registry is `reportDefs`** (`reports.go`): key → title → permission key. Web

@@ -7,6 +7,7 @@
 {{end}}
 
 {{define "head_tags"}}
+<link rel="stylesheet" href="{{asset "/donation-marks.css"}}">
 <link rel="stylesheet" href="{{asset "/accountability.css"}}">
 <link rel="stylesheet" href="{{asset "/participation.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -27,6 +28,7 @@
     <div class="tab-bar" style="margin-top:1.5rem;">
         <button class="tab-btn active" data-tab="strikes">Strikes</button>
         <button class="tab-btn" data-tab="vs">VS History</button>
+        <button class="tab-btn" data-tab="donations">Donations</button>
         <button class="tab-btn" data-tab="participation">Participation</button>
         <button class="tab-btn" data-tab="train">Train Record</button>
     </div>
@@ -35,6 +37,9 @@
         <div class="loading-msg">Loading…</div>
     </div>
     <div id="tab-vs" class="tab-content">
+        <div class="loading-msg">Loading…</div>
+    </div>
+    <div id="tab-donations" class="tab-content">
         <div class="loading-msg">Loading…</div>
     </div>
     <div id="tab-participation" class="tab-content">
@@ -87,5 +92,6 @@
 <script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/strike-types.js"}}"></script>
 <script src="{{asset "/participation-history.js"}}"></script>
+<script src="{{asset "/donation-marks.js"}}"></script>
 <script src="{{asset "/accountability_profile.js"}}"></script>
 {{end}}

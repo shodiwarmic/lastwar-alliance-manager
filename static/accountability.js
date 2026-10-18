@@ -88,34 +88,123 @@ async function saveStrike() {
     strikesLoaded = false; // invalidate cache so next tab-switch refetches
 }
 
-// One-time evaluated-week notes (server-authoritative via page-config): "(last week)"
-// suffix on the VS-below heading (Monday fallback) + an import-lag note when not all
-// completed days are imported, so officers know which week/how much data the flags reflect.
-function applyVSWeekNotes() {
+// The weeks the verdicts were judged on, from the members API (context): the notes on the
+// VS heading, the donation column's week and every strike's ref_date come from here, never
+// from the browser's clock (private-docs 266), and they refresh with every load.
+let judgedContext = null;
+
+// Evaluated-week notes on the VS-below heading: an override is always named, "(last
+// week)" on the Monday fallback, and an import-lag note when not all completed days are
+// imported, so officers know which week and how much data the flags reflect.
+function applyVSWeekNotes(ctx) {
     const heading = document.getElementById('vs-flag-heading');
     if (!heading) return;
-    // An officer's override for this week is always named, so it can't act unseen.
-    if (cfg.vsMinimumSource === 'override') {
+    heading.querySelectorAll('.acc-week-note').forEach(n => n.remove());
+    const note = (text, title) => {
         const s = document.createElement('span');
         s.className = 'acc-week-note';
-        s.textContent = ` (${formatCompact(Number(cfg.vsMinimum))}, this week's override)`;
+        s.textContent = text;
+        if (title) s.title = title;
         heading.appendChild(s);
+    };
+    if (ctx.vs_minimum_source === 'override') {
+        note(` (${formatCompact(ctx.vs_minimum)}, this week's override)`);
     }
-    if (cfg.vsFallback === 'true') {
-        const s = document.createElement('span');
-        s.className = 'acc-week-note';
-        s.title = 'Current VS week has no completed days yet — showing last week';
-        s.textContent = ' (last week)';
-        heading.appendChild(s);
+    if (ctx.vs_fallback) {
+        note(' (last week)', 'Current VS week has no completed days yet — showing last week');
     }
-    const completed = parseInt(cfg.vsCompleted, 10) || 0;
-    const imported = parseInt(cfg.vsImportedCompleted, 10) || 0;
-    if (imported < completed) {
-        const note = document.createElement('span');
-        note.className = 'acc-week-note';
-        note.textContent = ` (flags based on ${imported} of ${completed} completed days imported so far)`;
-        heading.appendChild(note);
+    if (ctx.vs_imported_completed < ctx.vs_completed) {
+        note(` (flags based on ${ctx.vs_imported_completed} of ${ctx.vs_completed} completed days imported so far)`);
     }
+}
+
+// "2026-10-06" → "6 Oct", for naming a donation week in prose.
+function shortWeek(date) {
+    const [y, m, d] = date.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+// The donation strikes to file, as the server built them: one per member and judged week
+// (decision 23), each with its week and reason.
+function donationStrikeTargets(members) {
+    const out = [];
+    members.forEach(m => (m.donation_strikes || []).forEach(t => out.push({ member: m, week: t.week, rules: t.rules, reason: t.reason })));
+    return out;
+}
+
+function renderDonationBanner(members, ctx) {
+    const banner = document.getElementById('donation-flag-banner');
+    if (!banner) return;
+    const names = document.getElementById('donation-flag-names');
+    const note = document.getElementById('donation-flag-note');
+    const targets = donationStrikeTargets(members);
+    names.replaceChildren();
+    // One entry per member, naming each rule and the week it judged.
+    const flagged = members.filter(m => (m.donation_strikes || []).length);
+    flagged.forEach((m, i) => {
+        if (i) names.appendChild(document.createTextNode(', '));
+        names.appendChild(noTranslate(Object.assign(document.createElement('span'), { textContent: m.name })));
+        const parts = m.donation_strikes.map(t => t.rules
+            .map(r => r === 'daily' ? `daily, ${m.donation_days_below} days` : r).join(' and ') + `, week of ${shortWeek(t.week)}`);
+        names.appendChild(document.createTextNode(` (${parts.join('; ')})`));
+    });
+    // A minimum nobody recorded for its week is today's setting: say so, as an override is named.
+    const heading = document.getElementById('donation-flag-heading');
+    heading.querySelectorAll('.acc-week-note').forEach(n => n.remove());
+    const unrecorded = [];
+    if (ctx.donation_weekly_minimums.weekly > 0 && ctx.donation_weekly_minimums.source === 'current_setting') {
+        unrecorded.push(`week of ${shortWeek(ctx.donation_weekly_week)}`);
+    }
+    if (ctx.donation_daily_minimums.daily > 0 && ctx.donation_daily_minimums.source === 'current_setting'
+        && ctx.donation_daily_week !== ctx.donation_weekly_week) {
+        unrecorded.push(`week of ${shortWeek(ctx.donation_daily_week)}`);
+    }
+    if (unrecorded.length) {
+        heading.appendChild(Object.assign(document.createElement('span'), { className: 'acc-week-note',
+            textContent: ` (${unrecorded.join(' and ')}: no minimum recorded then, judged against today's)` }));
+    }
+    const dailyOn = ctx.donation_daily_minimums.daily > 0;
+    note.textContent = dailyOn && ctx.donation_judged_days === 0
+        ? 'Daily rule: no exact day yet — readings on two consecutive days make a day exact.'
+        : '';
+    const addBtn = document.getElementById('btn-add-donation-strikes');
+    if (addBtn) addBtn.style.display = targets.length ? '' : 'none';
+    banner.style.display = targets.length || note.textContent ? 'flex' : 'none';
+}
+
+// The Donations column names the daily rule's week, which is the week its total is for.
+function applyDonationColumnHeading(ctx) {
+    const th = document.getElementById('donations-col-head');
+    if (!th) return;
+    th.textContent = `Donations (${shortWeek(ctx.donation_daily_week)})`;
+    th.title = `The week of ${shortWeek(ctx.donation_daily_week)} so far. A "weekly" badge is about last week's total.`;
+}
+
+function donationCell(m) {
+    const td = document.createElement('td');
+    const total = document.createElement('span');
+    if (m.donation_total_status === 'blank') {
+        total.className = 'don-blank';
+        total.textContent = '—';
+        total.title = 'No donation reading this week';
+    } else {
+        total.className = m.donation_total_status === 'so_far' ? 'don-so-far' : '';
+        total.textContent = formatCompact(m.donation_total);
+        if (m.donation_total_status === 'so_far') total.title = 'So far: the week is still running, or was not read on Sunday';
+    }
+    td.appendChild(total);
+    td.dataset.exportValue = m.donation_total_status === 'blank' ? '' : String(m.donation_total);
+    if (m.donation_below_weekly) {
+        const b = Object.assign(document.createElement('span'), { className: 'don-badge', textContent: 'weekly' });
+        b.title = 'Below last week\'s weekly minimum';
+        td.appendChild(b);
+    }
+    if (m.donation_below_daily) {
+        const b = Object.assign(document.createElement('span'), { className: 'don-badge', textContent: `${m.donation_days_below} days` });
+        b.title = 'Below the daily minimum on this many days';
+        td.appendChild(b);
+    }
+    return td;
 }
 
 // --- Tab: Members ---
@@ -124,17 +213,17 @@ async function loadMembers() {
     const tbody = document.getElementById('members-tbody');
     const loadingRow = document.createElement('tr');
     const loadingCell = document.createElement('td');
-    loadingCell.colSpan = 6;
+    loadingCell.colSpan = 7;
     loadingCell.className = 'loading-msg';
     loadingCell.textContent = 'Loading…';
     loadingRow.appendChild(loadingCell);
     tbody.replaceChildren(loadingRow);
 
-    let members;
+    let members, ctx;
     try {
         const res = await fetch('/api/accountability/members');
         if (!res.ok) throw new Error();
-        members = await res.json();
+        ({ members, context: ctx } = await res.json());
     } catch (err) {
         console.error('loadMembers:', err);
         loadingCell.textContent = 'Failed to load members.';
@@ -142,6 +231,10 @@ async function loadMembers() {
     }
 
     allMembers = members;
+    judgedContext = ctx;
+    applyVSWeekNotes(ctx);
+    applyDonationColumnHeading(ctx);
+    renderDonationBanner(members, ctx);
 
     // VS flag banner
     const below = members.filter(m => m.below_threshold);
@@ -163,7 +256,7 @@ async function loadMembers() {
     if (!filtered.length) {
         const emptyRow = document.createElement('tr');
         const emptyCell = document.createElement('td');
-        emptyCell.colSpan = 6;
+        emptyCell.colSpan = 7;
         emptyCell.textContent = 'No members found.';
         emptyRow.appendChild(emptyCell);
         tbody.appendChild(emptyRow);
@@ -173,6 +266,7 @@ async function loadMembers() {
     filtered.forEach(m => {
         const tr = document.createElement('tr');
         if (m.below_threshold) tr.className = 'acc-row--below-vs';
+        else if (m.donation_below_weekly || m.donation_below_daily) tr.className = 'acc-row--below-donation';
         tr.dataset.search = m.name + ' ' + m.rank;
 
         const tdName = document.createElement('td');
@@ -221,24 +315,18 @@ async function loadMembers() {
         }
         tdActions.appendChild(actionWrap);
 
-        tr.append(tdName, tdRank, tdTag, tdStrikes, tdVS, tdActions);
+        tr.append(tdName, tdRank, tdTag, tdStrikes, tdVS, donationCell(m), tdActions);
         tbody.appendChild(tr);
     });
     QuickSearch.apply('member-search');
 }
 
-function currentMonday() {
-    const d = new Date();
-    const day = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() - (day - 1));
-    return d.toISOString().slice(0, 10);
-}
-
 async function addVSStrikesForBelow() {
     const below = allMembers.filter(m => m.below_threshold);
-    if (!below.length) return;
+    if (!below.length || !judgedContext) return;
 
-    const refDate = currentMonday();
+    // The week the flags were judged on, from the server (private-docs 266).
+    const refDate = judgedContext.vs_week;
     let added = 0;
     let skipped = 0;
 
@@ -253,7 +341,7 @@ async function addVSStrikesForBelow() {
             body: JSON.stringify({
                 member_id:   m.id,
                 strike_type: 'vs_below_threshold',
-                reason:      'VS below minimum this week',
+                reason:      `VS below minimum (week of ${shortWeek(refDate)})`,
                 ref_date:    refDate,
             }),
         });
@@ -286,6 +374,50 @@ async function addVSStrikesForBelow() {
     statusEl.textContent = msg;
     setTimeout(() => { statusEl.textContent = ''; }, 5000);
 
+    if (added > 0) {
+        loadMembers();
+        strikesLoaded = false;
+    }
+}
+
+async function addDonationStrikesForBelow() {
+    if (!judgedContext) return;
+    const targets = donationStrikeTargets(allMembers);
+    if (!targets.length) return;
+    const banner = document.getElementById('donation-flag-banner');
+    const btn = document.getElementById('btn-add-donation-strikes');
+    if (btn) btn.disabled = true;
+    let added = 0, skipped = 0, failed = 0;
+    for (const t of targets) {
+        const res = await fetch('/api/accountability/strikes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                member_id:   t.member.id,
+                strike_type: 'donation_below_minimum',
+                reason:      'Donations below minimum: ' + t.reason,
+                ref_date:    t.week,
+            }),
+        });
+        if (res.status === 409) skipped++;
+        else if (res.ok) added++;
+        else failed++;
+    }
+    if (btn) btn.disabled = false;
+
+    const parts = [];
+    if (added) parts.push(`✓ ${added} strike${added !== 1 ? 's' : ''} added`);
+    if (skipped) parts.push(`${skipped} already had a donation strike for that week`);
+    if (failed) parts.push(`${failed} failed`);
+    let statusEl = banner.querySelector('.vs-add-status');
+    if (!statusEl) {
+        statusEl = document.createElement('span');
+        statusEl.className = 'vs-add-status';
+        statusEl.style.cssText = 'margin-left:12px;font-size:0.85em;';
+        banner.appendChild(statusEl);
+    }
+    statusEl.textContent = parts.join(', ') + '.';
+    setTimeout(() => { statusEl.textContent = ''; }, 5000);
     if (added > 0) {
         loadMembers();
         strikesLoaded = false;
@@ -695,7 +827,6 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch(err => console.error('StrikeTypes.load:', err));
 
     Tabs.init({ hash: true, defaultTab: 'members', onActivate: onTabActivated });
-    applyVSWeekNotes();
     loadMembers();
 
     QuickSearch.attach({
@@ -717,6 +848,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const addVSBtn = document.getElementById('btn-add-vs-strikes');
         if (addVSBtn) addVSBtn.addEventListener('click', addVSStrikesForBelow);
+        const addDonationBtn = document.getElementById('btn-add-donation-strikes');
+        if (addDonationBtn) addDonationBtn.addEventListener('click', addDonationStrikesForBelow);
     }
 
     document.getElementById('strikes-status-filter').addEventListener('change', () => {

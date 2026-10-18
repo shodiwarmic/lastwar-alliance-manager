@@ -132,6 +132,7 @@ func Seed(db *sql.DB, o Options) (Result, error) {
 		{"aliases and skills", (*seeder).aliases},
 		{"history", (*seeder).history},
 		{"vs points", (*seeder).vsPoints},
+		{"donations", (*seeder).donations},
 		{"vs league", (*seeder).vsLeague},
 		{"seasons", (*seeder).seasons},
 		{"schedule", (*seeder).schedule},

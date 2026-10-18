@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // resolveMemberAlias resolves aliases using the tiered Alias Engine.
@@ -135,13 +136,23 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	// Datapoint provenance: 'ocr' (upload.js) or 'csv' (vs.js); else 'import'.
 	src := provenanceSource(req.Source)
 
+	// Donation halves are filed on the day the screens were read (the upload page asks;
+	// absent is today) and dated by donationUploadInstant.
+	now := time.Now()
+	donationDay, err := parseDonationDate(req.DonationDate, now)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	donationAt := donationUploadInstant(donationDay, now)
+
 	// Every key becomes a column name below. Refuse an unknown one before any SQL
 	// is built: it is a request this endpoint cannot honour, and joining it into
 	// a statement would be identifier injection.
 	for _, row := range req.Records {
 		for key := range row.UpdatedFields {
 			if !vsCommitFields[key] {
-				http.Error(w, fmt.Sprintf("Unknown field %q for %s: only monday–saturday, power and kills can be saved here", key, row.OriginalName), http.StatusBadRequest)
+				http.Error(w, fmt.Sprintf("Unknown field %q for %s: only monday–saturday, power, kills, donation_daily and donation_weekly can be saved here", key, row.OriginalName), http.StatusBadRequest)
 				return
 			}
 		}
@@ -158,6 +169,8 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	unchangedCount := 0
 	aliasCount := 0
 	var dbErrors []string
+	// Both tabs of one member in one upload are one pair, read together.
+	var donationHalves []donationHalfIn
 
 	// 1. Process Records (VS Points & Power)
 	for _, row := range req.Records {
@@ -171,7 +184,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 		var killsVal int
 		hasKills := false
 
-		// Separate power / kills from VS points
+		// Separate power / kills and the donation halves from VS points
 		for day, val := range row.UpdatedFields {
 			if day == "power" {
 				hasPower = true
@@ -179,6 +192,9 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 			} else if day == "kills" {
 				hasKills = true
 				killsVal = val
+			} else if kind := donationCategoryKinds[day]; kind != "" {
+				donationHalves = append(donationHalves, donationHalfIn{MemberID: row.MatchedMember.ID,
+					Name: row.OriginalName, Category: day, Kind: kind, Amount: int64(val), Captured: donationAt})
 			} else {
 				hasVSPoints = true
 			}
@@ -220,7 +236,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 				vals := []interface{}{row.MatchedMember.ID, req.WeekDate}
 
 				for day, val := range row.UpdatedFields {
-					if day == "power" || day == "kills" {
+					if !vsDayFields[day] {
 						continue
 					}
 					cols = append(cols, day)
@@ -235,7 +251,7 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 				var updates []string
 				var vals []interface{}
 				for day, val := range row.UpdatedFields {
-					if day == "power" || day == "kills" {
+					if !vsDayFields[day] {
 						continue
 					}
 					updates = append(updates, day+" = ?")
@@ -259,7 +275,31 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Process Saved Aliases — through the one alias helper, which logs each change
+	// 2. Donation halves: refuse an impossible pair, then the one writer, later wins.
+	donationsSaved, donationsUnchanged := map[string]int{}, map[string]int{}
+	donationHalves, pairErrs := refuseImpossibleDonationPairs(donationHalves)
+	dbErrors = append(dbErrors, pairErrs...)
+	for _, h := range donationHalves {
+		if h.Amount < 0 {
+			dbErrors = append(dbErrors, fmt.Sprintf("Donation (%s): %d is below 0", h.Name, h.Amount))
+			continue
+		}
+		wrote, err := recordDonationReading(tx, donationReadingWrite{MemberID: h.MemberID, GameDate: donationDay,
+			Kind: h.Kind, Amount: h.Amount, CapturedAt: h.Captured.UTC().Format(sqliteTimeLayout), Source: src})
+		switch {
+		case err != nil:
+			slog.Error("commitCSVImport: donation write failed", "error", err)
+			dbErrors = append(dbErrors, fmt.Sprintf("Donation (%s): database error", h.Name))
+		case wrote:
+			donationsSaved[h.Category]++
+		default:
+			donationsUnchanged[h.Category]++
+		}
+	}
+	donationsSavedN := donationsSaved["donation_daily"] + donationsSaved["donation_weekly"]
+	donationsUnchangedN := donationsUnchanged["donation_daily"] + donationsUnchanged["donation_weekly"]
+
+	// 3. Process Saved Aliases — through the one alias helper, which logs each change
 	// inside this transaction. The route already requires manage_members, so an OCR
 	// mapping may replace another member's global alias.
 	aliasesReceived := len(req.SaveAliases)
@@ -292,14 +332,28 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 	if req.OCRSummary != "" {
 		details += " · " + req.OCRSummary
 	}
-	logActivity(userID, user.Username, "imported", "vs_points", req.WeekDate, false, details)
+	// The VS/power row as before, except for an upload that carried nothing but donations.
+	if successCount > 0 || aliasCount > 0 || len(donationHalves)+len(pairErrs) == 0 {
+		logActivity(userID, user.Username, "imported", "vs_points", req.WeekDate, false, details)
+	}
+	if donationsSavedN > 0 {
+		logActivity(userID, user.Username, "imported", "donations", donationDay, false,
+			fmt.Sprintf("daily %d, weekly %d readings for %s · %s", donationsSaved["donation_daily"],
+				donationsSaved["donation_weekly"], donationDay, strings.ToUpper(src)))
+	}
 
+	message := fmt.Sprintf("Import successful. Saved data for %d members and registered %d new aliases.", successCount, aliasCount)
+	if donationsSavedN+donationsUnchangedN > 0 {
+		message += fmt.Sprintf(" Donation readings for %s: %d saved, %d unchanged.", donationDay, donationsSavedN, donationsUnchangedN)
+	}
 	response := map[string]interface{}{
-		"message":          fmt.Sprintf("Import successful. Saved data for %d members and registered %d new aliases.", successCount, aliasCount),
-		"imported":         successCount,
-		"unchanged":        unchangedCount,
-		"aliases_saved":    aliasCount,
-		"aliases_received": aliasesReceived,
+		"message":             message,
+		"donations_saved":     donationsSavedN,
+		"donations_unchanged": donationsUnchangedN,
+		"imported":            successCount,
+		"unchanged":           unchangedCount,
+		"aliases_saved":       aliasCount,
+		"aliases_received":    aliasesReceived,
 	}
 
 	if len(dbErrors) > 0 {
@@ -314,11 +368,18 @@ func commitCSVImport(w http.ResponseWriter, r *http.Request) {
 var vsDayColumns = []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
 
 // vsCommitFields is every key a commit's updated_fields may carry: the day
-// columns of vs_points, and power and kills, which go to their history tables.
+// columns of vs_points, power and kills, which go to their history tables, and the
+// two donation halves, which go to donation_readings.
 // Keys are joined into SQL as column names, so nothing else may get that far.
 var vsCommitFields = map[string]bool{
 	"monday": true, "tuesday": true, "wednesday": true, "thursday": true,
 	"friday": true, "saturday": true, "power": true, "kills": true,
+	"donation_daily": true, "donation_weekly": true,
+}
+
+// vsDayFields are the commit keys that are vs_points columns.
+var vsDayFields = map[string]bool{
+	"monday": true, "tuesday": true, "wednesday": true, "thursday": true, "friday": true, "saturday": true,
 }
 
 // errSaturdayIncomplete and errSaturdayNegative are saturdayFromTotal's refusals.

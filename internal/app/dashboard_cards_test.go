@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -81,5 +82,27 @@ func TestLayoutRendersReviewNudgeGate(t *testing.T) {
 				t.Errorf("expected %s in the rendered layout", c.want)
 			}
 		})
+	}
+}
+
+// The Donations card follows view_rankings, like the Rankings tab it links to, and a
+// stored layout saved before it existed gains it on read.
+func TestDonationsCard(t *testing.T) {
+	if !hasCard(allowedCards(PageData{Permissions: RankPermissions{ViewRankings: true}}), "donations") {
+		t.Error("view_rankings should see the Donations card")
+	}
+	if hasCard(allowedCards(PageData{Permissions: RankPermissions{}}), "donations") {
+		t.Error("the Donations card leaked to a user without view_rankings")
+	}
+
+	setupPreviewTestDB(t)
+	mustExec(t, `INSERT INTO user_dashboard_prefs (user_id, prefs) VALUES (1, '[{"id":"health","visible":true},{"id":"vs","visible":false}]')`)
+	w := serveRouter(t, "GET", "/api/dashboard/prefs", "", sessionCookie(t, 1, ""))
+	var got DashboardPrefsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if !hasCard(got.Prefs, "donations") || got.Prefs[0].ID != "health" || got.Prefs[1].Visible {
+		t.Errorf("merged prefs %+v", got.Prefs)
 	}
 }

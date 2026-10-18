@@ -114,6 +114,26 @@ func handleVSMissesReport(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleDonationsReport is GET /api/reports/donations?from=&to=&weeks=&current=&member_id=
+// (view_report_donations). Weeks are Monday–Sunday.
+func handleDonationsReport(w http.ResponseWriter, r *http.Request) {
+	rng, err := reportRangeParamsFromQuery(r.URL.Query())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	p := donationsParams{Range: rng}
+	if v := r.URL.Query().Get("member_id"); v != "" {
+		if p.MemberID, err = strconv.Atoi(v); err != nil || p.MemberID < 0 {
+			http.Error(w, "member_id must be a member's id", http.StatusBadRequest)
+			return
+		}
+	}
+	serveReport(w, "donations", func(q rowQueryer) (any, error) {
+		return runDonationsReport(q, p, time.Now())
+	})
+}
+
 // handleParticipationGridReport is GET /api/reports/participation?from=&to=&weeks=&current=
 // (view_report_participation).
 func handleParticipationGridReport(w http.ResponseWriter, r *http.Request) {

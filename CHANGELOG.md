@@ -9,6 +9,48 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v3.2.0 — 2026-10-18
+
+**Donations tracking**: the members' tech donations, read from the Donation screen's Daily and
+Weekly tabs by screenshot upload or the Android scanner, worked out into daily amounts, judged
+against a weekly and a daily minimum, and shown on Tracking, Accountability, each member's profile,
+a Donations report, the Weekly summary and the dashboard.
+([#127](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/127))
+
+**Minor** — an image pull; nothing on the host changes and no `.env` needs editing. One database
+migrations (086, 087) add three tables, three settings columns, a strike category and a permission key.
+
+- **Donations are recorded.** The game shows each member's donation *today* and *this week* (Monday
+  to Sunday), both so far. Readings from two days in a row make a day exact; a day with only its own
+  reading shows *so far*; Sunday's last reading counts once the week is over. A reading never
+  replaces a later one, a member whose "today" is above their "week" in one read is refused as a
+  misread, and a reading taken in the ten minutes after the 02:00 UTC reset is refused.
+- **Screenshot upload stores both Donation tabs** (they were reported as "not stored yet"). The page
+  asks which game day the screens were taken on, today by default. **Needs the OCR service v1.0.1 or
+  later**, which tells the Donation tabs apart from Power: earlier versions read every Donation
+  screenshot as Power.
+- **Entered by hand, or from a CSV.** On Tracking → Donations, officers with roster management can
+  type each member's daily donation (correcting a misread, or filling in someone nobody scanned) and
+  import a CSV of them, previewed before it saves. A typed day replaces the screenshots' figure for
+  that day.
+- **The Android scanner** can send both tabs through the mobile API (`donation_daily`,
+  `donation_weekly`; `api_version` 3). The scanner release that uses it comes separately.
+- **Minimums and strikes.** Alliance Settings → Donations: a weekly and a daily minimum, each
+  optional (0 is off), and how many days below the daily one flag a member. They are remembered per
+  week. Accountability gains a Donations column, a banner and **Add Donation Strikes**: one strike
+  per member per week, dated the week that was judged, under the new built-in **Donation Below
+  Minimum** category.
+- **Where to read them.** A **Donations** tab on Tracking (any week, every member), a Donations tab
+  on each member's profile (eight weeks), a **Donations** report on the Reports page (Monday–Sunday
+  weeks; its permission is given to every rank that holds *VS misses*), a donations section in the
+  Weekly summary for last week, and a **Donations** dashboard card.
+- **Fixed: Add VS Strikes dated strikes by the browser's clock.** From Sunday evening in the
+  Americas until Monday's reset it filed them against the wrong week; strikes now carry the week
+  the flags were judged on. Two officers filing at the same moment can no longer file one week twice.
+- **For operators:** rolling back to v3.1.0 keeps working: the old image ignores the new tables and
+  columns. A save of the permissions matrix made while on v3.1.0 drops the new report key, as with
+  v3.1.0's own keys.
+
 ## v3.1.0 — 2026-10-15
 
 A **Reports** page: the weekly summary, a VS-misses report and a participation grid, each to read,

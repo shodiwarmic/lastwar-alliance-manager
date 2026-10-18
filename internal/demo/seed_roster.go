@@ -3,6 +3,9 @@ package demo
 import (
 	"fmt"
 	"math"
+	"time"
+
+	"lastwar-alliance/internal/gametime"
 )
 
 // settings is the one table the seed UPDATEs: migration 054 creates the singleton on every
@@ -15,10 +18,12 @@ func (s *seeder) settings() {
 	}
 	s.exec(`UPDATE settings SET alliance_name = ?, alliance_tag = ?, our_server_id = ?,
 		pwd_validity_days = 0, cv_worker_url = ?, ocr_backend_mode = ?,
-		login_message = '', join_requirements = ?, vs_minimum_points = ?
+		login_message = '', join_requirements = ?, vs_minimum_points = ?,
+		donation_weekly_minimum = ?, donation_daily_minimum = ?
 		WHERE id = 1`,
 		AllianceName, AllianceTag, ServerID, s.o.WorkerURL, mode,
-		"HQ 30+, 150M power, active in VS and Desert Storm.", 2_500_000)
+		"HQ 30+, 150M power, active in VS and Desert Storm.", 2_500_000,
+		donationWeeklyMinimum, donationDailyMinimum)
 	// Event level ceilings, as an operator sets them under Settings → Game Limits; the
 	// migrations seed a ceiling of the baseline, which would put every event at one level.
 	for _, c := range []struct {
@@ -199,4 +204,47 @@ func (s *seeder) vsPoints() {
 	s.exec(`DELETE FROM vs_week_minimums WHERE kind = 'setting'`)
 	s.exec(`INSERT INTO vs_week_minimums (week_date, kind, minimum_points, set_at) VALUES (?, 'setting', ?, ?)`,
 		s.monday(vsWeeks-1), 2_500_000, s.ts(float64(7*(vsWeeks-1))+0.1))
+}
+
+// donations writes, for every active member, both donation halves on each day of the
+// last complete Monday–Sunday week and on the finished days of the current one. Each day
+// is read once, at 18:00 game time (20:00 UTC, clear of the reset): today is part of the
+// day's amount (more was given after the reading) and the week is everything before it
+// plus that part, so the app derives exact days from consecutive readings, and last
+// week's Sunday reading makes its total final. The manifest's canned donation boards are
+// what the demo's OCR service answers, not a mirror of this.
+func (s *seeder) donations() {
+	done := s.todayWeekday() // finished days of the current week
+	for _, m := range s.ds.activeMembers() {
+		for w := 1; w >= 0; w-- {
+			days := 7
+			if w == 0 {
+				days = done
+			}
+			var before int64
+			for d := 0; d < days; d++ {
+				date := gametime.MondayOf(s.today).AddDate(0, 0, d-7*w)
+				daysAgo := int(s.today.Sub(date).Hours() / 24)
+				if m.JoinedAgo < daysAgo {
+					before = 0
+					continue
+				}
+				amount := donationDay(m, w, d)
+				today := amount * 4 / 5
+				at := time.Date(date.Year(), date.Month(), date.Day(), 20, 0, 0, 0, time.UTC).Format(gametime.SQLiteLayout)
+				for _, h := range []struct {
+					kind   string
+					amount int64
+				}{{"today", today}, {"week", before + today}} {
+					s.exec(`INSERT INTO donation_readings (member_id, game_date, kind, amount, captured_at, source, updated_at)
+						VALUES (?, ?, ?, ?, ?, ?, ?)`,
+						m.ID, date.Format(gametime.DateLayout), h.kind, h.amount, at, "mobile", at)
+				}
+				before += amount
+			}
+		}
+	}
+	// The minimums as recorded from the earliest seeded week, as vsPoints records VS's.
+	s.exec(`INSERT INTO donation_week_minimums (week_date, weekly_minimum, daily_minimum, set_at) VALUES (?, ?, ?, ?)`,
+		s.monday(1), donationWeeklyMinimum, donationDailyMinimum, s.ts(float64(7+s.todayWeekday())+0.1))
 }

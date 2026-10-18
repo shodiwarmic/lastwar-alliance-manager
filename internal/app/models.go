@@ -333,15 +333,20 @@ type Settings struct {
 	// TranslationMonthlyCharCap bounds monthly upstream spend (0 disables the
 	// guard). Summed from translation_cache.char_count — which is why cache
 	// rows are never deleted.
-	TranslationMonthlyCharCap       int    `json:"translation_monthly_char_cap"`
-	TrainFreeDailyLimit             int    `json:"train_free_daily_limit"`
-	TrainPurchasedDailyLimit        int    `json:"train_purchased_daily_limit"`
-	AllianceMaxMembers              int    `json:"alliance_max_members"`
-	JoinRequirements                string `json:"join_requirements"`
-	VSMinimumPoints                 int    `json:"vs_minimum_points"`
-	VsFlagDaysThreshold             int    `json:"vs_flag_days_threshold"`
-	StrikeNeedsImprovementThreshold int    `json:"strike_needs_improvement_threshold"`
-	StrikeAtRiskThreshold           int    `json:"strike_at_risk_threshold"`
+	TranslationMonthlyCharCap int    `json:"translation_monthly_char_cap"`
+	TrainFreeDailyLimit       int    `json:"train_free_daily_limit"`
+	TrainPurchasedDailyLimit  int    `json:"train_purchased_daily_limit"`
+	AllianceMaxMembers        int    `json:"alliance_max_members"`
+	JoinRequirements          string `json:"join_requirements"`
+	VSMinimumPoints           int    `json:"vs_minimum_points"`
+	VsFlagDaysThreshold       int    `json:"vs_flag_days_threshold"`
+	// The donation minimums (0 = off) and the daily rule's day count. The minimums are
+	// pointers so a PUT that omits them keeps the stored values: 0 is a real value here.
+	DonationWeeklyMinimum           *int `json:"donation_weekly_minimum"`
+	DonationDailyMinimum            *int `json:"donation_daily_minimum"`
+	DonationFlagDaysThreshold       int  `json:"donation_flag_days_threshold"`
+	StrikeNeedsImprovementThreshold int  `json:"strike_needs_improvement_threshold"`
+	StrikeAtRiskThreshold           int  `json:"strike_at_risk_threshold"`
 	// Schedule defaults.
 	//
 	// The four level fields (mg_baseline / zs_baseline / max_mg_level /
@@ -949,6 +954,7 @@ type RankPermissions struct {
 	// One key per report on the Reports page (reports.go → reportDefs).
 	ViewReportWeekly        bool `json:"view_report_weekly"`
 	ViewReportVSMisses      bool `json:"view_report_vs_misses"`
+	ViewReportDonations     bool `json:"view_report_donations"`
 	ViewReportParticipation bool `json:"view_report_participation"`
 }
 
@@ -1036,6 +1042,7 @@ var PermissionGroups = []PermissionGroup{
 	{Feature: "Reports", Rows: []PermissionRow{
 		{Key: "view_report_weekly", Label: "Weekly summary"},
 		{Key: "view_report_vs_misses", Label: "VS misses"},
+		{Key: "view_report_donations", Label: "Donations"},
 		{Key: "view_report_participation", Label: "Participation grid"},
 	}},
 	{Feature: "Season Hub", Rows: []PermissionRow{
@@ -1454,6 +1461,9 @@ type PageData struct {
 	VSImportedCompleted int
 	VSFallbackActive    bool
 	MemberID            int
+	// GameToday is today's game date (UTC−2), for a page that defaults a date control to
+	// it — never computed by the browser.
+	GameToday string
 	// OCRBackendMode is "cloud" (default — Cloud Vision auto-detect) or
 	// "local" (PaddleOCR sidecar; user picks scene per batch). Templates
 	// use this to swap help text and conditionally disable the
@@ -1562,6 +1572,9 @@ type VSImportCommitRequest struct {
 	// "ocr" (upload.js) or "csv" (vs.js). Threaded into the history-table inserts.
 	// Falls back to "import" when absent/unrecognized (old clients).
 	Source string `json:"source,omitempty"`
+	// DonationDate is the game day the donation screens were read on (the upload page's
+	// "Donation screens taken on", echoed from the preview). Absent means today.
+	DonationDate string `json:"donation_date,omitempty"`
 }
 
 // --- Mobile API Payloads ---
