@@ -497,6 +497,25 @@ A new install avoids it by running `umask 022` before creating the directory and
 host files (see the [README](../README.md#quick-install)). A later release will create these
 directories with safe modes and report a refusal on the Admin page before you press Install.
 
+#### Install is refused: "the collabora image … is not on this host"
+
+A known issue up to and including v3.2.0. Before an install moves anything, the agent tags every
+image of the running stack so a rollback can return to it. Collabora is pinned by digest, so that
+tag is its only one. When a request ends, the agent removes its tags. On Docker's classic image
+store (`overlay2`, `docker info` shows no `containerd` snapshotter), removing an image's last tag
+also drops its digest. The Collabora container keeps running, but nothing names its image any
+more. The next request then cannot tag it and is refused before anything changes. So the first
+Admin-page update works, and every later one is refused until this is done:
+
+```bash
+docker pull "$(docker compose config --images | grep collabora)"
+```
+
+Run it in the install directory, then press **Install** again. The layers are already on the host,
+so the pull only restores the name: nothing restarts. It is needed after each successful Admin-page
+update until a later release fixes the agent. A terminal update (`./scripts/manage.sh update`)
+pulls every image it installs, so it is not affected.
+
 ### Recovering from a failed update
 
 A failed update from the Admin page ends in one of three ways, and the Admin page says which:

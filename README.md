@@ -73,6 +73,14 @@ chmod 755 . scripts scripts/lib
 
 The `umask 022` line above avoids it on a new install. A later release will set these modes itself.
 
+**Known issue:** after an Admin-page update **succeeds**, the next one is refused with *"the collabora image collabora/code@sha256:… is not on this host, so it could not be held for a rollback"*. Nothing changes, and the app keeps running. The fix needs no new release. Run this in the install directory before pressing **Install** again; the image is already there, so it takes seconds and restarts nothing:
+
+```bash
+docker pull "$(docker compose config --images | grep collabora)"
+```
+
+It is needed again after each successful Admin-page update until a later release fixes it. An update from a terminal (`./scripts/manage.sh update`) is not affected.
+
 ## Documentation
 
 | Guide | What's in it |
