@@ -633,6 +633,7 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/admin/advanced/storm-slots", authMiddleware(adminMiddleware(putAdvancedStormSlots))).Methods("PUT")
 
 	// Train Tracker API
+	router.HandleFunc("/api/train-allocation", authMiddleware(requirePermission("manage_train", getTrainAllocation))).Methods("GET")
 	router.HandleFunc("/api/train-logs", authMiddleware(requirePermission("view_train", getTrainLogs))).Methods("GET")
 	router.HandleFunc("/api/train-logs", authMiddleware(requirePermission("manage_train", postTrainLog))).Methods("POST")
 	router.HandleFunc("/api/train-logs/{id:[0-9]+}", authMiddleware(requirePermission("manage_train", putTrainLog))).Methods("PUT")

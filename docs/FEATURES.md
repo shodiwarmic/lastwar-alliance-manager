@@ -221,6 +221,7 @@ A central hub for all alliance-wide mail templates, announcements, and reference
 - **Eligibility Rule Engine**: Officers create and save named eligibility rules using flexible OR-group / AND-condition logic to define who qualifies to conduct a train. Conditions can filter on member rank, current/previous week VS points, individual VS day columns, and days since last FREE or any train conducted.
 - **Configurable Selection**: Each rule stores a selection method — Random, Greatest, or Least — applied to any tracked field (e.g. "prioritise members who have gone longest without conducting a FREE train").
 - **Conductor Log**: Every train run is recorded with a game date (UTC-2), train type (FREE or PURCHASED), conductor, optional VIP slot (Special Guest or Guardian Defender), and notes. All members can view the full history with date-range filtering.
+- **Allocation / Fairness View**: Officers with `manage_train` (R4/R5 by default) have a read-only view across the active roster showing the last train conducted, total trains, free trains, last guest/VIP spot, and total guest spots. Conductor no-shows are excluded from train counts.
 - **Soft Daily Limits**: Configurable per-type daily limits (default: 1 FREE, 2 PURCHASED). Exceeding the limit shows a warning — no hard block.
 - **Permission-Gated Access**: Separate `view_train` (R1–R5 default) and `manage_train` (R4–R5 default) permissions control who can view history vs. manage logs and rules.
 

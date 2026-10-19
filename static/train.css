@@ -99,6 +99,15 @@
     gap: 6px;
 }
 
+/* Allocation shares table/search/sort styles with the rest of the app. */
+.train-allocation-table {
+    min-width: 760px;
+}
+
+.train-allocation-table td:not(:first-child) {
+    white-space: nowrap;
+}
+
 /* ── Selection Tab ────────────────────────────────────────────────────────── */
 
 .selection-controls {

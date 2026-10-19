@@ -24,6 +24,9 @@ let trainTabs = null;  // Tabs controller (tabs.js) — for programmatic switche
 let dateCtl = null;    // FilterPanel.setupDateRange controller — module-scoped (read by filters)
 let allLogs = [];      // full fetched log set (enriched w/ aliases); filtered client-side
 let aliasById = new Map(); // member id → "global, personal" aliases (for log search)
+let trainAllocation = null;
+let allocationSort = { key: 'last_train', direction: 1 }; // Never, then oldest first
+let allocationLoading = false;
 let logsFuse = null;   // Fuse index over enriched logs — matches the Members page's search
 
 // Flatpickr instances — initialised in DOMContentLoaded
@@ -58,7 +61,27 @@ document.addEventListener('DOMContentLoaded', () => {
         itemSelectText: '', shouldSort: false, allowHTML: true,
     }));
 
-    trainTabs = Tabs.init({ hash: true, defaultTab: 'logs' });
+    if (CAN_MANAGE) {
+        QuickSearch.attach({
+            input: 'allocation-search', container: 'allocation-body', rows: 'tr',
+            count: 'allocation-count', emptyText: 'No members match your search.',
+        });
+        document.getElementById('btn-allocation-refresh').addEventListener('click', loadTrainAllocation);
+        const table = document.getElementById('allocation-table');
+        table.addEventListener('click', sortTrainAllocation);
+        table.addEventListener('keydown', e => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            if (!e.target.closest('th[data-sort]')) return;
+            e.preventDefault();
+            sortTrainAllocation(e);
+        });
+    }
+    trainTabs = Tabs.init({
+        hash: true, defaultTab: 'logs',
+        onActivate: name => {
+            if (CAN_MANAGE && name === 'allocation') loadTrainAllocation();
+        },
+    });
     loadMembers().then(() => {
         loadTrainLogs();
         if (CAN_MANAGE) {
@@ -282,6 +305,84 @@ function clearFilters() {
     filterFromFP.clear(false);  // existing flatpickr instances; false suppresses onChange
     filterToFP.clear(false);
     applyLogFilters();
+}
+
+// ── Allocation (historic, read-only) ───────────────────────────────────────────
+
+function allocationMessage(message) {
+    const body = document.getElementById('allocation-body');
+    const row = document.createElement('tr');
+    const cell = td(row, message);
+    cell.colSpan = 7;
+    cell.className = 'empty-state';
+    body.replaceChildren(row);
+    QuickSearch.apply('allocation-search');
+}
+
+async function loadTrainAllocation() {
+    if (!CAN_MANAGE || allocationLoading) return;
+    allocationLoading = true;
+    const refresh = document.getElementById('btn-allocation-refresh');
+    const table = document.getElementById('allocation-table');
+    refresh.disabled = true;
+    table.setAttribute('aria-busy', 'true');
+    trainAllocation = null;
+    allocationMessage('Loading…');
+    try {
+        const res = await fetch('/api/train-allocation');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        trainAllocation = await res.json();
+        renderTrainAllocation();
+    } catch (err) {
+        console.error('loadTrainAllocation:', err);
+        allocationMessage('Could not load train allocation. Use Refresh to try again.');
+    } finally {
+        allocationLoading = false;
+        refresh.disabled = false;
+        table.setAttribute('aria-busy', 'false');
+    }
+}
+
+function sortTrainAllocation(e) {
+    const th = e.target.closest('th[data-sort]');
+    if (!th) return;
+    const key = th.dataset.sort;
+    allocationSort = { key, direction: allocationSort.key === key ? -allocationSort.direction : 1 };
+    renderTrainAllocation();
+}
+
+function renderTrainAllocation() {
+    document.querySelectorAll('#allocation-table th[data-sort]').forEach(th => {
+        const active = th.dataset.sort === allocationSort.key;
+        th.classList.toggle('sort-asc', active && allocationSort.direction === 1);
+        th.classList.toggle('sort-desc', active && allocationSort.direction === -1);
+        th.setAttribute('aria-sort', active ? (allocationSort.direction === 1 ? 'ascending' : 'descending') : 'none');
+    });
+    if (!trainAllocation) return;
+    if (!trainAllocation.length) {
+        allocationMessage('No active alliance members.');
+        return;
+    }
+    const sorted = trainAllocation.slice().sort((a, b) => {
+        const av = a[allocationSort.key] ?? '';
+        const bv = b[allocationSort.key] ?? '';
+        const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+        return cmp * allocationSort.direction || a.name.localeCompare(b.name) || a.member_id - b.member_id;
+    });
+    const body = document.getElementById('allocation-body');
+    body.replaceChildren(...sorted.map(a => {
+        const tr = document.createElement('tr');
+        tr.dataset.search = a.name + ' ' + a.rank;
+        noTranslate(td(tr, a.name));
+        noTranslate(td(tr, a.rank));
+        td(tr, a.last_train || 'Never');
+        td(tr, String(a.trains));
+        td(tr, String(a.free_trains));
+        td(tr, a.last_guest || 'Never');
+        td(tr, String(a.guest_spots));
+        return tr;
+    }));
+    QuickSearch.apply('allocation-search');
 }
 
 // ── Log Train Modal ───────────────────────────────────────────────────────────
