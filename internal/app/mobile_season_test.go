@@ -67,13 +67,14 @@ func TestMobileSeasonContributions(t *testing.T) {
 	w := serveMobile(t, "POST", "/api/mobile/season-hub/contributions/commit", `{"season_id":`+sidS+`,"week_number":2,
 		"category":"mutual_assistance_weekly","records":[{"member_id":`+strconv.Itoa(f.other)+`,"original_name":"Zed Player","score":70},
 		{"member_id":`+strconv.Itoa(f.r3Member)+`,"original_name":"Unknown Guy","score":50},
-		{"member_id":`+strconv.Itoa(f.former)+`,"original_name":"Gone","score":5}],
+		{"member_id":`+strconv.Itoa(f.former)+`,"original_name":"Gone","score":5},
+		{"member_id":999999,"original_name":"Nobody","score":5}],
 		"save_aliases":[{"failed_alias":"Unknown Guy","member_id":`+strconv.Itoa(f.r3Member)+`,"category":"ocr"}]}`, tok)
 	out = decodeObject(t, w)
-	if out["committed"] != float64(2) || out["aliases_saved"] != float64(1) || len(out["errors"].([]any)) != 1 {
+	if out["committed"] != float64(3) || out["aliases_saved"] != float64(1) || len(out["errors"].([]any)) != 1 {
 		t.Errorf("commit = %v", out)
 	}
-	if n := countRows(t, `SELECT COUNT(*) FROM season_member_records WHERE season_id = ? AND week_number = 2`, sid); n != 2 {
+	if n := countRows(t, `SELECT COUNT(*) FROM season_member_records WHERE season_id = ? AND week_number = 2`, sid); n != 3 {
 		t.Errorf("records = %d", n)
 	}
 	if n := countRows(t, `SELECT COUNT(*) FROM activity_log WHERE entity_type = 'season_contributions' AND details LIKE '%via mobile'`); n != 1 {

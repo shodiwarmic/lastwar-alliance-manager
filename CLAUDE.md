@@ -279,6 +279,13 @@ and the rest of the upload saves.
 | `profession_level` | `profession_level_history` | `manage_members` | ≥ 1, change-only |
 | `donation_daily`, `donation_weekly` | `donation_readings` (`today` / `week` half) | `manage_members` | ≥ 0, dated by `captured_at`'s game day; see "Donations" below |
 
+A record may name a **former member** (rank `EX`): the reading is true history, dated by
+`captured_at` / `week_date`. Only a `member_id` that names no member row is refused. The rule
+(owner, 2026-10-19, private-docs 302): **anywhere data is historical and dated accepts a former
+member** — this commit, the mobile season contributions commit and the donation day entries (and
+their CSV preview's match) all do. Writes of current state (member attributes, roster changes) and
+an undated manual kill entry still refuse one.
+
 Days follow the VS page's `manage_vs_points`, not the web import's stricter `manage_members`, so
 an officer who can type days in can upload them. A new category is a row in `mobileCategories`
 (and, for a member history, in `memberStats`); capabilities' `commit_categories` follows.

@@ -846,7 +846,7 @@ func sameAmount(a, b *int64) bool {
 }
 
 // saveDonationEntriesTx writes entered days in one transaction the caller commits. Each cell is
-// validated (an active member, a date no later than today's game date, an amount ≥ 0) and
+// validated (a member, former members included, a date no later than today's game date, an amount ≥ 0) and
 // refused into Errors otherwise. With checkWas, every cell is classified before anything is
 // written: if any is a conflict, the result carries the conflicts and nothing is written (the
 // caller answers 409). source is manual or csv.
@@ -867,12 +867,12 @@ func saveDonationEntriesTx(tx historyExecer, cells []donationEntryCell, source s
 			res.Errors = append(res.Errors, fmt.Sprintf("member %d, %s: %d is below 0", c.MemberID, c.GameDate, *c.Amount))
 			continue
 		}
-		var rank, name string
-		if err := tx.QueryRow(`SELECT rank, name FROM members WHERE id = ?`, c.MemberID).Scan(&rank, &name); err != nil || rank == "EX" {
-			if err != nil && err != sql.ErrNoRows {
+		var name string
+		if err := tx.QueryRow(`SELECT name FROM members WHERE id = ?`, c.MemberID).Scan(&name); err != nil {
+			if err != sql.ErrNoRows {
 				return res, err
 			}
-			res.Errors = append(res.Errors, fmt.Sprintf("member %d: not an active member", c.MemberID))
+			res.Errors = append(res.Errors, fmt.Sprintf("member %d: not a member", c.MemberID))
 			continue
 		}
 		var stored *int64
