@@ -157,6 +157,9 @@ Requests from the page the app itself served are same-origin and pass at any add
 ### Admin-page update refused: "… is group- or world-writable (mode 775)"
 A known issue on hosts whose default umask is `0002` (Ubuntu's default): the install directories are created group-writable, and the update agent refuses them, although **Test the host agent** succeeds. Nothing on the server changes. In the install directory run `chmod 755 . scripts scripts/lib`, then press **Install** again. No new release is needed. See [DEPLOYMENT.md](DEPLOYMENT.md#install-is-refused--is-group--or-world-writable-mode-775).
 
+### Admin-page update refused: "the collabora image … is not on this host"
+A known issue on the second and later Admin-page updates: the previous successful one left the running Collabora image without its name. Nothing on the server changes. In the install directory run `docker pull "$(docker compose config --images | grep collabora)"`, then press **Install** again. It takes seconds, restarts nothing, and needs no new release. See [DEPLOYMENT.md](DEPLOYMENT.md#install-is-refused-the-collabora-image--is-not-on-this-host).
+
 ---
 
 ## Quick Health Check
