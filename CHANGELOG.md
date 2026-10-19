@@ -21,6 +21,7 @@ A bug fix: data recorded for a member who has since left the alliance is no long
   kills, HQ and profession levels, donations), season contributions from the phone, and donation
   days typed in or imported from CSV now save for former members too. An id that names no member
   is still refused. A client that kept the skipped readings can send them again.
+  ([#132](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/132))
 
 ## v3.2.0 — 2026-10-18
 
