@@ -236,9 +236,11 @@ func mobileCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// Pre-validate: build set of valid member IDs
+	// Former members (rank 'EX') are valid targets: a reading of someone who has since left
+	// is still true history, dated by captured_at / week_date. Only an id that names no
+	// member at all is refused.
 	validMemberIDs := map[int]bool{}
-	idRows, err := tx.Query("SELECT id FROM members WHERE rank != 'EX'")
+	idRows, err := tx.Query("SELECT id FROM members")
 	if err != nil {
 		slog.Error("mobileCommit: member id query failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)

@@ -379,7 +379,7 @@ func previewDonationImport(w http.ResponseWriter, r *http.Request) {
 	out := []donationImportPreviewRow{}
 	for _, row := range rows {
 		p := donationImportPreviewRow{OriginalName: row.Name, Cells: row.Cells, MatchType: "unresolved"}
-		if m, how, err := resolveMemberAliasWithIndex(tx, row.Name, userID, idx); err == nil && m.Rank != "EX" {
+		if m, how, err := resolveMemberAliasWithIndex(tx, row.Name, userID, idx); err == nil {
 			p.MatchedMember, p.MatchType = m, how
 			for i := range p.Cells {
 				p.Cells[i].MemberID = m.ID

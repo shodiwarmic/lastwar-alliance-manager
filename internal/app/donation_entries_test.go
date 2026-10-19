@@ -70,10 +70,11 @@ func TestSaveDonationEntries(t *testing.T) {
 		{MemberID: a, GameDate: "2026-10-13", Amount: i64(900)},
 		{MemberID: a, GameDate: "2026-10-15", Amount: i64(1)}, // after today
 		{MemberID: a, GameDate: "2026-10-12", Amount: i64(-5)},
-		{MemberID: gone, GameDate: "2026-10-12", Amount: i64(5)},
+		{MemberID: gone, GameDate: "2026-10-12", Amount: i64(5)}, // a former member's day is still history
+		{MemberID: 999999, GameDate: "2026-10-12", Amount: i64(5)},
 		{MemberID: a, GameDate: "13/10/2026", Amount: i64(5)},
 	}, "manual", true)
-	if r.Saved != 1 || len(r.Errors) != 4 {
+	if r.Saved != 2 || len(r.Errors) != 4 {
 		t.Errorf("first save %+v", r)
 	}
 	// The same value again: unchanged. A stale `was`: a conflict, nothing written.
@@ -92,7 +93,7 @@ func TestSaveDonationEntries(t *testing.T) {
 	if v, _, _ := stored(); v != 900 {
 		t.Errorf("a conflict overwrote: %d", v)
 	}
-	if n := countRows(t, `SELECT COUNT(*) FROM donation_day_entries WHERE game_date = '2026-10-12'`); n != 0 {
+	if n := countRows(t, `SELECT COUNT(*) FROM donation_day_entries WHERE member_id = ? AND game_date = '2026-10-12'`, a); n != 0 {
 		t.Errorf("the good cell of a conflicting save was written")
 	}
 	// "Keep mine": resubmitted against the value the review showed — saved and counted.
@@ -130,7 +131,7 @@ func TestSaveDonationEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	tx.Commit()
-	if n := countRows(t, `SELECT COUNT(*) FROM donation_day_entries`); n != 0 {
+	if n := countRows(t, `SELECT COUNT(*) FROM donation_day_entries WHERE member_id = ?`, a); n != 0 {
 		t.Errorf("%d entries left after member delete", n)
 	}
 }
@@ -168,6 +169,7 @@ func TestParseDonationCSV(t *testing.T) {
 func TestDonationEntryRoutes(t *testing.T) {
 	setupPreviewTestDB(t) // admin 1; officer 3 is R3
 	a := seedMember(t, "Alder", "R3")
+	gone := seedMember(t, "Gone Player", "EX")
 	mustExec(t, `UPDATE rank_permissions SET permissions = json_set(permissions, '$.manage_members', json('false')) WHERE rank = 'R3'`)
 	today := time.Now().UTC().Add(-2 * time.Hour).Format("2006-01-02")
 	body := `{"source":"manual","cells":[{"member_id":` + itoaTest(a) + `,"game_date":"` + today + `","amount":800}]}`
@@ -194,7 +196,7 @@ func TestDonationEntryRoutes(t *testing.T) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	part, _ := mw.CreateFormFile("csv_file", "d.csv")
-	part.Write([]byte("Member,Date,Amount\nAlder,2026-10-13,500\nNobody Here,2026-10-13,5\n"))
+	part.Write([]byte("Member,Date,Amount\nAlder,2026-10-13,500\nNobody Here,2026-10-13,5\nGone Player,2026-10-13,7\n"))
 	mw.Close()
 	req := httptest.NewRequest("POST", "/api/donations/import/preview", &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
@@ -205,7 +207,8 @@ func TestDonationEntryRoutes(t *testing.T) {
 		Rows []donationImportPreviewRow `json:"rows"`
 	}
 	json.Unmarshal(rec.Body.Bytes(), &prev)
-	if rec.Code != 200 || len(prev.Rows) != 2 || prev.Rows[0].MatchedMember == nil || prev.Rows[0].Cells[0].MemberID != a || prev.Rows[1].MatchedMember != nil {
+	if rec.Code != 200 || len(prev.Rows) != 3 || prev.Rows[0].MatchedMember == nil || prev.Rows[0].Cells[0].MemberID != a || prev.Rows[1].MatchedMember != nil ||
+		prev.Rows[2].MatchedMember == nil || prev.Rows[2].Cells[0].MemberID != gone {
 		t.Errorf("preview: %d %s", rec.Code, rec.Body)
 	}
 	if n := countRows(t, `SELECT COUNT(*) FROM donation_day_entries WHERE game_date = '2026-10-13'`); n != 0 {

@@ -9,6 +9,19 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v3.2.1 — 2026-10-19
+
+A bug fix: data recorded for a member who has since left the alliance is no longer thrown away.
+
+**Patch** — an image pull; nothing on the host changes, and no `.env` needs editing.
+
+- **Former members' data is accepted wherever it is dated.** A phone upload that included members
+  who had left since the screens were read was refused for each of them ("unrecognized member_id
+  … skipped"), losing readings that were true when taken. Phone uploads (VS days, power,
+  kills, HQ and profession levels, donations), season contributions from the phone, and donation
+  days typed in or imported from CSV now save for former members too. An id that names no member
+  is still refused. A client that kept the skipped readings can send them again.
+
 ## v3.2.0 — 2026-10-18
 
 **Donations tracking**: the members' tech donations, read from the Donation screen's Daily and

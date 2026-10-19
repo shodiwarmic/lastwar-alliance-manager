@@ -119,8 +119,9 @@ func mobileContributionsCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	active := map[int]bool{}
-	rows, err := tx.Query(`SELECT id FROM members WHERE rank != 'EX'`)
+	// A former member's contribution to a season week is still that week's history.
+	known := map[int]bool{}
+	rows, err := tx.Query(`SELECT id FROM members`)
 	if err != nil {
 		dbError(w, "mobileContributionsCommit members", err)
 		return
@@ -128,15 +129,15 @@ func mobileContributionsCommit(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var id int
 		rows.Scan(&id)
-		active[id] = true
+		known[id] = true
 	}
 	rows.Close()
 
 	errs := []string{}
 	committed := 0
 	for _, rec := range req.Records {
-		if !active[rec.MemberID] {
-			errs = append(errs, fmt.Sprintf("%s: member_id %d is not an active member", rec.OriginalName, rec.MemberID))
+		if !known[rec.MemberID] {
+			errs = append(errs, fmt.Sprintf("%s: member_id %d is not a member", rec.OriginalName, rec.MemberID))
 			continue
 		}
 		if rec.Score < 0 {

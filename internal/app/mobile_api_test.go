@@ -304,7 +304,8 @@ func TestMobileCommitContract(t *testing.T) {
 		{"member_id":` + strconv.Itoa(f.other) + `,"original_name":"Zed Player","category":"power","score":5000000},
 		{"member_id":` + strconv.Itoa(f.other) + `,"original_name":"Zed Player","category":"kills","score":123},
 		{"member_id":` + strconv.Itoa(f.other) + `,"original_name":"Zed Player","category":"bogus","score":1},
-		{"member_id":` + strconv.Itoa(f.former) + `,"original_name":"Gone Player","category":"power","score":1}],
+		{"member_id":` + strconv.Itoa(f.former) + `,"original_name":"Gone Player","category":"power","score":1},
+		{"member_id":999999,"original_name":"Nobody","category":"power","score":1}],
 		"save_aliases":[{"failed_alias":"ZEDTEXT","member_id":` + strconv.Itoa(f.r3Member) + `,"category":"ocr"}]}`
 	w := serveMobile(t, "POST", "/api/mobile/commit", body, mobileToken(t, 2))
 	if w.Code != http.StatusOK {
@@ -313,12 +314,12 @@ func TestMobileCommitContract(t *testing.T) {
 	out := decodeObject(t, w)
 	assertKeys(t, "commit", out, "message", "vs_records_saved", "power_records_saved",
 		"kill_records_saved", "aliases_saved", "errors")
-	if out["vs_records_saved"].(float64) != 1 || out["power_records_saved"].(float64) != 1 ||
+	if out["vs_records_saved"].(float64) != 1 || out["power_records_saved"].(float64) != 2 ||
 		out["kill_records_saved"].(float64) != 1 || out["aliases_saved"].(float64) != 1 {
 		t.Errorf("counts = %v", out)
 	}
 	if errs := out["errors"].([]any); len(errs) != 2 {
-		t.Errorf("errors = %v, want the bogus category and the archived member", errs)
+		t.Errorf("errors = %v, want the bogus category and the unknown member id", errs)
 	}
 
 	// Days merge into the existing week (the 6th snaps to Monday the 5th).
