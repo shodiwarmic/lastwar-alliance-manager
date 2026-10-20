@@ -1286,6 +1286,13 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 
 	// foreign_keys is off app-wide, so the schema's ON DELETE CASCADE never fires —
 	// every child table has to be deleted explicitly (seasonChildTables).
+	for _, q := range seasonChildStatements {
+		if _, err := tx.Exec(q, id); err != nil {
+			slog.Error("handleSeasonDelete: delete grandchildren", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
 	for _, tbl := range seasonChildTables {
 		if _, err := tx.Exec(`DELETE FROM `+tbl+` WHERE season_id = ?`, id); err != nil {
 			slog.Error("handleSeasonDelete: delete children", "table", tbl, "error", err)

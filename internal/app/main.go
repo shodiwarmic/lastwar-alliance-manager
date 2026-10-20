@@ -490,6 +490,15 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/alliances/{id:[0-9]+}", authMiddleware(requireAnyPermission([]string{"manage_allies", "manage_season_war"}, handleSeasonAllianceDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/ally-seasons", authMiddleware(requireAnyPermission([]string{"view_allies", "manage_allies"}, handleAllySeasons))).Methods("GET")
 	// The Hub's Files tab is the Files page's list for one season: it needs both pages' keys.
+	// Land (private-docs 274–276): view_season_land reads; manage_season_land writes the plan.
+	// The rules and the level table are season setup too, so manage_season_config may edit them.
+	router.HandleFunc("/api/season-hub/land", authMiddleware(requirePermission("view_season_land", handleSeasonLandGet))).Methods("GET")
+	router.HandleFunc("/api/season-hub/land/lookup", authMiddleware(requirePermission("view_season_land", handleSeasonLandLookup))).Methods("GET")
+	router.HandleFunc("/api/season-hub/land/config", authMiddleware(requireAnyPermission([]string{"manage_season_land", "manage_season_config"}, handleSeasonLandConfigPut))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/land/levels", authMiddleware(requireAnyPermission([]string{"manage_season_land", "manage_season_config"}, handleSeasonLandLevelsPut))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/land/routes", authMiddleware(requirePermission("manage_season_land", handleSeasonLandRoutePut))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/land/routes/{id:[0-9]+}/activate", authMiddleware(requirePermission("manage_season_land", handleSeasonLandRouteActivate))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/land/routes/{id:[0-9]+}/revisions", authMiddleware(requirePermission("view_season_land", handleSeasonLandRouteRevisions))).Methods("GET")
 	router.HandleFunc("/api/season-hub/files", authMiddleware(requirePermission("view_season_hub", requireAlsoPermission("view_files", "the season's files are listed from the Files page.", handleSeasonHubFiles)))).Methods("GET")
 	router.HandleFunc("/api/season-hub/files/{id:[0-9]+}/download", authMiddleware(requirePermission("view_season_hub", requireAlsoPermission("view_files", "the season's files are listed from the Files page.", handleSeasonFileSnapshotDownload)))).Methods("GET")
 	router.HandleFunc("/api/season-hub/participation", authMiddleware(requirePermission("view_season_hub", handleParticipationGet))).Methods("GET")

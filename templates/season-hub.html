@@ -44,6 +44,7 @@
         {{if .Permissions.ManageSeasonParticipation}}<button class="tab-btn" data-tab="participation">Participation</button>{{end}}
         {{if .Permissions.ManageSeasonContributions}}<button class="tab-btn" data-tab="contributions">Contributions</button>{{end}}
         <button class="tab-btn" data-tab="rewards">Rewards</button>
+        {{if .Permissions.ViewSeasonLand}}<button class="tab-btn" data-tab="land">Land</button>{{end}}
         {{if .Permissions.ViewSchedule}}<button class="tab-btn" data-tab="schedule">Schedule</button>{{end}}
         {{if or .Permissions.ViewComms .Permissions.ViewPolls}}<button class="tab-btn" data-tab="comms">Comms</button>{{end}}
         {{if .Permissions.ViewFiles}}<button class="tab-btn" data-tab="files">Files</button>{{end}}
@@ -189,6 +190,23 @@
         </div>
     </div>
 
+    <!-- ── Land: path status, routes, settings ──────────────────────────── -->
+    {{if .Permissions.ViewSeasonLand}}
+    <div id="tab-land" class="tab-content" style="display:none">
+        <div id="land-readiness" class="card land-readiness"><p class="loading-msg">Loading…</p></div>
+        <div id="land-extras"></div>
+        <div class="hub-section-head">
+            <h3>Routes</h3>
+            <div class="land-route-tabs" id="land-route-tabs" role="tablist"></div>
+        </div>
+        <div id="land-route"></div>
+        <details class="land-settings" id="land-settings">
+            <summary>Land settings and level table</summary>
+            <div id="land-settings-body"></div>
+        </details>
+    </div>
+    {{end}}
+
     <!-- ── Schedule: the season's timeline and conflicts ────────────────── -->
     {{if .Permissions.ViewSchedule}}
     <div id="tab-schedule" class="tab-content" style="display:none">
@@ -255,6 +273,8 @@
     data-can-manage-rewards="{{if .Permissions.ManageSeasonRewards}}true{{else}}false{{end}}"
     data-can-manage-comms="{{if .Permissions.ManageComms}}true{{else}}false{{end}}"
     data-can-manage-schedule="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
+    data-can-manage-land="{{if .Permissions.ManageSeasonLand}}true{{else}}false{{end}}"
+    data-can-configure-land="{{if or .Permissions.ManageSeasonLand .Permissions.ManageSeasonConfig}}true{{else}}false{{end}}"
     data-member-id="{{.MemberID}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
@@ -264,6 +284,7 @@
 <script src="{{asset "/color-picker.js"}}"></script>
 <script src="{{asset "/mail.js"}}"></script>
 <script src="{{asset "/season-hub.js"}}"></script>
+<script src="{{asset "/season-hub-land.js"}}"></script>
 {{end}}
 
 {{define "modals"}}

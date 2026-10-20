@@ -1,0 +1,2108 @@
+{
+  "format_version": 1,
+  "season_number": 4,
+  "verified_local_date": "2026-10-17",
+  "source_commit": "5e41137",
+  "sources": [
+    {
+      "file": "grids-export-2026-10-18 (4).json",
+      "sha256": "42df3c7980bcbd3ac0899502dfbae3a0b32b5a0ee8645b7e7f8d4a917e81a9a0"
+    },
+    {
+      "file": "Screenshot 2026-10-17 225857.png",
+      "sha256": "dae484ac6e4561e36dbe08adb19a48b437d8c1c34dfed7ec495da34057e7a933"
+    },
+    {
+      "file": "Screenshot 2026-10-17 230348.png",
+      "sha256": "8ab7b3a5063e85377400c40bce142c23a0f74db7dc13c37027adaead7c33eb82"
+    },
+    {
+      "file": "Screenshot 2026-10-17 230358.png",
+      "sha256": "5e4dbb4f02b98a177dc4a39d69225a2b4c8ed9040ec4d57c6c09e440836d6c9b"
+    }
+  ],
+  "position_convention": {
+    "columns": "A through M from left to right",
+    "rows": "1 through 13 from top to bottom",
+    "bands": "A-B or 1-2 means the boundary between those adjacent columns or rows",
+    "units": "Logical map cells and boundaries, not native game coordinates or screenshot pixels",
+    "identification": "ID memberships from the Columns/Rows grids; type/name/level from map labels and legend"
+  },
+  "counts": {
+    "areas": 187,
+    "cells": 169,
+    "overlays": 18,
+    "by_name": {
+      "Stronghold": 84,
+      "Cottage": 24,
+      "Hot Spring Town": 20,
+      "Food Street": 16,
+      "Baseball Field": 12,
+      "Sky Tower": 8,
+      "Electropolis": 4,
+      "Tenryū Castle": 1,
+      "Trade Post": 16,
+      "Holy Mountain": 1,
+      "Divine Tree": 1
+    }
+  },
+  "areas": [
+    {
+      "id": "1",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "5",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "8",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "9",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "10",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "11",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "12",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "13",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "A",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "14",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "15",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "16",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "17",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "18",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "19",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "20",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "21",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "22",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "23",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "24",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "25",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "26",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "B",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "27",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "28",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "29",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "30",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "31",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "32",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "33",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "34",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "35",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "36",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "37",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "38",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "39",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "C",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "40",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "41",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "42",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "43",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "44",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "45",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "46",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "47",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "48",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "49",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "50",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "51",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "52",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "D",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "53",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "54",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "55",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "56",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "57",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "58",
+      "name": "Sky Tower",
+      "code": "ST",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "59",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "60",
+      "name": "Sky Tower",
+      "code": "ST",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "61",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "62",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "63",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "64",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "65",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "E",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "66",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "67",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "68",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "69",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "70",
+      "name": "Sky Tower",
+      "code": "ST",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "71",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 6,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "72",
+      "name": "Electropolis",
+      "code": "E",
+      "level": 6,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "73",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 6,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "74",
+      "name": "Sky Tower",
+      "code": "ST",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "75",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "76",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "77",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "78",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "F",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "79",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "80",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "81",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "82",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "83",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "84",
+      "name": "Electropolis",
+      "code": "E",
+      "level": 6,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "85",
+      "name": "Tenryū Castle",
+      "code": "CASTLE",
+      "level": 7,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "86",
+      "name": "Electropolis",
+      "code": "E",
+      "level": 6,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "87",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "88",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "89",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "90",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "91",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "G",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "92",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "93",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "94",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "95",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "96",
+      "name": "Sky Tower",
+      "code": "ST",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "97",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 6,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "98",
+      "name": "Electropolis",
+      "code": "E",
+      "level": 6,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "99",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 6,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "100",
+      "name": "Sky Tower",
+      "code": "ST",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "101",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "102",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "103",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "104",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "H",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "105",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "106",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "107",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "108",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "109",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "110",
+      "name": "Sky Tower",
+      "code": "ST",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "111",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "112",
+      "name": "Sky Tower",
+      "code": "ST",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "113",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 5,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "114",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "115",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "116",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "117",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "I",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "118",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "119",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "120",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "121",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "122",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "123",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "124",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "125",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "126",
+      "name": "Baseball Field",
+      "code": "BF",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "127",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 4,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "128",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "129",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "130",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "J",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "131",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "132",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "133",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "134",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "135",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "136",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "137",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "138",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "139",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "140",
+      "name": "Food Street",
+      "code": "FS",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "141",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 3,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "142",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "143",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "K",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "144",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "145",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "146",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "147",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "148",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "149",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "150",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "151",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "152",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "153",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "154",
+      "name": "Hot Spring Town",
+      "code": "HST",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "155",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 2,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "156",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "L",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "157",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "13"
+      }
+    },
+    {
+      "id": "158",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "12"
+      }
+    },
+    {
+      "id": "159",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "11"
+      }
+    },
+    {
+      "id": "160",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "10"
+      }
+    },
+    {
+      "id": "161",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "9"
+      }
+    },
+    {
+      "id": "162",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "8"
+      }
+    },
+    {
+      "id": "163",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "7"
+      }
+    },
+    {
+      "id": "164",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "6"
+      }
+    },
+    {
+      "id": "165",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "5"
+      }
+    },
+    {
+      "id": "166",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "4"
+      }
+    },
+    {
+      "id": "167",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "3"
+      }
+    },
+    {
+      "id": "168",
+      "name": "Cottage",
+      "code": "C",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "2"
+      }
+    },
+    {
+      "id": "169",
+      "name": "Stronghold",
+      "code": "SH",
+      "level": 1,
+      "position": {
+        "kind": "cell",
+        "column_band": "M",
+        "row_band": "1"
+      }
+    },
+    {
+      "id": "170",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 1,
+      "position": {
+        "kind": "overlay",
+        "column_band": "A-B",
+        "row_band": "1-2"
+      }
+    },
+    {
+      "id": "171",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 1,
+      "position": {
+        "kind": "overlay",
+        "column_band": "L-M",
+        "row_band": "1-2"
+      }
+    },
+    {
+      "id": "172",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 2,
+      "position": {
+        "kind": "overlay",
+        "column_band": "B-C",
+        "row_band": "2-3"
+      }
+    },
+    {
+      "id": "173",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 2,
+      "position": {
+        "kind": "overlay",
+        "column_band": "K-L",
+        "row_band": "2-3"
+      }
+    },
+    {
+      "id": "174",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 3,
+      "position": {
+        "kind": "overlay",
+        "column_band": "C-D",
+        "row_band": "3-4"
+      }
+    },
+    {
+      "id": "175",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 3,
+      "position": {
+        "kind": "overlay",
+        "column_band": "J-K",
+        "row_band": "3-4"
+      }
+    },
+    {
+      "id": "176",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 4,
+      "position": {
+        "kind": "overlay",
+        "column_band": "D-E",
+        "row_band": "4-5"
+      }
+    },
+    {
+      "id": "177",
+      "name": "Holy Mountain",
+      "code": "HM",
+      "level": 1,
+      "position": {
+        "kind": "overlay",
+        "column_band": "G",
+        "row_band": "4-5"
+      }
+    },
+    {
+      "id": "178",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 4,
+      "position": {
+        "kind": "overlay",
+        "column_band": "I-J",
+        "row_band": "4-5"
+      }
+    },
+    {
+      "id": "179",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 4,
+      "position": {
+        "kind": "overlay",
+        "column_band": "D-E",
+        "row_band": "9-10"
+      }
+    },
+    {
+      "id": "180",
+      "name": "Divine Tree",
+      "code": "DT",
+      "level": 1,
+      "position": {
+        "kind": "overlay",
+        "column_band": "G",
+        "row_band": "9-10"
+      }
+    },
+    {
+      "id": "181",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 4,
+      "position": {
+        "kind": "overlay",
+        "column_band": "I-J",
+        "row_band": "9-10"
+      }
+    },
+    {
+      "id": "182",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 3,
+      "position": {
+        "kind": "overlay",
+        "column_band": "C-D",
+        "row_band": "10-11"
+      }
+    },
+    {
+      "id": "183",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 3,
+      "position": {
+        "kind": "overlay",
+        "column_band": "J-K",
+        "row_band": "10-11"
+      }
+    },
+    {
+      "id": "184",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 2,
+      "position": {
+        "kind": "overlay",
+        "column_band": "B-C",
+        "row_band": "11-12"
+      }
+    },
+    {
+      "id": "185",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 2,
+      "position": {
+        "kind": "overlay",
+        "column_band": "K-L",
+        "row_band": "11-12"
+      }
+    },
+    {
+      "id": "186",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 1,
+      "position": {
+        "kind": "overlay",
+        "column_band": "A-B",
+        "row_band": "12-13"
+      }
+    },
+    {
+      "id": "187",
+      "name": "Trade Post",
+      "code": "TP",
+      "level": 1,
+      "position": {
+        "kind": "overlay",
+        "column_band": "L-M",
+        "row_band": "12-13"
+      }
+    }
+  ]
+}

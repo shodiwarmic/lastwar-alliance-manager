@@ -60,6 +60,8 @@ const ENTITY_LABELS = {
     season_event:          'season event',
     season_faction:        'season faction',
     season_alliance:       'season alliance',
+    season_land_config:    'season land settings',
+    season_land_route:     'season land route',
     poll_template:         'Poll Template',
     poll_instance:         'Poll',
     lastrank_sync:         'LastRank Sync',

@@ -714,3 +714,50 @@
 .tl-day { padding: 4px 0; }
 .tl-day-head { font-weight: 600; font-size: 0.85rem; margin-top: 4px; }
 .tl-empty { font-size: 0.8rem; color: var(--text-muted); padding: 2px 0; }
+
+/* ── Land tab ────────────────────────────────────────────────────────────── */
+.land-readiness { padding: 12px 14px; margin-bottom: 12px; }
+.land-readiness-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.land-readiness-head h3 { margin: 0; font-size: 1rem; flex: 1 1 auto; }
+.land-reasons { margin: 6px 0 0; padding-left: 18px; font-size: 0.85rem; color: var(--text-secondary); }
+.land-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+.land-status.tone-success { background: var(--color-success-bg); color: var(--color-success); }
+.land-status.tone-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.land-status.tone-danger  { background: var(--color-danger-bg);  color: var(--color-danger); }
+.land-status.tone-info    { background: var(--color-info-bg);    color: var(--color-info); }
+.land-route-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.land-route-bar { flex-wrap: wrap; gap: 8px; }
+.land-route-name { flex: 1 1 180px; min-width: 0; }
+.land-targets { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.land-target { padding: 8px 10px; border: 2px solid var(--border-color); }
+.land-target-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.land-target-head strong { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; }
+.land-target-actions { display: inline-flex; align-items: center; gap: 4px; }
+.land-target-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 6px 10px;
+}
+.land-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.78rem; color: var(--text-secondary); min-width: 0; }
+.land-field .form-input { width: 100%; min-width: 0; box-sizing: border-box; font-size: 0.85rem; }
+.land-field-wide { grid-column: 1 / -1; }
+.land-settings { margin-top: 14px; }
+.land-settings summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+.land-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px 12px;
+    margin: 8px 0;
+}
+.land-levels .form-input { min-width: 70px; font-size: 0.85rem; }
+.land-history h4 { margin: 10px 0 4px; }
+.land-revision { font-size: 0.85rem; padding: 2px 0; }

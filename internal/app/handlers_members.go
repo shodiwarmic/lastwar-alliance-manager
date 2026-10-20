@@ -456,6 +456,11 @@ func deleteMemberTx(tx *sql.Tx, id int) error {
 			return fmt.Errorf("%s: %w", tbl, err)
 		}
 	}
+	for _, c := range seasonMemberColumns {
+		if _, err := tx.Exec(`UPDATE `+c.table+` SET `+c.column+` = NULL WHERE `+c.column+` = ?`, id); err != nil {
+			return fmt.Errorf("%s.%s: %w", c.table, c.column, err)
+		}
+	}
 	if err := clearUserReferences(tx, "member_id = ?", id); err != nil {
 		return fmt.Errorf("clear user references: %w", err)
 	}

@@ -453,6 +453,13 @@ func loadSeasonRoster(q rowQueryer, s *Season) ([]seasonRosterMember, error) {
 
 // ── Delete lists ───────────────────────────────────────────────────────────
 
+// seasonChildStatements delete the rows that hang off a season's own child rows (no season_id
+// of their own); they run before seasonChildTables.
+var seasonChildStatements = []string{
+	`DELETE FROM season_land_route_revisions WHERE route_id IN (SELECT id FROM season_land_routes WHERE season_id = ?)`,
+	`DELETE FROM season_land_targets WHERE route_id IN (SELECT id FROM season_land_routes WHERE season_id = ?)`,
+}
+
 // seasonChildTables are deleted with their season, after its calendar purge. foreign_keys is
 // off app-wide, so a table missing here is left behind (season_events, season_trackables and
 // season_member_records were, before migration 089).
@@ -461,6 +468,7 @@ var seasonChildTables = []string{
 	"season_member_records", "season_trackables", "season_events",
 	"season_tabs", "season_dashboard_cards", "season_roster_snapshot", "season_file_snapshots",
 	"season_alliances", "season_factions",
+	"season_land_config", "season_land_levels", "season_land_routes",
 }
 
 // seasonMemberTables are deleted with a member (deleteMemberTx): a member delete removes the
@@ -473,6 +481,12 @@ var seasonMemberTables = []string{
 var seasonUserColumns = []struct{ table, column string }{
 	{"season_participation", "recorded_by"},
 	{"season_member_records", "logged_by"},
+	{"season_land_route_revisions", "saved_by"},
+}
+
+// seasonMemberColumns are nulled when a member is deleted: a plan that named them stays.
+var seasonMemberColumns = []struct{ table, column string }{
+	{"season_land_targets", "coordinator_member_id"},
 }
 
 // ── Configuration copy ─────────────────────────────────────────────────────
@@ -498,6 +512,14 @@ func copySeasonConfigTx(tx *sql.Tx, fromID int, toID int64) error {
 			SELECT ?2, tab_key, visible, label, position FROM season_tabs WHERE season_id = ?1`,
 		`INSERT INTO season_dashboard_cards (season_id, card_key, visible, label, position)
 			SELECT ?2, card_key, visible, label, position FROM season_dashboard_cards WHERE season_id = ?1`,
+		// Land rules and levels are setup; routes are the season's own plan.
+		`INSERT INTO season_land_config (season_id, city_daily_captures, stronghold_daily_captures, city_cap,
+			stronghold_cap, capitol_counts_toward_cap, abandon_minutes, unlock_offset_hours, redeclare_cooldown_days, source, grade)
+			SELECT ?2, city_daily_captures, stronghold_daily_captures, city_cap, stronghold_cap, capitol_counts_toward_cap,
+			abandon_minutes, unlock_offset_hours, redeclare_cooldown_days, source, grade FROM season_land_config WHERE season_id = ?1`,
+		`INSERT INTO season_land_levels (season_id, kind, level, name, resource_per_hour, unlock_week, unlock_day, extra, source, grade)
+			SELECT ?2, kind, level, name, resource_per_hour, unlock_week, unlock_day, extra, source, grade
+			FROM season_land_levels WHERE season_id = ?1`,
 		// Factions are setup; which alliance is in which is the new season's to record.
 		`INSERT INTO season_factions (season_id, key, label, is_ours, position)
 			SELECT ?2, key, label, is_ours, position FROM season_factions WHERE season_id = ?1`,

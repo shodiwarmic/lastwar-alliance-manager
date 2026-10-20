@@ -58,6 +58,10 @@
     // Declared up here, BEFORE Tabs.init: it calls onActivate for the initial tab inside
     // init(), so a `let` further down would throw (TDZ) and stop the whole page script.
     let currentTab = null;
+    // The Hub's other scripts (Land, War, the dashboard) register here for the selected season
+    // and the tab on screen. Declared before Tabs.init, which fires the first tab at once.
+    const hubListeners = { season: [], tab: [] };
+    const emitHub = (kind, value) => hubListeners[kind].forEach(fn => { try { fn(value); } catch (e) { console.error(e); } });
     // Rewards and Season Mail load when their tab is shown (and again when the season changes
     // while one is open — loadSeasonData). A load already in flight for this season isn't
     // repeated.
@@ -70,7 +74,16 @@
     }
     // An old #season-mail link opens the tab it became.
     if (location.hash === '#season-mail') history.replaceState(null, '', '#comms');
-    const tabsCtl = Tabs.init({ hash: true, defaultTab: 'rankings', onActivate: name => { currentTab = name; loadTabExtras(); } });
+    const tabsCtl = Tabs.init({ hash: true, defaultTab: 'rankings', onActivate: name => { currentTab = name; loadTabExtras(); emitHub('tab', name); } });
+    window.SeasonHub = {
+        get season() { return activeSeason; },
+        get members() { return allMembers; },
+        get tab() { return currentTab; },
+        onSeason(fn) { hubListeners.season.push(fn); if (activeSeason) fn(activeSeason); },
+        onTab(fn) { hubListeners.tab.push(fn); if (currentTab) fn(currentTab); },
+        reload() { if (activeSeason) loadSeasonData(activeSeason.id); },
+        gradeBadge: (g, src) => makeGradeBadge(g, src),
+    };
 
     // ── Per-season layout ─────────────────────────────────────────────────────
     // The template renders every tab this viewer may see; the season's layout reorders,
@@ -169,6 +182,7 @@
                 // Season Mail open: load it. A reload of the same season doesn't — the saves that
                 // trigger one already call loadRewards / loadSeasonMail themselves.
                 if ((activeSeason ? activeSeason.id : null) !== prevId) loadTabExtras();
+                if (activeSeason) emitHub('season', activeSeason);
             })
             .catch(() => showToast('Failed to load season data.', 'error'));
     }

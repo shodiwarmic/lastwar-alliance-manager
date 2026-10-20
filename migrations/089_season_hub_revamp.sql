@@ -331,7 +331,104 @@ WHERE season_id IS NULL AND season_event_id IS NULL AND EXISTS (SELECT 1 FROM ca
     WHERE c.d = schedule_events.event_date AND c.type_id = schedule_events.event_type_id);
 -- +goose StatementEnd
 
+
+-- ── 274: Land configuration, levels, routes and targets ─────────────────────
+-- A season's Land rules (S4's values are Cpt Hedge's and the requester's; entered or copied with
+-- the season, not seeded) and its level table. Instants are UTC (gametime.SQLiteLayout); the app
+-- shows them in server time.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_config (
+    season_id                 INTEGER PRIMARY KEY REFERENCES seasons(id),
+    city_daily_captures       INTEGER NOT NULL DEFAULT 2,
+    stronghold_daily_captures INTEGER NOT NULL DEFAULT 2,
+    city_cap                  INTEGER NOT NULL DEFAULT 6,
+    stronghold_cap            INTEGER NOT NULL DEFAULT 6,
+    capitol_counts_toward_cap INTEGER NOT NULL DEFAULT 0,
+    abandon_minutes           INTEGER NOT NULL DEFAULT 60,
+    unlock_offset_hours       INTEGER NOT NULL DEFAULT 12,
+    redeclare_cooldown_days   INTEGER,
+    source                    TEXT NOT NULL DEFAULT '',
+    grade                     TEXT NOT NULL DEFAULT 'unverified'
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_levels (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id         INTEGER NOT NULL REFERENCES seasons(id),
+    kind              TEXT    NOT NULL CHECK(kind IN ('city','stronghold')),
+    level             INTEGER NOT NULL,
+    name              TEXT    NOT NULL DEFAULT '',
+    resource_per_hour INTEGER,
+    unlock_week       INTEGER,
+    unlock_day        INTEGER,
+    extra             TEXT    NOT NULL DEFAULT '{}',
+    source            TEXT    NOT NULL DEFAULT '',
+    grade             TEXT    NOT NULL DEFAULT 'unverified',
+    UNIQUE(season_id, kind, level)
+);
+-- +goose StatementEnd
+-- Three route slots per season, exactly one active; a route's targets in order; and every save
+-- of a route kept as a revision.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_routes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id  INTEGER NOT NULL REFERENCES seasons(id),
+    slot       TEXT    NOT NULL CHECK(slot IN ('primary','backup_a','backup_b')),
+    name       TEXT    NOT NULL DEFAULT '',
+    is_active  INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME,
+    UNIQUE(season_id, slot)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_targets (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    route_id               INTEGER NOT NULL REFERENCES season_land_routes(id),
+    position               INTEGER NOT NULL DEFAULT 0,
+    area_id                TEXT    NOT NULL DEFAULT '',
+    name                   TEXT    NOT NULL,
+    kind                   TEXT    NOT NULL DEFAULT 'city',
+    level                  INTEGER,
+    unlock_at              TEXT,
+    planned_capture_at     TEXT,
+    actual_capture_at      TEXT,
+    prerequisite_target_id INTEGER REFERENCES season_land_targets(id),
+    buff                   TEXT    NOT NULL DEFAULT '',
+    resource_per_hour      INTEGER,
+    status                 TEXT    NOT NULL DEFAULT 'planned'
+                           CHECK(status IN ('planned','declared','captured','skipped','failed')),
+    connected              TEXT    NOT NULL DEFAULT 'unknown'
+                           CHECK(connected IN ('touching','not_touching','unknown')),
+    coordinator_member_id  INTEGER REFERENCES members(id),
+    notes                  TEXT    NOT NULL DEFAULT ''
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_route_revisions (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    route_id INTEGER NOT NULL REFERENCES season_land_routes(id),
+    saved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    saved_by INTEGER REFERENCES users(id),
+    snapshot TEXT    NOT NULL DEFAULT '[]'
+);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_route_revisions;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_targets;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_routes;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_levels;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_config;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP INDEX IF EXISTS idx_schedule_events_task_force;
 -- +goose StatementEnd

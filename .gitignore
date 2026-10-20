@@ -60,6 +60,8 @@ temp/
 files-dev/
 uploads/
 data/
+# ...but not the app's embedded data (go:embed reads it at build time)
+!internal/app/data/
 docker-compose.override.yml
 .claude/settings.json
 
