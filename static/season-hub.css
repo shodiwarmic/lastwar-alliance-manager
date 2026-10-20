@@ -608,3 +608,32 @@
 .es-diff-detail { color: var(--text-secondary); font-size: 0.8rem; margin-top: 2px; overflow-wrap: anywhere; }
 .es-diff-pickrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .es-diff-pick { flex: 1 1 200px; min-width: 0; }
+
+/* ── Create Season: start-from modes ─────────────────────────────────────── */
+.cs-mode {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin: 0 0 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+}
+.cs-mode legend { font-size: 0.85rem; font-weight: 600; padding: 0 4px; }
+.cs-mode label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
+
+/* ── Edit Season: layout tables ──────────────────────────────────────────── */
+.es-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+.es-layout-col h5 { margin: 0 0 6px; font-size: 0.85rem; }
+.es-layout-table td { vertical-align: middle; }
+.es-layout-table .layout-label { width: 100%; min-width: 0; }
+.es-layout-table td:last-child { white-space: nowrap; }
+
+/* ── Archived rosters: the frozen name, the name today ──────────────────── */
+.member-name-link { color: inherit; text-decoration: none; }
+.member-name-link:hover { text-decoration: underline; }
+.member-current-name { color: var(--text-muted); font-size: 0.8rem; }

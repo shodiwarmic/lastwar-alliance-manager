@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,21 +25,35 @@ import (
 // ---------------------------------------------------------------------------
 
 type Season struct {
-	ID               int               `json:"id"`
-	Name             string            `json:"name"`
-	SeasonNumber     int               `json:"season_number"`
-	StartDate        string            `json:"start_date"`
-	EndDate          string            `json:"end_date"`
-	WeekCount        int               `json:"week_count"`
-	KeyEventName     string            `json:"key_event_name"`
-	KeyEventRequired int               `json:"key_event_required"`
-	TierActiveMinPct int               `json:"tier_active_min_pct"`
-	TierAtRiskMinPct int               `json:"tier_at_risk_min_pct"`
-	IsActive         bool              `json:"is_active"`
-	ArchivedAt       string            `json:"archived_at"`
-	CreatedAt        string            `json:"created_at"`
-	ScoreLevels      []ScoreLevel      `json:"score_levels"`
-	Trackables       []SeasonTrackable `json:"trackables"`
+	ID               int    `json:"id"`
+	Name             string `json:"name"`
+	SeasonNumber     int    `json:"season_number"`
+	StartDate        string `json:"start_date"`
+	EndDate          string `json:"end_date"`
+	WeekCount        int    `json:"week_count"`
+	KeyEventName     string `json:"key_event_name"`
+	KeyEventRequired int    `json:"key_event_required"`
+	TierActiveMinPct int    `json:"tier_active_min_pct"`
+	TierAtRiskMinPct int    `json:"tier_at_risk_min_pct"`
+	// KeyEventTotal is how many key events (wars) the season schedules (S4: 8), beside
+	// KeyEventRequired. ResourceName is the season resource (S4: Copper).
+	KeyEventTotal int    `json:"key_event_total"`
+	ResourceName  string `json:"resource_name"`
+	// The poll and war floors; nil means "the overall floors" (TierActiveMinPct /
+	// TierAtRiskMinPct).
+	PollActiveMinPct *int `json:"poll_active_min_pct"`
+	PollAtRiskMinPct *int `json:"poll_at_risk_min_pct"`
+	WarActiveMinPct  *int `json:"war_active_min_pct"`
+	WarAtRiskMinPct  *int `json:"war_at_risk_min_pct"`
+	// ScheduleBufferMinutes is the window the Schedule tab's conflict check looks at;
+	// LandReadinessBufferHours how long before an unlock a Land target should be connected.
+	ScheduleBufferMinutes    int               `json:"schedule_buffer_minutes"`
+	LandReadinessBufferHours int               `json:"land_readiness_buffer_hours"`
+	IsActive                 bool              `json:"is_active"`
+	ArchivedAt               string            `json:"archived_at"`
+	CreatedAt                string            `json:"created_at"`
+	ScoreLevels              []ScoreLevel      `json:"score_levels"`
+	Trackables               []SeasonTrackable `json:"trackables"`
 	// RewardTiers is the season's configurable reward tier list, replacing the
 	// four fixed tier_count_* columns dropped in migration 068. Carried on the
 	// season so every page that already has one can render tier badges, populate
@@ -134,9 +149,13 @@ type ScoreLevel struct {
 }
 
 type SeasonMember struct {
-	MemberID           int              `json:"member_id"`
-	Name               string           `json:"name"`
-	Rank               string           `json:"rank"`
+	MemberID int    `json:"member_id"`
+	Name     string `json:"name"`
+	Rank     string `json:"rank"`
+	// ProfileID links the current profile; nil once the member row is gone. CurrentName is
+	// set when an archived season's frozen name differs from the member's name today.
+	ProfileID          *int             `json:"profile_id"`
+	CurrentName        string           `json:"current_name,omitempty"`
 	ParticipationPts   int              `json:"participation_pts"`
 	ParticipationPct   float64          `json:"participation_pct"`
 	ContributionTotal  int64            `json:"contribution_total"`
@@ -337,64 +356,50 @@ func validTierKey(key string) bool {
 
 // loadActiveSeason returns the active season with score levels and trackables.
 // Returns nil (not an error) if no active season exists.
-func loadActiveSeason() (*Season, error) {
+// seasonColumns is the SELECT list scanSeason reads, in its order.
+const seasonColumns = `id, name, season_number, start_date, COALESCE(end_date,''), week_count,
+	key_event_name, key_event_required, tier_active_min_pct, tier_at_risk_min_pct,
+	key_event_total, resource_name, poll_active_min_pct, poll_at_risk_min_pct,
+	war_active_min_pct, war_at_risk_min_pct, schedule_buffer_minutes, land_readiness_buffer_hours,
+	is_active, COALESCE(archived_at,''), created_at`
+
+func scanSeason(row *sql.Row) (*Season, error) {
 	var s Season
-	var archivedAt, endDate sql.NullString
-	err := db.QueryRow(`
-		SELECT id, name, season_number, start_date, COALESCE(end_date,''), week_count,
-		       key_event_name, key_event_required,
-		       tier_active_min_pct, tier_at_risk_min_pct,
-		       is_active, COALESCE(archived_at,''), created_at
-		FROM seasons WHERE is_active = 1 LIMIT 1`,
-	).Scan(&s.ID, &s.Name, &s.SeasonNumber, &s.StartDate, &endDate,
+	var pa, pr, wa, wr sql.NullInt64
+	if err := row.Scan(&s.ID, &s.Name, &s.SeasonNumber, &s.StartDate, &s.EndDate,
 		&s.WeekCount, &s.KeyEventName, &s.KeyEventRequired,
 		&s.TierActiveMinPct, &s.TierAtRiskMinPct,
-		&s.IsActive, &archivedAt, &s.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
+		&s.KeyEventTotal, &s.ResourceName, &pa, &pr, &wa, &wr,
+		&s.ScheduleBufferMinutes, &s.LandReadinessBufferHours,
+		&s.IsActive, &s.ArchivedAt, &s.CreatedAt); err != nil {
 		return nil, err
 	}
-	if endDate.Valid {
-		s.EndDate = endDate.String
+	opt := func(n sql.NullInt64) *int {
+		if !n.Valid {
+			return nil
+		}
+		v := int(n.Int64)
+		return &v
 	}
-	if archivedAt.Valid {
-		s.ArchivedAt = archivedAt.String
-	}
+	s.PollActiveMinPct, s.PollAtRiskMinPct = opt(pa), opt(pr)
+	s.WarActiveMinPct, s.WarAtRiskMinPct = opt(wa), opt(wr)
 	if err := populateSeasonChildren(&s); err != nil {
 		return nil, err
 	}
 	return &s, nil
 }
 
+func loadActiveSeason() (*Season, error) {
+	s, err := scanSeason(db.QueryRow(`SELECT ` + seasonColumns + ` FROM seasons WHERE is_active = 1 LIMIT 1`))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return s, err
+}
+
 // loadSeasonByID loads a season by ID with score levels and trackables.
 func loadSeasonByID(id int) (*Season, error) {
-	var s Season
-	var archivedAt, endDate sql.NullString
-	err := db.QueryRow(`
-		SELECT id, name, season_number, start_date, COALESCE(end_date,''), week_count,
-		       key_event_name, key_event_required,
-		       tier_active_min_pct, tier_at_risk_min_pct,
-		       is_active, COALESCE(archived_at,''), created_at
-		FROM seasons WHERE id = ?`, id,
-	).Scan(&s.ID, &s.Name, &s.SeasonNumber, &s.StartDate, &endDate,
-		&s.WeekCount, &s.KeyEventName, &s.KeyEventRequired,
-		&s.TierActiveMinPct, &s.TierAtRiskMinPct,
-		&s.IsActive, &archivedAt, &s.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	if endDate.Valid {
-		s.EndDate = endDate.String
-	}
-	if archivedAt.Valid {
-		s.ArchivedAt = archivedAt.String
-	}
-	if err := populateSeasonChildren(&s); err != nil {
-		return nil, err
-	}
-	return &s, nil
+	return scanSeason(db.QueryRow(`SELECT `+seasonColumns+` FROM seasons WHERE id = ?`, id))
 }
 
 // autoActivateUpcomingSeason checks whether any pending (inactive, non-archived) season
@@ -409,19 +414,37 @@ func autoActivateUpcomingSeason() {
 	if err != nil || pendingID == 0 {
 		return
 	}
+	// The outgoing season archives through the one archive service, so its roster and
+	// files are frozen exactly as the Archive button freezes them. Its copies are made
+	// before the transaction opens; a copy failure leaves both seasons as they were.
+	var prep *seasonArchivePrep
+	if outgoing := activeSeasonID(db); outgoing != 0 {
+		if prep, err = prepareSeasonArchive(outgoing); err != nil {
+			slog.Error("autoActivateUpcomingSeason: archive copies", "season", outgoing, "error", err)
+			return
+		}
+	}
 	tx, err := db.Begin()
 	if err != nil {
+		prep.discard()
 		return
 	}
 	defer tx.Rollback()
-	// Archive the outgoing active season
-	tx.Exec(`UPDATE seasons SET is_active = 0,
-		archived_at = CURRENT_TIMESTAMP,
-		end_date = COALESCE(end_date, date('now'))
-		WHERE is_active = 1`)
-	// Activate the incoming season
-	tx.Exec(`UPDATE seasons SET is_active = 1 WHERE id = ?`, pendingID)
-	tx.Commit()
+	if prep != nil {
+		if err := commitSeasonArchiveTx(tx, prep, gameDate(), false); err != nil {
+			slog.Error("autoActivateUpcomingSeason: archive", "error", err)
+			prep.discard()
+			return
+		}
+	}
+	if _, err := tx.Exec(`UPDATE seasons SET is_active = 1 WHERE id = ?`, pendingID); err != nil {
+		prep.discard()
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		prep.discard()
+		return
+	}
 	slog.Info("autoActivateUpcomingSeason: activated season", "id", pendingID)
 }
 
@@ -516,11 +539,49 @@ func deriveServerEventShortName(label string) string {
 	return short
 }
 
+// seasonScoreLevelDef is one score level a new season starts with.
+type seasonScoreLevelDef struct {
+	Key    string `json:"key"`
+	Label  string `json:"label"`
+	Points int    `json:"points"`
+}
+
+// defaultScoreLevels reads the global default score levels (Settings → Season Hub).
+func defaultScoreLevels() []seasonScoreLevelDef {
+	var raw string
+	db.QueryRow(`SELECT season_score_levels_default FROM settings WHERE id = 1`).Scan(&raw)
+	var defs []seasonScoreLevelDef
+	json.Unmarshal([]byte(raw), &defs)
+	if len(defs) == 0 {
+		defs = []seasonScoreLevelDef{
+			{Key: "full", Label: "FULL", Points: 10},
+			{Key: "partial", Label: "PARTIAL", Points: 5},
+			{Key: "absent", Label: "ABSENT", Points: 0},
+		}
+	}
+	return defs
+}
+
+// handleSeasonCreate makes a season in one of three modes (private-docs 270):
+//   - template (default): name, number, weeks, key event, trackables, events and reward tiers
+//     from a season template;
+//   - blank: name, number and weeks from the body, the default score levels and tiers, no
+//     events and no trackables;
+//   - copy: another season's configuration (copySeasonConfigTx) — never its records.
+//
+// All three take start_date. A season that starts today or earlier becomes the active one and
+// archives the previous active season through the archive service.
 func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
 
 	var body struct {
+		Mode             string `json:"mode"`
 		TemplateID       int    `json:"template_id"`
+		SourceSeasonID   int    `json:"source_season_id"`
+		Name             string `json:"name"`
+		SeasonNumber     int    `json:"season_number"`
+		WeekCount        int    `json:"week_count"`
+		KeyEventName     string `json:"key_event_name"`
 		StartDate        string `json:"start_date"`
 		TierActiveMinPct int    `json:"tier_active_min_pct"`
 		TierAtRiskMinPct int    `json:"tier_at_risk_min_pct"`
@@ -529,76 +590,34 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	if body.TemplateID == 0 {
-		http.Error(w, "template_id is required", http.StatusBadRequest)
-		return
+	if body.Mode == "" {
+		body.Mode = "template"
 	}
 	if body.StartDate == "" {
 		http.Error(w, "start_date is required", http.StatusBadRequest)
 		return
 	}
-
-	// Load the template
-	var tmpl SeasonTemplate
-	err := db.QueryRow(`SELECT id, template_name, season_number, trackables, defaults, events, reward_tiers
-		FROM season_templates WHERE id = ?`, body.TemplateID).Scan(
-		&tmpl.ID, &tmpl.TemplateName, &tmpl.SeasonNumber, &tmpl.Trackables, &tmpl.Defaults, &tmpl.Events, &tmpl.RewardTiers)
-	if err == sql.ErrNoRows {
-		http.Error(w, "Template not found", http.StatusNotFound)
+	if _, err := time.Parse("2006-01-02", body.StartDate); err != nil {
+		http.Error(w, "start_date must be YYYY-MM-DD", http.StatusBadRequest)
 		return
 	}
-	if err != nil {
-		slog.Error("handleSeasonCreate: load template", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+	if body.TierActiveMinPct == 0 {
+		body.TierActiveMinPct = 70
+	}
+	if body.TierAtRiskMinPct == 0 {
+		body.TierAtRiskMinPct = 60
 	}
 
-	// Parse template defaults
-	var defs struct {
-		WeekCount        int    `json:"week_count"`
-		KeyEventName     string `json:"key_event_name"`
-		KeyEventRequired int    `json:"key_event_required"`
+	// The new season's row, filled per mode.
+	ns := Season{
+		StartDate: body.StartDate, TierActiveMinPct: body.TierActiveMinPct, TierAtRiskMinPct: body.TierAtRiskMinPct,
+		ScheduleBufferMinutes: 60, LandReadinessBufferHours: 24,
 	}
-	json.Unmarshal([]byte(tmpl.Defaults), &defs)
-	if defs.WeekCount == 0 {
-		defs.WeekCount = 8
-	}
-	if defs.KeyEventName == "" {
-		defs.KeyEventName = "Key Event"
-	}
-
-	// Load score levels default from settings
-	var scoreLevelsJSON string
-	db.QueryRow(`SELECT season_score_levels_default FROM settings WHERE id = 1`).Scan(&scoreLevelsJSON)
-	type scoreLevelDef struct {
-		Key    string `json:"key"`
-		Label  string `json:"label"`
-		Points int    `json:"points"`
-	}
-	var scoreDefs []scoreLevelDef
-	json.Unmarshal([]byte(scoreLevelsJSON), &scoreDefs)
-	if len(scoreDefs) == 0 {
-		scoreDefs = []scoreLevelDef{
-			{Key: "full", Label: "FULL", Points: 10},
-			{Key: "partial", Label: "PARTIAL", Points: 5},
-			{Key: "absent", Label: "ABSENT", Points: 0},
-		}
-	}
-
-	// Reward tiers come from the template (the game's counts change by season), else the
-	// global default. Adjustments happen afterwards in the Edit Season modal, which is
-	// where the per-row CRUD lives (it needs a season id, which doesn't exist yet here).
-	tierDefs := templateRewardTiers(tmpl.RewardTiers)
-
-	// Parse trackables and events from template
 	type tkDef struct {
 		Key       string `json:"key"`
 		Label     string `json:"label"`
 		SortOrder int    `json:"sort_order"`
 	}
-	var tkDefs []tkDef
-	json.Unmarshal([]byte(tmpl.Trackables), &tkDefs)
-
 	type evDef struct {
 		Label         string `json:"label"`
 		TypeName      string `json:"type_name"` // resolved to event_type_id at creation
@@ -616,53 +635,153 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		Source        string `json:"source"`
 		Grade         string `json:"grade"`
 	}
-	var evDefs []evDef
-	json.Unmarshal([]byte(tmpl.Events), &evDefs)
+	var (
+		scoreDefs []seasonScoreLevelDef
+		tierDefs  []SeasonRewardTier
+		tkDefs    []tkDef
+		evDefs    []evDef
+		source    *Season
+	)
 
-	// Sync any missing schedule_event_types from the template so type_name lookups
-	// below resolve cleanly. Server-event types are skipped (they live elsewhere).
-	// backfillExisting=false: don't touch other seasons' season_events; the rows
-	// for THIS season will be inserted with correct values from the template below.
-	syncEventTypesFromEvents(tmpl.Events, false)
+	switch body.Mode {
+	case "template":
+		if body.TemplateID == 0 {
+			http.Error(w, "template_id is required", http.StatusBadRequest)
+			return
+		}
+		var tmpl SeasonTemplate
+		err := db.QueryRow(`SELECT id, template_name, season_number, trackables, defaults, events, reward_tiers
+			FROM season_templates WHERE id = ?`, body.TemplateID).Scan(
+			&tmpl.ID, &tmpl.TemplateName, &tmpl.SeasonNumber, &tmpl.Trackables, &tmpl.Defaults, &tmpl.Events, &tmpl.RewardTiers)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Template not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			slog.Error("handleSeasonCreate: load template", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		var defs struct {
+			WeekCount        int    `json:"week_count"`
+			KeyEventName     string `json:"key_event_name"`
+			KeyEventRequired int    `json:"key_event_required"`
+			KeyEventTotal    int    `json:"key_event_total"`
+			ResourceName     string `json:"resource_name"`
+		}
+		json.Unmarshal([]byte(tmpl.Defaults), &defs)
+		ns.Name, ns.SeasonNumber = tmpl.TemplateName, tmpl.SeasonNumber
+		ns.WeekCount, ns.KeyEventName, ns.KeyEventRequired = defs.WeekCount, defs.KeyEventName, defs.KeyEventRequired
+		ns.KeyEventTotal, ns.ResourceName = defs.KeyEventTotal, defs.ResourceName
+		scoreDefs = defaultScoreLevels()
+		// Reward tiers come from the template (the game's counts change by season), else the
+		// global default. Adjustments happen afterwards in Edit Season.
+		tierDefs = templateRewardTiers(tmpl.RewardTiers)
+		json.Unmarshal([]byte(tmpl.Trackables), &tkDefs)
+		json.Unmarshal([]byte(tmpl.Events), &evDefs)
 
-	// Resolve type_name → event_type_id for each event before the transaction.
-	typeIDCache := map[string]int{}
-	for i, ev := range evDefs {
-		if ev.TypeName == "" {
-			continue
+		// Sync any missing schedule_event_types from the template so type_name lookups
+		// below resolve cleanly. Server-event types are skipped (they live elsewhere).
+		// backfillExisting=false: don't touch other seasons' season_events; the rows
+		// for THIS season will be inserted with correct values from the template below.
+		syncEventTypesFromEvents(tmpl.Events, false)
+		typeIDCache := map[string]int{}
+		for i, ev := range evDefs {
+			if ev.TypeName == "" {
+				continue
+			}
+			if id, ok := typeIDCache[ev.TypeName]; ok {
+				n := id
+				evDefs[i].EventTypeID = &n
+				continue
+			}
+			var typeID int
+			if err := db.QueryRow(`SELECT id FROM schedule_event_types WHERE name = ?`, ev.TypeName).Scan(&typeID); err == nil {
+				typeIDCache[ev.TypeName] = typeID
+				n := typeID
+				evDefs[i].EventTypeID = &n
+			}
 		}
-		if id, ok := typeIDCache[ev.TypeName]; ok {
-			n := id
-			evDefs[i].EventTypeID = &n
-			continue
+	case "blank":
+		if strings.TrimSpace(body.Name) == "" || body.SeasonNumber <= 0 || body.WeekCount <= 0 {
+			http.Error(w, "name, season_number and week_count are required", http.StatusBadRequest)
+			return
 		}
-		var typeID int
-		if err := db.QueryRow(`SELECT id FROM schedule_event_types WHERE name = ?`, ev.TypeName).Scan(&typeID); err == nil {
-			typeIDCache[ev.TypeName] = typeID
-			n := typeID
-			evDefs[i].EventTypeID = &n
+		ns.Name, ns.SeasonNumber, ns.WeekCount = strings.TrimSpace(body.Name), body.SeasonNumber, body.WeekCount
+		ns.KeyEventName = strings.TrimSpace(body.KeyEventName)
+		scoreDefs = defaultScoreLevels()
+		tierDefs = loadDefaultRewardTiers()
+	case "copy":
+		if body.SourceSeasonID == 0 || strings.TrimSpace(body.Name) == "" || body.SeasonNumber <= 0 {
+			http.Error(w, "source_season_id, name and season_number are required", http.StatusBadRequest)
+			return
 		}
+		src, err := loadSeasonByID(body.SourceSeasonID)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Source season not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			slog.Error("handleSeasonCreate: load source", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		source = src
+		// The configuration travels; the dates, name and number are the new season's.
+		ns.Name, ns.SeasonNumber = strings.TrimSpace(body.Name), body.SeasonNumber
+		ns.WeekCount, ns.KeyEventName = src.WeekCount, src.KeyEventName
+		ns.KeyEventRequired, ns.KeyEventTotal, ns.ResourceName = src.KeyEventRequired, src.KeyEventTotal, src.ResourceName
+		ns.TierActiveMinPct, ns.TierAtRiskMinPct = src.TierActiveMinPct, src.TierAtRiskMinPct
+		ns.PollActiveMinPct, ns.PollAtRiskMinPct = src.PollActiveMinPct, src.PollAtRiskMinPct
+		ns.WarActiveMinPct, ns.WarAtRiskMinPct = src.WarActiveMinPct, src.WarAtRiskMinPct
+		ns.ScheduleBufferMinutes, ns.LandReadinessBufferHours = src.ScheduleBufferMinutes, src.LandReadinessBufferHours
+	default:
+		http.Error(w, "mode must be template, blank or copy", http.StatusBadRequest)
+		return
 	}
-
-	// Apply participation threshold defaults
-	if body.TierActiveMinPct == 0 {
-		body.TierActiveMinPct = 70
+	if ns.WeekCount <= 0 {
+		ns.WeekCount = 8
 	}
-	if body.TierAtRiskMinPct == 0 {
-		body.TierAtRiskMinPct = 60
+	if ns.KeyEventName == "" {
+		ns.KeyEventName = "Key Event"
 	}
 
 	// Block duplicate season numbers before starting the transaction
 	var existing int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM seasons WHERE season_number = ?`, tmpl.SeasonNumber).Scan(&existing); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM seasons WHERE season_number = ?`, ns.SeasonNumber).Scan(&existing); err != nil {
 		slog.Error("handleSeasonCreate: check duplicate", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	if existing > 0 {
-		http.Error(w, fmt.Sprintf("Season number %d already exists", tmpl.SeasonNumber), http.StatusConflict)
+		http.Error(w, fmt.Sprintf("Season number %d already exists", ns.SeasonNumber), http.StatusConflict)
 		return
 	}
+
+	// If the new season starts on or before today, the previous active season is archived
+	// and this one is active at once. Otherwise the active season stays active and
+	// autoActivateUpcomingSeason makes the switch when the date arrives. The outgoing
+	// season's file copies are made before the transaction: a failed copy creates nothing.
+	today := gameDate()
+	isFuture := body.StartDate > today
+	var prep *seasonArchivePrep
+	if !isFuture {
+		if outgoing := activeSeasonID(db); outgoing != 0 {
+			p, err := prepareSeasonArchive(outgoing)
+			if err != nil {
+				slog.Error("handleSeasonCreate: archive copies", "error", err)
+				http.Error(w, "Could not archive the current season: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			prep = p
+		}
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			prep.discard()
+		}
+	}()
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -672,35 +791,24 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// If the new season starts on or before today, archive the previous active season
-	// and make this one active immediately.
-	// If the start date is in the future, the existing active season stays active;
-	// autoActivateUpcomingSeason will handle the transition when the date arrives.
-	today := gameDate()
-	isFuture := body.StartDate > today
-	if !isFuture {
-		if _, err := tx.Exec(`UPDATE seasons SET is_active = 0,
-			archived_at = CURRENT_TIMESTAMP,
-			end_date = COALESCE(end_date, ?)
-			WHERE is_active = 1`, body.StartDate); err != nil {
+	if prep != nil {
+		if err := commitSeasonArchiveTx(tx, prep, body.StartDate, false); err != nil {
 			slog.Error("handleSeasonCreate: archive existing", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
 	}
 
-	newIsActive := 1
-	if isFuture {
-		newIsActive = 0
-	}
 	res, err := tx.Exec(`
 		INSERT INTO seasons (name, season_number, start_date, week_count, key_event_name, key_event_required,
-		    tier_active_min_pct, tier_at_risk_min_pct, is_active)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		tmpl.TemplateName, tmpl.SeasonNumber, body.StartDate, defs.WeekCount,
-		defs.KeyEventName, defs.KeyEventRequired,
-		body.TierActiveMinPct, body.TierAtRiskMinPct,
-		newIsActive,
+		    tier_active_min_pct, tier_at_risk_min_pct, key_event_total, resource_name,
+		    poll_active_min_pct, poll_at_risk_min_pct, war_active_min_pct, war_at_risk_min_pct,
+		    schedule_buffer_minutes, land_readiness_buffer_hours, is_active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ns.Name, ns.SeasonNumber, body.StartDate, ns.WeekCount, ns.KeyEventName, ns.KeyEventRequired,
+		ns.TierActiveMinPct, ns.TierAtRiskMinPct, ns.KeyEventTotal, ns.ResourceName,
+		ns.PollActiveMinPct, ns.PollAtRiskMinPct, ns.WarActiveMinPct, ns.WarAtRiskMinPct,
+		ns.ScheduleBufferMinutes, ns.LandReadinessBufferHours, boolToInt(!isFuture),
 	)
 	if err != nil {
 		slog.Error("handleSeasonCreate: insert season", "error", err)
@@ -709,53 +817,61 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	seasonID, _ := res.LastInsertId()
 
-	for i, sl := range scoreDefs {
-		if _, err := tx.Exec(`INSERT INTO season_score_levels (season_id, key, label, points, sort_order) VALUES (?, ?, ?, ?, ?)`,
-			seasonID, sl.Key, sl.Label, sl.Points, i); err != nil {
-			slog.Error("handleSeasonCreate: insert score level", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
+	fail := func(what string, err error) {
+		slog.Error("handleSeasonCreate: "+what, "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+	}
+	if source != nil {
+		if err := copySeasonConfigTx(tx, source.ID, seasonID); err != nil {
+			fail("copy configuration", err)
 			return
 		}
-	}
-
-	for i, rt := range tierDefs {
-		if _, err := tx.Exec(`INSERT INTO season_reward_tiers (season_id, key, label, slot_count, color, sort_order)
-			VALUES (?, ?, ?, ?, ?, ?)`,
-			seasonID, rt.Key, rt.Label, rt.SlotCount, rt.Color, i); err != nil {
-			slog.Error("handleSeasonCreate: insert reward tier", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
+	} else {
+		for i, sl := range scoreDefs {
+			if _, err := tx.Exec(`INSERT INTO season_score_levels (season_id, key, label, points, sort_order) VALUES (?, ?, ?, ?, ?)`,
+				seasonID, sl.Key, sl.Label, sl.Points, i); err != nil {
+				fail("insert score level", err)
+				return
+			}
 		}
-	}
-
-	for _, t := range tkDefs {
-		if _, err := tx.Exec(`INSERT INTO season_trackables (season_id, key, label, sort_order) VALUES (?, ?, ?, ?)`,
-			seasonID, t.Key, t.Label, t.SortOrder); err != nil {
-			slog.Error("handleSeasonCreate: insert trackable", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
+		for i, rt := range tierDefs {
+			if _, err := tx.Exec(`INSERT INTO season_reward_tiers (season_id, key, label, slot_count, color, sort_order)
+				VALUES (?, ?, ?, ?, ?, ?)`,
+				seasonID, rt.Key, rt.Label, rt.SlotCount, rt.Color, i); err != nil {
+				fail("insert reward tier", err)
+				return
+			}
 		}
-	}
-
-	for _, ev := range evDefs {
-		eventTime := ev.EventTime
-		if eventTime == "" {
-			eventTime = "20:00"
+		for _, t := range tkDefs {
+			if _, err := tx.Exec(`INSERT INTO season_trackables (season_id, key, label, sort_order) VALUES (?, ?, ?, ?)`,
+				seasonID, t.Key, t.Label, t.SortOrder); err != nil {
+				fail("insert trackable", err)
+				return
+			}
 		}
-		durationDays := ev.DurationDays
-		if durationDays < 1 {
-			durationDays = 1
+		for _, ev := range evDefs {
+			eventTime := ev.EventTime
+			if eventTime == "" {
+				eventTime = "20:00"
+			}
+			durationDays := ev.DurationDays
+			if durationDays < 1 {
+				durationDays = 1
+			}
+			if _, err := tx.Exec(`INSERT INTO season_events
+				(season_id, label, event_type_id, type_name, day_offset, event_time, all_day, level, week_start, week_end, notes, is_server_event, duration_days,
+				 template_key, source, grade)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				seasonID, ev.Label, ev.EventTypeID, ev.TypeName, ev.DayOffset, eventTime,
+				boolToInt(ev.AllDay), ev.Level, ev.WeekStart, ev.WeekEnd, ev.Notes,
+				boolToInt(ev.IsServerEvent), durationDays,
+				ev.Key, ev.Source, normaliseEventGrade(ev.Grade)); err != nil {
+				fail("insert season_event", err)
+				return
+			}
 		}
-		if _, err := tx.Exec(`INSERT INTO season_events
-			(season_id, label, event_type_id, type_name, day_offset, event_time, all_day, level, week_start, week_end, notes, is_server_event, duration_days,
-			 template_key, source, grade)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			seasonID, ev.Label, ev.EventTypeID, ev.TypeName, ev.DayOffset, eventTime,
-			boolToInt(ev.AllDay), ev.Level, ev.WeekStart, ev.WeekEnd, ev.Notes,
-			boolToInt(ev.IsServerEvent), durationDays,
-			ev.Key, ev.Source, normaliseEventGrade(ev.Grade)); err != nil {
-			slog.Error("handleSeasonCreate: insert season_event", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
+		if err := seedSeasonLayoutTx(tx, seasonID); err != nil {
+			fail("seed layout", err)
 			return
 		}
 	}
@@ -765,11 +881,16 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	committed = true
 
-	// Note: tmpl.TemplateName is also the new season's name (handleSeasonCreate
-	// uses it verbatim for the seasons.name column).
-	logActivity(user.ID, user.Username, "created", "season_config", tmpl.TemplateName, false,
-		fmt.Sprintf("Season %d", tmpl.SeasonNumber))
+	details := fmt.Sprintf("Season %d", ns.SeasonNumber)
+	switch body.Mode {
+	case "blank":
+		details += " · blank"
+	case "copy":
+		details += " · configuration copied from " + source.Name
+	}
+	logActivity(user.ID, user.Username, "created", "season_config", ns.Name, false, details)
 
 	// Auto-push events to the schedule. Best-effort: if the push fails we still
 	// report a successful season creation; the user can re-push from the edit
@@ -817,11 +938,12 @@ func handleSeasonArchive(w http.ResponseWriter, r *http.Request) {
 
 	// Game time (UTC-2), the same clock season create uses — between 00:00 and
 	// 02:00 UTC the game day is still the previous one, so a UTC date here stamped
-	// an end_date a day after the season actually ended.
-	today := gameDate()
-	if _, err := db.Exec(`UPDATE seasons SET is_active=0, archived_at=CURRENT_TIMESTAMP, end_date=? WHERE id=?`, today, id); err != nil {
-		slog.Error("handleSeasonArchive: update", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
+	// an end_date a day after the season actually ended. The archive service copies the
+	// season's files first and then, in one transaction, freezes the roster and marks it
+	// archived: a failed copy archives nothing.
+	if err := archiveSeason(id, gameDate()); err != nil {
+		slog.Error("handleSeasonArchive: archive", "error", err)
+		http.Error(w, "Could not archive the season: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -851,6 +973,11 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if old.ArchivedAt != "" {
+		http.Error(w, "Season is archived and cannot be modified", http.StatusConflict)
+		return
+	}
+
 	var body struct {
 		Name             string `json:"name"`
 		SeasonNumber     int    `json:"season_number"`
@@ -860,6 +987,16 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 		KeyEventRequired int    `json:"key_event_required"`
 		TierActiveMinPct int    `json:"tier_active_min_pct"`
 		TierAtRiskMinPct int    `json:"tier_at_risk_min_pct"`
+		// Pointers: a client that does not send them (an older page) keeps the stored value.
+		KeyEventTotal            *int    `json:"key_event_total"`
+		ResourceName             *string `json:"resource_name"`
+		ScheduleBufferMinutes    *int    `json:"schedule_buffer_minutes"`
+		LandReadinessBufferHours *int    `json:"land_readiness_buffer_hours"`
+		// The category floors: present and null means "use the overall floors".
+		PollActiveMinPct optionalInt `json:"poll_active_min_pct"`
+		PollAtRiskMinPct optionalInt `json:"poll_at_risk_min_pct"`
+		WarActiveMinPct  optionalInt `json:"war_active_min_pct"`
+		WarAtRiskMinPct  optionalInt `json:"war_at_risk_min_pct"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -868,6 +1005,40 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 	if body.Name == "" || body.SeasonNumber == 0 || body.StartDate == "" {
 		http.Error(w, "name, season_number, and start_date are required", http.StatusBadRequest)
 		return
+	}
+	keyTotal, resource := old.KeyEventTotal, old.ResourceName
+	bufMin, bufHours := old.ScheduleBufferMinutes, old.LandReadinessBufferHours
+	if body.KeyEventTotal != nil {
+		keyTotal = *body.KeyEventTotal
+	}
+	if body.ResourceName != nil {
+		resource = strings.TrimSpace(*body.ResourceName)
+	}
+	if body.ScheduleBufferMinutes != nil {
+		bufMin = *body.ScheduleBufferMinutes
+	}
+	if body.LandReadinessBufferHours != nil {
+		bufHours = *body.LandReadinessBufferHours
+	}
+	if keyTotal < 0 || bufMin < 0 || bufHours < 0 {
+		http.Error(w, "key_event_total and the buffers cannot be negative", http.StatusBadRequest)
+		return
+	}
+	floors := []*int{}
+	for _, f := range []struct {
+		in  optionalInt
+		old *int
+	}{{body.PollActiveMinPct, old.PollActiveMinPct}, {body.PollAtRiskMinPct, old.PollAtRiskMinPct},
+		{body.WarActiveMinPct, old.WarActiveMinPct}, {body.WarAtRiskMinPct, old.WarAtRiskMinPct}} {
+		v := f.old
+		if f.in.Set {
+			v = f.in.Value
+		}
+		if v != nil && (*v < 0 || *v > 100) {
+			http.Error(w, "a floor is a percentage from 0 to 100", http.StatusBadRequest)
+			return
+		}
+		floors = append(floors, v)
 	}
 
 	// Block duplicate season number on a different row
@@ -880,11 +1051,15 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 	if _, err := db.Exec(`
 		UPDATE seasons SET name=?, season_number=?, start_date=?, week_count=?,
 		    key_event_name=?, key_event_required=?,
-		    tier_active_min_pct=?, tier_at_risk_min_pct=?
+		    tier_active_min_pct=?, tier_at_risk_min_pct=?,
+		    key_event_total=?, resource_name=?, schedule_buffer_minutes=?, land_readiness_buffer_hours=?,
+		    poll_active_min_pct=?, poll_at_risk_min_pct=?, war_active_min_pct=?, war_at_risk_min_pct=?
 		WHERE id=?`,
 		body.Name, body.SeasonNumber, body.StartDate, body.WeekCount,
 		body.KeyEventName, body.KeyEventRequired,
 		body.TierActiveMinPct, body.TierAtRiskMinPct,
+		keyTotal, resource, bufMin, bufHours,
+		floors[0], floors[1], floors[2], floors[3],
 		id,
 	); err != nil {
 		slog.Error("handleSeasonUpdate: update", "error", err)
@@ -901,6 +1076,13 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if old.WeekCount != body.WeekCount {
 		changes = append(changes, fmt.Sprintf("week_count: %d → %d", old.WeekCount, body.WeekCount))
+	}
+	if old.KeyEventTotal != keyTotal {
+		changes = append(changes, fmt.Sprintf("key_event_total: %d → %d", old.KeyEventTotal, keyTotal))
+	}
+	if old.TierActiveMinPct != body.TierActiveMinPct || old.TierAtRiskMinPct != body.TierAtRiskMinPct {
+		changes = append(changes, fmt.Sprintf("floors: %d/%d → %d/%d", old.TierActiveMinPct, old.TierAtRiskMinPct,
+			body.TierActiveMinPct, body.TierAtRiskMinPct))
 	}
 	logActivity(user.ID, user.Username, "updated", "season_config", body.Name, false, strings.Join(changes, "; "))
 
@@ -1098,8 +1280,8 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// foreign_keys is off app-wide, so the schema's ON DELETE CASCADE never fires —
-	// every child table has to be deleted explicitly.
-	for _, tbl := range []string{"season_participation", "season_score_levels", "season_rewards", "season_reward_tiers"} {
+	// every child table has to be deleted explicitly (seasonChildTables).
+	for _, tbl := range seasonChildTables {
 		if _, err := tx.Exec(`DELETE FROM `+tbl+` WHERE season_id = ?`, id); err != nil {
 			slog.Error("handleSeasonDelete: delete children", "table", tbl, "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1122,6 +1304,11 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 		slog.Error("handleSeasonDelete: commit", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
+	}
+	// The archived file copies go with the season. Best effort, after the commit: a copy
+	// left behind is orphaned bytes, never a broken reference.
+	if err := os.RemoveAll(seasonArchiveDir(id)); err != nil {
+		slog.Warn("handleSeasonDelete: remove archived files", "season", id, "error", err)
 	}
 
 	details := ""
@@ -1320,35 +1507,21 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	}
 	rrows.Close()
 
-	// Load all active members plus any former members (EX) who have data for this season.
-	mrows, err := db.Query(`
-		SELECT DISTINCT m.id, m.name, m.rank FROM members m
-		WHERE m.rank != 'EX'
-		   OR m.id IN (SELECT DISTINCT member_id FROM season_participation   WHERE season_id = ?)
-		   OR m.id IN (SELECT DISTINCT member_id FROM season_member_records  WHERE season_id = ?)
-		   OR m.id IN (SELECT DISTINCT member_id FROM season_rewards         WHERE season_id = ?)
-		ORDER BY m.name ASC`, season.ID, season.ID, season.ID)
+	// The roster: an archived season's frozen snapshot (a recruit since is not on it, a
+	// rename since keeps the old name); an open season's current members plus any former
+	// members (EX) who have data for it.
+	allMembers, err := loadSeasonRoster(db, season)
 	if err != nil {
-		slog.Error("handleSeasonHubData: members query", "error", err)
+		slog.Error("handleSeasonHubData: roster", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	defer mrows.Close()
-
-	type memberBasic struct {
-		id   int
-		name string
-		rank string
+	layout, err := loadSeasonLayout(db, season.ID)
+	if err != nil {
+		slog.Error("handleSeasonHubData: layout", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
-	var allMembers []memberBasic
-	for mrows.Next() {
-		var m memberBasic
-		if err := mrows.Scan(&m.id, &m.name, &m.rank); err != nil {
-			continue
-		}
-		allMembers = append(allMembers, m)
-	}
-	mrows.Close()
 
 	// Index participation rows by member
 	type memberPart struct {
@@ -1382,15 +1555,17 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	members := make([]SeasonMember, 0, len(allMembers))
 	for _, m := range allMembers {
 		sm := SeasonMember{
-			MemberID:       m.id,
-			Name:           m.name,
-			Rank:           m.rank,
+			MemberID:       m.ID,
+			Name:           m.Name,
+			Rank:           m.Rank,
+			ProfileID:      m.ProfileID,
+			CurrentName:    m.CurrentName,
 			WeeklyScores:   make([]string, season.WeekCount),
 			WeeklyKeyEvent: make([]int, season.WeekCount),
-			RewardTier:     rewardByMember[m.id],
+			RewardTier:     rewardByMember[m.ID],
 		}
 
-		mp := partByMember[m.id]
+		mp := partByMember[m.ID]
 		keyEventCount := 0
 		for w := 1; w <= season.WeekCount; w++ {
 			scoreKey := "absent"
@@ -1412,9 +1587,9 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 
 		sm.ParticipationPct = float64(sm.ParticipationPts) / float64(maxSeasonPts) * 100
 
-		sm.ContributionTotal = contribByMember[m.id]
+		sm.ContributionTotal = contribByMember[m.ID]
 		sm.ContributionPct = float64(sm.ContributionTotal) / float64(topContrib) * 100
-		sm.Records = memberRecords[m.id]
+		sm.Records = memberRecords[m.ID]
 		if sm.Records == nil {
 			sm.Records = map[string]int64{}
 		}
@@ -1460,6 +1635,7 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{
 		"season":  season,
 		"members": members,
+		"layout":  layout,
 	})
 }
 
@@ -2066,12 +2242,14 @@ func handleRewardsGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := db.Query(`
-		SELECT sr.id, sr.season_id, sr.member_id, m.name, m.rank,
+		SELECT sr.id, sr.season_id, sr.member_id,
+		       COALESCE(rs.name, m.name, '#' || sr.member_id), COALESCE(rs.rank, m.rank, ''),
 		       sr.reward_tier, sr.participation_pct, COALESCE(sr.contribution_pct, 0),
-		       sr.note, u.username, sr.logged_at
+		       sr.note, COALESCE(u.username, ''), sr.logged_at
 		FROM season_rewards sr
-		JOIN members m ON m.id = sr.member_id
-		JOIN users u ON u.id = sr.logged_by
+		LEFT JOIN members m ON m.id = sr.member_id
+		LEFT JOIN users u ON u.id = sr.logged_by
+		LEFT JOIN season_roster_snapshot rs ON rs.season_id = sr.season_id AND rs.member_id = sr.member_id
 		LEFT JOIN season_reward_tiers t
 		       ON t.season_id = sr.season_id AND t.key = sr.reward_tier
 		WHERE sr.season_id = ?
@@ -2330,6 +2508,10 @@ func handleSeasonTrackableCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "season_id, key, and label are required", http.StatusBadRequest)
 		return
 	}
+	if ok, msg := seasonAcceptsEdits(body.SeasonID); !ok {
+		seasonEditRefusal(w, msg)
+		return
+	}
 
 	var existing int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM season_trackables WHERE season_id = ? AND key = ?`,
@@ -2376,14 +2558,18 @@ func handleSeasonTrackableUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var oldLabel string
-	var oldSortOrder int
-	if err := db.QueryRow(`SELECT label, sort_order FROM season_trackables WHERE id = ?`, id).
-		Scan(&oldLabel, &oldSortOrder); err == sql.ErrNoRows {
+	var oldSortOrder, seasonID int
+	if err := db.QueryRow(`SELECT label, sort_order, season_id FROM season_trackables WHERE id = ?`, id).
+		Scan(&oldLabel, &oldSortOrder, &seasonID); err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	} else if err != nil {
 		slog.Error("handleSeasonTrackableUpdate: load old", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if ok, msg := seasonAcceptsEdits(seasonID); !ok {
+		seasonEditRefusal(w, msg)
 		return
 	}
 	if _, err := db.Exec(`UPDATE season_trackables SET label = ?, sort_order = ? WHERE id = ?`,
@@ -2414,12 +2600,17 @@ func handleSeasonTrackableDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var label string
-	if err := db.QueryRow(`SELECT label FROM season_trackables WHERE id = ?`, id).Scan(&label); err == sql.ErrNoRows {
+	var seasonID int
+	if err := db.QueryRow(`SELECT label, season_id FROM season_trackables WHERE id = ?`, id).Scan(&label, &seasonID); err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	} else if err != nil {
 		slog.Error("handleSeasonTrackableDelete: load", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if ok, msg := seasonAcceptsEdits(seasonID); !ok {
+		seasonEditRefusal(w, msg)
 		return
 	}
 	var recordCount int
@@ -2475,24 +2666,6 @@ func handleSeasonRewardTierList(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"reward_tiers": tiers})
 }
 
-// seasonAcceptsTierEdits reports whether the season exists and is still open to
-// tier changes. An archived season is frozen, matching handleRewardSave.
-func seasonAcceptsTierEdits(seasonID int) (bool, string) {
-	var archivedAt sql.NullString
-	err := db.QueryRow(`SELECT archived_at FROM seasons WHERE id = ?`, seasonID).Scan(&archivedAt)
-	if err == sql.ErrNoRows {
-		return false, "Season not found"
-	}
-	if err != nil {
-		slog.Error("seasonAcceptsTierEdits: load", "error", err)
-		return false, "Database error"
-	}
-	if archivedAt.Valid && archivedAt.String != "" {
-		return false, "Season is archived and cannot be modified"
-	}
-	return true, ""
-}
-
 func handleSeasonRewardTierCreate(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
 
@@ -2520,14 +2693,8 @@ func handleSeasonRewardTierCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "slot_count cannot be negative", http.StatusBadRequest)
 		return
 	}
-	if ok, msg := seasonAcceptsTierEdits(body.SeasonID); !ok {
-		status := http.StatusConflict
-		if msg == "Season not found" {
-			status = http.StatusNotFound
-		} else if msg == "Database error" {
-			status = http.StatusInternalServerError
-		}
-		http.Error(w, msg, status)
+	if ok, msg := seasonAcceptsEdits(body.SeasonID); !ok {
+		seasonEditRefusal(w, msg)
 		return
 	}
 
@@ -2602,12 +2769,8 @@ func handleSeasonRewardTierUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	if ok, msg := seasonAcceptsTierEdits(seasonID); !ok {
-		status := http.StatusConflict
-		if msg == "Database error" {
-			status = http.StatusInternalServerError
-		}
-		http.Error(w, msg, status)
+	if ok, msg := seasonAcceptsEdits(seasonID); !ok {
+		seasonEditRefusal(w, msg)
 		return
 	}
 
@@ -2659,12 +2822,8 @@ func handleSeasonRewardTierDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	if ok, msg := seasonAcceptsTierEdits(seasonID); !ok {
-		status := http.StatusConflict
-		if msg == "Database error" {
-			status = http.StatusInternalServerError
-		}
-		http.Error(w, msg, status)
+	if ok, msg := seasonAcceptsEdits(seasonID); !ok {
+		seasonEditRefusal(w, msg)
 		return
 	}
 
@@ -2852,6 +3011,10 @@ func handleSeasonEventCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "season_id and label are required", http.StatusBadRequest)
 		return
 	}
+	if ok, msg := seasonAcceptsEdits(body.SeasonID); !ok {
+		seasonEditRefusal(w, msg)
+		return
+	}
 	// week_start may be 0 or negative for pre-season events (e.g. S6 Faction Awards).
 	if body.EventTime == "" {
 		body.EventTime = "20:00"
@@ -2927,11 +3090,11 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 	var old SeasonEvent
 	var oldEtID, oldDayOff, oldLevel sql.NullInt64
 	var oldAllDay, oldIsServer, oldDur int
-	loadErr := db.QueryRow(`SELECT label, event_type_id, type_name, day_offset, event_time,
+	loadErr := db.QueryRow(`SELECT season_id, label, event_type_id, type_name, day_offset, event_time,
 		all_day, level, week_start, week_end, notes, is_server_event, duration_days,
 		template_key, source, grade
 		FROM season_events WHERE id = ?`, id).Scan(
-		&old.Label, &oldEtID, &old.TypeName, &oldDayOff, &old.EventTime,
+		&old.SeasonID, &old.Label, &oldEtID, &old.TypeName, &oldDayOff, &old.EventTime,
 		&oldAllDay, &oldLevel, &old.WeekStart, &old.WeekEnd, &old.Notes,
 		&oldIsServer, &oldDur, &old.TemplateKey, &old.Source, &old.Grade)
 	if loadErr == sql.ErrNoRows {
@@ -2941,6 +3104,10 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 	if loadErr != nil {
 		slog.Error("handleSeasonEventUpdate: load old", "error", loadErr)
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if ok, msg := seasonAcceptsEdits(old.SeasonID); !ok {
+		seasonEditRefusal(w, msg)
 		return
 	}
 	// Derive type_name from the id. With no id the OLD name is preserved rather
@@ -3031,12 +3198,17 @@ func handleSeasonEventDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var label string
-	if err := db.QueryRow(`SELECT label FROM season_events WHERE id = ?`, id).Scan(&label); err == sql.ErrNoRows {
+	var seasonID int
+	if err := db.QueryRow(`SELECT label, season_id FROM season_events WHERE id = ?`, id).Scan(&label, &seasonID); err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	} else if err != nil {
 		slog.Error("handleSeasonEventDelete: load", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if ok, msg := seasonAcceptsEdits(seasonID); !ok {
+		seasonEditRefusal(w, msg)
 		return
 	}
 	// Clear the stamps BEFORE the template row goes. foreign_keys is off app-wide,

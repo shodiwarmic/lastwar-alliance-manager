@@ -37,15 +37,16 @@
         {{end}}
     </div>
 
-    <!-- Tabs -->
-    <div class="tab-bar">
+    <!-- Tabs. Each season orders, renames and hides these (Edit Season → Layout); the
+         permission blocks here still decide which exist for this viewer. -->
+    <div class="tab-bar" id="season-tab-bar">
         <button class="tab-btn active" data-tab="rankings">Rankings</button>
         {{if .Permissions.ManageSeasonHub}}
         <button class="tab-btn" data-tab="participation">Participation</button>
         <button class="tab-btn" data-tab="contributions">Contributions</button>
         {{end}}
         <button class="tab-btn" data-tab="rewards">Rewards</button>
-        <button class="tab-btn" data-tab="season-mail">Season Mail</button>
+        <button class="tab-btn" data-tab="comms">Season Mail</button>
     </div>
 
     <!-- ── Rankings ──────────────────────────────────────────────────────── -->
@@ -189,7 +190,7 @@
     </div>
 
     <!-- ── Season Mail ───────────────────────────────────────────────────── -->
-    <div id="tab-season-mail" class="tab-content" style="display:none">
+    <div id="tab-comms" class="tab-content" style="display:none">
         {{if .Permissions.ManageSeasonHub}}
         <div class="tab-toolbar">
             <button class="btn btn-primary btn-sm" id="btn-upload-mail">+ Post Mail</button>
@@ -226,19 +227,54 @@
     <div class="modal-content modal-md">
         <h3>Create Season</h3>
         <form id="form-create-season">
-            <div class="form-group">
-                <label for="cs-template">Template</label>
-                <select id="cs-template" class="form-input" required>
-                    <option value="">Loading templates…</option>
-                </select>
+            <fieldset class="cs-mode" id="cs-mode">
+                <legend>Start from</legend>
+                <label><input type="radio" name="cs-mode" value="template" checked> A template</label>
+                <label><input type="radio" name="cs-mode" value="copy"> Another season's configuration</label>
+                <label><input type="radio" name="cs-mode" value="blank"> Blank</label>
+            </fieldset>
+            <div class="cs-mode-template">
+                <div class="form-group">
+                    <label for="cs-template">Template</label>
+                    <select id="cs-template" class="form-input">
+                        <option value="">Loading templates…</option>
+                    </select>
+                </div>
+                <div id="cs-template-preview" style="display:none"></div>
             </div>
-            <div id="cs-template-preview" style="display:none"></div>
+            <div class="cs-mode-copy" style="display:none">
+                <div class="form-group">
+                    <label for="cs-source">Copy configuration from</label>
+                    <select id="cs-source" class="form-input"></select>
+                </div>
+                <p class="cs-tier-note">Copies score levels, trackables, reward tiers, season events, layout and every Land and War setting — never participation, rewards, wars, files or the calendar.</p>
+            </div>
+            <div class="cs-mode-copy cs-mode-blank form-row" style="display:none">
+                <div class="form-group">
+                    <label for="cs-name">Season Name</label>
+                    <input type="text" id="cs-name" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="cs-number">Season Number</label>
+                    <input type="number" id="cs-number" class="form-input" min="1">
+                </div>
+            </div>
+            <div class="cs-mode-blank form-row" style="display:none">
+                <div class="form-group">
+                    <label for="cs-weeks">Weeks</label>
+                    <input type="number" id="cs-weeks" class="form-input" min="1" max="52" value="8">
+                </div>
+                <div class="form-group">
+                    <label for="cs-key-event">Key Event Name</label>
+                    <input type="text" id="cs-key-event" class="form-input" placeholder="e.g. Copper War">
+                </div>
+            </div>
             <div class="form-group">
                 <label for="cs-start-date">Start Date</label>
                 <input type="date" id="cs-start-date" class="form-input" required>
             </div>
-            <h4 class="modal-subhead">Reward Tier Thresholds</h4>
-            <div class="form-row">
+            <h4 class="modal-subhead cs-floors">Reward Tier Thresholds</h4>
+            <div class="form-row cs-floors">
                 <div class="form-group">
                     <label for="cs-tier-active">Active % Floor</label>
                     <input type="number" id="cs-tier-active" class="form-input" value="70" min="0" max="100">
@@ -297,12 +333,54 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="es-tier-active">Active % Floor</label>
+                    <label for="es-key-event-total">Key Events Scheduled</label>
+                    <input type="number" id="es-key-event-total" class="form-input" min="0" title="How many key events (wars) the season schedules — S4: 8">
+                </div>
+                <div class="form-group">
+                    <label for="es-resource-name">Resource</label>
+                    <input type="text" id="es-resource-name" class="form-input" placeholder="e.g. Copper">
+                </div>
+            </div>
+            <h4 class="modal-subhead">Status floors</h4>
+            <p class="cs-tier-note">A member is Active at or above the first floor, At Risk at or above the second, and Below Requirement under it. Leave a poll or war floor blank to use the overall one.</p>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-tier-active">Overall: Active %</label>
                     <input type="number" id="es-tier-active" class="form-input" min="0" max="100">
                 </div>
                 <div class="form-group">
-                    <label for="es-tier-at-risk">At-Risk % Floor</label>
+                    <label for="es-tier-at-risk">Overall: At Risk %</label>
                     <input type="number" id="es-tier-at-risk" class="form-input" min="0" max="100">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-poll-active">Polls: Active %</label>
+                    <input type="number" id="es-poll-active" class="form-input" min="0" max="100" placeholder="overall">
+                </div>
+                <div class="form-group">
+                    <label for="es-poll-at-risk">Polls: At Risk %</label>
+                    <input type="number" id="es-poll-at-risk" class="form-input" min="0" max="100" placeholder="overall">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-war-active">Wars: Active %</label>
+                    <input type="number" id="es-war-active" class="form-input" min="0" max="100" placeholder="overall">
+                </div>
+                <div class="form-group">
+                    <label for="es-war-at-risk">Wars: At Risk %</label>
+                    <input type="number" id="es-war-at-risk" class="form-input" min="0" max="100" placeholder="overall">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-schedule-buffer">Schedule conflict window (minutes)</label>
+                    <input type="number" id="es-schedule-buffer" class="form-input" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="es-land-buffer">Land readiness buffer (hours)</label>
+                    <input type="number" id="es-land-buffer" class="form-input" min="0">
                 </div>
             </div>
             <h4 class="modal-subhead">Reward Tiers</h4>
@@ -317,6 +395,29 @@
                 <tbody id="es-trackables-tbody"></tbody>
             </table>
             <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-trackable">+ Add Trackable</button>
+
+            <h4 class="modal-subhead">Layout</h4>
+            <p class="cs-tier-note">Which tabs and dashboard cards this season shows, what they are called, and in what order. Permissions still decide what each viewer sees inside them.</p>
+            <div class="es-layout">
+                <div class="es-layout-col">
+                    <h5>Tabs</h5>
+                    <table class="data-table es-layout-table" id="es-layout-tabs">
+                        <thead><tr><th>Show</th><th>Label</th><th>Order</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="es-layout-col">
+                    <h5>Dashboard cards</h5>
+                    <table class="data-table es-layout-table" id="es-layout-cards">
+                        <thead><tr><th>Show</th><th>Label</th><th>Order</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="es-event-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-es-save-layout">Save layout</button>
+                <span id="es-layout-status" class="status-msg"></span>
+            </div>
 
             </div>
             <h4 class="modal-subhead">Season Events</h4>

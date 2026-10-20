@@ -472,7 +472,10 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/data", authMiddleware(requirePermission("view_season_hub", handleSeasonHubData))).Methods("GET")
 	router.HandleFunc("/api/season-hub/seasons", authMiddleware(requirePermission("view_season_hub", handleSeasonList))).Methods("GET")
 	router.HandleFunc("/api/season-hub/seasons", authMiddleware(requirePermission("manage_season_rewards", handleSeasonCreate))).Methods("POST")
-	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}/archive", authMiddleware(requirePermission("manage_season_rewards", handleSeasonArchive))).Methods("POST")
+	// Archiving writes the season's file copies to disk (archiveSeason), hence demoBlock.
+	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}/archive", demoBlock(authMiddleware(requirePermission("manage_season_rewards", handleSeasonArchive)))).Methods("POST")
+	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}/layout", authMiddleware(requirePermission("view_season_hub", handleSeasonLayoutGet))).Methods("GET")
+	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}/layout", authMiddleware(requirePermission("manage_season_rewards", handleSeasonLayoutPut))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleSeasonUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleSeasonDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}/template-diff", authMiddleware(requirePermission("view_season_hub", handleSeasonTemplateDiff))).Methods("GET")

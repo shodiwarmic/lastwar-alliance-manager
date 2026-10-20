@@ -413,6 +413,12 @@ func clearUserReferences(q interface {
 			return err
 		}
 	}
+	// Season Hub recorders (seasonUserColumns): the record stays, its author is forgotten.
+	for _, c := range seasonUserColumns {
+		if _, err := q.Exec(`UPDATE `+c.table+` SET `+c.column+` = NULL WHERE `+c.column+` IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -441,6 +447,13 @@ func deleteMemberTx(tx *sql.Tx, id int) error {
 	for _, s := range steps {
 		if _, err := tx.Exec(s.q, id); err != nil {
 			return fmt.Errorf("%s: %w", s.what, err)
+		}
+	}
+	// Season Hub rows, archived seasons included: a member delete removes the member's
+	// history everywhere (seasonMemberTables, season_lifecycle.go).
+	for _, tbl := range seasonMemberTables {
+		if _, err := tx.Exec(`DELETE FROM `+tbl+` WHERE member_id = ?`, id); err != nil {
+			return fmt.Errorf("%s: %w", tbl, err)
 		}
 	}
 	if err := clearUserReferences(tx, "member_id = ?", id); err != nil {

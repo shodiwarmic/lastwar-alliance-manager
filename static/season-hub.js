@@ -58,9 +58,31 @@
     function loadTabExtras() {
         if (!activeSeason) return;
         if (currentTab === 'rewards' && inflight.rewards !== activeSeason.id) loadRewards();
-        if (currentTab === 'season-mail' && inflight.mail !== activeSeason.id) loadSeasonMail();
+        if (currentTab === 'comms' && inflight.mail !== activeSeason.id) loadSeasonMail();
     }
-    Tabs.init({ hash: true, defaultTab: 'rankings', onActivate: name => { currentTab = name; loadTabExtras(); } });
+    // An old #season-mail link opens the tab it became.
+    if (location.hash === '#season-mail') history.replaceState(null, '', '#comms');
+    const tabsCtl = Tabs.init({ hash: true, defaultTab: 'rankings', onActivate: name => { currentTab = name; loadTabExtras(); } });
+
+    // ── Per-season layout ─────────────────────────────────────────────────────
+    // The template renders every tab this viewer may see; the season's layout reorders,
+    // renames and hides them. Buttons are moved, not rebuilt, so tabs.js keeps its listeners.
+    function applyLayout(layout) {
+        const bar = document.getElementById('season-tab-bar');
+        if (!bar || !layout || !layout.tabs) return;
+        layout.tabs.forEach(t => {
+            const btn = bar.querySelector('.tab-btn[data-tab="' + t.key + '"]');
+            if (!btn) return;
+            btn.textContent = t.label || t.default_label;
+            btn.style.display = t.visible ? '' : 'none';
+            bar.appendChild(btn);
+        });
+        const current = bar.querySelector('.tab-btn.active');
+        if (!current || current.style.display === 'none') {
+            const first = Array.from(bar.querySelectorAll('.tab-btn')).find(b => b.style.display !== 'none');
+            if (first) tabsCtl.show(first.dataset.tab);
+        }
+    }
 
     // ── Load season list (for selector) ──────────────────────────────────────
     function loadSeasonList() {
@@ -116,6 +138,7 @@
                 scoreLevels = (data.season && data.season.score_levels) || [];
                 allMembers = data.members || [];
                 setRewardTiers((data.season && data.season.reward_tiers) || []);
+                applyLayout(data.layout);
 
                 updateSeasonHeader();
                 renderRankingsTable();
@@ -279,9 +302,10 @@
             tdPos.textContent = rankPos[m.member_id];
             tr.appendChild(tdPos);
 
-            // Name
+            // Name — an archived season shows the name it froze, with the name today and a
+            // link to the current profile when the member still exists.
             const tdName = document.createElement('td');
-            tdName.textContent = m.name;
+            tdName.appendChild(memberNameNode(m));
             tr.appendChild(tdName);
 
             // Alliance rank
@@ -324,6 +348,29 @@
 
         tbody.replaceChildren(...rows);
         QuickSearch.apply('rankings-search');
+    }
+
+    function memberNameNode(m) {
+        const wrap = document.createElement('span');
+        if (m.profile_id) {
+            const a = document.createElement('a');
+            a.href = '/accountability/' + m.profile_id;
+            a.className = 'member-name-link';
+            a.textContent = m.name;
+            wrap.appendChild(a);
+        } else {
+            wrap.textContent = m.name;
+        }
+        if (m.current_name) {
+            const now = document.createElement('span');
+            now.className = 'member-current-name';
+            now.textContent = ' (now ' + m.current_name + ')';
+            wrap.appendChild(now);
+        }
+        wrap.title = activeSeason && activeSeason.archived_at
+            ? (m.profile_id ? 'Name as frozen at archive' : 'Name as frozen at archive; the member has since been deleted')
+            : '';
+        return wrap;
     }
 
     function makeParticipationCell(m, maxPts) {
@@ -1526,10 +1573,46 @@
             .catch(() => []);
     }
 
+    // Create modes: a template, another season's configuration, or blank.
+    function createMode() {
+        const checked = document.querySelector('input[name="cs-mode"]:checked');
+        return checked ? checked.value : 'template';
+    }
+    function showCreateMode() {
+        const mode = createMode();
+        document.querySelectorAll('#modal-create-season [class*="cs-mode-"]').forEach(el => {
+            el.style.display = el.classList.contains('cs-mode-' + mode) ? '' : 'none';
+        });
+        // A copy takes the source season's floors; the other two set their own.
+        document.querySelectorAll('#modal-create-season .cs-floors').forEach(el => {
+            el.style.display = mode === 'copy' ? 'none' : '';
+        });
+    }
+    document.querySelectorAll('input[name="cs-mode"]').forEach(r => r.addEventListener('change', showCreateMode));
+
+    function loadCopySources() {
+        const sel = document.getElementById('cs-source');
+        if (!sel) return;
+        fetch('/api/season-hub/seasons')
+            .then(r => r.json())
+            .then(d => {
+                sel.replaceChildren(...(d.seasons || []).map(se => {
+                    const opt = document.createElement('option');
+                    opt.value = se.id;
+                    opt.textContent = 'S' + se.season_number + ' — ' + se.name + (se.archived_at ? ' (archived)' : '');
+                    return opt;
+                }));
+                noTranslate(sel);
+            })
+            .catch(() => {});
+    }
+
     function openCreateSeasonModal() {
         const errEl = document.getElementById('cs-error');
         if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
         updateArchiveWarning();
+        showCreateMode();
+        loadCopySources();
 
         // Populate template dropdown
         const sel = document.getElementById('cs-template');
@@ -1621,17 +1704,25 @@
         const submitBtn = formCreateSeason.querySelector('button[type="submit"]');
         const tplSel = document.getElementById('cs-template');
 
+        const mode = createMode();
         const body = {
+            mode,
             template_id: parseInt(tplSel?.value, 10) || 0,
+            source_season_id: parseInt(document.getElementById('cs-source').value, 10) || 0,
+            name: document.getElementById('cs-name').value.trim(),
+            season_number: parseInt(document.getElementById('cs-number').value, 10) || 0,
+            week_count: parseInt(document.getElementById('cs-weeks').value, 10) || 0,
+            key_event_name: document.getElementById('cs-key-event').value.trim(),
             start_date: document.getElementById('cs-start-date').value,
             tier_active_min_pct: parseInt(document.getElementById('cs-tier-active').value, 10) || 70,
             tier_at_risk_min_pct: parseInt(document.getElementById('cs-tier-at-risk').value, 10) || 60,
         };
 
-        if (!body.template_id) {
-            if (errEl) { errEl.textContent = 'Please select a template.'; errEl.style.display = ''; }
-            return;
-        }
+        const need = msg => { if (errEl) { errEl.textContent = msg; errEl.style.display = ''; } };
+        if (mode === 'template' && !body.template_id) { need('Please select a template.'); return; }
+        if (mode === 'copy' && !body.source_season_id) { need('Please choose the season to copy.'); return; }
+        if (mode !== 'template' && (!body.name || !body.season_number)) { need('Name and season number are required.'); return; }
+        if (mode === 'blank' && !body.week_count) { need('Weeks are required.'); return; }
         if (!body.start_date) {
             if (errEl) { errEl.textContent = 'Start date is required.'; errEl.style.display = ''; }
             return;
@@ -2354,6 +2445,16 @@
             document.getElementById('es-key-event-required').value = s.key_event_required;
             document.getElementById('es-tier-active').value = s.tier_active_min_pct;
             document.getElementById('es-tier-at-risk').value = s.tier_at_risk_min_pct;
+            document.getElementById('es-key-event-total').value = s.key_event_total || 0;
+            document.getElementById('es-resource-name').value = s.resource_name || '';
+            const optVal = v => (v === null || v === undefined) ? '' : v;
+            document.getElementById('es-poll-active').value = optVal(s.poll_active_min_pct);
+            document.getElementById('es-poll-at-risk').value = optVal(s.poll_at_risk_min_pct);
+            document.getElementById('es-war-active').value = optVal(s.war_active_min_pct);
+            document.getElementById('es-war-at-risk').value = optVal(s.war_at_risk_min_pct);
+            document.getElementById('es-schedule-buffer').value = s.schedule_buffer_minutes;
+            document.getElementById('es-land-buffer').value = s.land_readiness_buffer_hours;
+            loadLayoutEditor(s);
             const errEl = document.getElementById('es-error');
             if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
             const diffBox = document.getElementById('es-template-diff');
@@ -2483,7 +2584,17 @@
                 key_event_required: parseInt(document.getElementById('es-key-event-required').value, 10) || 0,
                 tier_active_min_pct: parseInt(document.getElementById('es-tier-active').value, 10) || 70,
                 tier_at_risk_min_pct: parseInt(document.getElementById('es-tier-at-risk').value, 10) || 60,
+                key_event_total: parseInt(document.getElementById('es-key-event-total').value, 10) || 0,
+                resource_name: document.getElementById('es-resource-name').value.trim(),
+                schedule_buffer_minutes: parseInt(document.getElementById('es-schedule-buffer').value, 10) || 0,
+                land_readiness_buffer_hours: parseInt(document.getElementById('es-land-buffer').value, 10) || 0,
             };
+            // A blank category floor is sent as null: "use the overall floor".
+            [['poll_active_min_pct', 'es-poll-active'], ['poll_at_risk_min_pct', 'es-poll-at-risk'],
+             ['war_active_min_pct', 'es-war-active'], ['war_at_risk_min_pct', 'es-war-at-risk']].forEach(([k, id]) => {
+                const v = document.getElementById(id).value.trim();
+                body[k] = v === '' ? null : parseInt(v, 10);
+            });
             setButtonLoading(submitBtn);
             fetch('/api/season-hub/seasons/' + activeSeason.id, {
                 method: 'PUT',
@@ -2501,6 +2612,75 @@
                     if (errEl) { errEl.textContent = err.message || 'Update failed.'; errEl.style.display = ''; }
                 })
                 .finally(() => clearButtonLoading(submitBtn));
+        });
+    }
+
+    // ── Layout editor (Edit Season → Layout) ─────────────────────────────────
+    function buildLayoutRow(item, tbody) {
+        const tr = document.createElement('tr');
+        tr.dataset.key = item.key;
+        const tdShow = document.createElement('td');
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.className = 'layout-visible';
+        chk.checked = !!item.visible;
+        chk.setAttribute('aria-label', 'Show ' + item.default_label);
+        tdShow.appendChild(chk);
+        const tdLabel = document.createElement('td');
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'form-input layout-label';
+        inp.maxLength = 60;
+        inp.placeholder = item.default_label;
+        inp.value = item.label || '';
+        tdLabel.appendChild(inp);
+        const tdOrder = document.createElement('td');
+        tdOrder.appendChild(buildOrderButtons(tr, () => refreshOrderButtons(tbody)));
+        tr.append(tdShow, tdLabel, tdOrder);
+        return tr;
+    }
+
+    function loadLayoutEditor(season) {
+        const tabsBody = document.querySelector('#es-layout-tabs tbody');
+        const cardsBody = document.querySelector('#es-layout-cards tbody');
+        if (!tabsBody || !cardsBody) return;
+        fetch('/api/season-hub/seasons/' + season.id + '/layout')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d) return;
+                tabsBody.replaceChildren(...d.tabs.map(t => buildLayoutRow(t, tabsBody)));
+                cardsBody.replaceChildren(...d.cards.map(c => buildLayoutRow(c, cardsBody)));
+                refreshOrderButtons(tabsBody);
+                refreshOrderButtons(cardsBody);
+            })
+            .catch(() => {});
+    }
+
+    const btnSaveLayout = document.getElementById('btn-es-save-layout');
+    if (btnSaveLayout) {
+        btnSaveLayout.addEventListener('click', () => {
+            if (!activeSeason) return;
+            const read = sel => Array.from(document.querySelectorAll(sel + ' tbody tr')).map(tr => ({
+                key: tr.dataset.key,
+                visible: tr.querySelector('.layout-visible').checked,
+                label: tr.querySelector('.layout-label').value.trim(),
+            }));
+            const statusEl = document.getElementById('es-layout-status');
+            setButtonLoading(btnSaveLayout);
+            fetch('/api/season-hub/seasons/' + activeSeason.id + '/layout', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tabs: read('#es-layout-tabs'), cards: read('#es-layout-cards') }),
+            })
+                .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
+                .then(() => {
+                    if (statusEl) { statusEl.textContent = 'Layout saved.'; statusEl.style.color = 'var(--color-success)'; }
+                    loadSeasonData(activeSeason.id);
+                })
+                .catch(err => {
+                    if (statusEl) { statusEl.textContent = err.message || 'Save failed.'; statusEl.style.color = 'var(--color-danger)'; }
+                })
+                .finally(() => clearButtonLoading(btnSaveLayout));
         });
     }
 
