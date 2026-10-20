@@ -371,9 +371,52 @@ WHERE season_number = 3
   AND CASE WHEN json_valid(trackables) THEN json(trackables) = json('[{"key":"mutual_assistance","label":"Mutual Assistance","sort_order":0},{"key":"siege","label":"Siege","sort_order":1},{"key":"spice_war","label":"Spice War","sort_order":2},{"key":"defeat","label":"Defeat","sort_order":3}]') ELSE 0 END;
 -- +goose StatementEnd
 
+
+-- Reward tiers belong to the template (private-docs 299): the game's tier counts change by
+-- season, and the global default had no Tactician. A column of its own rather than a key inside
+-- defaults, which older editors re-emitted as a fixed object. Seasons created from a template
+-- seed their tiers from it; a blank season and a custom template without tiers fall back to the
+-- global default (settings.season_reward_tiers_default). Set only while still '[]' — the column
+-- is new, so no operator can have edited it.
+-- +goose StatementBegin
+ALTER TABLE season_templates ADD COLUMN reward_tiers TEXT NOT NULL DEFAULT '[]';
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE season_templates SET reward_tiers = '[{"key":"alliance_leader","label":"Alliance Leader","slot_count":1,"color":"purple"},{"key":"core","label":"Core","slot_count":10,"color":"info"},{"key":"elite","label":"Elite","slot_count":20,"color":"success"},{"key":"valued","label":"Valued","slot_count":69,"color":"neutral"}]'
+WHERE season_number = 1 AND reward_tiers = '[]';
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+UPDATE season_templates SET reward_tiers = '[{"key":"alliance_leader","label":"Alliance Leader","slot_count":1,"color":"purple"},{"key":"core","label":"Core","slot_count":10,"color":"info"},{"key":"elite","label":"Elite","slot_count":20,"color":"success"},{"key":"valued","label":"Valued","slot_count":69,"color":"neutral"}]'
+WHERE season_number = 2 AND reward_tiers = '[]';
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+UPDATE season_templates SET reward_tiers = '[{"key":"alliance_leader","label":"Alliance Leader","slot_count":1,"color":"purple"},{"key":"tactician","label":"Tactician","slot_count":4,"color":"warning"},{"key":"core","label":"Core","slot_count":15,"color":"info"},{"key":"elite","label":"Elite","slot_count":30,"color":"success"},{"key":"valued","label":"Valued","slot_count":50,"color":"neutral"}]'
+WHERE season_number = 3 AND reward_tiers = '[]';
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+UPDATE season_templates SET reward_tiers = '[{"key":"alliance_leader","label":"Alliance Leader","slot_count":1,"color":"purple"},{"key":"tactician","label":"Tactician","slot_count":4,"color":"warning"},{"key":"core","label":"Core","slot_count":15,"color":"info"},{"key":"elite","label":"Elite","slot_count":30,"color":"success"},{"key":"valued","label":"Valued","slot_count":50,"color":"neutral"}]'
+WHERE season_number = 4 AND reward_tiers = '[]';
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+UPDATE season_templates SET reward_tiers = '[{"key":"alliance_leader","label":"Alliance Leader","slot_count":1,"color":"purple"},{"key":"tactician","label":"Tactician","slot_count":4,"color":"warning"},{"key":"core","label":"Core","slot_count":15,"color":"info"},{"key":"elite","label":"Elite","slot_count":30,"color":"success"},{"key":"valued","label":"Valued","slot_count":50,"color":"neutral"}]'
+WHERE season_number = 5 AND reward_tiers = '[]';
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+UPDATE season_templates SET reward_tiers = '[{"key":"alliance_leader","label":"Alliance Leader","slot_count":1,"color":"purple"},{"key":"tactician","label":"Tactician","slot_count":4,"color":"warning"},{"key":"core","label":"Core","slot_count":15,"color":"info"},{"key":"elite","label":"Elite","slot_count":30,"color":"success"},{"key":"valued","label":"Valued","slot_count":50,"color":"neutral"}]'
+WHERE season_number = 6 AND reward_tiers = '[]';
+-- +goose StatementEnd
+
 -- +goose Down
 -- The template corrections are not reverted: a rollback that rewrote templates would have to
 -- tell a corrected row from an operator's edit, which is the judgement the Up refuses to make.
+-- +goose StatementBegin
+ALTER TABLE season_templates DROP COLUMN reward_tiers;
+-- +goose StatementEnd
 -- +goose StatementBegin
 ALTER TABLE season_events DROP COLUMN grade;
 -- +goose StatementEnd

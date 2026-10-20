@@ -460,3 +460,59 @@ func TestS1ToS3TemplatesCorrected(t *testing.T) {
 		}
 	}
 }
+
+func TestRewardTiersPerTemplate(t *testing.T) {
+	setupSettingsTestDB(t)
+	for sn := 1; sn <= 6; sn++ {
+		var raw string
+		db.QueryRow(`SELECT reward_tiers FROM season_templates WHERE season_number = ?`, sn).Scan(&raw)
+		var tiers []SeasonRewardTier
+		if err := json.Unmarshal([]byte(raw), &tiers); err != nil {
+			t.Fatalf("S%d tiers: %v", sn, err)
+		}
+		total, tactician := 0, false
+		for _, tr := range tiers {
+			total += tr.SlotCount
+			tactician = tactician || tr.Key == "tactician"
+		}
+		if total != 100 {
+			t.Errorf("S%d tiers total %d, want 100", sn, total)
+		}
+		if tactician != (sn >= 3) {
+			t.Errorf("S%d tactician = %v; S1–S2 have none, S3+ have one", sn, tactician)
+		}
+	}
+
+	// A season created from S4 starts with S4's five tiers, not the global four.
+	var tmplID int
+	db.QueryRow(`SELECT id FROM season_templates WHERE season_number = 4`).Scan(&tmplID)
+	rr := httptest.NewRecorder()
+	handleSeasonCreate(rr, shReq(http.MethodPost, `{"template_id":`+strconv.Itoa(tmplID)+`,"start_date":"2030-01-07"}`, nil, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("create: %d %s", rr.Code, rr.Body.String())
+	}
+	var n, core int
+	db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(CASE WHEN key = 'core' THEN slot_count END), 0) FROM season_reward_tiers`).Scan(&n, &core)
+	if n != 5 || core != 15 {
+		t.Errorf("seeded %d tiers with core %d, want S4's five with core 15", n, core)
+	}
+
+	// A template write refuses a bad list; one that sends no tiers keeps the template's.
+	put := func(body string) int {
+		rr := httptest.NewRecorder()
+		handleSeasonTemplateUpdate(rr, shReq(http.MethodPut, body, map[string]string{"id": strconv.Itoa(tmplID)}, nil))
+		return rr.Code
+	}
+	if code := put(`{"template_name":"Evernight Isle","season_number":4,"events":"[]","defaults":"{}","trackables":"[]",
+		"reward_tiers":"[{\"key\":\"Bad Key\",\"label\":\"x\"}]"}`); code != http.StatusBadRequest {
+		t.Errorf("bad tier key: status %d, want 400", code)
+	}
+	if code := put(`{"template_name":"Evernight Isle","season_number":4,"events":"[]","defaults":"{}","trackables":"[]"}`); code != http.StatusOK {
+		t.Fatalf("update without tiers: %d", code)
+	}
+	var raw string
+	db.QueryRow(`SELECT reward_tiers FROM season_templates WHERE id = ?`, tmplID).Scan(&raw)
+	if !strings.Contains(raw, "tactician") {
+		t.Errorf("an update that sent no tiers dropped them: %s", raw)
+	}
+}

@@ -119,6 +119,9 @@ type SeasonTemplate struct {
 	Trackables   string `json:"trackables"`
 	Defaults     string `json:"defaults"`
 	Events       string `json:"events"`
+	// RewardTiers is the template's tier list (JSON, migration 088): the game's tier counts
+	// change by season. '[]' means "use the global default".
+	RewardTiers string `json:"reward_tiers"`
 }
 
 type ScoreLevel struct {
@@ -255,6 +258,50 @@ func loadDefaultRewardTiers() []SeasonRewardTier {
 		}
 	}
 	return tiers
+}
+
+// cleanRewardTierList validates a whole tier list — the global default and a template's
+// carry the same rules — and returns it reduced to the four fields a list stores. A
+// non-empty msg is the 400 to return.
+func cleanRewardTierList(tiers []SeasonRewardTier) ([]SeasonRewardTier, string) {
+	seen := map[string]bool{}
+	clean := make([]SeasonRewardTier, 0, len(tiers))
+	for _, t := range tiers {
+		if !validTierKey(t.Key) {
+			return nil, "key must be lowercase letters, digits and underscores, starting with a letter"
+		}
+		if t.Label == "" {
+			return nil, "label is required for every tier"
+		}
+		if t.Color == "" {
+			t.Color = "neutral"
+		}
+		if !validTierColors[t.Color] {
+			return nil, "color is not a recognised palette slot"
+		}
+		if t.SlotCount < 0 {
+			return nil, "slot_count cannot be negative"
+		}
+		if seen[t.Key] {
+			return nil, "duplicate tier key: " + t.Key
+		}
+		seen[t.Key] = true
+		clean = append(clean, SeasonRewardTier{Key: t.Key, Label: t.Label, SlotCount: t.SlotCount, Color: t.Color})
+	}
+	return clean, ""
+}
+
+// templateRewardTiers is the tier list a season created from this template starts with:
+// the template's own, else the global default. A template list that no longer validates
+// falls back too — a season is never created with tiers the editors would refuse.
+func templateRewardTiers(raw string) []SeasonRewardTier {
+	var tiers []SeasonRewardTier
+	if json.Unmarshal([]byte(raw), &tiers) == nil && len(tiers) > 0 {
+		if clean, msg := cleanRewardTierList(tiers); msg == "" {
+			return clean
+		}
+	}
+	return loadDefaultRewardTiers()
 }
 
 // rewardTierExists reports whether key names a reward tier configured for this
@@ -493,9 +540,9 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Load the template
 	var tmpl SeasonTemplate
-	err := db.QueryRow(`SELECT id, template_name, season_number, trackables, defaults, events
+	err := db.QueryRow(`SELECT id, template_name, season_number, trackables, defaults, events, reward_tiers
 		FROM season_templates WHERE id = ?`, body.TemplateID).Scan(
-		&tmpl.ID, &tmpl.TemplateName, &tmpl.SeasonNumber, &tmpl.Trackables, &tmpl.Defaults, &tmpl.Events)
+		&tmpl.ID, &tmpl.TemplateName, &tmpl.SeasonNumber, &tmpl.Trackables, &tmpl.Defaults, &tmpl.Events, &tmpl.RewardTiers)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Template not found", http.StatusNotFound)
 		return
@@ -538,10 +585,10 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Reward tiers are seeded from the global default, same as score levels.
-	// Adjustments happen afterwards in the Edit Season modal, which is where the
-	// per-row CRUD lives (it needs a season id, which doesn't exist yet here).
-	tierDefs := loadDefaultRewardTiers()
+	// Reward tiers come from the template (the game's counts change by season), else the
+	// global default. Adjustments happen afterwards in the Edit Season modal, which is
+	// where the per-row CRUD lives (it needs a season id, which doesn't exist yet here).
+	tierDefs := templateRewardTiers(tmpl.RewardTiers)
 
 	// Parse trackables and events from template
 	type tkDef struct {
@@ -2663,34 +2710,10 @@ func handleSeasonRewardTiersDefaultPut(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "At least one reward tier is required", http.StatusBadRequest)
 		return
 	}
-	seen := map[string]bool{}
-	clean := make([]SeasonRewardTier, 0, len(body.RewardTiers))
-	for _, t := range body.RewardTiers {
-		if !validTierKey(t.Key) {
-			http.Error(w, "key must be lowercase letters, digits and underscores, starting with a letter", http.StatusBadRequest)
-			return
-		}
-		if t.Label == "" {
-			http.Error(w, "label is required for every tier", http.StatusBadRequest)
-			return
-		}
-		if t.Color == "" {
-			t.Color = "neutral"
-		}
-		if !validTierColors[t.Color] {
-			http.Error(w, "color is not a recognised palette slot", http.StatusBadRequest)
-			return
-		}
-		if t.SlotCount < 0 {
-			http.Error(w, "slot_count cannot be negative", http.StatusBadRequest)
-			return
-		}
-		if seen[t.Key] {
-			http.Error(w, "duplicate tier key: "+t.Key, http.StatusBadRequest)
-			return
-		}
-		seen[t.Key] = true
-		clean = append(clean, SeasonRewardTier{Key: t.Key, Label: t.Label, SlotCount: t.SlotCount, Color: t.Color})
+	clean, msg := cleanRewardTierList(body.RewardTiers)
+	if msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
 	}
 
 	encoded, err := json.Marshal(clean)
@@ -3425,7 +3448,7 @@ func handleSeasonEventPushToSchedule(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleSeasonTemplateList(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query(`SELECT id, template_name, season_number, trackables, defaults, events
+	rows, err := db.Query(`SELECT id, template_name, season_number, trackables, defaults, events, reward_tiers
 		FROM season_templates ORDER BY season_number ASC`)
 	if err != nil {
 		slog.Error("handleSeasonTemplateList: query", "error", err)
@@ -3436,7 +3459,7 @@ func handleSeasonTemplateList(w http.ResponseWriter, r *http.Request) {
 	templates := []SeasonTemplate{}
 	for rows.Next() {
 		var t SeasonTemplate
-		if err := rows.Scan(&t.ID, &t.TemplateName, &t.SeasonNumber, &t.Trackables, &t.Defaults, &t.Events); err != nil {
+		if err := rows.Scan(&t.ID, &t.TemplateName, &t.SeasonNumber, &t.Trackables, &t.Defaults, &t.Events, &t.RewardTiers); err != nil {
 			continue
 		}
 		templates = append(templates, t)
@@ -3448,9 +3471,9 @@ func handleSeasonTemplateList(w http.ResponseWriter, r *http.Request) {
 func handleSeasonTemplateGet(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(mux.Vars(r)["id"])
 	var t SeasonTemplate
-	err := db.QueryRow(`SELECT id, template_name, season_number, trackables, defaults, events
+	err := db.QueryRow(`SELECT id, template_name, season_number, trackables, defaults, events, reward_tiers
 		FROM season_templates WHERE id = ?`, id).Scan(
-		&t.ID, &t.TemplateName, &t.SeasonNumber, &t.Trackables, &t.Defaults, &t.Events)
+		&t.ID, &t.TemplateName, &t.SeasonNumber, &t.Trackables, &t.Defaults, &t.Events, &t.RewardTiers)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -3472,6 +3495,7 @@ func handleSeasonTemplateCreate(w http.ResponseWriter, r *http.Request) {
 		Trackables   string `json:"trackables"`
 		Defaults     string `json:"defaults"`
 		Events       string `json:"events"`
+		RewardTiers  string `json:"reward_tiers"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -3508,8 +3532,13 @@ func handleSeasonTemplateCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.Events = keyed
-	res, err := db.Exec(`INSERT INTO season_templates (template_name, season_number, trackables, defaults, events) VALUES (?,?,?,?,?)`,
-		body.TemplateName, body.SeasonNumber, body.Trackables, body.Defaults, body.Events)
+	tiers, msg := templateTiersBody(body.RewardTiers)
+	if msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+	res, err := db.Exec(`INSERT INTO season_templates (template_name, season_number, trackables, defaults, events, reward_tiers) VALUES (?,?,?,?,?,?)`,
+		body.TemplateName, body.SeasonNumber, body.Trackables, body.Defaults, body.Events, tiers)
 	if err != nil {
 		slog.Error("handleSeasonTemplateCreate: insert", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -3530,6 +3559,8 @@ func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 		Trackables   string `json:"trackables"`
 		Defaults     string `json:"defaults"`
 		Events       string `json:"events"`
+		// Pointer: an older client that sends no tiers keeps the template's.
+		RewardTiers *string `json:"reward_tiers"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -3559,6 +3590,18 @@ func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.Events = keyed
+	if body.RewardTiers != nil {
+		tiers, msg := templateTiersBody(*body.RewardTiers)
+		if msg != "" {
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
+		if _, err := db.Exec(`UPDATE season_templates SET reward_tiers = ? WHERE id = ?`, tiers, id); err != nil {
+			slog.Error("handleSeasonTemplateUpdate: tiers", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
 	_, err = db.Exec(`UPDATE season_templates SET template_name=?, season_number=?, trackables=?, defaults=?, events=? WHERE id=?`,
 		body.TemplateName, body.SeasonNumber, body.Trackables, body.Defaults, body.Events, id)
 	if err != nil {
@@ -3621,6 +3664,27 @@ func handleSeasonScoreLevelsDefaultPut(w http.ResponseWriter, r *http.Request) {
 	logActivity(user.ID, user.Username, "updated", "settings", "season score levels default", true)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Saved"})
+}
+
+// templateTiersBody validates a template's tier list from a write body: empty or "[]"
+// means "use the global default"; anything else must be a valid tier list.
+func templateTiersBody(raw string) (string, string) {
+	if strings.TrimSpace(raw) == "" {
+		return "[]", ""
+	}
+	var tiers []SeasonRewardTier
+	if err := json.Unmarshal([]byte(raw), &tiers); err != nil {
+		return "", "reward_tiers must be a JSON array"
+	}
+	if len(tiers) == 0 {
+		return "[]", ""
+	}
+	clean, msg := cleanRewardTierList(tiers)
+	if msg != "" {
+		return "", msg
+	}
+	enc, _ := json.Marshal(clean)
+	return string(enc), ""
 }
 
 // syncEventTypesFromEvents inserts a schedule_event_types row for each unique

@@ -1892,11 +1892,17 @@ Three more rules:
    Edit Season modal; reusing the trackables gate would silently widen access to
    R4.
 
-The global default list lives in `settings.season_reward_tiers_default` (mirroring
-`season_score_levels_default`) and is copied into a season at creation.
-**Do not move it into `season_templates.defaults`** — `buildDefaultsEditor`'s
-`getJSON()` (`static/settings.js`) re-emits a fixed three-key object, so anything
-else in that blob is silently destroyed on the next template save.
+**Tiers belong to the template** (migration 088, private-docs 299): the game's counts
+change by season (S1–S2 Leader 1 / Core 10 / Elite 20 / Valued 69; S3+ add Tactician 4
+and take Core 15 / Elite 30 / Valued 50). `season_templates.reward_tiers` is its own
+column, edited in Settings → Season Templates, and a season created from a template
+starts with it (`templateRewardTiers`). The global list in
+`settings.season_reward_tiers_default` is the **fallback** — for a blank season, a
+custom template with none, or a template list that no longer validates. Both lists pass
+`cleanRewardTierList`. The tiers are a column rather than a key inside `defaults` because
+older `buildDefaultsEditor`s re-emitted a fixed three-key object; that editor now starts
+from the parsed original, so `defaults` round-trips keys it doesn't show
+(`key_event_total`, `resource_name`).
 
 Badge colours are palette slots (`purple`/`info`/`success`/`warning`/`danger`/
 `neutral`) validated against `validTierColors` in Go and rendered as
