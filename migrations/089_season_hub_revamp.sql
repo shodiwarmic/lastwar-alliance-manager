@@ -216,7 +216,38 @@ CREATE TABLE IF NOT EXISTS season_alliances (
 );
 -- +goose StatementEnd
 
+
+-- ── 272: season tags on Comms and Files ─────────────────────────────────────
+-- comms_templates already carries season_id (Season Mail). Resources, polls (templates and
+-- launched instances — an instance inherits its template's season at launch) and files gain one.
+-- A season delete clears these tags rather than deleting the records: they belong to their own
+-- features. Tagging anything to an archived season is refused in Go.
+-- +goose StatementBegin
+ALTER TABLE comms_resources ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE poll_templates ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE poll_instances ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE files ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+ALTER TABLE files DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE poll_instances DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE poll_templates DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE comms_resources DROP COLUMN season_id;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_alliances;
 -- +goose StatementEnd

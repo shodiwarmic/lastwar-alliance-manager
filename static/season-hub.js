@@ -51,7 +51,7 @@
     // Each load takes a generation; only the newest response for it is used, and rewards /
     // mail must also still belong to the season on screen. So a quick A→B→A switch, or a save
     // overlapping a switch, can't paint one season's data under another.
-    const gen = { data: 0, rewards: 0, mail: 0 };
+    const gen = { data: 0, rewards: 0, mail: 0, comms: 0, files: 0 };
     const inflight = { rewards: null, mail: null };   // season id of a load in flight
 
     // ── Tabs (tabs.js), with #tab deep links ──────────────────────────────────
@@ -64,7 +64,8 @@
     function loadTabExtras() {
         if (!activeSeason) return;
         if (currentTab === 'rewards' && inflight.rewards !== activeSeason.id) loadRewards();
-        if (currentTab === 'comms' && inflight.mail !== activeSeason.id) loadSeasonMail();
+        if (currentTab === 'comms' && inflight.mail !== activeSeason.id) { loadSeasonMail(); loadSeasonCommsExtras(); }
+        if (currentTab === 'files') loadSeasonFiles();
     }
     // An old #season-mail link opens the tab it became.
     if (location.hash === '#season-mail') history.replaceState(null, '', '#comms');
@@ -128,6 +129,10 @@
             loadSeasonData(id);
             allRewards = []; renderRewardsTable();
             allMailItems = []; renderMailList();
+            ['season-announcement-list', 'season-resource-list', 'season-poll-list', 'season-files-list'].forEach(bid => {
+                const b = document.getElementById(bid);
+                if (b) b.replaceChildren();
+            });
         });
     }
 
@@ -1380,7 +1385,7 @@
         if (!activeSeason || allMailItems.length === 0) {
             const p = document.createElement('p');
             p.className = 'loading-msg';
-            p.textContent = activeSeason ? 'No documents uploaded yet.' : 'No active season.';
+            p.textContent = activeSeason ? 'No mail for this season yet.' : 'No active season.';
             container.replaceChildren(p);
             return;
         }
@@ -1557,6 +1562,126 @@
                 loadSeasonMail();
             })
             .catch(err => showToast(err.message || 'Delete failed.', 'error'));
+    }
+
+    // ── Comms tab: announcements, resources, polls tagged to the season ───────
+    // Read-only lists; each record is tagged and edited on the Comms page.
+    function hubListItem(title, meta, actions) {
+        const row = document.createElement('div');
+        row.className = 'hub-link-row';
+        const info = document.createElement('div');
+        info.className = 'hub-link-info';
+        const t = document.createElement('div');
+        t.className = 'hub-link-title';
+        if (title instanceof Node) t.appendChild(title); else t.textContent = title;
+        info.appendChild(t);
+        if (meta) {
+            const m = document.createElement('div');
+            m.className = 'hub-link-meta';
+            m.textContent = meta;
+            info.appendChild(m);
+        }
+        const act = document.createElement('div');
+        act.className = 'hub-link-actions';
+        (actions || []).forEach(a => act.appendChild(a));
+        row.append(info, act);
+        return row;
+    }
+    function hubLinkBtn(text, href, opts) {
+        const a = document.createElement('a');
+        a.className = 'btn btn-secondary btn-sm';
+        a.textContent = text;
+        a.href = href;
+        if (opts && opts.external) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+        return a;
+    }
+    function hubEmpty(text) {
+        const p = document.createElement('p');
+        p.className = 'loading-msg';
+        p.textContent = text;
+        return p;
+    }
+
+    function loadSeasonCommsExtras() {
+        if (!activeSeason) return;
+        const sid = activeSeason.id;
+        const mine = ++gen.comms;
+        const current = () => mine === gen.comms && activeSeason && activeSeason.id === sid;
+        const fill = (id, url, pick, render, emptyText) => {
+            const box = document.getElementById(id);
+            if (!box) return;
+            fetch(url)
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (!current() || !d) return;
+                    const items = pick(d);
+                    box.replaceChildren(...(items.length ? items.map(render) : [hubEmpty(emptyText)]));
+                })
+                .catch(() => {});
+        };
+        fill('season-announcement-list', '/api/comms/templates?type=announcement&season_id=' + sid, d => d.items || [],
+            a => {
+                const copy = document.createElement('button');
+                copy.type = 'button';
+                copy.className = 'btn btn-secondary btn-sm';
+                copy.textContent = 'Copy';
+                copy.addEventListener('click', () => copyWithVariables(a.content || ''));
+                return hubListItem(a.title, a.category, [copy]);
+            }, 'No announcements tagged to this season.');
+        fill('season-resource-list', '/api/comms/resources?season_id=' + sid, d => d.items || [],
+            r => hubListItem(r.title, r.description, [hubLinkBtn('Open', r.url, { external: true })]),
+            'No resources tagged to this season.');
+        fill('season-poll-list', '/api/comms/poll-instances?season_id=' + sid, d => d.items || [],
+            p => hubListItem(p.label, (p.responded_count || 0) + ' of ' + (p.total_eligible || 0) + ' responded',
+                [hubLinkBtn('Open in Poll Tracker', '/comms#polls')]),
+            'No polls tagged to this season.');
+    }
+
+    // ── Files tab ─────────────────────────────────────────────────────────────
+    // An open season lists its live files (the Files page's own rank rule); an archived one
+    // the copies taken when it archived, under the view rank they had then.
+    function loadSeasonFiles() {
+        if (!activeSeason) return;
+        const sid = activeSeason.id;
+        const mine = ++gen.files;
+        const box = document.getElementById('season-files-list');
+        const note = document.getElementById('season-files-note');
+        const add = document.getElementById('btn-season-files-add');
+        if (!box) return;
+        if (add) {
+            add.href = '/files?season_id=' + sid;
+            add.style.display = activeSeason.archived_at ? 'none' : '';
+        }
+        fetch('/api/season-hub/files?season_id=' + sid)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d || mine !== gen.files || !activeSeason || activeSeason.id !== sid) return;
+                if (note) {
+                    note.textContent = d.archived
+                        ? 'Frozen at archive: these are the copies taken when the season was archived. The live files may have changed since.'
+                        : 'Files tagged to this season on the Files page.';
+                }
+                const files = d.files || [];
+                if (!files.length) {
+                    box.replaceChildren(hubEmpty(d.archived
+                        ? 'No copies: no files were tagged to this season when it archived (seasons archived before files could be tagged have none).'
+                        : 'No files tagged to this season yet.'));
+                    return;
+                }
+                box.replaceChildren(...files.map(f => {
+                    const title = noTranslate(document.createElement('span'));
+                    title.textContent = f.title;
+                    if (d.archived) {
+                        return hubListItem(title, 'Frozen ' + formatDate((f.snapshot_at || '').replace(' ', 'T') + 'Z') + (f.owner_name ? ' · ' + f.owner_name : ''),
+                            [hubLinkBtn('Download', '/api/season-hub/files/' + f.snapshot_id + '/download')]);
+                    }
+                    return hubListItem(title, f.file_type + (f.owner_name ? ' · ' + f.owner_name : ''), [
+                        hubLinkBtn('Open', '/files?season_id=' + sid + '&open=' + f.id),
+                        hubLinkBtn('Download', '/api/files/download/' + f.id),
+                    ]);
+                }));
+            })
+            .catch(() => {});
     }
 
     // ── Season create / archive ───────────────────────────────────────────────

@@ -1293,6 +1293,14 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Records that belong to other features keep existing; only their season tag goes.
+	for _, tbl := range []string{"comms_resources", "poll_templates", "poll_instances", "files"} {
+		if _, err := tx.Exec(`UPDATE `+tbl+` SET season_id = NULL WHERE season_id = ?`, id); err != nil {
+			slog.Error("handleSeasonDelete: clear season tag", "table", tbl, "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
 	// Season mail was folded into comms_templates (migration 041); the old
 	// season_mail table no longer exists. Remove this season's mail templates.
 	if _, err := tx.Exec(`DELETE FROM comms_templates WHERE season_id = ?`, id); err != nil {

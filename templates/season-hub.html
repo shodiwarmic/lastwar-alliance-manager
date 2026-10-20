@@ -44,7 +44,8 @@
         {{if .Permissions.ManageSeasonParticipation}}<button class="tab-btn" data-tab="participation">Participation</button>{{end}}
         {{if .Permissions.ManageSeasonContributions}}<button class="tab-btn" data-tab="contributions">Contributions</button>{{end}}
         <button class="tab-btn" data-tab="rewards">Rewards</button>
-        <button class="tab-btn" data-tab="comms">Season Mail</button>
+        {{if or .Permissions.ViewComms .Permissions.ViewPolls}}<button class="tab-btn" data-tab="comms">Comms</button>{{end}}
+        {{if .Permissions.ViewFiles}}<button class="tab-btn" data-tab="files">Files</button>{{end}}
     </div>
 
     <!-- ── Rankings ──────────────────────────────────────────────────────── -->
@@ -187,17 +188,41 @@
         </div>
     </div>
 
-    <!-- ── Season Mail ───────────────────────────────────────────────────── -->
+    <!-- ── Comms: the season's mail, announcements, polls and resources ──── -->
+    {{if or .Permissions.ViewComms .Permissions.ViewPolls}}
     <div id="tab-comms" class="tab-content" style="display:none">
-        {{if .Permissions.ManageComms}}
-        <div class="tab-toolbar">
-            <button class="btn btn-primary btn-sm" id="btn-upload-mail">+ Post Mail</button>
+        {{if .Permissions.ViewComms}}
+        <div class="hub-section-head">
+            <h3>Mail</h3>
+            {{if .Permissions.ManageComms}}<button class="btn btn-primary btn-sm" id="btn-upload-mail">+ Post Mail</button>{{end}}
         </div>
-        {{end}}
         <div id="season-mail-list" class="file-list">
             <p class="loading-msg">Loading…</p>
         </div>
+        <div class="hub-section-head"><h3>Announcements</h3></div>
+        <div id="season-announcement-list" class="hub-link-list"></div>
+        <div class="hub-section-head"><h3>Resources</h3></div>
+        <div id="season-resource-list" class="hub-link-list"></div>
+        {{end}}
+        {{if .Permissions.ViewPolls}}
+        <div class="hub-section-head"><h3>Polls</h3></div>
+        <div id="season-poll-list" class="hub-link-list"></div>
+        {{end}}
+        <p class="hub-section-note">Announcements, resources and polls are tagged to a season on the <a href="/comms">Comms page</a>.</p>
     </div>
+    {{end}}
+
+    <!-- ── Files: the season's files; an archived season's frozen copies ──── -->
+    {{if .Permissions.ViewFiles}}
+    <div id="tab-files" class="tab-content" style="display:none">
+        <div class="hub-section-head">
+            <h3>Files</h3>
+            {{if .Permissions.UploadFiles}}<a class="btn btn-primary btn-sm" id="btn-season-files-add" href="/files">Upload or create on the Files page</a>{{end}}
+        </div>
+        <p id="season-files-note" class="hub-section-note"></p>
+        <div id="season-files-list" class="hub-link-list"></div>
+    </div>
+    {{end}}
 
 </div>
 {{end}}

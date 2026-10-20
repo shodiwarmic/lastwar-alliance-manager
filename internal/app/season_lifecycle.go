@@ -511,12 +511,12 @@ func copySeasonConfigTx(tx *sql.Tx, fromID int, toID int64) error {
 	return seedSeasonLayoutTx(tx, toID)
 }
 
-// seasonFilesToCopy lists the files tagged to a season (private-docs 272 adds the tag).
-// Before files carry a season there is nothing to copy.
-var seasonFilesToCopy = func(seasonID int) ([]seasonFileCopy, error) { return nil, nil }
-
-// copySeasonFile copies one file's bytes into dir (private-docs 272).
-var copySeasonFile = func(dir string, f seasonFileCopy) error { return nil }
+// seasonFilesToCopy lists the files tagged to a season, and copySeasonFile copies one into the
+// archive directory (season_files.go). Variables so a test can make a copy fail.
+var (
+	seasonFilesToCopy = listSeasonFilesToCopy
+	copySeasonFile    = copySeasonFileBytes
+)
 
 // optionalInt tells a JSON field that was absent from one sent as null: absent keeps the
 // stored value, null clears it (a category floor falling back to the overall floor).

@@ -637,3 +637,30 @@
 .member-name-link { color: inherit; text-decoration: none; }
 .member-name-link:hover { text-decoration: underline; }
 .member-current-name { color: var(--text-muted); font-size: 0.8rem; }
+
+/* ── Comms and Files tabs: section heads and read-only link lists ───────── */
+.hub-section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 18px 0 8px;
+}
+.hub-section-head:first-child { margin-top: 0; }
+.hub-section-head h3 { margin: 0; font-size: 1rem; flex: 1 1 auto; }
+.hub-section-note { font-size: 0.85rem; color: var(--text-muted); margin: 4px 0 10px; }
+.hub-link-list { display: flex; flex-direction: column; gap: 6px; }
+.hub-link-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+}
+.hub-link-info { flex: 1 1 200px; min-width: 0; }
+.hub-link-title { font-weight: 600; overflow-wrap: anywhere; }
+.hub-link-meta { font-size: 0.8rem; color: var(--text-secondary); overflow-wrap: anywhere; }
+.hub-link-actions { display: flex; flex-wrap: wrap; gap: 6px; }

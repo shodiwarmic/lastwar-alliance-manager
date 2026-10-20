@@ -1111,6 +1111,7 @@ type CommsResource struct {
 	Description string `json:"description"`
 	CreatedBy   string `json:"created_by"`
 	CreatedAt   string `json:"created_at"`
+	SeasonID    *int   `json:"season_id"`
 }
 
 type PollTemplate struct {
@@ -1122,6 +1123,7 @@ type PollTemplate struct {
 	MultiSelect bool   `json:"multi_select"`
 	CreatedBy   string `json:"created_by"`
 	CreatedAt   string `json:"created_at"`
+	SeasonID    *int   `json:"season_id"`
 }
 
 type PollInstance struct {
@@ -1137,6 +1139,7 @@ type PollInstance struct {
 	CreatedBy      string  `json:"created_by"`
 	CreatedAt      string  `json:"created_at"`
 	RespondedCount int     `json:"responded_count"` // computed on list queries
+	SeasonID       *int    `json:"season_id"`       // inherited from the template at launch unless set
 }
 
 type PollMemberStatus struct {
@@ -1388,6 +1391,7 @@ type AllianceFile struct {
 	UpdatedAt     string `json:"updated_at"`
 	UpdatedByName string `json:"updated_by_name"` // username of the last editor ("" if unknown)
 	IsOwner       bool   `json:"is_owner"`
+	SeasonID      *int   `json:"season_id"` // the Season Hub season the file belongs to, if any
 	// Tags is rank-filtered to the requesting viewer, so a card never renders a
 	// badge the viewer isn't cleared for. Always a non-nil slice (empty, not null)
 	// so the frontend can .map() it unconditionally.

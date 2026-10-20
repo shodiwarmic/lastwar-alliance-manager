@@ -358,6 +358,7 @@ function openTemplateModal(type, template) {
 
     const label = type === 'mail' ? 'Mail Template' : 'Announcement';
     titleEl.textContent = template ? 'Edit ' + label : 'New ' + label;
+    fillSeasonSelect(document.getElementById('template-season-input'), template ? template.season_id : null);
     typeEl.value = type;
     statusEl.textContent = '';
 
@@ -422,6 +423,8 @@ async function saveTemplate() {
     }
 
     const body = { type, title, category, content, required_vars: JSON.stringify(requiredVars) };
+    const seasonId = seasonSelectValue(document.getElementById('template-season-input'));
+    if (seasonId !== undefined) body.season_id = seasonId;
     const url = id ? '/api/comms/templates/' + id : '/api/comms/templates';
     const method = id ? 'PUT' : 'POST';
 
@@ -472,6 +475,7 @@ function openResourceModal(resource) {
     const statusEl = document.getElementById('resource-status');
 
     statusEl.textContent = '';
+    fillSeasonSelect(document.getElementById('resource-season-input'), resource && resource.id ? resource.season_id : null);
 
     if (resource && resource.id) {
         titleEl.textContent = 'Edit Resource';
@@ -515,7 +519,9 @@ async function saveResource() {
         const res = await fetch(endpoint, {
             method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, url, description }),
+            body: JSON.stringify(Object.assign({ title, url, description },
+                seasonSelectValue(document.getElementById('resource-season-input')) === undefined ? {}
+                    : { season_id: seasonSelectValue(document.getElementById('resource-season-input')) })),
         });
         if (!res.ok) {
             const msg = await res.text();
