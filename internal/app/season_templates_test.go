@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/mux"
+	"github.com/pressly/goose/v3"
 )
 
 func intp(v int) *int { return &v }
@@ -311,5 +312,93 @@ func TestSeasonCreateStampsTemplateProvenance(t *testing.T) {
 		FROM season_events`).Scan(&rows, &keyed, &graded)
 	if rows != len(shippedTemplateEvents(t, 4)) || keyed != rows || graded != rows {
 		t.Errorf("rows %d, keyed %d, graded %d — every row should carry its key and provenance", rows, keyed, graded)
+	}
+}
+
+func TestS5AndS6TemplatesCorrected(t *testing.T) {
+	setupSettingsTestDB(t)
+	s5 := shippedTemplateEvents(t, 5)
+	palace := 0
+	for _, e := range s5 {
+		if e.TypeName == "Golden Palace" {
+			palace++
+			if e.Grade != "conflict" || *e.DayOffset != 6 || e.EventTime != "13:00" {
+				t.Errorf("%s = day %d %s graded %s, want Saturday 13:00 graded conflict", e.Key, *e.DayOffset, e.EventTime, e.Grade)
+			}
+		}
+		if e.TypeName == "Bank Capture" && e.Grade != "unverified" {
+			t.Errorf("%s graded %s; the kept Bank Capture rows are unverified", e.Key, e.Grade)
+		}
+	}
+	if palace != 3 {
+		t.Errorf("S5 has %d Golden Palace rows, want W5, W6 and W7", palace)
+	}
+
+	s6 := shippedTemplateEvents(t, 6)
+	clashes := 0
+	for _, e := range s6 {
+		if e.TypeName == "City Clash" && e.WeekStart > 2 {
+			t.Errorf("S6 still schedules %s in W%d; the official calendar has L1–L3 only", e.Label, e.WeekStart)
+		}
+		if e.TypeName == "Faction Clash" {
+			if e.WeekStart != 2 || e.WeekEnd != 7 {
+				t.Errorf("%s runs W%d–%d, want W2–W7", e.Key, e.WeekStart, e.WeekEnd)
+			}
+			clashes += e.WeekEnd - e.WeekStart + 1
+		}
+	}
+	if clashes != 12 {
+		t.Errorf("S6 schedules %d Faction Clashes, want 12", clashes)
+	}
+}
+
+// The existing-install rule: 088 corrects a template column only while it still reads as
+// shipped, column by column, and leaves a malformed column alone instead of failing.
+func TestSeedCorrectionsLeaveEditedColumnsAlone(t *testing.T) {
+	conn := migrateTo(t, 87)
+	exec := func(q string) {
+		t.Helper()
+		if _, err := conn.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	// An operator relabelled one S4 row, changed S5's week count and broke S6's events.
+	exec(`UPDATE season_templates SET events = replace(events, 'City Clash (L1)', 'City Clash (Level 1)') WHERE season_number = 4`)
+	exec(`UPDATE season_templates SET defaults = '{"week_count":9,"key_event_name":"Finance Tycoon / Bank Capture","key_event_required":2}' WHERE season_number = 5`)
+	exec(`UPDATE season_templates SET events = '[{"label": broken' WHERE season_number = 6`)
+
+	read := func(sn int) (events, defaults string) {
+		t.Helper()
+		conn.QueryRow(`SELECT events, defaults FROM season_templates WHERE season_number = ?`, sn).Scan(&events, &defaults)
+		return
+	}
+	s4Events, _ := read(4)
+	_, s5Defaults := read(5)
+	s6Events, s6Defaults := read(6)
+
+	if err := goose.UpTo(conn, "migrations", 88); err != nil {
+		t.Fatalf("088 failed on an edited install: %v", err)
+	}
+
+	e4, d4 := read(4)
+	if e4 != s4Events {
+		t.Error("S4's edited events were overwritten")
+	}
+	if !strings.Contains(d4, `"key_event_total":8`) {
+		t.Errorf("S4's unedited defaults were not corrected: %s", d4)
+	}
+	e5, d5 := read(5)
+	if d5 != s5Defaults {
+		t.Error("S5's edited defaults were overwritten")
+	}
+	if !strings.Contains(e5, `"s5_golden_palace_w5"`) {
+		t.Error("S5's unedited events were not corrected")
+	}
+	e6, d6 := read(6)
+	if e6 != s6Events {
+		t.Error("S6's malformed events were touched")
+	}
+	if d6 == s6Defaults || !strings.Contains(d6, `"key_event_total":12`) {
+		t.Errorf("S6's unedited defaults were not corrected: %s", d6)
 	}
 }
