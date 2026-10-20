@@ -233,6 +233,10 @@ func loadLandExtras(q rowQueryer, s *Season, cfg landConfig, routes []landRoute,
 			}
 		}
 	}
+	snapshots, err := loadLandSnapshots(q, s)
+	if err != nil {
+		return nil, err
+	}
 	recent := []landEventView{}
 	for i := len(events) - 1; i >= 0 && len(recent) < 200; i-- {
 		at := events[i].At
@@ -244,6 +248,7 @@ func loadLandExtras(q rowQueryer, s *Season, cfg landConfig, routes []landRoute,
 		"drops":       drops,
 		"daily_cards": landDailyCards(held, captures, planned, doneToday, cfg, now),
 		"now":         landST(&now),
+		"snapshots":   snapshots,
 	}, nil
 }
 

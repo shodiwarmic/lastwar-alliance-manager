@@ -782,3 +782,8 @@
 .land-drop-holdings { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; max-height: 240px; overflow-y: auto; }
 .land-drop-pick { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
 .season-import-bad td { background: var(--color-danger-bg); }
+.land-snapshot-links { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; margin: 6px 0; font-size: 0.85rem; }
+.land-snapshot-img { display: block; max-width: min(100%, 320px); height: auto; border: 1px solid var(--border-color); border-radius: 6px; }
+.land-path { margin-top: 6px; }
+.land-path summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+.land-path-steps { margin: 6px 0; padding-left: 22px; font-size: 0.85rem; }

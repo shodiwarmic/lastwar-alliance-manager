@@ -461,7 +461,30 @@ CREATE TABLE IF NOT EXISTS season_land_drops (
 );
 -- +goose StatementEnd
 
+
+
+-- ── 276: Cpt Hedge snapshots ────────────────────────────────────────────────
+-- A map-planner export (a season-tagged .json in Files) and an optional screenshot of it, linked
+-- to a route or none. The file is the record; grid name and export date are read from it once.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_snapshots (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id     INTEGER NOT NULL REFERENCES seasons(id),
+    route_id      INTEGER REFERENCES season_land_routes(id),
+    file_id       INTEGER NOT NULL REFERENCES files(id),
+    image_file_id INTEGER REFERENCES files(id),
+    grid_name     TEXT    NOT NULL DEFAULT '',
+    export_date   TEXT    NOT NULL DEFAULT '',
+    note          TEXT    NOT NULL DEFAULT '',
+    uploaded_by   INTEGER REFERENCES users(id),
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_snapshots;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_land_drops;
 -- +goose StatementEnd

@@ -212,6 +212,7 @@ var mobileExcludedTables = map[string]string{
 	"season_land_targets":          "the plan, not an observation: a route's targets",
 	"season_land_route_revisions":  "app data: saved versions of a Land route",
 	"season_land_drops":            "the plan, not an observation: planned abandonments",
+	"season_land_snapshots":        "the plan, not an observation: Cpt Hedge planner exports",
 	"schedule_events":              "the plan, not an observation (a participation board's occurrence is created through its own route)",
 	"schedule_event_types":         "configuration: the schedule",
 	"server_events":                "the plan, not an observation",

@@ -503,6 +503,9 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/land/events/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_land", handleSeasonLandEventDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/land/drops", authMiddleware(requirePermission("manage_season_land", handleSeasonLandDropCreate))).Methods("POST")
 	router.HandleFunc("/api/season-hub/land/drops/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_land", handleSeasonLandDropUpdate))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/land/snapshots", authMiddleware(requirePermission("manage_season_land", handleSeasonLandSnapshotCreate))).Methods("POST")
+	router.HandleFunc("/api/season-hub/land/snapshots/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_land", handleSeasonLandSnapshotDelete))).Methods("DELETE")
+	router.HandleFunc("/api/season-hub/land/snapshots/{id:[0-9]+}/import", authMiddleware(requirePermission("manage_season_land", handleSeasonLandSnapshotImport))).Methods("POST")
 	// The Season Hub's CSV imports (decision 27): each kind names the permissions it needs, which
 	// the handler checks; the route only needs a signed-in user.
 	router.HandleFunc("/api/season-hub/import/preview", authMiddleware(handleSeasonImportPreview)).Methods("POST")

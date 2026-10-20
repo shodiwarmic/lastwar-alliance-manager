@@ -496,7 +496,8 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	logActivity(userID, user.Username, "created", "file", title, false)
 
-	w.WriteHeader(http.StatusOK)
+	// The new file's id, for a caller that links it (a Land snapshot); the Files page ignores it.
+	writeJSON(w, map[string]any{"id": fileID})
 }
 
 // createBlankFile generates an empty .docx/.xlsx on disk and registers it like an
@@ -792,6 +793,20 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 	if _, err := tx.Exec("DELETE FROM file_tag_map WHERE file_id = ?", fileID); err != nil {
 		tx.Rollback()
 		slog.Error("deleteFile: tag map delete failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	// A Land snapshot is the link between a season and its export file: deleting the export
+	// removes the snapshot; deleting its screenshot only unlinks it (private-docs 276).
+	if _, err := tx.Exec("DELETE FROM season_land_snapshots WHERE file_id = ?", fileID); err != nil {
+		tx.Rollback()
+		slog.Error("deleteFile: snapshot delete failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec("UPDATE season_land_snapshots SET image_file_id = NULL WHERE image_file_id = ?", fileID); err != nil {
+		tx.Rollback()
+		slog.Error("deleteFile: snapshot unlink failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}

@@ -327,7 +327,7 @@
     function renderExtras() {
         const box = document.getElementById('land-extras');
         if (!data.daily_cards) { box.replaceChildren(); return; }
-        box.replaceChildren(renderCards(), renderHoldings(), renderDrops(), renderEvents());
+        box.replaceChildren(renderCards(), renderHoldings(), renderDrops(), renderEvents(), renderSnapshots());
     }
 
     function section(title, ...children) {
@@ -461,6 +461,109 @@
             el('thead', null, el('tr', null, ['When (ST)', 'Area', 'Kind', 'What', 'Source', ''].map(t => el('th', { textContent: t, translate: 'yes' })))),
             el('tbody', null, rows.length ? rows : el('tr', null, el('td', { colspan: '6', className: 'loading-msg', translate: 'yes', textContent: 'No events recorded.' }))))));
         return section('Events', ...parts);
+    }
+
+    // ── Cpt Hedge snapshots (private-docs 276) ──────────────────────────────
+    // An export (.json) and an optional screenshot, uploaded to Files tagged to the season, then
+    // linked here. The card reads the stored export each time; a proposed path imports as targets.
+    async function uploadToFiles(file, title) {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('title', title);
+        fd.append('min_rank', 'R4');
+        fd.append('min_edit_rank', 'R4');
+        fd.append('season_id', String(season.id));
+        const res = await fetch('/api/files/upload', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error((await res.text()) || 'Upload failed');
+        return (await res.json()).id;
+    }
+
+    function renderSnapshots() {
+        const ro = !editable();
+        const parts = [];
+        if (!ro) {
+            const jsonInp = el('input', { type: 'file', className: 'form-input', accept: '.json,application/json' });
+            const imgInp = el('input', { type: 'file', className: 'form-input', accept: 'image/png,image/jpeg,image/webp' });
+            const slotSel = select([['', '— no route —']].concat(SLOTS), '');
+            const noteInp = el('input', { type: 'text', className: 'form-input' });
+            const btn = el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: async () => {
+                const f = jsonInp.files[0];
+                if (!f) { showToast('Choose the export (.json) first.', 'error'); return; }
+                btn.disabled = true;
+                try {
+                    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+                    const fileId = await uploadToFiles(f, 'Cpt Hedge export ' + stamp);
+                    const imageId = imgInp.files[0] ? await uploadToFiles(imgInp.files[0], 'Cpt Hedge map ' + stamp) : null;
+                    const d = await post('/api/season-hub/land/snapshots', { season_id: season.id, file_id: fileId,
+                        image_file_id: imageId, slot: slotSel.value, note: noteInp.value.trim() });
+                    showToast(d.summary && d.summary.valid ? 'Snapshot saved.' : 'Snapshot saved — the export has problems; see its card.',
+                        d.summary && d.summary.valid ? 'success' : 'info');
+                    load(true);
+                } catch (err) {
+                    showToast(err.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                }
+            } }, 'Upload snapshot');
+            parts.push(el('div', { className: 'land-target-grid' },
+                field('Export (.json)', jsonInp), field('Screenshot (optional)', imgInp), field('Route', slotSel),
+                field('Note', noteInp, 'land-field-wide')), el('div', { className: 'tab-toolbar' }, btn));
+        }
+        (data.snapshots || []).forEach(n => parts.push(buildSnapshotCard(n, ro)));
+        if (!(data.snapshots || []).length) parts.push(el('p', { className: 'loading-msg', textContent: 'No snapshots yet.' }));
+        return section('Cpt Hedge snapshots', ...parts);
+    }
+
+    function buildSnapshotCard(n, ro) {
+        const sum = n.summary || {};
+        const head = el('div', { className: 'land-target-head' },
+            el('strong', { translate: 'no', textContent: n.grid_name || n.file_title || 'Export' }),
+            el('span', { className: 'land-status tone-' + (sum.valid ? 'success' : 'warning'), textContent: sum.valid ? 'Valid' : 'Problems' }),
+            ro ? null : el('button', { type: 'button', className: 'btn btn-danger btn-sm', 'aria-label': 'Remove snapshot', onclick: async () => {
+                if (!await showConfirm('Remove this snapshot? Its files stay in Files.', 'Remove')) return;
+                api('/api/season-hub/land/snapshots/' + n.id, { method: 'DELETE' }).then(() => load(true))
+                    .catch(err => showToast(err.message, 'error'));
+            } }, svgIcon('x')));
+        const meta = el('div', { className: 'land-drop-when' },
+            (n.export_date ? 'Exported ' + n.export_date.replace('T', ' ').slice(0, 16) + ' UTC · ' : '') +
+            'uploaded ' + n.created_at + (n.uploaded_by ? ' by ' + n.uploaded_by : '') +
+            (n.route_slot ? ' · ' + landSlotName(n.route_slot) : '') +
+            ' · ' + (sum.alliances || 0) + ' planner alliance' + (sum.alliances === 1 ? '' : 's') + ', ' + (sum.claims || 0) + ' claimed areas');
+        const links = el('div', { className: 'land-snapshot-links' },
+            el('a', { href: '/api/files/download/' + n.file_id, textContent: 'Export file' }),
+            n.image_file_id ? el('a', { href: '/api/files/download/' + n.image_file_id, target: '_blank', rel: 'noopener' },
+                el('img', { className: 'land-snapshot-img', src: '/api/files/download/' + n.image_file_id, alt: 'Map screenshot', loading: 'lazy' })) : null);
+        const problems = (sum.problems || []).length ? el('ul', { className: 'land-reasons' }, sum.problems.map(p => el('li', { textContent: p }))) : null;
+        const note = n.note ? el('p', { className: 'land-drop-when', textContent: n.note }) : null;
+        const paths = (sum.paths || []).map(p => buildPathImport(n, p, ro || !sum.valid));
+        return el('div', { className: 'land-drop card land-snapshot' }, head, meta, note, links, problems, ...paths);
+    }
+
+    function landSlotName(slotKey) { return (SLOTS.find(x => x[0] === slotKey) || [slotKey, slotKey])[1]; }
+
+    function buildPathImport(n, p, ro) {
+        const steps = el('ol', { className: 'land-path-steps', translate: 'no' }, p.steps.map(st =>
+            el('li', { textContent: st.name + (st.level ? ' L' + st.level : '') + ' (#' + st.area_id + ')' })));
+        const problems = p.problems.length ? el('ul', { className: 'land-reasons' }, p.problems.map(t => el('li', { textContent: t }))) : null;
+        const box = el('details', { className: 'land-path' },
+            el('summary', null, 'Proposed path' + (p.alliance_name ? ' for ' : ''), p.alliance_name ? noTranslate(el('span', { textContent: p.alliance_name })) : null,
+                ' · ' + p.steps.length + ' steps'), steps, problems);
+        if (!ro && !p.problems.length) {
+            const slotSel = select(SLOTS, n.route_slot || 'backup_a');
+            box.appendChild(el('div', { className: 'tab-toolbar' }, field('Append to', slotSel),
+                el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                    post('/api/season-hub/land/snapshots/' + n.id + '/import', { grid_id: p.grid_id, alliance_id: p.alliance_id, slot: slotSel.value })
+                        .then(d => {
+                            const dup = d.already_on_route || [];
+                            showToast('Added ' + d.added + ' targets to ' + landSlotName(slotSel.value) + '.' +
+                                (dup.length ? ' Already on that route: ' + dup.join(', ') + '.' : ''), dup.length ? 'info' : 'success', dup.length ? 8000 : undefined);
+                            slot = slotSel.value;
+                            load(true);
+                        })
+                        .catch(err => showToast(err.message, 'error'));
+                } }, 'Import path as targets')));
+        }
+        return box;
     }
 
     // The drop modal: from a holding (that one ticked) or from a day's card (that kind listed,
