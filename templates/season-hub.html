@@ -27,7 +27,7 @@
             <option value="">No seasons</option>
         </select>
         <span id="season-status-badge" class="season-badge" style="display:none"></span>
-        {{if .Permissions.ManageSeasonRewards}}
+        {{if .Permissions.ManageSeasonConfig}}
         <div class="season-actions">
             <button class="btn btn-secondary btn-sm" id="btn-create-season" title="New Season" aria-label="New Season"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> <span class="action-label">New Season</span></button>
             <button class="btn btn-secondary btn-sm" id="btn-edit-season" title="Edit" aria-label="Edit" style="display:none"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-pencil"/></svg> <span class="action-label">Edit</span></button>
@@ -41,10 +41,8 @@
          permission blocks here still decide which exist for this viewer. -->
     <div class="tab-bar" id="season-tab-bar">
         <button class="tab-btn active" data-tab="rankings">Rankings</button>
-        {{if .Permissions.ManageSeasonHub}}
-        <button class="tab-btn" data-tab="participation">Participation</button>
-        <button class="tab-btn" data-tab="contributions">Contributions</button>
-        {{end}}
+        {{if .Permissions.ManageSeasonParticipation}}<button class="tab-btn" data-tab="participation">Participation</button>{{end}}
+        {{if .Permissions.ManageSeasonContributions}}<button class="tab-btn" data-tab="contributions">Contributions</button>{{end}}
         <button class="tab-btn" data-tab="rewards">Rewards</button>
         <button class="tab-btn" data-tab="comms">Season Mail</button>
     </div>
@@ -59,7 +57,7 @@
             <span id="rankings-count" class="tab-count"></span>
         </div>
         <div id="no-season-msg" class="info-panel" style="display:none">
-            No active season. {{if .Permissions.ManageSeasonRewards}}Create one above to get started.{{end}}
+            No active season. {{if .Permissions.ManageSeasonConfig}}Create one above to get started.{{end}}
         </div>
         <div class="table-scroll">
             <table class="data-table sortable-table" id="rankings-table" style="display:none" data-export-csv="rankings.csv" translate="no">
@@ -83,7 +81,7 @@
     </div>
 
     <!-- ── Participation ─────────────────────────────────────────────────── -->
-    {{if .Permissions.ManageSeasonHub}}
+    {{if .Permissions.ManageSeasonParticipation}}
     <div id="tab-participation" class="tab-content" style="display:none">
         <div class="tab-toolbar">
             <div class="participation-week-nav">
@@ -121,7 +119,7 @@
     {{end}}
 
     <!-- ── Contributions ─────────────────────────────────────────────────── -->
-    {{if .Permissions.ManageSeasonHub}}
+    {{if .Permissions.ManageSeasonContributions}}
     <div id="tab-contributions" class="tab-content" style="display:none">
 
         <div class="tab-toolbar">
@@ -191,7 +189,7 @@
 
     <!-- ── Season Mail ───────────────────────────────────────────────────── -->
     <div id="tab-comms" class="tab-content" style="display:none">
-        {{if .Permissions.ManageSeasonHub}}
+        {{if .Permissions.ManageComms}}
         <div class="tab-toolbar">
             <button class="btn btn-primary btn-sm" id="btn-upload-mail">+ Post Mail</button>
         </div>
@@ -207,8 +205,12 @@
 {{define "scripts"}}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <div id="page-config"
-    data-can-manage="{{if .Permissions.ManageSeasonHub}}true{{else}}false{{end}}"
+    data-can-manage="{{if .Permissions.ManageSeasonParticipation}}true{{else}}false{{end}}"
+    data-can-manage-contributions="{{if .Permissions.ManageSeasonContributions}}true{{else}}false{{end}}"
+    data-can-manage-config="{{if .Permissions.ManageSeasonConfig}}true{{else}}false{{end}}"
     data-can-manage-rewards="{{if .Permissions.ManageSeasonRewards}}true{{else}}false{{end}}"
+    data-can-manage-comms="{{if .Permissions.ManageComms}}true{{else}}false{{end}}"
+    data-can-manage-schedule="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
     data-member-id="{{.MemberID}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>

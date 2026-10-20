@@ -21,8 +21,14 @@
 
     // ── Config ────────────────────────────────────────────────────────────────
     const cfg = document.getElementById('page-config').dataset;
+    // One flag per Season Hub permission the page acts on (private-docs 304). CAN_MANAGE is
+    // participation: every member's row rather than the viewer's own.
     const CAN_MANAGE = cfg.canManage === 'true';
+    const CAN_MANAGE_CONTRIBUTIONS = cfg.canManageContributions === 'true';
+    const CAN_MANAGE_CONFIG = cfg.canManageConfig === 'true';
     const CAN_MANAGE_REWARDS = cfg.canManageRewards === 'true';
+    const CAN_MANAGE_COMMS = cfg.canManageComms === 'true';
+    const CAN_MANAGE_SCHEDULE = cfg.canManageSchedule === 'true';
     const CURRENT_MEMBER_ID = parseInt(cfg.memberId, 10) || 0;
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -120,7 +126,7 @@
         seasonSelect.addEventListener('change', () => {
             const id = parseInt(seasonSelect.value, 10) || null;
             loadSeasonData(id);
-            if (CAN_MANAGE) { allRewards = []; renderRewardsTable(); }
+            allRewards = []; renderRewardsTable();
             allMailItems = []; renderMailList();
         });
     }
@@ -146,6 +152,8 @@
                 if (CAN_MANAGE) {
                     populateWeekSelect();
                     loadParticipationWeek();
+                }
+                if (CAN_MANAGE_CONTRIBUTIONS) {
                     populateContribWeekSelect();
                     renderContribHeaders();
                     renderManualTable();
@@ -1422,7 +1430,7 @@
                 actions.appendChild(expandBtn);
             }
 
-            if (CAN_MANAGE) {
+            if (CAN_MANAGE_COMMS) {
                 const editBtn = document.createElement('button');
                 editBtn.className = 'btn btn-secondary btn-sm';
                 editBtn.textContent = 'Edit';
@@ -1739,6 +1747,7 @@
                 const modal = document.getElementById('modal-create-season');
                 if (modal) modal.style.display = '';
                 let msg = 'Season created.';
+                if (d && d.unpushed) msg += ' Its events are not on the calendar yet: someone who manages the Schedule can push them from Edit Season.';
                 const p = d && d.pushed;
                 if (p && (p.created || p.skipped_no_type || p.skipped_unscheduled)) {
                     msg += ' Pushed ' + (p.created || 0) + ' event' + ((p.created || 0) === 1 ? '' : 's') + ' to schedule';
@@ -1957,7 +1966,7 @@
                 setRewardTiers(d.reward_tiers || []);
                 if (activeSeason) activeSeason.reward_tiers = rewardTiers;
                 renderRankingsTable();
-                if (CAN_MANAGE) renderRewardsTable();
+                renderRewardsTable();
             })
             .catch(() => {});
     }
@@ -2511,6 +2520,17 @@
         });
     }
 
+    // Season events feed the calendar, so changing them also needs the Schedule's manage
+    // permission; without it the rows are shown read-only.
+    if (!CAN_MANAGE_SCHEDULE) {
+        ['btn-es-add-event', 'btn-es-push-schedule'].forEach(id => {
+            const b = document.getElementById(id);
+            if (b) { b.disabled = true; b.title = 'Needs the Schedule\'s manage permission'; }
+        });
+        const st = document.getElementById('es-push-status');
+        if (st) st.textContent = 'Season events feed the calendar: changing them needs the Schedule\'s manage permission.';
+    }
+
     const btnEsAddEvent = document.getElementById('btn-es-add-event');
     if (btnEsAddEvent) {
         btnEsAddEvent.addEventListener('click', () => {
@@ -2711,7 +2731,7 @@
                     // next season and reloads its data (rewards/mail lazy-load on
                     // tab focus). Don't fetch rewards/mail here — activeSeason still
                     // points at the just-deleted season until loadSeasonData resolves.
-                    if (CAN_MANAGE) { allRewards = []; renderRewardsTable(); }
+                    allRewards = []; renderRewardsTable();
                     allMailItems = []; renderMailList();
                     loadSeasonList();
                 })

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/pressly/goose/v3"
 )
 
 // seedSeasonRow inserts a season directly. archived marks it archived and inactive.
@@ -374,5 +377,102 @@ func assertNoSeasonRows(t *testing.T, seasonID int) {
 		if n := countT(t, `SELECT COUNT(*) FROM `+tbl+` WHERE season_id = ?`, seasonID); n != 0 {
 			t.Errorf("%s still holds %d row(s) for the deleted season", tbl, n)
 		}
+	}
+}
+
+// The permission split (migration 089, private-docs 304): every new key reads true through
+// both paths for the ranks that held its predecessor, and an operator's choice stands.
+func TestSeasonHubPermissionSplitSeeds(t *testing.T) {
+	conn := migrateTo(t, 88)
+	// An operator who had already decided R4 must not configure seasons.
+	if _, err := conn.Exec(`UPDATE rank_permissions SET permissions = json_set(permissions,
+		'$.manage_season_rewards', json('true'), '$.manage_season_config', json('false')) WHERE rank = 'R4'`); err != nil {
+		t.Fatal(err)
+	}
+	var before map[string]map[string]any
+	before = map[string]map[string]any{}
+	rows, _ := conn.Query(`SELECT rank, permissions FROM rank_permissions`)
+	for rows.Next() {
+		var rank, blob string
+		rows.Scan(&rank, &blob)
+		m := map[string]any{}
+		json.Unmarshal([]byte(blob), &m)
+		before[rank] = m
+	}
+	rows.Close()
+	if err := gooseUpTo(conn, 89); err != nil {
+		t.Fatal(err)
+	}
+	after := func(rank string) RankPermissions {
+		var blob string
+		conn.QueryRow(`SELECT permissions FROM rank_permissions WHERE rank = ?`, rank).Scan(&blob)
+		var p RankPermissions
+		if err := json.Unmarshal([]byte(blob), &p); err != nil {
+			t.Fatalf("%s blob: %v", rank, err)
+		}
+		return p
+	}
+	truthy := func(m map[string]any, k string) bool { v, _ := m[k].(bool); return v }
+	for _, rank := range []string{"R1", "R2", "R3", "R4", "R5"} {
+		p, b := after(rank), before[rank]
+		if p.ManageSeasonParticipation != truthy(b, "manage_season_hub") || p.ManageSeasonContributions != truthy(b, "manage_season_hub") {
+			t.Errorf("%s: participation/contributions %v/%v, manage_season_hub was %v", rank,
+				p.ManageSeasonParticipation, p.ManageSeasonContributions, truthy(b, "manage_season_hub"))
+		}
+		landWar := rank == "R4" || rank == "R5"
+		if p.ViewSeasonLand != landWar || p.ManageSeasonLand != landWar || p.ViewSeasonWar != landWar || p.ManageSeasonWar != landWar {
+			t.Errorf("%s: Land/War keys %+v, want %v", rank, []bool{p.ViewSeasonLand, p.ManageSeasonLand, p.ViewSeasonWar, p.ManageSeasonWar}, landWar)
+		}
+	}
+	if !after("R5").ManageSeasonConfig {
+		t.Error("R5 held manage_season_rewards and did not get manage_season_config")
+	}
+	if after("R4").ManageSeasonConfig {
+		t.Error("the operator's explicit R4 manage_season_config = false was overwritten")
+	}
+
+	// And through the live path the handlers use.
+	setupSettingsTestDB(t)
+	r5 := seedMember(t, "Leader", "R5")
+	user := &AuthUser{ID: 2, Username: "leader", Rank: "R5", MemberID: &r5}
+	for _, k := range []string{"manage_season_config", "manage_season_participation", "manage_season_contributions",
+		"view_season_land", "manage_season_land", "view_season_war", "manage_season_war"} {
+		if !userHasPermission(user, k) {
+			t.Errorf("userHasPermission(R5, %s) = false after a fresh migration", k)
+		}
+	}
+}
+
+func gooseUpTo(conn *sql.DB, version int64) error {
+	goose.SetDialect("sqlite3")
+	goose.SetLogger(goose.NopLogger())
+	return goose.UpTo(conn, "migrations", version)
+}
+
+// Season events write the calendar: without manage_schedule a season is created unpushed
+// and the season-event routes refuse.
+func TestSeasonCalendarWritesNeedManageSchedule(t *testing.T) {
+	setupSettingsTestDB(t)
+	r5 := seedMember(t, "Leader", "R5")
+	mustExecT(t, `INSERT INTO users (id, username, password, is_admin, is_active, member_id) VALUES (2, 'leader', 'x', 0, 1, ?)`, r5)
+	setRankPerm(t, "R5", "manage_season_config", true)
+	setRankPerm(t, "R5", "manage_schedule", false)
+	actor := &AuthUser{ID: 2, Username: "leader", Rank: "R5", MemberID: &r5}
+
+	var tmplID int
+	db.QueryRow(`SELECT id FROM season_templates WHERE season_number = 4`).Scan(&tmplID)
+	rr := httptest.NewRecorder()
+	handleSeasonCreate(rr, shReq(http.MethodPost, `{"template_id":`+strconv.Itoa(tmplID)+`,"start_date":"2031-03-03"}`, nil, actor))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"unpushed":true`) {
+		t.Fatalf("create without manage_schedule: %d %s", rr.Code, rr.Body.String())
+	}
+	if n := countT(t, `SELECT COUNT(*) FROM schedule_events WHERE season_event_id IS NOT NULL`); n != 0 {
+		t.Errorf("%d calendar rows pushed for a caller without manage_schedule", n)
+	}
+	h := requirePermission("manage_season_config", requireAlsoPermission("manage_schedule", seasonCalendarWhy, handleSeasonEventPushToSchedule))
+	rr = httptest.NewRecorder()
+	h(rr, shReq(http.MethodPost, `{"season_id":1}`, nil, actor))
+	if rr.Code != http.StatusForbidden || !strings.Contains(rr.Body.String(), "calendar") {
+		t.Errorf("push without manage_schedule: %d %q", rr.Code, rr.Body.String())
 	}
 }

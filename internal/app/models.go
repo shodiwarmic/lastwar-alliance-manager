@@ -944,12 +944,20 @@ type RankPermissions struct {
 	ViewAccountability   bool   `json:"view_accountability"`
 	ManageAccountability bool   `json:"manage_accountability"`
 	ViewSeasonHub        bool   `json:"view_season_hub"`
-	ManageSeasonHub      bool   `json:"manage_season_hub"`
 	ManageSeasonRewards  bool   `json:"manage_season_rewards"`
-	ViewComms            bool   `json:"view_comms"`
-	ManageComms          bool   `json:"manage_comms"`
-	ViewPolls            bool   `json:"view_polls"`
-	ManagePolls          bool   `json:"manage_polls"`
+	// The Season Hub split (migration 089, private-docs 304). manage_season_hub retired into
+	// participation and contributions; season setup left manage_season_rewards for config.
+	ManageSeasonConfig        bool `json:"manage_season_config"`
+	ManageSeasonParticipation bool `json:"manage_season_participation"`
+	ManageSeasonContributions bool `json:"manage_season_contributions"`
+	ViewSeasonLand            bool `json:"view_season_land"`
+	ManageSeasonLand          bool `json:"manage_season_land"`
+	ViewSeasonWar             bool `json:"view_season_war"`
+	ManageSeasonWar           bool `json:"manage_season_war"`
+	ViewComms                 bool `json:"view_comms"`
+	ManageComms               bool `json:"manage_comms"`
+	ViewPolls                 bool `json:"view_polls"`
+	ManagePolls               bool `json:"manage_polls"`
 
 	// One key per report on the Reports page (reports.go → reportDefs).
 	ViewReportWeekly        bool `json:"view_report_weekly"`
@@ -1047,8 +1055,14 @@ var PermissionGroups = []PermissionGroup{
 	}},
 	{Feature: "Season Hub", Rows: []PermissionRow{
 		{Key: "view_season_hub", Label: "View"},
-		{Key: "manage_season_hub", Label: "Manage"},
+		{Key: "manage_season_config", Label: "Configure seasons"},
 		{Key: "manage_season_rewards", Label: "Rewards"},
+		{Key: "manage_season_participation", Label: "Participation"},
+		{Key: "manage_season_contributions", Label: "Contributions"},
+		{Key: "view_season_land", Label: "View Land"},
+		{Key: "manage_season_land", Label: "Manage Land"},
+		{Key: "view_season_war", Label: "View War"},
+		{Key: "manage_season_war", Label: "Manage War"},
 	}},
 	{Feature: "Comms", Rows: []PermissionRow{
 		{Key: "view_comms", Label: "View"},

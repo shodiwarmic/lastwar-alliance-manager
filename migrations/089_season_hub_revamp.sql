@@ -130,6 +130,55 @@ WHERE s.archived_at IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM season_roster_snapshot r WHERE r.season_id = s.id AND r.member_id = m.id);
 -- +goose StatementEnd
 
+
+-- ── 304: the Season Hub's permission split ──────────────────────────────────
+-- Three keys become nine (owner, 2026-10-19): manage_season_hub retires into
+-- manage_season_participation and manage_season_contributions; manage_season_config takes the
+-- season's setup from manage_season_rewards, which keeps only the rewards themselves; Land and
+-- War get a view and a manage key each. Each new key is seeded from the key its scope lived
+-- under, so no rank loses access on upgrade. 085's shape: json('true'), never a json_extract
+-- copy (that writes the number 1, which getRankPermissions reads as false), and only where the
+-- key is absent, so an operator's later choice is never overwritten. manage_season_hub is left
+-- in the blob as dead data; nothing reads it.
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_config', json('true'))
+WHERE json_extract(permissions, '$.manage_season_rewards') = 1
+  AND json_type(permissions, '$.manage_season_config') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_participation', json('true'))
+WHERE json_extract(permissions, '$.manage_season_hub') = 1
+  AND json_type(permissions, '$.manage_season_participation') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_contributions', json('true'))
+WHERE json_extract(permissions, '$.manage_season_hub') = 1
+  AND json_type(permissions, '$.manage_season_contributions') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.view_season_land', json('true'))
+WHERE rank IN ('R4', 'R5') AND json_type(permissions, '$.view_season_land') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_land', json('true'))
+WHERE rank IN ('R4', 'R5') AND json_type(permissions, '$.manage_season_land') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.view_season_war', json('true'))
+WHERE rank IN ('R4', 'R5') AND json_type(permissions, '$.view_season_war') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_war', json('true'))
+WHERE rank IN ('R4', 'R5') AND json_type(permissions, '$.manage_season_war') IS NULL;
+-- +goose StatementEnd
+
 -- +goose Down
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_file_snapshots;

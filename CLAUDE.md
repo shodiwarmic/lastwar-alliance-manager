@@ -232,8 +232,8 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | GET | `/api/mobile/prospects` | `getMobileProspects` | `view_recruiting` | Prospects' game-read fields, for matching a scanned profile |
 | POST | `/api/mobile/prospects` | `postMobileProspect` | `manage_recruiting` | Update by `prospect_id` (fields sent only), or create — 409 with the id on a same-name, same-server duplicate |
 | GET | `/api/mobile/season-hub` | `getMobileSeasonHub` | `view_season_hub` | Active season, trackables, accepted categories |
-| POST | `/api/mobile/season-hub/contributions/preview` | `mobileContributionsPreview` | `manage_season_hub` | Resolve contribution rows (no OCR — the phone read them) |
-| POST | `/api/mobile/season-hub/contributions/commit` | `mobileContributionsCommit` | `manage_season_hub` | Save rows + aliases; the web import's target, resolution and upsert (`contributionTarget`, `resolveContributionRows`, `saveContributionTx`) |
+| POST | `/api/mobile/season-hub/contributions/preview` | `mobileContributionsPreview` | `manage_season_contributions` | Resolve contribution rows (no OCR — the phone read them) |
+| POST | `/api/mobile/season-hub/contributions/commit` | `mobileContributionsCommit` | `manage_season_contributions` | Save rows + aliases; the web import's target, resolution and upsert (`contributionTarget`, `resolveContributionRows`, `saveContributionTx`) |
 | GET | `/api/mobile/participation/types` | `getMobileParticipationTypes` | `view_` or `manage_participation` | Tracked types, absence rule, mail category, trackables |
 | POST | `/api/mobile/participation/preview` | `mobileParticipationPreview` | `manage_participation` | Rows the phone read (OCR wire shape, per frame) → the web import's answer |
 | POST | `/api/mobile/participation/import` | `mobileParticipationImport` | `manage_participation` | Frames (multipart, the web import's limits) → the same answer |
@@ -1887,10 +1887,9 @@ Three more rules:
 2. **A tier with rewards assigned cannot be deleted** (409), exactly as a
    trackable with recorded data cannot. Renders of an orphaned key still fall
    back to showing the raw key rather than blanking.
-3. **Tier CRUD is gated on `manage_season_rewards` (R5), not
-   `manage_season_hub`.** Tier counts were previously edited inside the R5-only
-   Edit Season modal; reusing the trackables gate would silently widen access to
-   R4.
+3. **Tier CRUD is gated on `manage_season_config` (R5)** — season setup, seeded
+   from `manage_season_rewards`, which now covers only assigning rewards. Tier
+   counts were always R5-only; a wider gate would silently extend access to R4.
 
 **Tiers belong to the template** (migration 088, private-docs 299): the game's counts
 change by season (S1–S2 Leader 1 / Core 10 / Elite 20 / Valued 69; S3+ add Tactician 4

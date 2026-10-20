@@ -244,6 +244,9 @@ func handleSeasonLayoutPut(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"message": "Layout saved"})
 }
 
+// seasonCalendarWhy is the refusal for a season-event write without manage_schedule.
+const seasonCalendarWhy = "season events feed the calendar, so changing them also needs the Schedule's manage permission."
+
 // seasonAcceptsEdits reports whether the season exists and is open to changes. An archived
 // season is frozen: its configuration and every record hanging off it.
 func seasonAcceptsEdits(seasonID int) (bool, string) {

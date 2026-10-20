@@ -892,23 +892,28 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	logActivity(user.ID, user.Username, "created", "season_config", ns.Name, false, details)
 
-	// Auto-push events to the schedule. Best-effort: if the push fails we still
-	// report a successful season creation; the user can re-push from the edit
-	// modal. Idempotent, so re-pushing is safe.
+	// Auto-push events to the schedule — only for a caller who may write the calendar
+	// (manage_schedule); otherwise the season is created and the response says it is
+	// unpushed, for a schedule manager to push from Edit Season. Best-effort: if the push
+	// fails we still report a successful creation. Idempotent, so re-pushing is safe.
 	var pushed pushResult
-	if s, err := loadSeasonByID(int(seasonID)); err == nil {
-		if p, err := pushSeasonEventsToSchedule(s, user.ID, user.Username); err != nil {
-			slog.Error("handleSeasonCreate: auto push", "error", err)
-		} else {
-			pushed = p
+	unpushed := !userHasPermission(user, "manage_schedule")
+	if !unpushed {
+		if s, err := loadSeasonByID(int(seasonID)); err == nil {
+			if p, err := pushSeasonEventsToSchedule(s, user.ID, user.Username); err != nil {
+				slog.Error("handleSeasonCreate: auto push", "error", err)
+			} else {
+				pushed = p
+			}
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"id":      seasonID,
-		"message": "Season created",
-		"pushed":  pushed,
+		"id":       seasonID,
+		"message":  "Season created",
+		"pushed":   pushed,
+		"unpushed": unpushed,
 	})
 }
 
@@ -1345,7 +1350,8 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 // R1–R3 (non-managers) receive only their own row — enforced server-side.
 func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
-	canManage := user.IsAdmin || getRankPermissions(user.Rank).ManageSeasonHub
+	// Every member's row for the participation managers; their own row for everyone else.
+	canManage := userHasPermission(user, "manage_season_participation")
 
 	var season *Season
 	var err error
@@ -2635,9 +2641,9 @@ func handleSeasonTrackableDelete(w http.ResponseWriter, r *http.Request) {
 // Per-row REST modelled on the trackables handlers above. Two rules carried
 // over: the key is immutable once created (it is the value stored in
 // season_rewards.reward_tier), and a tier that has rewards assigned cannot be
-// deleted. Gated on manage_season_rewards (R5) rather than manage_season_hub —
+// deleted. Gated on manage_season_config (seeded from manage_season_rewards, R5) —
 // tier counts were previously edited inside the R5-only Edit Season modal, and
-// using the trackables gate would silently widen access to R4.
+// using a wider gate would silently extend access to R4.
 // ---------------------------------------------------------------------------
 
 func handleSeasonRewardTierList(w http.ResponseWriter, r *http.Request) {

@@ -208,6 +208,19 @@ func requirePermission(permKey string, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// requireAlsoPermission is a second, AND-ed gate inside requirePermission, for a route
+// that writes into another feature's data — Season Hub events feed the calendar, so they
+// need manage_schedule as well. why is the refusal's explanation.
+func requireAlsoPermission(permKey, why string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if user := getAuthUser(r); user != nil && userHasPermission(user, permKey) {
+			next(w, r)
+			return
+		}
+		http.Error(w, "Forbidden: "+why, http.StatusForbidden)
+	}
+}
+
 // requireAnyPermission gates a handler behind holding any one of permKeys.
 func requireAnyPermission(permKeys []string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

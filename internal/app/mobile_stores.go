@@ -88,11 +88,11 @@ func mobileStores() []mobileStore {
 			Key:        "season_contributions",
 			Tables:     []string{"season_member_records"},
 			ReadPerms:  []string{"view_season_hub"},
-			WritePerms: []string{"manage_season_hub"},
+			WritePerms: []string{"manage_season_contributions"},
 			Routes: []mobileRoute{
 				{Method: "GET", Path: "/api/mobile/season-hub", Perms: []string{"view_season_hub"}, Handler: getMobileSeasonHub},
-				{Method: "POST", Path: "/api/mobile/season-hub/contributions/preview", Perms: []string{"manage_season_hub"}, Handler: mobileContributionsPreview},
-				{Method: "POST", Path: "/api/mobile/season-hub/contributions/commit", Perms: []string{"manage_season_hub"}, Handler: mobileContributionsCommit},
+				{Method: "POST", Path: "/api/mobile/season-hub/contributions/preview", Perms: []string{"manage_season_contributions"}, Handler: mobileContributionsPreview},
+				{Method: "POST", Path: "/api/mobile/season-hub/contributions/commit", Perms: []string{"manage_season_contributions"}, Handler: mobileContributionsCommit},
 			},
 		},
 		{
