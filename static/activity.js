@@ -58,6 +58,8 @@ const ENTITY_LABELS = {
     season_trackable:      'season trackable',
     season_reward_tier:    'season reward tier',
     season_event:          'season event',
+    season_faction:        'season faction',
+    season_alliance:       'season alliance',
     poll_template:         'Poll Template',
     poll_instance:         'Poll',
     lastrank_sync:         'LastRank Sync',

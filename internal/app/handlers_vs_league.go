@@ -1827,6 +1827,12 @@ func deleteExternalAlliance(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "This alliance is linked to an ally — remove it from Allies first", http.StatusConflict)
 		return
 	}
+	var seasons int
+	db.QueryRow(`SELECT COUNT(*) FROM season_alliances WHERE external_alliance_id=?`, id).Scan(&seasons)
+	if seasons > 0 {
+		http.Error(w, "This alliance has "+strconv.Itoa(seasons)+" Season Hub row(s) — remove it from the season first", http.StatusConflict)
+		return
+	}
 	tx, err := db.Begin()
 	if err != nil {
 		dbError(w, "deleteExternalAlliance begin", err)

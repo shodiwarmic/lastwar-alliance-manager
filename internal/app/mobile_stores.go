@@ -96,6 +96,17 @@ func mobileStores() []mobileStore {
 			},
 		},
 		{
+			// The season's war data the game shows: factions an alliance is in (from 271),
+			// then observations, results and Trade Post owners (277–280).
+			Key:        "season_war",
+			Tables:     []string{"season_alliances"},
+			ReadPerms:  []string{"view_season_war"},
+			WritePerms: []string{"manage_season_war"},
+			Routes: []mobileRoute{
+				{Method: "GET", Path: "/api/mobile/season-hub/war", Perms: []string{"view_season_war"}, Handler: getMobileSeasonWar},
+			},
+		},
+		{
 			Key:        "participation",
 			Tables:     []string{"participation_boards", "participation_entries", "participation_values"},
 			ReadPerms:  []string{"view_participation", "manage_participation"},
@@ -183,6 +194,7 @@ var mobileExcludedTables = map[string]string{
 	"season_dashboard_cards":       "configuration: the season dashboard's card layout",
 	"season_roster_snapshot":       "app data: an archived season's frozen names and ranks",
 	"season_file_snapshots":        "app data: an archived season's copies of its files",
+	"season_factions":              "configuration: season setup (the install's side, entered by an officer)",
 	"schedule_events":              "the plan, not an observation (a participation board's occurrence is created through its own route)",
 	"schedule_event_types":         "configuration: the schedule",
 	"server_events":                "the plan, not an observation",

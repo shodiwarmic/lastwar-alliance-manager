@@ -2464,6 +2464,7 @@
             document.getElementById('es-schedule-buffer').value = s.schedule_buffer_minutes;
             document.getElementById('es-land-buffer').value = s.land_readiness_buffer_hours;
             loadLayoutEditor(s);
+            loadFactionEditor(s);
             const errEl = document.getElementById('es-error');
             if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
             const diffBox = document.getElementById('es-template-diff');
@@ -2632,6 +2633,107 @@
                     if (errEl) { errEl.textContent = err.message || 'Update failed.'; errEl.style.display = ''; }
                 })
                 .finally(() => clearButtonLoading(submitBtn));
+        });
+    }
+
+    // ── Factions editor (Edit Season → Factions) ─────────────────────────────
+    // Per-row REST like the tiers: a row saves itself, a move persists at once.
+    function buildFactionRow(f, seasonId) {
+        f = f || {};
+        const tbody = document.getElementById('es-factions-tbody');
+        const tr = document.createElement('tr');
+        tr.dataset.id = f.id || '';
+        const tdLabel = document.createElement('td');
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'form-input fa-label';
+        inp.placeholder = 'e.g. Kage no Sato';
+        inp.value = f.label || '';
+        tdLabel.appendChild(inp);
+        const tdOurs = document.createElement('td');
+        const ours = document.createElement('input');
+        ours.type = 'checkbox';
+        ours.className = 'fa-ours';
+        ours.checked = !!f.is_ours;
+        ours.setAttribute('aria-label', 'Our faction');
+        tdOurs.appendChild(ours);
+        const tdAct = document.createElement('td');
+        tdAct.style.whiteSpace = 'nowrap';
+        tdAct.appendChild(buildOrderButtons(tr, () => persistFactionOrder(seasonId)));
+        const save = document.createElement('button');
+        save.type = 'button';
+        save.className = 'btn btn-primary btn-sm';
+        save.style.marginLeft = '4px';
+        save.textContent = 'Save';
+        save.addEventListener('click', () => {
+            const label = inp.value.trim();
+            if (!label) { showToast('Faction name required.', 'error'); return; }
+            const id = tr.dataset.id;
+            fetch(id ? '/api/season-hub/factions/' + id : '/api/season-hub/factions', {
+                method: id ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(id ? { label, is_ours: ours.checked, position: rowPosition(tr) }
+                    : { season_id: seasonId, label, is_ours: ours.checked }),
+            })
+                .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
+                .then(d => { if (!id) tr.dataset.id = d.id; showToast('Faction saved.'); loadFactionEditor(seasonId); })
+                .catch(err => showToast(err.message || 'Save failed.', 'error'));
+        });
+        tdAct.appendChild(save);
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn btn-danger btn-sm';
+        del.style.marginLeft = '4px';
+        del.setAttribute('aria-label', 'Delete');
+        del.appendChild(svgIcon('x'));
+        del.addEventListener('click', async () => {
+            if (!tr.dataset.id) { tr.remove(); refreshOrderButtons(tbody); return; }
+            if (!await showConfirm('Delete the faction "' + (f.label || inp.value) + '"?', 'Delete')) return;
+            fetch('/api/season-hub/factions/' + tr.dataset.id, { method: 'DELETE' })
+                .then(r => r.ok ? r : r.text().then(t => { throw new Error(t); }))
+                .then(() => { tr.remove(); refreshOrderButtons(tbody); showToast('Faction deleted.'); })
+                .catch(err => showToast(err.message || 'Delete failed.', 'error'));
+        });
+        tdAct.appendChild(del);
+        tr.append(tdLabel, tdOurs, tdAct);
+        return tr;
+    }
+
+    function persistFactionOrder(seasonId) {
+        const tbody = document.getElementById('es-factions-tbody');
+        refreshOrderButtons(tbody);
+        Promise.all(Array.from(tbody.children).map((tr, i) => {
+            if (!tr.dataset.id) return null;
+            return fetch('/api/season-hub/factions/' + tr.dataset.id, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label: tr.querySelector('.fa-label').value.trim(),
+                    is_ours: tr.querySelector('.fa-ours').checked, position: i }),
+            });
+        }).filter(Boolean)).catch(() => showToast('Reorder failed.', 'error'));
+    }
+
+    function loadFactionEditor(season) {
+        const seasonId = typeof season === 'object' ? season.id : season;
+        const tbody = document.getElementById('es-factions-tbody');
+        if (!tbody) return;
+        fetch('/api/season-hub/factions?season_id=' + seasonId)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d) return;
+                tbody.replaceChildren(...(d.factions || []).map(f => buildFactionRow(f, seasonId)));
+                refreshOrderButtons(tbody);
+            })
+            .catch(() => {});
+    }
+
+    const btnAddFaction = document.getElementById('btn-es-add-faction');
+    if (btnAddFaction) {
+        btnAddFaction.addEventListener('click', () => {
+            const tbody = document.getElementById('es-factions-tbody');
+            if (!tbody || !activeSeason) return;
+            tbody.appendChild(buildFactionRow({}, activeSeason.id));
+            refreshOrderButtons(tbody);
         });
     }
 

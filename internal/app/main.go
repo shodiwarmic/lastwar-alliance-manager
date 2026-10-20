@@ -479,6 +479,16 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_config", handleSeasonUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_config", handleSeasonDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}/template-diff", authMiddleware(requirePermission("view_season_hub", handleSeasonTemplateDiff))).Methods("GET")
+	router.HandleFunc("/api/season-hub/factions", authMiddleware(requirePermission("view_season_hub", handleSeasonFactionsList))).Methods("GET")
+	router.HandleFunc("/api/season-hub/factions", authMiddleware(requirePermission("manage_season_config", handleSeasonFactionCreate))).Methods("POST")
+	router.HandleFunc("/api/season-hub/factions/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_config", handleSeasonFactionUpdate))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/factions/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_config", handleSeasonFactionDelete))).Methods("DELETE")
+	// One alliance's row for a season: the Ally modal (manage_allies) and the War tab
+	// (manage_season_war) write the same table.
+	router.HandleFunc("/api/season-hub/alliances", authMiddleware(requirePermission("view_season_hub", handleSeasonAlliancesList))).Methods("GET")
+	router.HandleFunc("/api/season-hub/alliances", authMiddleware(requireAnyPermission([]string{"manage_allies", "manage_season_war"}, handleSeasonAlliancePut))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/alliances/{id:[0-9]+}", authMiddleware(requireAnyPermission([]string{"manage_allies", "manage_season_war"}, handleSeasonAllianceDelete))).Methods("DELETE")
+	router.HandleFunc("/api/season-hub/ally-seasons", authMiddleware(requireAnyPermission([]string{"view_allies", "manage_allies"}, handleAllySeasons))).Methods("GET")
 	router.HandleFunc("/api/season-hub/participation", authMiddleware(requirePermission("view_season_hub", handleParticipationGet))).Methods("GET")
 	router.HandleFunc("/api/season-hub/participation", authMiddleware(requirePermission("manage_season_participation", handleParticipationSave))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/contributions", authMiddleware(requirePermission("manage_season_contributions", handleContributionsGet))).Methods("GET")

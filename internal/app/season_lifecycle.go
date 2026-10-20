@@ -460,6 +460,7 @@ var seasonChildTables = []string{
 	"season_participation", "season_score_levels", "season_rewards", "season_reward_tiers",
 	"season_member_records", "season_trackables", "season_events",
 	"season_tabs", "season_dashboard_cards", "season_roster_snapshot", "season_file_snapshots",
+	"season_alliances", "season_factions",
 }
 
 // seasonMemberTables are deleted with a member (deleteMemberTx): a member delete removes the
@@ -497,6 +498,9 @@ func copySeasonConfigTx(tx *sql.Tx, fromID int, toID int64) error {
 			SELECT ?2, tab_key, visible, label, position FROM season_tabs WHERE season_id = ?1`,
 		`INSERT INTO season_dashboard_cards (season_id, card_key, visible, label, position)
 			SELECT ?2, card_key, visible, label, position FROM season_dashboard_cards WHERE season_id = ?1`,
+		// Factions are setup; which alliance is in which is the new season's to record.
+		`INSERT INTO season_factions (season_id, key, label, is_ours, position)
+			SELECT ?2, key, label, is_ours, position FROM season_factions WHERE season_id = ?1`,
 	}
 	for _, q := range steps {
 		if _, err := tx.Exec(q, fromID, toID); err != nil {

@@ -179,7 +179,50 @@ SET permissions = json_set(permissions, '$.manage_season_war', json('true'))
 WHERE rank IN ('R4', 'R5') AND json_type(permissions, '$.manage_season_war') IS NULL;
 -- +goose StatementEnd
 
+
+-- ── 271: factions and season alliances ──────────────────────────────────────
+-- A season's factions (S4: Kage no Sato and Koubutai), one flagged ours; entered by an officer,
+-- since they are the install's side and no template knows them.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_factions (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id INTEGER NOT NULL REFERENCES seasons(id),
+    key       TEXT    NOT NULL,
+    label     TEXT    NOT NULL,
+    is_ours   INTEGER NOT NULL DEFAULT 0,
+    position  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(season_id, key)
+);
+-- +goose StatementEnd
+-- One row per (season, registry alliance): the alliance's faction that season, the relationship
+-- (unknown is not enemy), the season's terms and the matchup fields. The Ally modal and the War
+-- tab write the same row, so nothing is entered twice, and an alliance's S5 row never touches its
+-- S4 row. faction_id is a game fact (the mobile store may set it); the rest is judgement.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_alliances (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id            INTEGER NOT NULL REFERENCES seasons(id),
+    external_alliance_id INTEGER NOT NULL REFERENCES external_alliances(id),
+    faction_id           INTEGER REFERENCES season_factions(id),
+    relationship         TEXT    NOT NULL DEFAULT 'unknown'
+                         CHECK(relationship IN ('allied','enemy','neutral','unknown')),
+    terms                TEXT    NOT NULL DEFAULT '',
+    notes                TEXT    NOT NULL DEFAULT '',
+    group_rank           INTEGER,
+    assessment_override  TEXT,
+    assessment_note      TEXT    NOT NULL DEFAULT '',
+    updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(season_id, external_alliance_id)
+);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_alliances;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_factions;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_file_snapshots;
 -- +goose StatementEnd

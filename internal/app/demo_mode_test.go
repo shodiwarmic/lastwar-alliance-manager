@@ -22,6 +22,7 @@ import (
 // demoBlocked is the demo's block list, one row per route. Adding a route to the list
 // means adding a row here.
 var demoBlocked = []struct{ method, path string }{
+	{"GET", "/api/mobile/season-hub/war"},
 	{"POST", "/api/season-hub/seasons/1/archive"},
 	{"POST", "/api/change-password"},
 	{"POST", "/api/force-change-password"},
