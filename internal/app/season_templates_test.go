@@ -165,3 +165,151 @@ func TestTemplateUpdateRefusesMalformedJSON(t *testing.T) {
 		t.Error("a refused update still wrote the template")
 	}
 }
+
+// ── The corrected templates (migration 088) ─────────────────────────────────
+
+// shippedTemplateEvents reads a template's events from a fresh, fully migrated database.
+func shippedTemplateEvents(t *testing.T, seasonNumber int) []templateEvent {
+	t.Helper()
+	var raw string
+	if err := db.QueryRow(`SELECT events FROM season_templates WHERE season_number = ?`, seasonNumber).Scan(&raw); err != nil {
+		t.Fatalf("load S%d template: %v", seasonNumber, err)
+	}
+	var evs []templateEvent
+	if err := json.Unmarshal([]byte(raw), &evs); err != nil {
+		t.Fatalf("S%d events do not parse: %v", seasonNumber, err)
+	}
+	return evs
+}
+
+func TestS4TemplateCorrected(t *testing.T) {
+	setupSettingsTestDB(t)
+	evs := shippedTemplateEvents(t, 4)
+	wars := 0
+	for _, e := range evs {
+		if e.TypeName != "Copper War" {
+			continue
+		}
+		if e.EventTime != "12:30" {
+			t.Errorf("%s (%s) at %s, want 12:30", e.Label, e.Key, e.EventTime)
+		}
+		if e.WeekStart < 4 || e.WeekEnd > 7 {
+			t.Errorf("%s runs W%d–%d, outside W4–W7", e.Key, e.WeekStart, e.WeekEnd)
+		}
+		wars += e.WeekEnd - e.WeekStart + 1
+	}
+	if wars != 8 {
+		t.Errorf("S4 schedules %d Copper Wars, want 8", wars)
+	}
+	labels := map[int]string{}
+	for _, e := range evs {
+		if e.TypeName == "Exclusive Weapon" {
+			labels[e.WeekStart] = e.Label
+		}
+	}
+	for wk, want := range map[int]string{1: "Lucius", 3: "Adam", 6: "Williams"} {
+		if !strings.Contains(labels[wk], want) {
+			t.Errorf("W%d Exclusive Weapon = %q, want %s", wk, labels[wk], want)
+		}
+	}
+	var defaults struct {
+		KeyEventTotal int    `json:"key_event_total"`
+		ResourceName  string `json:"resource_name"`
+	}
+	var raw string
+	db.QueryRow(`SELECT defaults FROM season_templates WHERE season_number = 4`).Scan(&raw)
+	json.Unmarshal([]byte(raw), &defaults)
+	if defaults.KeyEventTotal != 8 || defaults.ResourceName != "Copper" {
+		t.Errorf("S4 defaults = %s, want key_event_total 8 and resource_name Copper", raw)
+	}
+}
+
+// A season created from the S4 template as migration 034 shipped it, seen through the
+// diff once 088 has corrected the template.
+func TestTemplateDiffForASeasonFromTheOldS4(t *testing.T) {
+	old := migrateTo(t, 87)
+	var oldEvents string
+	if err := old.QueryRow(`SELECT events FROM season_templates WHERE season_number = 4`).Scan(&oldEvents); err != nil {
+		t.Fatal(err)
+	}
+	var oldRows []templateEvent
+	if err := json.Unmarshal([]byte(oldEvents), &oldRows); err != nil {
+		t.Fatal(err)
+	}
+
+	setupSettingsTestDB(t)
+	if _, err := db.Exec(`INSERT INTO seasons (id, name, season_number, start_date, week_count,
+		key_event_name, key_event_required, tier_active_min_pct, tier_at_risk_min_pct, is_active)
+		VALUES (1, 'Evernight Isle', 4, '2026-11-02', 8, 'Copper War', 4, 70, 60, 1)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range oldRows {
+		if _, err := db.Exec(`INSERT INTO season_events (season_id, label, type_name, day_offset, event_time,
+			week_start, week_end, notes, is_server_event, duration_days) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			e.Label, e.TypeName, e.DayOffset, e.EventTime, e.WeekStart, e.WeekEnd, e.Notes,
+			boolToInt(e.IsServerEvent), e.DurationDays); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rr := httptest.NewRecorder()
+	handleSeasonTemplateDiff(rr, shReq(http.MethodGet, "", map[string]string{"id": "1"}, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Diff templateDiff `json:"diff"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	d := resp.Diff
+	relabelled, retimed := 0, 0
+	for _, c := range d.Changed {
+		for _, f := range c.Fields {
+			if f.Field == "label" && strings.HasPrefix(f.Template, "Exclusive Weapon:") {
+				relabelled++
+			}
+			if f.Field == "time" && f.Template == "12:30" {
+				retimed++
+			}
+		}
+	}
+	if relabelled != 3 {
+		t.Errorf("%d Exclusive Weapons reported relabelled, want 3", relabelled)
+	}
+	// Both W4–W6 Copper War rows and the old W7 Saturday final, each matched to its own key.
+	if retimed != 3 {
+		t.Errorf("%d Copper War rows reported retimed, want 3", retimed)
+	}
+	added := map[string]bool{}
+	for _, a := range d.Added {
+		added[a.Key] = true
+	}
+	for _, k := range []string{"s4_copper_war_finals_wed", "s4_holy_mountain", "s4_transfer_surge"} {
+		if !added[k] {
+			t.Errorf("%s not reported as added", k)
+		}
+	}
+	if len(d.Ambiguous) != 0 || len(d.Removed) != 0 {
+		t.Errorf("ambiguous %+v / removed %+v, want none", d.Ambiguous, d.Removed)
+	}
+}
+
+func TestSeasonCreateStampsTemplateProvenance(t *testing.T) {
+	setupSettingsTestDB(t)
+	var tmplID int
+	db.QueryRow(`SELECT id FROM season_templates WHERE season_number = 4`).Scan(&tmplID)
+	rr := httptest.NewRecorder()
+	handleSeasonCreate(rr, shReq(http.MethodPost,
+		`{"template_id":`+strconv.Itoa(tmplID)+`,"start_date":"2030-01-07"}`, nil, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("create: %d %s", rr.Code, rr.Body.String())
+	}
+	var rows, keyed, graded int
+	db.QueryRow(`SELECT COUNT(*), SUM(template_key != ''), SUM(grade != 'unverified' OR source != '')
+		FROM season_events`).Scan(&rows, &keyed, &graded)
+	if rows != len(shippedTemplateEvents(t, 4)) || keyed != rows || graded != rows {
+		t.Errorf("rows %d, keyed %d, graded %d — every row should carry its key and provenance", rows, keyed, graded)
+	}
+}
