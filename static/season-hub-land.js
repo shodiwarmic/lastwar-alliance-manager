@@ -1,5 +1,6 @@
 /* season-hub-land.js — the Season Hub's Land tab (private-docs 274–276): the active route's
-   readiness, the three route slots and their targets, and the season's Land settings.
+   readiness, daily capacity, holdings, drops and events, the three route slots and their
+   targets, and the season's Land settings.
    Instants are server time (ST) throughout; the server stores them in UTC. */
 
 (function () {
@@ -94,6 +95,7 @@
 
     function render() {
         renderReadiness();
+        renderExtras();
         renderRouteTabs();
         renderRoute();
         renderSettings();
@@ -309,6 +311,191 @@
         }).catch(err => showToast(err.message, 'error'));
     }
 
+    // ── Capacity, holdings, drops and events (private-docs 275) ─────────────
+    const kindLabel = k => (KINDS.find(x => x[0] === k) || [k, k])[1];
+    const DROP_STATUSES = [['drop_required', 'Drop required'], ['assigned', 'Assigned'], ['abandoning', 'Abandoning'],
+        ['complete', 'Complete'], ['cancelled', 'Cancelled']];
+    const post = (url, body) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    let showCancelled = false;
+
+    function calendarToast(prefix, d) {
+        const refused = (d.calendar || []).filter(c => c.action === 'refused');
+        showToast(refused.length ? prefix + ' Not on the calendar: ' + refused.map(c => c.message).join('; ') : prefix,
+            refused.length ? 'info' : 'success', refused.length ? 8000 : undefined);
+    }
+
+    function renderExtras() {
+        const box = document.getElementById('land-extras');
+        if (!data.daily_cards) { box.replaceChildren(); return; }
+        box.replaceChildren(renderCards(), renderHoldings(), renderDrops(), renderEvents());
+    }
+
+    function section(title, ...children) {
+        return el('div', { className: 'card land-section' }, el('h3', { className: 'land-section-title', textContent: title }), ...children);
+    }
+
+    function renderCards() {
+        const grid = el('div', { className: 'land-day-cards' });
+        data.daily_cards.forEach(c => {
+            const kindRow = (label, k, kind) => {
+                const tone = k.drops_required > 0 ? 'warning' : 'success';
+                return el('div', { className: 'land-day-kind' },
+                    el('div', { className: 'land-day-kind-head' }, el('strong', { textContent: label }),
+                        k.drops_required > 0 ? el('span', { className: 'land-status tone-' + tone, textContent: k.drops_required + ' drop' + (k.drops_required === 1 ? '' : 's') + ' required' }) : null),
+                    el('div', { className: 'land-day-figures' },
+                        'Held ' + k.held + ' · capturing ' + k.planned + (k.drops_planned ? ' · dropping ' + k.drops_planned : '') + ' · cap ' + k.cap),
+                    k.over_daily ? el('div', { className: 'land-day-warn', textContent: 'More captures than the ' + k.daily_limit + ' a day the game allows' }) : null,
+                    k.drops_required > 0 && editable() ? el('button', { type: 'button', className: 'btn btn-secondary btn-sm',
+                        onclick: () => openDropModal({ kind, date: c.date, count: k.drops_required }) }, 'Plan drops') : null);
+            };
+            grid.appendChild(el('div', { className: 'land-day-card' },
+                el('div', { className: 'land-day-date', textContent: c.date === (data.now || '').slice(0, 10) ? c.date + ' (today)' : c.date }),
+                kindRow('Cities', c.cities, 'city'), kindRow('Strongholds', c.strongholds, 'stronghold')));
+        });
+        return section('Capacity by day', el('p', { className: 'hub-section-note',
+            textContent: 'From what is held now, the active route\'s planned captures and the open drops. Server time.' }), grid);
+    }
+
+    function renderHoldings() {
+        const rows = data.holdings.map(h => el('tr', null,
+            el('td', { translate: 'no' }, h.name + (h.area_id ? ' (#' + h.area_id + ')' : '')),
+            el('td', { textContent: kindLabel(h.kind) }),
+            el('td', { textContent: h.level ? 'L' + h.level : '' }),
+            el('td', { textContent: h.captured_at }),
+            el('td', null, editable() && (h.kind === 'city' || h.kind === 'stronghold' || h.kind === 'capitol')
+                ? el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => openDropModal({ holding: h }) }, 'Drop') : null)));
+        const table = el('div', { className: 'table-scroll' }, el('table', { className: 'data-table land-holdings', translate: 'no' },
+            el('thead', null, el('tr', null, ['Area', 'Kind', 'Level', 'Captured (ST)', ''].map(t => el('th', { textContent: t, translate: 'yes' })))),
+            el('tbody', null, rows.length ? rows : el('tr', null, el('td', { colspan: '5', className: 'loading-msg', translate: 'yes', textContent: 'Nothing held — record a capture below.' })))));
+        return section('Holdings', table);
+    }
+
+    function activeTargets() {
+        const r = (data.routes || []).find(x => x.is_active);
+        return r ? r.targets.filter(t => t.status === 'planned' || t.status === 'declared') : [];
+    }
+
+    function targetOptions(selected) {
+        return [['', '— none —']].concat(activeTargets().map(t => [String(t.id),
+            t.name + (t.level ? ' L' + t.level : '') + (t.planned_capture_at ? ' · ' + t.planned_capture_at + ' ST' : '')]));
+    }
+
+    function renderDrops() {
+        const list = data.drops.filter(d => showCancelled || d.status !== 'cancelled');
+        const ro = !editable();
+        const rows = list.map(d => {
+            const status = select(DROP_STATUSES, d.status, { disabled: ro, 'aria-label': 'Status' });
+            const member = select(memberOptions(), d.assigned_member_id, { disabled: ro, translate: 'no', 'aria-label': 'Assigned to' });
+            const repl = select(targetOptions(), d.replacement_target_id, { disabled: ro, translate: 'no', 'aria-label': 'Makes room for' });
+            if (d.replacement_target_id && !repl.value) {
+                repl.appendChild(el('option', { value: String(d.replacement_target_id), textContent: d.replacement_name || 'target ' + d.replacement_target_id }));
+                repl.value = String(d.replacement_target_id);
+            }
+            const notes = el('input', { type: 'text', className: 'form-input', value: d.notes || '', disabled: ro, 'aria-label': 'Notes' });
+            const save = ro ? null : el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                put('/api/season-hub/land/drops/' + d.id, { status: status.value, notes: notes.value.trim(),
+                    assigned_member_id: member.value ? parseInt(member.value, 10) : null,
+                    replacement_target_id: repl.value ? parseInt(repl.value, 10) : null })
+                    .then(r => { calendarToast('Drop saved.', r); load(true); })
+                    .catch(err => showToast(err.message, 'error'));
+            } }, 'Save');
+            return el('div', { className: 'land-drop card' + (d.status === 'cancelled' ? ' land-drop-cancelled' : '') },
+                el('div', { className: 'land-target-head' },
+                    el('strong', { translate: 'no', textContent: d.holding_name + (d.level ? ' L' + d.level : '') }),
+                    el('span', { className: 'land-drop-when', textContent: d.must_start_by ? 'Start abandoning by ' + d.must_start_by + ' ST' : 'No time yet — pick a planned target' })),
+                el('div', { className: 'land-target-grid' },
+                    field('Makes room for', repl), field('Status', status), field('Assigned to', member), field('Notes', notes, 'land-field-wide')),
+                save);
+        });
+        const toggle = el('label', { className: 'land-toggle' },
+            el('input', { type: 'checkbox', checked: showCancelled, onchange: e => { showCancelled = e.target.checked; renderExtras(); } }), ' Show cancelled');
+        return section('Drops', toggle, ...(rows.length ? rows : [el('p', { className: 'loading-msg', textContent: 'No drops planned.' })]));
+    }
+
+    function renderEvents() {
+        const ro = !editable();
+        const parts = [];
+        if (!ro) {
+            const areaInp = el('input', { type: 'text', className: 'form-input', placeholder: areas ? 'e.g. 86' : '', 'aria-label': 'Map ID' });
+            const nameInp = el('input', { type: 'text', className: 'form-input', translate: 'no' });
+            const kindSel = select(KINDS, 'city');
+            const levelInp = el('input', { type: 'number', className: 'form-input', min: '1', max: '20' });
+            const actionSel = select([['captured', 'Captured'], ['abandoned', 'Abandoned'], ['lost', 'Lost']], 'captured');
+            const atInp = stInput(data.now);
+            const noteInp = el('input', { type: 'text', className: 'form-input' });
+            areaInp.addEventListener('change', () => {
+                const a = (areas || []).find(x => String(x.id) === areaInp.value.trim());
+                if (!a) return;
+                nameInp.value = a.name;
+                kindSel.value = a.kind;
+                levelInp.value = a.level || '';
+            });
+            const record = el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                post('/api/season-hub/land/events', { season_id: season.id, area_id: areaInp.value.trim(), name: nameInp.value.trim(),
+                    kind: kindSel.value, level: levelInp.value ? parseInt(levelInp.value, 10) : null, action: actionSel.value,
+                    at: stValue(atInp), note: noteInp.value.trim() })
+                    .then(d => { showToast(d.written ? 'Event recorded.' : 'Already recorded.'); load(true); })
+                    .catch(err => showToast(err.message, 'error'));
+            } }, 'Record');
+            const imp = el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => window.SeasonHub.openImport({
+                kind: 'land_events', title: 'land events',
+                columns: 'Columns: Action (captured, abandoned or lost) and At (YYYY-MM-DD HH:MM, server time), required; Area (map ID) or Name; Kind, Level, Note. A row already recorded is left unchanged.',
+                onDone: () => load(true) }) }, 'Import CSV');
+            parts.push(el('div', { className: 'land-target-grid land-event-form' },
+                areas ? field('Map ID', areaInp) : null, field('Area', nameInp), field('Kind', kindSel), field('Level', levelInp),
+                field('What happened', actionSel), field('When (ST)', atInp), field('Note', noteInp, 'land-field-wide')),
+            el('div', { className: 'tab-toolbar' }, record, imp));
+        }
+        const rows = data.events.map(e => el('tr', null,
+            el('td', { textContent: e.at }),
+            el('td', { translate: 'no', textContent: e.name + (e.area_id ? ' (#' + e.area_id + ')' : '') }),
+            el('td', { textContent: kindLabel(e.kind) + (e.level ? ' L' + e.level : '') }),
+            el('td', { textContent: e.action }),
+            el('td', { textContent: e.source }),
+            el('td', null, ro ? null : el('button', { type: 'button', className: 'btn btn-danger btn-sm', 'aria-label': 'Delete event', onclick: async () => {
+                if (!await showConfirm('Delete this ' + e.action + ' event for ' + e.name + '?', 'Delete')) return;
+                api('/api/season-hub/land/events/' + e.id, { method: 'DELETE' }).then(() => load(true))
+                    .catch(err => showToast(err.message, 'error'));
+            } }, svgIcon('x')))));
+        parts.push(el('div', { className: 'table-scroll land-events-scroll' }, el('table', { className: 'data-table land-events', translate: 'no' },
+            el('thead', null, el('tr', null, ['When (ST)', 'Area', 'Kind', 'What', 'Source', ''].map(t => el('th', { textContent: t, translate: 'yes' })))),
+            el('tbody', null, rows.length ? rows : el('tr', null, el('td', { colspan: '6', className: 'loading-msg', translate: 'yes', textContent: 'No events recorded.' }))))));
+        return section('Events', ...parts);
+    }
+
+    // The drop modal: from a holding (that one ticked) or from a day's card (that kind listed,
+    // the officer picks which).
+    function openDropModal(o) {
+        const modal = document.getElementById('modal-land-drop');
+        const box = document.getElementById('land-drop-holdings');
+        const hint = document.getElementById('land-drop-hint');
+        const repl = document.getElementById('land-drop-replacement');
+        const notes = document.getElementById('land-drop-notes');
+        const kind = o.holding ? o.holding.kind : o.kind;
+        const held = data.holdings.filter(h => o.holding ? h === o.holding : (h.kind === kind || (kind === 'city' && h.kind === 'capitol' && data.config.capitol_counts_toward_cap)));
+        hint.textContent = o.holding ? 'Abandon this holding to make room for a planned capture.'
+            : o.count + ' ' + (kind === 'city' ? 'cit' + (o.count === 1 ? 'y' : 'ies') : 'stronghold' + (o.count === 1 ? '' : 's')) + ' to drop on ' + o.date + ': pick which.';
+        box.replaceChildren(...held.map(h => el('label', { className: 'land-drop-pick' },
+            el('input', { type: 'checkbox', checked: !!o.holding, value: '' }),
+            ' ' + h.name + (h.level ? ' L' + h.level : '') + ' · held since ' + h.captured_at)));
+        Array.from(box.querySelectorAll('input')).forEach((c, i) => { c._h = held[i]; });
+        repl.replaceChildren(...targetOptions().map(([v, t]) => el('option', { value: v, textContent: t })));
+        const sameDay = activeTargets().find(t => (t.planned_capture_at || '').slice(0, 10) === o.date && (!kind || t.kind === kind));
+        repl.value = sameDay ? String(sameDay.id) : (activeTargets()[0] ? String(activeTargets()[0].id) : '');
+        notes.value = '';
+        document.getElementById('land-drop-cancel').onclick = () => { modal.style.display = ''; };
+        document.getElementById('land-drop-save').onclick = () => {
+            const picked = Array.from(box.querySelectorAll('input:checked')).map(c => c._h);
+            if (!picked.length) { showToast('Pick at least one holding.', 'error'); return; }
+            post('/api/season-hub/land/drops', { season_id: season.id, notes: notes.value.trim(),
+                replacement_target_id: repl.value ? parseInt(repl.value, 10) : null,
+                holdings: picked.map(h => ({ area_id: h.area_id, name: h.name, kind: h.kind, level: h.level })) })
+                .then(d => { modal.style.display = ''; calendarToast('Drops planned.', d); load(true); })
+                .catch(err => showToast(err.message, 'error'));
+        };
+        modal.style.display = 'flex';
+    }
+
     // ── Settings: the rules and the level table ─────────────────────────────
     function renderSettings() {
         const body = document.getElementById('land-settings-body');
@@ -365,6 +552,10 @@
             tbody));
         const levelBar = ro ? null : el('div', { className: 'tab-toolbar' },
             el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => addRow({}) }, '+ Level'),
+            el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => window.SeasonHub.openImport({
+                kind: 'land_levels', title: 'land levels',
+                columns: 'Columns: Kind (city or stronghold) and Level, required; Name, Output per hour, Unlock week, Unlock day, Boss level, Resistance, Suggested power, Source, Grade. A level already in the table is replaced.',
+                onDone: () => load(true) }) }, 'Import CSV'),
             el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
                 const read = v => v === '' ? null : parseInt(v, 10);
                 const levels = Array.from(tbody.children).map(r => {

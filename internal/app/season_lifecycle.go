@@ -468,7 +468,7 @@ var seasonChildTables = []string{
 	"season_member_records", "season_trackables", "season_events",
 	"season_tabs", "season_dashboard_cards", "season_roster_snapshot", "season_file_snapshots",
 	"season_alliances", "season_factions",
-	"season_land_config", "season_land_levels", "season_land_routes",
+	"season_land_config", "season_land_levels", "season_land_routes", "season_land_events", "season_land_drops",
 }
 
 // seasonMemberTables are deleted with a member (deleteMemberTx): a member delete removes the
@@ -482,11 +482,13 @@ var seasonUserColumns = []struct{ table, column string }{
 	{"season_participation", "recorded_by"},
 	{"season_member_records", "logged_by"},
 	{"season_land_route_revisions", "saved_by"},
+	{"season_land_events", "recorded_by"},
 }
 
 // seasonMemberColumns are nulled when a member is deleted: a plan that named them stays.
 var seasonMemberColumns = []struct{ table, column string }{
 	{"season_land_targets", "coordinator_member_id"},
+	{"season_land_drops", "assigned_member_id"},
 }
 
 // ── Configuration copy ─────────────────────────────────────────────────────

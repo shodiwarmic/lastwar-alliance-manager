@@ -279,11 +279,6 @@ func handleSeasonLandGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-// loadLandExtras adds what later issues build on the same tab (holdings, drops, snapshots).
-func loadLandExtras(q rowQueryer, s *Season, cfg landConfig, routes []landRoute, now time.Time) (map[string]any, error) {
-	return map[string]any{}, nil
-}
-
 // GET /api/season-hub/land/lookup?season_id= — the season's map areas, for naming targets.
 func handleSeasonLandLookup(w http.ResponseWriter, r *http.Request) {
 	sid, _ := strconv.Atoi(r.URL.Query().Get("season_id"))
@@ -656,6 +651,11 @@ func handleSeasonLandRoutePut(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, msg, http.StatusConflict)
 			return
 		}
+		if err := landTargetRemovedTx(tx, id, user.ID); err != nil {
+			slog.Error("handleSeasonLandRoutePut: cancel calendar row", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
 		if _, err := tx.Exec(`UPDATE season_land_targets SET prerequisite_target_id = NULL WHERE prerequisite_target_id = ?`, id); err != nil {
 			slog.Error("handleSeasonLandRoutePut: detach prerequisite", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -689,17 +689,6 @@ func handleSeasonLandRoutePut(w http.ResponseWriter, r *http.Request) {
 }
 
 func return400(w http.ResponseWriter, msg string) { http.Error(w, msg, http.StatusBadRequest) }
-
-// landTargetInUseTx names what still points at a target, or "" — a drop's replacement.
-func landTargetInUseTx(tx *sql.Tx, id int) (string, error) {
-	return "", nil
-}
-
-// afterLandRouteSaveTx runs what a route save sets off beyond its own rows (the calendar's
-// planned captures, private-docs 275).
-func afterLandRouteSaveTx(tx *sql.Tx, s *Season, routeID, actorID int) ([]syncResult, error) {
-	return nil, nil
-}
 
 // writeRouteRevisionTx appends the route's targets as they now stand.
 func writeRouteRevisionTx(tx *sql.Tx, routeID, userID int) error {
@@ -761,14 +750,40 @@ func handleSeasonLandRouteActivate(w http.ResponseWriter, r *http.Request) {
 		seasonEditRefusal(w, msg)
 		return
 	}
-	if _, err := db.Exec(`UPDATE season_land_routes SET is_active = (id = ?) WHERE season_id = ?`, id, seasonID); err != nil {
+	s := landSeason(w, seasonID)
+	if s == nil {
+		return
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("handleSeasonLandRouteActivate: begin", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE season_land_routes SET is_active = (id = ?) WHERE season_id = ?`, id, seasonID); err != nil {
 		slog.Error("handleSeasonLandRouteActivate: update", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	// Only the active route reaches the calendar: the old one's rows cancel, the new one's land.
+	syncs, err := syncLandCalendarTx(tx, s, user.ID, time.Now())
+	if err != nil {
+		slog.Error("handleSeasonLandRouteActivate: sync", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		slog.Error("handleSeasonLandRouteActivate: commit", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 	logActivity(user.ID, user.Username, "updated", "season_land_route", landSlotLabel(slot)+" route, "+seasonTagName(&seasonID),
 		false, "made the active route")
-	writeJSON(w, map[string]string{"message": "Activated"})
+	if syncs == nil {
+		syncs = []landCalendarResult{}
+	}
+	writeJSON(w, map[string]any{"message": "Activated", "calendar": syncs})
 }
 
 // GET /api/season-hub/land/routes/{id}/revisions — every save of a route, newest first.

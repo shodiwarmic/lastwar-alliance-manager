@@ -499,6 +499,14 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/land/routes", authMiddleware(requirePermission("manage_season_land", handleSeasonLandRoutePut))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/land/routes/{id:[0-9]+}/activate", authMiddleware(requirePermission("manage_season_land", handleSeasonLandRouteActivate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/land/routes/{id:[0-9]+}/revisions", authMiddleware(requirePermission("view_season_land", handleSeasonLandRouteRevisions))).Methods("GET")
+	router.HandleFunc("/api/season-hub/land/events", authMiddleware(requirePermission("manage_season_land", handleSeasonLandEventCreate))).Methods("POST")
+	router.HandleFunc("/api/season-hub/land/events/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_land", handleSeasonLandEventDelete))).Methods("DELETE")
+	router.HandleFunc("/api/season-hub/land/drops", authMiddleware(requirePermission("manage_season_land", handleSeasonLandDropCreate))).Methods("POST")
+	router.HandleFunc("/api/season-hub/land/drops/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_land", handleSeasonLandDropUpdate))).Methods("PUT")
+	// The Season Hub's CSV imports (decision 27): each kind names the permissions it needs, which
+	// the handler checks; the route only needs a signed-in user.
+	router.HandleFunc("/api/season-hub/import/preview", authMiddleware(handleSeasonImportPreview)).Methods("POST")
+	router.HandleFunc("/api/season-hub/import/confirm", authMiddleware(handleSeasonImportConfirm)).Methods("POST")
 	router.HandleFunc("/api/season-hub/files", authMiddleware(requirePermission("view_season_hub", requireAlsoPermission("view_files", "the season's files are listed from the Files page.", handleSeasonHubFiles)))).Methods("GET")
 	router.HandleFunc("/api/season-hub/files/{id:[0-9]+}/download", authMiddleware(requirePermission("view_season_hub", requireAlsoPermission("view_files", "the season's files are listed from the Files page.", handleSeasonFileSnapshotDownload)))).Methods("GET")
 	router.HandleFunc("/api/season-hub/participation", authMiddleware(requirePermission("view_season_hub", handleParticipationGet))).Methods("GET")

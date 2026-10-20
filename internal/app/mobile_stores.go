@@ -14,7 +14,7 @@ import "net/http"
 // mobileAPIVersion is reported by login and capabilities. It rises whenever the
 // capabilities grow; it is informational — clients test the capability maps' keys.
 // A server answering 404 on /api/mobile/capabilities speaks contract 1.
-const mobileAPIVersion = 3
+const mobileAPIVersion = 4
 
 // mobileRoute is one /api/mobile/ route. Perms is an any-of gate resolved live on every
 // request; empty means any signed-in user.
@@ -93,6 +93,17 @@ func mobileStores() []mobileStore {
 				{Method: "GET", Path: "/api/mobile/season-hub", Perms: []string{"view_season_hub"}, Handler: getMobileSeasonHub},
 				{Method: "POST", Path: "/api/mobile/season-hub/contributions/preview", Perms: []string{"manage_season_contributions"}, Handler: mobileContributionsPreview},
 				{Method: "POST", Path: "/api/mobile/season-hub/contributions/commit", Perms: []string{"manage_season_contributions"}, Handler: mobileContributionsCommit},
+			},
+		},
+		{
+			// The land the alliance holds, as the game shows it: captures, abandonments and losses.
+			Key:        "season_land",
+			Tables:     []string{"season_land_events"},
+			ReadPerms:  []string{"view_season_land"},
+			WritePerms: []string{"manage_season_land"},
+			Routes: []mobileRoute{
+				{Method: "GET", Path: "/api/mobile/season-hub/land", Perms: []string{"view_season_land"}, Handler: getMobileSeasonLand},
+				{Method: "POST", Path: "/api/mobile/season-hub/land/events", Perms: []string{"manage_season_land"}, Handler: postMobileSeasonLandEvents},
 			},
 		},
 		{
@@ -200,6 +211,7 @@ var mobileExcludedTables = map[string]string{
 	"season_land_routes":           "the plan, not an observation: Land routes",
 	"season_land_targets":          "the plan, not an observation: a route's targets",
 	"season_land_route_revisions":  "app data: saved versions of a Land route",
+	"season_land_drops":            "the plan, not an observation: planned abandonments",
 	"schedule_events":              "the plan, not an observation (a participation board's occurrence is created through its own route)",
 	"schedule_event_types":         "configuration: the schedule",
 	"server_events":                "the plan, not an observation",

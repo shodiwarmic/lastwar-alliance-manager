@@ -413,7 +413,64 @@ CREATE TABLE IF NOT EXISTS season_land_route_revisions (
 );
 -- +goose StatementEnd
 
+
+-- ── 275: land events, holdings and drops ────────────────────────────────────
+-- What happened to the season's land, one observation per row: captured, abandoned, lost, at an
+-- instant (UTC), from a source (manual, csv, mobile). Holdings at any instant are derived —
+-- captured and not since abandoned or lost — never stored as state (the participation
+-- framework's rule, applied to land), which makes the mobile route a plain append.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id   INTEGER NOT NULL REFERENCES seasons(id),
+    area_id     TEXT    NOT NULL DEFAULT '',
+    name        TEXT    NOT NULL,
+    kind        TEXT    NOT NULL DEFAULT 'city',
+    level       INTEGER,
+    action      TEXT    NOT NULL CHECK(action IN ('captured','abandoned','lost')),
+    at          TEXT    NOT NULL,
+    source      TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by INTEGER REFERENCES users(id),
+    note        TEXT    NOT NULL DEFAULT '',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_land_events_season ON season_land_events(season_id, at);
+-- +goose StatementEnd
+-- A planned abandonment: which holding goes, to make room for which target, and when it must
+-- start (the replacement's planned capture less the abandoning time). Its calendar row is the
+-- Land Abandonment event the sync keeps in step.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_drops (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id             INTEGER NOT NULL REFERENCES seasons(id),
+    holding_area_id       TEXT    NOT NULL DEFAULT '',
+    holding_name          TEXT    NOT NULL,
+    kind                  TEXT    NOT NULL DEFAULT 'city',
+    level                 INTEGER,
+    replacement_target_id INTEGER REFERENCES season_land_targets(id),
+    replacement_at        TEXT,
+    must_start_by         TEXT,
+    status                TEXT    NOT NULL DEFAULT 'drop_required'
+                          CHECK(status IN ('drop_required','assigned','abandoning','complete','cancelled')),
+    assigned_member_id    INTEGER REFERENCES members(id),
+    notes                 TEXT    NOT NULL DEFAULT '',
+    schedule_event_id     INTEGER REFERENCES schedule_events(id),
+    updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_drops;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_land_events_season;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_events;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_land_route_revisions;
 -- +goose StatementEnd

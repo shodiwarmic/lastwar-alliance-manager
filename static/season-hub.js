@@ -83,7 +83,76 @@
         onTab(fn) { hubListeners.tab.push(fn); if (currentTab) fn(currentTab); },
         reload() { if (activeSeason) loadSeasonData(activeSeason.id); },
         gradeBadge: (g, src) => makeGradeBadge(g, src),
+        openImport: (opts) => openSeasonImport(opts),
     };
+
+    // ── CSV import: preview, then confirm (decision 27) ──────────────────────
+    // opts: {kind, title, columns (hint text), onDone(result)}. The server maps the headers,
+    // previews every row and writes exactly what it previewed; a row with an error blocks the
+    // import until the file is fixed.
+    function openSeasonImport(opts) {
+        const modal = document.getElementById('modal-season-import');
+        if (!modal || !activeSeason) return;
+        const fileInp = document.getElementById('season-import-file');
+        const status = document.getElementById('season-import-status');
+        const preview = document.getElementById('season-import-preview');
+        const confirmBtn = document.getElementById('season-import-confirm');
+        const seasonId = activeSeason.id;
+        let text = '';
+        document.getElementById('season-import-title').textContent = 'Import ' + opts.title;
+        document.getElementById('season-import-columns').textContent = opts.columns || '';
+        fileInp.value = '';
+        status.textContent = '';
+        preview.replaceChildren();
+        confirmBtn.disabled = true;
+        const post = (url) => fetch(url, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ season_id: seasonId, kind: opts.kind, csv: text }),
+        }).then(async res => { if (!res.ok) throw new Error((await res.text()) || 'Request failed'); return res.json(); });
+        const close = () => { modal.style.display = ''; fileInp.onchange = null; confirmBtn.onclick = null; };
+        document.getElementById('season-import-cancel').onclick = close;
+        fileInp.onchange = () => {
+            const f = fileInp.files[0];
+            confirmBtn.disabled = true;
+            preview.replaceChildren();
+            if (!f) return;
+            status.textContent = 'Reading…';
+            f.text().then(t => { text = t; return post('/api/season-hub/import/preview'); })
+                .then(d => {
+                    const cols = Object.keys((d.rows[0] || {}).summary || {});
+                    const table = document.createElement('table');
+                    table.className = 'data-table season-import-table';
+                    const hr = table.createTHead().insertRow();
+                    ['Line'].concat(cols, ['Check']).forEach(c => { const th = document.createElement('th'); th.textContent = c.replace(/_/g, ' '); hr.appendChild(th); });
+                    const tb = table.createTBody();
+                    d.rows.forEach(row => {
+                        const tr = tb.insertRow();
+                        if (row.errors.length) tr.className = 'season-import-bad';
+                        tr.insertCell().textContent = row.line;
+                        cols.forEach(c => { const v = row.summary[c]; tr.insertCell().textContent = v == null ? '' : String(v); });
+                        const check = tr.insertCell();
+                        check.textContent = row.errors.length ? row.errors.join('; ') : 'OK';
+                        check.setAttribute('translate', 'yes');
+                    });
+                    preview.replaceChildren(table);
+                    status.textContent = d.valid + ' row' + (d.valid === 1 ? '' : 's') + ' ready' +
+                        (d.invalid ? ', ' + d.invalid + ' with errors — fix the file and choose it again' : '');
+                    confirmBtn.disabled = d.invalid > 0 || d.valid === 0;
+                })
+                .catch(err => { status.textContent = err.message; });
+        };
+        confirmBtn.onclick = () => {
+            confirmBtn.disabled = true;
+            post('/api/season-hub/import/confirm')
+                .then(d => {
+                    close();
+                    showToast('Imported: ' + d.written + ' written, ' + d.unchanged + ' unchanged.');
+                    if (opts.onDone) opts.onDone(d);
+                })
+                .catch(err => { status.textContent = err.message; confirmBtn.disabled = false; });
+        };
+        modal.style.display = 'flex';
+    }
 
     // ── Per-season layout ─────────────────────────────────────────────────────
     // The template renders every tab this viewer may see; the season's layout reorders,

@@ -570,6 +570,45 @@
     </div>
 </div>
 
+<!-- Land: plan drops (private-docs 275) -->
+<div id="modal-land-drop" class="modal">
+    <div class="modal-content modal-md">
+        <h3>Plan drops</h3>
+        <p class="form-hint" id="land-drop-hint"></p>
+        <div id="land-drop-holdings" class="land-drop-holdings" translate="no"></div>
+        <div class="form-group">
+            <label for="land-drop-replacement">Makes room for</label>
+            <select id="land-drop-replacement" class="form-input" translate="no"></select>
+        </div>
+        <div class="form-group">
+            <label for="land-drop-notes">Notes</label>
+            <textarea id="land-drop-notes" class="form-input" rows="2"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="land-drop-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="land-drop-save">Create drops</button>
+        </div>
+    </div>
+</div>
+
+<!-- Season Hub CSV import: preview, then confirm (decision 27) -->
+<div id="modal-season-import" class="modal">
+    <div class="modal-content modal-lg">
+        <h3 id="season-import-title">Import CSV</h3>
+        <p class="form-hint" id="season-import-columns"></p>
+        <div class="form-group">
+            <label for="season-import-file">CSV file</label>
+            <input type="file" id="season-import-file" class="form-input" accept=".csv,text/csv">
+        </div>
+        <p class="status-msg" id="season-import-status"></p>
+        <div class="table-scroll" id="season-import-preview" translate="no"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="season-import-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="season-import-confirm" disabled>Import</button>
+        </div>
+    </div>
+</div>
+
 <!-- OCR Import Modal -->
 <div id="modal-ocr-import" class="modal">
     <div class="modal-content modal-lg">

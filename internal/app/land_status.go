@@ -8,6 +8,7 @@ package app
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -207,3 +208,189 @@ func computeLandReadiness(routeID int, routeName, slot string, targets []landTar
 	}
 	return out
 }
+
+// ── Holdings and daily capacity (private-docs 275) ─────────────────────────
+
+// landEvent is one observed change to the season's land.
+type landEvent struct {
+	ID     int       `json:"id"`
+	AreaID string    `json:"area_id"`
+	Name   string    `json:"name"`
+	Kind   string    `json:"kind"`
+	Level  *int      `json:"level"`
+	Action string    `json:"action"` // captured | abandoned | lost
+	At     time.Time `json:"-"`
+	Source string    `json:"source"`
+	Note   string    `json:"note"`
+}
+
+// landHolding is one area held at an instant.
+type landHolding struct {
+	AreaID     string `json:"area_id"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Level      *int   `json:"level"`
+	CapturedAt string `json:"captured_at"` // ST
+}
+
+// landAreaKey identifies an area across events: its map ID, else its kind and name.
+func landAreaKey(areaID, kind, name string) string {
+	if areaID != "" {
+		return "id:" + areaID
+	}
+	return "name:" + kind + ":" + strings.ToLower(strings.TrimSpace(name))
+}
+
+// landHoldingsAt derives what is held at instant: each area's latest event at or before it,
+// held when that event is a capture. Events need not be sorted.
+func landHoldingsAt(events []landEvent, instant time.Time) []landHolding {
+	latest := map[string]landEvent{}
+	for _, e := range events {
+		if e.At.After(instant) {
+			continue
+		}
+		k := landAreaKey(e.AreaID, e.Kind, e.Name)
+		if prev, ok := latest[k]; !ok || !e.At.Before(prev.At) {
+			latest[k] = e
+		}
+	}
+	out := []landHolding{}
+	for _, e := range latest {
+		if e.Action == "captured" {
+			at := e.At
+			out = append(out, landHolding{AreaID: e.AreaID, Name: e.Name, Kind: e.Kind, Level: e.Level, CapturedAt: landST(&at)})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].CapturedAt < out[j].CapturedAt
+	})
+	return out
+}
+
+// landKindCount is one kind's numbers on one day's card.
+type landKindCount struct {
+	Held          int  `json:"held"`
+	Planned       int  `json:"planned"`
+	DropsPlanned  int  `json:"drops_planned"`
+	Cap           int  `json:"cap"`
+	DropsRequired int  `json:"drops_required"`
+	DailyLimit    int  `json:"daily_limit"`
+	OverDaily     bool `json:"over_daily"`
+}
+
+// landDayCard is one game day's capacity: what is held at its start, what the active route
+// plans to capture and drop that day, and how many more drops the caps require.
+type landDayCard struct {
+	Date        string        `json:"date"`
+	Cities      landKindCount `json:"cities"`
+	Strongholds landKindCount `json:"strongholds"`
+}
+
+// landPlannedDrop is a drop's kind and when it must start, for the capacity simulation.
+type landPlannedDrop struct {
+	Kind        string
+	MustStartBy time.Time
+}
+
+// capacityKind maps an area kind onto the cap it counts against: cities, strongholds, or
+// neither. The Capitol counts as a city only when the season says so.
+func capacityKind(kind string, capitolCounts bool) string {
+	switch kind {
+	case "city":
+		return "city"
+	case "capitol":
+		if capitolCounts {
+			return "city"
+		}
+	case "stronghold":
+		return "stronghold"
+	}
+	return ""
+}
+
+// landDailyCards simulates each game day from today's through the last day anything is planned
+// (at least today). Inside a day, planned drops complete first and then captures land, so one
+// drop frees one slot once and a slot is never free before its drop:
+//
+//	drops_required = max(0, held − drops planned + captures planned − cap)
+//
+// and the next day starts from held − drops + captures. Backup routes are never counted.
+//
+// doneToday counts today's captures already made, per capacity kind: they count toward today's
+// daily limit but are already in held.
+func landDailyCards(held []landHolding, captures []landTarget, drops []landPlannedDrop, doneToday map[string]int, cfg landConfig, now time.Time) []landDayCard {
+	day := func(t time.Time) string { return t.In(gametimeLoc()).Format("2006-01-02") }
+	count := map[string]int{}
+	for _, h := range held {
+		if k := capacityKind(h.Kind, cfg.CapitolCountsTowardCap); k != "" {
+			count[k]++
+		}
+	}
+	planned := map[string]map[string]int{}
+	dropped := map[string]map[string]int{}
+	last := day(now)
+	add := func(m map[string]map[string]int, d, k string) {
+		if m[d] == nil {
+			m[d] = map[string]int{}
+		}
+		m[d][k]++
+		if d > last {
+			last = d
+		}
+	}
+	today := day(now)
+	for _, t := range captures {
+		if t.PlannedCaptureAt == nil || t.Status == "captured" || t.Status == "skipped" || t.Status == "failed" {
+			continue
+		}
+		k := capacityKind(t.Kind, cfg.CapitolCountsTowardCap)
+		if d := day(*t.PlannedCaptureAt); k != "" && d >= today {
+			add(planned, d, k)
+		}
+	}
+	for _, dr := range drops {
+		k := capacityKind(dr.Kind, cfg.CapitolCountsTowardCap)
+		if d := day(dr.MustStartBy); k != "" && d >= today {
+			add(dropped, d, k)
+		}
+	}
+	var out []landDayCard
+	d, _ := time.ParseInLocation("2006-01-02", today, gametimeLoc())
+	for i := 0; i < 60; i++ {
+		ds := d.Format("2006-01-02")
+		if ds > last {
+			break
+		}
+		card := landDayCard{Date: ds}
+		for _, k := range []string{"city", "stronghold"} {
+			c := landKindCount{Held: count[k], Planned: planned[ds][k], DropsPlanned: dropped[ds][k]}
+			if k == "city" {
+				c.Cap, c.DailyLimit = cfg.CityCap, cfg.CityDailyCaptures
+			} else {
+				c.Cap, c.DailyLimit = cfg.StrongholdCap, cfg.StrongholdDailyCaptures
+			}
+			if need := c.Held - c.DropsPlanned + c.Planned - c.Cap; need > 0 {
+				c.DropsRequired = need
+			}
+			done := 0
+			if ds == today {
+				done = doneToday[k]
+			}
+			c.OverDaily = c.Planned+done > c.DailyLimit
+			count[k] = c.Held - c.DropsPlanned + c.Planned
+			if k == "city" {
+				card.Cities = c
+			} else {
+				card.Strongholds = c
+			}
+		}
+		out = append(out, card)
+		d = d.AddDate(0, 0, 1)
+	}
+	return out
+}
+
+func gametimeLoc() *time.Location { return gametime.Loc }

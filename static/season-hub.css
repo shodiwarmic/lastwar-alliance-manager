@@ -761,3 +761,24 @@
 .land-levels .form-input { min-width: 70px; font-size: 0.85rem; }
 .land-history h4 { margin: 10px 0 4px; }
 .land-revision { font-size: 0.85rem; padding: 2px 0; }
+
+/* Land: capacity, holdings, drops, events (private-docs 275) */
+.land-section { padding: 12px 14px; margin-bottom: 12px; }
+.land-section-title { margin: 0 0 8px; font-size: 1rem; }
+.land-day-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.land-day-card { border: 2px solid var(--border-color); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.land-day-date { font-weight: 600; font-size: 0.9rem; }
+.land-day-kind { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+.land-day-kind-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.land-day-figures { color: var(--text-secondary); }
+.land-day-warn { color: var(--color-warning); font-size: 0.8rem; }
+.land-day-kind .btn { align-self: flex-start; }
+.land-drop { padding: 8px 10px; border: 2px solid var(--border-color); margin-top: 8px; }
+.land-drop-cancelled { opacity: 0.6; }
+.land-drop-when { font-size: 0.85rem; color: var(--text-secondary); }
+.land-toggle { font-size: 0.85rem; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 4px; }
+.land-event-form { margin-bottom: 6px; }
+.land-events-scroll { max-height: 360px; overflow-y: auto; }
+.land-drop-holdings { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; max-height: 240px; overflow-y: auto; }
+.land-drop-pick { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+.season-import-bad td { background: var(--color-danger-bg); }

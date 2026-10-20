@@ -235,6 +235,8 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | POST | `/api/mobile/season-hub/contributions/preview` | `mobileContributionsPreview` | `manage_season_contributions` | Resolve contribution rows (no OCR — the phone read them) |
 | POST | `/api/mobile/season-hub/contributions/commit` | `mobileContributionsCommit` | `manage_season_contributions` | Save rows + aliases; the web import's target, resolution and upsert (`contributionTarget`, `resolveContributionRows`, `saveContributionTx`) |
 | GET | `/api/mobile/season-hub/war` | `getMobileSeasonWar` | `view_season_war` | The active season's factions and alliance rows (tag, server, faction, relationship), to match what the phone reads |
+| GET | `/api/mobile/season-hub/land` | `getMobileSeasonLand` | `view_season_land` | The active season's Land rules, level table and current holdings (derived from its events) |
+| POST | `/api/mobile/season-hub/land/events` | `postMobileSeasonLandEvents` | `manage_season_land` | `{captured_at, events: [{area_id, name, kind, level, action, at}]}` appended (source `mobile`), the web form's validation (`normaliseLandEvent`); per event `written`, `unchanged` (same area, action, instant) or `refused` |
 | GET | `/api/mobile/participation/types` | `getMobileParticipationTypes` | `view_` or `manage_participation` | Tracked types, absence rule, mail category, trackables |
 | POST | `/api/mobile/participation/preview` | `mobileParticipationPreview` | `manage_participation` | Rows the phone read (OCR wire shape, per frame) → the web import's answer |
 | POST | `/api/mobile/participation/import` | `mobileParticipationImport` | `manage_participation` | Frames (multipart, the web import's limits) → the same answer |
