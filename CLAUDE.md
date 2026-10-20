@@ -1843,6 +1843,27 @@ sticky first table column, capping a drag pool's height) belongs **inside the
 existing `≤768px` block**, not in a new breakpoint. Avoid coupling JS to a width
 via `matchMedia`; prefer CSS. If you must, key it to `768px` so CSS and JS agree.
 
+### Season templates carry provenance, and a corrected template never rewrites a season
+
+Migration 088 gave every template event row a stable `key`, a `source` and a `grade`
+(`validEventGrades`: official, cpt_hedge, guide, owner, requester, conflict, unverified), and
+`season_events` the same three as `template_key` / `source` / `grade`, stamped at season create.
+
+- **A seed correction replaces a template column only while it still reads as shipped** —
+  `json(col) = json('<the old shipped text>')`, column by column, inside a `CASE WHEN
+  json_valid(col)` so a malformed blob is left alone instead of aborting the migration (and
+  blocking boot). An operator's edited column is never overwritten. Copy that shape for any
+  future seed fix.
+- **Seasons are never rewritten.** `GET /api/season-hub/seasons/{id}/template-diff`
+  (`season_template_diff.go`) compares a season's rows with its template's — by
+  `template_key`, else a fallback for pre-088 rows (same label/type/week/day; else same type
+  in the same slot; else same label and type), reporting more than one candidate as
+  *ambiguous* rather than guessing. Edit Season shows it with a per-row Apply through the
+  ordinary season-event endpoints. Pushed calendar rows don't move; the next push reports drift.
+- **The template editors round-trip what they don't show.** `buildEventsEditor.getJSON`
+  starts each row from its parsed original; the template write handlers refuse malformed
+  JSON (`validateTemplateJSON`) and key any row that has none (`ensureTemplateEventKeys`).
+
 ### Season reward tiers are per-season rows, and `reward_tier` has no CHECK
 
 Reward tiers were four fixed columns on `seasons` (`tier_count_leader`/`core`/

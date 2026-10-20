@@ -103,6 +103,13 @@ type SeasonEvent struct {
 	Notes         string `json:"notes"`
 	IsServerEvent bool   `json:"is_server_event"`
 	DurationDays  int    `json:"duration_days"`
+	// Provenance (migration 088). TemplateKey is the template row's stable key, stamped
+	// when the season is created from a template; empty for rows from older seasons and
+	// for rows an officer added. Source names where the fact came from; Grade is one of
+	// validEventGrades.
+	TemplateKey string `json:"template_key"`
+	Source      string `json:"source"`
+	Grade       string `json:"grade"`
 }
 
 type SeasonTemplate struct {
@@ -558,6 +565,9 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		Notes         string `json:"notes"`
 		IsServerEvent bool   `json:"is_server_event"`
 		DurationDays  int    `json:"duration_days"`
+		Key           string `json:"key"`
+		Source        string `json:"source"`
+		Grade         string `json:"grade"`
 	}
 	var evDefs []evDef
 	json.Unmarshal([]byte(tmpl.Events), &evDefs)
@@ -690,11 +700,13 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 			durationDays = 1
 		}
 		if _, err := tx.Exec(`INSERT INTO season_events
-			(season_id, label, event_type_id, type_name, day_offset, event_time, all_day, level, week_start, week_end, notes, is_server_event, duration_days)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(season_id, label, event_type_id, type_name, day_offset, event_time, all_day, level, week_start, week_end, notes, is_server_event, duration_days,
+			 template_key, source, grade)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			seasonID, ev.Label, ev.EventTypeID, ev.TypeName, ev.DayOffset, eventTime,
 			boolToInt(ev.AllDay), ev.Level, ev.WeekStart, ev.WeekEnd, ev.Notes,
-			boolToInt(ev.IsServerEvent), durationDays); err != nil {
+			boolToInt(ev.IsServerEvent), durationDays,
+			ev.Key, ev.Source, normaliseEventGrade(ev.Grade)); err != nil {
 			slog.Error("handleSeasonCreate: insert season_event", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -2714,7 +2726,8 @@ func handleSeasonEventList(w http.ResponseWriter, r *http.Request) {
 		       COALESCE(et.icon,''),
 		       se.day_offset, se.event_time, se.all_day, se.level,
 		       se.week_start, se.week_end, se.notes,
-		       se.is_server_event, se.duration_days
+		       se.is_server_event, se.duration_days,
+		       se.template_key, se.source, se.grade
 		FROM season_events se
 		LEFT JOIN schedule_event_types et ON et.id = se.event_type_id
 		WHERE se.season_id = ?
@@ -2736,7 +2749,8 @@ func handleSeasonEventList(w http.ResponseWriter, r *http.Request) {
 			&etID, &ev.TypeName, &ev.TypeIcon,
 			&dayOff, &ev.EventTime, &allDay, &level,
 			&ev.WeekStart, &ev.WeekEnd, &ev.Notes,
-			&isServer, &durationDays); err != nil {
+			&isServer, &durationDays,
+			&ev.TemplateKey, &ev.Source, &ev.Grade); err != nil {
 			continue
 		}
 		if etID.Valid {
@@ -2782,6 +2796,11 @@ type seasonEventRequest struct {
 	Notes         string `json:"notes"`
 	IsServerEvent bool   `json:"is_server_event"`
 	DurationDays  int    `json:"duration_days"`
+	// Provenance travels with every save so the Edit Season row round-trips it; the
+	// template diff's Apply sets all three from the template row.
+	TemplateKey string `json:"template_key"`
+	Source      string `json:"source"`
+	Grade       string `json:"grade"`
 }
 
 // resolveEventTypeName returns schedule_event_types.name for id. ok is false
@@ -2832,13 +2851,19 @@ func handleSeasonEventCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		typeName = name
 	}
+	if body.Grade != "" && !validEventGrades[body.Grade] {
+		http.Error(w, "grade is not a recognised grade", http.StatusBadRequest)
+		return
+	}
 	res, err := db.Exec(`
-		INSERT INTO season_events (season_id, label, event_type_id, type_name, day_offset, event_time, all_day, level, week_start, week_end, notes, is_server_event, duration_days)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO season_events (season_id, label, event_type_id, type_name, day_offset, event_time, all_day, level, week_start, week_end, notes, is_server_event, duration_days,
+		                           template_key, source, grade)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		body.SeasonID, body.Label, body.EventTypeID, typeName, body.DayOffset,
 		body.EventTime, body.AllDay, body.Level,
 		body.WeekStart, body.WeekEnd, body.Notes,
-		boolToInt(body.IsServerEvent), durationDays)
+		boolToInt(body.IsServerEvent), durationDays,
+		strings.TrimSpace(body.TemplateKey), strings.TrimSpace(body.Source), normaliseEventGrade(body.Grade))
 	if err != nil {
 		slog.Error("handleSeasonEventCreate: insert", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -2880,11 +2905,12 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 	var oldEtID, oldDayOff, oldLevel sql.NullInt64
 	var oldAllDay, oldIsServer, oldDur int
 	loadErr := db.QueryRow(`SELECT label, event_type_id, type_name, day_offset, event_time,
-		all_day, level, week_start, week_end, notes, is_server_event, duration_days
+		all_day, level, week_start, week_end, notes, is_server_event, duration_days,
+		template_key, source, grade
 		FROM season_events WHERE id = ?`, id).Scan(
 		&old.Label, &oldEtID, &old.TypeName, &oldDayOff, &old.EventTime,
 		&oldAllDay, &oldLevel, &old.WeekStart, &old.WeekEnd, &old.Notes,
-		&oldIsServer, &oldDur)
+		&oldIsServer, &oldDur, &old.TemplateKey, &old.Source, &old.Grade)
 	if loadErr == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -2911,13 +2937,20 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		typeName = name
 	}
+	if body.Grade != "" && !validEventGrades[body.Grade] {
+		http.Error(w, "grade is not a recognised grade", http.StatusBadRequest)
+		return
+	}
+	newGrade := normaliseEventGrade(body.Grade)
+	newKey, newSource := strings.TrimSpace(body.TemplateKey), strings.TrimSpace(body.Source)
 	if _, err := db.Exec(`
 		UPDATE season_events SET label=?, event_type_id=?, type_name=?, day_offset=?, event_time=?,
-		  all_day=?, level=?, week_start=?, week_end=?, notes=?, is_server_event=?, duration_days=?
+		  all_day=?, level=?, week_start=?, week_end=?, notes=?, is_server_event=?, duration_days=?,
+		  template_key=?, source=?, grade=?
 		WHERE id=?`,
 		body.Label, body.EventTypeID, typeName, body.DayOffset, body.EventTime,
 		body.AllDay, body.Level, body.WeekStart, body.WeekEnd, body.Notes,
-		boolToInt(body.IsServerEvent), updateDuration, id); err != nil {
+		boolToInt(body.IsServerEvent), updateDuration, newKey, newSource, newGrade, id); err != nil {
 		slog.Error("handleSeasonEventUpdate: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -2953,6 +2986,12 @@ func handleSeasonEventUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if oldDur != updateDuration {
 		changes = append(changes, fmt.Sprintf("duration_days: %d → %d", oldDur, updateDuration))
+	}
+	if old.Grade != newGrade {
+		changes = append(changes, "grade: "+old.Grade+" → "+newGrade)
+	}
+	if old.TemplateKey != newKey {
+		changes = append(changes, "template key: "+old.TemplateKey+" → "+newKey)
 	}
 	logActivity(user.ID, user.Username, "updated", "season_event", body.Label, false,
 		strings.Join(changes, "; "))
@@ -3459,6 +3498,16 @@ func handleSeasonTemplateCreate(w http.ResponseWriter, r *http.Request) {
 	if body.Events == "" {
 		body.Events = "[]"
 	}
+	if msg := validateTemplateJSON(body.Events, body.Defaults, body.Trackables); msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+	keyed, err := ensureTemplateEventKeys(body.Events)
+	if err != nil {
+		http.Error(w, "events must be a JSON array", http.StatusBadRequest)
+		return
+	}
+	body.Events = keyed
 	res, err := db.Exec(`INSERT INTO season_templates (template_name, season_number, trackables, defaults, events) VALUES (?,?,?,?,?)`,
 		body.TemplateName, body.SeasonNumber, body.Trackables, body.Defaults, body.Events)
 	if err != nil {
@@ -3498,7 +3547,19 @@ func handleSeasonTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	_, err := db.Exec(`UPDATE season_templates SET template_name=?, season_number=?, trackables=?, defaults=?, events=? WHERE id=?`,
+	// Validated before writing: a malformed blob would make every season created from
+	// this template silently empty, and the template diff unreadable.
+	if msg := validateTemplateJSON(body.Events, body.Defaults, body.Trackables); msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+	keyed, err := ensureTemplateEventKeys(body.Events)
+	if err != nil {
+		http.Error(w, "events must be a JSON array", http.StatusBadRequest)
+		return
+	}
+	body.Events = keyed
+	_, err = db.Exec(`UPDATE season_templates SET template_name=?, season_number=?, trackables=?, defaults=?, events=? WHERE id=?`,
 		body.TemplateName, body.SeasonNumber, body.Trackables, body.Defaults, body.Events, id)
 	if err != nil {
 		slog.Error("handleSeasonTemplateUpdate: update", "error", err)

@@ -475,6 +475,7 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}/archive", authMiddleware(requirePermission("manage_season_rewards", handleSeasonArchive))).Methods("POST")
 	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleSeasonUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleSeasonDelete))).Methods("DELETE")
+	router.HandleFunc("/api/season-hub/seasons/{id:[0-9]+}/template-diff", authMiddleware(requirePermission("view_season_hub", handleSeasonTemplateDiff))).Methods("GET")
 	router.HandleFunc("/api/season-hub/participation", authMiddleware(requirePermission("view_season_hub", handleParticipationGet))).Methods("GET")
 	router.HandleFunc("/api/season-hub/participation", authMiddleware(requirePermission("manage_season_hub", handleParticipationSave))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/contributions", authMiddleware(requirePermission("manage_season_hub", handleContributionsGet))).Methods("GET")

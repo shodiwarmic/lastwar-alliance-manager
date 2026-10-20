@@ -555,3 +555,56 @@
 #mail-content {
     resize: vertical;
 }
+
+/* ── Provenance grade badges (migration 088) ─────────────────────────────── */
+.grade-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+.grade-badge[title] { cursor: help; }
+.grade-badge.grade-official  { background: var(--color-success-bg); color: var(--color-success); }
+.grade-badge.grade-cpt_hedge,
+.grade-badge.grade-guide     { background: var(--color-info-bg);    color: var(--color-info); }
+.grade-badge.grade-owner,
+.grade-badge.grade-requester { background: var(--color-purple-bg);  color: var(--color-purple); }
+.grade-badge.grade-conflict  { background: var(--color-warning-bg); color: var(--color-warning); }
+
+/* ── Template-change notice in Edit Season ───────────────────────────────── */
+.es-template-diff {
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: var(--color-warning-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+.es-diff-summary { margin: 0 0 6px; }
+.es-diff-note { margin: 0 0 6px; color: var(--text-secondary); }
+.es-diff-list {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+.es-diff-list li {
+    padding: 6px 0;
+    border-top: 1px solid var(--border-color);
+}
+.es-diff-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.es-diff-label { flex: 1 1 180px; font-weight: 600; }
+.es-diff-detail { color: var(--text-secondary); font-size: 0.8rem; margin-top: 2px; overflow-wrap: anywhere; }
+.es-diff-pickrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.es-diff-pick { flex: 1 1 200px; min-width: 0; }

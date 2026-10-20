@@ -784,6 +784,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         return { el: wrap, getJSON };
     }
 
+    // The provenance grades a template row may carry (validEventGrades in Go).
+    const GRADE_OPTS = [
+        { value: 'official', label: 'Official' }, { value: 'cpt_hedge', label: 'Cpt Hedge' },
+        { value: 'guide', label: 'Guide' }, { value: 'owner', label: 'Owner' },
+        { value: 'requester', label: 'Requester' }, { value: 'conflict', label: 'Conflict' },
+        { value: 'unverified', label: 'Unverified' },
+    ];
+
     const DAY_OPTS = [
         { value: '', label: '— unscheduled' },
         { value: '1', label: 'Mon' }, { value: '2', label: 'Tue' },
@@ -826,6 +834,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             { text: 'Notes',   title: 'Optional notes pushed to schedule' },
             { text: 'Svr', icon: 'world', title: 'Server event — pushed to Server Events section of schedule instead of alliance schedule' },
             { text: 'Days',    title: 'Duration in days (server events only)' },
+            { text: 'Source',  title: 'Where this fact came from (calendar, guide, observation)' },
+            { text: 'Grade',   title: 'How sure the source is. In-game observation outranks every grade.' },
             { text: '',        title: 'Remove row' },
         ];
         COLS.forEach(c => {
@@ -911,6 +921,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             durInp.min = 1;
             cell(durInp);
 
+            cell(mkInp('text', 'e.g. Official S4 calendar', ev.source || '', '160px'));
+            const gradeSel = document.createElement('select');
+            gradeSel.className = 'form-input';
+            gradeSel.style.cssText = 'width:105px;font-size:0.78rem;padding:3px 4px;';
+            GRADE_OPTS.forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = o.value;
+                opt.textContent = o.label;
+                gradeSel.appendChild(opt);
+            });
+            gradeSel.value = GRADE_OPTS.some(o => o.value === ev.grade) ? ev.grade : 'unverified';
+            cell(gradeSel);
+
+            // The row's parsed original: getJSON starts from it, so a key this editor
+            // doesn't show (the stable "key", or anything a later release adds) survives
+            // a save instead of being silently dropped.
+            tr._orig = ev;
+
             const delBtn = document.createElement('button');
             delBtn.type = 'button';
             delBtn.className = 'btn btn-danger btn-sm';
@@ -943,7 +971,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const wkSVal = parseInt(tds[6].querySelector('input').value, 10);
                 const wkEVal = parseInt(tds[7].querySelector('input').value, 10);
                 const lvlVal = tds[8].querySelector('input').value.trim();
-                const ev = {
+                const ev = Object.assign({}, tr._orig || {}, {
                     label,
                     type_name:       tds[1].querySelector('input').value.trim(),
                     type_short:      tds[2].querySelector('input').value.trim(),
@@ -956,8 +984,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     notes:           tds[9].querySelector('input').value.trim(),
                     is_server_event: tds[10].querySelector('input[type=checkbox]').checked,
                     duration_days:   parseInt(tds[11].querySelector('input').value, 10) || 1,
-                };
+                    source:          tds[12].querySelector('input').value.trim(),
+                    grade:           tds[13].querySelector('select').value,
+                });
                 if (lvlVal !== '') ev.level = parseInt(lvlVal, 10);
+                else delete ev.level;
                 result.push(ev);
             });
             return JSON.stringify(result);

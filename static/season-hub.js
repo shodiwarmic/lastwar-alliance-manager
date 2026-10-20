@@ -2019,6 +2019,10 @@
         inDuration.value = ev.duration_days || 1; inDuration.style.width = '50px';
         tr.appendChild(mkTd(inDuration));
 
+        // Provenance is read here and edited in Settings → Season Templates; the row
+        // carries it on every save so a Save never strips it.
+        tr.appendChild(mkTd(makeGradeBadge(ev.grade || 'unverified', ev.source)));
+
         const tdAct = document.createElement('td');
         tdAct.style.cssText = 'white-space:nowrap;';
 
@@ -2040,6 +2044,9 @@
                 notes:           inNotes.value || '',
                 is_server_event: chkServer.checked,
                 duration_days:   parseInt(inDuration.value, 10) || 1,
+                template_key:    ev.template_key || '',
+                source:          ev.source || '',
+                grade:           ev.grade || 'unverified',
             };
         }
 
@@ -2094,6 +2101,242 @@
         return tr;
     }
 
+    // ── Provenance grades ─────────────────────────────────────────────────────
+    // The grade says where a season fact came from (migration 088); the source text is
+    // the badge's title. In-game observation outranks every one of them.
+    const GRADE_LABELS = {
+        official: 'Official', cpt_hedge: 'Cpt Hedge', guide: 'Guide', owner: 'Owner',
+        requester: 'Requester', conflict: 'Conflict', unverified: 'Unverified',
+    };
+    function makeGradeBadge(grade, source) {
+        const g = GRADE_LABELS[grade] ? grade : 'unverified';
+        const span = document.createElement('span');
+        span.className = 'grade-badge grade-' + g;
+        span.textContent = GRADE_LABELS[g];
+        if (source) span.title = source;
+        return span;
+    }
+
+    // ── Template-change notice ───────────────────────────────────────────────
+    // A corrected template never rewrites a season made from it (migration 088). The
+    // notice lists what differs and applies a row at a time through the ordinary
+    // season-event endpoints; pushed calendar rows don't move — the next push reports
+    // any drift, as always.
+    const DAY_NAMES = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    let esEvents = [];   // the open modal's season_events rows, as last loaded
+
+    function describeTemplateRow(t) {
+        const day = t.day_offset ? DAY_NAMES[t.day_offset] || ('day ' + t.day_offset) : 'unscheduled';
+        const weeks = t.week_end > t.week_start ? 'W' + t.week_start + '–' + t.week_end
+            : t.week_end < t.week_start && t.week_start >= 1 ? 'W' + t.week_start + '+' : 'W' + t.week_start;
+        return t.label + ' · ' + weeks + ' ' + day + (t.day_offset ? ' ' + t.event_time : '');
+    }
+
+    function describeField(f) {
+        const show = (field, v) => {
+            if (v === '') return '—';
+            if (field === 'day') return DAY_NAMES[parseInt(v, 10)] || v;
+            if (field === 'grade') return GRADE_LABELS[v] || v;
+            return v;
+        };
+        const names = { week_start: 'first week', week_end: 'last week', server_event: 'server event',
+            duration_days: 'days', template_key: 'key' };
+        return (names[f.field] || f.field) + ': ' + show(f.field, f.season) + ' → ' + show(f.field, f.template);
+    }
+
+    function templatePayload(t, base) {
+        let typeId = t.event_type_id != null ? t.event_type_id : null;
+        if (typeId == null && base && base.type_name === t.type_name) typeId = base.event_type_id;
+        return {
+            season_id:       activeSeason.id,
+            label:           t.label,
+            event_type_id:   typeId,
+            day_offset:      t.day_offset != null ? t.day_offset : null,
+            event_time:      t.event_time || '20:00',
+            all_day:         base ? !!base.all_day : false,
+            level:           t.level != null ? t.level : (base ? base.level : null),
+            week_start:      t.week_start,
+            week_end:        t.week_end,
+            notes:           t.notes || '',
+            is_server_event: !!t.is_server_event,
+            duration_days:   t.duration_days || 1,
+            template_key:    t.key || '',
+            source:          t.source || '',
+            grade:           t.grade || 'unverified',
+        };
+    }
+
+    // An alliance row needs a schedule event type to reach the calendar; a template type
+    // no install has created yet would save as untyped and be skipped by every push.
+    function missingType(t) {
+        return !t.is_server_event && t.type_name && t.event_type_id == null;
+    }
+
+    function applyTemplateRow(t, seasonEventId) {
+        if (missingType(t)) {
+            showToast('The event type "' + t.type_name + '" does not exist yet. Settings → Season Templates → Sync Event Types first.', 'error', 7000);
+            return Promise.resolve(false);
+        }
+        const base = seasonEventId ? esEvents.find(e => e.id === seasonEventId) : null;
+        const url = seasonEventId ? '/api/season-hub/season-events/' + seasonEventId : '/api/season-hub/season-events';
+        return fetch(url, {
+            method: seasonEventId ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(templatePayload(t, base)),
+        }).then(r => r.ok ? true : r.text().then(txt => { throw new Error(txt); }));
+    }
+
+    function loadTemplateDiff(season) {
+        const box = document.getElementById('es-template-diff');
+        if (!box) return;
+        fetch('/api/season-hub/seasons/' + season.id + '/template-diff')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d || !activeSeason || activeSeason.id !== season.id) return;
+                renderTemplateDiff(box, season, d);
+            })
+            .catch(() => {});
+    }
+
+    function renderTemplateDiff(box, season, d) {
+        box.replaceChildren();
+        if (d.error) {
+            const p = document.createElement('p');
+            p.textContent = d.error;
+            box.appendChild(p);
+            box.style.display = '';
+            return;
+        }
+        if (!d.diff || d.empty) { box.style.display = 'none'; return; }
+        const diff = d.diff;
+        const real = diff.changed.filter(c => !c.provenance_only);
+        const provOnly = diff.changed.filter(c => c.provenance_only);
+        const readOnly = !!d.archived;
+
+        const summary = document.createElement('p');
+        summary.className = 'es-diff-summary';
+        const parts = [];
+        if (real.length) parts.push(real.length + ' row' + (real.length === 1 ? '' : 's') + ' differ');
+        if (diff.added.length) parts.push(diff.added.length + ' new row' + (diff.added.length === 1 ? '' : 's'));
+        if (diff.removed.length) parts.push(diff.removed.length + ' row' + (diff.removed.length === 1 ? ' is' : 's are') + ' not in the template');
+        if (diff.ambiguous.length) parts.push(diff.ambiguous.length + ' to match by hand');
+        if (provOnly.length) parts.push(provOnly.length + ' only gain a source and grade');
+        setLabeledName(summary, 'This season\'s template has changed since the season was created: ', d.template.name);
+        summary.appendChild(document.createTextNode(' — ' + parts.join(', ') + '.'));
+        box.appendChild(summary);
+
+        if (readOnly) {
+            const note = document.createElement('p');
+            note.className = 'es-diff-note';
+            note.textContent = 'This season is archived, so its rows stay as they were.';
+            box.appendChild(note);
+        }
+
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'btn btn-secondary btn-sm';
+        toggle.textContent = 'Review changes';
+        const list = document.createElement('ul');
+        list.className = 'es-diff-list';
+        list.style.display = 'none';
+        toggle.addEventListener('click', () => {
+            const open = list.style.display === 'none';
+            list.style.display = open ? '' : 'none';
+            toggle.textContent = open ? 'Hide changes' : 'Review changes';
+        });
+        box.appendChild(toggle);
+
+        const after = () => reloadEsEvents(season);
+        function item(text, detail, actionLabel, action) {
+            const li = document.createElement('li');
+            const head = document.createElement('div');
+            head.className = 'es-diff-head';
+            const label = document.createElement('span');
+            label.className = 'es-diff-label';
+            label.textContent = text;
+            head.appendChild(label);
+            if (action && !readOnly) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-primary btn-sm';
+                btn.textContent = actionLabel;
+                btn.addEventListener('click', () => {
+                    btn.disabled = true;
+                    Promise.resolve(action())
+                        .then(ok => { if (ok !== false) { showToast('Applied.'); after(); } else btn.disabled = false; })
+                        .catch(err => { btn.disabled = false; showToast(err.message || 'Apply failed.', 'error'); });
+                });
+                head.appendChild(btn);
+            }
+            li.appendChild(head);
+            if (detail) {
+                const det = document.createElement('div');
+                det.className = 'es-diff-detail';
+                det.textContent = detail;
+                li.appendChild(det);
+            }
+            list.appendChild(li);
+            return li;
+        }
+
+        real.forEach(c => item(c.label, c.fields.map(describeField).join('; '), 'Apply',
+            () => applyTemplateRow(c.template, c.season_event_id)));
+        diff.added.forEach(t => item('New: ' + describeTemplateRow(t), t.source ? 'Source: ' + t.source : '',
+            'Add', () => applyTemplateRow(t, 0)));
+        diff.removed.forEach(rm => item('Not in the template: ' + rm.label,
+            'Deleting it keeps anything already on the calendar.', 'Delete', async () => {
+                if (!await showConfirm('Delete "' + rm.label + '" from this season?', 'Delete')) return false;
+                return fetch('/api/season-hub/season-events/' + rm.season_event_id, { method: 'DELETE' })
+                    .then(r => r.ok ? true : r.text().then(txt => { throw new Error(txt); }));
+            }));
+        diff.ambiguous.forEach(a => {
+            const li = item('Match by hand: ' + a.label, 'More than one template row could be this one.', null, null);
+            if (readOnly) return;
+            const pick = document.createElement('select');
+            pick.className = 'form-input es-diff-pick';
+            a.candidates.forEach((t, i) => {
+                const opt = document.createElement('option');
+                opt.value = String(i);
+                opt.textContent = describeTemplateRow(t);
+                pick.appendChild(opt);
+            });
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-primary btn-sm';
+            btn.textContent = 'Apply';
+            btn.addEventListener('click', () => {
+                btn.disabled = true;
+                applyTemplateRow(a.candidates[parseInt(pick.value, 10)], a.season_event_id)
+                    .then(ok => { if (ok !== false) { showToast('Applied.'); after(); } else btn.disabled = false; })
+                    .catch(err => { btn.disabled = false; showToast(err.message || 'Apply failed.', 'error'); });
+            });
+            const row = document.createElement('div');
+            row.className = 'es-diff-pickrow';
+            row.append(pick, btn);
+            li.appendChild(row);
+        });
+        if (provOnly.length) {
+            item(provOnly.length + ' row' + (provOnly.length === 1 ? '' : 's') + ' already match and only gain a source and grade',
+                provOnly.map(c => c.label).join(', '), 'Apply all', () => {
+                    return provOnly.reduce((p, c) => p.then(() => applyTemplateRow(c.template, c.season_event_id)), Promise.resolve(true));
+                });
+        }
+        box.appendChild(list);
+        box.style.display = '';
+    }
+
+    function reloadEsEvents(season) {
+        return fetch('/api/season-hub/season-events?season_id=' + season.id)
+            .then(r => r.json())
+            .then(evData => {
+                esEvents = evData.events || [];
+                const evBody = document.getElementById('es-events-tbody');
+                if (evBody) evBody.replaceChildren(...esEvents.map(ev => buildEsEventRow(ev, season.id)));
+                loadTemplateDiff(season);
+            })
+            .catch(() => {});
+    }
+
     // ── Edit season ───────────────────────────────────────────────────────────
     const btnEditSeason = document.getElementById('btn-edit-season');
     const btnCancelEditSeason = document.getElementById('btn-cancel-edit-season');
@@ -2113,6 +2356,8 @@
             document.getElementById('es-tier-at-risk').value = s.tier_at_risk_min_pct;
             const errEl = document.getElementById('es-error');
             if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+            const diffBox = document.getElementById('es-template-diff');
+            if (diffBox) { diffBox.replaceChildren(); diffBox.style.display = 'none'; }
 
             // Load trackables and events, then open modal
             fetchEventTypes().then(() => {
@@ -2123,8 +2368,10 @@
                 ]).then(([tkData, evData, rtData]) => {
                     const tkBody = document.getElementById('es-trackables-tbody');
                     if (tkBody) tkBody.replaceChildren(...(tkData.trackables || []).map(t => buildEsTrackableRow(t, s.id)));
+                    esEvents = evData.events || [];
                     const evBody = document.getElementById('es-events-tbody');
-                    if (evBody) evBody.replaceChildren(...(evData.events || []).map(ev => buildEsEventRow(ev, s.id)));
+                    if (evBody) evBody.replaceChildren(...esEvents.map(ev => buildEsEventRow(ev, s.id)));
+                    loadTemplateDiff(s);
                     const rtBody = document.getElementById('es-reward-tiers-tbody');
                     if (rtBody) {
                         rtBody.replaceChildren(...(rtData.reward_tiers || []).map(t => buildEsRewardTierRow(t, s.id)));
