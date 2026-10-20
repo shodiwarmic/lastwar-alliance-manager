@@ -219,6 +219,158 @@ WHERE season_number = 6
   AND CASE WHEN json_valid(defaults) THEN json(defaults) = json('{"week_count":8,"key_event_name":"Faction Clash","key_event_required":4}') ELSE 0 END;
 -- +goose StatementEnd
 
+-- S1 — The Crimson Plague (private-docs 298). Every row graded; Season Settlement added. No row moves.
+-- +goose StatementBegin
+UPDATE season_templates SET events = '[
+  {"key":"s1_city_clash_l1","label":"City Clash (L1)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":"","source":"Owner (Wed/Sat convention); official calendar: City Clash W1–W4","grade":"owner"},
+  {"key":"s1_city_clash_l2","label":"City Clash (L2)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":"","source":"Owner (Wed/Sat convention)","grade":"owner"},
+  {"key":"s1_ew_kimberly","label":"Exclusive Weapon: Kimberly","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":1,"week_end":1,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S1 calendar; lastwartutorial","grade":"official"},
+  {"key":"s1_city_clash_l3","label":"City Clash (L3)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":"","source":"Owner (Wed/Sat convention)","grade":"owner"},
+  {"key":"s1_city_clash_l4","label":"City Clash (L4)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":"","source":"Owner (Wed/Sat convention)","grade":"owner"},
+  {"key":"s1_city_clash_l5","label":"City Clash (L5)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":"","source":"Owner (Wed/Sat convention)","grade":"owner"},
+  {"key":"s1_city_clash_l6","label":"City Clash (L6)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":"","source":"Owner (Wed/Sat convention)","grade":"owner"},
+  {"key":"s1_ew_dva","label":"Exclusive Weapon: DVA","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S1 calendar; Cpt Hedge timeline","grade":"official"},
+  {"key":"s1_infinite_octagon","label":"Infinite Octagon (Capitol War)","type_name":"Infinite Octagon","type_short":"IO","type_icon":"🔄","day_offset":6,"event_time":"12:00","week_start":5,"week_end":7,"is_server_event":true,"duration_days":1,"notes":"","source":"Official S1 calendar (Infinite Octagon W5–W7 Saturdays)","grade":"official"},
+  {"key":"s1_ew_tesla","label":"Exclusive Weapon: Tesla","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":6,"week_end":6,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S1 calendar","grade":"official"},
+  {"key":"s1_season_settlement","label":"Season Settlement","type_name":"Season Settlement","type_short":"SET","type_icon":"🏁","day_offset":1,"event_time":"00:00","week_start":8,"week_end":8,"is_server_event":true,"duration_days":7,"notes":"","source":"Official season calendar","grade":"official"}
+]'
+WHERE season_number = 1
+  AND CASE WHEN json_valid(events) THEN json(events) = json('[
+      {"label":"City Clash (L1)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L2)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Exclusive Weapon: Kimberly","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":1,"week_end":1,"is_server_event":true,"duration_days":7,"notes":""},
+      {"label":"City Clash (L3)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L4)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L5)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L6)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Exclusive Weapon: DVA","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":7,"notes":""},
+      {"label":"Infinite Octagon (Capitol War)","type_name":"Infinite Octagon","type_short":"IO","type_icon":"🔄","day_offset":6,"event_time":"12:00","week_start":5,"week_end":7,"is_server_event":true,"duration_days":1,"notes":""},
+      {"label":"Exclusive Weapon: Tesla","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":6,"week_end":6,"is_server_event":true,"duration_days":7,"notes":""}
+    ]') ELSE 0 END;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+UPDATE season_templates SET defaults = '{"week_count":8,"key_event_name":"City Clash","key_event_required":0,"key_event_total":0,"resource_name":""}'
+WHERE season_number = 1
+  AND CASE WHEN json_valid(defaults) THEN json(defaults) = json('{"week_count":8,"key_event_name":"City Clash","key_event_required":0}') ELSE 0 END;
+-- +goose StatementEnd
+
+
+-- S2 — Polar World (private-docs 298). Rare Soil War at 20% plunder in W4–W5 and the 30% Showdown
+-- in W6–W7 (wiki 103); the Faction Duel (W7: ranking from day 1, Nuclear Furnace on day 7), Beast
+-- Crisis (Tue/Fri W2–W4), the Nuclear Furnace and Season Settlement added; Transfer Surge at W9
+-- day 1 and the Champion Duel window ending with the celebration in W12 (owner).
+-- +goose StatementBegin
+UPDATE season_templates SET events = '[
+  {"key":"s2_city_clash_l1","label":"City Clash (L1)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found; Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s2_city_clash_l2","label":"City Clash (L2)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found; Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s2_ew_murphy","label":"Exclusive Weapon: Murphy (Tank)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":1,"week_end":1,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S2 calendar; lastwarhub","grade":"official"},
+  {"key":"s2_beast_crisis_tue","label":"Beast Crisis","type_name":"Beast Crisis","type_short":"BCR","type_icon":"🐺","day_offset":2,"event_time":"12:00","week_start":2,"week_end":4,"is_server_event":true,"duration_days":1,"notes":"","source":"Official S2 calendar (Tue/Fri, W2–W4)","grade":"official"},
+  {"key":"s2_beast_crisis_fri","label":"Beast Crisis","type_name":"Beast Crisis","type_short":"BCR","type_icon":"🐺","day_offset":5,"event_time":"12:00","week_start":2,"week_end":4,"is_server_event":true,"duration_days":1,"notes":"","source":"Official S2 calendar (Tue/Fri, W2–W4)","grade":"official"},
+  {"key":"s2_city_clash_l3","label":"City Clash (L3)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found; Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s2_city_clash_l4","label":"City Clash (L4)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found; Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s2_ew_carlie","label":"Exclusive Weapon: Carlie (Aircraft)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S2 calendar; lastwarhub","grade":"official"},
+  {"key":"s2_faction_awards","label":"Faction Awards","type_name":"Faction Awards","type_short":"FA","type_icon":"🏆","day_offset":1,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":1,"notes":"","source":"Official S2 calendar (week); day unverified","grade":"official"},
+  {"key":"s2_city_clash_l5","label":"City Clash (L5 — Launch Sites)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found; Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s2_city_clash_l6","label":"City Clash (L6 — War Palaces)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found; Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s2_nuclear_furnace","label":"Turn On Nuclear Furnace","type_name":"Nuclear Furnace","type_short":"NF","type_icon":"☢️","day_offset":1,"event_time":"00:00","week_start":4,"week_end":4,"is_server_event":true,"duration_days":1,"notes":"","source":"Official S2 calendar","grade":"official"},
+  {"key":"s2_rare_soil_war_wed","label":"Rare Soil War","type_name":"Rare Soil War","type_short":"RSW","type_icon":"🌾","day_offset":3,"event_time":"12:00","week_start":4,"week_end":5,"is_server_event":false,"duration_days":1,"notes":"20% plunder","source":"Official: Rare Soil War W4–W7, 20% plunder in W4–W5 (wiki 103)","grade":"official"},
+  {"key":"s2_rare_soil_war_sat","label":"Rare Soil War","type_name":"Rare Soil War","type_short":"RSW","type_icon":"🌾","day_offset":6,"event_time":"12:00","week_start":4,"week_end":5,"is_server_event":false,"duration_days":1,"notes":"20% plunder","source":"Official: Rare Soil War W4–W7, 20% plunder in W4–W5 (wiki 103)","grade":"official"},
+  {"key":"s2_ew_swift","label":"Exclusive Weapon: Swift (Missile)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":6,"week_end":6,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S2 calendar; lastwarhub","grade":"official"},
+  {"key":"s2_rare_soil_showdown_wed","label":"Rare Soil Showdown (30% plunder)","type_name":"Rare Soil War","type_short":"RSW","type_icon":"🌾","day_offset":3,"event_time":"12:00","week_start":6,"week_end":7,"is_server_event":false,"duration_days":1,"notes":"30% plunder","source":"Official: 30% plunder in W6–W7 (wiki 103)","grade":"official"},
+  {"key":"s2_rare_soil_showdown_sat","label":"Rare Soil Showdown (30% plunder)","type_name":"Rare Soil War","type_short":"RSW","type_icon":"🌾","day_offset":6,"event_time":"12:00","week_start":6,"week_end":7,"is_server_event":false,"duration_days":1,"notes":"30% plunder","source":"Official: 30% plunder in W6–W7 (wiki 103)","grade":"official"},
+  {"key":"s2_faction_duel_irc","label":"Faction Duel — Invasion Right Contest","type_name":"Faction Duel","type_short":"FD","type_icon":"⚔️","day_offset":1,"event_time":"00:00","week_start":7,"week_end":7,"is_server_event":true,"duration_days":6,"notes":"Ranking phase","source":"Official S2 Faction Duel: period Week 7","grade":"official"},
+  {"key":"s2_faction_duel_furnace","label":"Faction Duel — Nuclear Furnace","type_name":"Faction Duel","type_short":"FD","type_icon":"⚔️","day_offset":7,"event_time":"12:00","week_start":7,"week_end":7,"is_server_event":true,"duration_days":1,"notes":"","source":"Official S2 Faction Duel: ends Sunday at the Nuclear Furnace","grade":"official"},
+  {"key":"s2_season_settlement","label":"Season Settlement","type_name":"Season Settlement","type_short":"SET","type_icon":"🏁","day_offset":1,"event_time":"00:00","week_start":8,"week_end":8,"is_server_event":true,"duration_days":7,"notes":"","source":"Official season calendar","grade":"official"},
+  {"key":"s2_age_of_oil","label":"Age of Oil Begins","type_name":"Age of Oil","type_short":"AoO","type_icon":"🛢️","day_offset":1,"event_time":"00:00","week_start":9,"week_end":9,"is_server_event":true,"duration_days":1,"notes":"Post-season phase begins","source":"Owner (four-week celebration W9–W12); lastwartutorial","grade":"owner"},
+  {"key":"s2_transfer_surge","label":"Transfer Surge","type_name":"Transfer Surge","type_short":"TS","type_icon":"🔀","day_offset":1,"event_time":"00:00","week_start":9,"week_end":9,"is_server_event":true,"duration_days":1,"notes":"","source":"Owner: W9 day 1 (season day 57); official \"after the end of Season 2\"","grade":"owner"},
+  {"key":"s2_black_market","label":"Black Market / Bingo / Champion Duel","type_name":"Champion Duel","type_short":"CD","type_icon":"🥊","day_offset":1,"event_time":"00:00","week_start":10,"week_end":10,"is_server_event":true,"duration_days":1,"notes":"","source":"Seed (migration 034); not re-sourced","grade":"unverified"},
+  {"key":"s2_champion_duel","label":"Champion Duel (ongoing)","type_name":"Champion Duel","type_short":"CD","type_icon":"🥊","day_offset":null,"event_time":"00:00","week_start":10,"week_end":12,"is_server_event":true,"duration_days":21,"notes":"21-day window","source":"Owner: the celebration ends W12","grade":"owner"}
+]'
+WHERE season_number = 2
+  AND CASE WHEN json_valid(events) THEN json(events) = json('[
+      {"label":"City Clash (L1)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L2)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Exclusive Weapon: Murphy (Tank)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":1,"week_end":1,"is_server_event":true,"duration_days":7,"notes":""},
+      {"label":"City Clash (L3)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L4)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Exclusive Weapon: Carlie (Aircraft)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":7,"notes":""},
+      {"label":"Faction Awards","type_name":"Faction Awards","type_short":"FA","type_icon":"🏆","day_offset":1,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":1,"notes":""},
+      {"label":"City Clash (L5 — Launch Sites)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L6 — War Palaces)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Rare Soil War","type_name":"Rare Soil War","type_short":"RSW","type_icon":"🌾","day_offset":3,"event_time":"12:00","week_start":4,"week_end":6,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Rare Soil War","type_name":"Rare Soil War","type_short":"RSW","type_icon":"🌾","day_offset":6,"event_time":"12:00","week_start":4,"week_end":6,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Exclusive Weapon: Swift (Missile)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":6,"week_end":6,"is_server_event":true,"duration_days":7,"notes":""},
+      {"label":"Rare Soil Showdown (30% plunder)","type_name":"Rare Soil War","type_short":"RSW","type_icon":"🌾","day_offset":3,"event_time":"12:00","week_start":7,"week_end":7,"is_server_event":false,"duration_days":1,"notes":"30% plunder"},
+      {"label":"Rare Soil Showdown (30% plunder)","type_name":"Rare Soil War","type_short":"RSW","type_icon":"🌾","day_offset":6,"event_time":"12:00","week_start":7,"week_end":7,"is_server_event":false,"duration_days":1,"notes":"30% plunder"},
+      {"label":"Age of Oil Begins","type_name":"Age of Oil","type_short":"AoO","type_icon":"🛢️","day_offset":1,"event_time":"00:00","week_start":9,"week_end":9,"is_server_event":true,"duration_days":1,"notes":"Post-season phase begins"},
+      {"label":"Black Market / Bingo / Champion Duel","type_name":"Champion Duel","type_short":"CD","type_icon":"🥊","day_offset":1,"event_time":"00:00","week_start":10,"week_end":10,"is_server_event":true,"duration_days":1,"notes":""},
+      {"label":"Transfer Surge","type_name":"Transfer Surge","type_short":"TS","type_icon":"🔀","day_offset":4,"event_time":"00:00","week_start":10,"week_end":10,"is_server_event":true,"duration_days":1,"notes":""},
+      {"label":"Champion Duel (ongoing)","type_name":"Champion Duel","type_short":"CD","type_icon":"🥊","day_offset":null,"event_time":"00:00","week_start":10,"week_end":13,"is_server_event":true,"duration_days":28,"notes":"28-day window"}
+    ]') ELSE 0 END;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+UPDATE season_templates SET defaults = '{"week_count":8,"key_event_name":"Rare Soil War","key_event_required":4,"key_event_total":8,"resource_name":""}'
+WHERE season_number = 2
+  AND CASE WHEN json_valid(defaults) THEN json(defaults) = json('{"week_count":8,"key_event_name":"Rare Soil War","key_event_required":4}') ELSE 0 END;
+-- +goose StatementEnd
+
+
+-- S3 — Golden Realm (private-docs 298). The key event, its trackable and its two war rows are
+-- Goldust Conquest, the official spelling (they read Spice War); Trade Posts W3–W7, Season
+-- Settlement and the Transfer Surge preheat added. A live S3 season keeps its own rows and name.
+-- +goose StatementBegin
+UPDATE season_templates SET events = '[
+  {"key":"s3_city_clash_l1","label":"City Clash (L1)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found (official: City Clash W1–W4); Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s3_city_clash_l2","label":"City Clash (L2)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found (official: City Clash W1–W4); Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s3_ew_marshall","label":"Exclusive Weapon: Marshall (Tank)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":1,"week_end":1,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S3 calendar; lastwarhub","grade":"official"},
+  {"key":"s3_city_clash_l3","label":"City Clash (L3)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found (official: City Clash W1–W4); Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s3_city_clash_l4","label":"City Clash (L4)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found (official: City Clash W1–W4); Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s3_ew_schuyler","label":"Exclusive Weapon: Schuyler (Aircraft)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S3 calendar; lastwarhub","grade":"official"},
+  {"key":"s3_faction_awards","label":"Faction Awards","type_name":"Faction Awards","type_short":"FA","type_icon":"🏆","day_offset":1,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":1,"notes":"","source":"Official S3 calendar W3; LWHB: faction formation W3","grade":"official"},
+  {"key":"s3_trade_posts","label":"Trade Posts","type_name":"Trade Posts","type_short":"TP","type_icon":"🏪","day_offset":1,"event_time":"00:00","week_start":3,"week_end":7,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S3 calendar: Trade Posts W3–W7","grade":"official"},
+  {"key":"s3_city_clash_l5","label":"City Clash (L5)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found (official: City Clash W1–W4); Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s3_city_clash_l6","label":"City Clash (L6)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":"","source":"No source found (official: City Clash W1–W4); Wed/Sat convention kept","grade":"unverified"},
+  {"key":"s3_goldust_conquest_wed","label":"Goldust Conquest","type_name":"Goldust Conquest","type_short":"GDC","type_icon":"🪙","day_offset":3,"event_time":"12:00","week_start":4,"week_end":7,"is_server_event":false,"duration_days":1,"notes":"","source":"Official S3 calendar: \"GOLDUST CONQUEST\" W4–W7; owner","grade":"official"},
+  {"key":"s3_goldust_conquest_sat","label":"Goldust Conquest","type_name":"Goldust Conquest","type_short":"GDC","type_icon":"🪙","day_offset":6,"event_time":"12:00","week_start":4,"week_end":7,"is_server_event":false,"duration_days":1,"notes":"","source":"Official S3 calendar: \"GOLDUST CONQUEST\" W4–W7; owner","grade":"official"},
+  {"key":"s3_ew_mcgregor","label":"Exclusive Weapon: McGregor (Missile)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":6,"week_end":6,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S3 calendar; lastwarhub","grade":"official"},
+  {"key":"s3_faction_duel_irc","label":"Faction Duel — Invasion Right Contest","type_name":"Faction Duel","type_short":"FD","type_icon":"⚔️","day_offset":1,"event_time":"00:00","week_start":7,"week_end":7,"is_server_event":true,"duration_days":1,"notes":"Ranking phase Mon–Fri","source":"Official S3 calendar W7; LWHB days 1–6","grade":"official"},
+  {"key":"s3_faction_duel_capitol","label":"Faction Duel — Capitol War","type_name":"Faction Duel","type_short":"FD","type_icon":"⚔️","day_offset":7,"event_time":"12:00","week_start":7,"week_end":7,"is_server_event":true,"duration_days":1,"notes":"","source":"LWHB: Sunday 12:00; official S3 calendar W7","grade":"official"},
+  {"key":"s3_season_settlement","label":"Season Settlement","type_name":"Season Settlement","type_short":"SET","type_icon":"🏁","day_offset":1,"event_time":"00:00","week_start":8,"week_end":8,"is_server_event":true,"duration_days":7,"notes":"","source":"Official season calendar","grade":"official"},
+  {"key":"s3_transfer_surge_preheat","label":"Transfer Surge Preheat","type_name":"Transfer Surge","type_short":"TS","type_icon":"🔀","day_offset":1,"event_time":"00:00","week_start":8,"week_end":8,"is_server_event":true,"duration_days":7,"notes":"","source":"Official S3 calendar","grade":"official"}
+]'
+WHERE season_number = 3
+  AND CASE WHEN json_valid(events) THEN json(events) = json('[
+      {"label":"City Clash (L1)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L2)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":1,"week_end":1,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Exclusive Weapon: Marshall (Tank)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":1,"week_end":1,"is_server_event":true,"duration_days":7,"notes":""},
+      {"label":"City Clash (L3)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L4)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":2,"week_end":2,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Exclusive Weapon: Schuyler (Aircraft)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":7,"notes":""},
+      {"label":"Faction Awards","type_name":"Faction Awards","type_short":"FA","type_icon":"🏆","day_offset":1,"event_time":"00:00","week_start":3,"week_end":3,"is_server_event":true,"duration_days":1,"notes":""},
+      {"label":"City Clash (L5)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":3,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"City Clash (L6)","type_name":"City Clash","type_short":"CC","type_icon":"🏙️","day_offset":6,"event_time":"12:00","week_start":3,"week_end":3,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Spice War","type_name":"Spice War","type_short":"SPW","type_icon":"🌶️","day_offset":3,"event_time":"12:00","week_start":4,"week_end":7,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Spice War","type_name":"Spice War","type_short":"SPW","type_icon":"🌶️","day_offset":6,"event_time":"12:00","week_start":4,"week_end":7,"is_server_event":false,"duration_days":1,"notes":""},
+      {"label":"Exclusive Weapon: McGregor (Missile)","type_name":"Exclusive Weapon","type_short":"EW","type_icon":"⚔️","day_offset":4,"event_time":"00:00","week_start":6,"week_end":6,"is_server_event":true,"duration_days":7,"notes":""},
+      {"label":"Faction Duel — Invasion Right Contest","type_name":"Faction Duel","type_short":"FD","type_icon":"⚔️","day_offset":1,"event_time":"00:00","week_start":7,"week_end":7,"is_server_event":true,"duration_days":1,"notes":"Ranking phase Mon–Fri"},
+      {"label":"Faction Duel — Capitol War","type_name":"Faction Duel","type_short":"FD","type_icon":"⚔️","day_offset":7,"event_time":"12:00","week_start":7,"week_end":7,"is_server_event":true,"duration_days":1,"notes":""}
+    ]') ELSE 0 END;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+UPDATE season_templates SET defaults = '{"week_count":8,"key_event_name":"Goldust Conquest","key_event_required":4,"key_event_total":8,"resource_name":""}'
+WHERE season_number = 3
+  AND CASE WHEN json_valid(defaults) THEN json(defaults) = json('{"week_count":8,"key_event_name":"Spice War","key_event_required":4}') ELSE 0 END;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+UPDATE season_templates SET trackables = '[{"key":"mutual_assistance","label":"Mutual Assistance","sort_order":0},{"key":"siege","label":"Siege","sort_order":1},{"key":"goldust_conquest","label":"Goldust Conquest","sort_order":2},{"key":"defeat","label":"Defeat","sort_order":3}]'
+WHERE season_number = 3
+  AND CASE WHEN json_valid(trackables) THEN json(trackables) = json('[{"key":"mutual_assistance","label":"Mutual Assistance","sort_order":0},{"key":"siege","label":"Siege","sort_order":1},{"key":"spice_war","label":"Spice War","sort_order":2},{"key":"defeat","label":"Defeat","sort_order":3}]') ELSE 0 END;
+-- +goose StatementEnd
+
 -- +goose Down
 -- The template corrections are not reverted: a rollback that rewrote templates would have to
 -- tell a corrected row from an operator's edit, which is the judgement the Up refuses to make.

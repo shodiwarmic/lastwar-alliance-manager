@@ -402,3 +402,61 @@ func TestSeedCorrectionsLeaveEditedColumnsAlone(t *testing.T) {
 		t.Errorf("S6's unedited defaults were not corrected: %s", d6)
 	}
 }
+
+// Every shipped template row is keyed, graded and sourced once 088 has run.
+func TestEveryShippedTemplateRowHasProvenance(t *testing.T) {
+	setupSettingsTestDB(t)
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM season_templates`).Scan(&n)
+	if n != 6 {
+		t.Fatalf("%d templates, want 6", n)
+	}
+	for sn := 1; sn <= 6; sn++ {
+		seen := map[string]bool{}
+		for _, e := range shippedTemplateEvents(t, sn) {
+			if e.Key == "" || seen[e.Key] {
+				t.Errorf("S%d %q: key %q missing or repeated", sn, e.Label, e.Key)
+			}
+			seen[e.Key] = true
+			if !validEventGrades[e.Grade] {
+				t.Errorf("S%d %s: grade %q", sn, e.Key, e.Grade)
+			}
+			if strings.TrimSpace(e.Source) == "" {
+				t.Errorf("S%d %s: no source", sn, e.Key)
+			}
+		}
+	}
+}
+
+func TestS1ToS3TemplatesCorrected(t *testing.T) {
+	setupSettingsTestDB(t)
+	var defaults, trackables string
+	db.QueryRow(`SELECT defaults, trackables FROM season_templates WHERE season_number = 3`).Scan(&defaults, &trackables)
+	if !strings.Contains(defaults, `"key_event_name":"Goldust Conquest"`) {
+		t.Errorf("S3 key event: %s", defaults)
+	}
+	if !strings.Contains(trackables, `"key":"goldust_conquest"`) || strings.Contains(trackables, "spice_war") {
+		t.Errorf("S3 trackables: %s", trackables)
+	}
+	for _, e := range shippedTemplateEvents(t, 3) {
+		if strings.Contains(e.Label, "Spice") || e.TypeName == "Spice War" {
+			t.Errorf("S3 still carries %q (%s)", e.Label, e.TypeName)
+		}
+	}
+	for _, e := range shippedTemplateEvents(t, 2) {
+		switch e.Key {
+		case "s2_rare_soil_war_wed", "s2_rare_soil_war_sat":
+			if e.WeekStart != 4 || e.WeekEnd != 5 {
+				t.Errorf("%s runs W%d–%d, want the 20%% weeks W4–W5", e.Key, e.WeekStart, e.WeekEnd)
+			}
+		case "s2_rare_soil_showdown_wed", "s2_rare_soil_showdown_sat":
+			if e.WeekStart != 6 || e.WeekEnd != 7 {
+				t.Errorf("%s runs W%d–%d, want the 30%% weeks W6–W7", e.Key, e.WeekStart, e.WeekEnd)
+			}
+		case "s2_transfer_surge":
+			if e.WeekStart != 9 || *e.DayOffset != 1 {
+				t.Errorf("Transfer Surge at W%d day %d, want W9 day 1", e.WeekStart, *e.DayOffset)
+			}
+		}
+	}
+}
