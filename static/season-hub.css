@@ -664,3 +664,53 @@
 .hub-link-title { font-weight: 600; overflow-wrap: anywhere; }
 .hub-link-meta { font-size: 0.8rem; color: var(--text-secondary); overflow-wrap: anywhere; }
 .hub-link-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ── Schedule tab: the season timeline ───────────────────────────────────── */
+.season-schedule-toolbar { flex-wrap: wrap; gap: 8px; }
+.season-schedule-all { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.season-conflicts {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    background: var(--color-warning-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+.season-conflicts-head { font-weight: 600; margin-bottom: 4px; }
+.season-conflicts ul { margin: 0; padding-left: 18px; }
+.season-timeline { display: flex; flex-direction: column; gap: 12px; }
+.tl-week {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+}
+.tl-week h4 { margin: 0 0 6px; font-size: 0.95rem; }
+.tl-sub { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin: 6px 0 2px; }
+.tl-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 3px 0;
+    font-size: 0.85rem;
+    border-top: 1px dashed var(--border-color);
+}
+.tl-when { min-width: 82px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.tl-name { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.tl-badge {
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.tl-status-tentative { background: var(--color-info-bg); color: var(--color-info); }
+.tl-status-completed { background: var(--color-success-bg); color: var(--color-success); }
+.tl-status-cancelled { background: var(--color-danger-bg); color: var(--color-danger); }
+.tl-status-leadership { background: var(--color-purple-bg); color: var(--color-purple); }
+.tl-cancelled .tl-when, .tl-cancelled .tl-name { text-decoration: line-through; opacity: 0.7; }
+.tl-day { padding: 4px 0; }
+.tl-day-head { font-weight: 600; font-size: 0.85rem; margin-top: 4px; }
+.tl-empty { font-size: 0.8rem; color: var(--text-muted); padding: 2px 0; }

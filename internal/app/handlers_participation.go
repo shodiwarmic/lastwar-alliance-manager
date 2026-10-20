@@ -263,7 +263,8 @@ func handleParticipationBoards(w http.ResponseWriter, r *http.Request) {
 // GET /api/participation/recent?type=&limit= — the chooser on /participation/new:
 // a type's most recent past occurrences, recorded or not.
 func handleParticipationRecent(w http.ResponseWriter, r *http.Request) {
-	if !canViewParticipation(getAuthUser(r)) {
+	user := getAuthUser(r)
+	if !canViewParticipation(user) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -278,6 +279,7 @@ func handleParticipationRecent(w http.ResponseWriter, r *http.Request) {
 		FROM schedule_events se
 		LEFT JOIN participation_boards b ON b.schedule_event_id = se.id
 		WHERE se.event_type_id = ? AND se.event_date <= ?
+		  AND (se.status != 'cancelled' OR b.id IS NOT NULL)`+scheduleVisibility(user, "se")+`
 		ORDER BY se.event_date DESC, se.event_time DESC, se.task_force LIMIT 10`, typeID, gameDate())
 	if err != nil {
 		slog.Error("handleParticipationRecent: query failed", "error", err)

@@ -1305,6 +1305,16 @@ type ScheduleEvent struct {
 	OutsideWindow bool   `json:"outside_window,omitempty"`
 	ParentName    string `json:"parent_name,omitempty"`
 
+	// Season Hub planning fields (migration 089, private-docs 273). SourceKind names the
+	// Land or War record that owns the row (syncSourcedScheduleEvent); such a row is moved
+	// and cancelled by its source, not by hand.
+	SeasonID       *int   `json:"season_id"`
+	Status         string `json:"status"`
+	LeadershipOnly bool   `json:"leadership_only"`
+	ShowOnMain     bool   `json:"show_on_main"`
+	ReferenceURL   string `json:"reference_url"`
+	SourceKind     string `json:"source_kind,omitempty"`
+
 	// Participation (#13), derived per read: whether the type tracks participation,
 	// whether this occurrence has a recorded board, and how many rows it holds. The
 	// card offers Record on a tracked past event and a board badge once recorded.

@@ -3520,8 +3520,8 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 				WHERE event_date = ? AND event_type_id = ? AND season_event_id IS NULL`,
 				dateStr, ev.eventTypeID).Scan(&existingID)
 			if err == nil {
-				if _, uerr := db.Exec(`UPDATE schedule_events SET season_event_id = ?, season_week = ? WHERE id = ?`,
-					ev.id, week, existingID); uerr != nil && !isUniqueViolation(uerr) {
+				if _, uerr := db.Exec(`UPDATE schedule_events SET season_event_id = ?, season_week = ?, season_id = COALESCE(season_id, ?) WHERE id = ?`,
+					ev.id, week, s.ID, existingID); uerr != nil && !isUniqueViolation(uerr) {
 					return result, uerr
 				}
 				result.Skipped++
@@ -3568,9 +3568,9 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 			}
 
 			if _, err := db.Exec(`
-				INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by, season_event_id, season_week)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				dateStr, ev.eventTypeID, ev.eventTime, ev.allDay, ev.level, ev.notes, userID, ev.id, week); err != nil {
+				INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by, season_event_id, season_week, season_id)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				dateStr, ev.eventTypeID, ev.eventTime, ev.allDay, ev.level, ev.notes, userID, ev.id, week, s.ID); err != nil {
 				if isUniqueViolation(err) {
 					result.Skipped++
 					continue

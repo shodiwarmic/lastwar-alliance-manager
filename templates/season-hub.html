@@ -44,6 +44,7 @@
         {{if .Permissions.ManageSeasonParticipation}}<button class="tab-btn" data-tab="participation">Participation</button>{{end}}
         {{if .Permissions.ManageSeasonContributions}}<button class="tab-btn" data-tab="contributions">Contributions</button>{{end}}
         <button class="tab-btn" data-tab="rewards">Rewards</button>
+        {{if .Permissions.ViewSchedule}}<button class="tab-btn" data-tab="schedule">Schedule</button>{{end}}
         {{if or .Permissions.ViewComms .Permissions.ViewPolls}}<button class="tab-btn" data-tab="comms">Comms</button>{{end}}
         {{if .Permissions.ViewFiles}}<button class="tab-btn" data-tab="files">Files</button>{{end}}
     </div>
@@ -187,6 +188,24 @@
             </table>
         </div>
     </div>
+
+    <!-- ── Schedule: the season's timeline and conflicts ────────────────── -->
+    {{if .Permissions.ViewSchedule}}
+    <div id="tab-schedule" class="tab-content" style="display:none">
+        <div class="tab-toolbar season-schedule-toolbar">
+            <div class="participation-week-nav">
+                <label for="season-schedule-view">View:</label>
+                <select id="season-schedule-view" class="form-input">
+                    <option value="timeline">Whole season</option>
+                </select>
+            </div>
+            <label class="season-schedule-all"><input type="checkbox" id="season-schedule-all"> Every calendar event in these weeks</label>
+            <a class="btn btn-secondary btn-sm" href="/schedule">Open the Schedule</a>
+        </div>
+        <div id="season-conflicts" class="season-conflicts" style="display:none"></div>
+        <div id="season-timeline" class="season-timeline"><p class="loading-msg">Loading…</p></div>
+    </div>
+    {{end}}
 
     <!-- ── Comms: the season's mail, announcements, polls and resources ──── -->
     {{if or .Permissions.ViewComms .Permissions.ViewPolls}}

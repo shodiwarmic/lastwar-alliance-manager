@@ -624,6 +624,7 @@ func buildRouter() *mux.Router {
 
 	// Calendar events
 	router.HandleFunc("/api/schedule/events", authMiddleware(requirePermission("view_schedule", getScheduleEvents))).Methods("GET")
+	router.HandleFunc("/api/schedule/conflicts", authMiddleware(requirePermission("view_schedule", handleScheduleConflicts))).Methods("GET")
 	router.HandleFunc("/api/schedule/events", authMiddleware(requirePermission("manage_schedule", createScheduleEvent))).Methods("POST")
 	router.HandleFunc("/api/schedule/events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", updateScheduleEvent))).Methods("PUT")
 	router.HandleFunc("/api/schedule/events/{id:[0-9]+}", authMiddleware(requirePermission("manage_schedule", deleteScheduleEvent))).Methods("DELETE")

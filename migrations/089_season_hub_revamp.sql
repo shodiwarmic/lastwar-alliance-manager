@@ -235,7 +235,134 @@ ALTER TABLE poll_instances ADD COLUMN season_id INTEGER REFERENCES seasons(id);
 ALTER TABLE files ADD COLUMN season_id INTEGER REFERENCES seasons(id);
 -- +goose StatementEnd
 
+
+-- ── 273: season and planning fields on schedule events; sourced origins ─────
+-- An ordinary calendar row gains a season, a status (tentative / confirmed / completed /
+-- cancelled), leadership_only (hidden from anyone without manage_schedule — every reader,
+-- the announcement included), show_on_main (off: the row shows on the season timeline only)
+-- and a reference link. A cancelled row is history: it leaves the rule, duplicate and
+-- generator checks (and the Desert Storm index below), so it never blocks its replacement.
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'
+    CHECK(status IN ('tentative','confirmed','completed','cancelled'));
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN leadership_only INTEGER NOT NULL DEFAULT 0;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN show_on_main INTEGER NOT NULL DEFAULT 1;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN reference_url TEXT NOT NULL DEFAULT '';
+-- +goose StatementEnd
+-- A row a Land or War record owns (land_capture, land_drop, war, trade_post): one row per
+-- source, created, moved and cancelled only by syncSourcedScheduleEvent. The 078 pattern for a
+-- second kind of origin; a war that adopts a pushed occurrence carries both.
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN source_kind TEXT;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN source_id INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_events_source ON schedule_events(source_kind, source_id)
+    WHERE source_kind IS NOT NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_schedule_events_task_force;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE UNIQUE INDEX idx_schedule_events_task_force
+    ON schedule_events(event_date, event_type_id, task_force) WHERE task_force IS NOT NULL AND status != 'cancelled';
+-- +goose StatementEnd
+
+-- The three types Land and Trade Posts write through. System rows, so no officer can delete or
+-- rename them from under the sync (the system-only RULES key on MG/LS/ZS/DS short names, so none
+-- applies); announce off, so planning rows stay out of the nightly announcement unless an
+-- officer opts the type in. An install that already uses one of the short names gets a longer
+-- one; a type already called by the name is adopted.
+-- +goose StatementBegin
+INSERT INTO schedule_event_types (name, short_name, icon, is_system, sort_order, announce)
+SELECT 'Land Capture', CASE WHEN EXISTS (SELECT 1 FROM schedule_event_types WHERE short_name = 'LC') THEN 'LCAP' ELSE 'LC' END,
+       '🏙️', 1, 90, 0
+WHERE NOT EXISTS (SELECT 1 FROM schedule_event_types WHERE name = 'Land Capture');
+-- +goose StatementEnd
+-- +goose StatementBegin
+INSERT INTO schedule_event_types (name, short_name, icon, is_system, sort_order, announce)
+SELECT 'Land Abandonment', CASE WHEN EXISTS (SELECT 1 FROM schedule_event_types WHERE short_name = 'LA') THEN 'LABN' ELSE 'LA' END,
+       '🏳️', 1, 91, 0
+WHERE NOT EXISTS (SELECT 1 FROM schedule_event_types WHERE name = 'Land Abandonment');
+-- +goose StatementEnd
+-- +goose StatementBegin
+INSERT INTO schedule_event_types (name, short_name, icon, is_system, sort_order, announce)
+SELECT 'Trade Post Action', CASE WHEN EXISTS (SELECT 1 FROM schedule_event_types WHERE short_name = 'TPA') THEN 'TPAC' ELSE 'TPA' END,
+       '🏪', 1, 92, 0
+WHERE NOT EXISTS (SELECT 1 FROM schedule_event_types WHERE name = 'Trade Post Action');
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE schedule_event_types SET is_system = 1
+WHERE name IN ('Land Capture', 'Land Abandonment', 'Trade Post Action');
+-- +goose StatementEnd
+
+-- Tag pushed rows with their season, so the season timeline needs no join: by origin (078)
+-- where the row has one, else by the push's own legacy match — a row of a template row's type
+-- on the date that row computes. Seasons pushed before 078 and never re-pushed (S2 and S3 on
+-- most installs) have only the second. This tags; it never claims an origin.
+-- +goose StatementBegin
+UPDATE schedule_events SET season_id = (SELECT se.season_id FROM season_events se WHERE se.id = schedule_events.season_event_id)
+WHERE season_id IS NULL AND season_event_id IS NOT NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+WITH RECURSIVE wk(n) AS (SELECT -2 UNION ALL SELECT n + 1 FROM wk WHERE n < 60),
+cand AS (
+    SELECT s.id AS season_id, se.event_type_id AS type_id,
+           date(s.start_date, printf('%+d days', (wk.n - 1) * 7 + se.day_offset - 1)) AS d
+    FROM season_events se JOIN seasons s ON s.id = se.season_id JOIN wk
+    WHERE se.is_server_event = 0 AND se.day_offset IS NOT NULL AND se.event_type_id IS NOT NULL
+      AND wk.n >= se.week_start
+      AND wk.n <= CASE WHEN se.week_end < se.week_start THEN s.week_count ELSE se.week_end END
+)
+UPDATE schedule_events SET season_id = (SELECT c.season_id FROM cand c
+    WHERE c.d = schedule_events.event_date AND c.type_id = schedule_events.event_type_id LIMIT 1)
+WHERE season_id IS NULL AND season_event_id IS NULL AND EXISTS (SELECT 1 FROM cand c
+    WHERE c.d = schedule_events.event_date AND c.type_id = schedule_events.event_type_id);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_schedule_events_task_force;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_schedule_events_source;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN source_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN source_kind;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN reference_url;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN show_on_main;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN leadership_only;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN status;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE UNIQUE INDEX idx_schedule_events_task_force
+    ON schedule_events(event_date, event_type_id, task_force) WHERE task_force IS NOT NULL;
+-- +goose StatementEnd
 -- +goose StatementBegin
 ALTER TABLE files DROP COLUMN season_id;
 -- +goose StatementEnd

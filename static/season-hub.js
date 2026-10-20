@@ -51,7 +51,7 @@
     // Each load takes a generation; only the newest response for it is used, and rewards /
     // mail must also still belong to the season on screen. So a quick A→B→A switch, or a save
     // overlapping a switch, can't paint one season's data under another.
-    const gen = { data: 0, rewards: 0, mail: 0, comms: 0, files: 0 };
+    const gen = { data: 0, rewards: 0, mail: 0, comms: 0, files: 0, schedule: 0 };
     const inflight = { rewards: null, mail: null };   // season id of a load in flight
 
     // ── Tabs (tabs.js), with #tab deep links ──────────────────────────────────
@@ -66,6 +66,7 @@
         if (currentTab === 'rewards' && inflight.rewards !== activeSeason.id) loadRewards();
         if (currentTab === 'comms' && inflight.mail !== activeSeason.id) { loadSeasonMail(); loadSeasonCommsExtras(); }
         if (currentTab === 'files') loadSeasonFiles();
+        if (currentTab === 'schedule') loadSeasonSchedule();
     }
     // An old #season-mail link opens the tab it became.
     if (location.hash === '#season-mail') history.replaceState(null, '', '#comms');
@@ -129,7 +130,7 @@
             loadSeasonData(id);
             allRewards = []; renderRewardsTable();
             allMailItems = []; renderMailList();
-            ['season-announcement-list', 'season-resource-list', 'season-poll-list', 'season-files-list'].forEach(bid => {
+            ['season-announcement-list', 'season-resource-list', 'season-poll-list', 'season-files-list', 'season-timeline', 'season-conflicts'].forEach(bid => {
                 const b = document.getElementById(bid);
                 if (b) b.replaceChildren();
             });
@@ -1683,6 +1684,197 @@
             })
             .catch(() => {});
     }
+
+    // ── Schedule tab: the season's timeline ───────────────────────────────────
+    // One season_id query for the calendar rows (tagged to the season, or with the switch on,
+    // every row in its weeks), the season's own template rows week by week, and the conflict
+    // check. Read-only: events are added and edited on the Schedule page.
+    const scheduleState = { events: [], template: [], from: '', to: '' };
+
+    function addDaysISO(dateStr, n) {
+        const d = new Date(dateStr + 'T00:00:00Z');
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+    }
+    function shortDate(dateStr) {
+        const d = new Date(dateStr + 'T00:00:00Z');
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    }
+    function templateRunsInWeek(t, w) {
+        const end = t.week_end < t.week_start ? (activeSeason ? activeSeason.week_count : t.week_start) : t.week_end;
+        return w >= t.week_start && w <= end;
+    }
+
+    function loadSeasonSchedule() {
+        if (!activeSeason) return;
+        const sid = activeSeason.id;
+        const mine = ++gen.schedule;
+        const all = document.getElementById('season-schedule-all');
+        const scope = all && all.checked ? '&scope=all' : '';
+        Promise.all([
+            fetch('/api/schedule/events?season_id=' + sid + scope).then(r => r.ok ? r.json() : null),
+            fetch('/api/season-hub/season-events?season_id=' + sid).then(r => r.ok ? r.json() : null),
+            fetch('/api/schedule/conflicts?season_id=' + sid).then(r => r.ok ? r.json() : null),
+        ]).then(([ev, tpl, conf]) => {
+            if (mine !== gen.schedule || !activeSeason || activeSeason.id !== sid) return;
+            scheduleState.events = (ev && ev.events) || [];
+            scheduleState.from = ev ? ev.from : activeSeason.start_date;
+            scheduleState.to = ev ? ev.to : addDaysISO(activeSeason.start_date, activeSeason.week_count * 7 - 1);
+            scheduleState.template = (tpl && tpl.events) || [];
+            populateScheduleViewSelect();
+            renderSeasonConflicts(conf);
+            renderSeasonTimeline();
+        }).catch(() => showToast('Failed to load the season schedule.', 'error'));
+    }
+
+    function seasonWeekRange() {
+        const start = activeSeason.start_date;
+        const first = Math.round((Date.parse(scheduleState.from) - Date.parse(start)) / 86400000 / 7) + 1;
+        const last = Math.round((Date.parse(scheduleState.to) - Date.parse(start) + 86400000) / 86400000 / 7);
+        const weeks = [];
+        for (let w = first; w <= last; w++) weeks.push(w);
+        return weeks;
+    }
+
+    function populateScheduleViewSelect() {
+        const sel = document.getElementById('season-schedule-view');
+        if (!sel) return;
+        const prev = sel.value;
+        const opts = [['timeline', 'Whole season']].concat(seasonWeekRange().map(w => ['w' + w, 'Week ' + w + ' by day']));
+        sel.replaceChildren(...opts.map(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; }));
+        sel.value = opts.some(o => o[0] === prev) ? prev : 'timeline';
+    }
+
+    function scheduleRowNode(kind, item) {
+        const row = document.createElement('div');
+        row.className = 'tl-row tl-' + kind;
+        const when = document.createElement('span');
+        when.className = 'tl-when';
+        const name = document.createElement('span');
+        name.className = 'tl-name';
+        if (kind === 'template') {
+            const day = item.day_offset ? DAY_NAMES[item.day_offset] : '—';
+            when.textContent = day + (item.day_offset && !item.is_server_event ? ' ' + item.event_time : '');
+            name.textContent = (item.type_icon ? item.type_icon + ' ' : '') + item.label
+                + (item.is_server_event && item.duration_days > 1 ? ' (' + item.duration_days + ' days)' : '');
+            row.append(when, name, makeGradeBadge(item.grade, item.source));
+        } else {
+            when.textContent = DAY_NAMES[(new Date(item.event_date + 'T00:00:00Z').getUTCDay() || 7)]
+                + ' ' + (item.all_day ? 'all day' : item.event_time);
+            name.textContent = item.type_icon + ' ' + item.type_name + (item.notes ? ' — ' + item.notes : '');
+            row.append(when, name);
+            if (item.status && item.status !== 'confirmed') {
+                const st = document.createElement('span');
+                st.className = 'tl-badge tl-status-' + item.status;
+                st.textContent = item.status;
+                row.appendChild(st);
+            }
+            if (item.leadership_only) {
+                const lo = document.createElement('span');
+                lo.className = 'tl-badge tl-status-leadership';
+                lo.textContent = 'leadership';
+                row.appendChild(lo);
+            }
+            if (!item.show_on_main) {
+                const off = document.createElement('span');
+                off.className = 'tl-badge';
+                off.textContent = 'not on main schedule';
+                row.appendChild(off);
+            }
+            if (item.status === 'cancelled') row.classList.add('tl-cancelled');
+        }
+        return row;
+    }
+
+    function renderSeasonTimeline() {
+        const box = document.getElementById('season-timeline');
+        const sel = document.getElementById('season-schedule-view');
+        if (!box || !activeSeason) return;
+        const start = activeSeason.start_date;
+        const view = sel ? sel.value : 'timeline';
+        const weeks = view === 'timeline' ? seasonWeekRange() : [parseInt(view.slice(1), 10)];
+        const blocks = weeks.map(w => {
+            const mon = addDaysISO(start, (w - 1) * 7);
+            const sun = addDaysISO(mon, 6);
+            const tpl = scheduleState.template.filter(t => templateRunsInWeek(t, w))
+                .sort((a, b) => (a.day_offset || 9) - (b.day_offset || 9));
+            const cal = scheduleState.events.filter(e => e.event_date >= mon && e.event_date <= sun);
+            const sec = document.createElement('section');
+            sec.className = 'tl-week';
+            const head = document.createElement('h4');
+            head.textContent = (w <= 0 ? 'Pre-season' : 'Week ' + w) + ' · ' + shortDate(mon) + ' – ' + shortDate(sun);
+            sec.appendChild(head);
+            if (view !== 'timeline') {
+                // One week by day: seven stacked days, each with its plan and its calendar.
+                for (let d = 0; d < 7; d++) {
+                    const date = addDaysISO(mon, d);
+                    const day = document.createElement('div');
+                    day.className = 'tl-day';
+                    const dh = document.createElement('div');
+                    dh.className = 'tl-day-head';
+                    dh.textContent = DAY_NAMES[d + 1] + ' ' + shortDate(date);
+                    day.appendChild(dh);
+                    const items = tpl.filter(t => t.day_offset === d + 1).map(t => scheduleRowNode('template', t))
+                        .concat(cal.filter(e => e.event_date === date).map(e => scheduleRowNode('calendar', e)));
+                    if (!items.length) {
+                        const none = document.createElement('div');
+                        none.className = 'tl-empty';
+                        none.textContent = 'Nothing planned';
+                        items.push(none);
+                    }
+                    day.append(...items);
+                    sec.appendChild(day);
+                }
+                return sec;
+            }
+            if (tpl.length) {
+                const sub = document.createElement('div');
+                sub.className = 'tl-sub';
+                sub.textContent = 'Season events';
+                sec.append(sub, ...tpl.map(t => scheduleRowNode('template', t)));
+            }
+            if (cal.length) {
+                const sub = document.createElement('div');
+                sub.className = 'tl-sub';
+                sub.textContent = 'On the calendar';
+                sec.append(sub, ...cal.map(e => scheduleRowNode('calendar', e)));
+            }
+            if (!tpl.length && !cal.length) {
+                const none = document.createElement('div');
+                none.className = 'tl-empty';
+                none.textContent = 'Nothing planned this week.';
+                sec.appendChild(none);
+            }
+            return sec;
+        });
+        box.replaceChildren(...blocks);
+    }
+
+    function renderSeasonConflicts(conf) {
+        const box = document.getElementById('season-conflicts');
+        if (!box) return;
+        const list = (conf && conf.conflicts) || [];
+        if (!list.length) { box.style.display = 'none'; box.replaceChildren(); return; }
+        const head = document.createElement('div');
+        head.className = 'season-conflicts-head';
+        head.textContent = list.length + ' season event' + (list.length === 1 ? '' : 's') + ' within '
+            + conf.buffer_minutes + ' minutes of a game event or window change — nothing has been moved:';
+        const ul = document.createElement('ul');
+        list.forEach(c => {
+            const li = document.createElement('li');
+            const what = c.conflicts.map(h => h.name + ' at ' + h.time).join(', ');
+            li.textContent = shortDate(c.date) + ' ' + c.time + ' ' + c.type_name + ' — ' + what
+                + (c.suggestion ? '. Nearest clear time: ' + c.suggestion + '.' : '. No clear time that day.');
+            ul.appendChild(li);
+        });
+        box.replaceChildren(head, ul);
+        box.style.display = '';
+    }
+
+    const scheduleViewSel = document.getElementById('season-schedule-view');
+    if (scheduleViewSel) scheduleViewSel.addEventListener('change', renderSeasonTimeline);
+    const scheduleAll = document.getElementById('season-schedule-all');
+    if (scheduleAll) scheduleAll.addEventListener('change', loadSeasonSchedule);
 
     // ── Season create / archive ───────────────────────────────────────────────
     const btnCreateSeason = document.getElementById('btn-create-season');
