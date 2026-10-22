@@ -145,6 +145,7 @@ func mobileStores() []mobileStore {
 var mobileExcludedTables = map[string]string{
 
 	// Officer judgement or app data: nothing the game shows.
+	"train_schedule_entries":       "officer plans, not game-reported results; completed trains use the train_logs store",
 	"release_state":                "app data: the release check's cache of GitHub's latest release",
 	"vs_week_minimums":             "configuration: the VS daily minimum that applied to each week (officer judgement)",
 	"donation_week_minimums":       "configuration: the donation minimums that applied to each week (officer judgement)",

@@ -9,6 +9,7 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/filter-panel.css"}}">
+<link rel="stylesheet" href="{{asset "/member-picker.css"}}">
 <link rel="stylesheet" href="{{asset "/train.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
@@ -23,13 +24,34 @@
 
     <!-- Tab Bar -->
     <div class="tab-bar">
-        <button class="tab-btn active" data-tab="logs">Trains</button>
+        {{if or .Permissions.ViewTrainSchedule .Permissions.ManageTrainSchedule}}
+        <button class="tab-btn" data-tab="upcoming">Upcoming</button>
+        {{end}}
+        {{if .Permissions.ViewTrain}}<button class="tab-btn active" data-tab="logs">Trains</button>{{end}}
         {{if .Permissions.ManageTrain}}
         <button class="tab-btn" data-tab="selection">Selection</button>
         <button class="tab-btn" data-tab="rules">Rules</button>
         {{end}}
     </div>
 
+    {{if or .Permissions.ViewTrainSchedule .Permissions.ManageTrainSchedule}}
+    <div id="tab-upcoming" class="tab-content">
+        <div class="panel-header">
+            <h3>Upcoming Trains</h3>
+            <div class="button-group">
+                <button type="button" id="schedule-refresh" class="btn btn-secondary btn-sm">Refresh</button>
+                {{if .Permissions.ManageTrainSchedule}}<button type="button" id="schedule-new" class="btn btn-primary">+ Plan train</button>{{end}}
+            </div>
+        </div>
+        <p class="field-hint">Planned assignments, separate from train history. Overdue plans stay until resolved. Closed plans remain here while their scheduled date is today or later.</p>
+        <div class="filter-search-wrap quick-search">
+            <input type="text" id="schedule-search" class="form-input" placeholder="Search conductor or guest…" aria-label="Search upcoming trains" autocomplete="off">
+            <button type="button" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+        </div>
+        <div id="schedule-container" aria-live="polite"></div>
+    </div>
+    {{end}}
+    {{if .Permissions.ViewTrain}}
     <!-- ── Tab: Trains ──────────────────────────────────────────────────── -->
     <div id="tab-logs" class="tab-content">
 
@@ -80,6 +102,8 @@
         </div>
     </div>
 
+    {{end}}
+
     <!-- ── Tab: Selection ───────────────────────────────────────────────── -->
     {{if .Permissions.ManageTrain}}
     <div id="tab-selection" class="tab-content">
@@ -124,15 +148,40 @@
 {{end}}
 
 {{define "scripts"}}
-<div id="page-config" data-can-manage="{{if .Permissions.ManageTrain}}true{{else}}false{{end}}" hidden></div>
+<div id="page-config" data-can-manage="{{if .Permissions.ManageTrain}}true{{else}}false{{end}}"
+     data-can-view-train="{{if .Permissions.ViewTrain}}true{{else}}false{{end}}"
+     data-can-view-schedule="{{if or .Permissions.ViewTrainSchedule .Permissions.ManageTrainSchedule}}true{{else}}false{{end}}"
+     data-can-manage-schedule="{{if .Permissions.ManageTrainSchedule}}true{{else}}false{{end}}" hidden></div>
 <script src="{{asset "/table-utils.js"}}"></script>
 <script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/filter-panel.js"}}"></script>
+<script src="{{asset "/member-picker.js"}}"></script>
+<script src="{{asset "/train-schedule.js"}}"></script>
 <script src="{{asset "/train.js"}}"></script>
 {{end}}
 
 {{define "modals"}}
 
+{{if .Permissions.ManageTrainSchedule}}
+<div id="schedule-modal" class="modal">
+    <div class="modal-content modal-md">
+        <h2 id="schedule-modal-title">Plan train</h2>
+        <p id="schedule-planned" class="field-hint"></p>
+        <form id="schedule-form">
+            <div class="form-row">
+                <div class="form-group"><label for="schedule-date">Date (Game Time)</label><input type="date" id="schedule-date" class="form-input" required></div>
+                <div class="form-group"><label for="schedule-type">Train type</label><select id="schedule-type" class="form-input"><option value="FREE">Free</option><option value="PURCHASED">Purchased</option></select></div>
+            </div>
+            <div class="form-group"><label id="schedule-conductor-label">Planned conductor</label><p id="schedule-conductor-selected" translate="no"></p><div id="schedule-conductor-picker"></div></div>
+            <div class="form-group"><label id="schedule-guest-label">Planned guest (optional)</label><p id="schedule-guest-selected" translate="no"></p><div id="schedule-guest-picker"></div><button type="button" id="schedule-clear-guest" class="btn btn-secondary btn-sm">No guest</button></div>
+            <div class="form-group"><label for="schedule-vip-type">Guest type</label><select id="schedule-vip-type" class="form-input"><option value="SPECIAL_GUEST">Special Guest</option><option value="GUARDIAN_DEFENDER">Guardian Defender</option></select></div>
+            <div class="form-group"><label for="schedule-notes" id="schedule-notes-label">Plan notes</label><textarea id="schedule-notes" class="form-input" rows="2"></textarea></div>
+            <p id="schedule-modal-status" class="status-msg" role="alert"></p>
+            <div class="modal-actions"><button type="submit" id="schedule-save" class="btn btn-primary">Save plan</button><button type="button" id="schedule-close" class="btn btn-secondary">Cancel</button></div>
+        </form>
+    </div>
+</div>
+{{end}}
 <!-- Log Train Modal -->
 <div id="log-modal" class="modal">
     <div class="modal-content modal-md">

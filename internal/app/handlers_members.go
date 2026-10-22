@@ -399,6 +399,9 @@ func updateMember(w http.ResponseWriter, r *http.Request) {
 func clearUserReferences(q interface {
 	Exec(string, ...any) (sql.Result, error)
 }, userWhere string, args ...any) error {
+	if err := clearTrainScheduleUserReferences(q, userWhere, args...); err != nil {
+		return err
+	}
 	for _, tbl := range []string{"participation_boards", "participation_exceptions"} {
 		if _, err := q.Exec(`UPDATE `+tbl+` SET recorded_by = NULL WHERE recorded_by IN (SELECT id FROM users WHERE `+userWhere+`)`, args...); err != nil {
 			return err
@@ -427,6 +430,8 @@ func deleteMemberTx(tx *sql.Tx, id int) error {
 		what string
 		q    string
 	}{
+		{"planned conductor", `UPDATE train_schedule_entries SET conductor_id = NULL WHERE conductor_id = ?`},
+		{"planned guest", `UPDATE train_schedule_entries SET vip_id = NULL WHERE vip_id = ?`},
 		{"participation values", `DELETE FROM participation_values WHERE entry_id IN (SELECT id FROM participation_entries WHERE member_id = ?)`},
 		{"participation entries", `DELETE FROM participation_entries WHERE member_id = ?`},
 		{"participation roles", `DELETE FROM participation_roles WHERE member_id = ?`},
