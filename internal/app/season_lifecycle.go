@@ -459,6 +459,7 @@ var seasonChildStatements = []string{
 	`DELETE FROM season_land_route_revisions WHERE route_id IN (SELECT id FROM season_land_routes WHERE season_id = ?)`,
 	`DELETE FROM season_land_targets WHERE route_id IN (SELECT id FROM season_land_routes WHERE season_id = ?)`,
 	`DELETE FROM season_trade_post_observations WHERE post_id IN (SELECT id FROM season_trade_posts WHERE season_id = ?)`,
+	`DELETE FROM season_war_attendance WHERE war_id IN (SELECT id FROM season_wars WHERE season_id = ?)`,
 }
 
 // seasonChildTables are deleted with their season, after its calendar purge. foreign_keys is
@@ -479,6 +480,7 @@ var seasonChildTables = []string{
 // member's history everywhere, archived seasons included.
 var seasonMemberTables = []string{
 	"season_participation", "season_member_records", "season_rewards", "season_roster_snapshot",
+	"season_war_attendance",
 }
 
 // seasonUserColumns are nulled when a user is deleted (clearUserReferences); the rows stay.
@@ -494,6 +496,7 @@ var seasonUserColumns = []struct{ table, column string }{
 	{"season_resource_observations", "recorded_by"},
 	{"season_rank_cutoffs", "recorded_by"},
 	{"season_trade_post_observations", "recorded_by"},
+	{"season_war_attendance", "recorded_by"},
 }
 
 // seasonMemberColumns are nulled when a member is deleted: a plan that named them stays.

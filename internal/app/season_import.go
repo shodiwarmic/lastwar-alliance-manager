@@ -35,6 +35,9 @@ type importCtx struct {
 	Season *Season
 	User   *AuthUser
 	Data   map[string]any
+	// Tx is open while a ParseInTx kind parses (member names resolve on a transaction); such a
+	// kind's Parse reads only through it.
+	Tx *sql.Tx
 }
 
 type importKind struct {
@@ -47,6 +50,9 @@ type importKind struct {
 	Parse func(ctx *importCtx, rec map[string]string) (item any, summary map[string]any, errs []string)
 	// Write stores every item in the caller's transaction; returns written and unchanged counts.
 	Write func(tx *sql.Tx, ctx *importCtx, items []any) (written, unchanged int, err error)
+	// ParseInTx parses inside a transaction (ctx.Tx): the preview's is rolled back, the
+	// confirm's is the one that writes.
+	ParseInTx bool
 }
 
 // seasonImportKinds is the registry; later issues add their kinds here.
@@ -195,6 +201,16 @@ func handleSeasonImportPreview(w http.ResponseWriter, r *http.Request) {
 	if k == nil {
 		return
 	}
+	if k.ParseInTx {
+		tx, err := db.Begin()
+		if err != nil {
+			slog.Error("handleSeasonImportPreview: begin", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
+		ctx.Tx = tx
+	}
 	rows, msg := parseSeasonImport(*k, ctx, body.CSV)
 	if msg != "" {
 		http.Error(w, msg, http.StatusBadRequest)
@@ -217,6 +233,17 @@ func handleSeasonImportConfirm(w http.ResponseWriter, r *http.Request) {
 	if k == nil {
 		return
 	}
+	var tx *sql.Tx
+	if k.ParseInTx {
+		var err error
+		if tx, err = db.Begin(); err != nil {
+			slog.Error("handleSeasonImportConfirm: begin", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
+		ctx.Tx = tx
+	}
 	rows, msg := parseSeasonImport(*k, ctx, body.CSV)
 	if msg != "" {
 		http.Error(w, msg, http.StatusBadRequest)
@@ -230,13 +257,15 @@ func handleSeasonImportConfirm(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, row.item)
 	}
-	tx, err := db.Begin()
-	if err != nil {
-		slog.Error("handleSeasonImportConfirm: begin", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+	if tx == nil {
+		var err error
+		if tx, err = db.Begin(); err != nil {
+			slog.Error("handleSeasonImportConfirm: begin", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
 	written, unchanged, err := k.Write(tx, ctx, items)
 	if err != nil {
 		slog.Error("handleSeasonImportConfirm: write", "kind", body.Kind, "error", err)

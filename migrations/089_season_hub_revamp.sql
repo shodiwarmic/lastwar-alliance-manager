@@ -694,7 +694,36 @@ CREATE TABLE IF NOT EXISTS season_trade_post_observations (
 CREATE INDEX IF NOT EXISTS idx_season_trade_post_obs ON season_trade_post_observations(post_id, observed_at);
 -- +goose StatementEnd
 
+
+
+-- ── 282: war attendance and tri-state polls ────────────────────────────────
+-- Per member and war: attended (NULL unknown, 0 no, 1 yes) and the in-game poll response the
+-- officers confirmed (yes, no, none). A war with no rows says nothing about anyone. The legacy
+-- weekly key-event count and poll booleans stay as history (decision 8).
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_war_attendance (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    war_id        INTEGER NOT NULL REFERENCES season_wars(id),
+    member_id     INTEGER NOT NULL REFERENCES members(id),
+    attended      INTEGER CHECK(attended IN (0, 1)),
+    poll_response TEXT    NOT NULL DEFAULT 'none' CHECK(poll_response IN ('yes','no','none')),
+    note          TEXT    NOT NULL DEFAULT '',
+    recorded_by   INTEGER REFERENCES users(id),
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(war_id, member_id)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_war_attendance_member ON season_war_attendance(member_id);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_war_attendance_member;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_war_attendance;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP INDEX IF EXISTS idx_season_trade_post_obs;
 -- +goose StatementEnd

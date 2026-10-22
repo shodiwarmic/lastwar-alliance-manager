@@ -97,6 +97,8 @@
                 <input type="text" id="participation-search" class="form-input" placeholder="Search members…" aria-label="Search members…" autocomplete="off">
                 <button type="button" id="participation-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
             </div>
+            <button class="btn btn-secondary btn-sm" id="btn-war-detail-all" style="display:none">Show war detail</button>
+            <button class="btn btn-secondary btn-sm" id="btn-import-attendance" style="display:none">Import attendance</button>
             <button class="btn btn-primary" id="btn-save-participation">Save Week</button>
             <span id="participation-status" class="status-msg"></span>
         </div>
@@ -107,16 +109,17 @@
                         <th>Member</th>
                         <th>Rank</th>
                         <th>Score</th>
-                        <th id="key-event-participation-header" data-export-key="key-event">Key Event</th>
+                        <th class="wars-col" title="This week's wars: attendance and the in-game poll">Wars</th>
+                        <th id="key-event-participation-header" class="legacy-col" data-export-key="key-event">Key Event</th>
                         <th>Note</th>
-                        <th>Attack Note</th>
-                        <th title="Member confirmed their response to the in-game attack poll">Attack Poll</th>
-                        <th>Defense Note</th>
-                        <th title="Member confirmed their response to the in-game defense poll">Defense Poll</th>
+                        <th class="legacy-col">Attack Note</th>
+                        <th class="legacy-col" title="Member confirmed their response to the in-game attack poll">Attack Poll</th>
+                        <th class="legacy-col">Defense Note</th>
+                        <th class="legacy-col" title="Member confirmed their response to the in-game defense poll">Defense Poll</th>
                     </tr>
                 </thead>
                 <tbody id="participation-tbody">
-                    <tr><td colspan="9" class="loading-msg">Loading…</td></tr>
+                    <tr><td colspan="10" class="loading-msg">Loading…</td></tr>
                 </tbody>
             </table>
         </div>

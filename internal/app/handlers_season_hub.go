@@ -169,6 +169,14 @@ type SeasonMember struct {
 	RewardTier         string           `json:"reward_tier"`
 	ClassTag           string           `json:"class_tag"`
 	Records            map[string]int64 `json:"records"`
+	// War and poll figures for a season with wars (nil on a legacy season, decision 8):
+	// attended and known over the completed wars to date, against the scheduled total.
+	WarsAttended    *int `json:"wars_attended,omitempty"`
+	WarsKnown       *int `json:"wars_known,omitempty"`
+	WarsCompleted   *int `json:"wars_completed,omitempty"`
+	WarsScheduled   *int `json:"wars_scheduled,omitempty"`
+	PollsResponded  *int `json:"polls_responded,omitempty"`
+	PollsApplicable *int `json:"polls_applicable,omitempty"`
 }
 
 type ParticipationEntry struct {
@@ -183,6 +191,8 @@ type ParticipationEntry struct {
 	// Officer-confirmed responses to the IN-GAME poll — not the app's Poll Tracker.
 	AttackPollVoted  bool `json:"attack_poll_voted"`
 	DefensePollVoted bool `json:"defense_poll_voted"`
+	// Each of the week's wars: attended and the poll response (private-docs 282).
+	Wars []warAttendanceIn `json:"wars"`
 }
 
 type ContributionImportRow struct {
@@ -1554,6 +1564,23 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Wars and their attendance (private-docs 282); a season with no wars keeps the legacy
+	// key-event count (decision 8).
+	seasonWars, err := loadSeasonWars(db, season.ID)
+	if err != nil {
+		slog.Error("handleSeasonHubData: wars", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	attendance, err := loadWarAttendance(db, season.ID)
+	if err != nil {
+		slog.Error("handleSeasonHubData: war attendance", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	hasWars := len(seasonWars) > 0
+	warCounts, warsCompleted, pollsApplicable := warCountsByMember(seasonWars, attendance, gametimeDateOf(time.Now()))
+
 	// Index participation rows by member
 	type memberPart struct {
 		scores    map[int]string // week → score key
@@ -1615,6 +1642,15 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 		}
 		sm.KeyEventAttendance = keyEventCount
 		sm.KeyEventEligible = keyEventCount >= season.KeyEventRequired
+		if hasWars {
+			c := warCounts[m.ID]
+			if c == nil {
+				c = &memberWarCounts{}
+			}
+			att, known, done, sched, resp, appl := c.Attended, c.Known, warsCompleted, season.KeyEventTotal, c.PollsResponded, pollsApplicable
+			sm.WarsAttended, sm.WarsKnown, sm.WarsCompleted, sm.WarsScheduled = &att, &known, &done, &sched
+			sm.PollsResponded, sm.PollsApplicable = &resp, &appl
+		}
 
 		sm.ParticipationPct = float64(sm.ParticipationPts) / float64(maxSeasonPts) * 100
 
@@ -1664,9 +1700,10 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"season":  season,
-		"members": members,
-		"layout":  layout,
+		"season":   season,
+		"members":  members,
+		"layout":   layout,
+		"has_wars": hasWars,
 	})
 }
 
@@ -1734,9 +1771,23 @@ func handleParticipationGet(w http.ResponseWriter, r *http.Request) {
 		}
 		entries = append(entries, e)
 	}
+	rows.Close()
+	wars, hasWars, err := participationWars(db, season.ID)
+	if err != nil {
+		slog.Error("handleParticipationGet: wars", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	attendance, err := loadWarAttendance(db, season.ID)
+	if err != nil {
+		slog.Error("handleParticipationGet: attendance", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"season_id": season.ID, "entries": entries})
+	json.NewEncoder(w).Encode(map[string]any{"season_id": season.ID, "entries": entries, "has_wars": hasWars,
+		"wars": wars, "war_attendance": attendance})
 }
 
 func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
@@ -1787,6 +1838,30 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The wars a line may name: this season's, taking attendance.
+	attendWars, _, err := participationWars(db, body.SeasonID)
+	if err != nil {
+		slog.Error("handleParticipationSave: wars", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	warOK := map[int]bool{}
+	for _, wr := range attendWars {
+		warOK[wr.ID] = true
+	}
+	for _, e := range body.Entries {
+		for _, wa := range e.Wars {
+			if !warOK[wa.WarID] {
+				http.Error(w, fmt.Sprintf("war %d is not one of this season's wars taking attendance", wa.WarID), http.StatusBadRequest)
+				return
+			}
+			if wa.PollResponse != "" && !validPollResponse(wa.PollResponse) {
+				http.Error(w, "poll_response must be yes, no or none", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
 		slog.Error("handleParticipationSave: begin tx", "error", err)
@@ -1825,6 +1900,13 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 			slog.Error("handleParticipationSave: upsert", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
+		}
+		for _, wa := range e.Wars {
+			if _, err := writeWarAttendanceTx(tx, e.MemberID, wa, user.ID); err != nil {
+				slog.Error("handleParticipationSave: war attendance", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
 		}
 		saved++
 	}

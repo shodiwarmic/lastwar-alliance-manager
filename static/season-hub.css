@@ -827,3 +827,14 @@
 .war-group-row .form-input[type="text"] { flex: 1 1 120px; }
 .war-post-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
 .war-post-list .war-post { margin-top: 0; }
+
+/* Participation: war attendance (private-docs 282). A season with wars hides the legacy
+   key-event and poll columns; one without hides the Wars column. */
+#participation-table.part-wars-mode .legacy-col,
+#participation-table.part-legacy-mode .wars-col { display: none; }
+.war-detail-row > td { padding: 4px 6px 10px; background: var(--bg-secondary); }
+.war-detail { position: sticky; left: 0; width: min(100%, calc(100vw - 48px)); display: flex; flex-direction: column; gap: 8px; }
+.war-detail-war { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; align-items: end; }
+.war-detail-head { grid-column: 1 / -1; font-weight: 600; font-size: 0.85rem; }
+.war-detail-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.78rem; color: var(--text-secondary); }
+.war-detail-war .form-input { min-width: 0; width: 100%; box-sizing: border-box; font-size: 0.85rem; }

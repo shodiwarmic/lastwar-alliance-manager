@@ -219,6 +219,7 @@ var mobileExcludedTables = map[string]string{
 	"season_war_config":            "configuration: the season's matchup weights, bands and loot settings",
 	"season_rank_groups":           "configuration: the season's war-rank reward groups",
 	"season_trade_posts":           "configuration and the plan: Trade Post definitions and their planned actions",
+	"season_war_attendance":        "officer judgement: who attended a war and how they answered its in-game poll",
 	"schedule_events":              "the plan, not an observation (a participation board's occurrence is created through its own route)",
 	"schedule_event_types":         "configuration: the schedule",
 	"server_events":                "the plan, not an observation",

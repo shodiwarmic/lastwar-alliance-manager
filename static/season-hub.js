@@ -370,7 +370,10 @@
                 case 'rank':              va = a.rank;                  vb = b.rank;                    break;
                 case 'participation_pct': va = a.participation_pct;    vb = b.participation_pct;       break;
                 case 'contribution_pct':  va = a.contribution_pct;     vb = b.contribution_pct;        break;
-                case 'key_event_attendance': va = a.key_event_attendance; vb = b.key_event_attendance; break;
+                case 'key_event_attendance':
+                    va = a.wars_completed != null ? a.wars_attended : a.key_event_attendance;
+                    vb = b.wars_completed != null ? b.wars_attended : b.key_event_attendance;
+                    break;
                 case 'class_tag':         va = a.class_tag;             vb = b.class_tag;               break;
                 case 'reward_tier':       va = tierSortIndex(a.reward_tier); vb = tierSortIndex(b.reward_tier); break;
                 default:                  va = 0; vb = 0;
@@ -419,12 +422,21 @@
             // Contribution
             tr.appendChild(makeContributionCell(m));
 
-            // Key event attendance
+            // Key event attendance: with wars, attended of the completed wars to date (the
+            // scheduled total in the title); without, the legacy count against the requirement.
             const tdKey = document.createElement('td');
-            const eligClass = m.key_event_eligible ? 'key-event-eligible' : 'key-event-ineligible';
             const eligSpan = document.createElement('span');
-            eligSpan.className = eligClass;
-            eligSpan.textContent = m.key_event_attendance + ' / ' + (activeSeason ? activeSeason.key_event_required : '—');
+            if (m.wars_completed != null) {
+                eligSpan.className = 'wars-attended';
+                eligSpan.textContent = m.wars_attended + ' / ' + m.wars_completed;
+                const unknown = m.wars_completed - m.wars_known;
+                eligSpan.title = m.wars_attended + ' attended of ' + m.wars_completed + ' completed so far · ' + m.wars_scheduled +
+                    ' scheduled this season' + (unknown > 0 ? ' · ' + unknown + ' not recorded' : '');
+                tdKey.dataset.exportValue = m.wars_attended;
+            } else {
+                eligSpan.className = m.key_event_eligible ? 'key-event-eligible' : 'key-event-ineligible';
+                eligSpan.textContent = m.key_event_attendance + ' / ' + (activeSeason ? activeSeason.key_event_required : '—');
+            }
             tdKey.appendChild(eligSpan);
             tr.appendChild(tdKey);
 
@@ -598,12 +610,19 @@
     // Rows carry a score <select>, key-event count and three note inputs, so the
     // search hides rows rather than re-rendering — a re-render would wipe every
     // unsaved edit. saveParticipation walks all rows, so hidden members still save.
+    // A season with wars gives each member a second row (the week's war detail) in the same
+    // tbody, so the search hides the group: rows are the member rows, groups their tbodies.
     QuickSearch.attach({
         input: 'participation-search',
-        container: 'participation-tbody',
-        rows: 'tr',
+        container: 'participation-table',
+        rows: 'tr[data-member-id]',
+        groups: 'tbody.part-member',
         emptyText: 'No members match your search.',
     });
+    // The week's wars and their attendance (private-docs 282), from the participation GET.
+    let partHasWars = false;
+    let partWars = [];
+    let partAttendance = {};
 
     function populateWeekSelect() {
         const sel = document.getElementById('week-select');
@@ -651,13 +670,28 @@
 
         fetch('/api/season-hub/participation?season_id=' + activeSeason.id + '&week=' + week)
             .then(r => r.json())
-            .then(data => renderParticipationRows(data.entries, week))
+            .then(data => {
+                partHasWars = !!data.has_wars;
+                partWars = data.wars || [];
+                partAttendance = {};
+                (data.war_attendance || []).forEach(a => { partAttendance[a.war_id + ':' + a.member_id] = a; });
+                renderParticipationRows(data.entries, week);
+            })
             .catch(() => showToast('Failed to load participation.', 'error'));
     }
 
     function renderParticipationRows(existingEntries, week) {
-        const tbody = document.getElementById('participation-tbody');
-        if (!tbody) return;
+        const table = document.getElementById('participation-table');
+        if (!table) return;
+        // A season with wars records each war's attendance and poll; one without keeps the
+        // legacy key-event count and poll boxes (decision 8).
+        table.classList.toggle('part-wars-mode', partHasWars);
+        table.classList.toggle('part-legacy-mode', !partHasWars);
+        const weekWars = partWars.filter(w => w.week_number === week);
+        const allBtn = document.getElementById('btn-war-detail-all');
+        if (allBtn) allBtn.style.display = partHasWars && CAN_MANAGE ? '' : 'none';
+        const impBtn = document.getElementById('btn-import-attendance');
+        if (impBtn) impBtn.style.display = partHasWars && CAN_MANAGE ? '' : 'none';
 
         // Build a lookup of existing entries for the selected week, keyed by member_id
         const existing = {};
@@ -676,6 +710,7 @@
             const tr = document.createElement('tr');
             tr.dataset.memberId = m.member_id;
             tr.dataset.search = m.name + ' ' + m.rank;
+            tr._entry = e;
 
             const tdName = document.createElement('td');
             tdName.textContent = m.name;
@@ -702,8 +737,31 @@
             tdScore.appendChild(sel);
             tr.appendChild(tdScore);
 
+            // This week's wars: a toggle for the member's detail row.
+            const tdWars = document.createElement('td');
+            tdWars.className = 'wars-col';
+            let detail = null;
+            if (partHasWars) {
+                detail = buildWarDetailRow(m, weekWars);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-secondary btn-sm war-detail-toggle';
+                const known = weekWars.filter(w => { const a = partAttendance[w.id + ':' + m.member_id]; return a && a.attended != null; }).length;
+                btn.textContent = weekWars.length ? weekWars.length + ' war' + (weekWars.length === 1 ? '' : 's') + ' · ' + known + ' recorded' : 'No wars';
+                btn.disabled = !weekWars.length;
+                btn.setAttribute('aria-expanded', 'false');
+                btn.addEventListener('click', () => {
+                    const open = detail.style.display === 'none';
+                    detail.style.display = open ? '' : 'none';
+                    btn.setAttribute('aria-expanded', String(open));
+                });
+                tdWars.appendChild(btn);
+            }
+            tr.appendChild(tdWars);
+
             // Key event count
             const tdKey = document.createElement('td');
+            tdKey.className = 'legacy-col';
             const keyInput = document.createElement('input');
             keyInput.type = 'number';
             keyInput.className = 'key-event-count';
@@ -728,6 +786,7 @@
             // role-specific note says which context the officer meant.
             const mkRoleNote = (cls, value, placeholder) => {
                 const td = document.createElement('td');
+                td.className = 'legacy-col';
                 const input = document.createElement('input');
                 input.type = 'text';
                 input.className = `${cls} note-input form-input`;
@@ -738,7 +797,7 @@
             };
             const mkPollCheck = (cls, checked, label) => {
                 const td = document.createElement('td');
-                td.className = 'poll-cell';
+                td.className = 'poll-cell legacy-col';
                 const box = document.createElement('input');
                 box.type = 'checkbox';
                 box.className = `${cls} poll-check`;
@@ -754,11 +813,84 @@
             tr.appendChild(mkRoleNote('defense-note-input', e.defense_note, 'Defense note'));
             tr.appendChild(mkPollCheck('defense-poll-check', e.defense_poll_voted, 'Voted on defense poll'));
 
-            return tr;
+            const group = document.createElement('tbody');
+            group.className = 'part-member';
+            group.appendChild(tr);
+            if (detail) group.appendChild(detail);
+            return group;
         });
 
-        tbody.replaceChildren(...rows);
+        table.querySelectorAll('tbody').forEach(tb => tb.remove());
+        rows.forEach(g => table.appendChild(g));
         QuickSearch.apply('participation-search');
+    }
+
+    // One member's war detail: per war of the week, attended (unknown / yes / no), the in-game
+    // poll (no response / yes / no) and a note. Unknown is not absent.
+    function buildWarDetailRow(m, weekWars) {
+        const tr = document.createElement('tr');
+        tr.className = 'war-detail-row';
+        tr.style.display = 'none';
+        const td = document.createElement('td');
+        td.colSpan = 10;
+        const box = document.createElement('div');
+        box.className = 'war-detail';
+        weekWars.forEach(w => {
+            const a = partAttendance[w.id + ':' + m.member_id] || {};
+            const block = document.createElement('div');
+            block.className = 'war-detail-war';
+            block.dataset.warId = w.id;
+            const head = document.createElement('div');
+            head.className = 'war-detail-head';
+            head.textContent = (w.role === 'attack' ? 'Attack' : 'Defense') + (w.opponent_tag ? ' vs [' + w.opponent_tag + ']' : '') +
+                (w.battle_date ? ' · ' + w.battle_date : '') + (w.status !== 'completed' ? ' · ' + w.status : '');
+            const mkSel = (cls, opts, value, label) => {
+                const lab = document.createElement('label');
+                lab.className = 'war-detail-field';
+                const span = document.createElement('span');
+                span.textContent = label;
+                const s = document.createElement('select');
+                s.className = 'form-input ' + cls;
+                opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.appendChild(o); });
+                s.value = value;
+                lab.append(span, s);
+                return lab;
+            };
+            const attended = a.attended == null ? '' : (a.attended ? 'yes' : 'no');
+            const note = document.createElement('input');
+            note.type = 'text';
+            note.className = 'form-input war-att-note';
+            note.placeholder = 'Note';
+            note.value = a.note || '';
+            note.setAttribute('aria-label', 'Note');
+            block.append(head,
+                mkSel('war-att-attended', [['', 'Unknown'], ['yes', 'Attended'], ['no', 'Did not']], attended, 'Attended'),
+                mkSel('war-att-poll', [['none', 'No response'], ['yes', 'Yes'], ['no', 'No']], a.poll_response || 'none', w.poll_held ? 'Poll' : 'Poll (none held)'),
+                note);
+            box.appendChild(block);
+        });
+        td.appendChild(box);
+        tr.appendChild(td);
+        return tr;
+    }
+
+    const btnWarDetailAll = document.getElementById('btn-war-detail-all');
+    if (btnWarDetailAll) {
+        btnWarDetailAll.addEventListener('click', () => {
+            const rows = document.querySelectorAll('#participation-table .war-detail-row');
+            const open = Array.from(rows).some(r => r.style.display === 'none');
+            rows.forEach(r => { r.style.display = open ? '' : 'none'; });
+            document.querySelectorAll('#participation-table .war-detail-toggle').forEach(b => b.setAttribute('aria-expanded', String(open)));
+            btnWarDetailAll.textContent = open ? 'Hide war detail' : 'Show war detail';
+        });
+    }
+    const btnImportAttendance = document.getElementById('btn-import-attendance');
+    if (btnImportAttendance) {
+        btnImportAttendance.addEventListener('click', () => window.SeasonHub.openImport({
+            kind: 'war_attendance', title: 'war attendance',
+            columns: 'Columns: Member and War (a date, with attack or defense when a day has two, or a week and role such as W5 attack), required; Attended (yes, no, blank = unknown), Poll (yes, no, blank = no response), Note.',
+            onDone: () => loadParticipationWeek(),
+        }));
     }
 
     const btnSaveParticipation = document.getElementById('btn-save-participation');
@@ -770,13 +902,23 @@
         const sel = document.getElementById('week-select');
         if (!sel || !activeSeason) return;
         const week = parseInt(sel.value, 10);
-        const tbody = document.getElementById('participation-tbody');
-        if (!tbody) return;
+        const table = document.getElementById('participation-table');
+        if (!table) return;
 
         const entries = [];
-        tbody.querySelectorAll('tr').forEach(tr => {
+        table.querySelectorAll('tr[data-member-id]').forEach(tr => {
             const memberId = parseInt(tr.dataset.memberId, 10);
             if (!memberId) return;
+            // The week's wars, from the member's detail row (the next row in its group).
+            const wars = [];
+            const detail = tr.nextElementSibling;
+            if (detail && detail.classList.contains('war-detail-row')) {
+                detail.querySelectorAll('.war-detail-war').forEach(b => {
+                    const att = b.querySelector('.war-att-attended').value;
+                    wars.push({ war_id: parseInt(b.dataset.warId, 10), attended: att === '' ? null : att === 'yes',
+                        poll_response: b.querySelector('.war-att-poll').value, note: b.querySelector('.war-att-note').value });
+                });
+            }
             const score = tr.querySelector('.score-select').value;
             const attended = parseInt(tr.querySelector('.key-event-count').value, 10) || 0;
             // '.note-input' is shared styling across all three note fields, so
@@ -790,7 +932,8 @@
                 attack_note:        tr.querySelector('.attack-note-input').value,
                 defense_note:       tr.querySelector('.defense-note-input').value,
                 attack_poll_voted:  tr.querySelector('.attack-poll-check').checked,
-                defense_poll_voted: tr.querySelector('.defense-poll-check').checked
+                defense_poll_voted: tr.querySelector('.defense-poll-check').checked,
+                wars,
             });
         });
 
