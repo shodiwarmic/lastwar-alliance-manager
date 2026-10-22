@@ -964,6 +964,8 @@ type RankPermissions struct {
 	ViewReportVSMisses      bool `json:"view_report_vs_misses"`
 	ViewReportDonations     bool `json:"view_report_donations"`
 	ViewReportParticipation bool `json:"view_report_participation"`
+	// The Season Participation report (private-docs 286), seeded from view_report_participation.
+	ViewReportSeasonParticipation bool `json:"view_report_season_participation"`
 }
 
 // ValidSkillKeys is the canonical list of skill keys. Adding a new skill = add here only.
@@ -1052,6 +1054,7 @@ var PermissionGroups = []PermissionGroup{
 		{Key: "view_report_vs_misses", Label: "VS misses"},
 		{Key: "view_report_donations", Label: "Donations"},
 		{Key: "view_report_participation", Label: "Participation grid"},
+		{Key: "view_report_season_participation", Label: "Season participation"},
 	}},
 	{Feature: "Season Hub", Rows: []PermissionRow{
 		{Key: "view_season_hub", Label: "View"},

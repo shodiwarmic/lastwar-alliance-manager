@@ -842,6 +842,18 @@ WHERE NOT EXISTS (SELECT 1 FROM strike_types WHERE key = 'war_poll_yes_no_show')
 UPDATE strike_types SET is_system = 1, active = 1 WHERE key = 'war_poll_yes_no_show';
 -- +goose StatementEnd
 
+
+
+-- ── 286: the Season Participation report's permission ───────────────────────
+-- Seeded true for every rank that can run the Participation grid report, where the key is
+-- absent (085's shape), so an operator's later choice is never overwritten.
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.view_report_season_participation', json('true'))
+WHERE json_extract(permissions, '$.view_report_participation') = 1
+  AND json_type(permissions, '$.view_report_season_participation') IS NULL;
+-- +goose StatementEnd
+
 -- +goose Down
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_poll_reviews;

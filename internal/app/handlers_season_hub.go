@@ -237,8 +237,11 @@ type SeasonReward struct {
 // Helpers
 // ---------------------------------------------------------------------------
 
-func populateSeasonChildren(s *Season) error {
-	slRows, err := db.Query(`SELECT id, season_id, key, label, points, sort_order
+func populateSeasonChildren(s *Season) error { return populateSeasonChildrenQ(db, s) }
+
+// populateSeasonChildrenQ reads a season's score levels, trackables and reward tiers through q.
+func populateSeasonChildrenQ(q rowQueryer, s *Season) error {
+	slRows, err := q.Query(`SELECT id, season_id, key, label, points, sort_order
 		FROM season_score_levels WHERE season_id = ? ORDER BY sort_order ASC`, s.ID)
 	if err != nil {
 		return err
@@ -253,7 +256,7 @@ func populateSeasonChildren(s *Season) error {
 	}
 	slRows.Close()
 
-	tRows, err := db.Query(`SELECT id, season_id, key, label, sort_order
+	tRows, err := q.Query(`SELECT id, season_id, key, label, sort_order
 		FROM season_trackables WHERE season_id = ? ORDER BY sort_order ASC`, s.ID)
 	if err != nil {
 		return err
@@ -270,7 +273,7 @@ func populateSeasonChildren(s *Season) error {
 	// holds the only connection and any further query deadlocks the process.
 	tRows.Close()
 
-	rtRows, err := db.Query(`SELECT id, season_id, key, label, slot_count, color, sort_order, wars_required, requires_core_events
+	rtRows, err := q.Query(`SELECT id, season_id, key, label, slot_count, color, sort_order, wars_required, requires_core_events
 		FROM season_reward_tiers WHERE season_id = ? ORDER BY sort_order ASC`, s.ID)
 	if err != nil {
 		return err
@@ -390,7 +393,10 @@ const seasonColumns = `id, name, season_number, start_date, COALESCE(end_date,''
 	war_active_min_pct, war_at_risk_min_pct, schedule_buffer_minutes, land_readiness_buffer_hours,
 	is_active, COALESCE(archived_at,''), created_at, target_war_rank`
 
-func scanSeason(row *sql.Row) (*Season, error) {
+func scanSeason(row *sql.Row) (*Season, error) { return scanSeasonQ(row, db) }
+
+// scanSeasonQ scans a season row and reads its children through childQ.
+func scanSeasonQ(row *sql.Row, childQ rowQueryer) (*Season, error) {
 	var s Season
 	var pa, pr, wa, wr, target sql.NullInt64
 	if err := row.Scan(&s.ID, &s.Name, &s.SeasonNumber, &s.StartDate, &s.EndDate,
@@ -414,7 +420,7 @@ func scanSeason(row *sql.Row) (*Season, error) {
 	}
 	s.PollActiveMinPct, s.PollAtRiskMinPct = opt(pa), opt(pr)
 	s.WarActiveMinPct, s.WarAtRiskMinPct = opt(wa), opt(wr)
-	if err := populateSeasonChildren(&s); err != nil {
+	if err := populateSeasonChildrenQ(childQ, &s); err != nil {
 		return nil, err
 	}
 	return &s, nil
@@ -431,6 +437,11 @@ func loadActiveSeason() (*Season, error) {
 // loadSeasonByID loads a season by ID with score levels and trackables.
 func loadSeasonByID(id int) (*Season, error) {
 	return scanSeason(db.QueryRow(`SELECT `+seasonColumns+` FROM seasons WHERE id = ?`, id))
+}
+
+// loadSeasonByIDQ is loadSeasonByID through q (a report's read transaction).
+func loadSeasonByIDQ(q rowQueryer, id int) (*Season, error) {
+	return scanSeasonQ(q.QueryRow(`SELECT `+seasonColumns+` FROM seasons WHERE id = ?`, id), q)
 }
 
 // autoActivateUpcomingSeason checks whether any pending (inactive, non-archived) season
@@ -1409,6 +1420,11 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 // the Hub's default order (overall %, then contribution). The Hub data and the season dashboard
 // both read it; neither filters here.
 func buildSeasonMembers(season *Season) ([]SeasonMember, bool, error) {
+	return buildSeasonMembersQ(db, season, time.Now())
+}
+
+// buildSeasonMembersQ is buildSeasonMembers through q at now (the report layer's form).
+func buildSeasonMembersQ(q rowQueryer, season *Season, now time.Time) ([]SeasonMember, bool, error) {
 	var err error
 	// Build score key → points lookup
 	scorePts := map[string]int{}
@@ -1427,7 +1443,7 @@ func buildSeasonMembers(season *Season) ([]SeasonMember, bool, error) {
 		attendedKeyEvt int // count, not bool
 	}
 	partRows := []partRow{}
-	rows, err := db.Query(`SELECT member_id, week_number, score, attended_key_event
+	rows, err := q.Query(`SELECT member_id, week_number, score, attended_key_event
 		FROM season_participation WHERE season_id = ?`, season.ID)
 	if err != nil {
 		return nil, false, fmt.Errorf("participation query: %w", err)
@@ -1454,7 +1470,7 @@ func buildSeasonMembers(season *Season) ([]SeasonMember, bool, error) {
 	memberRecords := map[int]map[string]int64{}
 
 	// Season-end snapshot totals (week_number=0)
-	crows, err := db.Query(`SELECT member_id, SUM(recorded_value) AS total
+	crows, err := q.Query(`SELECT member_id, SUM(recorded_value) AS total
 		FROM season_member_records WHERE season_id = ? AND week_number = 0
 		GROUP BY member_id`, season.ID)
 	if err != nil {
@@ -1474,7 +1490,7 @@ func buildSeasonMembers(season *Season) ([]SeasonMember, bool, error) {
 	crows.Close()
 
 	// For members without a season-end snapshot, sum their weekly rows
-	wrows, err := db.Query(`SELECT member_id, SUM(recorded_value) AS total
+	wrows, err := q.Query(`SELECT member_id, SUM(recorded_value) AS total
 		FROM season_member_records WHERE season_id = ? AND week_number > 0
 		GROUP BY member_id`, season.ID)
 	if err != nil {
@@ -1494,7 +1510,7 @@ func buildSeasonMembers(season *Season) ([]SeasonMember, bool, error) {
 	wrows.Close()
 
 	// Pivot query: per-member per-trackable breakdown from the season-end snapshot.
-	prows, err := db.Query(`SELECT member_id, trackable_id, recorded_value
+	prows, err := q.Query(`SELECT member_id, trackable_id, recorded_value
 		FROM season_member_records WHERE season_id = ? AND week_number = 0`, season.ID)
 	if err != nil {
 		return nil, false, fmt.Errorf("records pivot query: %w", err)
@@ -1517,7 +1533,7 @@ func buildSeasonMembers(season *Season) ([]SeasonMember, bool, error) {
 
 	// Load reward assignments
 	rewardByMember := map[int]string{}
-	rrows, err := db.Query(`SELECT member_id, reward_tier FROM season_rewards WHERE season_id = ?`, season.ID)
+	rrows, err := q.Query(`SELECT member_id, reward_tier FROM season_rewards WHERE season_id = ?`, season.ID)
 	if err != nil {
 		return nil, false, fmt.Errorf("rewards query: %w", err)
 	}
@@ -1535,31 +1551,31 @@ func buildSeasonMembers(season *Season) ([]SeasonMember, bool, error) {
 	// The roster: an archived season's frozen snapshot (a recruit since is not on it, a
 	// rename since keeps the old name); an open season's current members plus any former
 	// members (EX) who have data for it.
-	allMembers, err := loadSeasonRoster(db, season)
+	allMembers, err := loadSeasonRoster(q, season)
 	if err != nil {
 		return nil, false, fmt.Errorf("roster: %w", err)
 	}
 
 	// Wars and their attendance (private-docs 282); a season with no wars keeps the legacy
 	// key-event count (decision 8).
-	seasonWars, err := loadSeasonWars(db, season.ID)
+	seasonWars, err := loadSeasonWars(q, season.ID)
 	if err != nil {
 		return nil, false, fmt.Errorf("wars: %w", err)
 	}
-	attendance, err := loadWarAttendance(db, season.ID)
+	attendance, err := loadWarAttendance(q, season.ID)
 	if err != nil {
 		return nil, false, fmt.Errorf("war attendance: %w", err)
 	}
 	hasWars := len(seasonWars) > 0
-	strikeCounts, err := seasonStrikeCounts(db, season.ID)
+	strikeCounts, err := seasonStrikeCounts(q, season.ID)
 	if err != nil {
 		return nil, false, fmt.Errorf("season strikes: %w", err)
 	}
-	today := gametimeDateOf(time.Now())
+	today := gametimeDateOf(now)
 	warCounts, warsCompleted, pollsApplicable := warCountsByMember(seasonWars, attendance, today)
 	// The status engine's inputs: the completed weeks, and the completed wars with each member's
 	// line (decisions 3 and 7).
-	completedWeeks := completedSeasonWeeks(season, time.Now())
+	completedWeeks := completedSeasonWeeks(season, now)
 	type warLine struct {
 		attended *bool
 		poll     string

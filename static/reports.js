@@ -544,6 +544,125 @@
     }
     REPORTS.donations = { run: runDonations };
 
+    // --- Season participation (GET /api/reports/season-participation) ---------------
+    // One on-screen table (sortable) and a detached export with one column per week, built
+    // from the report data (TableExport.attach) — the on-screen week dots don't export.
+
+    let seasonReport = null;
+    const seasonSort = { col: null, asc: true };
+    const STATUS_LABEL = { active: 'Active', at_risk: 'At Risk', below: 'Below Requirement', na: 'Not yet rated' };
+    const ELIG_LABEL = { eligible: 'Eligible', on_pace: 'On Pace', can_still_qualify: 'Can Still Qualify', eliminated: 'Eliminated', not_applicable: '—' };
+    const pctText = v => v == null ? '—' : Math.round(v) + '%';
+    const warsText = m => m.has_wars ? m.wars_attended + ' / ' + m.wars_completed + ' (of ' + m.wars_scheduled + ')' : m.wars_attended + ' (legacy count)';
+    const tierLabel = (rep, k) => { const t = (rep.tiers || []).find(x => x.key === k); return t ? t.label : (k || ''); };
+    const scoreLabel = (rep, k) => {
+        if (k === 'not_scored') return 'Not scored';
+        if (!k) return '';
+        const sl = (rep.score_levels || []).find(x => x.key === k);
+        return sl ? sl.label : k;
+    };
+
+    function seasonExportTable(rows) {
+        const rep = seasonReport;
+        const t = document.createElement('table');
+        const head = t.createTHead().insertRow();
+        const cols = ['Member', 'Rank'].concat((rep ? rep.weeks : []).map(w => 'Week ' + w),
+            ['Full', 'Partial', 'Absent', 'Excused', 'Not scored', 'Wars attended', 'Wars completed', 'Wars scheduled', 'Attack',
+                'Defense', 'Poll attack %', 'Poll defense %', 'Poll %', 'Overall %', 'Status', 'Season strikes', 'Reviews dismissed',
+                'Contribution', 'Reward tier', 'Transferred from', 'Transfer reason'],
+            (rep ? rep.tiers : []).map(x => x.label + ' eligibility'));
+        cols.forEach(c => head.appendChild(Object.assign(document.createElement('th'), { textContent: c })));
+        const body = t.createTBody();
+        rows.forEach(m => {
+            const tr = body.insertRow();
+            const cell = (v, raw) => { const td = tr.insertCell(); td.textContent = v == null ? '' : String(v); if (raw != null) td.dataset.exportValue = raw; };
+            cell(m.name); cell(m.rank);
+            m.weekly.forEach(k => cell(scoreLabel(rep, k)));
+            [m.full, m.partial, m.absent, m.excused, m.not_scored, m.wars_attended].forEach(v => cell(v));
+            cell(m.wars_completed); cell(m.wars_scheduled);
+            cell(m.has_wars ? m.wars_attack : ''); cell(m.has_wars ? m.wars_defense : '');
+            [m.poll_attack_pct, m.poll_defense_pct, m.poll_pct].forEach(v => cell(v == null ? '' : v.toFixed(1)));
+            const ov = m.standing.overall;
+            cell(ov.applicable ? ov.pct.toFixed(1) : '');
+            cell(STATUS_LABEL[m.standing.final] || m.standing.final);
+            cell(m.season_strikes_applied); cell(m.reviews_dismissed); cell(m.contribution_total);
+            cell(tierLabel(rep, m.reward_tier)); cell(m.transferred_from); cell(m.transfer_override_note);
+            rep.tiers.forEach(x => { const e = (m.eligibility || []).find(y => y.tier === x.key); cell(e ? ELIG_LABEL[e.status] || e.status : ''); });
+        });
+        return t;
+    }
+
+    function renderSeasonReport(panel, rep) {
+        seasonReport = rep;
+        const sel = document.getElementById('season-report-season');
+        sel.replaceChildren(...rep.seasons.map(s => el('option', { value: s.id, text: 'S' + s.season_number + ' — ' + s.name + (s.archived ? ' (archived)' : '') })));
+        sel.value = String(rep.season.id || '');
+        const table = document.getElementById('season-report-table');
+        const th = (text, key, type) => el('th', { dataset: key ? { sort: key, sortType: type || 'text' } : null, text });
+        table.tHead.replaceChildren(el('tr', {}, th('Member', 'name'), th('Rank', 'rank'), th('Weeks'), th('Full', 'full', 'number'),
+            th('Partial', 'partial', 'number'), th('Absent', 'absent', 'number'), th('Not scored', 'not_scored', 'number'),
+            th('Wars', 'wars', 'number'), th('Polls', 'polls', 'number'), th('Overall', 'overall', 'number'), th('Status', 'status', 'number'),
+            th('Strikes', 'strikes', 'number'), th('Contribution', 'contrib', 'number'), th('Reward', 'reward'), th('Eligibility')));
+        const sev = { below: 3, at_risk: 2, active: 1, na: 0 };
+        const rows = rep.members.map(m => {
+            const dots = el('span', { className: 'week-dots' }, m.weekly.map((k, i) => el('span', {
+                className: 'week-dot ' + (k === 'not_scored' ? 'dot-notscored' : !k ? 'dot-empty' : k === 'full' ? 'dot-full' : k === 'partial' ? 'dot-partial' : k === 'excused' ? 'dot-empty' : 'dot-absent'),
+                title: 'Week ' + (i + 1) + ': ' + (scoreLabel(rep, k) || 'still to come') })));
+            const ov = m.standing.overall;
+            const elig = (m.eligibility || []).filter(e => e.status !== 'not_applicable')
+                .map(e => { const t = rep.tiers.find(x => x.key === e.tier); return (t ? t.label : e.tier) + ': ' + (ELIG_LABEL[e.status] || e.status); });
+            return el('tr', {},
+                el('td', { text: m.name }),
+                el('td', {}, el('span', { className: 'member-rank rank-' + m.rank, text: m.rank })),
+                el('td', {}, dots),
+                numCell(String(m.full), m.full), numCell(String(m.partial), m.partial), numCell(String(m.absent), m.absent),
+                numCell(String(m.not_scored), m.not_scored),
+                el('td', { dataset: { sortValue: m.wars_attended }, text: warsText(m) }),
+                el('td', { dataset: { sortValue: m.poll_pct == null ? '' : m.poll_pct }, title: m.has_wars ? 'Attack ' + pctText(m.poll_attack_pct) + ' · Defense ' + pctText(m.poll_defense_pct) : null, text: pctText(m.poll_pct) }),
+                el('td', { dataset: { sortValue: ov.applicable ? ov.pct : '' }, title: ov.reason, text: ov.applicable ? ov.pct.toFixed(1) + '%' : '—' }),
+                el('td', { dataset: { sortValue: sev[m.standing.final] || 0 } },
+                    el('span', { className: 'status-badge status-' + (STATUS_LABEL[m.standing.final] ? m.standing.final : 'na'), text: STATUS_LABEL[m.standing.final] || m.standing.final })),
+                el('td', { dataset: { sortValue: m.season_strikes_applied }, title: m.reviews_dismissed ? m.reviews_dismissed + ' poll reviews dismissed' : null,
+                    text: String(m.season_strikes_applied) }),
+                el('td', { className: 'num', dataset: { sortValue: m.contribution_total, exportValue: m.contribution_total }, text: formatCompact(m.contribution_total) }),
+                el('td', {}, tierLabel(rep, m.reward_tier), m.transferred_from ? el('div', { className: 'report-note', text: 'from ' + m.transferred_from + (m.transfer_override_note ? ' — ' + m.transfer_override_note : '') }) : null),
+                el('td', { className: 'report-note', text: elig.join(' · ') }));
+        });
+        if (!rows.length) rows.push(el('tr', {}, el('td', { colspan: '15', className: 'report-empty', text: 'No season, or nobody on its roster.' })));
+        table.tBodies[0].replaceChildren(...rows);
+        if (window.TableSort) TableSort.attach(table, { state: seasonSort }).apply();
+        const bar = document.getElementById('season-report-export');
+        if (!bar.dataset.wired && window.TableExport) {
+            bar.dataset.wired = '1';
+            TableExport.attach({ bar, key: 'season-participation', filename: 'season-participation',
+                getRows: () => (seasonReport ? seasonReport.members : []), build: seasonExportTable });
+        }
+        document.getElementById('season-report-summary').replaceChildren(
+            el('p', { className: 'report-summary-lead', text: rep.season.id
+                ? `${rep.members.length} members · ${rep.completed_weeks} of ${rep.weeks.length} weeks complete` + (rep.in_progress ? ' · season in progress' : '')
+                : 'No season yet.' }),
+            el('p', { className: 'report-note', text: 'Overall is points over the weeks that have finished, Excused weeks left out; a finished week with no score is Not scored and counts as Absent. Wars are attended of the completed wars (a season without war records shows its weekly key-event count).' }));
+        setMeta(panel, [rep.season.id ? 'S' + rep.season.season_number + ' — ' + rep.season.name : '', 'Generated ' + fmtGenerated(rep.generated_at)]);
+        showBody(panel);
+    }
+
+    async function runSeasonReport(panel) {
+        setStatus(panel, 'Loading…');
+        const sel = document.getElementById('season-report-season');
+        const sid = sel && sel.value ? '?season_id=' + encodeURIComponent(sel.value) : '';
+        try {
+            renderSeasonReport(panel, await fetchReport('/api/reports/season-participation' + sid));
+        } catch (e) {
+            panel.querySelector('.report-body').style.display = 'none';
+            setStatus(panel, 'Could not run the report: ' + e.message, true);
+        }
+    }
+    REPORTS['season-participation'] = { run: runSeasonReport };
+    document.addEventListener('DOMContentLoaded', () => {
+        const sel = document.getElementById('season-report-season');
+        if (sel) sel.addEventListener('change', () => runSeasonReport(document.getElementById('tab-season-participation')));
+    });
+
     // --- Page ----------------------------------------------------------------------
 
     const ran = {};

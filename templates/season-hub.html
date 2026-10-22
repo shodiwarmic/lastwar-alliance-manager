@@ -66,6 +66,7 @@
                 <button type="button" id="rankings-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
             </div>
             <span id="rankings-count" class="tab-count"></span>
+            {{if .Permissions.ViewReportSeasonParticipation}}<a class="btn btn-secondary btn-sm" href="/reports#season-participation">Season Participation report</a>{{end}}
         </div>
         <div id="no-season-msg" class="info-panel" style="display:none">
             No active season. {{if .Permissions.ManageSeasonConfig}}Create one above to get started.{{end}}
