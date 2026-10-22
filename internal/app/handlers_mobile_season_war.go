@@ -6,8 +6,14 @@
 package app
 
 import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // GET /api/mobile/season-hub/war (view_season_war) — the active season's factions and alliance
@@ -53,4 +59,179 @@ func getMobileSeasonWar(w http.ResponseWriter, r *http.Request) {
 		"factions":  factions,
 		"alliances": out,
 	})
+}
+
+// mobileWarAlliance is one alliance a phone read: identity by tag AND server, then figures.
+type mobileWarAlliance struct {
+	Tag         string `json:"tag"`
+	Server      int    `json:"server"`
+	Name        string `json:"name"`
+	FactionKey  string `json:"faction_key"`
+	Power       *int64 `json:"power"`
+	MemberCount *int64 `json:"member_count"`
+	GroupRank   *int64 `json:"group_rank"`
+	Top10       *int64 `json:"top10_thp"`
+	Top5        *int64 `json:"top5_thp"`
+	Top3        *int64 `json:"top3_thp"`
+}
+
+// POST /api/mobile/season-hub/war/observations (manage_season_war)
+// {captured_at, alliances: [{tag, server, name?, faction_key?, power?, member_count?, group_rank?,
+// top10_thp?, top5_thp?, top3_thp?}]} — appended to the active season (source mobile). An alliance
+// is named by tag AND server; one the registry does not know is refused (a phone never mints a
+// registry row), one the registry knows but the season does not gets its season row. A faction
+// key sets the alliance's faction (a game fact). Each alliance is reported written, unchanged or
+// in errors[].
+func postMobileSeasonWarObservations(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	var body struct {
+		CapturedAt string              `json:"captured_at"`
+		Alliances  []mobileWarAlliance `json:"alliances"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if len(body.Alliances) == 0 || len(body.Alliances) > 500 {
+		http.Error(w, "send 1 to 500 alliances", http.StatusBadRequest)
+		return
+	}
+	s, err := loadActiveSeason()
+	if err != nil {
+		slog.Error("postMobileSeasonWarObservations: season", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if s == nil {
+		http.Error(w, "No active season", http.StatusConflict)
+		return
+	}
+	if ok, msg := seasonAcceptsEdits(s.ID); !ok {
+		seasonEditRefusal(w, msg)
+		return
+	}
+	factions, err := loadSeasonFactions(db, s.ID)
+	if err != nil {
+		slog.Error("postMobileSeasonWarObservations: factions", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	factionID := map[string]int{}
+	for _, f := range factions {
+		factionID[strings.ToLower(f.Key)] = f.ID
+	}
+	type result struct {
+		Index  int    `json:"index"`
+		Tag    string `json:"tag"`
+		Server int    `json:"server"`
+		Status string `json:"status"` // written | unchanged
+	}
+	type refusal struct {
+		Index int    `json:"index"`
+		Tag   string `json:"tag"`
+		Error string `json:"error"`
+	}
+	type valid struct {
+		i     int
+		a     mobileWarAlliance
+		extID int64
+		in    warObservationIn
+		at    time.Time
+	}
+	results := []result{}
+	errs := []refusal{}
+	var ok []valid
+	now := time.Now()
+	for i, a := range body.Alliances {
+		a.Tag = strings.TrimSpace(a.Tag)
+		if a.Tag == "" || a.Server <= 0 {
+			errs = append(errs, refusal{i, a.Tag, "an alliance is named by its tag together with its server"})
+			continue
+		}
+		if isOwnAlliance("", a.Tag) {
+			errs = append(errs, refusal{i, a.Tag, "our own alliance is not an opponent"})
+			continue
+		}
+		if a.FactionKey != "" && factionID[strings.ToLower(a.FactionKey)] == 0 {
+			errs = append(errs, refusal{i, a.Tag, "faction_key " + a.FactionKey + " is not one of this season's factions"})
+			continue
+		}
+		var extID int64
+		if err := db.QueryRow(`SELECT id FROM external_alliances WHERE tag = ? COLLATE NOCASE AND server = ?
+			ORDER BY updated_at DESC LIMIT 1`, a.Tag, a.Server).Scan(&extID); err == sql.ErrNoRows {
+			errs = append(errs, refusal{i, a.Tag, fmt.Sprintf("[%s] on server %d is not in the alliance registry — add it on the War tab first", a.Tag, a.Server)})
+			continue
+		} else if err != nil {
+			slog.Error("postMobileSeasonWarObservations: registry", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		in := warObservationIn{ObservedAt: body.CapturedAt, AlliancePower: a.Power, MemberCount: a.MemberCount,
+			GroupRank: a.GroupRank, Top10: a.Top10, Top5: a.Top5, Top3: a.Top3}
+		var at time.Time
+		hasFigure := a.Power != nil || a.MemberCount != nil || a.GroupRank != nil || a.Top10 != nil || a.Top5 != nil || a.Top3 != nil
+		if hasFigure {
+			var msg string
+			if at, msg = validateWarObservation(in, now); msg != "" {
+				errs = append(errs, refusal{i, a.Tag, msg})
+				continue
+			}
+		} else if a.FactionKey == "" {
+			errs = append(errs, refusal{i, a.Tag, "nothing to record: no figures and no faction"})
+			continue
+		}
+		ok = append(ok, valid{i, a, extID, in, at})
+	}
+	written := 0
+	if len(ok) > 0 {
+		tx, err := db.Begin()
+		if err != nil {
+			slog.Error("postMobileSeasonWarObservations: begin", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
+		for _, v := range ok {
+			write := seasonAllianceWrite{}
+			if v.a.FactionKey != "" {
+				fid := factionID[strings.ToLower(v.a.FactionKey)]
+				write.FactionID = optionalInt{Set: true, Value: &fid}
+			}
+			saID, created, err := writeSeasonAllianceTx(tx, s.ID, v.extID, write)
+			if err != nil {
+				slog.Error("postMobileSeasonWarObservations: season row", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+			changed := created || v.a.FactionKey != ""
+			if v.in.AlliancePower != nil || v.in.MemberCount != nil || v.in.GroupRank != nil || v.in.Top10 != nil ||
+				v.in.Top5 != nil || v.in.Top3 != nil {
+				id := int(saID)
+				v.in.SeasonAllianceID = &id
+				wrote, err := writeWarObservationTx(tx, s.ID, v.in, v.at, "mobile", user.ID)
+				if err != nil {
+					slog.Error("postMobileSeasonWarObservations: write", "error", err)
+					http.Error(w, "Database error", http.StatusInternalServerError)
+					return
+				}
+				changed = changed || wrote
+			}
+			st := "unchanged"
+			if changed {
+				st = "written"
+				written++
+			}
+			results = append(results, result{v.i, v.a.Tag, v.a.Server, st})
+		}
+		if err := tx.Commit(); err != nil {
+			slog.Error("postMobileSeasonWarObservations: commit", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
+	if written > 0 {
+		logActivity(user.ID, user.Username, "created", "season_opponent_observation", seasonTagName(&s.ID), false,
+			strconv.Itoa(written)+" alliances · via mobile")
+	}
+	writeJSON(w, map[string]any{"season_id": s.ID, "written": written, "results": results, "errors": errs})
 }

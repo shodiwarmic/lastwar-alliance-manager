@@ -787,3 +787,26 @@
 .land-path { margin-top: 6px; }
 .land-path summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
 .land-path-steps { margin: 6px 0; padding-left: 22px; font-size: 0.85rem; }
+
+/* War: opponents, figures, matchup breakdown, player pairing (private-docs 277) */
+.war-toolbar { flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.war-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 12px; margin: 6px 0; }
+.war-figure { display: flex; flex-direction: column; font-size: 0.85rem; min-width: 0; }
+.war-figure-label { color: var(--text-secondary); font-size: 0.78rem; }
+.war-figure-asof { color: var(--text-muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+.war-server { font-size: 0.85rem; color: var(--text-secondary); }
+.war-override { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--text-secondary); }
+.war-breakdown { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; margin: 6px 0; }
+.war-cat { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.82rem; }
+.war-cat-dropped { opacity: 0.6; }
+.war-obs-form { margin-top: 8px; }
+.war-obs-form summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+.war-add-grid { position: relative; }
+.war-pairs { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: 0.85rem; }
+.war-pair { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) minmax(0, 1fr) 4.5em; gap: 6px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border-color); }
+.war-pair-head { font-size: 0.78rem; color: var(--text-secondary); }
+.war-pair-side { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.war-pair-side small { color: var(--text-muted); }
+.war-pair-delta { text-align: right; }
+.war-pair-delta.up { color: var(--color-success); }
+.war-pair-delta.down { color: var(--color-danger); }

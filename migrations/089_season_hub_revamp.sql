@@ -481,7 +481,64 @@ CREATE TABLE IF NOT EXISTS season_land_snapshots (
 );
 -- +goose StatementEnd
 
+
+
+-- ── 277: War settings and opponent observations ─────────────────────────────
+-- The matchup score's weights and bands, the loot steps and the production stop, per season and
+-- copied with it. Observations are appended, never edited: the latest value of each figure per
+-- alliance (and for our own side, where a typed row overrides what the roster computes) is what
+-- the comparison uses, with its instant shown.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_war_config (
+    season_id             INTEGER PRIMARY KEY REFERENCES seasons(id),
+    weight_power          INTEGER NOT NULL DEFAULT 25,
+    weight_top10          INTEGER NOT NULL DEFAULT 35,
+    weight_top5           INTEGER NOT NULL DEFAULT 25,
+    weight_top3           INTEGER NOT NULL DEFAULT 15,
+    band_very_favorable   REAL    NOT NULL DEFAULT 10,
+    band_favorable        REAL    NOT NULL DEFAULT 3,
+    band_unfavorable      REAL    NOT NULL DEFAULT -3,
+    band_very_unfavorable REAL    NOT NULL DEFAULT -10,
+    min_categories        INTEGER NOT NULL DEFAULT 2,
+    loot_step_pct         INTEGER NOT NULL DEFAULT 3,
+    loot_max_pct          INTEGER NOT NULL DEFAULT 15,
+    production_stop_week  INTEGER,
+    production_stop_day   INTEGER
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_opponent_observations (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id          INTEGER NOT NULL REFERENCES seasons(id),
+    season_alliance_id INTEGER REFERENCES season_alliances(id),
+    is_own             INTEGER NOT NULL DEFAULT 0 CHECK((is_own = 1) = (season_alliance_id IS NULL)),
+    observed_at        TEXT    NOT NULL,
+    alliance_power     INTEGER,
+    member_count       INTEGER,
+    group_rank         INTEGER,
+    top10_thp          INTEGER,
+    top5_thp           INTEGER,
+    top3_thp           INTEGER,
+    source             TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by        INTEGER REFERENCES users(id),
+    note               TEXT    NOT NULL DEFAULT '',
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_opponent_obs ON season_opponent_observations(season_id, season_alliance_id, observed_at);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_opponent_obs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_opponent_observations;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_war_config;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_land_snapshots;
 -- +goose StatementEnd

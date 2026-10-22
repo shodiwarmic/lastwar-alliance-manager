@@ -9,6 +9,7 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/order-buttons.css"}}">
+<link rel="stylesheet" href="{{asset "/remote-finder.css"}}">
 <link rel="stylesheet" href="{{asset "/season-hub.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
 <link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
@@ -45,6 +46,7 @@
         {{if .Permissions.ManageSeasonContributions}}<button class="tab-btn" data-tab="contributions">Contributions</button>{{end}}
         <button class="tab-btn" data-tab="rewards">Rewards</button>
         {{if .Permissions.ViewSeasonLand}}<button class="tab-btn" data-tab="land">Land</button>{{end}}
+        {{if .Permissions.ViewSeasonWar}}<button class="tab-btn" data-tab="war">War</button>{{end}}
         {{if .Permissions.ViewSchedule}}<button class="tab-btn" data-tab="schedule">Schedule</button>{{end}}
         {{if or .Permissions.ViewComms .Permissions.ViewPolls}}<button class="tab-btn" data-tab="comms">Comms</button>{{end}}
         {{if .Permissions.ViewFiles}}<button class="tab-btn" data-tab="files">Files</button>{{end}}
@@ -207,6 +209,22 @@
     </div>
     {{end}}
 
+    <!-- ── War: opponents, observations, matchup, settings ─────────────── -->
+    {{if .Permissions.ViewSeasonWar}}
+    <div id="tab-war" class="tab-content" style="display:none">
+        <div id="war-own" class="card land-section"><p class="loading-msg">Loading…</p></div>
+        <div class="hub-section-head"><h3>Opponents</h3></div>
+        <div id="war-opponents"></div>
+        <div id="war-extras"></div>
+        <div class="hub-section-head"><h3>Observations</h3></div>
+        <div id="war-observations"></div>
+        <details class="land-settings" id="war-settings">
+            <summary>War settings</summary>
+            <div id="war-settings-body"></div>
+        </details>
+    </div>
+    {{end}}
+
     <!-- ── Schedule: the season's timeline and conflicts ────────────────── -->
     {{if .Permissions.ViewSchedule}}
     <div id="tab-schedule" class="tab-content" style="display:none">
@@ -275,16 +293,20 @@
     data-can-manage-schedule="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
     data-can-manage-land="{{if .Permissions.ManageSeasonLand}}true{{else}}false{{end}}"
     data-can-configure-land="{{if or .Permissions.ManageSeasonLand .Permissions.ManageSeasonConfig}}true{{else}}false{{end}}"
+    data-can-manage-war="{{if .Permissions.ManageSeasonWar}}true{{else}}false{{end}}"
+    data-can-configure-war="{{if or .Permissions.ManageSeasonWar .Permissions.ManageSeasonConfig}}true{{else}}false{{end}}"
     data-member-id="{{.MemberID}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
 <script src="{{asset "/table-utils.js"}}"></script>
+<script src="{{asset "/remote-finder.js"}}"></script>
 <script src="{{asset "/order-buttons.js"}}"></script>
 <script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/color-picker.js"}}"></script>
 <script src="{{asset "/mail.js"}}"></script>
 <script src="{{asset "/season-hub.js"}}"></script>
 <script src="{{asset "/season-hub-land.js"}}"></script>
+<script src="{{asset "/season-hub-war.js"}}"></script>
 {{end}}
 
 {{define "modals"}}

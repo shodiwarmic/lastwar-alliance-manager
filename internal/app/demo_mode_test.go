@@ -25,6 +25,7 @@ var demoBlocked = []struct{ method, path string }{
 	{"GET", "/api/mobile/season-hub/war"},
 	{"GET", "/api/mobile/season-hub/land"},
 	{"POST", "/api/mobile/season-hub/land/events"},
+	{"POST", "/api/mobile/season-hub/war/observations"},
 	{"POST", "/api/season-hub/seasons/1/archive"},
 	{"POST", "/api/change-password"},
 	{"POST", "/api/force-change-password"},

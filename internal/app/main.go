@@ -503,6 +503,11 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/land/events/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_land", handleSeasonLandEventDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/land/drops", authMiddleware(requirePermission("manage_season_land", handleSeasonLandDropCreate))).Methods("POST")
 	router.HandleFunc("/api/season-hub/land/drops/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_land", handleSeasonLandDropUpdate))).Methods("PUT")
+	// War (private-docs 277–280): view_season_war reads; manage_season_war writes.
+	router.HandleFunc("/api/season-hub/war", authMiddleware(requirePermission("view_season_war", handleSeasonWarGet))).Methods("GET")
+	router.HandleFunc("/api/season-hub/war/config", authMiddleware(requireAnyPermission([]string{"manage_season_war", "manage_season_config"}, handleSeasonWarConfigPut))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/war/observations", authMiddleware(requirePermission("manage_season_war", handleSeasonWarObservationCreate))).Methods("POST")
+	router.HandleFunc("/api/season-hub/war/observations/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_war", handleSeasonWarObservationDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/land/snapshots", authMiddleware(requirePermission("manage_season_land", handleSeasonLandSnapshotCreate))).Methods("POST")
 	router.HandleFunc("/api/season-hub/land/snapshots/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_land", handleSeasonLandSnapshotDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/land/snapshots/{id:[0-9]+}/import", authMiddleware(requirePermission("manage_season_land", handleSeasonLandSnapshotImport))).Methods("POST")

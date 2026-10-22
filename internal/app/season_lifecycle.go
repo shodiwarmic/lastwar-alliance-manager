@@ -469,7 +469,7 @@ var seasonChildTables = []string{
 	"season_tabs", "season_dashboard_cards", "season_roster_snapshot", "season_file_snapshots",
 	"season_alliances", "season_factions",
 	"season_land_config", "season_land_levels", "season_land_routes", "season_land_events", "season_land_drops",
-	"season_land_snapshots",
+	"season_land_snapshots", "season_war_config", "season_opponent_observations",
 }
 
 // seasonMemberTables are deleted with a member (deleteMemberTx): a member delete removes the
@@ -485,6 +485,7 @@ var seasonUserColumns = []struct{ table, column string }{
 	{"season_land_route_revisions", "saved_by"},
 	{"season_land_events", "recorded_by"},
 	{"season_land_snapshots", "uploaded_by"},
+	{"season_opponent_observations", "recorded_by"},
 }
 
 // seasonMemberColumns are nulled when a member is deleted: a plan that named them stays.
@@ -524,6 +525,12 @@ func copySeasonConfigTx(tx *sql.Tx, fromID int, toID int64) error {
 		`INSERT INTO season_land_levels (season_id, kind, level, name, resource_per_hour, unlock_week, unlock_day, extra, source, grade)
 			SELECT ?2, kind, level, name, resource_per_hour, unlock_week, unlock_day, extra, source, grade
 			FROM season_land_levels WHERE season_id = ?1`,
+		`INSERT INTO season_war_config (season_id, weight_power, weight_top10, weight_top5, weight_top3, band_very_favorable,
+			band_favorable, band_unfavorable, band_very_unfavorable, min_categories, loot_step_pct, loot_max_pct,
+			production_stop_week, production_stop_day)
+			SELECT ?2, weight_power, weight_top10, weight_top5, weight_top3, band_very_favorable, band_favorable,
+			band_unfavorable, band_very_unfavorable, min_categories, loot_step_pct, loot_max_pct, production_stop_week,
+			production_stop_day FROM season_war_config WHERE season_id = ?1`,
 		// Factions are setup; which alliance is in which is the new season's to record.
 		`INSERT INTO season_factions (season_id, key, label, is_ours, position)
 			SELECT ?2, key, label, is_ours, position FROM season_factions WHERE season_id = ?1`,
