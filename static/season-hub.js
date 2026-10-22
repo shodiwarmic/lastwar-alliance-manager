@@ -75,7 +75,7 @@
     }
     // An old #season-mail link opens the tab it became.
     if (location.hash === '#season-mail') history.replaceState(null, '', '#comms');
-    const tabsCtl = Tabs.init({ hash: true, defaultTab: 'rankings', onActivate: name => { currentTab = name; loadTabExtras(); emitHub('tab', name); } });
+    const tabsCtl = Tabs.init({ hash: true, defaultTab: 'dashboard', onActivate: name => { currentTab = name; loadTabExtras(); emitHub('tab', name); } });
     window.SeasonHub = {
         get season() { return activeSeason; },
         get members() { return allMembers; },
@@ -85,6 +85,7 @@
         reload() { if (activeSeason) loadSeasonData(activeSeason.id); },
         gradeBadge: (g, src) => makeGradeBadge(g, src),
         openImport: (opts) => openSeasonImport(opts),
+        showTab: (name) => tabsCtl.show(name),
     };
 
     // ── CSV import: preview, then confirm (decision 27) ──────────────────────

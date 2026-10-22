@@ -303,26 +303,33 @@ func handleScheduleConflicts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "season_id is required", http.StatusBadRequest)
 		return
 	}
-	var buffer int
-	if err := db.QueryRow(`SELECT schedule_buffer_minutes FROM seasons WHERE id = ?`, sid).Scan(&buffer); err == sql.ErrNoRows {
+	buffer, conflicts, err := seasonConflicts(db, user, sid)
+	if err == sql.ErrNoRows {
 		http.Error(w, "Season not found", http.StatusNotFound)
 		return
-	} else if err != nil {
-		slog.Error("handleScheduleConflicts: season", "error", err)
+	}
+	if err != nil {
+		slog.Error("handleScheduleConflicts", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	from, to, err := seasonTimelineBounds(db, sid)
-	if err != nil {
-		slog.Error("handleScheduleConflicts: bounds", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+	writeJSON(w, map[string]any{"buffer_minutes": buffer, "conflicts": conflicts})
+}
+
+// seasonConflicts checks a season's timed rows against everything the viewer may see on the
+// season's timeline (the Schedule tab and the dashboard both ask).
+func seasonConflicts(q rowQueryer, user *AuthUser, sid int) (int, []seasonConflict, error) {
+	var buffer int
+	if err := q.QueryRow(`SELECT schedule_buffer_minutes FROM seasons WHERE id = ?`, sid).Scan(&buffer); err != nil {
+		return 0, nil, err
 	}
-	events, windows, err := loadConflictInputs(db, user, from, to)
+	from, to, err := seasonTimelineBounds(q, sid)
 	if err != nil {
-		slog.Error("handleScheduleConflicts: load", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return 0, nil, err
+	}
+	events, windows, err := loadConflictInputs(q, user, from, to)
+	if err != nil {
+		return 0, nil, err
 	}
 	// Only this season's rows are checked; every timed row in range can block them.
 	for i := range events {
@@ -330,7 +337,7 @@ func handleScheduleConflicts(w http.ResponseWriter, r *http.Request) {
 			events[i].SeasonID = nil
 		}
 	}
-	writeJSON(w, map[string]any{"buffer_minutes": buffer, "conflicts": detectSeasonConflicts(events, windows, buffer)})
+	return buffer, detectSeasonConflicts(events, windows, buffer), nil
 }
 
 // loadConflictInputs reads the timed, uncancelled rows the viewer may see in [from, to] and the

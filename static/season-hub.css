@@ -865,3 +865,16 @@
 .poll-review-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; border-top: 1px solid var(--border-color); }
 .poll-review-actions { display: flex; gap: 6px; margin-left: auto; }
 .status-strikes { display: inline-block; margin-top: 3px; font-size: 0.72rem; color: var(--color-danger); }
+
+/* Season dashboard (private-docs 287): the main dashboard's auto-fit card grid */
+.season-dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; align-items: start; }
+.sd-card { padding: 12px 14px; min-width: 0; }
+.sd-card h3 { margin: 0 0 8px; font-size: 1rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sd-empty { color: var(--text-muted); font-size: 0.85rem; margin: 0; }
+.sd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 0.88rem; }
+.sd-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.sd-sub { font-size: 0.78rem; color: var(--text-secondary); }
+.sd-section { margin-top: 8px; }
+.sd-section-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-secondary); margin: 6px 0 4px; }
+.sd-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px 10px; }
+.sd-goto { margin-top: 6px; }

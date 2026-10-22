@@ -41,7 +41,8 @@
     <!-- Tabs. Each season orders, renames and hides these (Edit Season → Layout); the
          permission blocks here still decide which exist for this viewer. -->
     <div class="tab-bar" id="season-tab-bar">
-        <button class="tab-btn active" data-tab="rankings">Rankings</button>
+        <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+        <button class="tab-btn" data-tab="rankings">Rankings</button>
         {{if .Permissions.ManageSeasonParticipation}}<button class="tab-btn" data-tab="participation">Participation</button>{{end}}
         {{if .Permissions.ManageSeasonContributions}}<button class="tab-btn" data-tab="contributions">Contributions</button>{{end}}
         <button class="tab-btn" data-tab="rewards">Rewards</button>
@@ -50,6 +51,11 @@
         {{if .Permissions.ViewSchedule}}<button class="tab-btn" data-tab="schedule">Schedule</button>{{end}}
         {{if or .Permissions.ViewComms .Permissions.ViewPolls}}<button class="tab-btn" data-tab="comms">Comms</button>{{end}}
         {{if .Permissions.ViewFiles}}<button class="tab-btn" data-tab="files">Files</button>{{end}}
+    </div>
+
+    <!-- ── Dashboard: the season's cards (private-docs 287) ─────────────── -->
+    <div id="tab-dashboard" class="tab-content">
+        <div id="season-dashboard-grid" class="season-dashboard-grid"><p class="loading-msg">Loading…</p></div>
     </div>
 
     <!-- ── Rankings ──────────────────────────────────────────────────────── -->
@@ -344,6 +350,7 @@
 <script src="{{asset "/season-hub.js"}}"></script>
 <script src="{{asset "/season-hub-land.js"}}"></script>
 <script src="{{asset "/season-hub-war.js"}}"></script>
+<script src="{{asset "/season-hub-dashboard.js"}}"></script>
 {{end}}
 
 {{define "modals"}}

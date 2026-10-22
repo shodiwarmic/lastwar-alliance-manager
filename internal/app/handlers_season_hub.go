@@ -1404,36 +1404,12 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 // Main data endpoint
 // ---------------------------------------------------------------------------
 
-// handleSeasonHubData returns the active season config + all member standings.
-// R1–R3 (non-managers) receive only their own row — enforced server-side.
-func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
-	user := getAuthUser(r)
-	// Every member's row for the participation managers; their own row for everyone else.
-	canManage := userHasPermission(user, "manage_season_participation")
-
-	var season *Season
+// buildSeasonMembers computes every roster member's standings for a season — scores, the
+// status engine's judgement, war and poll counts, contribution, reward and season strikes — in
+// the Hub's default order (overall %, then contribution). The Hub data and the season dashboard
+// both read it; neither filters here.
+func buildSeasonMembers(season *Season) ([]SeasonMember, bool, error) {
 	var err error
-	if sidStr := r.URL.Query().Get("season_id"); sidStr != "" {
-		sid, _ := strconv.Atoi(sidStr)
-		season, err = loadSeasonByID(sid)
-		if err == sql.ErrNoRows {
-			http.Error(w, "Season not found", http.StatusNotFound)
-			return
-		}
-	} else {
-		season, err = loadActiveSeason()
-	}
-	if err != nil {
-		slog.Error("handleSeasonHubData: load season", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	if season == nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"season": nil, "members": []any{}})
-		return
-	}
-
 	// Build score key → points lookup
 	scorePts := map[string]int{}
 	maxPts := 0
@@ -1454,9 +1430,7 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query(`SELECT member_id, week_number, score, attended_key_event
 		FROM season_participation WHERE season_id = ?`, season.ID)
 	if err != nil {
-		slog.Error("handleSeasonHubData: participation query", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, false, fmt.Errorf("participation query: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -1484,9 +1458,7 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 		FROM season_member_records WHERE season_id = ? AND week_number = 0
 		GROUP BY member_id`, season.ID)
 	if err != nil {
-		slog.Error("handleSeasonHubData: contribution query", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, false, fmt.Errorf("contribution query: %w", err)
 	}
 	defer crows.Close()
 	snapshotMemberIDs := map[int]bool{}
@@ -1506,9 +1478,7 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 		FROM season_member_records WHERE season_id = ? AND week_number > 0
 		GROUP BY member_id`, season.ID)
 	if err != nil {
-		slog.Error("handleSeasonHubData: weekly contribution query", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, false, fmt.Errorf("weekly contribution query: %w", err)
 	}
 	defer wrows.Close()
 	for wrows.Next() {
@@ -1527,9 +1497,7 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	prows, err := db.Query(`SELECT member_id, trackable_id, recorded_value
 		FROM season_member_records WHERE season_id = ? AND week_number = 0`, season.ID)
 	if err != nil {
-		slog.Error("handleSeasonHubData: records pivot query", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, false, fmt.Errorf("records pivot query: %w", err)
 	}
 	defer prows.Close()
 	for prows.Next() {
@@ -1551,9 +1519,7 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	rewardByMember := map[int]string{}
 	rrows, err := db.Query(`SELECT member_id, reward_tier FROM season_rewards WHERE season_id = ?`, season.ID)
 	if err != nil {
-		slog.Error("handleSeasonHubData: rewards query", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, false, fmt.Errorf("rewards query: %w", err)
 	}
 	defer rrows.Close()
 	for rrows.Next() {
@@ -1571,37 +1537,23 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 	// members (EX) who have data for it.
 	allMembers, err := loadSeasonRoster(db, season)
 	if err != nil {
-		slog.Error("handleSeasonHubData: roster", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	layout, err := loadSeasonLayout(db, season.ID)
-	if err != nil {
-		slog.Error("handleSeasonHubData: layout", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, false, fmt.Errorf("roster: %w", err)
 	}
 
 	// Wars and their attendance (private-docs 282); a season with no wars keeps the legacy
 	// key-event count (decision 8).
 	seasonWars, err := loadSeasonWars(db, season.ID)
 	if err != nil {
-		slog.Error("handleSeasonHubData: wars", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, false, fmt.Errorf("wars: %w", err)
 	}
 	attendance, err := loadWarAttendance(db, season.ID)
 	if err != nil {
-		slog.Error("handleSeasonHubData: war attendance", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, false, fmt.Errorf("war attendance: %w", err)
 	}
 	hasWars := len(seasonWars) > 0
 	strikeCounts, err := seasonStrikeCounts(db, season.ID)
 	if err != nil {
-		slog.Error("handleSeasonHubData: season strikes", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, false, fmt.Errorf("season strikes: %w", err)
 	}
 	today := gametimeDateOf(time.Now())
 	warCounts, warsCompleted, pollsApplicable := warCountsByMember(seasonWars, attendance, today)
@@ -1728,6 +1680,52 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 		}
 		return members[i].ContributionPct > members[j].ContributionPct
 	})
+
+	return members, hasWars, nil
+}
+
+// handleSeasonHubData returns the active season config + all member standings.
+// R1–R3 (non-managers) receive only their own row — enforced server-side.
+func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	// Every member's row for the participation managers; their own row for everyone else.
+	canManage := userHasPermission(user, "manage_season_participation")
+
+	var season *Season
+	var err error
+	if sidStr := r.URL.Query().Get("season_id"); sidStr != "" {
+		sid, _ := strconv.Atoi(sidStr)
+		season, err = loadSeasonByID(sid)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Season not found", http.StatusNotFound)
+			return
+		}
+	} else {
+		season, err = loadActiveSeason()
+	}
+	if err != nil {
+		slog.Error("handleSeasonHubData: load season", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if season == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"season": nil, "members": []any{}})
+		return
+	}
+
+	members, hasWars, err := buildSeasonMembers(season)
+	if err != nil {
+		slog.Error("handleSeasonHubData", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	layout, err := loadSeasonLayout(db, season.ID)
+	if err != nil {
+		slog.Error("handleSeasonHubData: layout", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 
 	// R1–R3 view restriction — enforced server-side: filter to own row only
 	if !canManage {
