@@ -544,6 +544,11 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/contributions/import", authMiddleware(requirePermission("manage_season_contributions", handleContributionsImport))).Methods("POST")
 	router.HandleFunc("/api/season-hub/contributions/manual", authMiddleware(requirePermission("manage_season_contributions", handleContributionsManual))).Methods("POST")
 	router.HandleFunc("/api/season-hub/rewards", authMiddleware(requirePermission("view_season_hub", handleRewardsGet))).Methods("GET")
+	// Eligibility (private-docs 284): shown beside the reward choice, never assigning.
+	router.HandleFunc("/api/season-hub/eligibility", authMiddleware(requirePermission("manage_season_rewards", handleSeasonEligibility))).Methods("GET")
+	router.HandleFunc("/api/season-hub/rewards/context", authMiddleware(requirePermission("manage_season_rewards", handleRewardContext))).Methods("GET")
+	router.HandleFunc("/api/season-hub/exemptions", authMiddleware(requirePermission("manage_season_config", handleExemptionCreate))).Methods("POST")
+	router.HandleFunc("/api/season-hub/exemptions/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_config", handleExemptionDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/rewards", authMiddleware(requirePermission("manage_season_rewards", handleRewardSave))).Methods("POST")
 	router.HandleFunc("/api/season-hub/rewards/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleRewardUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/rewards/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_rewards", handleRewardDelete))).Methods("DELETE")

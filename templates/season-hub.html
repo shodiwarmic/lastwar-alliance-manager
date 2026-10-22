@@ -212,6 +212,11 @@
                 </tbody>
             </table>
         </div>
+        {{if .Permissions.ManageSeasonRewards}}
+        <div class="hub-section-head"><h3>Eligibility</h3></div>
+        <div id="rewards-eligibility"></div>
+        {{end}}
+        <div id="rewards-exemptions"></div>
     </div>
 
     <!-- ── Land: path status, routes, settings ──────────────────────────── -->
@@ -505,7 +510,7 @@
             </div>
             <h4 class="modal-subhead">Reward Tiers</h4>
             <table class="data-table" id="es-reward-tiers-table">
-                <thead><tr><th>Key</th><th>Label</th><th>Slots</th><th>Colour</th><th>Order</th></tr></thead>
+                <thead><tr><th>Key</th><th>Label</th><th>Slots</th><th title="Wars a member must attend to be eligible; blank for no war rule">Wars required</th><th title="The week's Core events are required">Core</th><th>Colour</th><th>Order</th></tr></thead>
                 <tbody id="es-reward-tiers-tbody"></tbody>
             </table>
             <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-reward-tier">+ Add Tier</button>
@@ -614,6 +619,16 @@
                 <label for="reward-note">Note</label>
                 <textarea id="reward-note" class="form-input" rows="2"></textarea>
             </div>
+            <div class="form-group">
+                <label for="reward-transfer-from">Transferred from</label>
+                <select id="reward-transfer-from" class="form-input" translate="no"></select>
+            </div>
+            <div class="form-group" id="reward-transfer-note-wrap" style="display:none">
+                <label for="reward-transfer-note">Override reason</label>
+                <p class="field-warning" id="reward-transfer-rule"></p>
+                <textarea id="reward-transfer-note" class="form-input" rows="2"></textarea>
+            </div>
+            <div id="reward-context" class="reward-context"></div>
             <div id="reward-error" class="field-error" style="display:none"></div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" id="btn-cancel-reward">Cancel</button>

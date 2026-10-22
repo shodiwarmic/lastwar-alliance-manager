@@ -220,6 +220,7 @@ var mobileExcludedTables = map[string]string{
 	"season_rank_groups":                 "configuration: the season's war-rank reward groups",
 	"season_trade_posts":                 "configuration and the plan: Trade Post definitions and their planned actions",
 	"season_war_attendance":              "officer judgement: who attended a war and how they answered its in-game poll",
+	"season_member_exemptions":           "officer judgement: a member's exemption from the Core-event rule",
 	"season_participation_events":        "configuration: a season week's Core events",
 	"season_participation_event_entries": "officer judgement: a member's result in a week's event",
 	"schedule_events":                    "the plan, not an observation (a participation board's occurrence is created through its own route)",

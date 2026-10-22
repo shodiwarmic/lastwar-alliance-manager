@@ -36,6 +36,7 @@
     let scoreLevels = [];          // ScoreLevel[] for active season
     let allMembers = [];           // SeasonMember[] — filtered server-side already
     let allRewards = [];           // SeasonReward[]
+    let eligibility = null;        // the eligibility endpoint's answer (managers of rewards)
     let rewardTiers = [];          // SeasonRewardTier[] for active season, in sort order
     let tierByKey = {};            // key → SeasonRewardTier, rebuilt on every data load
     let allMailItems = [];         // SeasonMailItem[]
@@ -1646,6 +1647,7 @@
                 if (mine !== gen.rewards || !activeSeason || activeSeason.id !== sid) return;
                 allRewards = data.rewards || [];
                 renderRewardsTable();
+                if (CAN_MANAGE_REWARDS) loadEligibility(sid);
             })
             .catch(() => { if (mine === gen.rewards) showToast('Failed to load rewards.', 'error'); })
             .finally(() => { if (mine === gen.rewards) inflight.rewards = null; });
@@ -1677,6 +1679,15 @@
             count.className = 'tier-slot-count';
             count.textContent = t.slot_count > 0 ? n + '/' + t.slot_count : String(n);
             chip.appendChild(count);
+            // Eligible = on pace or eligible for the tier's rules (private-docs 284).
+            const sum = eligibility && (eligibility.tiers || []).find(x => x.key === t.key);
+            if (sum && (sum.wars_required != null || sum.requires_core_events)) {
+                const el = document.createElement('span');
+                el.className = 'tier-slot-eligible';
+                el.textContent = sum.eligible + ' eligible';
+                el.title = sum.eligible + ' members are on pace or eligible for ' + t.label;
+                chip.appendChild(el);
+            }
 
             return chip;
         }));
@@ -1711,7 +1722,15 @@
             const tdContrib = document.createElement('td'); tdContrib.textContent = rw.contribution_pct != null ? (rw.contribution_pct).toFixed(1) + '%' : '—'; tr.appendChild(tdContrib);
             // #rewards-table is translate="no" to protect names and the CSV/XLSX export,
             // but this cell is free-form officer prose — opt it back in.
-            const tdNote = document.createElement('td'); tdNote.setAttribute('translate', 'yes'); tdNote.textContent = rw.note || ''; tr.appendChild(tdNote);
+            const tdNote = document.createElement('td'); tdNote.setAttribute('translate', 'yes'); tdNote.textContent = rw.note || '';
+            if (rw.transferred_from_member_id) {
+                const tf = document.createElement('div');
+                tf.className = 'reward-transfer-line';
+                tf.append('Transferred from ', noTranslate(Object.assign(document.createElement('span'), { textContent: rw.transferred_from_name || ('#' + rw.transferred_from_member_id) })));
+                if (rw.transfer_override_note) tf.append(' · override: ' + rw.transfer_override_note);
+                tdNote.appendChild(tf);
+            }
+            tr.appendChild(tdNote);
             const tdBy = document.createElement('td'); tdBy.textContent = rw.logged_by || ''; tr.appendChild(tdBy);
 
             if (CAN_MANAGE_REWARDS) {
@@ -1738,6 +1757,206 @@
 
         tbody.replaceChildren(...rows);
         QuickSearch.apply('rewards-search');
+    }
+
+    // ── Eligibility (private-docs 284) ────────────────────────────────────────
+    const ELIG_LABELS = { eligible: 'Eligible', on_pace: 'On Pace', can_still_qualify: 'Can Still Qualify', eliminated: 'Eliminated', not_applicable: '—' };
+    const ELIG_TONES = { eligible: 'active', on_pace: 'active', can_still_qualify: 'at_risk', eliminated: 'below', not_applicable: 'na' };
+    const eligSort = { col: null, asc: true };
+
+    function loadEligibility(sid) {
+        fetch('/api/season-hub/eligibility?season_id=' + sid)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d || !activeSeason || activeSeason.id !== sid) return;
+                eligibility = d;
+                renderTierSlots();
+                renderEligibility();
+                renderExemptions();
+            })
+            .catch(() => {});
+    }
+
+    function eligBadge(te) {
+        const span = document.createElement('span');
+        span.className = 'status-badge status-' + (ELIG_TONES[te.status] || 'na');
+        span.textContent = ELIG_LABELS[te.status] || te.status;
+        span.title = (te.reasons || []).join('\n');
+        return span;
+    }
+
+    function renderEligibility() {
+        const box = document.getElementById('rewards-eligibility');
+        if (!box || !eligibility) return;
+        const ruled = (eligibility.tiers || []).filter(t => t.wars_required != null || t.requires_core_events);
+        if (!ruled.length) {
+            const p = document.createElement('p');
+            p.className = 'hub-section-note';
+            p.textContent = 'No tier has an eligibility rule yet — set wars required or Core events in Edit Season → Reward Tiers.';
+            box.replaceChildren(p);
+            return;
+        }
+        const table = document.createElement('table');
+        table.className = 'data-table';
+        table.setAttribute('translate', 'no');
+        const head = table.createTHead().insertRow();
+        const th = (text, key, type) => {
+            const h = document.createElement('th');
+            h.textContent = text;
+            h.setAttribute('translate', 'yes');
+            if (key) { h.dataset.sort = key; if (type) h.dataset.sortType = type; }
+            head.appendChild(h);
+        };
+        th('Member', 'name'); th('Rank', 'rank'); th('Wars', 'wars', 'number'); th('Overall', 'overall', 'number'); th('Core events', 'core', 'number');
+        ruled.forEach(t => th(t.label, 'tier_' + t.key, 'number'));
+        const tb = table.createTBody();
+        const sev = { eligible: 0, on_pace: 1, can_still_qualify: 2, eliminated: 3, not_applicable: 4 };
+        (eligibility.members || []).forEach(m => {
+            const tr = tb.insertRow();
+            tr.dataset.search = m.name + ' ' + m.rank;
+            const cell = (text, sortValue) => { const td = tr.insertCell(); td.textContent = text; if (sortValue != null) td.dataset.sortValue = sortValue; return td; };
+            cell(m.name);
+            const rc = tr.insertCell();
+            rc.appendChild(Object.assign(document.createElement('span'), { className: 'member-rank rank-' + m.rank, textContent: m.rank }));
+            cell(m.has_wars ? m.wars_attended + '/' + m.wars_completed + ' of ' + m.wars_scheduled : '—', m.wars_attended).style.whiteSpace = 'nowrap';
+            cell(m.overall_pct != null ? m.overall_pct.toFixed(1) + '%' : '—', m.overall_pct != null ? m.overall_pct : '');
+            cell(m.exempt ? 'Exempt' : (m.core_required ? m.core_attended + ' / ' + m.core_required : '—'), m.core_attended);
+            ruled.forEach(t => {
+                const te = (m.tiers || []).find(x => x.tier === t.key) || { status: 'not_applicable', reasons: [] };
+                const td = tr.insertCell();
+                td.dataset.sortValue = sev[te.status];
+                td.appendChild(eligBadge(te));
+            });
+        });
+        const wrap = document.createElement('div');
+        wrap.className = 'table-scroll';
+        wrap.appendChild(table);
+        const note = document.createElement('p');
+        note.className = 'hub-section-note';
+        note.textContent = (eligibility.season_over ? 'The season\'s wars are done: On Pace now reads Eligible. ' : '') +
+            'Eligibility is shown beside the choice and never assigns. Hover or tap a status for its reasons.';
+        box.replaceChildren(note, wrap);
+        tb.querySelectorAll('.status-badge').forEach(b => b.addEventListener('click', () => showToast(b.title || '', 'info', 7000)));
+        if (window.TableSort) TableSort.attach(table, { state: eligSort }).apply();
+    }
+
+    function renderExemptions() {
+        const box = document.getElementById('rewards-exemptions');
+        if (!box || !eligibility) return;
+        const canEdit = CAN_MANAGE_CONFIG && activeSeason && !activeSeason.archived_at;
+        const list = eligibility.exemptions || [];
+        if (!list.length && !canEdit) { box.replaceChildren(); return; }
+        const head = document.createElement('div');
+        head.className = 'hub-section-head';
+        head.appendChild(Object.assign(document.createElement('h3'), { textContent: 'Exemptions' }));
+        const ul = document.createElement('ul');
+        ul.className = 'exemption-list';
+        list.forEach(x => {
+            const li = document.createElement('li');
+            li.append(noTranslate(Object.assign(document.createElement('strong'), { textContent: x.name })),
+                ' — Core events' + (x.note ? ': ' + x.note : '') + (x.granted_by ? ' (granted by ' + x.granted_by + ', ' + x.created_at + ')' : ''));
+            if (canEdit) {
+                const del = Object.assign(document.createElement('button'), { type: 'button', className: 'btn btn-danger btn-sm' });
+                del.setAttribute('aria-label', 'Remove exemption');
+                del.appendChild(svgIcon('x'));
+                del.addEventListener('click', async () => {
+                    if (!await showConfirm('Remove ' + x.name + '\'s exemption?', 'Remove')) return;
+                    fetch('/api/season-hub/exemptions/' + x.id, { method: 'DELETE' })
+                        .then(r => { if (!r.ok) throw new Error('Remove failed'); loadEligibility(activeSeason.id); })
+                        .catch(err => showToast(err.message, 'error'));
+                });
+                li.appendChild(del);
+            }
+            ul.appendChild(li);
+        });
+        const parts = [head, list.length ? ul : Object.assign(document.createElement('p'), { className: 'hub-section-note', textContent: 'No exemptions.' })];
+        if (canEdit) {
+            const sel = document.createElement('select');
+            sel.className = 'form-input';
+            sel.setAttribute('translate', 'no');
+            sel.setAttribute('aria-label', 'Member');
+            [['', '— member —']].concat(allMembers.filter(m => m.rank !== 'EX').map(m => [String(m.member_id), m.name]))
+                .forEach(([v, t]) => sel.appendChild(Object.assign(document.createElement('option'), { value: v, textContent: t })));
+            const note = Object.assign(document.createElement('input'), { type: 'text', className: 'form-input', placeholder: 'Why (e.g. R4 duties)' });
+            note.setAttribute('aria-label', 'Reason');
+            const add = Object.assign(document.createElement('button'), { type: 'button', className: 'btn btn-primary btn-sm', textContent: 'Exempt from Core events' });
+            add.addEventListener('click', () => {
+                if (!sel.value) { showToast('Pick a member.', 'error'); return; }
+                fetch('/api/season-hub/exemptions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ season_id: activeSeason.id, member_id: parseInt(sel.value, 10), note: note.value.trim() }) })
+                    .then(async r => { if (!r.ok) throw new Error(await r.text()); loadEligibility(activeSeason.id); })
+                    .catch(err => showToast(err.message, 'error'));
+            });
+            const row = document.createElement('div');
+            row.className = 'tab-toolbar exemption-add';
+            row.append(sel, note, add);
+            parts.push(row);
+        }
+        box.replaceChildren(...parts);
+    }
+
+    // The Assign Reward modal's context: the member's figures and eligibility per tier, beside
+    // the choice; and, for a transfer, the Elite rule the recipient is checked against.
+    let rewardContext = null;
+    function loadRewardContext(memberId) {
+        const box = document.getElementById('reward-context');
+        rewardContext = null;
+        if (!box) return;
+        box.replaceChildren();
+        updateTransferRule();
+        if (!memberId || !activeSeason) return;
+        fetch('/api/season-hub/rewards/context?season_id=' + activeSeason.id + '&member_id=' + memberId)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d) return;
+                rewardContext = d;
+                const m = d.member;
+                const line = (label, value) => {
+                    const row = document.createElement('div');
+                    row.className = 'reward-context-row';
+                    row.append(Object.assign(document.createElement('span'), { textContent: label }), Object.assign(document.createElement('strong'), { textContent: value }));
+                    return row;
+                };
+                const tiers = document.createElement('div');
+                tiers.className = 'reward-context-tiers';
+                (m.tiers || []).filter(te => te.status !== 'not_applicable').forEach(te => {
+                    const row = document.createElement('div');
+                    row.append(makeTierBadge(te.tier), ' ', eligBadge(te));
+                    const why = document.createElement('div');
+                    why.className = 'reward-context-why';
+                    why.textContent = (te.reasons || []).join('; ');
+                    row.appendChild(why);
+                    tiers.appendChild(row);
+                });
+                box.replaceChildren(
+                    Object.assign(document.createElement('h4'), { className: 'modal-subhead', textContent: 'Context' }),
+                    line('Wars', m.has_wars ? m.wars_attended + ' attended · ' + m.wars_completed + ' completed · ' + m.wars_scheduled + ' scheduled' : 'no war records'),
+                    line('Overall', m.overall_pct != null ? m.overall_pct.toFixed(1) + '%' : 'no completed week yet'),
+                    line('Core events', m.exempt ? 'exempt' + (m.exempt_note ? ' (' + m.exempt_note + ')' : '') : m.core_attended + ' of ' + m.core_required + ' required'),
+                    line('Contribution', formatCompact(d.contribution_total)),
+                    line('Season strikes', (d.strikes || []).length ? (d.strikes || []).map(s => s.label || s.reason || 'strike').join(', ') : 'none'),
+                    tiers);
+                updateTransferRule();
+            })
+            .catch(() => {});
+    }
+
+    // A transfer to a member below the Elite rule needs a reason; show which rule they fail.
+    function updateTransferRule() {
+        const from = document.getElementById('reward-transfer-from');
+        const wrap = document.getElementById('reward-transfer-note-wrap');
+        const rule = document.getElementById('reward-transfer-rule');
+        if (!from || !wrap) return;
+        if (!from.value) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        let msg = 'A reason is needed when the recipient does not meet the Elite rule.';
+        if (rewardContext && rewardContext.elite_tier) {
+            const te = (rewardContext.member.tiers || []).find(x => x.tier === rewardContext.elite_tier);
+            if (te) msg = (te.status === 'eligible' || te.status === 'on_pace' || te.status === 'not_applicable')
+                ? 'The recipient meets the ' + rewardContext.elite_tier + ' rule; a reason is optional.'
+                : 'The recipient does not meet the ' + rewardContext.elite_tier + ' rule (' + (te.reasons || []).join('; ') + ') — a reason is required.';
+        }
+        rule.textContent = msg;
     }
 
     function openRewardModal(rw) {
@@ -1770,6 +1989,12 @@
             );
         }
 
+        // Transferred from: any member of the season (the original holder of the reward).
+        const transferSel = document.getElementById('reward-transfer-from');
+        transferSel.replaceChildren(...[['', '— not a transfer —']].concat(allMembers.map(m => [String(m.member_id), m.name + (m.rank === 'EX' ? ' (former)' : '')]))
+            .map(([v, t]) => Object.assign(document.createElement('option'), { value: v, textContent: t })));
+        transferSel.onchange = updateTransferRule;
+
         // The tier list is per-season and configurable, so the options are built
         // here rather than being static markup in the template.
         tierSel.replaceChildren(...rewardTiers.map(t => {
@@ -1789,17 +2014,22 @@
                 tierSel.appendChild(orphan);
             }
             tierSel.value = rw.reward_tier;
+            transferSel.value = rw.transferred_from_member_id ? String(rw.transferred_from_member_id) : '';
+            document.getElementById('reward-transfer-note').value = rw.transfer_override_note || '';
             partPct.value = rw.participation_pct;
             contribPct.value = rw.contribution_pct != null ? rw.contribution_pct : '';
             noteEl.value = rw.note || '';
         } else {
             // Default to the lowest tier — the broadest, most commonly assigned one.
             tierSel.value = rewardTiers.length ? rewardTiers[rewardTiers.length - 1].key : '';
+            transferSel.value = '';
+            document.getElementById('reward-transfer-note').value = '';
             partPct.value = '';
             contribPct.value = '';
             noteEl.value = '';
         }
 
+        loadRewardContext(rw ? rw.member_id : null);
         modal.style.display = 'flex';
     }
 
@@ -1817,6 +2047,9 @@
     }
 
     const rewardMemberEl = document.getElementById('reward-member');
+    if (rewardMemberEl && CAN_MANAGE_REWARDS) {
+        rewardMemberEl.addEventListener('change', () => loadRewardContext(parseInt(rewardMemberEl.value, 10) || null));
+    }
     if (rewardMemberEl) {
         rewardMemberChoices = noTranslateChoices(new Choices(rewardMemberEl, {
             searchEnabled: true, searchPlaceholderValue: 'Search…',
@@ -1848,7 +2081,10 @@
             reward_tier: tierSel.value,
             participation_pct: parseFloat(partPct.value),
             contribution_pct: contribPct.value !== '' ? parseFloat(contribPct.value) : null,
-            note: noteEl.value
+            note: noteEl.value,
+            transferred_from_member_id: document.getElementById('reward-transfer-from').value
+                ? parseInt(document.getElementById('reward-transfer-from').value, 10) : null,
+            transfer_override_note: document.getElementById('reward-transfer-note').value,
         };
 
         const method = editingRewardId ? 'PUT' : 'POST';
@@ -2663,6 +2899,22 @@
         tdSlots.appendChild(inpSlots);
         tr.appendChild(tdSlots);
 
+        // Eligibility rules (private-docs 284): wars required (blank: no war rule) and the Core events.
+        const tdWars = document.createElement('td');
+        const inpWars = document.createElement('input');
+        inpWars.type = 'number'; inpWars.className = 'form-input rt-wars'; inpWars.min = '0';
+        inpWars.value = rt.wars_required != null ? rt.wars_required : '';
+        inpWars.placeholder = '—';
+        inpWars.setAttribute('aria-label', 'Wars required');
+        tdWars.appendChild(inpWars);
+        tr.appendChild(tdWars);
+        const tdCore = document.createElement('td');
+        const inpCore = document.createElement('input');
+        inpCore.type = 'checkbox'; inpCore.className = 'rt-core'; inpCore.checked = !!rt.requires_core_events;
+        inpCore.setAttribute('aria-label', 'Requires the Core events');
+        tdCore.appendChild(inpCore);
+        tr.appendChild(tdCore);
+
         const tdColor = document.createElement('td');
         const selColor = ColorPicker.buildSelect(rt.color, 'form-input rt-color');
         tdColor.appendChild(selColor);
@@ -2685,6 +2937,8 @@
                 slot_count: parseInt(inpSlots.value, 10) || 0,
                 color: selColor.value,
                 sort_order: rowPosition(tr),
+                wars_required: inpWars.value === '' ? null : parseInt(inpWars.value, 10),
+                requires_core_events: inpCore.checked,
             };
             if (rt.id) {
                 fetch('/api/season-hub/reward-tiers/' + rt.id, {

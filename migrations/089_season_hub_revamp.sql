@@ -771,7 +771,53 @@ WHERE CASE WHEN json_valid(season_score_levels_default)
            ELSE 0 END;
 -- +goose StatementEnd
 
+
+
+-- ── 284: eligibility rules, transfers, exemptions ───────────────────────────
+-- A tier may require a number of wars and the Core events; a transferred reward records who held
+-- it, and a recipient below the Elite rule needs a reason. An exemption (granted by an R5) lifts
+-- the Core-event requirement for one member for one season.
+-- +goose StatementBegin
+ALTER TABLE season_reward_tiers ADD COLUMN wars_required INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_reward_tiers ADD COLUMN requires_core_events INTEGER NOT NULL DEFAULT 0;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_rewards ADD COLUMN transferred_from_member_id INTEGER REFERENCES members(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_rewards ADD COLUMN transfer_override_note TEXT NOT NULL DEFAULT '';
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_member_exemptions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id  INTEGER NOT NULL REFERENCES seasons(id),
+    member_id  INTEGER NOT NULL REFERENCES members(id),
+    kind       TEXT    NOT NULL DEFAULT 'core_events' CHECK(kind IN ('core_events')),
+    granted_by INTEGER REFERENCES users(id),
+    note       TEXT    NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(season_id, member_id, kind)
+);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_member_exemptions;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_rewards DROP COLUMN transfer_override_note;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_rewards DROP COLUMN transferred_from_member_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_reward_tiers DROP COLUMN requires_core_events;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_reward_tiers DROP COLUMN wars_required;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DELETE FROM season_score_levels WHERE key = 'excused' AND points = 0 AND label = 'EXCUSED'
     AND NOT EXISTS (SELECT 1 FROM season_participation p WHERE p.season_id = season_score_levels.season_id AND p.score = 'excused');

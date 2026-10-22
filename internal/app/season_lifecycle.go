@@ -474,14 +474,14 @@ var seasonChildTables = []string{
 	"season_land_config", "season_land_levels", "season_land_routes", "season_land_events", "season_land_drops",
 	"season_land_snapshots", "season_war_config", "season_opponent_observations",
 	"season_wars", "season_faction_battles", "season_resource_observations", "season_rank_groups", "season_rank_cutoffs",
-	"season_trade_posts", "season_participation_events",
+	"season_trade_posts", "season_participation_events", "season_member_exemptions",
 }
 
 // seasonMemberTables are deleted with a member (deleteMemberTx): a member delete removes the
 // member's history everywhere, archived seasons included.
 var seasonMemberTables = []string{
 	"season_participation", "season_member_records", "season_rewards", "season_roster_snapshot",
-	"season_war_attendance", "season_participation_event_entries",
+	"season_war_attendance", "season_participation_event_entries", "season_member_exemptions",
 }
 
 // seasonUserColumns are nulled when a user is deleted (clearUserReferences); the rows stay.
@@ -498,6 +498,7 @@ var seasonUserColumns = []struct{ table, column string }{
 	{"season_rank_cutoffs", "recorded_by"},
 	{"season_trade_post_observations", "recorded_by"},
 	{"season_war_attendance", "recorded_by"},
+	{"season_member_exemptions", "granted_by"},
 }
 
 // seasonMemberColumns are nulled when a member is deleted: a plan that named them stays.
@@ -505,6 +506,7 @@ var seasonMemberColumns = []struct{ table, column string }{
 	{"season_land_targets", "coordinator_member_id"},
 	{"season_land_drops", "assigned_member_id"},
 	{"season_wars", "declared_by_member_id"},
+	{"season_rewards", "transferred_from_member_id"},
 }
 
 // ── Configuration copy ─────────────────────────────────────────────────────
@@ -519,8 +521,8 @@ func copySeasonConfigTx(tx *sql.Tx, fromID int, toID int64) error {
 			SELECT ?2, key, label, points, sort_order FROM season_score_levels WHERE season_id = ?1`,
 		`INSERT INTO season_trackables (season_id, key, label, sort_order)
 			SELECT ?2, key, label, sort_order FROM season_trackables WHERE season_id = ?1`,
-		`INSERT INTO season_reward_tiers (season_id, key, label, slot_count, color, sort_order)
-			SELECT ?2, key, label, slot_count, color, sort_order FROM season_reward_tiers WHERE season_id = ?1`,
+		`INSERT INTO season_reward_tiers (season_id, key, label, slot_count, color, sort_order, wars_required, requires_core_events)
+			SELECT ?2, key, label, slot_count, color, sort_order, wars_required, requires_core_events FROM season_reward_tiers WHERE season_id = ?1`,
 		`INSERT INTO season_events (season_id, label, event_type_id, type_name, day_offset, event_time, all_day,
 			level, week_start, week_end, notes, is_server_event, duration_days, template_key, source, grade)
 			SELECT ?2, label, event_type_id, type_name, day_offset, event_time, all_day,

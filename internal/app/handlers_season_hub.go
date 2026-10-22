@@ -75,6 +75,10 @@ type SeasonRewardTier struct {
 	SlotCount int    `json:"slot_count"`
 	Color     string `json:"color"`
 	SortOrder int    `json:"sort_order"`
+	// Eligibility rules (private-docs 284): wars a member must attend (nil: no war rule) and
+	// whether the Core events are required.
+	WarsRequired       *int `json:"wars_required"`
+	RequiresCoreEvents bool `json:"requires_core_events"`
 }
 
 // validTierColors are the palette slots a reward tier may use. Each maps to a
@@ -221,6 +225,10 @@ type SeasonReward struct {
 	Note             string  `json:"note"`
 	LoggedBy         string  `json:"logged_by"`
 	LoggedAt         string  `json:"logged_at"`
+	// A transferred reward's original holder and the override reason (private-docs 284).
+	TransferredFromMemberID *int   `json:"transferred_from_member_id"`
+	TransferredFromName     string `json:"transferred_from_name"`
+	TransferOverrideNote    string `json:"transfer_override_note"`
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +268,7 @@ func populateSeasonChildren(s *Season) error {
 	// holds the only connection and any further query deadlocks the process.
 	tRows.Close()
 
-	rtRows, err := db.Query(`SELECT id, season_id, key, label, slot_count, color, sort_order
+	rtRows, err := db.Query(`SELECT id, season_id, key, label, slot_count, color, sort_order, wars_required, requires_core_events
 		FROM season_reward_tiers WHERE season_id = ? ORDER BY sort_order ASC`, s.ID)
 	if err != nil {
 		return err
@@ -268,7 +276,8 @@ func populateSeasonChildren(s *Season) error {
 	defer rtRows.Close()
 	for rtRows.Next() {
 		var rt SeasonRewardTier
-		if err := rtRows.Scan(&rt.ID, &rt.SeasonID, &rt.Key, &rt.Label, &rt.SlotCount, &rt.Color, &rt.SortOrder); err != nil {
+		if err := rtRows.Scan(&rt.ID, &rt.SeasonID, &rt.Key, &rt.Label, &rt.SlotCount, &rt.Color, &rt.SortOrder,
+			&rt.WarsRequired, &rt.RequiresCoreEvents); err != nil {
 			continue
 		}
 		s.RewardTiers = append(s.RewardTiers, rt)
@@ -2422,8 +2431,10 @@ func handleRewardsGet(w http.ResponseWriter, r *http.Request) {
 		SELECT sr.id, sr.season_id, sr.member_id,
 		       COALESCE(rs.name, m.name, '#' || sr.member_id), COALESCE(rs.rank, m.rank, ''),
 		       sr.reward_tier, sr.participation_pct, COALESCE(sr.contribution_pct, 0),
-		       sr.note, COALESCE(u.username, ''), sr.logged_at
+		       sr.note, COALESCE(u.username, ''), sr.logged_at,
+		       sr.transferred_from_member_id, COALESCE(fm.name, ''), sr.transfer_override_note
 		FROM season_rewards sr
+		LEFT JOIN members fm ON fm.id = sr.transferred_from_member_id
 		LEFT JOIN members m ON m.id = sr.member_id
 		LEFT JOIN users u ON u.id = sr.logged_by
 		LEFT JOIN season_roster_snapshot rs ON rs.season_id = sr.season_id AND rs.member_id = sr.member_id
@@ -2445,7 +2456,8 @@ func handleRewardsGet(w http.ResponseWriter, r *http.Request) {
 		var rw SeasonReward
 		if err := rows.Scan(&rw.ID, &rw.SeasonID, &rw.MemberID, &rw.MemberName, &rw.MemberRank,
 			&rw.RewardTier, &rw.ParticipationPct, &rw.ContributionPct,
-			&rw.Note, &rw.LoggedBy, &rw.LoggedAt); err != nil {
+			&rw.Note, &rw.LoggedBy, &rw.LoggedAt, &rw.TransferredFromMemberID, &rw.TransferredFromName,
+			&rw.TransferOverrideNote); err != nil {
 			continue
 		}
 		rewards = append(rewards, rw)
@@ -2465,6 +2477,10 @@ func handleRewardSave(w http.ResponseWriter, r *http.Request) {
 		ParticipationPct float64 `json:"participation_pct"`
 		ContributionPct  float64 `json:"contribution_pct"`
 		Note             string  `json:"note"`
+		// A transferred reward names its original holder; a recipient below the Elite rule
+		// needs a reason (private-docs 284).
+		TransferredFromMemberID *int   `json:"transferred_from_member_id"`
+		TransferOverrideNote    string `json:"transfer_override_note"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -2508,19 +2524,34 @@ func handleRewardSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Member not found", http.StatusBadRequest)
 		return
 	}
+	if msg, err := transferCheck(s, body.MemberID, body.TransferredFromMemberID, body.TransferOverrideNote); err != nil {
+		slog.Error("handleRewardSave: transfer check", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	} else if msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+	overrideNote := ""
+	if body.TransferredFromMemberID != nil {
+		overrideNote = strings.TrimSpace(body.TransferOverrideNote)
+	}
 
 	res, err := db.Exec(`
-		INSERT INTO season_rewards (season_id, member_id, reward_tier, participation_pct, contribution_pct, note, logged_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO season_rewards (season_id, member_id, reward_tier, participation_pct, contribution_pct, note, logged_by,
+		                            transferred_from_member_id, transfer_override_note)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(season_id, member_id) DO UPDATE SET
 		  reward_tier = excluded.reward_tier,
 		  participation_pct = excluded.participation_pct,
 		  contribution_pct = excluded.contribution_pct,
 		  note = excluded.note,
 		  logged_by = excluded.logged_by,
+		  transferred_from_member_id = excluded.transferred_from_member_id,
+		  transfer_override_note = excluded.transfer_override_note,
 		  logged_at = CURRENT_TIMESTAMP`,
 		body.SeasonID, body.MemberID, body.RewardTier,
-		body.ParticipationPct, body.ContributionPct, body.Note, user.ID)
+		body.ParticipationPct, body.ContributionPct, body.Note, user.ID, body.TransferredFromMemberID, overrideNote)
 	if err != nil {
 		slog.Error("handleRewardSave: upsert", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -2549,6 +2580,9 @@ func handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
 		ParticipationPct float64 `json:"participation_pct"`
 		ContributionPct  float64 `json:"contribution_pct"`
 		Note             string  `json:"note"`
+		// Absent keeps the stored transfer; null clears it (private-docs 284).
+		TransferredFromMemberID optionalInt `json:"transferred_from_member_id"`
+		TransferOverrideNote    *string     `json:"transfer_override_note"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -2587,9 +2621,33 @@ func handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "reward_tier is not a configured tier for this season", http.StatusBadRequest)
 		return
 	}
+	var curFrom sql.NullInt64
+	var curNote string
+	db.QueryRow(`SELECT transferred_from_member_id, transfer_override_note FROM season_rewards WHERE id = ?`, id).Scan(&curFrom, &curNote)
+	from, note := nullIntPtr(curFrom), curNote
+	if body.TransferredFromMemberID.Set {
+		from = body.TransferredFromMemberID.Value
+	}
+	if body.TransferOverrideNote != nil {
+		note = strings.TrimSpace(*body.TransferOverrideNote)
+	}
+	if from == nil {
+		note = ""
+	}
+	if s != nil {
+		if msg, err := transferCheck(s, memberID, from, note); err != nil {
+			slog.Error("handleRewardUpdate: transfer check", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		} else if msg != "" {
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
+	}
 
-	if _, err := db.Exec(`UPDATE season_rewards SET reward_tier=?, participation_pct=?, contribution_pct=?, note=?, logged_by=?, logged_at=CURRENT_TIMESTAMP WHERE id=?`,
-		body.RewardTier, body.ParticipationPct, body.ContributionPct, body.Note, user.ID, id); err != nil {
+	if _, err := db.Exec(`UPDATE season_rewards SET reward_tier=?, participation_pct=?, contribution_pct=?, note=?, logged_by=?,
+		transferred_from_member_id=?, transfer_override_note=?, logged_at=CURRENT_TIMESTAMP WHERE id=?`,
+		body.RewardTier, body.ParticipationPct, body.ContributionPct, body.Note, user.ID, from, note, id); err != nil {
 		slog.Error("handleRewardUpdate: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -2823,7 +2881,7 @@ func handleSeasonRewardTierList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "season_id is required", http.StatusBadRequest)
 		return
 	}
-	rows, err := db.Query(`SELECT id, season_id, key, label, slot_count, color, sort_order
+	rows, err := db.Query(`SELECT id, season_id, key, label, slot_count, color, sort_order, wars_required, requires_core_events
 		FROM season_reward_tiers WHERE season_id = ? ORDER BY sort_order ASC`, seasonID)
 	if err != nil {
 		slog.Error("handleSeasonRewardTierList: query", "error", err)
@@ -2834,7 +2892,8 @@ func handleSeasonRewardTierList(w http.ResponseWriter, r *http.Request) {
 	tiers := []SeasonRewardTier{}
 	for rows.Next() {
 		var t SeasonRewardTier
-		if err := rows.Scan(&t.ID, &t.SeasonID, &t.Key, &t.Label, &t.SlotCount, &t.Color, &t.SortOrder); err != nil {
+		if err := rows.Scan(&t.ID, &t.SeasonID, &t.Key, &t.Label, &t.SlotCount, &t.Color, &t.SortOrder,
+			&t.WarsRequired, &t.RequiresCoreEvents); err != nil {
 			continue
 		}
 		tiers = append(tiers, t)
@@ -2870,6 +2929,10 @@ func handleSeasonRewardTierCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "slot_count cannot be negative", http.StatusBadRequest)
 		return
 	}
+	if body.WarsRequired != nil && *body.WarsRequired < 0 {
+		http.Error(w, "wars_required cannot be negative", http.StatusBadRequest)
+		return
+	}
 	if ok, msg := seasonAcceptsEdits(body.SeasonID); !ok {
 		seasonEditRefusal(w, msg)
 		return
@@ -2886,9 +2949,9 @@ func handleSeasonRewardTierCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A reward tier with that key already exists for this season", http.StatusConflict)
 		return
 	}
-	res, err := db.Exec(`INSERT INTO season_reward_tiers (season_id, key, label, slot_count, color, sort_order)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		body.SeasonID, body.Key, body.Label, body.SlotCount, body.Color, body.SortOrder)
+	res, err := db.Exec(`INSERT INTO season_reward_tiers (season_id, key, label, slot_count, color, sort_order, wars_required, requires_core_events)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		body.SeasonID, body.Key, body.Label, body.SlotCount, body.Color, body.SortOrder, body.WarsRequired, boolToInt(body.RequiresCoreEvents))
 	if err != nil {
 		slog.Error("handleSeasonRewardTierCreate: insert", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -2913,6 +2976,10 @@ func handleSeasonRewardTierUpdate(w http.ResponseWriter, r *http.Request) {
 		SlotCount int    `json:"slot_count"`
 		Color     string `json:"color"`
 		SortOrder int    `json:"sort_order"`
+		// The rules (private-docs 284); absent keeps them, so an older editor's save leaves
+		// them alone.
+		WarsRequired       optionalInt `json:"wars_required"`
+		RequiresCoreEvents *bool       `json:"requires_core_events"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -2936,9 +3003,11 @@ func handleSeasonRewardTierUpdate(w http.ResponseWriter, r *http.Request) {
 
 	var seasonID, oldSlotCount, oldSortOrder int
 	var oldLabel, oldColor string
-	if err := db.QueryRow(`SELECT season_id, label, slot_count, color, sort_order
+	var oldWars sql.NullInt64
+	var oldCore bool
+	if err := db.QueryRow(`SELECT season_id, label, slot_count, color, sort_order, wars_required, requires_core_events
 		FROM season_reward_tiers WHERE id = ?`, id).
-		Scan(&seasonID, &oldLabel, &oldSlotCount, &oldColor, &oldSortOrder); err == sql.ErrNoRows {
+		Scan(&seasonID, &oldLabel, &oldSlotCount, &oldColor, &oldSortOrder, &oldWars, &oldCore); err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	} else if err != nil {
@@ -2954,8 +3023,20 @@ func handleSeasonRewardTierUpdate(w http.ResponseWriter, r *http.Request) {
 	// The key is deliberately not updatable — it is the value already stored on
 	// every season_rewards row for this tier. Renaming the label is the supported
 	// operation and flows through to those rewards automatically.
-	if _, err := db.Exec(`UPDATE season_reward_tiers SET label = ?, slot_count = ?, color = ?, sort_order = ? WHERE id = ?`,
-		body.Label, body.SlotCount, body.Color, body.SortOrder, id); err != nil {
+	wars, core := nullIntPtr(oldWars), oldCore
+	if body.WarsRequired.Set {
+		wars = body.WarsRequired.Value
+		if wars != nil && *wars < 0 {
+			http.Error(w, "wars_required cannot be negative", http.StatusBadRequest)
+			return
+		}
+	}
+	if body.RequiresCoreEvents != nil {
+		core = *body.RequiresCoreEvents
+	}
+	if _, err := db.Exec(`UPDATE season_reward_tiers SET label = ?, slot_count = ?, color = ?, sort_order = ?, wars_required = ?,
+		requires_core_events = ? WHERE id = ?`,
+		body.Label, body.SlotCount, body.Color, body.SortOrder, wars, boolToInt(core), id); err != nil {
 		slog.Error("handleSeasonRewardTierUpdate: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -2973,6 +3054,12 @@ func handleSeasonRewardTierUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if oldSortOrder != body.SortOrder {
 		changes = append(changes, fmt.Sprintf("sort_order: %d → %d", oldSortOrder, body.SortOrder))
+	}
+	if !sameIntPtr(nullIntPtr(oldWars), wars) {
+		changes = append(changes, "wars required changed")
+	}
+	if oldCore != core {
+		changes = append(changes, fmt.Sprintf("requires Core events: %v → %v", oldCore, core))
 	}
 	logActivity(user.ID, user.Username, "updated", "season_reward_tier", body.Label, false,
 		strings.Join(changes, "; "))
