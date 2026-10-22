@@ -1398,6 +1398,73 @@ never derived figures.
   `mobileExcludedTables`: phones send readings.
 - **Member delete** removes the readings and entries (`deleteMemberTx`); `foreign_keys` is off.
 
+## Season Hub (`handlers_season_*.go`, `season_*.go`)
+
+One season's tracking: participation, contributions, rewards, Land, War, its schedule, comms and
+files, and a dashboard. Project 21 (v3.3.0) rebuilt it; the rules below are the ones a change is
+most likely to break.
+
+- **Nine permission keys** (`models.go`): `view_season_hub` opens it; `manage_season_config`
+  (season setup — tiers and their rules, trackables, layout, factions, Land and War settings,
+  exemptions), `manage_season_rewards`, `manage_season_participation` (scores, war attendance,
+  polls, week events), `manage_season_contributions`, and a view/manage pair each for Land and
+  War. A route that writes **another feature's** data needs that feature's key too, through
+  `requireAlsoPermission(key, why, …)` inside `requirePermission` — season events and Push to
+  Schedule write the calendar, so they also need `manage_schedule`. Never widen a Hub key to
+  cover the calendar.
+- **The status engine is `season_status.go`, and it is pure.** `computeSeasonStanding` is the
+  one place rows become a member's standing; `buildSeasonMembersQ(q, season, now)` feeds it and
+  every surface (Rankings, the grid, the dashboard, eligibility, the Season Participation
+  report) reads its result — none recomputes a percentage. **Only completed weeks count**
+  (`completedSeasonWeeks`: a week's last game day has passed, or the season is archived); the
+  current week counts for nobody. A completed week with no score counts as Absent and the
+  reason names it "not scored". **Excused** (a seeded score level, `excusedScoreKey`) leaves
+  the week out of the denominator. Wars count attended over completed wars with known
+  attendance; polls count yes-or-no over completed wars that held one. The final status is the
+  worst applicable category. A season with no war records keeps the legacy weekly key-event
+  count.
+- **Eligibility** (`computeSeasonEligibility`) judges each member against each tier's rules
+  (wars required, the week's Core events) with exemptions. A reward transferred to a member who
+  fails the Elite rule (`eliteRuleTier`, `transferCheck`) is refused unless it carries an
+  override reason, which the report shows.
+- **Hub records own calendar rows** (`schedule_sync.go`). A Land capture, abandonment, a war and
+  a Trade Post action each keep one `schedule_events` row in step through
+  `syncSourcedScheduleEvent(tx, sourcedEvent{…}, actor)`, found by `(source_kind, source_id)`
+  (a unique index), created through the schedule's own validator, moved when the source
+  moves, and **cancelled, never deleted**, when the source is. A validator refusal comes back
+  for the page to show; it never fails the source's own write. `AdoptPushed` lets a war adopt
+  the pushed Copper War already on its date instead of inserting a second. Any new record type
+  that belongs on the calendar goes through this function.
+- **Observations are append-only.** Opponent figures, resource totals, cutoffs and Trade Post
+  owners are rows with an `observed_at` and a `source` (`manual` | `csv` | `mobile`); the
+  latest counts and nothing edits an old one. A figure nobody has seen is NULL, never 0.
+- **One CSV import pair for every kind** (`season_import.go`): `POST
+  /api/season-hub/import/preview|confirm`, kinds registered with `registerSeasonImportKind`
+  from their own file's `init()`. A kind declares its columns (with header aliases), its
+  any-of permissions, `Parse` per row and `Write` in the caller's transaction; the confirm
+  re-parses the same text and refuses if any row errors, so it writes exactly what the preview
+  showed. Members resolve through `resolveMemberAliasWithIndex`, alliances by **tag and
+  server**. A new import is a kind, not a route.
+- **Engines are pure and shared**: Land readiness (`activeRouteReadiness`), holdings
+  (`landHoldingsAt`) and daily capacity (`landDailyCards`); the matchup (`computeMatchup`);
+  the war record (`warRecordsFor`); the resource projection and reward-tier status
+  (`resource_projection.go`, `loadWarResources`). The dashboard (`handleSeasonDashboard`)
+  computes every card server-side from these, filtered by permission; strategy fields never
+  reach it.
+- **Layout** (`season_tabs`, `season_dashboard_cards`): each season orders, renames and hides
+  its tabs and cards. Readers merge the defaults (`seasonTabKeys`, `seasonCardKeys`) in memory
+  — a GET never writes.
+- **Archives never move** (`archiveSeason`): files are copied first, then one transaction
+  freezes the roster (`season_roster_snapshot`) and marks the season archived; a failed copy
+  archives nothing. An archived Hub reads the frozen roster, and every configuration write
+  refuses an archived season. Copying a season copies configuration (`copySeasonConfigTx`),
+  never records.
+- **Templates never rewrite a season** — see "Season templates carry provenance" below.
+- **`foreign_keys` is off**: the season delete, the member delete, the user delete, a file
+  delete and a mail delete each clear or unlink the Hub rows that name them
+  (`season_lifecycle.go` lists every child table). A new table naming one of those gets a line
+  there.
+
 ## Reporting layer (`reports_*.go`)
 
 The Reports page (`/reports`) and every report on it sit on one layer, and that layer is

@@ -9,6 +9,70 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v3.3.0 — 2026-10-22
+
+**The Season Hub rebuilt**: a season dashboard, a Land tab that plans and records the season's
+land, a War tab for opponents, wars, resources and Trade Posts, war attendance and polls on the
+weekly grid, a status that counts only finished weeks, reward rules with transfers and
+exemptions, season tags across the schedule, Comms and Files, and a Season Participation report.
+([#133](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/133))
+
+**Minor** — an image pull; nothing on the host changes and no `.env` needs editing. Two database
+migrations (088, 089) add the Hub's tables and columns, correct the shipped season templates, and
+seed the new permission keys from the ones they replace, so no rank loses access. The mobile API
+reports `api_version` 4.
+
+- **Season templates corrected, with sources.** Seasons 1–6's shipped templates were checked
+  against the publisher's calendars and the guides; every event now says where it came from and
+  how sure it is. A template you have edited is left alone, and **no existing season is
+  rewritten**: Edit Season lists what its template now says differently, with an Apply per row.
+  Each template carries its season's reward tiers (Season 3 on: Leader 1 / Tactician 4 / Core
+  15 / Elite 30 / Valued 50).
+- **Seasons are set up per season.** Create a season from a template, blank, or by copying
+  another season's configuration. Edit Season holds the wars scheduled, the resource's name, poll
+  and war floors, the conflict window and the Land buffer, and each season orders, renames and
+  hides its own tabs and dashboard cards. Archiving freezes the season's roster, so an archived
+  season keeps showing who was in the alliance at the time.
+- **Nine permission keys instead of three.** Season setup, rewards, participation,
+  contributions, and a view and a manage key each for Land and War. On upgrade each rank gets
+  the new keys its old ones covered. Season events and Push to Schedule also need the Schedule's
+  manage permission, because they write the calendar.
+- **A season dashboard**, the Hub's first tab: faction allies and their agreements, leadership
+  flags (the lowest five, everyone at risk or below, poll reviews waiting), the season's
+  schedule with conflicts, Land path status, the war record and the reward tier status.
+- **Land.** Three route slots, a level table (CSV import), readiness per target, captures,
+  abandonments and losses recorded as events (typed, CSV, or from a phone), the holdings and
+  daily capacity they leave, planned drops, and Cpt Hedge map exports kept beside the plan, with
+  their proposed path importable as a route.
+- **War.** Opponents per season with observations and a matchup score; wars from Considering to
+  Completed with strategy and a review; faction battles and each faction's record; our resource
+  total, other alliances' totals and the rank cutoffs, projected to the next reset and to the
+  production stop, with the gap to a target rank and loot scenarios; a Trade Post board with
+  owners and planned actions. Figures are observations — typed, imported from CSV, or sent from
+  a phone — and the latest counts.
+- **Wars and polls on the weekly grid.** Each war gets attended (yes, no, unknown) and the poll
+  answer (yes, no, no response) per member; a Yes with no show waits as a poll review that can
+  become a strike or be dismissed. The grid lists R5 to R1 then by name, sorts and filters, and
+  shows each week's events per member.
+- **Season status counts finished weeks only.** The current week no longer pulls everyone's
+  percentage down; a finished week nobody scored counts as Absent and says so; a new **Excused**
+  score takes a week out of the count. Status is the worst of overall, wars and polls.
+- **Reward rules.** A tier can require a number of wars and the week's Core events; exemptions
+  per member; a transfer to a member who fails the Elite rule needs an override reason.
+- **Strikes name their season.** A strike can carry its season, week and war, shown as a badge
+  on Accountability and the member's profile.
+- **Season tags** on schedule events (with a status, leadership-only and a link), mail and
+  announcement templates, resources, polls and files; the Hub's Schedule, Comms and Files tabs
+  list what is tagged. Land captures, wars and Trade Post actions put their own rows on the
+  calendar and keep them in step.
+- **Season Participation report** on the Reports page: every member's weeks, wars, polls,
+  status, strikes, contribution, eligibility and reward for one season. Its permission is given
+  to every rank that holds *Participation grid*.
+- **The Android scanner** can read the season's factions, wars, Trade Posts and Land, and send
+  opponent figures, resource totals, cutoffs, Trade Post owners, war and faction battle results,
+  and Land events (`api_version` 4). The scanner release that uses them comes separately.
+- **Tables sort by clicking a column** across the new Land and War tables and the weekly grid.
+
 ## v3.2.1 — 2026-10-19
 
 A bug fix: data recorded for a member who has since left the alliance is no longer thrown away.

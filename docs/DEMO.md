@@ -27,7 +27,9 @@ list of accounts, files and canned leaderboards the fixtures service answers fro
 
 **What it fills.** 100 member rows (1 R5, 9 R4, 55 R3, 15 R2, 6 R1, 14 former), aliases, twelve
 weeks of power / hero / squad / kill / HQ / profession history, eight VS weeks, a four-week Duel
-League season, Seasons 1–3 (Season 3 active, with weekly participation and contributions),
+League season, Seasons 1–3 (Season 3 active, with weekly participation and contributions, and its Hub filled in:
+two factions and three alliances, a Land route with captures and drops, four wars with attendance
+and polls, faction battles, resource totals and cutoffs, three Trade Posts, and week events),
 ±6 weeks of schedule, three recorded event boards, strikes, train logs, a Desert Storm plan,
 recruits, allies, polls, shout-outs, the Officers directory, four sample files (a `.docx`, an
 `.xlsx`, a `.csv` and a `.png`), a few LastRank review decisions, and a month of activity.
