@@ -91,6 +91,9 @@ type mobileWarAlliance struct {
 	Top10       *int64 `json:"top10_thp"`
 	Top5        *int64 `json:"top5_thp"`
 	Top3        *int64 `json:"top3_thp"`
+	// The alliance's season resource total and war rank (private-docs 279).
+	ResourceTotal *int64 `json:"resource_total"`
+	WarRank       *int   `json:"war_rank"`
 }
 
 // POST /api/mobile/season-hub/war/observations (manage_season_war)
@@ -105,13 +108,22 @@ func postMobileSeasonWarObservations(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		CapturedAt string              `json:"captured_at"`
 		Alliances  []mobileWarAlliance `json:"alliances"`
+		// Our own total and rank, and the totals at ranks (private-docs 279).
+		Own *struct {
+			ResourceTotal *int64 `json:"resource_total"`
+			WarRank       *int   `json:"war_rank"`
+		} `json:"own"`
+		Cutoffs []struct {
+			Rank          int    `json:"rank"`
+			ResourceTotal *int64 `json:"resource_total"`
+		} `json:"cutoffs"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	if len(body.Alliances) == 0 || len(body.Alliances) > 500 {
-		http.Error(w, "send 1 to 500 alliances", http.StatusBadRequest)
+	if len(body.Alliances) > 500 || len(body.Cutoffs) > 500 || (len(body.Alliances) == 0 && body.Own == nil && len(body.Cutoffs) == 0) {
+		http.Error(w, "send 1 to 500 alliances, our own total, or cutoffs", http.StatusBadRequest)
 		return
 	}
 	s, err := loadActiveSeason()
@@ -188,20 +200,58 @@ func postMobileSeasonWarObservations(w http.ResponseWriter, r *http.Request) {
 			GroupRank: a.GroupRank, Top10: a.Top10, Top5: a.Top5, Top3: a.Top3}
 		var at time.Time
 		hasFigure := a.Power != nil || a.MemberCount != nil || a.GroupRank != nil || a.Top10 != nil || a.Top5 != nil || a.Top3 != nil
+		if a.ResourceTotal != nil {
+			if _, msg := validateResourceObservation(resourceObservationIn{ResourceTotal: a.ResourceTotal, WarRank: a.WarRank, ObservedAt: body.CapturedAt}, now); msg != "" {
+				errs = append(errs, refusal{i, a.Tag, msg})
+				continue
+			}
+		}
 		if hasFigure {
 			var msg string
 			if at, msg = validateWarObservation(in, now); msg != "" {
 				errs = append(errs, refusal{i, a.Tag, msg})
 				continue
 			}
+		} else if a.ResourceTotal != nil {
+			at, _ = validateResourceObservation(resourceObservationIn{ResourceTotal: a.ResourceTotal, ObservedAt: body.CapturedAt}, now)
 		} else if a.FactionKey == "" {
 			errs = append(errs, refusal{i, a.Tag, "nothing to record: no figures and no faction"})
 			continue
 		}
 		ok = append(ok, valid{i, a, extID, in, at})
 	}
+	// Our own total and the cutoffs, checked before the transaction.
+	var ownAt time.Time
+	var ownIn *resourceObservationIn
+	if body.Own != nil {
+		in := resourceObservationIn{Own: true, ResourceTotal: body.Own.ResourceTotal, WarRank: body.Own.WarRank, ObservedAt: body.CapturedAt}
+		var msg string
+		if ownAt, msg = validateResourceObservation(in, now); msg != "" {
+			errs = append(errs, refusal{-1, "own", msg})
+		} else {
+			ownIn = &in
+		}
+	}
+	type cutoffOK struct {
+		i     int
+		rank  int
+		total int64
+		at    time.Time
+	}
+	var cuts []cutoffOK
+	for i, c := range body.Cutoffs {
+		at, msg := validateResourceObservation(resourceObservationIn{ResourceTotal: c.ResourceTotal, ObservedAt: body.CapturedAt}, now)
+		if msg == "" && c.Rank < 1 {
+			msg = "rank is from 1"
+		}
+		if msg != "" {
+			errs = append(errs, refusal{i, "cutoff", msg})
+			continue
+		}
+		cuts = append(cuts, cutoffOK{i, c.Rank, *c.ResourceTotal, at})
+	}
 	written := 0
-	if len(ok) > 0 {
+	if len(ok) > 0 || ownIn != nil || len(cuts) > 0 {
 		tx, err := db.Begin()
 		if err != nil {
 			slog.Error("postMobileSeasonWarObservations: begin", "error", err)
@@ -234,12 +284,49 @@ func postMobileSeasonWarObservations(w http.ResponseWriter, r *http.Request) {
 				}
 				changed = changed || wrote
 			}
+			if v.a.ResourceTotal != nil {
+				id := int(saID)
+				wrote, err := writeResourceObservationTx(tx, s.ID, resourceObservationIn{SeasonAllianceID: &id,
+					ResourceTotal: v.a.ResourceTotal, WarRank: v.a.WarRank}, v.at, "mobile", user.ID)
+				if err != nil {
+					slog.Error("postMobileSeasonWarObservations: resources", "error", err)
+					http.Error(w, "Database error", http.StatusInternalServerError)
+					return
+				}
+				changed = changed || wrote
+			}
 			st := "unchanged"
 			if changed {
 				st = "written"
 				written++
 			}
 			results = append(results, result{v.i, v.a.Tag, v.a.Server, st})
+		}
+		if ownIn != nil {
+			wrote, err := writeResourceObservationTx(tx, s.ID, *ownIn, ownAt, "mobile", user.ID)
+			if err != nil {
+				slog.Error("postMobileSeasonWarObservations: own", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+			st := "unchanged"
+			if wrote {
+				st, written = "written", written+1
+			}
+			results = append(results, result{-1, "own", 0, st})
+		}
+		for _, c := range cuts {
+			wrote, err := writeRankCutoffTx(tx, s.ID, c.rank, c.total, c.at, "mobile", "", user.ID)
+			if err != nil {
+				slog.Error("postMobileSeasonWarObservations: cutoff", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+			st := "unchanged"
+			if wrote {
+				st, written = "written", written+1
+			}
+			results = append(results, result{c.i, "cutoff", c.rank, st})
 		}
 		if err := tx.Commit(); err != nil {
 			slog.Error("postMobileSeasonWarObservations: commit", "error", err)

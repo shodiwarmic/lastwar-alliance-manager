@@ -588,7 +588,7 @@ CREATE TABLE IF NOT EXISTS season_faction_battles (
     opponent_label              TEXT    NOT NULL DEFAULT '',
     role                        TEXT    NOT NULL CHECK(role IN ('attack','defense')),
     outcome                     TEXT    NOT NULL DEFAULT 'unknown' CHECK(outcome IN ('win','loss','draw','unknown')),
-    rank_group_id               INTEGER,
+    rank_group_id               INTEGER REFERENCES season_rank_groups(id),
     notes                       TEXT    NOT NULL DEFAULT '',
     source                      TEXT    NOT NULL DEFAULT 'manual',
     recorded_by                 INTEGER REFERENCES users(id),
@@ -597,7 +597,80 @@ CREATE TABLE IF NOT EXISTS season_faction_battles (
 );
 -- +goose StatementEnd
 
+
+
+-- ── 279: resource totals, rank groups, cutoffs ──────────────────────────────
+-- Resource totals (ours and opponents') and rank cutoffs are observations, appended; the latest
+-- is authoritative and the projection from our holdings is computed, never written back. Rank
+-- groups are season setup (S4 King #1, Queen #2–3, Rook #4–10), copied with the season.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_resource_observations (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id          INTEGER NOT NULL REFERENCES seasons(id),
+    season_alliance_id INTEGER REFERENCES season_alliances(id),
+    is_own             INTEGER NOT NULL DEFAULT 0 CHECK((is_own = 1) = (season_alliance_id IS NULL)),
+    resource_total     INTEGER NOT NULL,
+    war_rank           INTEGER,
+    observed_at        TEXT    NOT NULL,
+    source             TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by        INTEGER REFERENCES users(id),
+    note               TEXT    NOT NULL DEFAULT '',
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_resource_obs ON season_resource_observations(season_id, season_alliance_id, observed_at);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_rank_groups (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id INTEGER NOT NULL REFERENCES seasons(id),
+    label     TEXT    NOT NULL,
+    rank_from INTEGER NOT NULL,
+    rank_to   INTEGER NOT NULL,
+    position  INTEGER NOT NULL DEFAULT 0
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_rank_cutoffs (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id      INTEGER NOT NULL REFERENCES seasons(id),
+    rank           INTEGER NOT NULL,
+    resource_total INTEGER NOT NULL,
+    observed_at    TEXT    NOT NULL,
+    source         TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by    INTEGER REFERENCES users(id),
+    note           TEXT    NOT NULL DEFAULT '',
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_rank_cutoffs ON season_rank_cutoffs(season_id, rank, observed_at);
+-- +goose StatementEnd
+-- The war rank the season aims for (S4: a reward group's last rank).
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN target_war_rank INTEGER;
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN target_war_rank;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_rank_cutoffs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_rank_cutoffs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_rank_groups;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_resource_obs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_resource_observations;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_faction_battles;
 -- +goose StatementEnd

@@ -47,13 +47,15 @@ type Season struct {
 	WarAtRiskMinPct  *int `json:"war_at_risk_min_pct"`
 	// ScheduleBufferMinutes is the window the Schedule tab's conflict check looks at;
 	// LandReadinessBufferHours how long before an unlock a Land target should be connected.
-	ScheduleBufferMinutes    int               `json:"schedule_buffer_minutes"`
-	LandReadinessBufferHours int               `json:"land_readiness_buffer_hours"`
-	IsActive                 bool              `json:"is_active"`
-	ArchivedAt               string            `json:"archived_at"`
-	CreatedAt                string            `json:"created_at"`
-	ScoreLevels              []ScoreLevel      `json:"score_levels"`
-	Trackables               []SeasonTrackable `json:"trackables"`
+	ScheduleBufferMinutes    int `json:"schedule_buffer_minutes"`
+	LandReadinessBufferHours int `json:"land_readiness_buffer_hours"`
+	// TargetWarRank is the war rank the season aims for (set in the War tab's settings).
+	TargetWarRank *int              `json:"target_war_rank"`
+	IsActive      bool              `json:"is_active"`
+	ArchivedAt    string            `json:"archived_at"`
+	CreatedAt     string            `json:"created_at"`
+	ScoreLevels   []ScoreLevel      `json:"score_levels"`
+	Trackables    []SeasonTrackable `json:"trackables"`
 	// RewardTiers is the season's configurable reward tier list, replacing the
 	// four fixed tier_count_* columns dropped in migration 068. Carried on the
 	// season so every page that already has one can render tier badges, populate
@@ -361,18 +363,22 @@ const seasonColumns = `id, name, season_number, start_date, COALESCE(end_date,''
 	key_event_name, key_event_required, tier_active_min_pct, tier_at_risk_min_pct,
 	key_event_total, resource_name, poll_active_min_pct, poll_at_risk_min_pct,
 	war_active_min_pct, war_at_risk_min_pct, schedule_buffer_minutes, land_readiness_buffer_hours,
-	is_active, COALESCE(archived_at,''), created_at`
+	is_active, COALESCE(archived_at,''), created_at, target_war_rank`
 
 func scanSeason(row *sql.Row) (*Season, error) {
 	var s Season
-	var pa, pr, wa, wr sql.NullInt64
+	var pa, pr, wa, wr, target sql.NullInt64
 	if err := row.Scan(&s.ID, &s.Name, &s.SeasonNumber, &s.StartDate, &s.EndDate,
 		&s.WeekCount, &s.KeyEventName, &s.KeyEventRequired,
 		&s.TierActiveMinPct, &s.TierAtRiskMinPct,
 		&s.KeyEventTotal, &s.ResourceName, &pa, &pr, &wa, &wr,
 		&s.ScheduleBufferMinutes, &s.LandReadinessBufferHours,
-		&s.IsActive, &s.ArchivedAt, &s.CreatedAt); err != nil {
+		&s.IsActive, &s.ArchivedAt, &s.CreatedAt, &target); err != nil {
 		return nil, err
+	}
+	if target.Valid {
+		v := int(target.Int64)
+		s.TargetWarRank = &v
 	}
 	opt := func(n sql.NullInt64) *int {
 		if !n.Valid {

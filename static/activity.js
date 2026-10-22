@@ -69,6 +69,8 @@ const ENTITY_LABELS = {
     season_opponent_observation: 'opponent observation',
     season_war:            'season war',
     season_faction_battle: 'faction battles',
+    season_resource_observation: 'resource total',
+    season_rank_cutoff:    'rank cutoff',
     season_import:         'season import',
     poll_template:         'Poll Template',
     poll_instance:         'Poll',

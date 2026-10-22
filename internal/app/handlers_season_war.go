@@ -31,11 +31,15 @@ func loadWarConfig(q rowQuerier, seasonID int) (warConfig, error) {
 		production_stop_day, war_event_type_id FROM season_war_config WHERE season_id = ?`, seasonID).Scan(&c.WeightPower, &c.WeightTop10,
 		&c.WeightTop5, &c.WeightTop3, &c.BandVeryFavorable, &c.BandFavorable, &c.BandUnfavorable, &c.BandVeryUnfavorable,
 		&c.MinCategories, &c.LootStepPct, &c.LootMaxPct, &week, &day, &c.WarEventTypeID)
-	if err == sql.ErrNoRows {
-		return c, nil
-	}
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		return c, err
+	}
+	saved := err == nil
+	if err := q.QueryRow(`SELECT target_war_rank FROM seasons WHERE id = ?`, seasonID).Scan(&c.TargetWarRank); err != nil && err != sql.ErrNoRows {
+		return c, err
+	}
+	if !saved {
+		return c, nil
 	}
 	c.Saved = true
 	if week.Valid {
@@ -328,6 +332,11 @@ func handleSeasonWarGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	record, factionRecords := warRecordsFor(wars, battles, alliances, factions, gametimeDateOf(time.Now()))
+	resources, err := loadWarResources(db, s, cfg, opponents, time.Now())
+	if err != nil {
+		fail("resources", err)
+		return
+	}
 	links, err := warLinkChoices(getAuthUser(r), sid)
 	if err != nil {
 		fail("links", err)
@@ -351,6 +360,7 @@ func handleSeasonWarGet(w http.ResponseWriter, r *http.Request) {
 		"factions_wl":  factionRecords,
 		"start_date":   s.StartDate,
 		"links":        links,
+		"resources":    resources,
 	})
 }
 
@@ -387,6 +397,11 @@ func handleSeasonWarConfigPut(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	if _, err := db.Exec(`UPDATE seasons SET target_war_rank = ? WHERE id = ?`, c.TargetWarRank, c.SeasonID); err != nil {
+		slog.Error("handleSeasonWarConfigPut: target rank", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	logActivity(user.ID, user.Username, "updated", "season_war_config", seasonTagName(&c.SeasonID), true)
 	writeJSON(w, map[string]string{"message": "Saved"})
 }
@@ -402,6 +417,9 @@ func validateWarConfig(c warConfig) string {
 	}
 	if !(c.BandVeryFavorable > c.BandFavorable && c.BandFavorable > c.BandUnfavorable && c.BandUnfavorable > c.BandVeryUnfavorable) {
 		return "the bands must run Very Favorable > Favorable > Unfavorable > Very Unfavorable"
+	}
+	if c.TargetWarRank != nil && *c.TargetWarRank < 1 {
+		return "the target rank is from 1"
 	}
 	if c.MinCategories < 1 || c.MinCategories > 4 {
 		return "the minimum number of categories is 1 to 4"

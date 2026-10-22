@@ -99,6 +99,7 @@
     function render() {
         renderOwn();
         renderRecord();
+        renderResources();
         renderWars();
         renderOpponents();
         renderBattles();
@@ -129,6 +130,85 @@
         box.replaceChildren(el('h3', { className: 'land-section-title', textContent: 'Our war record' }),
             el('div', { className: 'war-figures' }, line('Overall', r.overall), line('Attacking', r.attack), line('Defending', r.defense)),
             el('p', { className: 'hub-section-note', textContent: 'Completed wars whose battle date has come. Draws and unknown results are listed, not counted.' }));
+    }
+
+    // ── Resources, rank goals, loot (private-docs 279) ───────────────────────
+    const TIER_STATUS = { on_track: ['On Track', 'success'], at_risk: ['At Risk', 'warning'], behind: ['Behind', 'danger'], unknown: ['Unknown', 'neutral'] };
+    const signed = v => v == null ? '—' : (v > 0 ? '' : '−') + formatCompact(Math.abs(v));
+
+    function renderResources() {
+        const box = document.getElementById('war-resources');
+        const r = data.resources;
+        const ro = !editable();
+        const [label, tone] = TIER_STATUS[r.status] || [r.status, 'neutral'];
+        const fig = (name, value, note) => el('div', { className: 'war-figure' }, el('span', { className: 'war-figure-label', textContent: name }),
+            el('strong', { textContent: value }), note ? el('span', { className: 'war-figure-asof', textContent: note }) : null);
+        const own = r.own;
+        const summary = el('div', { className: 'card land-section' },
+            el('div', { className: 'land-readiness-head' }, el('h3', { textContent: 'Reward Tier Status' }),
+                el('span', { className: 'land-status tone-' + tone, textContent: label })),
+            el('div', { className: 'war-figures' },
+                fig('Our total', own ? compact(own.resource_total) : '—', own ? 'as of ' + own.observed_at + ' ST · ' + own.source : 'not recorded yet'),
+                fig('Projection now', r.projected_now != null ? compact(r.projected_now) : '—', 'projection · ' + compact(r.per_hour) + '/h from held cities'),
+                fig('Projection at reset', r.projected_at_reset != null ? compact(r.projected_at_reset) : '—', 'projection · reset ' + r.next_reset + ' ST' +
+                    (r.production_stop ? ' · production stops ' + r.production_stop + ' ST' : '') + (r.stopped ? ' (stopped)' : '')),
+                fig('War rank', r.rank != null ? '#' + r.rank : '—', r.group ? r.group.label : (r.rank != null ? 'no reward group' : '')),
+                fig('Target', r.target_rank != null ? '#' + r.target_rank : '—', r.target_group ? r.target_group.label : (r.target_rank == null ? 'set in War settings' : '')),
+                fig('Gap to target', r.gap == null ? '—' : r.gap <= 0 ? 'past it' : compact(r.gap),
+                    r.target_cutoff ? 'cutoff ' + compact(r.target_cutoff.resource_total) + ' as of ' + r.target_cutoff.observed_at + ' ST' : 'no cutoff recorded for the target rank'),
+                fig('Gap to the rank above', r.gap_next_above == null ? '—' : r.gap_next_above <= 0 ? 'past it' : compact(r.gap_next_above),
+                    r.next_above ? 'rank #' + r.next_above.rank : '')),
+            r.unknown_output && r.unknown_output.length ? el('p', { className: 'hub-section-note', textContent: 'No output known for: ' + r.unknown_output.join(', ') + ' — set the level table in Land settings.' }) : null,
+            el('p', { className: 'hub-section-note', textContent: 'Projections add what held cities produce since our last recorded total; they are never saved as a balance.' }));
+        const parts = [summary];
+
+        if (!ro) {
+            const who = select([['own', 'Our alliance']].concat(data.opponents.map(o => [String(o.id), '[' + o.tag + '] S' + o.server])), 'own', { translate: 'no' });
+            const total = num(), rank = num(null, { min: '1' });
+            const at = el('input', { type: 'datetime-local', className: 'form-input', value: nowST() });
+            const save = el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                const body = { season_id: season.id, resource_total: readNum(total), war_rank: readNum(rank), observed_at: at.value.replace('T', ' ') };
+                if (who.value === 'own') body.own = true; else body.season_alliance_id = parseInt(who.value, 10);
+                send('POST', '/api/season-hub/war/resources', body).then(d => { showToast(d.written ? 'Total recorded.' : 'Already recorded.'); load(true); })
+                    .catch(err => showToast(err.message, 'error'));
+            } }, 'Record total');
+            const cRank = num(null, { min: '1' }), cTotal = num();
+            const cAt = el('input', { type: 'datetime-local', className: 'form-input', value: nowST() });
+            const cSave = el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                send('POST', '/api/season-hub/war/cutoffs', { season_id: season.id, rank: readNum(cRank) || 0, resource_total: readNum(cTotal), observed_at: cAt.value.replace('T', ' ') })
+                    .then(d => { showToast(d.written ? 'Cutoff recorded.' : 'Already recorded.'); load(true); })
+                    .catch(err => showToast(err.message, 'error'));
+            } }, 'Record cutoff');
+            const imp = (kind, title, columns) => el('button', { type: 'button', className: 'btn btn-secondary btn-sm',
+                onclick: () => window.SeasonHub.openImport({ kind, title, columns, onDone: () => load(true) }) }, 'Import ' + title);
+            parts.push(el('details', { className: 'war-obs-form' }, el('summary', null, 'Record a total or a cutoff'),
+                el('div', { className: 'land-target-grid' }, field('Alliance', who), field('Total', total), field('War rank', rank), field('Observed (ST)', at)),
+                el('div', { className: 'tab-toolbar' }, save, imp('resource_observations', 'totals',
+                    'Columns: Total, required; Alliance and Server (blank Alliance, or our own tag, is ours), Rank, Observed at (YYYY-MM-DD HH:MM, server time), Note.')),
+                el('div', { className: 'land-target-grid' }, field('Rank', cRank), field('Total at that rank', cTotal), field('Observed (ST)', cAt)),
+                el('div', { className: 'tab-toolbar' }, cSave, imp('rank_cutoffs', 'cutoffs', 'Columns: Rank and Total, required; Observed at, Note.'))));
+        }
+
+        // Cutoffs, latest per rank, with their group.
+        const groupOf = rank => (r.groups || []).find(g => rank >= g.rank_from && rank <= g.rank_to);
+        if ((r.cutoffs || []).length) {
+            parts.push(el('div', { className: 'war-cutoffs' }, r.cutoffs.map(c => el('div', { className: 'war-cat' },
+                el('span', { textContent: '#' + c.rank + (groupOf(c.rank) ? ' · ' + groupOf(c.rank).label : '') }),
+                el('strong', { textContent: compact(c.resource_total) }),
+                el('span', { className: 'war-figure-asof', textContent: 'as of ' + c.observed_at + ' ST' })))));
+        }
+
+        // Loot scenarios: one card per opponent with a total, each step against our gap.
+        const loot = (r.loot || []).map(o => el('div', { className: 'war-cat war-loot' },
+            el('div', { className: 'land-target-head' }, el('strong', { translate: 'no', textContent: '[' + o.tag + '] S' + o.server }),
+                ratingBadge(o.rating), o.override ? el('span', { className: 'war-override' }, 'Leadership: ', ratingBadge(o.override)) : null),
+            el('span', { className: 'war-figure-asof', textContent: 'Total ' + compact(o.total) + (o.war_rank ? ' · rank #' + o.war_rank : '') + ' · as of ' + o.observed_at + ' ST' }),
+            el('div', { className: 'war-loot-steps' }, o.scenarios.map(s => el('div', { className: 'war-loot-step' },
+                el('span', { textContent: s.pct + '%' }), el('strong', { textContent: compact(s.amount) }),
+                el('small', { textContent: r.gap == null ? 'gap unknown' : r.gap <= 0 ? 'no gap' : s.of_gap + '% of gap' }))))));
+        parts.push(el('div', { className: 'war-loot-list' }, loot.length ? loot
+            : [el('p', { className: 'loading-msg', textContent: 'Loot scenarios appear once an opponent\'s total is recorded.' })]));
+        box.replaceChildren(...parts);
     }
 
     // ── Wars ─────────────────────────────────────────────────────────────────
@@ -606,6 +686,31 @@
             send('PUT', '/api/season-hub/war/config', out).then(() => { showToast('War settings saved.'); load(true); })
                 .catch(err => showToast(err.message, 'error'));
         } }, 'Save settings');
-        body.replaceChildren(...[note, form, save].filter(Boolean));
+        const target = num(c.target_war_rank, { min: '1', disabled: ro, 'data-k': 'target_war_rank' });
+        form.insertBefore(field('Target war rank', target), form.children[1]);
+
+        // Rank groups (S4: King #1, Queen #2–3, Rook #4–10), in order.
+        const list = el('div', { className: 'war-groups' });
+        const addGroup = g => {
+            g = g || {};
+            const name = el('input', { type: 'text', className: 'form-input', value: g.label || '', disabled: ro, 'aria-label': 'Group name' });
+            const from = num(g.rank_from, { min: '1', disabled: ro, 'aria-label': 'From rank' });
+            const to = num(g.rank_to, { min: '1', disabled: ro, 'aria-label': 'To rank' });
+            const row = el('div', { className: 'war-group-row' }, name, el('span', { textContent: '#' }), from,
+                el('span', { textContent: 'to' }), to,
+                ro ? null : el('button', { type: 'button', className: 'btn btn-danger btn-sm', 'aria-label': 'Remove group', onclick: () => { row.remove(); refreshOrderButtons(list); } }, svgIcon('x')));
+            if (!ro) row.prepend(buildOrderButtons(row, null));
+            row._read = () => ({ id: g.id || 0, label: name.value.trim(), rank_from: readNum(from) || 0, rank_to: readNum(to) || 0 });
+            list.appendChild(row);
+            if (!ro) refreshOrderButtons(list);
+        };
+        ((data.resources || {}).groups || []).forEach(addGroup);
+        const groupBar = ro ? null : el('div', { className: 'tab-toolbar' },
+            el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => addGroup() }, '+ Group'),
+            el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                send('PUT', '/api/season-hub/war/rank-groups', { season_id: season.id, groups: Array.from(list.children).map(x => x._read()) })
+                    .then(() => { showToast('Rank groups saved.'); load(true); }).catch(err => showToast(err.message, 'error'));
+            } }, 'Save groups'));
+        body.replaceChildren(...[note, form, save, el('h4', { textContent: 'Reward groups by war rank' }), list, groupBar].filter(Boolean));
     }
 })();

@@ -816,3 +816,12 @@
     padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; }
 .war-battle-opp { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .war-battle-del { display: flex; justify-content: flex-end; }
+.war-cutoffs, .war-loot-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin: 8px 0; }
+.war-loot-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.war-loot-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 4px; margin-top: 4px; }
+.war-loot-step { display: flex; flex-direction: column; font-size: 0.8rem; padding: 4px; border-radius: 4px; background: var(--bg-secondary); }
+.war-loot-step small { color: var(--text-muted); }
+.war-groups { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.war-group-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.war-group-row .form-input { width: auto; flex: 0 1 80px; min-width: 60px; }
+.war-group-row .form-input[type="text"] { flex: 1 1 120px; }

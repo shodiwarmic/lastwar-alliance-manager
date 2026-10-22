@@ -28,6 +28,7 @@ type warConfig struct {
 	ProductionStopWeek  *int    `json:"production_stop_week"`
 	ProductionStopDay   *int    `json:"production_stop_day"`
 	WarEventTypeID      *int    `json:"war_event_type_id"`
+	TargetWarRank       *int    `json:"target_war_rank"` // stored on the season`
 	Saved               bool    `json:"saved"`
 }
 
