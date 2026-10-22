@@ -63,6 +63,7 @@ func TestEligibilityCountsAndTransfer(t *testing.T) {
 		(1, 'elite', 'Elite', 2, 'info', 0, 7), (1, 'valued', 'Valued', 5, 'neutral', 1, NULL)`)
 	mustExecT(t, `INSERT INTO season_war_attendance (war_id, member_id, attended, poll_response) VALUES
 		(1, 1, 1, 'yes'), (2, 1, 1, 'yes'), (1, 2, 0, 'no'), (2, 2, 0, 'no')`)
+	mustExecT(t, `INSERT INTO season_participation (season_id, member_id, week_number, score) VALUES (1, 1, 1, 'full')`)
 	req := shReq(http.MethodGet, "", nil, nil)
 	req.URL.RawQuery = "season_id=1"
 	rr := httptest.NewRecorder()
@@ -71,6 +72,18 @@ func TestEligibilityCountsAndTransfer(t *testing.T) {
 	json.Unmarshal(rr.Body.Bytes(), &res)
 	if len(res.Tiers) != 2 || res.Tiers[0].Eligible != 1 {
 		t.Fatalf("tiers: %s", rr.Body.String())
+	}
+	// A member nobody scored has an overall standing too — their completed weeks are Absent, as on
+	// Rankings — not "no completed week yet".
+	for _, m := range res.Members {
+		switch {
+		case m.OverallPct == nil:
+			t.Errorf("%s has no overall standing", m.Name)
+		case m.Name == "Bravo" && *m.OverallPct != 0:
+			t.Errorf("Bravo, never scored: %v%%, want 0", *m.OverallPct)
+		case m.Name == "Alpha" && *m.OverallPct <= 0:
+			t.Errorf("Alpha, one Full week: %v%%", *m.OverallPct)
+		}
 	}
 
 	save := func(body string) *httptest.ResponseRecorder {

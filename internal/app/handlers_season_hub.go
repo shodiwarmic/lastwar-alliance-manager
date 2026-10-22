@@ -1250,6 +1250,31 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 		purgedServer += int(n)
 	}
 
+	// Calendar rows owned by the season's own records — a war, a Trade Post action, a Land
+	// capture or drop (273) — go with those records. One carrying a participation board is kept
+	// and detached, as a pushed row is.
+	if derr := collectKept(`SELECT id FROM schedule_events WHERE season_id = ? AND source_kind IS NOT NULL
+		  AND id IN (SELECT schedule_event_id FROM participation_boards)`, id); derr != nil {
+		slog.Error("handleSeasonDelete: find boarded sourced events", "error", derr)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, derr := tx.Exec(`UPDATE schedule_events SET source_kind = NULL, source_id = NULL
+		WHERE season_id = ? AND source_kind IS NOT NULL
+		  AND id IN (SELECT schedule_event_id FROM participation_boards)`, id); derr != nil {
+		slog.Error("handleSeasonDelete: detach boarded sourced events", "error", derr)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if res, derr := tx.Exec(`DELETE FROM schedule_events WHERE season_id = ? AND source_kind IS NOT NULL`, id); derr != nil {
+		slog.Error("handleSeasonDelete: purge sourced events", "error", derr)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	} else if res != nil {
+		n, _ := res.RowsAffected()
+		purgedAlliance += int(n)
+	}
+
 	// Then the legacy recomputed-date purge, for rows pushed before origins
 	// existed and never re-pushed since. Best-effort — skipped with no start_date.
 	if s.StartDate != "" {
@@ -1348,7 +1373,8 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Records that belong to other features keep existing; only their season tag goes.
-	for _, tbl := range []string{"comms_resources", "poll_templates", "poll_instances", "files"} {
+	// A calendar row an officer tagged to the season (or one kept above) stays on the calendar.
+	for _, tbl := range []string{"comms_resources", "poll_templates", "poll_instances", "files", "schedule_events"} {
 		if _, err := tx.Exec(`UPDATE `+tbl+` SET season_id = NULL WHERE season_id = ?`, id); err != nil {
 			slog.Error("handleSeasonDelete: clear season tag", "table", tbl, "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)

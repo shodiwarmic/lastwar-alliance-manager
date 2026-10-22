@@ -83,8 +83,10 @@ func loadExemptions(q rowQueryer, seasonID int) ([]seasonExemption, error) {
 	return out, rows.Err()
 }
 
-// overallPcts is each member's overall standing (points over completed, unexcused weeks).
-func overallPcts(q rowQueryer, s *Season, completedWeeks int) (map[int]float64, error) {
+// overallPcts is each listed member's overall standing (points over completed, unexcused
+// weeks). A member nobody scored still has one: their completed weeks count as Absent, as the
+// status engine counts them on Rankings.
+func overallPcts(q rowQueryer, s *Season, completedWeeks int, memberIDs []int) (map[int]float64, error) {
 	pts, maxPts := map[string]int{}, 0
 	for _, sl := range s.ScoreLevels {
 		pts[sl.Key] = sl.Points
@@ -111,7 +113,8 @@ func overallPcts(q rowQueryer, s *Season, completedWeeks int) (map[int]float64, 
 	}
 	rows.Close()
 	out := map[int]float64{}
-	for m, byWeek := range scores {
+	for _, m := range memberIDs {
+		byWeek := scores[m]
 		var weeks []weekInput
 		for w := 1; w <= completedWeeks; w++ {
 			weeks = append(weeks, weekInput{Week: w, Score: byWeek[w], Points: pts[byWeek[w]]})
@@ -151,7 +154,11 @@ func computeSeasonEligibility(q rowQueryer, s *Season, now time.Time) (seasonEli
 		return res, err
 	}
 	completedWeeks := completedSeasonWeeks(s, now)
-	pcts, err := overallPcts(q, s, completedWeeks)
+	ids := make([]int, 0, len(roster))
+	for _, m := range roster {
+		ids = append(ids, m.ID)
+	}
+	pcts, err := overallPcts(q, s, completedWeeks, ids)
 	if err != nil {
 		return res, err
 	}

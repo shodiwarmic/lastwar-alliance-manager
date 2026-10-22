@@ -52,7 +52,7 @@
     // Each load takes a generation; only the newest response for it is used, and rewards /
     // mail must also still belong to the season on screen. So a quick A→B→A switch, or a save
     // overlapping a switch, can't paint one season's data under another.
-    const gen = { data: 0, rewards: 0, mail: 0, comms: 0, files: 0, schedule: 0 };
+    const gen = { data: 0, rewards: 0, mail: 0, comms: 0, files: 0, schedule: 0, week: 0 };
     const inflight = { rewards: null, mail: null };   // season id of a load in flight
 
     // ── Tabs (tabs.js), with #tab deep links ──────────────────────────────────
@@ -840,7 +840,10 @@
         if (prevWeek && parseInt(prevWeek, 10) <= activeSeason.week_count) {
             sel.value = prevWeek;
         }
-        sel.addEventListener('change', loadParticipationWeek);
+        if (!sel.dataset.wired) {   // populated on every season load; listen once
+            sel.dataset.wired = '1';
+            sel.addEventListener('change', loadParticipationWeek);
+        }
     }
 
     function populateContribWeekSelect() {
@@ -867,12 +870,15 @@
         const sel = document.getElementById('week-select');
         if (!sel || !activeSeason) return;
         const week = parseInt(sel.value, 10);
-        const tbody = document.getElementById('participation-tbody');
-        if (!tbody) return;
+        // The grid is one tbody per member (renderParticipationRows replaces them all), so the
+        // template's tbody is gone after the first render: test for the table.
+        if (!document.getElementById('participation-table')) return;
+        const mine = ++gen.week;
 
         fetch('/api/season-hub/participation?season_id=' + activeSeason.id + '&week=' + week)
             .then(r => r.json())
             .then(data => {
+                if (mine !== gen.week) return;   // another week was asked for since
                 partHasWars = !!data.has_wars;
                 partWars = data.wars || [];
                 partAttendance = {};

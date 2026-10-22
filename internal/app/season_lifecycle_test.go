@@ -343,6 +343,21 @@ func TestSeasonDeleteLeavesNoChildRows(t *testing.T) {
 	db.QueryRow(`SELECT id FROM season_trackables WHERE season_id = ? LIMIT 1`, id).Scan(&tk)
 	mustExecT(t, `INSERT INTO season_member_records (season_id, member_id, week_number, trackable_id, recorded_value) VALUES (?, ?, 0, ?, 5)`, id, m, tk)
 	mustExecT(t, `INSERT INTO season_rewards (season_id, member_id, reward_tier, participation_pct, logged_by) VALUES (?, ?, 'core', 90, 1)`, id, m)
+	// Calendar rows: one a war owns, one a Trade Post owns that carries a board, and one an
+	// officer tagged to the season by hand.
+	var typeID int
+	db.QueryRow(`SELECT id FROM schedule_event_types ORDER BY id LIMIT 1`).Scan(&typeID)
+	ins := func(source any, sourceID any) int64 {
+		res, err := db.Exec(`INSERT INTO schedule_events (event_date, event_type_id, event_time, notes, created_by, season_id, source_kind, source_id)
+			VALUES ('2031-03-20', ?, '20:00', '', 1, ?, ?, ?)`, typeID, id, source, sourceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, _ := res.LastInsertId()
+		return n
+	}
+	warRow, postRow, manual := ins("war", 901), ins("trade_post", 902), ins(nil, nil)
+	mustExecT(t, `INSERT INTO participation_boards (schedule_event_id, recorded_by) VALUES (?, 1)`, postRow)
 	if err := archiveSeason(id, "2031-05-01"); err != nil {
 		t.Fatal(err)
 	}
@@ -353,6 +368,15 @@ func TestSeasonDeleteLeavesNoChildRows(t *testing.T) {
 		t.Fatalf("delete: %d %s", rr.Code, rr.Body.String())
 	}
 	assertNoSeasonRows(t, id)
+	if n := countT(t, `SELECT COUNT(*) FROM schedule_events WHERE id = ?`, warRow); n != 0 {
+		t.Errorf("the war's calendar row outlived the season")
+	}
+	if n := countT(t, `SELECT COUNT(*) FROM schedule_events WHERE id = ? AND source_kind IS NULL AND source_id IS NULL`, postRow); n != 1 {
+		t.Errorf("the boarded Trade Post row should stay, detached from its deleted source")
+	}
+	if n := countT(t, `SELECT COUNT(*) FROM schedule_events WHERE id = ?`, manual); n != 1 {
+		t.Errorf("an officer's tagged row should stay on the calendar, untagged")
+	}
 }
 
 // assertNoSeasonRows checks every table carrying a season_id column.
