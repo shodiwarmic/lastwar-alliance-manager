@@ -9,6 +9,7 @@
 {{define "head_tags"}}
 <link rel="stylesheet" href="{{asset "/table-utils.css"}}">
 <link rel="stylesheet" href="{{asset "/order-buttons.css"}}">
+<link rel="stylesheet" href="{{asset "/remote-finder.css"}}">
 <link rel="stylesheet" href="{{asset "/season-hub.css"}}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/styles/choices.min.css">
 <link rel="stylesheet" href="{{asset "/choices-theme.css"}}">
@@ -27,7 +28,7 @@
             <option value="">No seasons</option>
         </select>
         <span id="season-status-badge" class="season-badge" style="display:none"></span>
-        {{if .Permissions.ManageSeasonRewards}}
+        {{if .Permissions.ManageSeasonConfig}}
         <div class="season-actions">
             <button class="btn btn-secondary btn-sm" id="btn-create-season" title="New Season" aria-label="New Season"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-plus"/></svg> <span class="action-label">New Season</span></button>
             <button class="btn btn-secondary btn-sm" id="btn-edit-season" title="Edit" aria-label="Edit" style="display:none"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-pencil"/></svg> <span class="action-label">Edit</span></button>
@@ -37,15 +38,24 @@
         {{end}}
     </div>
 
-    <!-- Tabs -->
-    <div class="tab-bar">
-        <button class="tab-btn active" data-tab="rankings">Rankings</button>
-        {{if .Permissions.ManageSeasonHub}}
-        <button class="tab-btn" data-tab="participation">Participation</button>
-        <button class="tab-btn" data-tab="contributions">Contributions</button>
-        {{end}}
+    <!-- Tabs. Each season orders, renames and hides these (Edit Season → Layout); the
+         permission blocks here still decide which exist for this viewer. -->
+    <div class="tab-bar" id="season-tab-bar">
+        <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+        <button class="tab-btn" data-tab="rankings">Rankings</button>
+        {{if .Permissions.ManageSeasonParticipation}}<button class="tab-btn" data-tab="participation">Participation</button>{{end}}
+        {{if .Permissions.ManageSeasonContributions}}<button class="tab-btn" data-tab="contributions">Contributions</button>{{end}}
         <button class="tab-btn" data-tab="rewards">Rewards</button>
-        <button class="tab-btn" data-tab="season-mail">Season Mail</button>
+        {{if .Permissions.ViewSeasonLand}}<button class="tab-btn" data-tab="land">Land</button>{{end}}
+        {{if .Permissions.ViewSeasonWar}}<button class="tab-btn" data-tab="war">War</button>{{end}}
+        {{if .Permissions.ViewSchedule}}<button class="tab-btn" data-tab="schedule">Schedule</button>{{end}}
+        {{if or .Permissions.ViewComms .Permissions.ViewPolls}}<button class="tab-btn" data-tab="comms">Comms</button>{{end}}
+        {{if .Permissions.ViewFiles}}<button class="tab-btn" data-tab="files">Files</button>{{end}}
+    </div>
+
+    <!-- ── Dashboard: the season's cards (private-docs 287) ─────────────── -->
+    <div id="tab-dashboard" class="tab-content">
+        <div id="season-dashboard-grid" class="season-dashboard-grid"><p class="loading-msg">Loading…</p></div>
     </div>
 
     <!-- ── Rankings ──────────────────────────────────────────────────────── -->
@@ -56,9 +66,10 @@
                 <button type="button" id="rankings-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
             </div>
             <span id="rankings-count" class="tab-count"></span>
+            {{if .Permissions.ViewReportSeasonParticipation}}<a class="btn btn-secondary btn-sm" href="/reports#season-participation">Season Participation report</a>{{end}}
         </div>
         <div id="no-season-msg" class="info-panel" style="display:none">
-            No active season. {{if .Permissions.ManageSeasonRewards}}Create one above to get started.{{end}}
+            No active season. {{if .Permissions.ManageSeasonConfig}}Create one above to get started.{{end}}
         </div>
         <div class="table-scroll">
             <table class="data-table sortable-table" id="rankings-table" style="display:none" data-export-csv="rankings.csv" translate="no">
@@ -70,7 +81,7 @@
                         <th data-sort="participation_pct" class="sort-desc">Participation</th>
                         <th data-sort="contribution_pct">Contribution</th>
                         <th data-sort="key_event_attendance" id="key-event-col-header" data-export-key="key-event">Key Event</th>
-                        <th data-sort="class_tag">Tag</th>
+                        <th data-sort="status">Status</th>
                         <th data-sort="reward_tier">Reward Tier</th>
                     </tr>
                 </thead>
@@ -82,7 +93,7 @@
     </div>
 
     <!-- ── Participation ─────────────────────────────────────────────────── -->
-    {{if .Permissions.ManageSeasonHub}}
+    {{if .Permissions.ManageSeasonParticipation}}
     <div id="tab-participation" class="tab-content" style="display:none">
         <div class="tab-toolbar">
             <div class="participation-week-nav">
@@ -93,26 +104,48 @@
                 <input type="text" id="participation-search" class="form-input" placeholder="Search members…" aria-label="Search members…" autocomplete="off">
                 <button type="button" id="participation-search-clear" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
             </div>
+            <label class="participation-sort-wrap" for="participation-sort">Sort
+                <select id="participation-sort" class="form-input">
+                    <option value="rankname|asc">Rank, then name</option>
+                    <option value="name|asc">Name A–Z</option>
+                    <option value="name|desc">Name Z–A</option>
+                    <option value="pct|desc">Participation, high to low</option>
+                    <option value="pct|asc">Participation, low to high</option>
+                    <option value="wars|desc">War attendance, high to low</option>
+                    <option value="wars|asc">War attendance, low to high</option>
+                    <option value="absences|desc">Most absences</option>
+                    <option value="partials|desc">Most partials</option>
+                </select>
+            </label>
+            <button class="btn btn-secondary btn-sm" id="btn-participation-filters" aria-expanded="false" aria-controls="participation-filters">Filters</button>
+            <button class="btn btn-secondary btn-sm" id="btn-war-detail-all" style="display:none">Show detail</button>
+            <button class="btn btn-secondary btn-sm" id="btn-import-attendance" style="display:none">Import attendance</button>
             <button class="btn btn-primary" id="btn-save-participation">Save Week</button>
             <span id="participation-status" class="status-msg"></span>
         </div>
+        <div id="participation-filters" class="participation-filters" style="display:none"></div>
+        <details class="land-settings week-events-manage" id="week-events-manage">
+            <summary>Events this week</summary>
+            <div id="week-events-body"></div>
+        </details>
         <div id="participation-grid-wrap" class="table-scroll">
             <table class="data-table" id="participation-table" data-export-csv="participation.csv" translate="no">
                 <thead>
                     <tr>
-                        <th>Member</th>
-                        <th>Rank</th>
-                        <th>Score</th>
-                        <th id="key-event-participation-header" data-export-key="key-event">Key Event</th>
+                        <th data-sort="name">Member</th>
+                        <th data-sort="rankname">Rank</th>
+                        <th data-sort="score">Score</th>
+                        <th class="wars-col" title="This week's events and wars: each member's result, attendance and in-game poll">Detail</th>
+                        <th id="key-event-participation-header" class="legacy-col" data-export-key="key-event">Key Event</th>
                         <th>Note</th>
-                        <th>Attack Note</th>
-                        <th title="Member confirmed their response to the in-game attack poll">Attack Poll</th>
-                        <th>Defense Note</th>
-                        <th title="Member confirmed their response to the in-game defense poll">Defense Poll</th>
+                        <th class="legacy-col">Attack Note</th>
+                        <th class="legacy-col" title="Member confirmed their response to the in-game attack poll">Attack Poll</th>
+                        <th class="legacy-col">Defense Note</th>
+                        <th class="legacy-col" title="Member confirmed their response to the in-game defense poll">Defense Poll</th>
                     </tr>
                 </thead>
                 <tbody id="participation-tbody">
-                    <tr><td colspan="9" class="loading-msg">Loading…</td></tr>
+                    <tr><td colspan="10" class="loading-msg">Loading…</td></tr>
                 </tbody>
             </table>
         </div>
@@ -120,7 +153,7 @@
     {{end}}
 
     <!-- ── Contributions ─────────────────────────────────────────────────── -->
-    {{if .Permissions.ManageSeasonHub}}
+    {{if .Permissions.ManageSeasonContributions}}
     <div id="tab-contributions" class="tab-content" style="display:none">
 
         <div class="tab-toolbar">
@@ -186,19 +219,109 @@
                 </tbody>
             </table>
         </div>
+        {{if .Permissions.ManageSeasonRewards}}
+        <div class="hub-section-head"><h3>Eligibility</h3></div>
+        <div id="rewards-eligibility"></div>
+        {{end}}
+        <div id="rewards-exemptions"></div>
     </div>
 
-    <!-- ── Season Mail ───────────────────────────────────────────────────── -->
-    <div id="tab-season-mail" class="tab-content" style="display:none">
-        {{if .Permissions.ManageSeasonHub}}
-        <div class="tab-toolbar">
-            <button class="btn btn-primary btn-sm" id="btn-upload-mail">+ Post Mail</button>
+    <!-- ── Land: path status, routes, settings ──────────────────────────── -->
+    {{if .Permissions.ViewSeasonLand}}
+    <div id="tab-land" class="tab-content" style="display:none">
+        <div id="land-readiness" class="card land-readiness"><p class="loading-msg">Loading…</p></div>
+        <div id="land-extras"></div>
+        <div class="hub-section-head">
+            <h3>Routes</h3>
+            <div class="land-route-tabs" id="land-route-tabs" role="tablist"></div>
         </div>
-        {{end}}
+        <div id="land-route"></div>
+        <details class="land-settings" id="land-settings">
+            <summary>Land settings and level table</summary>
+            <div id="land-settings-body"></div>
+        </details>
+    </div>
+    {{end}}
+
+    <!-- ── War: opponents, observations, matchup, settings ─────────────── -->
+    {{if .Permissions.ViewSeasonWar}}
+    <div id="tab-war" class="tab-content" style="display:none">
+        <div id="war-own" class="card land-section"><p class="loading-msg">Loading…</p></div>
+        <div id="war-record" class="card land-section"></div>
+        <div class="hub-section-head"><h3>Resources and rank</h3></div>
+        <div id="war-resources"></div>
+        <div class="hub-section-head"><h3>Wars</h3></div>
+        <div id="war-wars"></div>
+        <div id="war-poll-reviews"></div>
+        <div class="hub-section-head"><h3>Opponents</h3></div>
+        <div id="war-opponents"></div>
+        <div class="hub-section-head"><h3>Trade Posts</h3></div>
+        <div id="war-posts"></div>
+        <div class="hub-section-head"><h3>Faction battles</h3></div>
+        <div id="war-battles"></div>
+        <div id="war-extras"></div>
+        <div class="hub-section-head"><h3>Observations</h3></div>
+        <div id="war-observations"></div>
+        <details class="land-settings" id="war-settings">
+            <summary>War settings</summary>
+            <div id="war-settings-body"></div>
+        </details>
+    </div>
+    {{end}}
+
+    <!-- ── Schedule: the season's timeline and conflicts ────────────────── -->
+    {{if .Permissions.ViewSchedule}}
+    <div id="tab-schedule" class="tab-content" style="display:none">
+        <div class="tab-toolbar season-schedule-toolbar">
+            <div class="participation-week-nav">
+                <label for="season-schedule-view">View:</label>
+                <select id="season-schedule-view" class="form-input">
+                    <option value="timeline">Whole season</option>
+                </select>
+            </div>
+            <label class="season-schedule-all"><input type="checkbox" id="season-schedule-all"> Every calendar event in these weeks</label>
+            <a class="btn btn-secondary btn-sm" href="/schedule">Open the Schedule</a>
+        </div>
+        <div id="season-conflicts" class="season-conflicts" style="display:none"></div>
+        <div id="season-timeline" class="season-timeline"><p class="loading-msg">Loading…</p></div>
+    </div>
+    {{end}}
+
+    <!-- ── Comms: the season's mail, announcements, polls and resources ──── -->
+    {{if or .Permissions.ViewComms .Permissions.ViewPolls}}
+    <div id="tab-comms" class="tab-content" style="display:none">
+        {{if .Permissions.ViewComms}}
+        <div class="hub-section-head">
+            <h3>Mail</h3>
+            {{if .Permissions.ManageComms}}<button class="btn btn-primary btn-sm" id="btn-upload-mail">+ Post Mail</button>{{end}}
+        </div>
         <div id="season-mail-list" class="file-list">
             <p class="loading-msg">Loading…</p>
         </div>
+        <div class="hub-section-head"><h3>Announcements</h3></div>
+        <div id="season-announcement-list" class="hub-link-list"></div>
+        <div class="hub-section-head"><h3>Resources</h3></div>
+        <div id="season-resource-list" class="hub-link-list"></div>
+        {{end}}
+        {{if .Permissions.ViewPolls}}
+        <div class="hub-section-head"><h3>Polls</h3></div>
+        <div id="season-poll-list" class="hub-link-list"></div>
+        {{end}}
+        <p class="hub-section-note">Announcements, resources and polls are tagged to a season on the <a href="/comms">Comms page</a>.</p>
     </div>
+    {{end}}
+
+    <!-- ── Files: the season's files; an archived season's frozen copies ──── -->
+    {{if .Permissions.ViewFiles}}
+    <div id="tab-files" class="tab-content" style="display:none">
+        <div class="hub-section-head">
+            <h3>Files</h3>
+            {{if .Permissions.UploadFiles}}<a class="btn btn-primary btn-sm" id="btn-season-files-add" href="/files">Upload or create on the Files page</a>{{end}}
+        </div>
+        <p id="season-files-note" class="hub-section-note"></p>
+        <div id="season-files-list" class="hub-link-list"></div>
+    </div>
+    {{end}}
 
 </div>
 {{end}}
@@ -206,17 +329,29 @@
 {{define "scripts"}}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js"></script>
 <div id="page-config"
-    data-can-manage="{{if .Permissions.ManageSeasonHub}}true{{else}}false{{end}}"
+    data-can-manage="{{if .Permissions.ManageSeasonParticipation}}true{{else}}false{{end}}"
+    data-can-manage-contributions="{{if .Permissions.ManageSeasonContributions}}true{{else}}false{{end}}"
+    data-can-manage-config="{{if .Permissions.ManageSeasonConfig}}true{{else}}false{{end}}"
     data-can-manage-rewards="{{if .Permissions.ManageSeasonRewards}}true{{else}}false{{end}}"
+    data-can-manage-comms="{{if .Permissions.ManageComms}}true{{else}}false{{end}}"
+    data-can-manage-schedule="{{if .Permissions.ManageSchedule}}true{{else}}false{{end}}"
+    data-can-manage-land="{{if .Permissions.ManageSeasonLand}}true{{else}}false{{end}}"
+    data-can-configure-land="{{if or .Permissions.ManageSeasonLand .Permissions.ManageSeasonConfig}}true{{else}}false{{end}}"
+    data-can-manage-war="{{if .Permissions.ManageSeasonWar}}true{{else}}false{{end}}"
+    data-can-configure-war="{{if or .Permissions.ManageSeasonWar .Permissions.ManageSeasonConfig}}true{{else}}false{{end}}"
     data-member-id="{{.MemberID}}"
     hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2/public/assets/scripts/choices.min.js"></script>
 <script src="{{asset "/table-utils.js"}}"></script>
+<script src="{{asset "/remote-finder.js"}}"></script>
 <script src="{{asset "/order-buttons.js"}}"></script>
 <script src="{{asset "/tabs.js"}}"></script>
 <script src="{{asset "/color-picker.js"}}"></script>
 <script src="{{asset "/mail.js"}}"></script>
 <script src="{{asset "/season-hub.js"}}"></script>
+<script src="{{asset "/season-hub-land.js"}}"></script>
+<script src="{{asset "/season-hub-war.js"}}"></script>
+<script src="{{asset "/season-hub-dashboard.js"}}"></script>
 {{end}}
 
 {{define "modals"}}
@@ -226,19 +361,54 @@
     <div class="modal-content modal-md">
         <h3>Create Season</h3>
         <form id="form-create-season">
-            <div class="form-group">
-                <label for="cs-template">Template</label>
-                <select id="cs-template" class="form-input" required>
-                    <option value="">Loading templates…</option>
-                </select>
+            <fieldset class="cs-mode" id="cs-mode">
+                <legend>Start from</legend>
+                <label><input type="radio" name="cs-mode" value="template" checked> A template</label>
+                <label><input type="radio" name="cs-mode" value="copy"> Another season's configuration</label>
+                <label><input type="radio" name="cs-mode" value="blank"> Blank</label>
+            </fieldset>
+            <div class="cs-mode-template">
+                <div class="form-group">
+                    <label for="cs-template">Template</label>
+                    <select id="cs-template" class="form-input">
+                        <option value="">Loading templates…</option>
+                    </select>
+                </div>
+                <div id="cs-template-preview" style="display:none"></div>
             </div>
-            <div id="cs-template-preview" style="display:none"></div>
+            <div class="cs-mode-copy" style="display:none">
+                <div class="form-group">
+                    <label for="cs-source">Copy configuration from</label>
+                    <select id="cs-source" class="form-input"></select>
+                </div>
+                <p class="cs-tier-note">Copies score levels, trackables, reward tiers, season events, layout and every Land and War setting — never participation, rewards, wars, files or the calendar.</p>
+            </div>
+            <div class="cs-mode-copy cs-mode-blank form-row" style="display:none">
+                <div class="form-group">
+                    <label for="cs-name">Season Name</label>
+                    <input type="text" id="cs-name" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="cs-number">Season Number</label>
+                    <input type="number" id="cs-number" class="form-input" min="1">
+                </div>
+            </div>
+            <div class="cs-mode-blank form-row" style="display:none">
+                <div class="form-group">
+                    <label for="cs-weeks">Weeks</label>
+                    <input type="number" id="cs-weeks" class="form-input" min="1" max="52" value="8">
+                </div>
+                <div class="form-group">
+                    <label for="cs-key-event">Key Event Name</label>
+                    <input type="text" id="cs-key-event" class="form-input" placeholder="e.g. Copper War">
+                </div>
+            </div>
             <div class="form-group">
                 <label for="cs-start-date">Start Date</label>
                 <input type="date" id="cs-start-date" class="form-input" required>
             </div>
-            <h4 class="modal-subhead">Reward Tier Thresholds</h4>
-            <div class="form-row">
+            <h4 class="modal-subhead cs-floors">Reward Tier Thresholds</h4>
+            <div class="form-row cs-floors">
                 <div class="form-group">
                     <label for="cs-tier-active">Active % Floor</label>
                     <input type="number" id="cs-tier-active" class="form-input" value="70" min="0" max="100">
@@ -248,7 +418,7 @@
                     <input type="number" id="cs-tier-at-risk" class="form-input" value="60" min="0" max="100">
                 </div>
             </div>
-            <p class="cs-tier-note">Reward tiers are seeded from the default list in Settings &rarr; Season Hub. Adjust them for this season after it is created, via Edit Season.</p>
+            <p class="cs-tier-note">Reward tiers come from the template (or the default list in Settings &rarr; Season Hub when it has none). Adjust them for this season after it is created, via Edit Season.</p>
             <div id="cs-archive-warning" class="field-warning" style="display:none"></div>
             <div id="cs-error" class="field-error" style="display:none"></div>
             <div class="modal-actions">
@@ -297,17 +467,64 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="es-tier-active">Active % Floor</label>
+                    <label for="es-key-event-total">Key Events Scheduled</label>
+                    <input type="number" id="es-key-event-total" class="form-input" min="0" title="How many key events (wars) the season schedules — S4: 8">
+                </div>
+                <div class="form-group">
+                    <label for="es-resource-name">Resource</label>
+                    <input type="text" id="es-resource-name" class="form-input" placeholder="e.g. Copper">
+                </div>
+            </div>
+            <h4 class="modal-subhead">Status floors</h4>
+            <p class="cs-tier-note">A member is Active at or above the first floor, At Risk at or above the second, and Below Requirement under it. Leave a poll or war floor blank to use the overall one.</p>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-tier-active">Overall: Active %</label>
                     <input type="number" id="es-tier-active" class="form-input" min="0" max="100">
                 </div>
                 <div class="form-group">
-                    <label for="es-tier-at-risk">At-Risk % Floor</label>
+                    <label for="es-tier-at-risk">Overall: At Risk %</label>
                     <input type="number" id="es-tier-at-risk" class="form-input" min="0" max="100">
                 </div>
             </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-poll-active">Polls: Active %</label>
+                    <input type="number" id="es-poll-active" class="form-input" min="0" max="100" placeholder="overall">
+                </div>
+                <div class="form-group">
+                    <label for="es-poll-at-risk">Polls: At Risk %</label>
+                    <input type="number" id="es-poll-at-risk" class="form-input" min="0" max="100" placeholder="overall">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-war-active">Wars: Active %</label>
+                    <input type="number" id="es-war-active" class="form-input" min="0" max="100" placeholder="overall">
+                </div>
+                <div class="form-group">
+                    <label for="es-war-at-risk">Wars: At Risk %</label>
+                    <input type="number" id="es-war-at-risk" class="form-input" min="0" max="100" placeholder="overall">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="es-schedule-buffer">Schedule conflict window (minutes)</label>
+                    <input type="number" id="es-schedule-buffer" class="form-input" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="es-land-buffer">Land readiness buffer (hours)</label>
+                    <input type="number" id="es-land-buffer" class="form-input" min="0">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="es-uncounted-weeks">Weeks that don't count</label>
+                <input type="text" id="es-uncounted-weeks" class="form-input" inputmode="numeric" placeholder="e.g. 8" autocomplete="off">
+                <small class="form-hint">Left out of every member's standing — the reward week, 8, on the shipped templates. Separate several with commas.</small>
+            </div>
             <h4 class="modal-subhead">Reward Tiers</h4>
             <table class="data-table" id="es-reward-tiers-table">
-                <thead><tr><th>Key</th><th>Label</th><th>Slots</th><th>Colour</th><th>Order</th></tr></thead>
+                <thead><tr><th>Key</th><th>Label</th><th>Slots</th><th title="Wars a member must attend to be eligible; blank for no war rule">Wars required</th><th title="The week's Core events are required">Core</th><th>Colour</th><th>Order</th></tr></thead>
                 <tbody id="es-reward-tiers-tbody"></tbody>
             </table>
             <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-reward-tier">+ Add Tier</button>
@@ -318,8 +535,40 @@
             </table>
             <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-trackable">+ Add Trackable</button>
 
+            <h4 class="modal-subhead">Factions</h4>
+            <p class="cs-tier-note">The season's factions — tick ours. Which alliance is in which is set on the Allies page (allies) and the War tab (opponents).</p>
+            <table class="data-table" id="es-factions-table" translate="no">
+                <thead><tr><th>Faction</th><th>Ours</th><th></th></tr></thead>
+                <tbody id="es-factions-tbody"></tbody>
+            </table>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-es-add-faction">+ Add Faction</button>
+
+            <h4 class="modal-subhead">Layout</h4>
+            <p class="cs-tier-note">Which tabs and dashboard cards this season shows, what they are called, and in what order. Permissions still decide what each viewer sees inside them.</p>
+            <div class="es-layout">
+                <div class="es-layout-col">
+                    <h5>Tabs</h5>
+                    <table class="data-table es-layout-table" id="es-layout-tabs">
+                        <thead><tr><th>Show</th><th>Label</th><th>Order</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="es-layout-col">
+                    <h5>Dashboard cards</h5>
+                    <table class="data-table es-layout-table" id="es-layout-cards">
+                        <thead><tr><th>Show</th><th>Label</th><th>Order</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="es-event-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-es-save-layout">Save layout</button>
+                <span id="es-layout-status" class="status-msg"></span>
+            </div>
+
             </div>
             <h4 class="modal-subhead">Season Events</h4>
+            <div id="es-template-diff" class="es-template-diff" style="display:none"></div>
             <div class="es-events-scroll">
             <table class="data-table" id="es-events-table">
                 <thead>
@@ -334,6 +583,7 @@
                         <th>Notes</th>
                         <th title="Server event — pushed to Server Events section"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-world"/></svg> Server</th>
                         <th title="Duration in days (server events only)">Days</th>
+                        <th title="Where this row's fact came from, and how sure it is">Grade</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -383,12 +633,61 @@
                 <label for="reward-note">Note</label>
                 <textarea id="reward-note" class="form-input" rows="2"></textarea>
             </div>
+            <div class="form-group">
+                <label for="reward-transfer-from">Transferred from</label>
+                <select id="reward-transfer-from" class="form-input" translate="no"></select>
+            </div>
+            <div class="form-group" id="reward-transfer-note-wrap" style="display:none">
+                <label for="reward-transfer-note">Override reason</label>
+                <p class="field-warning" id="reward-transfer-rule"></p>
+                <textarea id="reward-transfer-note" class="form-input" rows="2"></textarea>
+            </div>
+            <div id="reward-context" class="reward-context"></div>
             <div id="reward-error" class="field-error" style="display:none"></div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" id="btn-cancel-reward">Cancel</button>
                 <button type="submit" class="btn btn-primary" id="btn-submit-reward">Save</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Land: plan drops (private-docs 275) -->
+<div id="modal-land-drop" class="modal">
+    <div class="modal-content modal-md">
+        <h3>Plan drops</h3>
+        <p class="form-hint" id="land-drop-hint"></p>
+        <div id="land-drop-holdings" class="land-drop-holdings" translate="no"></div>
+        <div class="form-group">
+            <label for="land-drop-replacement">Makes room for</label>
+            <select id="land-drop-replacement" class="form-input" translate="no"></select>
+        </div>
+        <div class="form-group">
+            <label for="land-drop-notes">Notes</label>
+            <textarea id="land-drop-notes" class="form-input" rows="2"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="land-drop-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="land-drop-save">Create drops</button>
+        </div>
+    </div>
+</div>
+
+<!-- Season Hub CSV import: preview, then confirm (decision 27) -->
+<div id="modal-season-import" class="modal">
+    <div class="modal-content modal-lg">
+        <h3 id="season-import-title">Import CSV</h3>
+        <p class="form-hint" id="season-import-columns"></p>
+        <div class="form-group">
+            <label for="season-import-file">CSV file</label>
+            <input type="file" id="season-import-file" class="form-input" accept=".csv,text/csv">
+        </div>
+        <p class="status-msg" id="season-import-status"></p>
+        <div class="table-scroll" id="season-import-preview" translate="no"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="season-import-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="season-import-confirm" disabled>Import</button>
+        </div>
     </div>
 </div>
 

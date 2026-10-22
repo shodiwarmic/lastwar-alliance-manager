@@ -1699,7 +1699,8 @@ func loadOpponentWeeks() []opponentWeek {
 // canViewExternalAlliances gates the registry endpoint: any officer who deals with outside
 // alliances (allies / VS League / recruiting) may read it.
 func canViewExternalAlliances(user *AuthUser) bool {
-	for _, key := range []string{"view_allies", "view_vs_points", "manage_vs_points", "view_recruiting"} {
+	// view_season_war: the War tab's registry finder and the Scout Report's player route.
+	for _, key := range []string{"view_allies", "view_vs_points", "manage_vs_points", "view_recruiting", "view_season_war"} {
 		if userHasPermission(user, key) {
 			return true
 		}
@@ -1717,7 +1718,9 @@ func getExternalAlliancesGated(w http.ResponseWriter, r *http.Request) {
 
 // canManageExternalAlliances gates registry writes to officers who manage allies or VS League.
 func canManageExternalAlliances(user *AuthUser) bool {
-	return userHasPermission(user, "manage_allies") || userHasPermission(user, "manage_vs_points")
+	// manage_season_war: an opponent added from the War tab gets its registry row.
+	return userHasPermission(user, "manage_allies") || userHasPermission(user, "manage_vs_points") ||
+		userHasPermission(user, "manage_season_war")
 }
 
 func requireManageExternalAlliances(next http.HandlerFunc) http.HandlerFunc {
@@ -1822,6 +1825,12 @@ func deleteExternalAlliance(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow(`SELECT EXISTS(SELECT 1 FROM allies WHERE external_alliance_id=?)`, id).Scan(&isAlly)
 	if isAlly == 1 {
 		http.Error(w, "This alliance is linked to an ally — remove it from Allies first", http.StatusConflict)
+		return
+	}
+	var seasons int
+	db.QueryRow(`SELECT COUNT(*) FROM season_alliances WHERE external_alliance_id=?`, id).Scan(&seasons)
+	if seasons > 0 {
+		http.Error(w, "This alliance has "+strconv.Itoa(seasons)+" Season Hub row(s) — remove it from the season first", http.StatusConflict)
 		return
 	}
 	tx, err := db.Begin()

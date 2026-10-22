@@ -273,9 +273,12 @@ func TestEventTimeRejectsOutOfRangeTimes(t *testing.T) {
 func TestAnnounceFlagRoundTrips(t *testing.T) {
 	setupSettingsTestDB(t)
 
-	// Every existing type is announced by default — the migration's whole point.
+	// Every existing type is announced by default — the migration's whole point. The three
+	// Season Hub planning types (089) are off by design: a planned capture, abandonment or
+	// Trade Post action is not news for the nightly post unless an officer opts it in.
 	var off int
-	db.QueryRow(`SELECT COUNT(*) FROM schedule_event_types WHERE announce = 0`).Scan(&off)
+	db.QueryRow(`SELECT COUNT(*) FROM schedule_event_types WHERE announce = 0
+		AND name NOT IN ('Land Capture', 'Land Abandonment', 'Trade Post Action')`).Scan(&off)
 	if off != 0 {
 		t.Errorf("%d existing types arrived with announce off", off)
 	}

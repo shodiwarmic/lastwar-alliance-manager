@@ -157,8 +157,11 @@
 .week-dot.dot-absent  { background: var(--color-danger); opacity: 0.6; }
 .week-dot.dot-empty   { background: var(--color-card); border: 1px solid var(--color-border); }
 
-/* Class tags */
-.class-tag {
+.week-dot.dot-notscored { background: var(--color-danger-bg); border: 1px dashed var(--color-danger); }
+.week-dot.dot-uncounted { background: var(--bg-tertiary); border: 1px dotted var(--text-muted); }
+
+/* Status badges (the status engine, private-docs 283), keyed on the status code */
+.status-badge {
     display: inline-block;
     padding: 2px 8px;
     border-radius: 10px;
@@ -166,21 +169,13 @@
     font-weight: 600;
     white-space: nowrap;
 }
-
-.class-tag.active-member {
-    background: var(--color-success-bg);
-    color: var(--color-success);
-}
-
-.class-tag.at-risk {
-    background: var(--color-info-bg);
-    color: var(--color-info);
-}
-
-.class-tag.dead-weight {
-    background: var(--color-danger-bg);
-    color: var(--color-danger);
-}
+.status-badge.status-active  { background: var(--color-success-bg); color: var(--color-success); }
+.status-badge.status-at_risk { background: var(--color-warning-bg); color: var(--color-warning); }
+.status-badge.status-below   { background: var(--color-danger-bg);  color: var(--color-danger); }
+.status-badge.status-na      { background: var(--bg-tertiary);       color: var(--text-muted); }
+.status-cats { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 3px; font-size: 0.72rem; color: var(--text-secondary); }
+.status-cats .status-cat-below   { color: var(--color-danger); }
+.status-cats .status-cat-at_risk { color: var(--color-warning); }
 
 /* .tier-badge and its .tone-* palette live in styles.css — the tier colour
    picker previews them on the Settings page too, which does not load this file. */
@@ -555,3 +550,335 @@
 #mail-content {
     resize: vertical;
 }
+
+/* ── Provenance grade badges (migration 088) ─────────────────────────────── */
+.grade-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+.grade-badge[title] { cursor: help; }
+.grade-badge.grade-official  { background: var(--color-success-bg); color: var(--color-success); }
+.grade-badge.grade-cpt_hedge,
+.grade-badge.grade-guide     { background: var(--color-info-bg);    color: var(--color-info); }
+.grade-badge.grade-owner,
+.grade-badge.grade-requester { background: var(--color-purple-bg);  color: var(--color-purple); }
+.grade-badge.grade-conflict  { background: var(--color-warning-bg); color: var(--color-warning); }
+
+/* ── Template-change notice in Edit Season ───────────────────────────────── */
+.es-template-diff {
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: var(--color-warning-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+.es-diff-summary { margin: 0 0 6px; }
+.es-diff-note { margin: 0 0 6px; color: var(--text-secondary); }
+.es-diff-list {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+.es-diff-list li {
+    padding: 6px 0;
+    border-top: 1px solid var(--border-color);
+}
+.es-diff-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.es-diff-label { flex: 1 1 180px; font-weight: 600; }
+.es-diff-detail { color: var(--text-secondary); font-size: 0.8rem; margin-top: 2px; overflow-wrap: anywhere; }
+.es-diff-pickrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.es-diff-pick { flex: 1 1 200px; min-width: 0; }
+
+/* ── Create Season: start-from modes ─────────────────────────────────────── */
+.cs-mode {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin: 0 0 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+}
+.cs-mode legend { font-size: 0.85rem; font-weight: 600; padding: 0 4px; }
+.cs-mode label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
+
+/* ── Edit Season: layout tables ──────────────────────────────────────────── */
+.es-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+.es-layout-col h5 { margin: 0 0 6px; font-size: 0.85rem; }
+.es-layout-table td { vertical-align: middle; }
+.es-layout-table .layout-label { width: 100%; min-width: 0; }
+.es-layout-table td:last-child { white-space: nowrap; }
+
+/* ── Archived rosters: the frozen name, the name today ──────────────────── */
+.member-name-link { color: inherit; text-decoration: none; }
+.member-name-link:hover { text-decoration: underline; }
+.member-current-name { color: var(--text-muted); font-size: 0.8rem; }
+
+/* ── Comms and Files tabs: section heads and read-only link lists ───────── */
+.hub-section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 18px 0 8px;
+}
+.hub-section-head:first-child { margin-top: 0; }
+.hub-section-head h3 { margin: 0; font-size: 1rem; flex: 1 1 auto; }
+.hub-section-note { font-size: 0.85rem; color: var(--text-muted); margin: 4px 0 10px; }
+.hub-link-list { display: flex; flex-direction: column; gap: 6px; }
+.hub-link-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+}
+.hub-link-info { flex: 1 1 200px; min-width: 0; }
+.hub-link-title { font-weight: 600; overflow-wrap: anywhere; }
+.hub-link-meta { font-size: 0.8rem; color: var(--text-secondary); overflow-wrap: anywhere; }
+.hub-link-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ── Schedule tab: the season timeline ───────────────────────────────────── */
+.season-schedule-toolbar { flex-wrap: wrap; gap: 8px; }
+.season-schedule-all { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.season-conflicts {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    background: var(--color-warning-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+.season-conflicts-head { font-weight: 600; margin-bottom: 4px; }
+.season-conflicts ul { margin: 0; padding-left: 18px; }
+.season-timeline { display: flex; flex-direction: column; gap: 12px; }
+.tl-week {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+}
+.tl-week h4 { margin: 0 0 6px; font-size: 0.95rem; }
+.tl-sub { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin: 6px 0 2px; }
+.tl-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 3px 0;
+    font-size: 0.85rem;
+    border-top: 1px dashed var(--border-color);
+}
+.tl-when { min-width: 82px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.tl-name { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.tl-badge {
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.tl-status-tentative { background: var(--color-info-bg); color: var(--color-info); }
+.tl-status-completed { background: var(--color-success-bg); color: var(--color-success); }
+.tl-status-cancelled { background: var(--color-danger-bg); color: var(--color-danger); }
+.tl-status-leadership { background: var(--color-purple-bg); color: var(--color-purple); }
+.tl-cancelled .tl-when, .tl-cancelled .tl-name { text-decoration: line-through; opacity: 0.7; }
+.tl-day { padding: 4px 0; }
+.tl-day-head { font-weight: 600; font-size: 0.85rem; margin-top: 4px; }
+.tl-empty { font-size: 0.8rem; color: var(--text-muted); padding: 2px 0; }
+
+/* ── Land tab ────────────────────────────────────────────────────────────── */
+.land-readiness { padding: 12px 14px; margin-bottom: 12px; }
+.land-readiness-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.land-readiness-head h3 { margin: 0; font-size: 1rem; flex: 1 1 auto; }
+.land-reasons { margin: 6px 0 0; padding-left: 18px; font-size: 0.85rem; color: var(--text-secondary); }
+.land-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+.land-status.tone-success { background: var(--color-success-bg); color: var(--color-success); }
+.land-status.tone-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.land-status.tone-danger  { background: var(--color-danger-bg);  color: var(--color-danger); }
+.land-status.tone-info    { background: var(--color-info-bg);    color: var(--color-info); }
+.land-route-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.land-route-bar { flex-wrap: wrap; gap: 8px; }
+.land-route-name { flex: 1 1 180px; min-width: 0; }
+.land-targets { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.land-target { padding: 8px 10px; border: 2px solid var(--border-color); }
+.land-target-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.land-target-head strong { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; }
+.land-target-actions { display: inline-flex; align-items: center; gap: 4px; }
+.land-target-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 6px 10px;
+}
+.land-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.78rem; color: var(--text-secondary); min-width: 0; }
+.land-field .form-input { width: 100%; min-width: 0; box-sizing: border-box; font-size: 0.85rem; }
+.land-field-wide { grid-column: 1 / -1; }
+.land-settings { margin-top: 14px; }
+.land-settings summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+.land-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px 12px;
+    margin: 8px 0;
+}
+.land-levels .form-input { min-width: 70px; font-size: 0.85rem; }
+.land-history h4 { margin: 10px 0 4px; }
+.land-revision { font-size: 0.85rem; padding: 2px 0; }
+
+/* Land: capacity, holdings, drops, events (private-docs 275) */
+.land-section { padding: 12px 14px; margin-bottom: 12px; }
+.land-section-title { margin: 0 0 8px; font-size: 1rem; }
+.land-day-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.land-day-card { border: 2px solid var(--border-color); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.land-day-date { font-weight: 600; font-size: 0.9rem; }
+.land-day-kind { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+.land-day-kind-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.land-day-figures { color: var(--text-secondary); }
+.land-day-warn { color: var(--color-warning); font-size: 0.8rem; }
+.land-day-kind .btn { align-self: flex-start; }
+.land-drop { padding: 8px 10px; border: 2px solid var(--border-color); margin-top: 8px; }
+.land-drop-cancelled { opacity: 0.6; }
+.land-drop-when { font-size: 0.85rem; color: var(--text-secondary); }
+.land-toggle { font-size: 0.85rem; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 4px; }
+.land-event-form { margin-bottom: 6px; }
+.land-events-scroll { max-height: 360px; overflow-y: auto; }
+.land-drop-holdings { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; max-height: 240px; overflow-y: auto; }
+.land-drop-pick { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+.season-import-bad td { background: var(--color-danger-bg); }
+.land-snapshot-links { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; margin: 6px 0; font-size: 0.85rem; }
+.land-snapshot-img { display: block; max-width: min(100%, 320px); height: auto; border: 1px solid var(--border-color); border-radius: 6px; }
+.land-path { margin-top: 6px; }
+.land-path summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+.land-path-steps { margin: 6px 0; padding-left: 22px; font-size: 0.85rem; }
+
+/* War: opponents, figures, matchup breakdown, player pairing (private-docs 277) */
+.war-toolbar { flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.war-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 12px; margin: 6px 0; }
+.war-figure { display: flex; flex-direction: column; font-size: 0.85rem; min-width: 0; }
+.war-figure-label { color: var(--text-secondary); font-size: 0.78rem; }
+.war-figure-asof { color: var(--text-muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+.war-server { font-size: 0.85rem; color: var(--text-secondary); }
+.war-override { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--text-secondary); }
+.war-breakdown { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; margin: 6px 0; }
+.war-cat { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.82rem; }
+.war-cat-dropped { opacity: 0.6; }
+.war-obs-form { margin-top: 8px; }
+.war-obs-form summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+.war-add-grid { position: relative; }
+.war-pairs { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: 0.85rem; }
+.war-pair { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) minmax(0, 1fr) 4.5em; gap: 6px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border-color); }
+.war-pair-head { font-size: 0.78rem; color: var(--text-secondary); }
+.war-pair-side { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.war-pair-side small { color: var(--text-muted); }
+.war-pair-delta { text-align: right; }
+.war-pair-delta.up { color: var(--color-success); }
+.war-pair-delta.down { color: var(--color-danger); }
+.war-prose { margin: 2px 0 8px; white-space: pre-wrap; font-size: 0.9rem; }
+.war-battle-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.war-battle-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; align-items: end;
+    padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; }
+.war-battle-opp { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.war-battle-del { display: flex; justify-content: flex-end; }
+.war-cutoffs, .war-loot-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin: 8px 0; }
+.war-loot-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.war-loot-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 4px; margin-top: 4px; }
+.war-loot-step { display: flex; flex-direction: column; font-size: 0.8rem; padding: 4px; border-radius: 4px; background: var(--bg-secondary); }
+.war-loot-step small { color: var(--text-muted); }
+.war-groups { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.war-group-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.war-group-row .form-input { width: auto; flex: 0 1 80px; min-width: 60px; }
+.war-group-row .form-input[type="text"] { flex: 1 1 120px; }
+.war-post-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+.war-post-list .war-post { margin-top: 0; }
+
+/* Participation: war attendance (private-docs 282). A season with wars hides the legacy
+   key-event and poll columns; one without hides the Wars column. */
+#participation-table.part-wars-mode .legacy-col,
+#participation-table.part-legacy-mode.part-no-detail .wars-col { display: none; }
+.war-detail-row > td { padding: 4px 6px 10px; background: var(--bg-secondary); }
+.war-detail { position: sticky; left: 0; width: min(100%, calc(100vw - 48px)); display: flex; flex-direction: column; gap: 8px; }
+.war-detail-war { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; align-items: end; }
+.war-detail-head { grid-column: 1 / -1; font-weight: 600; font-size: 0.85rem; }
+.war-detail-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.78rem; color: var(--text-secondary); }
+.war-detail-war .form-input { min-width: 0; width: 100%; box-sizing: border-box; font-size: 0.85rem; }
+
+/* Participation toolbar: sort, filters, the week's events (private-docs 281). */
+.participation-sort-wrap { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.participation-sort-wrap .form-input { width: auto; max-width: 100%; }
+.participation-filters { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; margin-bottom: 8px;
+    border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); }
+.participation-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.participation-filters > .btn { align-self: flex-start; }
+.week-events-manage { margin: 0 0 8px; }
+.week-events-list { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.week-event-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.week-event-row .form-input { width: auto; flex: 1 1 140px; min-width: 0; }
+.week-event-row .form-input[placeholder="kind"] { flex: 0 1 90px; }
+.week-event-core { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; }
+
+/* Rewards: eligibility, exemptions, the Assign modal's context (private-docs 284) */
+.tier-slot-eligible { font-size: 0.75rem; color: var(--text-secondary); margin-left: 4px; }
+.reward-transfer-line { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+.exemption-list { margin: 4px 0 8px; padding-left: 18px; font-size: 0.9rem; }
+.exemption-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0; }
+.exemption-add { flex-wrap: wrap; gap: 6px; }
+.exemption-add .form-input { width: auto; flex: 1 1 160px; min-width: 0; }
+.reward-context { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); }
+.reward-context:empty { display: none; }
+.reward-context-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: 0.85rem; padding: 2px 0; }
+.reward-context-tiers { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.reward-context-why { font-size: 0.78rem; color: var(--text-muted); }
+
+/* War: poll reviews (private-docs 285) */
+.poll-reviews { border-left: 4px solid var(--color-warning); }
+.poll-review-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; border-top: 1px solid var(--border-color); }
+.poll-review-actions { display: flex; gap: 6px; margin-left: auto; }
+.status-strikes { display: inline-block; margin-top: 3px; font-size: 0.72rem; color: var(--color-danger); }
+
+/* Season dashboard (private-docs 287): the main dashboard's auto-fit card grid */
+.season-dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; align-items: start; }
+.sd-card { padding: 12px 14px; min-width: 0; }
+.sd-card h3 { margin: 0 0 8px; font-size: 1rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sd-empty { color: var(--text-muted); font-size: 0.85rem; margin: 0; }
+.sd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 0.88rem; }
+.sd-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.sd-sub { font-size: 0.78rem; color: var(--text-secondary); }
+.sd-section { margin-top: 8px; }
+.sd-section-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-secondary); margin: 6px 0 4px; }
+.sd-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px 10px; }
+.sd-goto { margin-top: 6px; }
+
+/* Help text under a form field (Edit Season, the Land drop and import modals). */
+.form-hint { display: block; margin-top: 4px; font-size: 0.82em; color: var(--text-muted); }

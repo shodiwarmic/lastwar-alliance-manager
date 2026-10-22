@@ -165,6 +165,14 @@
             <label for="strike-ref-date">Reference Date <span style="color:var(--color-text-muted);font-weight:400;">(optional)</span></label>
             <input type="date" id="strike-ref-date" class="form-input">
         </div>
+        <div class="form-group strike-season-fields">
+            <label for="strike-season">Season <span style="color:var(--color-text-muted);font-weight:400;">(optional)</span></label>
+            <select id="strike-season" class="form-input"></select>
+            <div class="strike-season-sub">
+                <label class="strike-season-week">Week <select id="strike-season-week" class="form-input"></select></label>
+                <label class="strike-season-war">War <select id="strike-season-war" class="form-input"></select></label>
+            </div>
+        </div>
         <p id="strike-modal-status" class="status-msg"></p>
         <div class="modal-actions">
             <button id="btn-strike-save" class="btn btn-primary">Save Strike</button>
