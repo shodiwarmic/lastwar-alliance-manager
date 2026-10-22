@@ -17,8 +17,8 @@ weekly grid, a status that counts only finished weeks, reward rules with transfe
 exemptions, season tags across the schedule, Comms and Files, and a Season Participation report.
 ([#133](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/133))
 
-**Minor** — an image pull; nothing on the host changes and no `.env` needs editing. Two database
-migrations (088, 089) add the Hub's tables and columns, correct the shipped season templates, and
+**Minor** — an image pull; nothing on the host changes and no `.env` needs editing. Three database
+migrations (088–090) add the Hub's tables and columns, correct the shipped season templates, and
 seed the new permission keys from the ones they replace, so no rank loses access. The mobile API
 reports `api_version` 4.
 
@@ -57,6 +57,10 @@ reports `api_version` 4.
 - **Season status counts finished weeks only.** The current week no longer pulls everyone's
   percentage down; a finished week nobody scored counts as Absent and says so; a new **Excused**
   score takes a week out of the count. Status is the worst of overall, wars and polls.
+- **Week 8 doesn't count.** It is the reward week, when everything is finalised, so a season can
+  leave weeks out of every standing (Edit Season). Seasons from the shipped templates leave out
+  week 8. On upgrade, an archived eight-week season whose week 8 nobody was scored for leaves it
+  out, so its percentages are no longer capped at 87.5 %; one that scored week 8 is unchanged.
 - **Reward rules.** A tier can require a number of wars and the week's Core events; exemptions
   per member; a transfer to a member who fails the Elite rule needs an override reason.
 - **Strikes name their season.** A strike can carry its season, week and war, shown as a badge

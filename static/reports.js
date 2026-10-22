@@ -557,6 +557,7 @@
     const tierLabel = (rep, k) => { const t = (rep.tiers || []).find(x => x.key === k); return t ? t.label : (k || ''); };
     const scoreLabel = (rep, k) => {
         if (k === 'not_scored') return 'Not scored';
+        if (k === 'not_counted') return "Doesn't count";
         if (!k) return '';
         const sl = (rep.score_levels || []).find(x => x.key === k);
         return sl ? sl.label : k;
@@ -605,9 +606,10 @@
             th('Strikes', 'strikes', 'number'), th('Contribution', 'contrib', 'number'), th('Reward', 'reward'), th('Eligibility')));
         const sev = { below: 3, at_risk: 2, active: 1, na: 0 };
         const rows = rep.members.map(m => {
+            const uncounted = rep.uncounted_weeks || [];
             const dots = el('span', { className: 'week-dots' }, m.weekly.map((k, i) => el('span', {
-                className: 'week-dot ' + (k === 'not_scored' ? 'dot-notscored' : !k ? 'dot-empty' : k === 'full' ? 'dot-full' : k === 'partial' ? 'dot-partial' : k === 'excused' ? 'dot-empty' : 'dot-absent'),
-                title: 'Week ' + (i + 1) + ': ' + (scoreLabel(rep, k) || 'still to come') })));
+                className: 'week-dot ' + (uncounted.includes(i + 1) ? 'dot-uncounted' : k === 'not_scored' ? 'dot-notscored' : !k ? 'dot-empty' : k === 'full' ? 'dot-full' : k === 'partial' ? 'dot-partial' : k === 'excused' ? 'dot-empty' : 'dot-absent'),
+                title: 'Week ' + (i + 1) + ': ' + (uncounted.includes(i + 1) ? "doesn't count this season" + (k && k !== 'not_counted' ? ' (' + scoreLabel(rep, k) + ')' : '') : (scoreLabel(rep, k) || 'still to come')) })));
             const ov = m.standing.overall;
             const elig = (m.eligibility || []).filter(e => e.status !== 'not_applicable')
                 .map(e => { const t = rep.tiers.find(x => x.key === e.tier); return (t ? t.label : e.tier) + ': ' + (ELIG_LABEL[e.status] || e.status); });
@@ -641,7 +643,7 @@
             el('p', { className: 'report-summary-lead', text: rep.season.id
                 ? `${rep.members.length} members · ${rep.completed_weeks} of ${rep.weeks.length} weeks complete` + (rep.in_progress ? ' · season in progress' : '')
                 : 'No season yet.' }),
-            el('p', { className: 'report-note', text: 'Overall is points over the weeks that have finished, Excused weeks left out; a finished week with no score is Not scored and counts as Absent. Wars are attended of the completed wars (a season without war records shows its weekly key-event count).' }));
+            el('p', { className: 'report-note', text: "Overall is points over the weeks that have finished, Excused weeks and the season's weeks that don't count left out; a finished week with no score is Not scored and counts as Absent. Wars are attended of the completed wars (a season without war records shows its weekly key-event count)." }));
         setMeta(panel, [rep.season.id ? 'S' + rep.season.season_number + ' — ' + rep.season.name : '', 'Generated ' + fmtGenerated(rep.generated_at)]);
         showBody(panel);
     }

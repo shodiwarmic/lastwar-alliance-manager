@@ -515,6 +515,7 @@
         // Per-week score dots
         if (m.weekly_scores && m.weekly_scores.length > 0) {
             const maxWeekPts = scoreLevels.length > 0 ? Math.max(...scoreLevels.map(sl => sl.points)) : 0;
+            const uncounted = (activeSeason && activeSeason.uncounted_weeks) || [];
             const dots = document.createElement('div');
             dots.className = 'week-dots';
             m.weekly_scores.forEach((key, i) => {
@@ -522,6 +523,13 @@
                 dot.className = 'week-dot';
                 const sl = scoreLevels.find(s => s.key === key);
                 const done = m.standing && i < m.standing.completed_weeks;
+                if (uncounted.includes(i + 1)) {
+                    // The season leaves this week out (the reward week): neither scored nor missed.
+                    dot.classList.add('dot-uncounted');
+                    dot.title = 'Week ' + (i + 1) + ": doesn't count this season" + (sl ? ' (' + sl.label + ')' : '');
+                    dots.appendChild(dot);
+                    return;
+                }
                 if (!key && done) {
                     dot.classList.add('dot-notscored');
                 } else if (!key) {
@@ -3579,6 +3587,7 @@
             document.getElementById('es-war-at-risk').value = optVal(s.war_at_risk_min_pct);
             document.getElementById('es-schedule-buffer').value = s.schedule_buffer_minutes;
             document.getElementById('es-land-buffer').value = s.land_readiness_buffer_hours;
+            document.getElementById('es-uncounted-weeks').value = (s.uncounted_weeks || []).join(', ');
             loadLayoutEditor(s);
             loadFactionEditor(s);
             const errEl = document.getElementById('es-error');
@@ -3726,6 +3735,14 @@
                 schedule_buffer_minutes: parseInt(document.getElementById('es-schedule-buffer').value, 10) || 0,
                 land_readiness_buffer_hours: parseInt(document.getElementById('es-land-buffer').value, 10) || 0,
             };
+            const uncountedText = document.getElementById('es-uncounted-weeks').value.trim();
+            const uncounted = uncountedText === '' ? [] : uncountedText.split(/[\s,]+/).filter(Boolean).map(Number);
+            if (uncounted.some(n => !Number.isInteger(n))) {
+                setFieldError(document.getElementById('es-uncounted-weeks'), 'List week numbers, e.g. 8 or 7, 8.');
+                return;
+            }
+            clearFieldError(document.getElementById('es-uncounted-weeks'));
+            body.uncounted_weeks = uncounted;
             // A blank category floor is sent as null: "use the overall floor".
             [['poll_active_min_pct', 'es-poll-active'], ['poll_at_risk_min_pct', 'es-poll-at-risk'],
              ['war_active_min_pct', 'es-war-active'], ['war_at_risk_min_pct', 'es-war-at-risk']].forEach(([k, id]) => {

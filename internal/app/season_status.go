@@ -17,6 +17,7 @@ package app
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -85,6 +86,35 @@ func completedSeasonWeeks(s *Season, now time.Time) int {
 	return n
 }
 
+// countsWeek reports whether a week counts toward the season's standings: the weeks in
+// UncountedWeeks (the reward week on the shipped templates) are left out everywhere.
+func (s *Season) countsWeek(week int) bool {
+	for _, w := range s.UncountedWeeks {
+		if w == week {
+			return false
+		}
+	}
+	return true
+}
+
+// cleanUncountedWeeks validates a season's uncounted weeks against its week count and returns
+// them sorted, without repeats.
+func cleanUncountedWeeks(weeks []int, weekCount int) ([]int, error) {
+	seen := map[int]bool{}
+	out := []int{}
+	for _, w := range weeks {
+		if w < 1 || w > weekCount {
+			return nil, fmt.Errorf("a week that doesn't count must be between 1 and %d", weekCount)
+		}
+		if !seen[w] {
+			seen[w] = true
+			out = append(out, w)
+		}
+	}
+	sort.Ints(out)
+	return out, nil
+}
+
 func bandStatus(pct float64, active, atRisk int) string {
 	switch {
 	case pct >= float64(active):
@@ -117,6 +147,14 @@ func weekList(ws []int) string {
 	return strings.Join(parts, ", ")
 }
 
+// orNone reads an empty list as "none" in an activity line.
+func orNone(list string) string {
+	if list == "" {
+		return "none"
+	}
+	return list
+}
+
 // computeSeasonStanding judges one member.
 func computeSeasonStanding(s *Season, in standingInputs) standing {
 	var out standing
@@ -124,8 +162,12 @@ func computeSeasonStanding(s *Season, in standingInputs) standing {
 
 	// Overall.
 	o := na
-	var notScored, excused []int
+	var notScored, excused, uncounted []int
 	for _, w := range in.Weeks {
+		if !s.countsWeek(w.Week) {
+			uncounted = append(uncounted, w.Week)
+			continue
+		}
 		if w.Score == excusedScoreKey {
 			excused = append(excused, w.Week)
 			continue
@@ -136,7 +178,7 @@ func computeSeasonStanding(s *Season, in standingInputs) standing {
 		o.Numerator += w.Points
 		o.Denominator += in.MaxWeekPts
 	}
-	counted := len(in.Weeks) - len(excused)
+	counted := len(in.Weeks) - len(uncounted) - len(excused)
 	if counted > 0 && in.MaxWeekPts > 0 {
 		o.Applicable = true
 		o.Pct = roundPct(o.Numerator, o.Denominator)
@@ -149,8 +191,11 @@ func computeSeasonStanding(s *Season, in standingInputs) standing {
 		if len(notScored) > 0 {
 			why = append(why, "not scored (counted as Absent): week "+weekList(notScored))
 		}
+		if len(uncounted) > 0 {
+			why = append(why, "doesn't count this season: week "+weekList(uncounted))
+		}
 		o.Reason = strings.Join(why, "; ")
-	} else if len(in.Weeks) == 0 {
+	} else if len(in.Weeks)-len(uncounted) == 0 {
 		o.Reason = "no completed weeks yet"
 	} else {
 		o.Reason = "every completed week excused"

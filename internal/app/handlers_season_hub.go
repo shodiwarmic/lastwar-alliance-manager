@@ -50,12 +50,15 @@ type Season struct {
 	ScheduleBufferMinutes    int `json:"schedule_buffer_minutes"`
 	LandReadinessBufferHours int `json:"land_readiness_buffer_hours"`
 	// TargetWarRank is the war rank the season aims for (set in the War tab's settings).
-	TargetWarRank *int              `json:"target_war_rank"`
-	IsActive      bool              `json:"is_active"`
-	ArchivedAt    string            `json:"archived_at"`
-	CreatedAt     string            `json:"created_at"`
-	ScoreLevels   []ScoreLevel      `json:"score_levels"`
-	Trackables    []SeasonTrackable `json:"trackables"`
+	TargetWarRank *int `json:"target_war_rank"`
+	// UncountedWeeks are the weeks the season's standings leave out (the reward week, 8, on
+	// the shipped templates): countsWeek, computeSeasonStanding.
+	UncountedWeeks []int             `json:"uncounted_weeks"`
+	IsActive       bool              `json:"is_active"`
+	ArchivedAt     string            `json:"archived_at"`
+	CreatedAt      string            `json:"created_at"`
+	ScoreLevels    []ScoreLevel      `json:"score_levels"`
+	Trackables     []SeasonTrackable `json:"trackables"`
 	// RewardTiers is the season's configurable reward tier list, replacing the
 	// four fixed tier_count_* columns dropped in migration 068. Carried on the
 	// season so every page that already has one can render tier badges, populate
@@ -391,7 +394,7 @@ const seasonColumns = `id, name, season_number, start_date, COALESCE(end_date,''
 	key_event_name, key_event_required, tier_active_min_pct, tier_at_risk_min_pct,
 	key_event_total, resource_name, poll_active_min_pct, poll_at_risk_min_pct,
 	war_active_min_pct, war_at_risk_min_pct, schedule_buffer_minutes, land_readiness_buffer_hours,
-	is_active, COALESCE(archived_at,''), created_at, target_war_rank`
+	is_active, COALESCE(archived_at,''), created_at, target_war_rank, uncounted_weeks`
 
 func scanSeason(row *sql.Row) (*Season, error) { return scanSeasonQ(row, db) }
 
@@ -399,14 +402,17 @@ func scanSeason(row *sql.Row) (*Season, error) { return scanSeasonQ(row, db) }
 func scanSeasonQ(row *sql.Row, childQ rowQueryer) (*Season, error) {
 	var s Season
 	var pa, pr, wa, wr, target sql.NullInt64
+	var uncounted string
 	if err := row.Scan(&s.ID, &s.Name, &s.SeasonNumber, &s.StartDate, &s.EndDate,
 		&s.WeekCount, &s.KeyEventName, &s.KeyEventRequired,
 		&s.TierActiveMinPct, &s.TierAtRiskMinPct,
 		&s.KeyEventTotal, &s.ResourceName, &pa, &pr, &wa, &wr,
 		&s.ScheduleBufferMinutes, &s.LandReadinessBufferHours,
-		&s.IsActive, &s.ArchivedAt, &s.CreatedAt, &target); err != nil {
+		&s.IsActive, &s.ArchivedAt, &s.CreatedAt, &target, &uncounted); err != nil {
 		return nil, err
 	}
+	s.UncountedWeeks = []int{}
+	json.Unmarshal([]byte(uncounted), &s.UncountedWeeks)
 	if target.Valid {
 		v := int(target.Int64)
 		s.TargetWarRank = &v
@@ -711,8 +717,10 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 			KeyEventRequired int    `json:"key_event_required"`
 			KeyEventTotal    int    `json:"key_event_total"`
 			ResourceName     string `json:"resource_name"`
+			UncountedWeeks   []int  `json:"uncounted_weeks"`
 		}
 		json.Unmarshal([]byte(tmpl.Defaults), &defs)
+		ns.UncountedWeeks = defs.UncountedWeeks
 		ns.Name, ns.SeasonNumber = tmpl.TemplateName, tmpl.SeasonNumber
 		ns.WeekCount, ns.KeyEventName, ns.KeyEventRequired = defs.WeekCount, defs.KeyEventName, defs.KeyEventRequired
 		ns.KeyEventTotal, ns.ResourceName = defs.KeyEventTotal, defs.ResourceName
@@ -778,6 +786,7 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		ns.PollActiveMinPct, ns.PollAtRiskMinPct = src.PollActiveMinPct, src.PollAtRiskMinPct
 		ns.WarActiveMinPct, ns.WarAtRiskMinPct = src.WarActiveMinPct, src.WarAtRiskMinPct
 		ns.ScheduleBufferMinutes, ns.LandReadinessBufferHours = src.ScheduleBufferMinutes, src.LandReadinessBufferHours
+		ns.UncountedWeeks = src.UncountedWeeks
 	default:
 		http.Error(w, "mode must be template, blank or copy", http.StatusBadRequest)
 		return
@@ -788,6 +797,15 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 	if ns.KeyEventName == "" {
 		ns.KeyEventName = "Key Event"
 	}
+	// A template's or source season's weeks outside this season's length are dropped.
+	var keep []int
+	for _, wk := range ns.UncountedWeeks {
+		if wk >= 1 && wk <= ns.WeekCount {
+			keep = append(keep, wk)
+		}
+	}
+	ns.UncountedWeeks, _ = cleanUncountedWeeks(keep, ns.WeekCount)
+	uncountedJSON, _ := json.Marshal(ns.UncountedWeeks)
 
 	// Block duplicate season numbers before starting the transaction
 	var existing int
@@ -846,12 +864,12 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO seasons (name, season_number, start_date, week_count, key_event_name, key_event_required,
 		    tier_active_min_pct, tier_at_risk_min_pct, key_event_total, resource_name,
 		    poll_active_min_pct, poll_at_risk_min_pct, war_active_min_pct, war_at_risk_min_pct,
-		    schedule_buffer_minutes, land_readiness_buffer_hours, is_active)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		    schedule_buffer_minutes, land_readiness_buffer_hours, is_active, uncounted_weeks)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ns.Name, ns.SeasonNumber, body.StartDate, ns.WeekCount, ns.KeyEventName, ns.KeyEventRequired,
 		ns.TierActiveMinPct, ns.TierAtRiskMinPct, ns.KeyEventTotal, ns.ResourceName,
 		ns.PollActiveMinPct, ns.PollAtRiskMinPct, ns.WarActiveMinPct, ns.WarAtRiskMinPct,
-		ns.ScheduleBufferMinutes, ns.LandReadinessBufferHours, boolToInt(!isFuture),
+		ns.ScheduleBufferMinutes, ns.LandReadinessBufferHours, boolToInt(!isFuture), string(uncountedJSON),
 	)
 	if err != nil {
 		slog.Error("handleSeasonCreate: insert season", "error", err)
@@ -1044,6 +1062,7 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 		ResourceName             *string `json:"resource_name"`
 		ScheduleBufferMinutes    *int    `json:"schedule_buffer_minutes"`
 		LandReadinessBufferHours *int    `json:"land_readiness_buffer_hours"`
+		UncountedWeeks           *[]int  `json:"uncounted_weeks"`
 		// The category floors: present and null means "use the overall floors".
 		PollActiveMinPct optionalInt `json:"poll_active_min_pct"`
 		PollAtRiskMinPct optionalInt `json:"poll_at_risk_min_pct"`
@@ -1076,6 +1095,16 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "key_event_total and the buffers cannot be negative", http.StatusBadRequest)
 		return
 	}
+	uncounted := old.UncountedWeeks
+	if body.UncountedWeeks != nil {
+		uncounted = *body.UncountedWeeks
+	}
+	uncounted, uerr := cleanUncountedWeeks(uncounted, body.WeekCount)
+	if uerr != nil {
+		http.Error(w, uerr.Error(), http.StatusBadRequest)
+		return
+	}
+	uncountedJSON, _ := json.Marshal(uncounted)
 	floors := []*int{}
 	for _, f := range []struct {
 		in  optionalInt
@@ -1105,13 +1134,15 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 		    key_event_name=?, key_event_required=?,
 		    tier_active_min_pct=?, tier_at_risk_min_pct=?,
 		    key_event_total=?, resource_name=?, schedule_buffer_minutes=?, land_readiness_buffer_hours=?,
-		    poll_active_min_pct=?, poll_at_risk_min_pct=?, war_active_min_pct=?, war_at_risk_min_pct=?
+		    poll_active_min_pct=?, poll_at_risk_min_pct=?, war_active_min_pct=?, war_at_risk_min_pct=?,
+		    uncounted_weeks=?
 		WHERE id=?`,
 		body.Name, body.SeasonNumber, body.StartDate, body.WeekCount,
 		body.KeyEventName, body.KeyEventRequired,
 		body.TierActiveMinPct, body.TierAtRiskMinPct,
 		keyTotal, resource, bufMin, bufHours,
 		floors[0], floors[1], floors[2], floors[3],
+		string(uncountedJSON),
 		id,
 	); err != nil {
 		slog.Error("handleSeasonUpdate: update", "error", err)
@@ -1131,6 +1162,9 @@ func handleSeasonUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if old.KeyEventTotal != keyTotal {
 		changes = append(changes, fmt.Sprintf("key_event_total: %d → %d", old.KeyEventTotal, keyTotal))
+	}
+	if weekList(old.UncountedWeeks) != weekList(uncounted) {
+		changes = append(changes, "weeks that don't count: "+orNone(weekList(old.UncountedWeeks))+" → "+orNone(weekList(uncounted)))
 	}
 	if old.TierActiveMinPct != body.TierActiveMinPct || old.TierAtRiskMinPct != body.TierAtRiskMinPct {
 		changes = append(changes, fmt.Sprintf("floors: %d/%d → %d/%d", old.TierActiveMinPct, old.TierAtRiskMinPct,

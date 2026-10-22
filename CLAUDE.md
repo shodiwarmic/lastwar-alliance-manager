@@ -1419,7 +1419,9 @@ most likely to break.
   (`completedSeasonWeeks`: a week's last game day has passed, or the season is archived); the
   current week counts for nobody. A completed week with no score counts as Absent and the
   reason names it "not scored". **Excused** (a seeded score level, `excusedScoreKey`) leaves
-  the week out of the denominator. Wars count attended over completed wars with known
+  the week out of the denominator, and so does a week in the season's `uncounted_weeks`
+  (migration 090: the reward week, 8, on the shipped templates; `Season.countsWeek`) — the
+  engine skips it, so no reader filters weeks itself. Eligibility's Core events skip it too. Wars count attended over completed wars with known
   attendance; polls count yes-or-no over completed wars that held one. The final status is the
   worst applicable category. A season with no war records keeps the legacy weekly key-event
   count.

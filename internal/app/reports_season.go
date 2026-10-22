@@ -31,7 +31,7 @@ type seasonReportMember struct {
 	MemberID             int               `json:"member_id"`
 	Name                 string            `json:"name"`
 	Rank                 string            `json:"rank"`
-	Weekly               []string          `json:"weekly"` // score key, "not_scored", or "" for a week still to come
+	Weekly               []string          `json:"weekly"` // score key, "not_scored", "not_counted", or "" for a week still to come
 	Full                 int               `json:"full"`
 	Partial              int               `json:"partial"`
 	Absent               int               `json:"absent"`
@@ -60,6 +60,7 @@ type seasonReport struct {
 	Season         seasonReportSeason   `json:"season"`
 	Seasons        []seasonReportSeason `json:"seasons"`
 	Weeks          []int                `json:"weeks"`
+	UncountedWeeks []int                `json:"uncounted_weeks"`
 	CompletedWeeks int                  `json:"completed_weeks"`
 	ScoreLevels    []ScoreLevel         `json:"score_levels"`
 	Tiers          []tierSummary        `json:"tiers"`
@@ -102,6 +103,7 @@ func runSeasonParticipationReport(q rowQueryer, p seasonReportParams, now time.T
 	if sid == 0 {
 		rep.Members = []seasonReportMember{}
 		rep.Weeks = []int{}
+		rep.UncountedWeeks = []int{}
 		return rep, nil
 	}
 	s, err := loadSeasonByIDQ(q, sid)
@@ -117,6 +119,7 @@ func runSeasonParticipationReport(q rowQueryer, p seasonReportParams, now time.T
 		}
 	}
 	rep.ScoreLevels = s.ScoreLevels
+	rep.UncountedWeeks = s.UncountedWeeks
 	rep.CompletedWeeks = completedSeasonWeeks(s, now)
 	rep.InProgress = s.ArchivedAt == "" && rep.CompletedWeeks < s.WeekCount
 	for w := 1; w <= s.WeekCount; w++ {
@@ -228,6 +231,13 @@ func runSeasonParticipationReport(q rowQueryer, p seasonReportParams, now time.T
 			switch {
 			case w > rep.CompletedWeeks && k == "":
 				row.Weekly[i] = ""
+			case !s.countsWeek(w):
+				// The standing leaves the week out, so the counts do too; a score recorded
+				// anyway still shows.
+				row.Weekly[i] = "not_counted"
+				if k != "" {
+					row.Weekly[i] = k
+				}
 			case k == "":
 				row.Weekly[i] = "not_scored"
 				row.NotScored++

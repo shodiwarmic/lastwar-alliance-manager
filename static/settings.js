@@ -772,6 +772,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const kerInp = addField('Key Event Required', 'number', '4', defs.key_event_required ?? 0, 0, 99);
         const ketInp = addField('Key Event Total (scheduled)', 'number', '8', defs.key_event_total ?? 0, 0, 99);
         const resInp = addField('Resource name', 'text', 'e.g. Copper', defs.resource_name || '');
+        const uwInp  = addField("Weeks that don't count", 'text', 'e.g. 8', (defs.uncounted_weeks || []).join(', '));
 
         wrap.appendChild(grid);
 
@@ -784,6 +785,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 key_event_required: parseInt(kerInp.value, 10) || 0,
                 key_event_total: parseInt(ketInp.value, 10) || 0,
                 resource_name: resInp.value.trim(),
+                // A season made from the template leaves these weeks out of its standings.
+                uncounted_weeks: uwInp.value.split(/[\s,]+/).map(Number).filter(n => Number.isInteger(n) && n > 0),
             }));
         }
 

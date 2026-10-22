@@ -154,6 +154,14 @@ func computeSeasonEligibility(q rowQueryer, s *Season, now time.Time) (seasonEli
 		return res, err
 	}
 	completedWeeks := completedSeasonWeeks(s, now)
+	// A week that doesn't count (the reward week) asks no Core events of anyone.
+	counted := events[:0:0]
+	for _, e := range events {
+		if s.countsWeek(e.WeekNumber) {
+			counted = append(counted, e)
+		}
+	}
+	events = counted
 	ids := make([]int, 0, len(roster))
 	for _, m := range roster {
 		ids = append(ids, m.ID)

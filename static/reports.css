@@ -304,6 +304,7 @@
 #tab-season-participation .dot-absent { background: var(--color-danger); opacity: 0.6; }
 #tab-season-participation .dot-empty { background: var(--bg-primary); border: 1px solid var(--border-color); }
 #tab-season-participation .dot-notscored { background: var(--color-danger-bg); border: 1px dashed var(--color-danger); }
+#tab-season-participation .dot-uncounted { background: var(--bg-tertiary); border: 1px dotted var(--text-muted); }
 #tab-season-participation .status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
 #tab-season-participation .status-active { background: var(--color-success-bg); color: var(--color-success); }
 #tab-season-participation .status-at_risk { background: var(--color-warning-bg); color: var(--color-warning); }
