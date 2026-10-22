@@ -1305,12 +1305,19 @@ func handleParticipationException(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
 	var boardID int
-	var source, typeName, date string
-	err := db.QueryRow(`SELECT b.id, b.source, t.name, se.event_date FROM participation_boards b
+	var source, typeName, date, short, rule string
+	err = tx.QueryRow(`SELECT b.id, b.source, t.name, se.event_date, t.short_name, COALESCE(pt.absence_rule,'') FROM participation_boards b
 		JOIN schedule_events se ON se.id = b.schedule_event_id
 		JOIN schedule_event_types t ON t.id = se.event_type_id
-		WHERE b.schedule_event_id = ?`, id).Scan(&boardID, &source, &typeName, &date)
+		LEFT JOIN participation_types pt ON pt.event_type_id = t.id
+		WHERE b.schedule_event_id = ?`, id).Scan(&boardID, &source, &typeName, &date, &short, &rule)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "No board is recorded for this event", http.StatusNotFound)
 		return
@@ -1325,8 +1332,9 @@ func handleParticipationException(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
 		memberID, _ := strconv.Atoi(r.URL.Query().Get("member_id"))
 		var kind, name string
-		err := db.QueryRow(`SELECT x.kind, COALESCE(m.name,'') FROM participation_exceptions x
-			LEFT JOIN members m ON m.id = x.member_id WHERE x.board_id = ? AND x.member_id = ?`, boardID, memberID).Scan(&kind, &name)
+		var manualMissed bool
+		err := tx.QueryRow(`SELECT x.kind, COALESCE(m.name,''), x.manual_missed FROM participation_exceptions x
+			LEFT JOIN members m ON m.id = x.member_id WHERE x.board_id = ? AND x.member_id = ?`, boardID, memberID).Scan(&kind, &name, &manualMissed)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "Nothing to undo for that member", http.StatusNotFound)
 			return
@@ -1336,7 +1344,7 @@ func handleParticipationException(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
-		if kind == "missed" {
+		if kind == "missed" && source == "legacy" {
 			http.Error(w, "A miss carried over from the old Storm Attendance screen cannot be removed — excuse it instead", http.StatusConflict)
 			return
 		}
@@ -1344,15 +1352,25 @@ func handleParticipationException(w http.ResponseWriter, r *http.Request) {
 		// (there are no roles to derive one from), so undoing it restores that
 		// absence rather than making the member vanish from the board.
 		q := `DELETE FROM participation_exceptions WHERE board_id = ? AND member_id = ?`
+		if manualMissed && (kind == "excused" || kind == "dismissed") {
+			q = `UPDATE participation_exceptions SET kind = 'missed', reason = '', recorded_by = NULL WHERE board_id = ? AND member_id = ?`
+		}
 		if source == "legacy" && kind == "excused" {
 			var entered int
-			db.QueryRow(`SELECT COUNT(*) FROM participation_entries WHERE board_id = ? AND member_id = ?`, boardID, memberID).Scan(&entered)
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM participation_entries WHERE board_id = ? AND member_id = ?`, boardID, memberID).Scan(&entered); err != nil {
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
 			if entered == 0 {
 				q = `UPDATE participation_exceptions SET kind = 'missed', reason = '', recorded_by = NULL WHERE board_id = ? AND member_id = ?`
 			}
 		}
-		if _, err := db.Exec(q, boardID, memberID); err != nil {
+		if _, err := tx.Exec(q, boardID, memberID); err != nil {
 			slog.Error("handleParticipationException: delete failed", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if err := tx.Commit(); err != nil {
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
@@ -1371,8 +1389,8 @@ func handleParticipationException(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.Reason = strings.TrimSpace(body.Reason)
-	if body.Kind != "excused" && body.Kind != "dismissed" {
-		http.Error(w, "kind must be excused or dismissed", http.StatusBadRequest)
+	if body.Kind != "excused" && body.Kind != "dismissed" && body.Kind != "missed" && body.Kind != "late" {
+		http.Error(w, "kind must be excused, dismissed, missed or late", http.StatusBadRequest)
 		return
 	}
 	if body.Kind == "excused" && body.Reason == "" {
@@ -1380,26 +1398,61 @@ func handleParticipationException(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var name string
-	if err := db.QueryRow(`SELECT name FROM members WHERE id = ?`, body.MemberID).Scan(&name); err != nil {
+	if err := tx.QueryRow(`SELECT name FROM members WHERE id = ?`, body.MemberID).Scan(&name); err != nil {
 		http.Error(w, "Member not found", http.StatusBadRequest)
 		return
 	}
+	if body.Kind == "missed" || body.Kind == "late" {
+		if source == "legacy" || short != "DS" || rule != ruleRole {
+			http.Error(w, "Attendance marks require a current role-based Desert Storm board", http.StatusBadRequest)
+			return
+		}
+		var entered bool
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM participation_entries WHERE board_id = ? AND member_id = ?)`, boardID, body.MemberID).Scan(&entered); err != nil {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if body.Kind == "late" && !entered {
+			http.Error(w, "Only a member on the saved results board can be marked late", http.StatusBadRequest)
+			return
+		}
+		if body.Kind == "missed" {
+			var sub bool
+			if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM participation_roles WHERE board_id = ? AND member_id = ? AND role = 'sub')`, boardID, body.MemberID).Scan(&sub); err != nil {
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+			if entered || !sub {
+				http.Error(w, "Only an absent substitute in the saved lineup can be marked missed", http.StatusBadRequest)
+				return
+			}
+		}
+	}
 	var existing string
-	db.QueryRow(`SELECT kind FROM participation_exceptions WHERE board_id = ? AND member_id = ?`, boardID, body.MemberID).Scan(&existing)
-	if existing == "missed" && body.Kind == "dismissed" {
+	if err := tx.QueryRow(`SELECT kind FROM participation_exceptions WHERE board_id = ? AND member_id = ?`, boardID, body.MemberID).Scan(&existing); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if existing == "missed" && source == "legacy" && body.Kind == "dismissed" {
 		// The stored miss IS this member's status on a legacy board (no role to derive
 		// one from); dismissing would overwrite it and the member would vanish.
 		http.Error(w, "This absence was recorded on the old Storm Attendance screen — excuse it with a reason if it should not count", http.StatusConflict)
 		return
 	}
-	if _, err := db.Exec(`
-		INSERT INTO participation_exceptions (board_id, member_id, kind, reason, recorded_by)
-		VALUES (?, ?, ?, ?, ?)
+	if _, err := tx.Exec(`
+		INSERT INTO participation_exceptions (board_id, member_id, kind, reason, recorded_by, manual_missed)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(board_id, member_id) DO UPDATE SET
 			kind = excluded.kind, reason = excluded.reason,
+			manual_missed = CASE WHEN excluded.kind = 'late' THEN 0
+			    ELSE MAX(participation_exceptions.manual_missed, excluded.manual_missed) END,
 			recorded_by = excluded.recorded_by, created_at = CURRENT_TIMESTAMP`,
-		boardID, body.MemberID, body.Kind, body.Reason, u.ID); err != nil {
+		boardID, body.MemberID, body.Kind, body.Reason, u.ID, body.Kind == "missed"); err != nil {
 		slog.Error("handleParticipationException: upsert failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
