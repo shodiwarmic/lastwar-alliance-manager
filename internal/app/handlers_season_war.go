@@ -337,6 +337,17 @@ func handleSeasonWarGet(w http.ResponseWriter, r *http.Request) {
 		fail("resources", err)
 		return
 	}
+	posts, err := loadTradePosts(db, sid, alliances)
+	if err != nil {
+		fail("trade posts", err)
+		return
+	}
+	postChoices := []landArea{}
+	for _, a := range landLookupFor(s.SeasonNumber) {
+		if a.Kind == "trade_post" {
+			postChoices = append(postChoices, a)
+		}
+	}
 	links, err := warLinkChoices(getAuthUser(r), sid)
 	if err != nil {
 		fail("links", err)
@@ -361,6 +372,8 @@ func handleSeasonWarGet(w http.ResponseWriter, r *http.Request) {
 		"start_date":   s.StartDate,
 		"links":        links,
 		"resources":    resources,
+		"trade_posts":  posts,
+		"post_lookup":  postChoices,
 	})
 }
 

@@ -72,10 +72,11 @@ func getMobileSeasonWar(w http.ResponseWriter, r *http.Request) {
 		mw = append(mw, mobileWar{ID: w.ID, BattleDate: w.BattleDate, Role: w.Role, Status: w.Status, OpponentSeasonAllianceID: w.OpponentSeasonAllianceID})
 	}
 	writeJSON(w, map[string]any{
-		"season":    map[string]any{"id": s.ID, "name": s.Name, "season_number": s.SeasonNumber, "start_date": s.StartDate, "week_count": s.WeekCount},
-		"factions":  factions,
-		"alliances": out,
-		"wars":      mw,
+		"season":      map[string]any{"id": s.ID, "name": s.Name, "season_number": s.SeasonNumber, "start_date": s.StartDate, "week_count": s.WeekCount},
+		"factions":    factions,
+		"alliances":   out,
+		"wars":        mw,
+		"trade_posts": mobileTradePosts(s.ID),
 	})
 }
 
@@ -117,13 +118,22 @@ func postMobileSeasonWarObservations(w http.ResponseWriter, r *http.Request) {
 			Rank          int    `json:"rank"`
 			ResourceTotal *int64 `json:"resource_total"`
 		} `json:"cutoffs"`
+		// Who holds which Trade Post (private-docs 280): an owner by season-alliance id or by tag
+		// AND server; an owner the season does not list is kept as its label.
+		TradePosts []struct {
+			PostKey               string `json:"post_key"`
+			OwnerSeasonAllianceID *int   `json:"owner_season_alliance_id"`
+			OwnerTag              string `json:"owner_tag"`
+			OwnerServer           int    `json:"owner_server"`
+		} `json:"trade_posts"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	if len(body.Alliances) > 500 || len(body.Cutoffs) > 500 || (len(body.Alliances) == 0 && body.Own == nil && len(body.Cutoffs) == 0) {
-		http.Error(w, "send 1 to 500 alliances, our own total, or cutoffs", http.StatusBadRequest)
+	if len(body.Alliances) > 500 || len(body.Cutoffs) > 500 || len(body.TradePosts) > 500 ||
+		(len(body.Alliances) == 0 && body.Own == nil && len(body.Cutoffs) == 0 && len(body.TradePosts) == 0) {
+		http.Error(w, "send 1 to 500 alliances, our own total, cutoffs or trade posts", http.StatusBadRequest)
 		return
 	}
 	s, err := loadActiveSeason()
@@ -250,8 +260,53 @@ func postMobileSeasonWarObservations(w http.ResponseWriter, r *http.Request) {
 		}
 		cuts = append(cuts, cutoffOK{i, c.Rank, *c.ResourceTotal, at})
 	}
+	type postOK struct {
+		i      int
+		postID int
+		key    string
+		in     postObservationIn
+		at     time.Time
+	}
+	var postObs []postOK
+	if len(body.TradePosts) > 0 {
+		alliances, err := loadSeasonAlliances(db, s.ID)
+		var posts []tradePost
+		if err == nil {
+			posts, err = loadTradePosts(db, s.ID, nil)
+		}
+		if err != nil {
+			slog.Error("postMobileSeasonWarObservations: posts", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		for i, tp := range body.TradePosts {
+			p := postByKeyOrName(posts, tp.PostKey)
+			if p == nil {
+				errs = append(errs, refusal{i, tp.PostKey, "no Trade Post of this season has that key"})
+				continue
+			}
+			in := postObservationIn{OwnerSeasonAllianceID: tp.OwnerSeasonAllianceID, ObservedAt: body.CapturedAt}
+			if in.OwnerSeasonAllianceID == nil {
+				if strings.TrimSpace(tp.OwnerTag) == "" || tp.OwnerServer <= 0 {
+					errs = append(errs, refusal{i, tp.PostKey, "an owner is a season alliance id, or a tag together with its server"})
+					continue
+				}
+				if id := seasonAllianceByTagServer(alliances, tp.OwnerTag, tp.OwnerServer); id != 0 {
+					in.OwnerSeasonAllianceID = &id
+				} else {
+					in.OwnerLabel = fmt.Sprintf("%s (S%d)", strings.TrimSpace(tp.OwnerTag), tp.OwnerServer)
+				}
+			}
+			at, msg := validatePostObservation(s.ID, in, now)
+			if msg != "" {
+				errs = append(errs, refusal{i, tp.PostKey, msg})
+				continue
+			}
+			postObs = append(postObs, postOK{i, p.ID, p.PostKey, in, at})
+		}
+	}
 	written := 0
-	if len(ok) > 0 || ownIn != nil || len(cuts) > 0 {
+	if len(ok) > 0 || ownIn != nil || len(cuts) > 0 || len(postObs) > 0 {
 		tx, err := db.Begin()
 		if err != nil {
 			slog.Error("postMobileSeasonWarObservations: begin", "error", err)
@@ -327,6 +382,19 @@ func postMobileSeasonWarObservations(w http.ResponseWriter, r *http.Request) {
 				st, written = "written", written+1
 			}
 			results = append(results, result{c.i, "cutoff", c.rank, st})
+		}
+		for _, po := range postObs {
+			wrote, err := writePostObservationTx(tx, po.postID, po.in, po.at, "mobile", user.ID)
+			if err != nil {
+				slog.Error("postMobileSeasonWarObservations: trade post", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+			st := "unchanged"
+			if wrote {
+				st, written = "written", written+1
+			}
+			results = append(results, result{po.i, "trade_post:" + po.key, 0, st})
 		}
 		if err := tx.Commit(); err != nil {
 			slog.Error("postMobileSeasonWarObservations: commit", "error", err)
@@ -486,4 +554,18 @@ func postMobileSeasonWarResults(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Error("postMobileSeasonWarResults: load", "error", err)
 	http.Error(w, "Database error", http.StatusInternalServerError)
+}
+
+// mobileTradePosts lists the active season's posts (key and name) for the phone to name them.
+func mobileTradePosts(seasonID int) []map[string]string {
+	out := []map[string]string{}
+	posts, err := loadTradePosts(db, seasonID, nil)
+	if err != nil {
+		slog.Error("mobileTradePosts", "error", err)
+		return out
+	}
+	for _, p := range posts {
+		out = append(out, map[string]string{"post_key": p.PostKey, "name": p.Name})
+	}
+	return out
 }

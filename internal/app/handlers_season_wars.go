@@ -634,6 +634,11 @@ func handleSeasonWarDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	if _, err := tx.Exec(`UPDATE season_trade_posts SET related_war_id = NULL WHERE related_war_id = ?`, war.ID); err != nil {
+		slog.Error("handleSeasonWarDelete: unlink posts", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	if _, err := tx.Exec(`DELETE FROM season_wars WHERE id = ?`, war.ID); err == nil {
 		err = tx.Commit()
 	} else {

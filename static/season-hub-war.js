@@ -102,6 +102,7 @@
         renderResources();
         renderWars();
         renderOpponents();
+        renderPosts();
         renderBattles();
         renderObservations();
         renderSettings();
@@ -358,6 +359,93 @@
                     .then(() => { showToast('Review saved.'); load(true); }).catch(err => showToast(err.message, 'error'));
             } }, 'Save review'));
         return box;
+    }
+
+    // ── Trade Posts (private-docs 280) ───────────────────────────────────────
+    const POST_ACTIONS = [['', '—'], ['take', 'Take'], ['contest', 'Contest'], ['defend', 'Defend'], ['hold', 'Hold'], ['ignore', 'Ignore']];
+    const PRIORITIES = [['', '—'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']];
+
+    function renderPosts() {
+        const box = document.getElementById('war-posts');
+        const ro = !editable();
+        const parts = [];
+        if (!ro) {
+            const lookup = data.post_lookup || [];
+            const used = new Set((data.trade_posts || []).map(p => p.post_key));
+            const pick = lookup.length ? select([['', '— pick a post —']].concat(lookup.filter(a => !used.has(a.id)).map(a =>
+                [a.id, a.name + ' ' + a.id + (a.position ? ' · ' + [a.position.column_band, a.position.row_band].filter(Boolean).join(' ') : '')])), '') : null;
+            const name = el('input', { type: 'text', className: 'form-input', placeholder: lookup.length ? 'or a name' : 'Post name' });
+            const add = el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                const body = { season_id: season.id };
+                if (pick && pick.value) body.post_key = pick.value; else body.name = name.value.trim();
+                send('POST', '/api/season-hub/war/trade-posts', body).then(() => load(true)).catch(err => showToast(err.message, 'error'));
+            } }, '+ Post');
+            parts.push(el('div', { className: 'tab-toolbar war-toolbar' }, pick ? field('Post', pick) : null, field(pick ? 'Name' : 'Post', name), add,
+                el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => window.SeasonHub.openImport({
+                    kind: 'trade_post_observations', title: 'Trade Post owners',
+                    columns: 'Columns: Post (its key or name) and Owner tag, required; Owner server (tag and server name a season alliance — another is kept as a label), Observed at.',
+                    onDone: () => load(true) }) }, 'Import owners')));
+        }
+        const cards = (data.trade_posts || []).map(p => buildPostCard(p, ro));
+        parts.push(el('div', { className: 'war-post-list' }, cards.length ? cards : [el('p', { className: 'loading-msg', textContent: 'No Trade Posts yet.' })]));
+        box.replaceChildren(...parts);
+    }
+
+    function buildPostCard(p, ro) {
+        const factionLabel = id => ((data.factions || []).find(f => f.id === id) || {}).label;
+        const owner = p.owner;
+        const head = el('div', { className: 'land-target-head' }, el('strong', { textContent: p.name }),
+            p.strategic_priority ? el('span', { className: 'land-status tone-' + ({ high: 'danger', medium: 'warning', low: 'neutral' }[p.strategic_priority]), textContent: p.strategic_priority }) : null,
+            p.planned_action ? el('span', { className: 'land-status tone-info', textContent: p.planned_action + (p.planned_at ? ' · ' + p.planned_at + ' ST' : '') }) : null);
+        const ownerLine = el('div', { className: 'land-drop-when' }, owner
+            ? el('span', null, 'Held by ', el('span', { translate: 'no', textContent: owner.label }), owner.faction_id && factionLabel(owner.faction_id) ? ' · ' + factionLabel(owner.faction_id) : '',
+                ' · as of ' + owner.observed_at + ' ST · ' + owner.source)
+            : 'Owner not recorded');
+        const card = el('div', { className: 'land-drop card war-post' }, head, ownerLine);
+        if (p.notes) card.appendChild(prose('Notes', p.notes));
+        if (ro) return card;
+        const priority = select(PRIORITIES, p.strategic_priority || '');
+        const action = select(POST_ACTIONS, p.planned_action || '');
+        const at = el('input', { type: 'datetime-local', className: 'form-input', value: (p.planned_at || '').replace(' ', 'T') });
+        const assigned = select(opponentOptions(), p.assigned_season_alliance_id, { translate: 'no' });
+        const war = select([['', '— none —']].concat(data.wars.map(w => [String(w.id), (w.role === 'attack' ? 'Attack' : 'Defense') +
+            (w.opponent_tag ? ' vs [' + w.opponent_tag + ']' : '') + (w.battle_date ? ' ' + w.battle_date : '')])), p.related_war_id, { translate: 'no' });
+        const mail = select(linkOptions('mails'), p.strategy_comms_id);
+        const map = select(linkOptions('files'), p.map_file_id);
+        const notes = el('input', { type: 'text', className: 'form-input', value: p.notes || '' });
+        const save = el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+            send('PUT', '/api/season-hub/war/trade-posts/' + p.id, { strategic_priority: priority.value, planned_action: action.value,
+                planned_at: at.value.replace('T', ' '), assigned_season_alliance_id: intOrNull(assigned.value), related_war_id: intOrNull(war.value),
+                strategy_comms_id: intOrNull(mail.value), map_file_id: intOrNull(map.value), notes: notes.value.trim() })
+                .then(d => { calendarNote(d); load(true); }).catch(err => showToast(err.message, 'error'));
+        } }, 'Save');
+        const del = el('button', { type: 'button', className: 'btn btn-danger btn-sm', onclick: async () => {
+            if (!await showConfirm('Remove ' + p.name + ' from the board?', 'Remove')) return;
+            api('/api/season-hub/war/trade-posts/' + p.id, { method: 'DELETE' }).then(() => load(true)).catch(err => showToast(err.message, 'error'));
+        } }, 'Remove');
+        card.appendChild(el('details', { className: 'war-obs-form' }, el('summary', null, 'Plan'),
+            el('div', { className: 'land-target-grid' }, field('Priority', priority), field('Action', action), field('When (ST)', at),
+                field('Assigned to', assigned), field('Related war', war), field('Strategy mail', mail), field('Map', map), field('Notes', notes, 'land-field-wide')),
+            el('p', { className: 'hub-section-note', textContent: 'Take, contest or defend with a time goes on the Schedule as a Trade Post Action; hold and ignore never do.' }),
+            el('div', { className: 'tab-toolbar' }, save, del)));
+        const who = select([['', '— pick —']].concat(data.opponents.map(o => [String(o.id), '[' + o.tag + '] S' + o.server])).concat([['label', 'Someone else (type it)']]), '', { translate: 'no' });
+        const label = el('input', { type: 'text', className: 'form-input', placeholder: 'TAG (S123), or none', translate: 'no' });
+        const faction = select([['', '— faction —']].concat((data.factions || []).map(f => [String(f.id), f.label])), '');
+        const when = el('input', { type: 'datetime-local', className: 'form-input', value: nowST() });
+        card.appendChild(el('details', { className: 'war-obs-form' }, el('summary', null, 'Record the owner'),
+            el('div', { className: 'land-target-grid' }, field('Owner', who), field('Or', label), field('Faction', faction), field('Observed (ST)', when)),
+            el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                const body = { observed_at: when.value.replace('T', ' '), owner_faction_id: intOrNull(faction.value) };
+                if (who.value && who.value !== 'label') body.owner_season_alliance_id = parseInt(who.value, 10); else body.owner_label = label.value.trim();
+                send('POST', '/api/season-hub/war/trade-posts/' + p.id + '/observations', body)
+                    .then(d => { showToast(d.written ? 'Owner recorded.' : 'Already recorded.'); load(true); }).catch(err => showToast(err.message, 'error'));
+            } }, 'Record'),
+            owner ? el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: async () => {
+                if (!await showConfirm('Delete the latest owner observation?', 'Delete')) return;
+                api('/api/season-hub/war/trade-posts/observations/' + owner.observation_id, { method: 'DELETE' }).then(() => load(true))
+                    .catch(err => showToast(err.message, 'error'));
+            } }, 'Delete latest') : null));
+        return card;
     }
 
     // ── Faction battles ──────────────────────────────────────────────────────

@@ -111,7 +111,7 @@ func mobileStores() []mobileStore {
 			// then observations, results and Trade Post owners (277–280).
 			Key: "season_war",
 			Tables: []string{"season_alliances", "season_opponent_observations", "season_wars", "season_faction_battles",
-				"season_resource_observations", "season_rank_cutoffs"},
+				"season_resource_observations", "season_rank_cutoffs", "season_trade_post_observations"},
 			ReadPerms:  []string{"view_season_war"},
 			WritePerms: []string{"manage_season_war"},
 			Routes: []mobileRoute{
@@ -218,6 +218,7 @@ var mobileExcludedTables = map[string]string{
 	"season_land_snapshots":        "the plan, not an observation: Cpt Hedge planner exports",
 	"season_war_config":            "configuration: the season's matchup weights, bands and loot settings",
 	"season_rank_groups":           "configuration: the season's war-rank reward groups",
+	"season_trade_posts":           "configuration and the plan: Trade Post definitions and their planned actions",
 	"schedule_events":              "the plan, not an observation (a participation board's occurrence is created through its own route)",
 	"schedule_event_types":         "configuration: the schedule",
 	"server_events":                "the plan, not an observation",

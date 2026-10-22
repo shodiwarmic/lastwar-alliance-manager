@@ -810,6 +810,12 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	if _, err := tx.Exec("UPDATE season_trade_posts SET map_file_id = NULL WHERE map_file_id = ?", fileID); err != nil {
+		tx.Rollback()
+		slog.Error("deleteFile: trade post map unlink failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	if _, err := tx.Exec("UPDATE season_wars SET map_file_id = NULL WHERE map_file_id = ?", fileID); err != nil {
 		tx.Rollback()
 		slog.Error("deleteFile: war map unlink failed", "error", err)

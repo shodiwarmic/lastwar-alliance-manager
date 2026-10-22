@@ -825,3 +825,5 @@
 .war-group-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .war-group-row .form-input { width: auto; flex: 0 1 80px; min-width: 60px; }
 .war-group-row .form-input[type="text"] { flex: 1 1 120px; }
+.war-post-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+.war-post-list .war-post { margin-top: 0; }

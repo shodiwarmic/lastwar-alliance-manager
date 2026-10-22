@@ -458,6 +458,7 @@ func loadSeasonRoster(q rowQueryer, s *Season) ([]seasonRosterMember, error) {
 var seasonChildStatements = []string{
 	`DELETE FROM season_land_route_revisions WHERE route_id IN (SELECT id FROM season_land_routes WHERE season_id = ?)`,
 	`DELETE FROM season_land_targets WHERE route_id IN (SELECT id FROM season_land_routes WHERE season_id = ?)`,
+	`DELETE FROM season_trade_post_observations WHERE post_id IN (SELECT id FROM season_trade_posts WHERE season_id = ?)`,
 }
 
 // seasonChildTables are deleted with their season, after its calendar purge. foreign_keys is
@@ -471,6 +472,7 @@ var seasonChildTables = []string{
 	"season_land_config", "season_land_levels", "season_land_routes", "season_land_events", "season_land_drops",
 	"season_land_snapshots", "season_war_config", "season_opponent_observations",
 	"season_wars", "season_faction_battles", "season_resource_observations", "season_rank_groups", "season_rank_cutoffs",
+	"season_trade_posts",
 }
 
 // seasonMemberTables are deleted with a member (deleteMemberTx): a member delete removes the
@@ -491,6 +493,7 @@ var seasonUserColumns = []struct{ table, column string }{
 	{"season_faction_battles", "recorded_by"},
 	{"season_resource_observations", "recorded_by"},
 	{"season_rank_cutoffs", "recorded_by"},
+	{"season_trade_post_observations", "recorded_by"},
 }
 
 // seasonMemberColumns are nulled when a member is deleted: a plan that named them stays.
@@ -539,6 +542,9 @@ func copySeasonConfigTx(tx *sql.Tx, fromID int, toID int64) error {
 			production_stop_day, war_event_type_id FROM season_war_config WHERE season_id = ?1`,
 		`INSERT INTO season_rank_groups (season_id, label, rank_from, rank_to, position)
 			SELECT ?2, label, rank_from, rank_to, position FROM season_rank_groups WHERE season_id = ?1`,
+		// Trade Posts are definitions; the plan for each is the new season's.
+		`INSERT INTO season_trade_posts (season_id, post_key, name, position)
+			SELECT ?2, post_key, name, position FROM season_trade_posts WHERE season_id = ?1`,
 		// Factions are setup; which alliance is in which is the new season's to record.
 		`INSERT INTO season_factions (season_id, key, label, is_ours, position)
 			SELECT ?2, key, label, is_ours, position FROM season_factions WHERE season_id = ?1`,

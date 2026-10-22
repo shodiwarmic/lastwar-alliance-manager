@@ -325,6 +325,11 @@ func handleCommsTemplateDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// A war's battle mail link is cleared, not the war (private-docs 278).
+	if _, err := db.Exec(`UPDATE season_trade_posts SET strategy_comms_id = NULL WHERE strategy_comms_id = ?`, id); err != nil {
+		slog.Error("handleCommsTemplateDelete: unlink trade post", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	if _, err := db.Exec(`UPDATE season_wars SET strategy_comms_id = NULL WHERE strategy_comms_id = ?`, id); err != nil {
 		slog.Error("handleCommsTemplateDelete: unlink war", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)

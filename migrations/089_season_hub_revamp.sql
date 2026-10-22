@@ -652,7 +652,58 @@ CREATE INDEX IF NOT EXISTS idx_season_rank_cutoffs ON season_rank_cutoffs(season
 ALTER TABLE seasons ADD COLUMN target_war_rank INTEGER;
 -- +goose StatementEnd
 
+
+
+-- ── 280: Trade Posts ────────────────────────────────────────────────────────
+-- The season's posts are definitions (copied with the season); the plan for each — priority,
+-- action, when, who — keeps a Trade Post Action calendar row for take / contest / defend with a
+-- time. Who holds a post is observed and appended; the latest observation is the owner.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_trade_posts (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id                   INTEGER NOT NULL REFERENCES seasons(id),
+    post_key                    TEXT    NOT NULL,
+    name                        TEXT    NOT NULL,
+    strategic_priority          TEXT CHECK(strategic_priority IN ('high','medium','low')),
+    planned_action              TEXT CHECK(planned_action IN ('take','contest','defend','hold','ignore')),
+    planned_at                  TEXT,
+    assigned_season_alliance_id INTEGER REFERENCES season_alliances(id),
+    related_war_id              INTEGER REFERENCES season_wars(id),
+    strategy_comms_id           INTEGER REFERENCES comms_templates(id),
+    map_file_id                 INTEGER REFERENCES files(id),
+    notes                       TEXT    NOT NULL DEFAULT '',
+    schedule_event_id           INTEGER REFERENCES schedule_events(id),
+    position                    INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(season_id, post_key)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_trade_post_observations (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id                  INTEGER NOT NULL REFERENCES season_trade_posts(id),
+    owner_season_alliance_id INTEGER REFERENCES season_alliances(id),
+    owner_label              TEXT    NOT NULL DEFAULT '',
+    owner_faction_id         INTEGER REFERENCES season_factions(id),
+    observed_at              TEXT    NOT NULL,
+    source                   TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by              INTEGER REFERENCES users(id),
+    created_at               DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_trade_post_obs ON season_trade_post_observations(post_id, observed_at);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_trade_post_obs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_trade_post_observations;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_trade_posts;
+-- +goose StatementEnd
 -- +goose StatementBegin
 ALTER TABLE seasons DROP COLUMN target_war_rank;
 -- +goose StatementEnd
