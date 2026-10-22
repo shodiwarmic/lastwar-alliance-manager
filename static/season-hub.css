@@ -810,3 +810,9 @@
 .war-pair-delta { text-align: right; }
 .war-pair-delta.up { color: var(--color-success); }
 .war-pair-delta.down { color: var(--color-danger); }
+.war-prose { margin: 2px 0 8px; white-space: pre-wrap; font-size: 0.9rem; }
+.war-battle-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.war-battle-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; align-items: end;
+    padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; }
+.war-battle-opp { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.war-battle-del { display: flex; justify-content: flex-end; }

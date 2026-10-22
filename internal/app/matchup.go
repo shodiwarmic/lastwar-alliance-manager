@@ -27,6 +27,7 @@ type warConfig struct {
 	LootMaxPct          int     `json:"loot_max_pct"`
 	ProductionStopWeek  *int    `json:"production_stop_week"`
 	ProductionStopDay   *int    `json:"production_stop_day"`
+	WarEventTypeID      *int    `json:"war_event_type_id"`
 	Saved               bool    `json:"saved"`
 }
 

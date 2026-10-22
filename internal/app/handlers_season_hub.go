@@ -875,6 +875,10 @@ func handleSeasonCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := defaultWarEventTypeTx(tx, seasonID); err != nil {
+		fail("war event type", err)
+		return
+	}
 
 	if err := tx.Commit(); err != nil {
 		slog.Error("handleSeasonCreate: commit", "error", err)
@@ -3522,9 +3526,11 @@ func pushSeasonEventsToSchedule(s *Season, userID int, username string) (pushRes
 				return result, err
 			}
 
+			// A war's own row is found here too and stamped, so war-then-push leaves one row with
+			// both origins (decision 16); a cancelled row is not the event and is passed over.
 			var existingID int
 			err = db.QueryRow(`SELECT id FROM schedule_events
-				WHERE event_date = ? AND event_type_id = ? AND season_event_id IS NULL`,
+				WHERE event_date = ? AND event_type_id = ? AND season_event_id IS NULL AND status != 'cancelled'`,
 				dateStr, ev.eventTypeID).Scan(&existingID)
 			if err == nil {
 				if _, uerr := db.Exec(`UPDATE schedule_events SET season_event_id = ?, season_week = ?, season_id = COALESCE(season_id, ?) WHERE id = ?`,

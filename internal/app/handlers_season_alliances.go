@@ -685,7 +685,7 @@ func handleSeasonAllianceDelete(w http.ResponseWriter, r *http.Request) {
 // seasonAllianceInUse names what still points at a season alliance row, or "". Every table
 // that references season_alliances adds its check here (foreign_keys is off).
 func seasonAllianceInUse(id int) string {
-	for _, check := range []func(int) string{warSeasonAllianceInUse} {
+	for _, check := range []func(int) string{warSeasonAllianceInUse, warAllianceInUse} {
 		if msg := check(id); msg != "" {
 			return msg
 		}

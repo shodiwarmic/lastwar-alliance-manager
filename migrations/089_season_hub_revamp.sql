@@ -503,7 +503,9 @@ CREATE TABLE IF NOT EXISTS season_war_config (
     loot_step_pct         INTEGER NOT NULL DEFAULT 3,
     loot_max_pct          INTEGER NOT NULL DEFAULT 15,
     production_stop_week  INTEGER,
-    production_stop_day   INTEGER
+    production_stop_day   INTEGER,
+    -- The calendar type a war's row uses (S4: Copper War); NULL saves wars unscheduled.
+    war_event_type_id     INTEGER REFERENCES schedule_event_types(id)
 );
 -- +goose StatementEnd
 -- +goose StatementBegin
@@ -529,7 +531,82 @@ CREATE TABLE IF NOT EXISTS season_opponent_observations (
 CREATE INDEX IF NOT EXISTS idx_season_opponent_obs ON season_opponent_observations(season_id, season_alliance_id, observed_at);
 -- +goose StatementEnd
 
+
+
+-- ── 278: wars and faction battles ───────────────────────────────────────────
+-- A season war is one row from Considering (or Incoming) to Completed: role, opponent, battle
+-- date, result, strategy and review. Its calendar row is the war-sourced schedule row, which
+-- adopts a pushed Copper War occurrence on the same date. Faction battles are the wider war's
+-- results, one row per battle, entered from the side whose record it is.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_wars (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id                   INTEGER NOT NULL REFERENCES seasons(id),
+    week_number                 INTEGER,
+    role                        TEXT    NOT NULL CHECK(role IN ('attack','defense')),
+    direction                   TEXT    NOT NULL DEFAULT 'outgoing' CHECK(direction IN ('outgoing','incoming')),
+    opponent_season_alliance_id INTEGER REFERENCES season_alliances(id),
+    battle_date                 TEXT,
+    battle_time                 TEXT,
+    status                      TEXT    NOT NULL DEFAULT 'considering'
+                                CHECK(status IN ('considering','planned','declared','incoming','confirmed','completed','cancelled')),
+    declared_by_member_id       INTEGER REFERENCES members(id),
+    planned_declaration_at      TEXT,
+    priority                    TEXT CHECK(priority IN ('high','medium','low')),
+    outcome                     TEXT CHECK(outcome IN ('win','loss','draw','unknown')),
+    participant_count           INTEGER,
+    resource_result             INTEGER,
+    poll_held                   INTEGER NOT NULL DEFAULT 1,
+    strategy_file_id            INTEGER REFERENCES files(id),
+    strategy_comms_id           INTEGER REFERENCES comms_templates(id),
+    map_file_id                 INTEGER REFERENCES files(id),
+    strategy_status             TEXT    NOT NULL DEFAULT 'draft' CHECK(strategy_status IN ('draft','ready','final','archived')),
+    key_objective               TEXT    NOT NULL DEFAULT '',
+    special_instructions        TEXT    NOT NULL DEFAULT '',
+    notes                       TEXT    NOT NULL DEFAULT '',
+    review_worked               TEXT    NOT NULL DEFAULT '',
+    review_improve              TEXT    NOT NULL DEFAULT '',
+    review_adjust               TEXT    NOT NULL DEFAULT '',
+    strategy_updated_at         TEXT,
+    schedule_event_id           INTEGER REFERENCES schedule_events(id),
+    created_by                  INTEGER REFERENCES users(id),
+    created_at                  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_wars_season ON season_wars(season_id, battle_date);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_faction_battles (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id                   INTEGER NOT NULL REFERENCES seasons(id),
+    week_number                 INTEGER,
+    battle_date                 TEXT    NOT NULL,
+    alliance_season_alliance_id INTEGER NOT NULL REFERENCES season_alliances(id),
+    opponent_season_alliance_id INTEGER REFERENCES season_alliances(id),
+    opponent_label              TEXT    NOT NULL DEFAULT '',
+    role                        TEXT    NOT NULL CHECK(role IN ('attack','defense')),
+    outcome                     TEXT    NOT NULL DEFAULT 'unknown' CHECK(outcome IN ('win','loss','draw','unknown')),
+    rank_group_id               INTEGER,
+    notes                       TEXT    NOT NULL DEFAULT '',
+    source                      TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by                 INTEGER REFERENCES users(id),
+    created_at                  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(season_id, battle_date, alliance_season_alliance_id, role)
+);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_faction_battles;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_wars_season;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_wars;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP INDEX IF EXISTS idx_season_opponent_obs;
 -- +goose StatementEnd

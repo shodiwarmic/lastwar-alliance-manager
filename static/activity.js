@@ -67,6 +67,8 @@ const ENTITY_LABELS = {
     season_land_snapshot:  'season land snapshot',
     season_war_config:     'season war settings',
     season_opponent_observation: 'opponent observation',
+    season_war:            'season war',
+    season_faction_battle: 'faction battles',
     season_import:         'season import',
     poll_template:         'Poll Template',
     poll_instance:         'Poll',

@@ -110,12 +110,13 @@ func mobileStores() []mobileStore {
 			// The season's war data the game shows: factions an alliance is in (from 271),
 			// then observations, results and Trade Post owners (277–280).
 			Key:        "season_war",
-			Tables:     []string{"season_alliances", "season_opponent_observations"},
+			Tables:     []string{"season_alliances", "season_opponent_observations", "season_wars", "season_faction_battles"},
 			ReadPerms:  []string{"view_season_war"},
 			WritePerms: []string{"manage_season_war"},
 			Routes: []mobileRoute{
 				{Method: "GET", Path: "/api/mobile/season-hub/war", Perms: []string{"view_season_war"}, Handler: getMobileSeasonWar},
 				{Method: "POST", Path: "/api/mobile/season-hub/war/observations", Perms: []string{"manage_season_war"}, Handler: postMobileSeasonWarObservations},
+				{Method: "POST", Path: "/api/mobile/season-hub/war/results", Perms: []string{"manage_season_war"}, Handler: postMobileSeasonWarResults},
 			},
 		},
 		{

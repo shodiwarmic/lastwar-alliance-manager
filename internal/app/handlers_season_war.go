@@ -28,9 +28,9 @@ func loadWarConfig(q rowQuerier, seasonID int) (warConfig, error) {
 	var week, day sql.NullInt64
 	err := q.QueryRow(`SELECT weight_power, weight_top10, weight_top5, weight_top3, band_very_favorable, band_favorable,
 		band_unfavorable, band_very_unfavorable, min_categories, loot_step_pct, loot_max_pct, production_stop_week,
-		production_stop_day FROM season_war_config WHERE season_id = ?`, seasonID).Scan(&c.WeightPower, &c.WeightTop10,
+		production_stop_day, war_event_type_id FROM season_war_config WHERE season_id = ?`, seasonID).Scan(&c.WeightPower, &c.WeightTop10,
 		&c.WeightTop5, &c.WeightTop3, &c.BandVeryFavorable, &c.BandFavorable, &c.BandUnfavorable, &c.BandVeryUnfavorable,
-		&c.MinCategories, &c.LootStepPct, &c.LootMaxPct, &week, &day)
+		&c.MinCategories, &c.LootStepPct, &c.LootMaxPct, &week, &day, &c.WarEventTypeID)
 	if err == sql.ErrNoRows {
 		return c, nil
 	}
@@ -317,6 +317,22 @@ func handleSeasonWarGet(w http.ResponseWriter, r *http.Request) {
 		opponents = append(opponents, warOpponent{SeasonAlliance: a, LastRankID: lastrank[a.ExternalAllianceID],
 			Figures: side, Matchup: computeMatchup(own.figures(), side.figures(), cfg)})
 	}
+	wars, err := loadSeasonWars(db, sid)
+	if err != nil {
+		fail("wars", err)
+		return
+	}
+	battles, err := loadFactionBattles(db, sid)
+	if err != nil {
+		fail("faction battles", err)
+		return
+	}
+	record, factionRecords := warRecordsFor(wars, battles, alliances, factions, gametimeDateOf(time.Now()))
+	links, err := warLinkChoices(getAuthUser(r), sid)
+	if err != nil {
+		fail("links", err)
+		return
+	}
 	recent := []warObservation{}
 	for i := len(obs) - 1; i >= 0 && len(recent) < 200; i-- {
 		recent = append(recent, obs[i])
@@ -329,6 +345,12 @@ func handleSeasonWarGet(w http.ResponseWriter, r *http.Request) {
 		"own_top":      top,
 		"opponents":    opponents,
 		"observations": recent,
+		"wars":         wars,
+		"battles":      battles,
+		"record":       record,
+		"factions_wl":  factionRecords,
+		"start_date":   s.StartDate,
+		"links":        links,
 	})
 }
 
@@ -350,16 +372,17 @@ func handleSeasonWarConfigPut(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := db.Exec(`INSERT INTO season_war_config (season_id, weight_power, weight_top10, weight_top5, weight_top3,
 		band_very_favorable, band_favorable, band_unfavorable, band_very_unfavorable, min_categories, loot_step_pct,
-		loot_max_pct, production_stop_week, production_stop_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		loot_max_pct, production_stop_week, production_stop_day, war_event_type_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(season_id) DO UPDATE SET weight_power = excluded.weight_power, weight_top10 = excluded.weight_top10,
 		weight_top5 = excluded.weight_top5, weight_top3 = excluded.weight_top3,
 		band_very_favorable = excluded.band_very_favorable, band_favorable = excluded.band_favorable,
 		band_unfavorable = excluded.band_unfavorable, band_very_unfavorable = excluded.band_very_unfavorable,
 		min_categories = excluded.min_categories, loot_step_pct = excluded.loot_step_pct, loot_max_pct = excluded.loot_max_pct,
-		production_stop_week = excluded.production_stop_week, production_stop_day = excluded.production_stop_day`,
+		production_stop_week = excluded.production_stop_week, production_stop_day = excluded.production_stop_day,
+		war_event_type_id = excluded.war_event_type_id`,
 		c.SeasonID, c.WeightPower, c.WeightTop10, c.WeightTop5, c.WeightTop3, c.BandVeryFavorable, c.BandFavorable,
 		c.BandUnfavorable, c.BandVeryUnfavorable, c.MinCategories, c.LootStepPct, c.LootMaxPct, c.ProductionStopWeek,
-		c.ProductionStopDay); err != nil {
+		c.ProductionStopDay, c.WarEventTypeID); err != nil {
 		slog.Error("handleSeasonWarConfigPut", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -385,6 +408,13 @@ func validateWarConfig(c warConfig) string {
 	}
 	if c.LootStepPct < 0 || c.LootMaxPct < 0 || c.LootMaxPct > 100 {
 		return "loot percentages are from 0 to 100"
+	}
+	if c.WarEventTypeID != nil {
+		var n int
+		db.QueryRow(`SELECT COUNT(*) FROM schedule_event_types WHERE id = ?`, *c.WarEventTypeID).Scan(&n)
+		if n == 0 {
+			return "the war event type is not a schedule event type"
+		}
 	}
 	if (c.ProductionStopWeek == nil) != (c.ProductionStopDay == nil) {
 		return "the production stop needs both a week and a day"
@@ -674,4 +704,67 @@ func warSeasonAllianceInUse(id int) string {
 		return fmt.Sprintf("this alliance has %d observations this season — delete them first", n)
 	}
 	return ""
+}
+
+// defaultWarEventTypeTx sets a new season's war calendar type, when it has none, from its season
+// events: the type of the first event labelled as the season's key event (S4: Copper War).
+func defaultWarEventTypeTx(tx *sql.Tx, seasonID int64) error {
+	var typeID sql.NullInt64
+	err := tx.QueryRow(`SELECT e.event_type_id FROM season_events e JOIN seasons s ON s.id = e.season_id
+		WHERE e.season_id = ? AND e.event_type_id IS NOT NULL AND s.key_event_name != ''
+		AND LOWER(e.label) = LOWER(s.key_event_name) ORDER BY e.week_start, e.day_offset, e.id LIMIT 1`, seasonID).Scan(&typeID)
+	if err == sql.ErrNoRows || (err == nil && !typeID.Valid) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO season_war_config (season_id, war_event_type_id) VALUES (?, ?)
+		ON CONFLICT(season_id) DO UPDATE SET war_event_type_id = COALESCE(season_war_config.war_event_type_id, excluded.war_event_type_id)`,
+		seasonID, typeID.Int64)
+	return err
+}
+
+// warLinkChoices is what a war's strategy may link to, as this viewer may see it: the season's
+// files (Files' own visibility), its mails (with view_comms) and the event types for the war
+// type setting.
+func warLinkChoices(user *AuthUser, seasonID int) (map[string]any, error) {
+	type choice struct {
+		ID    int    `json:"id"`
+		Title string `json:"title"`
+		Kind  string `json:"kind,omitempty"`
+	}
+	files, mails, types := []choice{}, []choice{}, []choice{}
+	if userHasPermission(user, "view_files") {
+		list, err := listFilesForUser(user, &seasonID)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range list {
+			files = append(files, choice{ID: f.ID, Title: f.Title, Kind: f.FileType})
+		}
+	}
+	if userHasPermission(user, "view_comms") {
+		rows, err := db.Query(`SELECT id, title FROM comms_templates WHERE season_id = ? ORDER BY title`, seasonID)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var c choice
+			rows.Scan(&c.ID, &c.Title)
+			mails = append(mails, c)
+		}
+		rows.Close()
+	}
+	rows, err := db.Query(`SELECT id, name FROM schedule_event_types WHERE active = 1 ORDER BY sort_order, name`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var c choice
+		rows.Scan(&c.ID, &c.Title)
+		types = append(types, c)
+	}
+	rows.Close()
+	return map[string]any{"files": files, "mails": mails, "event_types": types}, nil
 }

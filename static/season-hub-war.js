@@ -98,7 +98,10 @@
 
     function render() {
         renderOwn();
+        renderRecord();
+        renderWars();
         renderOpponents();
+        renderBattles();
         renderObservations();
         renderSettings();
         document.dispatchEvent(new CustomEvent('seasonwar:render', { detail: { season, data } }));
@@ -113,6 +116,221 @@
         return el('div', { className: 'war-figure' }, el('span', { className: 'war-figure-label', textContent: label }),
             el('strong', { textContent: compact(f && f.value) }),
             f && f.at ? el('span', { className: 'war-figure-asof', textContent: 'as of ' + utcToST(f.at) + ' ST' + (f.source ? ' · ' + f.source : '') }) : null);
+    }
+
+    // ── Our record ───────────────────────────────────────────────────────────
+    const pctText = r => r.pct == null ? '—' : r.pct.toFixed(0) + '%';
+    const wlText = r => r.wins + '–' + r.losses + (r.draws ? ' (' + r.draws + ' drawn)' : '') + (r.unknown ? ' (' + r.unknown + ' unknown)' : '');
+    function renderRecord() {
+        const box = document.getElementById('war-record');
+        const r = data.record;
+        const line = (label, x) => el('div', { className: 'war-figure' }, el('span', { className: 'war-figure-label', textContent: label }),
+            el('strong', { textContent: wlText(x) }), el('span', { className: 'war-figure-asof', textContent: 'win rate ' + pctText(x) }));
+        box.replaceChildren(el('h3', { className: 'land-section-title', textContent: 'Our war record' }),
+            el('div', { className: 'war-figures' }, line('Overall', r.overall), line('Attacking', r.attack), line('Defending', r.defense)),
+            el('p', { className: 'hub-section-note', textContent: 'Completed wars whose battle date has come. Draws and unknown results are listed, not counted.' }));
+    }
+
+    // ── Wars ─────────────────────────────────────────────────────────────────
+    const STATUS_LABELS = { considering: 'Considering', planned: 'Planned', declared: 'Declared', incoming: 'Incoming',
+        confirmed: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled' };
+    const STATUS_TONES = { considering: 'neutral', planned: 'info', declared: 'warning', incoming: 'warning', confirmed: 'warning', completed: 'success', cancelled: 'neutral' };
+    const FLOW = { considering: ['planned', 'cancelled'], planned: ['considering', 'declared', 'cancelled'], declared: ['planned', 'completed', 'cancelled'],
+        incoming: ['confirmed', 'cancelled'], confirmed: ['incoming', 'completed', 'cancelled'], completed: [], cancelled: ['considering', 'incoming'] };
+    const OUTCOMES = [['', '—'], ['win', 'Win'], ['loss', 'Loss'], ['draw', 'Draw'], ['unknown', 'Unknown']];
+    const ROLES = [['attack', 'Attack'], ['defense', 'Defense']];
+    const opponentOptions = () => [['', '— none —']].concat(data.opponents.map(o => [String(o.id), '[' + o.tag + '] ' + (o.name || '') + ' · S' + o.server]));
+    const memberOptions = () => [['', '— none —']].concat((window.SeasonHub.members || []).filter(m => m.rank !== 'EX').map(m => [String(m.member_id), m.name]));
+    const linkOptions = kind => [['', '— none —']].concat(((data.links || {})[kind] || []).map(f => [String(f.id), f.title]));
+    const intOrNull = v => v === '' ? null : parseInt(v, 10);
+
+    function calendarNote(d) {
+        const c = d.calendar || {};
+        if (c.action === 'refused') showToast('Saved. Not on the calendar: ' + c.message, 'info', 8000);
+        else showToast('Saved.');
+    }
+
+    function renderWars() {
+        const box = document.getElementById('war-wars');
+        const ro = !editable();
+        const bar = el('div', { className: 'tab-toolbar war-toolbar' },
+            ro ? null : el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                send('POST', '/api/season-hub/war/wars', { season_id: season.id, role: 'attack', direction: 'outgoing' })
+                    .then(() => load(true)).catch(err => showToast(err.message, 'error'));
+            } }, '+ War we declare'),
+            ro ? null : el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => {
+                send('POST', '/api/season-hub/war/wars', { season_id: season.id, role: 'defense', direction: 'incoming' })
+                    .then(() => load(true)).catch(err => showToast(err.message, 'error'));
+            } }, '+ War declared on us'),
+            ro ? null : el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => window.SeasonHub.openImport({
+                kind: 'war_results', title: 'war results',
+                columns: 'Columns: Date (YYYY-MM-DD) and Role (attack or defense) name the war; Outcome (win, loss, draw, unknown), required; Participants, Resources. Completing a war stays a step on its card.',
+                onDone: () => load(true) }) }, 'Import results'));
+        const cards = data.wars.map(buildWarCard);
+        box.replaceChildren(bar, ...(cards.length ? cards : [el('p', { className: 'loading-msg', textContent: 'No wars yet.' })]));
+    }
+
+    function buildWarCard(w) {
+        const ro = !editable();
+        const opp = data.opponents.find(o => o.id === w.opponent_season_alliance_id);
+        const head = el('div', { className: 'land-target-head' },
+            el('strong', { translate: 'no', textContent: (w.role === 'attack' ? 'Attack' : 'Defense') + (w.opponent_tag ? ' vs [' + w.opponent_tag + '] ' + w.opponent_name : '') }),
+            el('span', { className: 'land-status tone-' + (STATUS_TONES[w.status] || 'neutral'), textContent: STATUS_LABELS[w.status] || w.status }),
+            opp ? ratingBadge(opp.matchup.rating, opp.matchup.score) : null,
+            opp && opp.assessment_override ? el('span', { className: 'war-override' }, 'Leadership: ', ratingBadge(opp.assessment_override)) : null,
+            w.outcome ? el('span', { className: 'land-status tone-' + (w.outcome === 'win' ? 'success' : w.outcome === 'loss' ? 'danger' : 'neutral'), textContent: w.outcome }) : null);
+        const meta = el('div', { className: 'land-drop-when' }, [w.battle_date ? w.battle_date + (w.battle_time ? ' ' + w.battle_time + ' ST' : '') : 'No date yet',
+            w.week_number ? 'Week ' + w.week_number : null, w.direction === 'incoming' ? 'declared on us' : 'we declare',
+            w.priority ? w.priority + ' priority' : null, w.participant_count != null ? w.participant_count + ' took part' : null].filter(Boolean).join(' · '));
+        const ownFlow = { outgoing: ['considering', 'planned', 'declared', 'completed', 'cancelled'], incoming: ['incoming', 'confirmed', 'completed', 'cancelled'] }[w.direction];
+        const next = (FLOW[w.status] || []).filter(s => ownFlow.includes(s));
+        const status = select([[w.status, STATUS_LABELS[w.status]]].concat(next.map(s => [s, '→ ' + STATUS_LABELS[s]])), w.status, { disabled: ro });
+        const role = select(ROLES, w.role, { disabled: ro });
+        const opponent = select(opponentOptions(), w.opponent_season_alliance_id, { disabled: ro, translate: 'no' });
+        const date = el('input', { type: 'date', className: 'form-input', value: w.battle_date || '', disabled: ro });
+        const time = el('input', { type: 'time', className: 'form-input', value: w.battle_time || '', disabled: ro });
+        const priority = select([['', '—'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], w.priority || '', { disabled: ro });
+        const declaredBy = select(memberOptions(), w.declared_by_member_id, { disabled: ro, translate: 'no' });
+        const plannedDecl = el('input', { type: 'datetime-local', className: 'form-input', value: (w.planned_declaration_at || '').replace(' ', 'T'), disabled: ro });
+        const outcome = select(OUTCOMES, w.outcome || '', { disabled: ro });
+        const participants = num(w.participant_count, { max: '200', disabled: ro });
+        const resources = num(w.resource_result, { disabled: ro });
+        const pollHeld = el('input', { type: 'checkbox', checked: w.poll_held, disabled: ro });
+        const notes = el('input', { type: 'text', className: 'form-input', value: w.notes || '', disabled: ro });
+        const save = ro ? null : el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+            const body = { status: status.value, role: role.value, opponent_season_alliance_id: intOrNull(opponent.value),
+                battle_date: date.value, battle_time: time.value, priority: priority.value, declared_by_member_id: intOrNull(declaredBy.value),
+                planned_declaration_at: plannedDecl.value.replace('T', ' '), outcome: outcome.value,
+                participant_count: intOrNull(participants.value), poll_held: pollHeld.checked, notes: notes.value.trim() };
+            if (resources.value === '') body.clear_resource_result = true; else body.resource_result = Number(resources.value);
+            send('PUT', '/api/season-hub/war/wars/' + w.id, body).then(d => { calendarNote(d); load(true); })
+                .catch(err => showToast(err.message, 'error'));
+        } }, 'Save');
+        const del = ro || (w.status !== 'considering' && w.status !== 'cancelled') ? null : el('button', { type: 'button', className: 'btn btn-danger btn-sm', onclick: async () => {
+            if (!await showConfirm('Delete this war?', 'Delete')) return;
+            api('/api/season-hub/war/wars/' + w.id, { method: 'DELETE' }).then(() => load(true)).catch(err => showToast(err.message, 'error'));
+        } }, 'Delete');
+        const details = el('details', { className: 'war-obs-form' }, el('summary', null, ro ? 'Details' : 'Edit'),
+            el('div', { className: 'land-target-grid' },
+                field('Status', status), field('Role', role), field('Opponent', opponent), field('Battle date', date), field('Time (ST)', time),
+                field('Priority', priority), field('Declared by', declaredBy), field('Declare at (ST)', plannedDecl),
+                field('Result', outcome), field('Took part', participants), field('Resources won/lost', resources),
+                field('Attendance poll held', pollHeld), field('Notes', notes, 'land-field-wide')),
+            el('div', { className: 'tab-toolbar' }, save, del));
+        return el('div', { className: 'land-drop card war-card' }, head, meta, details, buildStrategy(w, ro), buildReview(w, ro));
+    }
+
+    // Prose shown read-only gets the per-block Translate control; editors get the fields.
+    function prose(label, text) {
+        if (!text) return null;
+        const p = el('p', { className: 'war-prose' });
+        p.textContent = text;
+        if (window.TranslateBlock) TranslateBlock.attach(p, text);
+        return el('div', null, el('span', { className: 'war-figure-label', textContent: label }), p);
+    }
+
+    function buildStrategy(w, ro) {
+        const box = el('details', { className: 'war-obs-form' }, el('summary', null, 'Strategy · ' + w.strategy_status +
+            (w.strategy_updated_at ? ' · updated ' + utcToST(w.strategy_updated_at) + ' ST' : '')));
+        const links = el('div', { className: 'land-snapshot-links' },
+            w.strategy_file_id ? el('a', { href: '/api/files/download/' + w.strategy_file_id, textContent: 'Strategy document' }) : null,
+            w.map_file_id ? el('a', { href: '/api/files/download/' + w.map_file_id, textContent: 'Map' }) : null,
+            w.strategy_comms_id ? el('span', { textContent: 'Battle mail: ' + ((((data.links || {}).mails || []).find(m => m.id === w.strategy_comms_id) || {}).title || 'linked') }) : null);
+        if (ro) {
+            box.append(links, prose('Key objective', w.key_objective) || '', prose('Special instructions', w.special_instructions) || '');
+            return box;
+        }
+        const file = select(linkOptions('files'), w.strategy_file_id);
+        const map = select(linkOptions('files'), w.map_file_id);
+        const mail = select(linkOptions('mails'), w.strategy_comms_id);
+        const st = select([['draft', 'Draft'], ['ready', 'Ready'], ['final', 'Final'], ['archived', 'Archived']], w.strategy_status);
+        const objective = el('textarea', { className: 'form-input', rows: '2' });
+        objective.value = w.key_objective || '';
+        const instructions = el('textarea', { className: 'form-input', rows: '3' });
+        instructions.value = w.special_instructions || '';
+        box.append(links, el('div', { className: 'land-target-grid' },
+            field('Strategy document', file), field('Map', map), field('Battle mail', mail), field('Status', st),
+            field('Key objective', objective, 'land-field-wide'), field('Special instructions', instructions, 'land-field-wide')),
+            el('p', { className: 'hub-section-note', textContent: 'Files and mails tagged to this season.' }),
+            el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                send('PUT', '/api/season-hub/war/wars/' + w.id, { strategy_file_id: intOrNull(file.value), map_file_id: intOrNull(map.value),
+                    strategy_comms_id: intOrNull(mail.value), strategy_status: st.value, key_objective: objective.value,
+                    special_instructions: instructions.value })
+                    .then(() => { showToast('Strategy saved.'); load(true); }).catch(err => showToast(err.message, 'error'));
+            } }, 'Save strategy'));
+        return box;
+    }
+
+    function buildReview(w, ro) {
+        if (w.status !== 'completed' && !(w.review_worked || w.review_improve || w.review_adjust)) return null;
+        const box = el('details', { className: 'war-obs-form' }, el('summary', null, 'Review'));
+        if (ro) {
+            box.append(prose('What worked', w.review_worked) || '', prose('What needs improvement', w.review_improve) || '',
+                prose('Adjustment for next battle', w.review_adjust) || '');
+            return box;
+        }
+        const ta = v => { const t = el('textarea', { className: 'form-input', rows: '2' }); t.value = v || ''; return t; };
+        const worked = ta(w.review_worked), improve = ta(w.review_improve), adjust = ta(w.review_adjust);
+        box.append(el('div', { className: 'land-target-grid' }, field('What worked', worked, 'land-field-wide'),
+            field('What needs improvement', improve, 'land-field-wide'), field('Adjustment for next battle', adjust, 'land-field-wide')),
+            el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                send('PUT', '/api/season-hub/war/wars/' + w.id + '/review', { review_worked: worked.value, review_improve: improve.value, review_adjust: adjust.value })
+                    .then(() => { showToast('Review saved.'); load(true); }).catch(err => showToast(err.message, 'error'));
+            } }, 'Save review'));
+        return box;
+    }
+
+    // ── Faction battles ──────────────────────────────────────────────────────
+    function renderBattles() {
+        const box = document.getElementById('war-battles');
+        const ro = !editable();
+        const factionName = id => id == null ? 'No faction' : ((data.factions || []).find(f => f.id === id) || {}).label || 'Faction';
+        const wl = el('div', { className: 'war-figures' }, (data.factions_wl || []).map(f => el('div', { className: 'war-figure' },
+            el('span', { className: 'war-figure-label', textContent: factionName(f.faction_id) }),
+            el('strong', { textContent: wlText(f.season) + ' · ' + pctText(f.season) }),
+            el('span', { className: 'war-figure-asof', textContent: f.weeks.map(x => 'W' + x.week + ' ' + x.record.wins + '–' + x.record.losses).join(' · ') }))));
+        const alliances = [['', '—']].concat(data.opponents.map(o => [String(o.id), '[' + o.tag + '] S' + o.server]));
+        const tbody = el('div', { className: 'war-battle-list' });
+        const addRow = b => {
+            b = b || { role: 'attack', outcome: 'unknown' };
+            const date = el('input', { type: 'date', className: 'form-input', value: b.battle_date || '', disabled: ro });
+            const ally = select(alliances, b.alliance_season_alliance_id, { disabled: ro, translate: 'no' });
+            const opp = select(alliances.concat([['label', 'Other (type it)']]), b.opponent_season_alliance_id || (b.opponent_label ? 'label' : ''), { disabled: ro, translate: 'no' });
+            const label = el('input', { type: 'text', className: 'form-input', value: b.opponent_label || '', disabled: ro, translate: 'no', placeholder: 'TAG (S123)' });
+            const role = select(ROLES, b.role, { disabled: ro });
+            const outcome = select(OUTCOMES.slice(1), b.outcome, { disabled: ro });
+            const showLabel = () => { label.style.display = opp.value === 'label' ? '' : 'none'; };
+            opp.addEventListener('change', showLabel);
+            showLabel();
+            const tr = el('div', { className: 'war-battle-row' }, field('Date', date), field('Alliance', ally), field('Opponent', el('span', { className: 'war-battle-opp' }, opp, label)),
+                field('Role', role), field('Result', outcome),
+                el('div', { className: 'war-battle-del' }, ro ? null : el('button', { type: 'button', className: 'btn btn-danger btn-sm', 'aria-label': 'Remove battle', onclick: async () => {
+                    if (!b.id) { tr.remove(); return; }
+                    if (!await showConfirm('Delete this battle?', 'Delete')) return;
+                    api('/api/season-hub/war/faction-battles/' + b.id, { method: 'DELETE' }).then(() => load(true)).catch(err => showToast(err.message, 'error'));
+                } }, svgIcon('x'))));
+            tr._read = () => ({ id: b.id || 0, battle_date: date.value, alliance_season_alliance_id: intOrNull(ally.value),
+                opponent_season_alliance_id: opp.value && opp.value !== 'label' ? parseInt(opp.value, 10) : null,
+                opponent_label: opp.value === 'label' ? label.value.trim() : '', role: role.value, outcome: outcome.value, notes: b.notes || '' });
+            tbody.appendChild(tr);
+        };
+        (data.battles || []).forEach(addRow);
+        const table = tbody;
+        const bar = ro ? null : el('div', { className: 'tab-toolbar war-toolbar' },
+            el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => addRow() }, '+ Battle'),
+            el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
+                const battles = Array.from(tbody.children).map(tr => tr._read()).filter(b => b.battle_date || b.alliance_season_alliance_id);
+                send('PUT', '/api/season-hub/war/faction-battles', { season_id: season.id, battles })
+                    .then(d => { showToast(d.written + ' battle' + (d.written === 1 ? '' : 's') + ' saved.'); load(true); })
+                    .catch(err => showToast(err.message, 'error'));
+            } }, 'Save battles'),
+            el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => window.SeasonHub.openImport({
+                kind: 'faction_battles', title: 'faction battles',
+                columns: 'Columns: Date (YYYY-MM-DD), Alliance tag, Alliance server, Role (attack or defense), Outcome (win, loss, draw, unknown), required; Opponent tag, Opponent server, Notes. Record each battle once, from the side whose record it is.',
+                onDone: () => load(true) }) }, 'Import CSV'));
+        box.replaceChildren(el('div', { className: 'card land-section' },
+            el('p', { className: 'hub-section-note', textContent: 'Each faction\'s record comes from its alliances\' battles; an alliance with no faction is counted in none.' }),
+            wl, table, bar));
     }
 
     // ── Our side ─────────────────────────────────────────────────────────────
@@ -364,7 +582,10 @@
         const c = data.config;
         const ro = !(CAN_CONFIGURE && season && !season.archived_at);
         const n = (k, props) => num(c[k], Object.assign({ disabled: ro, 'data-k': k }, props || {}));
+        const typeSel = select([['', '— not scheduled —']].concat(((data.links || {}).event_types || []).map(t => [String(t.id), t.title])),
+            c.war_event_type_id, { disabled: ro, 'data-k': 'war_event_type_id' });
         const form = el('div', { className: 'land-settings-grid' },
+            field('Wars go on the calendar as', typeSel),
             field('Weight: alliance power', n('weight_power', { max: '100' })), field('Weight: top 10 THP', n('weight_top10', { max: '100' })),
             field('Weight: top 5 THP', n('weight_top5', { max: '100' })), field('Weight: top 3 THP', n('weight_top3', { max: '100' })),
             field('Very Favorable from (%)', n('band_very_favorable', { min: '-100', step: '0.01' })),
@@ -379,6 +600,7 @@
         const save = ro ? null : el('button', { type: 'button', className: 'btn btn-primary btn-sm', onclick: () => {
             const out = { season_id: season.id };
             form.querySelectorAll('[data-k]').forEach(i => { out[i.dataset.k] = readNum(i); });
+            out.war_event_type_id = typeSel.value ? parseInt(typeSel.value, 10) : null;
             ['weight_power', 'weight_top10', 'weight_top5', 'weight_top3', 'min_categories', 'loot_step_pct', 'loot_max_pct']
                 .forEach(k => { if (out[k] == null) out[k] = 0; });
             send('PUT', '/api/season-hub/war/config', out).then(() => { showToast('War settings saved.'); load(true); })
