@@ -157,8 +157,10 @@
 .week-dot.dot-absent  { background: var(--color-danger); opacity: 0.6; }
 .week-dot.dot-empty   { background: var(--color-card); border: 1px solid var(--color-border); }
 
-/* Class tags */
-.class-tag {
+.week-dot.dot-notscored { background: var(--color-danger-bg); border: 1px dashed var(--color-danger); }
+
+/* Status badges (the status engine, private-docs 283), keyed on the status code */
+.status-badge {
     display: inline-block;
     padding: 2px 8px;
     border-radius: 10px;
@@ -166,21 +168,13 @@
     font-weight: 600;
     white-space: nowrap;
 }
-
-.class-tag.active-member {
-    background: var(--color-success-bg);
-    color: var(--color-success);
-}
-
-.class-tag.at-risk {
-    background: var(--color-info-bg);
-    color: var(--color-info);
-}
-
-.class-tag.dead-weight {
-    background: var(--color-danger-bg);
-    color: var(--color-danger);
-}
+.status-badge.status-active  { background: var(--color-success-bg); color: var(--color-success); }
+.status-badge.status-at_risk { background: var(--color-warning-bg); color: var(--color-warning); }
+.status-badge.status-below   { background: var(--color-danger-bg);  color: var(--color-danger); }
+.status-badge.status-na      { background: var(--bg-tertiary);       color: var(--text-muted); }
+.status-cats { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 3px; font-size: 0.72rem; color: var(--text-secondary); }
+.status-cats .status-cat-below   { color: var(--color-danger); }
+.status-cats .status-cat-at_risk { color: var(--color-warning); }
 
 /* .tier-badge and its .tone-* palette live in styles.css — the tier colour
    picker previews them on the Settings page too, which does not load this file. */

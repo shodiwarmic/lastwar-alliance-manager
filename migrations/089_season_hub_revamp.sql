@@ -746,7 +746,36 @@ CREATE TABLE IF NOT EXISTS season_participation_event_entries (
 );
 -- +goose StatementEnd
 
+
+
+-- ── 283: the Excused score level ────────────────────────────────────────────
+-- A week scored Excused leaves the member's overall denominator (decision 4). It joins the
+-- default score levels and every season that lacks it, as a 0-point level after the others; a
+-- season or default list that already has an "excused" key is left as it is.
+-- +goose StatementBegin
+INSERT INTO season_score_levels (season_id, key, label, points, sort_order)
+SELECT s.id, 'excused', 'EXCUSED', 0,
+       COALESCE((SELECT MAX(sort_order) + 1 FROM season_score_levels l WHERE l.season_id = s.id), 0)
+FROM seasons s
+WHERE NOT EXISTS (SELECT 1 FROM season_score_levels l WHERE l.season_id = s.id AND l.key = 'excused');
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE settings
+SET season_score_levels_default = json_insert(season_score_levels_default, '$[#]',
+        json('{"key":"excused","label":"EXCUSED","points":0}'))
+WHERE CASE WHEN json_valid(season_score_levels_default)
+           THEN json_type(season_score_levels_default) = 'array'
+                AND json_array_length(season_score_levels_default) > 0
+                AND NOT EXISTS (SELECT 1 FROM json_each(season_score_levels_default)
+                                WHERE json_extract(value, '$.key') = 'excused')
+           ELSE 0 END;
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DELETE FROM season_score_levels WHERE key = 'excused' AND points = 0 AND label = 'EXCUSED'
+    AND NOT EXISTS (SELECT 1 FROM season_participation p WHERE p.season_id = season_score_levels.season_id AND p.score = 'excused');
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_participation_event_entries;
 -- +goose StatementEnd

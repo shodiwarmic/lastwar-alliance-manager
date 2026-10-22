@@ -156,19 +156,21 @@ type SeasonMember struct {
 	Rank     string `json:"rank"`
 	// ProfileID links the current profile; nil once the member row is gone. CurrentName is
 	// set when an archived season's frozen name differs from the member's name today.
-	ProfileID          *int             `json:"profile_id"`
-	CurrentName        string           `json:"current_name,omitempty"`
-	ParticipationPts   int              `json:"participation_pts"`
-	ParticipationPct   float64          `json:"participation_pct"`
-	ContributionTotal  int64            `json:"contribution_total"`
-	ContributionPct    float64          `json:"contribution_pct"`
-	KeyEventAttendance int              `json:"key_event_attendance"`
-	KeyEventEligible   bool             `json:"key_event_eligible"`
-	WeeklyScores       []string         `json:"weekly_scores"`
-	WeeklyKeyEvent     []int            `json:"weekly_key_event"`
-	RewardTier         string           `json:"reward_tier"`
-	ClassTag           string           `json:"class_tag"`
-	Records            map[string]int64 `json:"records"`
+	ProfileID          *int     `json:"profile_id"`
+	CurrentName        string   `json:"current_name,omitempty"`
+	ParticipationPts   int      `json:"participation_pts"`
+	ParticipationPct   float64  `json:"participation_pct"`
+	ContributionTotal  int64    `json:"contribution_total"`
+	ContributionPct    float64  `json:"contribution_pct"`
+	KeyEventAttendance int      `json:"key_event_attendance"`
+	KeyEventEligible   bool     `json:"key_event_eligible"`
+	WeeklyScores       []string `json:"weekly_scores"`
+	WeeklyKeyEvent     []int    `json:"weekly_key_event"`
+	RewardTier         string   `json:"reward_tier"`
+	// Standing is the status engine's judgement (season_status.go): overall, polls, wars and
+	// the final status (private-docs 283). It replaced class_tag.
+	Standing standing         `json:"standing"`
+	Records  map[string]int64 `json:"records"`
 	// War and poll figures for a season with wars (nil on a legacy season, decision 8):
 	// attended and known over the completed wars to date, against the scheduled total.
 	WarsAttended    *int `json:"wars_attended,omitempty"`
@@ -575,6 +577,7 @@ func defaultScoreLevels() []seasonScoreLevelDef {
 			{Key: "full", Label: "FULL", Points: 10},
 			{Key: "partial", Label: "PARTIAL", Points: 5},
 			{Key: "absent", Label: "ABSENT", Points: 0},
+			{Key: excusedScoreKey, Label: "EXCUSED", Points: 0},
 		}
 	}
 	return defs
@@ -1422,11 +1425,6 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 			maxPts = sl.Points
 		}
 	}
-	maxSeasonPts := season.WeekCount * maxPts
-	if maxSeasonPts == 0 {
-		maxSeasonPts = 1 // avoid division by zero
-	}
-
 	// Load all participation rows for this season
 	type partRow struct {
 		memberID       int
@@ -1581,7 +1579,25 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hasWars := len(seasonWars) > 0
-	warCounts, warsCompleted, pollsApplicable := warCountsByMember(seasonWars, attendance, gametimeDateOf(time.Now()))
+	today := gametimeDateOf(time.Now())
+	warCounts, warsCompleted, pollsApplicable := warCountsByMember(seasonWars, attendance, today)
+	// The status engine's inputs: the completed weeks, and the completed wars with each member's
+	// line (decisions 3 and 7).
+	completedWeeks := completedSeasonWeeks(season, time.Now())
+	type warLine struct {
+		attended *bool
+		poll     string
+	}
+	lineByWarMember := map[string]warLine{}
+	for _, a := range attendance {
+		lineByWarMember[fmt.Sprintf("%d:%d", a.WarID, a.MemberID)] = warLine{a.Attended, a.PollResponse}
+	}
+	var doneWars []seasonWar
+	for _, sw := range seasonWars {
+		if sw.Status == "completed" && sw.BattleDate != "" && sw.BattleDate <= today {
+			doneWars = append(doneWars, sw)
+		}
+	}
 
 	// Index participation rows by member
 	type memberPart struct {
@@ -1627,8 +1643,11 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 
 		mp := partByMember[m.ID]
 		keyEventCount := 0
+		var weeks []weekInput
 		for w := 1; w <= season.WeekCount; w++ {
-			scoreKey := "absent"
+			// A week with no score row is "" — not scored — and the engine counts a completed
+			// one as Absent while naming it (decision 4).
+			scoreKey := ""
 			if mp != nil {
 				if k, ok := mp.scores[w]; ok {
 					scoreKey = k
@@ -1636,6 +1655,9 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 			}
 			sm.WeeklyScores[w-1] = scoreKey
 			sm.ParticipationPts += scorePts[scoreKey]
+			if w <= completedWeeks {
+				weeks = append(weeks, weekInput{Week: w, Score: scoreKey, Points: scorePts[scoreKey]})
+			}
 
 			if mp != nil {
 				sm.WeeklyKeyEvent[w-1] = mp.keyEvents[w]
@@ -1654,23 +1676,21 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 			sm.PollsResponded, sm.PollsApplicable = &resp, &appl
 		}
 
-		sm.ParticipationPct = float64(sm.ParticipationPts) / float64(maxSeasonPts) * 100
+		var wars []warInput
+		for _, sw := range doneWars {
+			l := lineByWarMember[fmt.Sprintf("%d:%d", sw.ID, m.ID)]
+			wars = append(wars, warInput{Attended: l.attended, Poll: l.poll, PollHeld: sw.PollHeld})
+		}
+		sm.Standing = computeSeasonStanding(season, standingInputs{Weeks: weeks, Wars: wars, MaxWeekPts: maxPts})
+		sm.Standing.CompletedWeeks = completedWeeks
+		// Participation % is the overall standing's: points over the completed, unexcused weeks.
+		sm.ParticipationPct = sm.Standing.Overall.Pct
 
 		sm.ContributionTotal = contribByMember[m.ID]
 		sm.ContributionPct = float64(sm.ContributionTotal) / float64(topContrib) * 100
 		sm.Records = memberRecords[m.ID]
 		if sm.Records == nil {
 			sm.Records = map[string]int64{}
-		}
-
-		pct := sm.ParticipationPct
-		switch {
-		case pct >= float64(season.TierActiveMinPct):
-			sm.ClassTag = "Active Member"
-		case pct >= float64(season.TierAtRiskMinPct):
-			sm.ClassTag = "At Risk / Inconsistent"
-		default:
-			sm.ClassTag = "Dead Weight"
 		}
 
 		members = append(members, sm)

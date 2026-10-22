@@ -374,7 +374,7 @@
                     va = a.wars_completed != null ? a.wars_attended : a.key_event_attendance;
                     vb = b.wars_completed != null ? b.wars_attended : b.key_event_attendance;
                     break;
-                case 'class_tag':         va = a.class_tag;             vb = b.class_tag;               break;
+                case 'status':            va = statusSeverity(a);       vb = statusSeverity(b);         break;
                 case 'reward_tier':       va = tierSortIndex(a.reward_tier); vb = tierSortIndex(b.reward_tier); break;
                 default:                  va = 0; vb = 0;
             }
@@ -440,9 +440,9 @@
             tdKey.appendChild(eligSpan);
             tr.appendChild(tdKey);
 
-            // Class tag
+            // Status: the final badge and the three categories, each reason on hover or tap.
             const tdTag = document.createElement('td');
-            tdTag.appendChild(makeClassTag(m.class_tag));
+            tdTag.appendChild(makeStatusCell(m.standing));
             tr.appendChild(tdTag);
 
             // Reward tier
@@ -495,9 +495,12 @@
         bg.appendChild(fill);
         const label = document.createElement('span');
         label.className = 'pct-bar-label';
-        label.textContent = maxPts > 0
-            ? m.participation_pts + ' / ' + maxPts + ' pts'
-            : (m.participation_pct || 0).toFixed(1) + '%';
+        // Over the completed, unexcused weeks (the status engine's overall figure).
+        const ov = m.standing && m.standing.overall;
+        label.textContent = ov && ov.applicable
+            ? ov.numerator + ' / ' + ov.denominator + ' pts · ' + ov.pct.toFixed(1) + '%'
+            : 'no completed week yet';
+        if (ov) label.title = ov.reason;
         wrap.append(bg, label);
         td.appendChild(wrap);
 
@@ -510,7 +513,10 @@
                 const dot = document.createElement('span');
                 dot.className = 'week-dot';
                 const sl = scoreLevels.find(s => s.key === key);
-                if (!key) {
+                const done = m.standing && i < m.standing.completed_weeks;
+                if (!key && done) {
+                    dot.classList.add('dot-notscored');
+                } else if (!key) {
                     dot.classList.add('dot-empty');
                 } else if (sl && sl.points === maxWeekPts) {
                     dot.classList.add('dot-full');
@@ -519,7 +525,7 @@
                 } else {
                     dot.classList.add('dot-absent');
                 }
-                dot.title = 'Week ' + (i + 1) + ': ' + (sl ? sl.label : 'Not logged');
+                dot.title = 'Week ' + (i + 1) + ': ' + (sl ? sl.label : (done ? 'Not scored (counts as Absent)' : 'Not logged'));
                 dots.appendChild(dot);
             });
             td.appendChild(dots);
@@ -571,14 +577,39 @@
         return td;
     }
 
-    function makeClassTag(tag) {
+    // The status engine's labels (Pudgey's wording), keyed on the code.
+    const STATUS_LABELS = { active: 'Active', at_risk: 'At Risk', below: 'Below Requirement', na: 'Not yet rated' };
+    function makeStatusBadge(code, title) {
         const span = document.createElement('span');
-        span.className = 'class-tag';
-        if (tag === 'Active Member') span.classList.add('active-member');
-        else if (tag === 'At Risk / Inconsistent') span.classList.add('at-risk');
-        else span.classList.add('dead-weight');
-        span.textContent = tag || '';
+        span.className = 'status-badge status-' + (STATUS_LABELS[code] ? code : 'na');
+        span.textContent = STATUS_LABELS[code] || STATUS_LABELS.na;
+        if (title) span.title = title;
         return span;
+    }
+    function statusSeverity(m) {
+        const s = m.standing && m.standing.final;
+        return { below: 3, at_risk: 2, active: 1 }[s] || 0;
+    }
+    function makeStatusCell(st) {
+        const box = document.createElement('div');
+        if (!st) return box;
+        const from = st.final_from ? st[st.final_from] : null;
+        box.appendChild(makeStatusBadge(st.final, from ? from.reason : 'Nothing to judge yet'));
+        const cats = document.createElement('div');
+        cats.className = 'status-cats';
+        [['overall', 'Overall'], ['polls', 'Polls'], ['wars', 'Wars']].forEach(([k, label]) => {
+            const c = st[k];
+            if (!c) return;
+            const span = document.createElement('span');
+            span.className = 'status-cat-' + c.status;
+            span.textContent = label + ' ' + (c.applicable ? Math.round(c.pct) + '%' : 'n/a');
+            span.title = c.reason;
+            span.tabIndex = 0;
+            span.addEventListener('click', () => showToast(label + ': ' + c.reason, 'info', 6000));
+            cats.appendChild(span);
+        });
+        box.appendChild(cats);
+        return box;
     }
 
     // Reward tiers are per-season and configurable, so badges are driven by the
@@ -635,12 +666,12 @@
     }
     function countScores(m, key) {
         const n = elapsedWeeks();
-        return (m.weekly_scores || []).slice(0, n).filter(k => k === key).length;
+        // A completed week with no score counts as Absent (decision 4).
+        return (m.weekly_scores || []).slice(0, n).filter(k => k === key || (key === 'absent' && !k)).length;
     }
     // A member's standing code: the status engine's when present, else today's class tag.
     function participationStatus(m) {
-        if (m.standing && m.standing.final) return m.standing.final;
-        return { 'Active Member': 'active', 'At Risk / Inconsistent': 'at_risk', 'Dead Weight': 'below' }[m.class_tag] || '';
+        return (m.standing && m.standing.final) || '';
     }
     // Voted Yes on a war's poll and did not attend it.
     function yesVoteNoShow(m) {
