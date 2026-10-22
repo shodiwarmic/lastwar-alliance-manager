@@ -460,6 +460,7 @@ var seasonChildStatements = []string{
 	`DELETE FROM season_land_targets WHERE route_id IN (SELECT id FROM season_land_routes WHERE season_id = ?)`,
 	`DELETE FROM season_trade_post_observations WHERE post_id IN (SELECT id FROM season_trade_posts WHERE season_id = ?)`,
 	`DELETE FROM season_war_attendance WHERE war_id IN (SELECT id FROM season_wars WHERE season_id = ?)`,
+	`DELETE FROM season_participation_event_entries WHERE event_id IN (SELECT id FROM season_participation_events WHERE season_id = ?)`,
 }
 
 // seasonChildTables are deleted with their season, after its calendar purge. foreign_keys is
@@ -473,14 +474,14 @@ var seasonChildTables = []string{
 	"season_land_config", "season_land_levels", "season_land_routes", "season_land_events", "season_land_drops",
 	"season_land_snapshots", "season_war_config", "season_opponent_observations",
 	"season_wars", "season_faction_battles", "season_resource_observations", "season_rank_groups", "season_rank_cutoffs",
-	"season_trade_posts",
+	"season_trade_posts", "season_participation_events",
 }
 
 // seasonMemberTables are deleted with a member (deleteMemberTx): a member delete removes the
 // member's history everywhere, archived seasons included.
 var seasonMemberTables = []string{
 	"season_participation", "season_member_records", "season_rewards", "season_roster_snapshot",
-	"season_war_attendance",
+	"season_war_attendance", "season_participation_event_entries",
 }
 
 // seasonUserColumns are nulled when a user is deleted (clearUserReferences); the rows stay.

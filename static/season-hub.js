@@ -612,17 +612,171 @@
     // unsaved edit. saveParticipation walks all rows, so hidden members still save.
     // A season with wars gives each member a second row (the week's war detail) in the same
     // tbody, so the search hides the group: rows are the member rows, groups their tbodies.
+    // The week's wars and their attendance (private-docs 282) and the season's weekly events and
+    // their results (281), from the participation GET.
+    let partHasWars = false;
+    let partWars = [];
+    let partAttendance = {};
+    let partEvents = [];
+    let partEventEntries = {};
+    // The grid's order (default rank R5→R1, then name) and filters; the toolbar Sort select and
+    // the header clicks share the state (TableSort).
+    const RANK_ORDER = ['R5', 'R4', 'R3', 'R2', 'R1'];
+    const partSort = { col: 'rankname', asc: true };
+    const partFilters = { ranks: new Set(), results: new Set(), statuses: new Set(), noShow: false };
+    const EVENT_RESULTS = [['', '—'], ['full', 'Full'], ['partial', 'Partial'], ['absent', 'Absent'], ['excused', 'Excused'], ['completed', 'Completed'], ['na', 'N/A']];
+
+    // Weeks of the season that have ended, for the absence and partial counts.
+    function elapsedWeeks() {
+        if (!activeSeason || !activeSeason.start_date) return 0;
+        const start = new Date(activeSeason.start_date + 'T00:00:00Z');
+        const now = new Date(Date.now() - 2 * 3600e3);
+        return Math.max(0, Math.min(activeSeason.week_count, Math.floor((now - start) / (7 * 86400e3))));
+    }
+    function countScores(m, key) {
+        const n = elapsedWeeks();
+        return (m.weekly_scores || []).slice(0, n).filter(k => k === key).length;
+    }
+    // A member's standing code: the status engine's when present, else today's class tag.
+    function participationStatus(m) {
+        if (m.standing && m.standing.final) return m.standing.final;
+        return { 'Active Member': 'active', 'At Risk / Inconsistent': 'at_risk', 'Dead Weight': 'below' }[m.class_tag] || '';
+    }
+    // Voted Yes on a war's poll and did not attend it.
+    function yesVoteNoShow(m) {
+        return partWars.some(w => { const a = partAttendance[w.id + ':' + m.member_id]; return a && a.poll_response === 'yes' && a.attended === false; });
+    }
+    function partSortValue(row, key) {
+        const m = row._member;
+        if (!m) return undefined;
+        switch (key) {
+            case 'rankname': {
+                const i = RANK_ORDER.indexOf(m.rank);
+                return (i < 0 ? 9 : i) + '|' + foldSearch(m.name);
+            }
+            case 'name': return m.name;
+            case 'pct': return m.participation_pct;
+            case 'wars': return m.wars_completed != null ? (m.wars_completed ? m.wars_attended / m.wars_completed : null) : m.key_event_attendance;
+            case 'absences': return countScores(m, 'absent');
+            case 'partials': return countScores(m, 'partial');
+        }
+        return undefined;
+    }
+    const partTable = document.getElementById('participation-table');
+    const partSorter = partTable && window.TableSort ? TableSort.attach(partTable, {
+        state: partSort, groups: true, value: partSortValue,
+        types: { pct: 'number', wars: 'number', absences: 'number', partials: 'number' },
+        onChange: st => {
+            const sel = document.getElementById('participation-sort');
+            if (sel) sel.value = Array.from(sel.options).some(o => o.value === st.col + '|' + (st.asc ? 'asc' : 'desc')) ? st.col + '|' + (st.asc ? 'asc' : 'desc') : sel.value;
+        },
+    }) : null;
+    const partSortSel = document.getElementById('participation-sort');
+    if (partSortSel && partSorter) {
+        partSortSel.addEventListener('change', () => {
+            const [col, dir] = partSortSel.value.split('|');
+            partSorter.sort(col, dir === 'asc');
+        });
+    }
+    const partFiltersBtn = document.getElementById('btn-participation-filters');
+    if (partFiltersBtn) {
+        partFiltersBtn.addEventListener('click', () => {
+            const box = document.getElementById('participation-filters');
+            const open = box.style.display === 'none';
+            box.style.display = open ? '' : 'none';
+            partFiltersBtn.setAttribute('aria-expanded', String(open));
+        });
+    }
+
+    // The filter chips: ranks, this week's result, status and Yes-vote no-show. Within a row the
+    // chips are alternatives; across rows they combine.
+    function renderParticipationFilters() {
+        const box = document.getElementById('participation-filters');
+        if (!box) return;
+        const chipRow = (label, items, set) => {
+            const row = document.createElement('div');
+            row.className = 'participation-filter-row';
+            const lab = document.createElement('span');
+            lab.className = 'filter-chip-label';
+            lab.textContent = label;
+            row.appendChild(lab);
+            items.forEach(([v, t]) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'filter-chip' + (set.has(v) ? ' active' : '');
+                b.textContent = t;
+                b.addEventListener('click', () => {
+                    if (set.has(v)) set.delete(v); else set.add(v);
+                    b.classList.toggle('active', set.has(v));
+                    applyParticipationFilters();
+                });
+                row.appendChild(b);
+            });
+            return row;
+        };
+        const noShow = document.createElement('div');
+        noShow.className = 'participation-filter-row';
+        const nb = document.createElement('button');
+        nb.type = 'button';
+        nb.className = 'filter-chip' + (partFilters.noShow ? ' active' : '');
+        nb.textContent = 'Voted Yes, did not attend';
+        nb.addEventListener('click', () => { partFilters.noShow = !partFilters.noShow; nb.classList.toggle('active', partFilters.noShow); applyParticipationFilters(); });
+        noShow.appendChild(nb);
+        const clear = document.createElement('button');
+        clear.type = 'button';
+        clear.className = 'btn btn-secondary btn-sm';
+        clear.textContent = 'Clear filters';
+        clear.addEventListener('click', () => {
+            partFilters.ranks.clear(); partFilters.results.clear(); partFilters.statuses.clear(); partFilters.noShow = false;
+            renderParticipationFilters();
+            applyParticipationFilters();
+        });
+        box.replaceChildren(
+            chipRow('Rank', RANK_ORDER.map(r => [r, r]), partFilters.ranks),
+            chipRow('This week', scoreLevels.map(sl => [sl.key, sl.label]), partFilters.results),
+            chipRow('Status', [['active', 'Active'], ['at_risk', 'At Risk'], ['below', 'Below Requirement']], partFilters.statuses),
+            partHasWars ? noShow : null, clear);
+        const n = partFilters.ranks.size + partFilters.results.size + partFilters.statuses.size + (partFilters.noShow ? 1 : 0);
+        if (partFiltersBtn) partFiltersBtn.textContent = n ? 'Filters (' + n + ')' : 'Filters';
+    }
+
+    // Hide the member groups the filters and the search rule out; the save still walks them all.
+    function applyParticipationFilters() {
+        const table = document.getElementById('participation-table');
+        if (!table) return;
+        const q = (document.getElementById('participation-search') || {}).value || '';
+        let shown = 0, total = 0;
+        table.querySelectorAll('tbody.part-member').forEach(g => {
+            const row = g.rows[0];
+            const m = row && row._member;
+            if (!m) return;
+            total++;
+            const score = row.querySelector('.score-select');
+            const ok = (!partFilters.ranks.size || partFilters.ranks.has(m.rank)) &&
+                (!partFilters.results.size || (score && partFilters.results.has(score.value))) &&
+                (!partFilters.statuses.size || partFilters.statuses.has(participationStatus(m))) &&
+                (!partFilters.noShow || yesVoteNoShow(m)) &&
+                (!q.trim() || QuickSearch.match(row.dataset.search || '', q));
+            g.style.display = ok ? '' : 'none';
+            if (ok) shown++;
+        });
+        const n = partFilters.ranks.size + partFilters.results.size + partFilters.statuses.size + (partFilters.noShow ? 1 : 0);
+        if (partFiltersBtn) partFiltersBtn.textContent = n ? 'Filters (' + n + ')' : 'Filters';
+        const status = document.getElementById('participation-status');
+        if (status) status.textContent = shown < total ? shown + ' of ' + total + ' shown' : '';
+    }
+
+    // The filters (rank, this week's result, status, Yes-vote no-show) combine with the search,
+    // so the search hands its query to applyParticipationFilters rather than hiding rows itself.
+    // Attached after the filter state: attach runs the query once straight away.
     QuickSearch.attach({
         input: 'participation-search',
         container: 'participation-table',
         rows: 'tr[data-member-id]',
         groups: 'tbody.part-member',
         emptyText: 'No members match your search.',
+        onQuery: () => applyParticipationFilters(),
     });
-    // The week's wars and their attendance (private-docs 282), from the participation GET.
-    let partHasWars = false;
-    let partWars = [];
-    let partAttendance = {};
 
     function populateWeekSelect() {
         const sel = document.getElementById('week-select');
@@ -675,6 +829,9 @@
                 partWars = data.wars || [];
                 partAttendance = {};
                 (data.war_attendance || []).forEach(a => { partAttendance[a.war_id + ':' + a.member_id] = a; });
+                partEvents = data.events || [];
+                partEventEntries = {};
+                (data.event_entries || []).forEach(x => { partEventEntries[x.event_id + ':' + x.member_id] = x; });
                 renderParticipationRows(data.entries, week);
             })
             .catch(() => showToast('Failed to load participation.', 'error'));
@@ -688,8 +845,12 @@
         table.classList.toggle('part-wars-mode', partHasWars);
         table.classList.toggle('part-legacy-mode', !partHasWars);
         const weekWars = partWars.filter(w => w.week_number === week);
+        const weekEvents = partEvents.filter(e => e.week_number === week);
+        // The Detail column: the week's events (any season) and wars (a season with wars).
+        const hasDetail = partHasWars || partEvents.length > 0;
+        table.classList.toggle('part-no-detail', !hasDetail);
         const allBtn = document.getElementById('btn-war-detail-all');
-        if (allBtn) allBtn.style.display = partHasWars && CAN_MANAGE ? '' : 'none';
+        if (allBtn) allBtn.style.display = hasDetail && CAN_MANAGE ? '' : 'none';
         const impBtn = document.getElementById('btn-import-attendance');
         if (impBtn) impBtn.style.display = partHasWars && CAN_MANAGE ? '' : 'none';
 
@@ -703,7 +864,8 @@
             // Non-managers see only themselves; still show the row
         }
 
-        const members = CAN_MANAGE ? allMembers.filter(m => m.rank !== 'EX') : allMembers;
+        const members = (CAN_MANAGE ? allMembers.filter(m => m.rank !== 'EX') : allMembers).slice()
+            .sort((a, b) => foldSearch(a.name).localeCompare(foldSearch(b.name)));
 
         const rows = members.map(m => {
             const e = existing[m.member_id] || {};
@@ -711,6 +873,7 @@
             tr.dataset.memberId = m.member_id;
             tr.dataset.search = m.name + ' ' + m.rank;
             tr._entry = e;
+            tr._member = m;
 
             const tdName = document.createElement('td');
             tdName.textContent = m.name;
@@ -737,18 +900,22 @@
             tdScore.appendChild(sel);
             tr.appendChild(tdScore);
 
-            // This week's wars: a toggle for the member's detail row.
+            // This week's events and wars: a toggle for the member's detail row.
             const tdWars = document.createElement('td');
             tdWars.className = 'wars-col';
             let detail = null;
-            if (partHasWars) {
-                detail = buildWarDetailRow(m, weekWars);
+            if (hasDetail) {
+                detail = buildWarDetailRow(m, weekWars, weekEvents);
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'btn btn-secondary btn-sm war-detail-toggle';
                 const known = weekWars.filter(w => { const a = partAttendance[w.id + ':' + m.member_id]; return a && a.attended != null; }).length;
-                btn.textContent = weekWars.length ? weekWars.length + ' war' + (weekWars.length === 1 ? '' : 's') + ' · ' + known + ' recorded' : 'No wars';
-                btn.disabled = !weekWars.length;
+                const results = weekEvents.filter(ev => partEventEntries[ev.id + ':' + m.member_id]).length;
+                const parts = [];
+                if (weekEvents.length) parts.push(results + ' of ' + weekEvents.length + ' events');
+                if (weekWars.length) parts.push(known + ' of ' + weekWars.length + ' wars');
+                btn.textContent = parts.length ? parts.join(' · ') : 'Nothing this week';
+                btn.disabled = !parts.length;
                 btn.setAttribute('aria-expanded', 'false');
                 btn.addEventListener('click', () => {
                     const open = detail.style.display === 'none';
@@ -822,12 +989,76 @@
 
         table.querySelectorAll('tbody').forEach(tb => tb.remove());
         rows.forEach(g => table.appendChild(g));
-        QuickSearch.apply('participation-search');
+        if (partSorter) partSorter.apply();
+        renderParticipationFilters();
+        renderWeekEventsManager(week, weekEvents);
+        applyParticipationFilters();
     }
 
-    // One member's war detail: per war of the week, attended (unknown / yes / no), the in-game
-    // poll (no response / yes / no) and a note. Unknown is not absent.
-    function buildWarDetailRow(m, weekWars) {
+    // Events this week: managers add, rename, mark Core-required, order and remove them.
+    function renderWeekEventsManager(week, weekEvents) {
+        const wrap = document.getElementById('week-events-manage');
+        const body = document.getElementById('week-events-body');
+        if (!wrap || !body) return;
+        wrap.style.display = CAN_MANAGE && activeSeason && !activeSeason.archived_at ? '' : 'none';
+        const send = (method, url, data) => fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: data ? JSON.stringify(data) : undefined })
+            .then(async r => { if (!r.ok) throw new Error((await r.text()) || 'Request failed'); return r.json(); });
+        const list = document.createElement('div');
+        list.className = 'week-events-list';
+        const saveOrder = () => send('PUT', '/api/season-hub/participation-events/order', { ids: Array.from(list.children).map(r => r._id) })
+            .catch(err => showToast(err.message, 'error'));
+        weekEvents.forEach(ev => {
+            const row = document.createElement('div');
+            row.className = 'week-event-row';
+            row._id = ev.id;
+            const label = Object.assign(document.createElement('input'), { type: 'text', className: 'form-input', value: ev.label });
+            label.setAttribute('aria-label', 'Event');
+            const kind = Object.assign(document.createElement('input'), { type: 'text', className: 'form-input', value: ev.kind, placeholder: 'kind' });
+            kind.setAttribute('aria-label', 'Kind');
+            const req = Object.assign(document.createElement('input'), { type: 'checkbox', checked: ev.required_for_core });
+            const reqLab = document.createElement('label');
+            reqLab.className = 'week-event-core';
+            reqLab.append(req, ' Core');
+            const save = Object.assign(document.createElement('button'), { type: 'button', className: 'btn btn-secondary btn-sm', textContent: 'Save' });
+            save.addEventListener('click', () => send('PUT', '/api/season-hub/participation-events/' + ev.id,
+                { label: label.value.trim(), kind: kind.value.trim(), required_for_core: req.checked })
+                .then(() => { showToast('Event saved.'); loadParticipationWeek(); }).catch(err => showToast(err.message, 'error')));
+            const del = Object.assign(document.createElement('button'), { type: 'button', className: 'btn btn-danger btn-sm' });
+            del.setAttribute('aria-label', 'Remove event');
+            del.appendChild(svgIcon('x'));
+            del.addEventListener('click', async () => {
+                if (!await showConfirm('Remove ' + ev.label + ' and every member\'s result in it?', 'Remove')) return;
+                send('DELETE', '/api/season-hub/participation-events/' + ev.id).then(() => loadParticipationWeek())
+                    .catch(err => showToast(err.message, 'error'));
+            });
+            row.append(buildOrderButtons(row, saveOrder), label, kind, reqLab, save, del);
+            list.appendChild(row);
+        });
+        refreshOrderButtons(list);
+        const nl = Object.assign(document.createElement('input'), { type: 'text', className: 'form-input', placeholder: 'e.g. Monday VS' });
+        nl.setAttribute('aria-label', 'New event');
+        const nk = Object.assign(document.createElement('input'), { type: 'text', className: 'form-input', placeholder: 'kind' });
+        nk.setAttribute('aria-label', 'Kind');
+        const nr = Object.assign(document.createElement('input'), { type: 'checkbox' });
+        const nrLab = document.createElement('label');
+        nrLab.className = 'week-event-core';
+        nrLab.append(nr, ' Core');
+        const add = Object.assign(document.createElement('button'), { type: 'button', className: 'btn btn-primary btn-sm', textContent: '+ Event' });
+        add.addEventListener('click', () => send('POST', '/api/season-hub/participation-events',
+            { season_id: activeSeason.id, week_number: week, label: nl.value.trim(), kind: nk.value.trim(), required_for_core: nr.checked })
+            .then(() => loadParticipationWeek()).catch(err => showToast(err.message, 'error')));
+        const addRow = document.createElement('div');
+        addRow.className = 'week-event-row week-event-add';
+        addRow.append(nl, nk, nrLab, add);
+        const note = Object.assign(document.createElement('p'), { className: 'hub-section-note',
+            textContent: 'Each member\'s result in these appears in their detail row. The week\'s score stays yours to set.' });
+        body.replaceChildren(note, list, addRow);
+    }
+
+    // One member's detail row: per event of the week, the result and a note (281); per war,
+    // attended (unknown / yes / no), the in-game poll (no response / yes / no) and a note (282).
+    // Unknown is not absent.
+    function buildWarDetailRow(m, weekWars, weekEvents) {
         const tr = document.createElement('tr');
         tr.className = 'war-detail-row';
         tr.style.display = 'none';
@@ -835,6 +1066,35 @@
         td.colSpan = 10;
         const box = document.createElement('div');
         box.className = 'war-detail';
+        const mkField = (label, ctl) => {
+            const lab = document.createElement('label');
+            lab.className = 'war-detail-field';
+            const span = document.createElement('span');
+            span.textContent = label;
+            lab.append(span, ctl);
+            return lab;
+        };
+        (weekEvents || []).forEach(ev => {
+            const x = partEventEntries[ev.id + ':' + m.member_id] || {};
+            const block = document.createElement('div');
+            block.className = 'war-detail-war week-event-detail';
+            block.dataset.eventId = ev.id;
+            const head = document.createElement('div');
+            head.className = 'war-detail-head';
+            head.textContent = ev.label + (ev.required_for_core ? ' · Core' : '');
+            const s = document.createElement('select');
+            s.className = 'form-input event-result';
+            EVENT_RESULTS.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.appendChild(o); });
+            s.value = x.result || '';
+            const note = document.createElement('input');
+            note.type = 'text';
+            note.className = 'form-input event-note';
+            note.placeholder = 'Note';
+            note.value = x.note || '';
+            note.setAttribute('aria-label', 'Note');
+            block.append(head, mkField('Result', s), note);
+            box.appendChild(block);
+        });
         weekWars.forEach(w => {
             const a = partAttendance[w.id + ':' + m.member_id] || {};
             const block = document.createElement('div');
@@ -881,7 +1141,7 @@
             const open = Array.from(rows).some(r => r.style.display === 'none');
             rows.forEach(r => { r.style.display = open ? '' : 'none'; });
             document.querySelectorAll('#participation-table .war-detail-toggle').forEach(b => b.setAttribute('aria-expanded', String(open)));
-            btnWarDetailAll.textContent = open ? 'Hide war detail' : 'Show war detail';
+            btnWarDetailAll.textContent = open ? 'Hide detail' : 'Show detail';
         });
     }
     const btnImportAttendance = document.getElementById('btn-import-attendance');
@@ -911,9 +1171,14 @@
             if (!memberId) return;
             // The week's wars, from the member's detail row (the next row in its group).
             const wars = [];
+            const events = [];
             const detail = tr.nextElementSibling;
             if (detail && detail.classList.contains('war-detail-row')) {
-                detail.querySelectorAll('.war-detail-war').forEach(b => {
+                detail.querySelectorAll('.week-event-detail').forEach(b => {
+                    events.push({ event_id: parseInt(b.dataset.eventId, 10), result: b.querySelector('.event-result').value,
+                        note: b.querySelector('.event-note').value });
+                });
+                detail.querySelectorAll('.war-detail-war:not(.week-event-detail)').forEach(b => {
                     const att = b.querySelector('.war-att-attended').value;
                     wars.push({ war_id: parseInt(b.dataset.warId, 10), attended: att === '' ? null : att === 'yes',
                         poll_response: b.querySelector('.war-att-poll').value, note: b.querySelector('.war-att-note').value });
@@ -934,6 +1199,7 @@
                 attack_poll_voted:  tr.querySelector('.attack-poll-check').checked,
                 defense_poll_voted: tr.querySelector('.defense-poll-check').checked,
                 wars,
+                events,
             });
         });
 

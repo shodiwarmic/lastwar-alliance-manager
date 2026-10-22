@@ -59,6 +59,21 @@
     const readNum = inp => inp.value === '' ? null : Number(inp.value);
     const nowST = () => { const g = new Date(Date.now() - 2 * 3600e3); return g.toISOString().slice(0, 16); };
     const editable = () => CAN_MANAGE && season && !season.archived_at;
+
+    // Click-to-sort headers (TableSort): [label, key, type] per column; key '' is not sortable.
+    // The state outlives a re-render, so a re-drawn table keeps its order.
+    const sortStates = {};
+    function sortHead(cols) {
+        return el('thead', null, el('tr', null, cols.map(([t, key, type]) =>
+            el('th', { textContent: t, translate: 'yes', 'data-sort': key || null, 'data-sort-type': key ? (type || 'text') : null }))));
+    }
+    function sortable(table, name) {
+        if (!window.TableSort) return table;
+        sortStates[name] = sortStates[name] || { col: null, asc: true };
+        TableSort.attach(table, { state: sortStates[name] }).apply();
+        return table;
+    }
+
     const compact = v => v == null ? '—' : formatCompact(v);
     const utcToST = s => {
         if (!s) return '';
@@ -725,12 +740,12 @@
         const rows = data.observations.map(ob => el('tr', null,
             el('td', { textContent: ob.observed_at }),
             el('td', { textContent: ob.is_own ? 'Ours' : (names[ob.season_alliance_id] || '—') }),
-            el('td', { 'data-export-value': ob.alliance_power ?? '', textContent: compact(ob.alliance_power) }),
+            el('td', { 'data-export-value': ob.alliance_power ?? '', 'data-sort-value': ob.alliance_power ?? '', textContent: compact(ob.alliance_power) }),
             el('td', { textContent: ob.member_count ?? '—' }),
             el('td', { textContent: ob.group_rank ?? '—' }),
-            el('td', { 'data-export-value': ob.top10_thp ?? '', textContent: compact(ob.top10_thp) }),
-            el('td', { 'data-export-value': ob.top5_thp ?? '', textContent: compact(ob.top5_thp) }),
-            el('td', { 'data-export-value': ob.top3_thp ?? '', textContent: compact(ob.top3_thp) }),
+            el('td', { 'data-export-value': ob.top10_thp ?? '', 'data-sort-value': ob.top10_thp ?? '', textContent: compact(ob.top10_thp) }),
+            el('td', { 'data-export-value': ob.top5_thp ?? '', 'data-sort-value': ob.top5_thp ?? '', textContent: compact(ob.top5_thp) }),
+            el('td', { 'data-export-value': ob.top3_thp ?? '', 'data-sort-value': ob.top3_thp ?? '', textContent: compact(ob.top3_thp) }),
             el('td', { textContent: ob.source }),
             el('td', null, ro ? null : el('button', { type: 'button', className: 'btn btn-danger btn-sm', 'aria-label': 'Delete observation', onclick: async () => {
                 if (!await showConfirm('Delete this observation?', 'Delete')) return;
@@ -738,10 +753,10 @@
                     .catch(err => showToast(err.message, 'error'));
             } }, svgIcon('x')))));
         box.replaceChildren(el('div', { className: 'table-scroll land-events-scroll' },
-            el('table', { className: 'data-table war-obs-table', translate: 'no' },
-                el('thead', null, el('tr', null, ['Observed (ST)', 'Alliance', 'Power', 'Members', 'Rank', 'Top 10', 'Top 5', 'Top 3', 'Source', '']
-                    .map(t => el('th', { textContent: t, translate: 'yes' })))),
-                el('tbody', null, rows.length ? rows : el('tr', null, el('td', { colspan: '10', className: 'loading-msg', translate: 'yes', textContent: 'No observations yet.' }))))));
+            sortable(el('table', { className: 'data-table war-obs-table', translate: 'no' },
+                sortHead([['Observed (ST)', 'at', 'date'], ['Alliance', 'alliance'], ['Power', 'power', 'number'], ['Members', 'members', 'number'],
+                    ['Rank', 'rank', 'number'], ['Top 10', 'top10', 'number'], ['Top 5', 'top5', 'number'], ['Top 3', 'top3', 'number'], ['Source', 'source'], ['']]),
+                el('tbody', null, rows.length ? rows : el('tr', null, el('td', { colspan: '10', className: 'loading-msg', translate: 'yes', textContent: 'No observations yet.' })))), 'observations')));
     }
 
     // ── Settings ─────────────────────────────────────────────────────────────

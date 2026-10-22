@@ -72,6 +72,7 @@ const ENTITY_LABELS = {
     season_resource_observation: 'resource total',
     season_rank_cutoff:    'rank cutoff',
     season_trade_post:     'trade post',
+    season_participation_event: 'season week event',
     season_import:         'season import',
     poll_template:         'Poll Template',
     poll_instance:         'Poll',

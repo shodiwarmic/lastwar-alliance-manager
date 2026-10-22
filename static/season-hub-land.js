@@ -61,6 +61,21 @@
     const stValue = inp => inp.value ? inp.value.replace('T', ' ').slice(0, 16) : '';
     const editable = () => CAN_MANAGE && season && !season.archived_at;
 
+    // Click-to-sort headers (TableSort): [label, key, type] per column; key '' is not sortable.
+    // The state outlives a re-render, so a re-drawn table keeps its order.
+    const sortStates = {};
+    function sortHead(cols) {
+        return el('thead', null, el('tr', null, cols.map(([t, key, type]) =>
+            el('th', { textContent: t, translate: 'yes', 'data-sort': key || null, 'data-sort-type': key ? (type || 'text') : null }))));
+    }
+    function sortable(table, name) {
+        if (!window.TableSort) return table;
+        sortStates[name] = sortStates[name] || { col: null, asc: true };
+        TableSort.attach(table, { state: sortStates[name] }).apply();
+        return table;
+    }
+
+
     async function api(url, opts) {
         const res = await fetch(url, opts);
         if (!res.ok) throw new Error((await res.text()) || 'Request failed');
@@ -360,13 +375,13 @@
         const rows = data.holdings.map(h => el('tr', null,
             el('td', { translate: 'no' }, h.name + (h.area_id ? ' (#' + h.area_id + ')' : '')),
             el('td', { textContent: kindLabel(h.kind) }),
-            el('td', { textContent: h.level ? 'L' + h.level : '' }),
+            el('td', { textContent: h.level ? 'L' + h.level : '', 'data-sort-value': h.level ?? '' }),
             el('td', { textContent: h.captured_at }),
             el('td', null, editable() && (h.kind === 'city' || h.kind === 'stronghold' || h.kind === 'capitol')
                 ? el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => openDropModal({ holding: h }) }, 'Drop') : null)));
-        const table = el('div', { className: 'table-scroll' }, el('table', { className: 'data-table land-holdings', translate: 'no' },
-            el('thead', null, el('tr', null, ['Area', 'Kind', 'Level', 'Captured (ST)', ''].map(t => el('th', { textContent: t, translate: 'yes' })))),
-            el('tbody', null, rows.length ? rows : el('tr', null, el('td', { colspan: '5', className: 'loading-msg', translate: 'yes', textContent: 'Nothing held — record a capture below.' })))));
+        const table = el('div', { className: 'table-scroll' }, sortable(el('table', { className: 'data-table land-holdings', translate: 'no' },
+            sortHead([['Area', 'area'], ['Kind', 'kind'], ['Level', 'level', 'number'], ['Captured (ST)', 'at', 'date'], ['']]),
+            el('tbody', null, rows.length ? rows : el('tr', null, el('td', { colspan: '5', className: 'loading-msg', translate: 'yes', textContent: 'Nothing held — record a capture below.' })))), 'holdings'));
         return section('Holdings', table);
     }
 
@@ -457,9 +472,9 @@
                 api('/api/season-hub/land/events/' + e.id, { method: 'DELETE' }).then(() => load(true))
                     .catch(err => showToast(err.message, 'error'));
             } }, svgIcon('x')))));
-        parts.push(el('div', { className: 'table-scroll land-events-scroll' }, el('table', { className: 'data-table land-events', translate: 'no' },
-            el('thead', null, el('tr', null, ['When (ST)', 'Area', 'Kind', 'What', 'Source', ''].map(t => el('th', { textContent: t, translate: 'yes' })))),
-            el('tbody', null, rows.length ? rows : el('tr', null, el('td', { colspan: '6', className: 'loading-msg', translate: 'yes', textContent: 'No events recorded.' }))))));
+        parts.push(el('div', { className: 'table-scroll land-events-scroll' }, sortable(el('table', { className: 'data-table land-events', translate: 'no' },
+            sortHead([['When (ST)', 'at', 'date'], ['Area', 'area'], ['Kind', 'kind'], ['What', 'action'], ['Source', 'source'], ['']]),
+            el('tbody', null, rows.length ? rows : el('tr', null, el('td', { colspan: '6', className: 'loading-msg', translate: 'yes', textContent: 'No events recorded.' })))), 'events')));
         return section('Events', ...parts);
     }
 
@@ -651,8 +666,10 @@
         };
         (data.levels || []).forEach(addRow);
         const table = el('div', { className: 'table-scroll' }, el('table', { className: 'data-table land-levels' },
-            el('thead', null, el('tr', null, ['Kind', 'Level', 'Name', 'Output / h', 'Unlock week', 'Unlock day', 'Source', ''].map(h => el('th', { textContent: h })))),
+            sortHead([['Kind', 'kind'], ['Level', 'level', 'number'], ['Name', 'name'], ['Output / h', 'out', 'number'], ['Unlock week', 'week', 'number'],
+                ['Unlock day', 'day', 'number'], ['Source', 'source'], ['']]),
             tbody));
+        sortable(table.firstChild, 'levels');
         const levelBar = ro ? null : el('div', { className: 'tab-toolbar' },
             el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => addRow({}) }, '+ Level'),
             el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => window.SeasonHub.openImport({

@@ -504,6 +504,11 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/land/drops", authMiddleware(requirePermission("manage_season_land", handleSeasonLandDropCreate))).Methods("POST")
 	router.HandleFunc("/api/season-hub/land/drops/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_land", handleSeasonLandDropUpdate))).Methods("PUT")
 	// War (private-docs 277–280): view_season_war reads; manage_season_war writes.
+	// The weekly event detail (private-docs 281), with the participation it belongs to.
+	router.HandleFunc("/api/season-hub/participation-events", authMiddleware(requirePermission("manage_season_participation", handleWeekEventCreate))).Methods("POST")
+	router.HandleFunc("/api/season-hub/participation-events/order", authMiddleware(requirePermission("manage_season_participation", handleWeekEventOrder))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/participation-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_participation", handleWeekEventUpdate))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/participation-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_participation", handleWeekEventDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/war", authMiddleware(requirePermission("view_season_war", handleSeasonWarGet))).Methods("GET")
 	router.HandleFunc("/api/season-hub/war/config", authMiddleware(requireAnyPermission([]string{"manage_season_war", "manage_season_config"}, handleSeasonWarConfigPut))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/war/observations", authMiddleware(requirePermission("manage_season_war", handleSeasonWarObservationCreate))).Methods("POST")

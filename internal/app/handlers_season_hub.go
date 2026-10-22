@@ -193,6 +193,8 @@ type ParticipationEntry struct {
 	DefensePollVoted bool `json:"defense_poll_voted"`
 	// Each of the week's wars: attended and the poll response (private-docs 282).
 	Wars []warAttendanceIn `json:"wars"`
+	// Each of the week's events: the member's result (private-docs 281).
+	Events []weekEventIn `json:"events"`
 }
 
 type ContributionImportRow struct {
@@ -1785,9 +1787,22 @@ func handleParticipationGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	events, err := loadWeekEvents(db, season.ID)
+	if err != nil {
+		slog.Error("handleParticipationGet: events", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	eventEntries, err := loadWeekEventEntries(db, season.ID)
+	if err != nil {
+		slog.Error("handleParticipationGet: event entries", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"season_id": season.ID, "entries": entries, "has_wars": hasWars,
-		"wars": wars, "war_attendance": attendance})
+		"wars": wars, "war_attendance": attendance, "events": events, "event_entries": eventEntries})
 }
 
 func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
@@ -1849,7 +1864,29 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 	for _, wr := range attendWars {
 		warOK[wr.ID] = true
 	}
+	weekEvents, err := loadWeekEvents(db, body.SeasonID)
+	if err != nil {
+		slog.Error("handleParticipationSave: events", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	eventOK := map[int]bool{}
+	for _, ev := range weekEvents {
+		if ev.WeekNumber == body.WeekNumber {
+			eventOK[ev.ID] = true
+		}
+	}
 	for _, e := range body.Entries {
+		for _, ev := range e.Events {
+			if !eventOK[ev.EventID] {
+				http.Error(w, fmt.Sprintf("event %d is not one of week %d's events", ev.EventID, body.WeekNumber), http.StatusBadRequest)
+				return
+			}
+			if ev.Result != "" && !validEventResults[ev.Result] {
+				http.Error(w, "an event result is full, partial, absent, excused, completed or na", http.StatusBadRequest)
+				return
+			}
+		}
 		for _, wa := range e.Wars {
 			if !warOK[wa.WarID] {
 				http.Error(w, fmt.Sprintf("war %d is not one of this season's wars taking attendance", wa.WarID), http.StatusBadRequest)
@@ -1900,6 +1937,13 @@ func handleParticipationSave(w http.ResponseWriter, r *http.Request) {
 			slog.Error("handleParticipationSave: upsert", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
+		}
+		for _, ev := range e.Events {
+			if err := writeWeekEventEntryTx(tx, e.MemberID, ev); err != nil {
+				slog.Error("handleParticipationSave: event result", "error", err)
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
 		}
 		for _, wa := range e.Wars {
 			if _, err := writeWarAttendanceTx(tx, e.MemberID, wa, user.ID); err != nil {

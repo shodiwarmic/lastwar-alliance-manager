@@ -717,7 +717,42 @@ CREATE TABLE IF NOT EXISTS season_war_attendance (
 CREATE INDEX IF NOT EXISTS idx_season_war_attendance_member ON season_war_attendance(member_id);
 -- +goose StatementEnd
 
+
+
+-- ── 281: weekly event detail ────────────────────────────────────────────────
+-- The events of a season week that make up its Core set (label, kind, required for Core), and
+-- each member's result in each. The weekly score stays the one officers assign; the detail
+-- neither sets nor suggests it.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_participation_events (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id         INTEGER NOT NULL REFERENCES seasons(id),
+    week_number       INTEGER NOT NULL,
+    label             TEXT    NOT NULL,
+    kind              TEXT    NOT NULL DEFAULT '',
+    required_for_core INTEGER NOT NULL DEFAULT 0,
+    position          INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(season_id, week_number, label)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_participation_event_entries (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id  INTEGER NOT NULL REFERENCES season_participation_events(id),
+    member_id INTEGER NOT NULL REFERENCES members(id),
+    result    TEXT    NOT NULL CHECK(result IN ('full','partial','absent','excused','completed','na')),
+    note      TEXT    NOT NULL DEFAULT '',
+    UNIQUE(event_id, member_id)
+);
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_participation_event_entries;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_participation_events;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP INDEX IF EXISTS idx_season_war_attendance_member;
 -- +goose StatementEnd
