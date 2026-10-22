@@ -74,6 +74,7 @@ const ENTITY_LABELS = {
     season_trade_post:     'trade post',
     season_participation_event: 'season week event',
     season_exemption:      'season exemption',
+    season_poll_review:    'war poll review',
     season_import:         'season import',
     poll_template:         'Poll Template',
     poll_instance:         'Poll',

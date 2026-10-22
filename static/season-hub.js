@@ -444,6 +444,12 @@
             // Status: the final badge and the three categories, each reason on hover or tap.
             const tdTag = document.createElement('td');
             tdTag.appendChild(makeStatusCell(m.standing));
+            if (m.season_strikes) {
+                const st = document.createElement('span');
+                st.className = 'status-strikes';
+                st.textContent = m.season_strikes + ' season strike' + (m.season_strikes === 1 ? '' : 's');
+                tdTag.appendChild(st);
+            }
             tr.appendChild(tdTag);
 
             // Reward tier
@@ -655,7 +661,7 @@
     // the header clicks share the state (TableSort).
     const RANK_ORDER = ['R5', 'R4', 'R3', 'R2', 'R1'];
     const partSort = { col: 'rankname', asc: true };
-    const partFilters = { ranks: new Set(), results: new Set(), statuses: new Set(), noShow: false };
+    const partFilters = { ranks: new Set(), results: new Set(), statuses: new Set(), noShow: false, strike: false };
     const EVENT_RESULTS = [['', '—'], ['full', 'Full'], ['partial', 'Partial'], ['absent', 'Absent'], ['excused', 'Excused'], ['completed', 'Completed'], ['na', 'N/A']];
 
     // Weeks of the season that have ended, for the absence and partial counts.
@@ -746,29 +752,37 @@
             });
             return row;
         };
-        const noShow = document.createElement('div');
-        noShow.className = 'participation-filter-row';
         const nb = document.createElement('button');
         nb.type = 'button';
         nb.className = 'filter-chip' + (partFilters.noShow ? ' active' : '');
         nb.textContent = 'Voted Yes, did not attend';
         nb.addEventListener('click', () => { partFilters.noShow = !partFilters.noShow; nb.classList.toggle('active', partFilters.noShow); applyParticipationFilters(); });
-        noShow.appendChild(nb);
+        // Has a strike carrying this season (private-docs 285).
+        const sb = document.createElement('button');
+        sb.type = 'button';
+        sb.className = 'filter-chip' + (partFilters.strike ? ' active' : '');
+        sb.textContent = 'Has a season strike';
+        sb.addEventListener('click', () => { partFilters.strike = !partFilters.strike; sb.classList.toggle('active', partFilters.strike); applyParticipationFilters(); });
         const clear = document.createElement('button');
         clear.type = 'button';
         clear.className = 'btn btn-secondary btn-sm';
         clear.textContent = 'Clear filters';
         clear.addEventListener('click', () => {
-            partFilters.ranks.clear(); partFilters.results.clear(); partFilters.statuses.clear(); partFilters.noShow = false;
+            partFilters.ranks.clear(); partFilters.results.clear(); partFilters.statuses.clear(); partFilters.noShow = false; partFilters.strike = false;
             renderParticipationFilters();
             applyParticipationFilters();
         });
+        // Strike and no-show chips share a row; the no-show one only in a season with wars.
+        const flags = document.createElement('div');
+        flags.className = 'participation-filter-row';
+        if (partHasWars) flags.appendChild(nb);
+        flags.appendChild(sb);
         box.replaceChildren(
             chipRow('Rank', RANK_ORDER.map(r => [r, r]), partFilters.ranks),
             chipRow('This week', scoreLevels.map(sl => [sl.key, sl.label]), partFilters.results),
             chipRow('Status', [['active', 'Active'], ['at_risk', 'At Risk'], ['below', 'Below Requirement']], partFilters.statuses),
-            partHasWars ? noShow : null, clear);
-        const n = partFilters.ranks.size + partFilters.results.size + partFilters.statuses.size + (partFilters.noShow ? 1 : 0);
+            flags, clear);
+        const n = partFilters.ranks.size + partFilters.results.size + partFilters.statuses.size + (partFilters.noShow ? 1 : 0) + (partFilters.strike ? 1 : 0);
         if (partFiltersBtn) partFiltersBtn.textContent = n ? 'Filters (' + n + ')' : 'Filters';
     }
 
@@ -788,11 +802,12 @@
                 (!partFilters.results.size || (score && partFilters.results.has(score.value))) &&
                 (!partFilters.statuses.size || partFilters.statuses.has(participationStatus(m))) &&
                 (!partFilters.noShow || yesVoteNoShow(m)) &&
+                (!partFilters.strike || (m.season_strikes || 0) > 0) &&
                 (!q.trim() || QuickSearch.match(row.dataset.search || '', q));
             g.style.display = ok ? '' : 'none';
             if (ok) shown++;
         });
-        const n = partFilters.ranks.size + partFilters.results.size + partFilters.statuses.size + (partFilters.noShow ? 1 : 0);
+        const n = partFilters.ranks.size + partFilters.results.size + partFilters.statuses.size + (partFilters.noShow ? 1 : 0) + (partFilters.strike ? 1 : 0);
         if (partFiltersBtn) partFiltersBtn.textContent = n ? 'Filters (' + n + ')' : 'Filters';
         const status = document.getElementById('participation-status');
         if (status) status.textContent = shown < total ? shown + ' of ' + total + ' shown' : '';

@@ -183,6 +183,8 @@ type SeasonMember struct {
 	WarsScheduled   *int `json:"wars_scheduled,omitempty"`
 	PollsResponded  *int `json:"polls_responded,omitempty"`
 	PollsApplicable *int `json:"polls_applicable,omitempty"`
+	// SeasonStrikes is the member's active strikes carrying this season (private-docs 285).
+	SeasonStrikes int `json:"season_strikes"`
 }
 
 type ParticipationEntry struct {
@@ -1342,6 +1344,13 @@ func handleSeasonDelete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// A strike outlives its season: its season context is cleared, the strike kept (285).
+	if _, err := tx.Exec(`UPDATE accountability_strikes SET season_id = NULL, season_week = NULL, season_war_id = NULL
+		WHERE season_id = ?`, id); err != nil {
+		slog.Error("handleSeasonDelete: clear strike seasons", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	// Season mail was folded into comms_templates (migration 041); the old
 	// season_mail table no longer exists. Remove this season's mail templates.
 	if _, err := tx.Exec(`DELETE FROM comms_templates WHERE season_id = ?`, id); err != nil {
@@ -1588,6 +1597,12 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hasWars := len(seasonWars) > 0
+	strikeCounts, err := seasonStrikeCounts(db, season.ID)
+	if err != nil {
+		slog.Error("handleSeasonHubData: season strikes", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	today := gametimeDateOf(time.Now())
 	warCounts, warsCompleted, pollsApplicable := warCountsByMember(seasonWars, attendance, today)
 	// The status engine's inputs: the completed weeks, and the completed wars with each member's
@@ -1692,6 +1707,7 @@ func handleSeasonHubData(w http.ResponseWriter, r *http.Request) {
 		}
 		sm.Standing = computeSeasonStanding(season, standingInputs{Weeks: weeks, Wars: wars, MaxWeekPts: maxPts})
 		sm.Standing.CompletedWeeks = completedWeeks
+		sm.SeasonStrikes = strikeCounts[m.ID]
 		// Participation % is the overall standing's: points over the completed, unexcused weeks.
 		sm.ParticipationPct = sm.Standing.Overall.Pct
 

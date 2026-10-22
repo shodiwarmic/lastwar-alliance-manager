@@ -509,6 +509,11 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/participation-events/order", authMiddleware(requirePermission("manage_season_participation", handleWeekEventOrder))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/participation-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_participation", handleWeekEventUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/participation-events/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_participation", handleWeekEventDelete))).Methods("DELETE")
+	// War poll reviews (private-docs 285): Apply needs manage_accountability, Dismiss
+	// manage_season_war; the handler checks which.
+	router.HandleFunc("/api/season-hub/poll-reviews", authMiddleware(requirePermission("view_season_war", handlePollReviewsGet))).Methods("GET")
+	router.HandleFunc("/api/season-hub/poll-reviews", authMiddleware(requireAnyPermission([]string{"manage_accountability", "manage_season_war"}, handlePollReviewDecide))).Methods("POST")
+	router.HandleFunc("/api/accountability/season-options", authMiddleware(requirePermission("manage_accountability", handleStrikeSeasonOptions))).Methods("GET")
 	router.HandleFunc("/api/season-hub/war", authMiddleware(requirePermission("view_season_war", handleSeasonWarGet))).Methods("GET")
 	router.HandleFunc("/api/season-hub/war/config", authMiddleware(requireAnyPermission([]string{"manage_season_war", "manage_season_config"}, handleSeasonWarConfigPut))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/war/observations", authMiddleware(requirePermission("manage_season_war", handleSeasonWarObservationCreate))).Methods("POST")

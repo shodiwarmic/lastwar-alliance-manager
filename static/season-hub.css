@@ -859,3 +859,9 @@
 .reward-context-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: 0.85rem; padding: 2px 0; }
 .reward-context-tiers { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .reward-context-why { font-size: 0.78rem; color: var(--text-muted); }
+
+/* War: poll reviews (private-docs 285) */
+.poll-reviews { border-left: 4px solid var(--color-warning); }
+.poll-review-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; border-top: 1px solid var(--border-color); }
+.poll-review-actions { display: flex; gap: 6px; margin-left: auto; }
+.status-strikes { display: inline-block; margin-top: 3px; font-size: 0.72rem; color: var(--color-danger); }

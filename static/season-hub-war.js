@@ -114,6 +114,7 @@
     function render() {
         renderOwn();
         renderRecord();
+        loadPollReviews();
         renderResources();
         renderWars();
         renderOpponents();
@@ -133,6 +134,37 @@
         return el('div', { className: 'war-figure' }, el('span', { className: 'war-figure-label', textContent: label }),
             el('strong', { textContent: compact(f && f.value) }),
             f && f.at ? el('span', { className: 'war-figure-asof', textContent: 'as of ' + utcToST(f.at) + ' ST' + (f.source ? ' · ' + f.source : '') }) : null);
+    }
+
+    // ── Poll reviews (private-docs 285): voted Yes, did not attend ───────────
+    function loadPollReviews() {
+        const box = document.getElementById('war-poll-reviews');
+        if (!box || !season) return;
+        const sid = season.id;
+        api('/api/season-hub/poll-reviews?season_id=' + sid).then(d => {
+            if (!season || season.id !== sid) return;
+            const list = d.reviews || [];
+            if (!list.length) { box.replaceChildren(); return; }
+            const ro = !!season.archived_at;
+            const rows = list.map(p => {
+                const row = el('div', { className: 'poll-review-row' },
+                    el('span', { className: 'member-rank rank-' + p.member_rank, textContent: p.member_rank }),
+                    el('strong', { translate: 'no', textContent: p.member_name }),
+                    el('span', { className: 'land-drop-when', textContent: 'voted Yes, did not attend ' + p.war }));
+                const decide = decision => send('POST', '/api/season-hub/poll-reviews', { war_id: p.war_id, member_id: p.member_id, decision })
+                    .then(() => { showToast(decision === 'applied' ? 'Strike applied.' : 'Dismissed.'); loadPollReviews(); })
+                    .catch(err => showToast(err.message, 'error'));
+                const acts = el('div', { className: 'poll-review-actions' },
+                    !ro && d.can_apply ? el('button', { type: 'button', className: 'btn btn-danger btn-sm', onclick: () => decide('applied') }, 'Apply strike') : null,
+                    !ro && d.can_dismiss ? el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => decide('dismissed') }, 'Dismiss') : null);
+                row.appendChild(acts);
+                return row;
+            });
+            box.replaceChildren(el('div', { className: 'card land-section poll-reviews' },
+                el('h3', { className: 'land-section-title', textContent: 'Poll reviews (' + list.length + ')' }),
+                el('p', { className: 'hub-section-note', textContent: 'Members who voted Yes on a completed war\'s poll and did not attend. Applying files a strike; nothing changes a weekly score.' }),
+                ...rows));
+        }).catch(() => box.replaceChildren());
     }
 
     // ── Our record ───────────────────────────────────────────────────────────

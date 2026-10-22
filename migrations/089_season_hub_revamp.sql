@@ -802,7 +802,62 @@ CREATE TABLE IF NOT EXISTS season_member_exemptions (
 );
 -- +goose StatementEnd
 
+
+
+-- ── 285: season context on strikes, war poll reviews ────────────────────────
+-- A strike may name the season, week and war it belongs to. A member who voted Yes on a war's
+-- poll and did not attend is put to the officers as a review: applied (a strike) or dismissed,
+-- once per war and member. Strike categories stay one global managed list; this adds one system
+-- category.
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes ADD COLUMN season_week INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes ADD COLUMN season_war_id INTEGER REFERENCES season_wars(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_strikes_season ON accountability_strikes(season_id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_poll_reviews (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    war_id     INTEGER NOT NULL REFERENCES season_wars(id),
+    member_id  INTEGER NOT NULL REFERENCES members(id),
+    decision   TEXT    NOT NULL CHECK(decision IN ('applied','dismissed')),
+    strike_id  INTEGER REFERENCES accountability_strikes(id),
+    decided_by INTEGER REFERENCES users(id),
+    decided_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(war_id, member_id)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+INSERT INTO strike_types (key, label, is_system, active, sort_order)
+SELECT 'war_poll_yes_no_show', 'War Poll Yes / Did Not Show', 1, 1, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM strike_types)
+WHERE NOT EXISTS (SELECT 1 FROM strike_types WHERE key = 'war_poll_yes_no_show');
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE strike_types SET is_system = 1, active = 1 WHERE key = 'war_poll_yes_no_show';
+-- +goose StatementEnd
+
 -- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_poll_reviews;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_strikes_season;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes DROP COLUMN season_war_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes DROP COLUMN season_week;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes DROP COLUMN season_id;
+-- +goose StatementEnd
 -- +goose StatementBegin
 DROP TABLE IF EXISTS season_member_exemptions;
 -- +goose StatementEnd
