@@ -2197,7 +2197,8 @@
 
             const meta = document.createElement('div');
             meta.className = 'mail-item-meta';
-            meta.textContent = 'Posted by ' + item.posted_by + ' · ' + formatDate(item.posted_at);
+            // The Comms templates API names its author created_by (season mail moved there in 041).
+            meta.textContent = 'Posted by ' + item.created_by + ' · ' + formatDate(item.created_at);
 
             info.append(titleEl, meta);
 

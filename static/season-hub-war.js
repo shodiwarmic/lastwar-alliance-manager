@@ -23,6 +23,7 @@
     let loaded = 0;
     let sortBy = 'rating';
     let registry = null;      // the alliance registry, fetched once, for the add finder
+    let pendingOpponent = null; // { warID, allianceID }: an opponent just added from a war card
     const players = {};       // season alliance id → the Scout Report's members (browser only)
     const gen = { n: 0 };
 
@@ -314,7 +315,17 @@
         const next = (FLOW[w.status] || []).filter(s => ownFlow.includes(s));
         const status = select([[w.status, STATUS_LABELS[w.status]]].concat(next.map(s => [s, '→ ' + STATUS_LABELS[s]])), w.status, { disabled: ro });
         const role = select(ROLES, w.role, { disabled: ro });
-        const opponent = select(opponentOptions(), w.opponent_season_alliance_id, { disabled: ro, translate: 'no' });
+        // An opponent added from this card arrives picked, for the officer to save.
+        const picked = pendingOpponent && pendingOpponent.warID === w.id ? pendingOpponent.allianceID : null;
+        if (picked) pendingOpponent = null;
+        const opponent = select(opponentOptions().concat(ro ? [] : [['__add', '+ Add an opponent…']]),
+            picked || w.opponent_season_alliance_id, { disabled: ro, translate: 'no' });
+        let lastOpponent = opponent.value;
+        opponent.addEventListener('change', () => {
+            if (opponent.value !== '__add') { lastOpponent = opponent.value; return; }
+            opponent.value = lastOpponent;
+            openAddOpponent(w.id);
+        });
         const date = el('input', { type: 'date', className: 'form-input', value: w.battle_date || '', disabled: ro });
         const time = el('input', { type: 'time', className: 'form-input', value: w.battle_time || '', disabled: ro });
         const priority = select([['', '—'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], w.priority || '', { disabled: ro });
@@ -708,9 +719,15 @@
     }
 
     // ── Add an opponent: the registry finder, local matches first ───────────
-    async function openAddOpponent() {
+    // forWar: the war card that asked (the new opponent arrives picked on it); the toolbar's
+    // button passes its click event instead, and toggles the form.
+    async function openAddOpponent(forWar) {
+        const warID = typeof forWar === 'number' ? forWar : 0;
         const slot = document.getElementById('war-add-slot');
-        if (slot.firstChild) { slot.replaceChildren(); return; }
+        if (slot.firstChild) {
+            if (warID) { slot.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+            slot.replaceChildren(); return;
+        }
         if (!registry) {
             try { registry = await api('/api/external-alliances'); } catch (e) { registry = []; }
         }
@@ -751,7 +768,12 @@
             if (pickedID) body.external_alliance_id = pickedID;
             else Object.assign(body, { tag: tag.value.trim(), name: name.value.trim(), server: parseInt(server.value, 10) || 0 });
             send('PUT', '/api/season-hub/alliances', body)
-                .then(() => { slot.replaceChildren(); showToast('Opponent added.'); load(true); })
+                .then(res => {
+                    slot.replaceChildren();
+                    if (warID && res && res.id) pendingOpponent = { warID, allianceID: res.id };
+                    showToast(warID ? 'Opponent added — save the war to keep it.' : 'Opponent added.');
+                    load(true);
+                })
                 .catch(err => showToast(err.message, 'error'));
         } }, 'Add');
         const grid = el('div', { className: 'land-target-grid war-add-grid' }, field('Server', server), field('Tag', tag), field('Name', name),
@@ -760,6 +782,7 @@
             el('p', { className: 'hub-section-note', textContent: 'Type a tag or name to search your registry; enter the server to look it up on LastRank. Tag and server together name an alliance.' }),
             grid, el('div', { className: 'tab-toolbar' }, save,
                 el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => slot.replaceChildren() }, 'Cancel'))));
+        if (warID) slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
         tag.focus();
     }
 
