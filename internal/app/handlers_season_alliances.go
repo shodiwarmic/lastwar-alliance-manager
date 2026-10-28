@@ -7,10 +7,13 @@
 //
 // Identity is the registry row found by tag AND server (upsertExternalAllianceIdentityTx);
 // tags repeat across servers. Our own alliance has no registry row (Rule 2), so no season row.
+// A LastRank id from the War tab links the registry row (never overwriting another id) and brings
+// LastRank's power and member count in as an opponent observation.
 
 package app
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -18,8 +21,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 // SeasonFaction is one of a season's factions.
@@ -467,6 +473,9 @@ type seasonAllianceWrite struct {
 	GroupRank          optionalInt `json:"group_rank"`
 	AssessmentOverride *string     `json:"assessment_override"`
 	AssessmentNote     *string     `json:"assessment_note"`
+	// LastRankID is a lastrank.fun link or id (the War tab's finder pick, or Compare players). It
+	// needs manage_season_war, links the registry row and imports LastRank's figures.
+	LastRankID string `json:"lastrank_id"`
 }
 
 // PUT /api/season-hub/alliances — create or update one alliance's row for a season. The Ally
@@ -496,6 +505,19 @@ func handleSeasonAlliancePut(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "assessment_override is not a recognised rating", http.StatusBadRequest)
 		return
 	}
+	lrid := ""
+	if strings.TrimSpace(body.LastRankID) != "" {
+		if !canWar {
+			http.Error(w, "Forbidden: linking LastRank needs the War tab's manage permission", http.StatusForbidden)
+			return
+		}
+		id, ok := lastrank.ParseAllianceIDStrict(body.LastRankID)
+		if !ok {
+			http.Error(w, "That doesn't look like a lastrank.fun alliance link or id", http.StatusBadRequest)
+			return
+		}
+		lrid = id
+	}
 	if ok, msg := seasonAcceptsEdits(body.SeasonID); !ok {
 		seasonEditRefusal(w, msg)
 		return
@@ -519,6 +541,14 @@ func handleSeasonAlliancePut(w http.ResponseWriter, r *http.Request) {
 		}
 		server, _ = parseServerNumber(serverStr)
 	}
+	if body.ExternalAllianceID == 0 && lrid != "" {
+		// The alliance may already be in the registry under this id (an older tag, another server).
+		var found int
+		if db.QueryRow(`SELECT id FROM external_alliances WHERE lastrank_id = ? COLLATE NOCASE
+			ORDER BY updated_at DESC LIMIT 1`, lrid).Scan(&found) == nil {
+			body.ExternalAllianceID = found
+		}
+	}
 	if body.ExternalAllianceID == 0 {
 		if tag == "" || server <= 0 {
 			http.Error(w, "an alliance is named by its registry id, an ally, or a tag together with its server", http.StatusBadRequest)
@@ -534,6 +564,46 @@ func handleSeasonAlliancePut(w http.ResponseWriter, r *http.Request) {
 		if n == 0 {
 			http.Error(w, "external_alliance_id not found", http.StatusNotFound)
 			return
+		}
+	}
+
+	// LastRank, all before the transaction: one DB connection, so no handle is held across the
+	// fetch. A registry row already linked to another LastRank alliance is never retargeted.
+	var lr *lastrank.Alliance
+	lrNote := ""
+	if lrid != "" {
+		var stored sql.NullString
+		if body.ExternalAllianceID != 0 {
+			db.QueryRow(`SELECT lastrank_id FROM external_alliances WHERE id = ?`, body.ExternalAllianceID).Scan(&stored)
+		} else {
+			db.QueryRow(`SELECT lastrank_id FROM external_alliances WHERE tag = ? COLLATE NOCASE AND server = ?
+				ORDER BY updated_at DESC LIMIT 1`, tag, server).Scan(&stored)
+		}
+		if s := strings.TrimSpace(stored.String); s != "" && !strings.EqualFold(s, lrid) {
+			http.Error(w, "This alliance is linked to a different LastRank alliance — check its link on the External Alliances page",
+				http.StatusConflict)
+			return
+		}
+		// Nor is one LastRank alliance put on a second registry row.
+		var other string
+		if db.QueryRow(`SELECT COALESCE('['||tag||'] S'||server, name, '?') FROM external_alliances
+			WHERE lastrank_id = ? COLLATE NOCASE AND id != ? LIMIT 1`, lrid, body.ExternalAllianceID).Scan(&other) == nil {
+			http.Error(w, "That LastRank alliance is already in the registry as "+other+" — check the link", http.StatusConflict)
+			return
+		}
+		if !demoMode() {
+			ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+			a, err := lastrank.FetchAlliance(ctx, lrid)
+			cancel()
+			if err != nil {
+				slogLastRank("handleSeasonAlliancePut: LastRank fetch failed", err)
+				lrNote = "LastRank didn't answer, so its figures weren't imported — Load players under Compare players tries again."
+			} else if isOwnAlliance(a.AllianceID, a.Abbr) {
+				http.Error(w, "That LastRank alliance is ours — our own alliance has no season row", http.StatusBadRequest)
+				return
+			} else {
+				lr = a
+			}
 		}
 	}
 
@@ -558,24 +628,73 @@ func handleSeasonAlliancePut(w http.ResponseWriter, r *http.Request) {
 		}
 		extID = id.Int64
 	}
+	if lrid != "" {
+		if _, err := tx.Exec(`UPDATE external_alliances SET lastrank_id = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ? AND (lastrank_id IS NULL OR TRIM(lastrank_id) = '')`, lrid, extID); err != nil {
+			slog.Error("handleSeasonAlliancePut: lastrank link", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
 	id, created, err := writeSeasonAllianceTx(tx, body.SeasonID, extID, body)
 	if err != nil {
 		slog.Error("handleSeasonAlliancePut: write", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	imported := false
+	if lr != nil {
+		if imported, err = importLastRankObservationTx(tx, body.SeasonID, id, lr, user.ID); err != nil {
+			slog.Error("handleSeasonAlliancePut: lastrank observation", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		slog.Error("handleSeasonAlliancePut: commit", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
+	}
+	if lr != nil {
+		// The registry's own figures, through the Scout Report's guarded write (best-effort).
+		saveReportAllianceStats(user, lr)
 	}
 	label := seasonAllianceLabel(extID)
 	action := "updated"
 	if created {
 		action = "created"
 	}
-	logActivity(user.ID, user.Username, action, "season_alliance", label, false)
-	writeJSON(w, map[string]any{"id": id, "external_alliance_id": extID})
+	var details []string
+	if imported {
+		details = append(details, "LastRank power and member count recorded")
+	}
+	logActivity(user.ID, user.Username, action, "season_alliance", label, false, details...)
+	writeJSON(w, map[string]any{"id": id, "external_alliance_id": extID, "lastrank_imported": imported, "lastrank_note": lrNote})
+}
+
+// importLastRankObservationTx records LastRank's alliance power and member count as an opponent
+// observation, at the instant LastRank last saw the alliance — never now, which would put a
+// game-side value on the wall clock. No instant or no figure records nothing; the same figures at
+// the same instant are already there (writeWarObservationTx's unchanged rule).
+func importLastRankObservationTx(tx *sql.Tx, seasonID int, seasonAllianceID int64, a *lastrank.Alliance, userID int) (bool, error) {
+	at, ok := lastRankParseTime(a.LastSeenAt)
+	if !ok {
+		return false, nil
+	}
+	sa := int(seasonAllianceID)
+	in := warObservationIn{SeasonAllianceID: &sa}
+	if a.Fightpower > 0 {
+		pw := a.Fightpower
+		in.AlliancePower = &pw
+	}
+	if a.CurMember > 0 && a.CurMember <= 200 {
+		mc := int64(a.CurMember)
+		in.MemberCount = &mc
+	}
+	if in.AlliancePower == nil && in.MemberCount == nil {
+		return false, nil
+	}
+	return writeWarObservationTx(tx, seasonID, in, at, "lastrank", userID)
 }
 
 // writeSeasonAllianceTx upserts one row, keeping every field the body leaves out.

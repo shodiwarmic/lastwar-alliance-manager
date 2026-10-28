@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 func putSeasonAlliance(t *testing.T, body string, actor *AuthUser) *httptest.ResponseRecorder {
@@ -124,5 +126,79 @@ func TestOurOwnAllianceHasNoSeasonRow(t *testing.T) {
 	}
 	if n := countT(t, `SELECT COUNT(*) FROM external_alliances`); n != 0 {
 		t.Errorf("our own alliance was written to the registry (%d rows)", n)
+	}
+}
+
+// The War tab's LastRank pick links the registry row (never retargeting one linked to another
+// LastRank alliance), and LastRank's figures come in as an observation at LastRank's own instant
+// (private-docs 277, staging report 2026-10-28).
+func TestSeasonAllianceLastRankLink(t *testing.T) {
+	setupSettingsTestDB(t)
+	mustExecT(t, `INSERT INTO users (id, username, password, is_admin, is_active) VALUES (1, 'admin', 'x', 1, 1)`)
+	seedSeasonRow(t, 1, 4, "2030-11-02", true, false)
+	t.Setenv("DEMO_MODE", "true") // links without the LastRank request
+	const lrA, lrB = "0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210"
+
+	rr := putSeasonAlliance(t, `{"season_id":1,"tag":"WAR","server":1712,"name":"War Machine","lastrank_id":"https://lastrank.fun/a/`+lrA+`"}`, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("put with a LastRank link: %d %s", rr.Code, rr.Body.String())
+	}
+	var stored string
+	db.QueryRow(`SELECT COALESCE(lastrank_id, '') FROM external_alliances WHERE tag = 'WAR'`).Scan(&stored)
+	if stored != lrA {
+		t.Errorf("registry lastrank_id = %q, want %q", stored, lrA)
+	}
+	// The same LastRank alliance under a new tag is the same registry row and season row.
+	if rr := putSeasonAlliance(t, `{"season_id":1,"tag":"WAR2","server":1712,"lastrank_id":"`+lrA+`"}`, nil); rr.Code != http.StatusOK {
+		t.Fatalf("put by a known id: %d %s", rr.Code, rr.Body.String())
+	}
+	if n := countT(t, `SELECT COUNT(*) FROM external_alliances`) + countT(t, `SELECT COUNT(*) FROM season_alliances`); n != 2 {
+		t.Errorf("%d registry + season rows, want one of each", n)
+	}
+	// A row linked to another LastRank alliance is not retargeted; junk and Allies-only are refused.
+	if rr := putSeasonAlliance(t, `{"season_id":1,"tag":"WAR","server":1712,"lastrank_id":"`+lrB+`"}`, nil); rr.Code != http.StatusConflict {
+		t.Errorf("a different LastRank id on a linked row: %d", rr.Code)
+	}
+	mustExecT(t, `INSERT INTO external_alliances (id, tag, server) VALUES (50, 'OTH', 1712)`)
+	if rr := putSeasonAlliance(t, `{"season_id":1,"external_alliance_id":50,"lastrank_id":"`+lrA+`"}`, nil); rr.Code != http.StatusConflict {
+		t.Errorf("another registry row's LastRank id: %d", rr.Code)
+	}
+	if rr := putSeasonAlliance(t, `{"season_id":1,"tag":"NEW","server":1712,"lastrank_id":"https://example.com/a/`+lrB+`"}`, nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("a link from another site: %d", rr.Code)
+	}
+	alliesOnly := &AuthUser{ID: 3, Username: "allies", Rank: "R3"}
+	mustExecT(t, `UPDATE rank_permissions SET permissions = json_set(permissions, '$.manage_allies', json('true'), '$.manage_season_war', json('false')) WHERE rank = 'R3'`)
+	m := seedMember(t, "Diplomat", "R3")
+	alliesOnly.MemberID = &m
+	if rr := putSeasonAlliance(t, `{"season_id":1,"tag":"NEW","server":1712,"lastrank_id":"`+lrB+`"}`, alliesOnly); rr.Code != http.StatusForbidden {
+		t.Errorf("a LastRank link without manage_season_war: %d", rr.Code)
+	}
+	db.QueryRow(`SELECT lastrank_id FROM external_alliances WHERE tag = 'WAR2'`).Scan(&stored)
+	if stored != lrA {
+		t.Errorf("registry lastrank_id after the refusals = %q, want %q", stored, lrA)
+	}
+
+	// The import: power and member count at LastRank's instant, once; no instant, nothing.
+	var sa int64
+	db.QueryRow(`SELECT id FROM season_alliances WHERE season_id = 1`).Scan(&sa)
+	a := &lastrank.Alliance{AllianceID: lrA, Abbr: "WAR2", Fightpower: 1234000000, CurMember: 97, LastSeenAt: "2030-11-03T04:05:06Z"}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err1 := importLastRankObservationTx(tx, 1, sa, a, 1)
+	again, err2 := importLastRankObservationTx(tx, 1, sa, a, 1)
+	undated, err3 := importLastRankObservationTx(tx, 1, sa, &lastrank.Alliance{Fightpower: 5}, 1)
+	if err := tx.Commit(); err != nil || err1 != nil || err2 != nil || err3 != nil {
+		t.Fatalf("import: %v %v %v %v", err, err1, err2, err3)
+	}
+	if !first || again || undated {
+		t.Errorf("written = %v, %v, %v; want true, then unchanged, then nothing", first, again, undated)
+	}
+	var at, src string
+	var pw, mc int64
+	db.QueryRow(`SELECT observed_at, alliance_power, member_count, source FROM season_opponent_observations`).Scan(&at, &pw, &mc, &src)
+	if at != "2030-11-03 04:05:06" || pw != 1234000000 || mc != 97 || src != "lastrank" {
+		t.Errorf("observation = %s %d %d %s, want LastRank's instant, power and member count", at, pw, mc, src)
 	}
 }

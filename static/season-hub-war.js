@@ -672,7 +672,8 @@
 
     // ── Player pairing: the Scout Report's members, held in the browser only ─
     function buildPairing(o) {
-        const box = el('details', { className: 'war-obs-form war-pairing' }, el('summary', null, 'Compare players'));
+        // Open while players are loaded, so the redraw after the link is saved keeps them in view.
+        const box = el('details', { className: 'war-obs-form war-pairing', open: !!players[o.id] }, el('summary', null, 'Compare players'));
         const body = el('div');
         box.appendChild(body);
         const draw = () => {
@@ -683,12 +684,22 @@
                 const go = el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => {
                     go.disabled = true;
                     send('POST', '/api/external-alliances/report', { lastrank_id: link.value.trim() })
-                        .then(r => { players[o.id] = r; draw(); })
+                        .then(r => {
+                            players[o.id] = r; draw();
+                            if (!editable()) return;
+                            // Keep the link on the alliance and record LastRank's power and member count.
+                            return send('PUT', '/api/season-hub/alliances', { season_id: season.id,
+                                external_alliance_id: o.external_alliance_id, lastrank_id: r.lastrank_id })
+                                .then(res => {
+                                    if (res && res.lastrank_note) showToast(res.lastrank_note, 'warning', 6000);
+                                    load(true);
+                                });
+                        })
                         .catch(err => showToast(err.message, 'error'))
                         .finally(() => { go.disabled = false; });
                 } }, theirs ? 'Reload players' : 'Load players');
                 parts.push(el('div', { className: 'tab-toolbar' }, field('LastRank alliance', link), go),
-                    el('p', { className: 'hub-section-note', textContent: 'One LastRank request. Their players are shown here only and never saved.' }));
+                    el('p', { className: 'hub-section-note', textContent: 'Their players are shown here only and never saved. The link stays on the alliance, and its power and member count are recorded.' }));
             }
             if (theirs) {
                 const known = (theirs.members || []).filter(p => p.hero_power != null).sort((a, b) => b.hero_power - a.hero_power).slice(0, 10);
@@ -736,8 +747,10 @@
         const name = el('input', { type: 'text', className: 'form-input', translate: 'no', autocomplete: 'off' });
         const rel = select(RELATIONSHIPS, 'enemy');
         const faction = select([['', '— none —']].concat((data.factions || []).map(f => [String(f.id), f.label])), '');
-        let pickedID = 0;
-        const clearPick = () => { pickedID = 0; };
+        // pickedLR: the pick's LastRank id — the server links it and records LastRank's figures.
+        let pickedID = 0, pickedLR = '';
+        const lrNote = el('p', { className: 'hub-section-note' });
+        const clearPick = () => { pickedID = 0; pickedLR = ''; lrNote.textContent = ''; };
         [server, tag, name].forEach(i => i.addEventListener('input', clearPick));
         const finder = buildRemoteFinder({
             inputs: [tag, name],
@@ -759,6 +772,8 @@
                 onPick: () => {
                     tag.value = x.tag || ''; name.value = x.name || ''; if (x.server != null) server.value = x.server;
                     pickedID = kind === 'local' ? x.id : 0;
+                    pickedLR = x.lastrank_id || '';
+                    lrNote.textContent = pickedLR ? 'Linked to LastRank: its power and member count are recorded when you add.' : '';
                     finder.close();
                 },
             }),
@@ -767,20 +782,25 @@
             const body = { season_id: season.id, relationship: rel.value, faction_id: faction.value ? parseInt(faction.value, 10) : null };
             if (pickedID) body.external_alliance_id = pickedID;
             else Object.assign(body, { tag: tag.value.trim(), name: name.value.trim(), server: parseInt(server.value, 10) || 0 });
+            if (pickedLR) body.lastrank_id = pickedLR;
+            save.disabled = true;
             send('PUT', '/api/season-hub/alliances', body)
                 .then(res => {
                     slot.replaceChildren();
                     if (warID && res && res.id) pendingOpponent = { warID, allianceID: res.id };
-                    showToast(warID ? 'Opponent added — save the war to keep it.' : 'Opponent added.');
+                    showToast((warID ? 'Opponent added — save the war to keep it.' : 'Opponent added.') +
+                        (res && res.lastrank_imported ? ' LastRank\'s figures are recorded.' : ''));
+                    if (res && res.lastrank_note) showToast(res.lastrank_note, 'warning', 6000);
                     load(true);
                 })
+                .finally(() => { save.disabled = false; })
                 .catch(err => showToast(err.message, 'error'));
         } }, 'Add');
         const grid = el('div', { className: 'land-target-grid war-add-grid' }, field('Server', server), field('Tag', tag), field('Name', name),
             field('Relationship', rel), field('Faction', faction), finder.dropdown);
         slot.replaceChildren(el('div', { className: 'card land-drop' }, el('strong', { textContent: 'Add an opponent' }),
             el('p', { className: 'hub-section-note', textContent: 'Type a tag or name to search your registry; enter the server to look it up on LastRank. Tag and server together name an alliance.' }),
-            grid, el('div', { className: 'tab-toolbar' }, save,
+            grid, lrNote, el('div', { className: 'tab-toolbar' }, save,
                 el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => slot.replaceChildren() }, 'Cancel'))));
         if (warID) slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
         tag.focus();
