@@ -10,8 +10,10 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -21,6 +23,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+
+	"lastwar-alliance/internal/lastrank"
 )
 
 func loadWarConfig(q rowQuerier, seasonID int) (warConfig, error) {
@@ -594,6 +598,76 @@ func handleSeasonWarObservationCreate(w http.ResponseWriter, r *http.Request) {
 			"observed "+landST(&at)+" ST")
 	}
 	writeJSON(w, map[string]any{"written": written})
+}
+
+// POST /api/season-hub/war/observations/lastrank {season_id, season_alliance_id} — the opponent's
+// power and member count from LastRank, through its registry link: one request, made before the
+// transaction, recorded at the instant LastRank last saw the alliance (importLastRankObservationTx).
+func handleSeasonWarObservationLastRank(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	var body struct {
+		SeasonID         int `json:"season_id"`
+		SeasonAllianceID int `json:"season_alliance_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if ok, msg := seasonAcceptsEdits(body.SeasonID); !ok {
+		seasonEditRefusal(w, msg)
+		return
+	}
+	var ext int64
+	var lrid sql.NullString
+	if err := db.QueryRow(`SELECT sa.external_alliance_id, ea.lastrank_id FROM season_alliances sa
+		JOIN external_alliances ea ON ea.id = sa.external_alliance_id WHERE sa.id = ? AND sa.season_id = ?`,
+		body.SeasonAllianceID, body.SeasonID).Scan(&ext, &lrid); err != nil {
+		http.Error(w, "that alliance is not one of this season's", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(lrid.String) == "" {
+		http.Error(w, "This opponent has no LastRank link — load its players under Compare players to link it", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	a, err := lastrank.FetchAlliance(ctx, lrid.String)
+	if err != nil {
+		slogLastRank("handleSeasonWarObservationLastRank: fetch failed", err)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			http.Error(w, "LastRank is busy right now — try again in a moment", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "Could not reach LastRank for that alliance", http.StatusBadGateway)
+		return
+	}
+	at, dated := lastRankParseTime(a.LastSeenAt)
+	if !dated {
+		http.Error(w, "LastRank gave no date for its figures, so nothing was recorded", http.StatusBadGateway)
+		return
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("handleSeasonWarObservationLastRank: begin", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	written, err := importLastRankObservationTx(tx, body.SeasonID, int64(body.SeasonAllianceID), a, user.ID)
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		slog.Error("handleSeasonWarObservationLastRank: write", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	saveReportAllianceStats(user, a)
+	if written {
+		logActivity(user.ID, user.Username, "created", "season_opponent_observation", seasonAllianceLabel(ext)+", "+seasonTagName(&body.SeasonID), false,
+			"from LastRank, observed "+landST(&at)+" ST")
+	}
+	writeJSON(w, map[string]any{"written": written, "observed_at": landST(&at), "alliance_power": a.Fightpower, "member_count": a.CurMember})
 }
 
 // DELETE /api/season-hub/war/observations/{id} — a mistaken observation.

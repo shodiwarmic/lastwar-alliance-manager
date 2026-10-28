@@ -203,3 +203,31 @@ func TestSeasonAllianceLastRankLink(t *testing.T) {
 		t.Errorf("observation = %s %d %d %s, want LastRank's instant, power and member count", at, pw, mc, src)
 	}
 }
+
+// From LastRank needs this season's row and the opponent's LastRank link; it records nothing
+// otherwise (the request itself is internal/lastrank's, never made from a test).
+func TestSeasonWarObservationFromLastRankRefusals(t *testing.T) {
+	setupSettingsTestDB(t)
+	mustExecT(t, `INSERT INTO users (id, username, password, is_admin, is_active) VALUES (1, 'admin', 'x', 1, 1)`)
+	seedSeasonRow(t, 1, 4, "2030-11-02", true, false)
+	seedSeasonRow(t, 2, 5, "2031-01-05", false, false)
+	if rr := putSeasonAlliance(t, `{"season_id":1,"tag":"NOL","server":1712}`, nil); rr.Code != http.StatusOK {
+		t.Fatalf("put: %d %s", rr.Code, rr.Body.String())
+	}
+	var sa int
+	db.QueryRow(`SELECT id FROM season_alliances WHERE season_id = 1`).Scan(&sa)
+	post := func(body string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		handleSeasonWarObservationLastRank(rr, shReq(http.MethodPost, body, nil, nil))
+		return rr
+	}
+	if rr := post(`{"season_id":1,"season_alliance_id":` + strconv.Itoa(sa) + `}`); rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "no LastRank link") {
+		t.Errorf("an unlinked opponent: %d %s", rr.Code, rr.Body.String())
+	}
+	if rr := post(`{"season_id":2,"season_alliance_id":` + strconv.Itoa(sa) + `}`); rr.Code != http.StatusBadRequest {
+		t.Errorf("another season's alliance: %d", rr.Code)
+	}
+	if n := countT(t, `SELECT COUNT(*) FROM season_opponent_observations`); n != 0 {
+		t.Errorf("%d observations recorded by refused requests", n)
+	}
+}

@@ -571,7 +571,9 @@
     }
 
     // An inline observation form (details): for our side or one opponent.
-    function observationForm(target, label) {
+    // lastrankID: an opponent's LastRank link, which adds the From LastRank button (one request,
+    // recorded at the instant LastRank last saw the alliance).
+    function observationForm(target, label, lastrankID) {
         const at = el('input', { type: 'datetime-local', className: 'form-input', value: nowST() });
         const inputs = { alliance_power: num(), member_count: num(null, { max: '200' }), group_rank: num(null, { min: '1' }),
             top10_thp: num(), top5_thp: num(), top3_thp: num() };
@@ -583,6 +585,17 @@
                 .then(d => { showToast(d.written ? 'Observation recorded.' : 'Already recorded.'); load(true); })
                 .catch(err => showToast(err.message, 'error'));
         } }, 'Record');
+        const fromLR = !target.own && lastrankID ? el('button', { type: 'button', className: 'btn btn-secondary btn-sm', onclick: () => {
+            fromLR.disabled = true;
+            send('POST', '/api/season-hub/war/observations/lastrank', { season_id: season.id, season_alliance_id: target.season_alliance_id })
+                .then(d => {
+                    showToast(d.written ? 'Recorded from LastRank: ' + compact(d.alliance_power) + ' power, ' + d.member_count + ' members, as of ' + d.observed_at + ' ST.'
+                        : 'LastRank has nothing newer: its reading as of ' + d.observed_at + ' ST is already recorded.', d.written ? 'success' : 'info');
+                    load(true);
+                })
+                .catch(err => showToast(err.message, 'error'))
+                .finally(() => { fromLR.disabled = false; });
+        } }, 'From LastRank') : null;
         return el('details', { className: 'war-obs-form' }, el('summary', null, label),
             el('div', { className: 'land-target-grid' },
                 field('Observed (ST)', at), field('Alliance power', inputs.alliance_power), field('Members', inputs.member_count),
@@ -590,7 +603,8 @@
                 field('Top 10 THP', inputs.top10_thp), field('Top 5 THP', inputs.top5_thp), field('Top 3 THP', inputs.top3_thp),
                 field('Note', note, 'land-field-wide')),
             el('p', { className: 'hub-section-note', textContent: 'Leave a figure blank when it was not seen — a blank is unknown, never zero.' }),
-            save);
+            el('div', { className: 'tab-toolbar' }, save, fromLR),
+            !target.own && !lastrankID ? el('p', { className: 'hub-section-note', textContent: 'No LastRank link yet — load their players under Compare players to link it, then record from LastRank here.' }) : null);
     }
 
     // ── Opponents ────────────────────────────────────────────────────────────
@@ -667,7 +681,7 @@
                         .catch(err => showToast(err.message, 'error'));
                 } }, 'Remove from season')));
         return el('div', { className: 'land-drop card war-opponent' }, head, meta, figures, breakdown, note,
-            rowEdit, ro ? null : observationForm({ season_alliance_id: o.id }, 'Record an observation'), buildPairing(o));
+            rowEdit, ro ? null : observationForm({ season_alliance_id: o.id }, 'Record an observation', o.lastrank_id), buildPairing(o));
     }
 
     // ── Player pairing: the Scout Report's members, held in the browser only ─

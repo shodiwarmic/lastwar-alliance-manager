@@ -49,8 +49,8 @@ reports `api_version` 4.
   total, other alliances' totals and the rank cutoffs, projected to the next reset and to the
   production stop, with the gap to a target rank and loot scenarios; a Trade Post board with
   owners and planned actions. Figures are observations — typed, imported from CSV, sent from
-  a phone, or brought in from LastRank when an opponent is added or its players are loaded — and
-  the latest counts.
+  a phone, or brought in from LastRank when an opponent is added, when its players are loaded,
+  or on request — and the latest counts.
 - **Wars and polls on the weekly grid.** Each war gets attended (yes, no, unknown) and the poll
   answer (yes, no, no response) per member; a Yes with no show waits as a poll review that can
   become a strike or be dismissed. The grid lists R5 to R1 then by name, sorts and filters, and

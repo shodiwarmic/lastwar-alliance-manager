@@ -92,6 +92,7 @@ var demoBlocked = []struct{ method, path string }{
 	{"GET", "/api/external-alliances/search"},
 	{"POST", "/api/external-alliances/report"},
 	{"GET", "/api/external-alliances/report/player"},
+	{"POST", "/api/season-hub/war/observations/lastrank"},
 	{"POST", "/api/vs-league/opponent-lookup"},
 	{"GET", "/api/vs-league/opponent-roster"},
 	{"GET", "/api/vs-league/our-snapshot"},
