@@ -1438,8 +1438,12 @@ most likely to break.
   the pushed Copper War already on its date instead of inserting a second. Any new record type
   that belongs on the calendar goes through this function.
 - **Observations are append-only.** Opponent figures, resource totals, cutoffs and Trade Post
-  owners are rows with an `observed_at` and a `source` (`manual` | `csv` | `mobile`); the
-  latest counts and nothing edits an old one. A figure nobody has seen is NULL, never 0.
+  owners are rows with an `observed_at` and a `source` (`manual` | `csv` | `mobile` |
+  `lastrank`); the latest counts and nothing edits an old one. A figure nobody has seen is NULL,
+  never 0. `lastrank` rows come from the War tab linking an opponent (`PUT
+  /api/season-hub/alliances` with `lastrank_id`: the add-opponent pick, or Compare players) —
+  power and member count, dated LastRank's `last_seen_at`, never now. That link fills an empty
+  registry `lastrank_id` only: a row linked elsewhere is refused, never retargeted.
 - **One CSV import pair for every kind** (`season_import.go`): `POST
   /api/season-hub/import/preview|confirm`, kinds registered with `registerSeasonImportKind`
   from their own file's `init()`. A kind declares its columns (with header aliases), its

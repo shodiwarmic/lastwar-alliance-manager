@@ -139,7 +139,7 @@ func TestSeasonAllianceLastRankLink(t *testing.T) {
 	t.Setenv("DEMO_MODE", "true") // links without the LastRank request
 	const lrA, lrB = "0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210"
 
-	rr := putSeasonAlliance(t, `{"season_id":1,"tag":"WAR","server":1712,"name":"War Machine","lastrank_id":"https://lastrank.fun/a/`+lrA+`"}`, nil)
+	rr := putSeasonAlliance(t, `{"season_id":1,"tag":"WAR","server":1712,"name":"War Machine","lastrank_id":"`+lrA+`"}`, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("put with a LastRank link: %d %s", rr.Code, rr.Body.String())
 	}
@@ -173,7 +173,8 @@ func TestSeasonAllianceLastRankLink(t *testing.T) {
 	if rr := putSeasonAlliance(t, `{"season_id":1,"tag":"NEW","server":1712,"lastrank_id":"`+lrB+`"}`, alliesOnly); rr.Code != http.StatusForbidden {
 		t.Errorf("a LastRank link without manage_season_war: %d", rr.Code)
 	}
-	db.QueryRow(`SELECT lastrank_id FROM external_alliances WHERE tag = 'WAR2'`).Scan(&stored)
+	stored = ""
+	db.QueryRow(`SELECT lastrank_id FROM external_alliances WHERE tag = 'WAR'`).Scan(&stored)
 	if stored != lrA {
 		t.Errorf("registry lastrank_id after the refusals = %q, want %q", stored, lrA)
 	}
