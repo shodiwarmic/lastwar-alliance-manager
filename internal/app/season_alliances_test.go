@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -182,7 +183,8 @@ func TestSeasonAllianceLastRankLink(t *testing.T) {
 	// The import: power and member count at LastRank's instant, once; no instant, nothing.
 	var sa int64
 	db.QueryRow(`SELECT id FROM season_alliances WHERE season_id = 1`).Scan(&sa)
-	a := &lastrank.Alliance{AllianceID: lrA, Abbr: "WAR2", Fightpower: 1234000000, CurMember: 97, LastSeenAt: "2030-11-03T04:05:06Z"}
+	a := &lastrank.Alliance{AllianceID: lrA, Abbr: "WAR2", Fightpower: 1234000000, CurMember: 97, LastSeenAt: "2030-11-03T04:05:06Z",
+		Members: heroPowers(50, 40, 30, 20)}
 	tx, err := db.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -198,9 +200,38 @@ func TestSeasonAllianceLastRankLink(t *testing.T) {
 	}
 	var at, src string
 	var pw, mc int64
-	db.QueryRow(`SELECT observed_at, alliance_power, member_count, source FROM season_opponent_observations`).Scan(&at, &pw, &mc, &src)
+	var top10, top5, top3 sql.NullInt64
+	db.QueryRow(`SELECT observed_at, alliance_power, member_count, source, top10_thp, top5_thp, top3_thp FROM season_opponent_observations`).
+		Scan(&at, &pw, &mc, &src, &top10, &top5, &top3)
 	if at != "2030-11-03 04:05:06" || pw != 1234000000 || mc != 97 || src != "lastrank" {
 		t.Errorf("observation = %s %d %d %s, want LastRank's instant, power and member count", at, pw, mc, src)
+	}
+	if top10.Valid || top5.Valid || top3.Int64 != 120 {
+		t.Errorf("tops from four players = %v / %v / %v, want unknown / unknown / 120", top10, top5, top3)
+	}
+}
+
+// heroPowers builds LastRank players carrying these hero powers.
+func heroPowers(hp ...int64) []lastrank.AllianceMember {
+	out := make([]lastrank.AllianceMember, len(hp))
+	for i := range hp {
+		out[i].HeroPower = &hp[i]
+	}
+	return out
+}
+
+// Each top N is summed once LastRank has N players' hero power, and unknown below that; a player
+// without one, or with zero, is not counted (owner, 2026-10-29).
+func TestLastRankTopTHP(t *testing.T) {
+	twelve := heroPowers(1, 12, 3, 11, 5, 10, 7, 9, 2, 8, 6, 4)
+	twelve = append(twelve, lastrank.AllianceMember{}, heroPowers(0)[0])
+	top10, top5, top3, known := lastRankTopTHP(&lastrank.Alliance{Members: twelve})
+	if known != 12 || top10 == nil || *top10 != 75 || *top5 != 50 || *top3 != 33 {
+		t.Errorf("twelve players: known %d, tops %v %v %v; want 12, 75, 50, 33", known, top10, top5, top3)
+	}
+	top10, top5, top3, known = lastRankTopTHP(&lastrank.Alliance{Members: heroPowers(9, 8, 7, 6)})
+	if known != 4 || top10 != nil || top5 != nil || top3 == nil || *top3 != 24 {
+		t.Errorf("four players: known %d, tops %v %v %v; want 4, unknown, unknown, 24", known, top10, top5, top3)
 	}
 }
 

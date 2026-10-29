@@ -601,7 +601,7 @@ func handleSeasonWarObservationCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /api/season-hub/war/observations/lastrank {season_id, season_alliance_id} — the opponent's
-// power and member count from LastRank, through its registry link: one request, made before the
+// power, member count and top 10/5/3 hero power from LastRank, through its registry link: one request, made before the
 // transaction, recorded at the instant LastRank last saw the alliance (importLastRankObservationTx).
 func handleSeasonWarObservationLastRank(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
@@ -667,7 +667,9 @@ func handleSeasonWarObservationLastRank(w http.ResponseWriter, r *http.Request) 
 		logActivity(user.ID, user.Username, "created", "season_opponent_observation", seasonAllianceLabel(ext)+", "+seasonTagName(&body.SeasonID), false,
 			"from LastRank, observed "+landST(&at)+" ST")
 	}
-	writeJSON(w, map[string]any{"written": written, "observed_at": landST(&at), "alliance_power": a.Fightpower, "member_count": a.CurMember})
+	top10, top5, top3, known := lastRankTopTHP(a)
+	writeJSON(w, map[string]any{"written": written, "observed_at": landST(&at), "alliance_power": a.Fightpower, "member_count": a.CurMember,
+		"top10_thp": top10, "top5_thp": top5, "top3_thp": top3, "hero_power_known": known})
 }
 
 // DELETE /api/season-hub/war/observations/{id} — a mistaken observation.

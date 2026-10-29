@@ -1443,7 +1443,9 @@ most likely to break.
   never 0. `lastrank` rows come from the War tab linking an opponent (`PUT
   /api/season-hub/alliances` with `lastrank_id`: the add-opponent pick, or Compare players) or
   from *From LastRank* on a linked one (`POST /api/season-hub/war/observations/lastrank`, demo-blocked) —
-  power and member count, dated LastRank's `last_seen_at`, never now. That link fills an empty
+  power, member count and top 10/5/3 THP (`lastRankTopTHP`: LastRank's players come from the server
+  rankings, so each top N is summed once N players' hero power is known, else NULL), dated LastRank's
+  `last_seen_at`, never now. Group rank is the season's; LastRank has none. That link fills an empty
   registry `lastrank_id` only: a row linked elsewhere is refused, never retargeted.
 - **One CSV import pair for every kind** (`season_import.go`): `POST
   /api/season-hub/import/preview|confirm`, kinds registered with `registerSeasonImportKind`

@@ -589,8 +589,15 @@
             fromLR.disabled = true;
             send('POST', '/api/season-hub/war/observations/lastrank', { season_id: season.id, season_alliance_id: target.season_alliance_id })
                 .then(d => {
-                    showToast(d.written ? 'Recorded from LastRank: ' + compact(d.alliance_power) + ' power, ' + d.member_count + ' members, as of ' + d.observed_at + ' ST.'
-                        : 'LastRank has nothing newer: its reading as of ' + d.observed_at + ' ST is already recorded.', d.written ? 'success' : 'info');
+                    // A top is known once LastRank has that many players' hero power; below that it stays unknown.
+                    const tops = [['top 10', d.top10_thp], ['top 5', d.top5_thp], ['top 3', d.top3_thp]];
+                    const known = tops.filter(t => t[1] != null).map(t => t[0] + ' ' + compact(t[1]));
+                    const thp = known.length ? ', ' + known.join(' / ') + ' THP' : '';
+                    const gap = known.length < 3 ? ' Hero power is known for ' + d.hero_power_known + ' of their players, so ' +
+                        tops.filter(t => t[1] == null).map(t => t[0]).join(' and ') + ' stay' + (known.length === 2 ? 's' : '') + ' unknown.' : '';
+                    showToast((d.written ? 'Recorded from LastRank: ' + compact(d.alliance_power) + ' power, ' + d.member_count + ' members' + thp + ', as of ' + d.observed_at + ' ST.'
+                        : 'LastRank has nothing newer: its reading as of ' + d.observed_at + ' ST is already recorded.') + (d.written ? gap : ''),
+                        d.written ? 'success' : 'info', 6000);
                     load(true);
                 })
                 .catch(err => showToast(err.message, 'error'))
@@ -713,12 +720,13 @@
                         .finally(() => { go.disabled = false; });
                 } }, theirs ? 'Reload players' : 'Load players');
                 parts.push(el('div', { className: 'tab-toolbar' }, field('LastRank alliance', link), go),
-                    el('p', { className: 'hub-section-note', textContent: 'Their players are shown here only and never saved. The link stays on the alliance, and its power and member count are recorded.' }));
+                    el('p', { className: 'hub-section-note', textContent: 'Their players are shown here only and never saved. The link stays on the alliance, and its power, members and top 10/5/3 hero power are recorded.' }));
             }
             if (theirs) {
-                const known = (theirs.members || []).filter(p => p.hero_power != null).sort((a, b) => b.hero_power - a.hero_power).slice(0, 10);
+                const withHP = (theirs.members || []).filter(p => p.hero_power != null).sort((a, b) => b.hero_power - a.hero_power);
+                const known = withHP.slice(0, 10);
                 parts.push(el('p', { className: 'hub-section-note', textContent: 'LastRank holds ' + (theirs.members || []).length + ' of their players (the game shows ' +
-                    theirs.member_count + ' members); hero power is known for ' + known.length + '. A missing player is unknown, not weaker.' }));
+                    theirs.member_count + ' members); hero power is known for ' + withHP.length + '. Its players come from the server rankings, so the ones missing are from the low end.' }));
                 const ours = data.own_top || [];
                 const rows = [];
                 for (let i = 0; i < Math.max(ours.length, known.length); i++) {
@@ -787,7 +795,7 @@
                     tag.value = x.tag || ''; name.value = x.name || ''; if (x.server != null) server.value = x.server;
                     pickedID = kind === 'local' ? x.id : 0;
                     pickedLR = x.lastrank_id || '';
-                    lrNote.textContent = pickedLR ? 'Linked to LastRank: its power and member count are recorded when you add.' : '';
+                    lrNote.textContent = pickedLR ? 'Linked to LastRank: its power, members and top 10/5/3 hero power are recorded when you add.' : '';
                     finder.close();
                 },
             }),

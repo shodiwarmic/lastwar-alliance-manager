@@ -8,7 +8,7 @@
 // Identity is the registry row found by tag AND server (upsertExternalAllianceIdentityTx);
 // tags repeat across servers. Our own alliance has no registry row (Rule 2), so no season row.
 // A LastRank id from the War tab links the registry row (never overwriting another id) and brings
-// LastRank's power and member count in as an opponent observation.
+// LastRank's power, member count and top 10/5/3 hero power in as an opponent observation.
 
 package app
 
@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -672,10 +673,11 @@ func handleSeasonAlliancePut(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"id": id, "external_alliance_id": extID, "lastrank_imported": imported, "lastrank_note": lrNote})
 }
 
-// importLastRankObservationTx records LastRank's alliance power and member count as an opponent
-// observation, at the instant LastRank last saw the alliance — never now, which would put a
-// game-side value on the wall clock. No instant or no figure records nothing; the same figures at
-// the same instant are already there (writeWarObservationTx's unchanged rule).
+// importLastRankObservationTx records LastRank's alliance power, member count and top 10/5/3 hero
+// power (lastRankTopTHP) as an opponent observation, at the instant LastRank last saw the alliance —
+// never now, which would put a game-side value on the wall clock. No instant or no figure records
+// nothing; the same figures at the same instant are already there (writeWarObservationTx's
+// unchanged rule). The group rank is the season's and LastRank has none.
 func importLastRankObservationTx(tx *sql.Tx, seasonID int, seasonAllianceID int64, a *lastrank.Alliance, userID int) (bool, error) {
 	at, ok := lastRankParseTime(a.LastSeenAt)
 	if !ok {
@@ -691,10 +693,36 @@ func importLastRankObservationTx(tx *sql.Tx, seasonID int, seasonAllianceID int6
 		mc := int64(a.CurMember)
 		in.MemberCount = &mc
 	}
-	if in.AlliancePower == nil && in.MemberCount == nil {
+	in.Top10, in.Top5, in.Top3, _ = lastRankTopTHP(a)
+	if in.AlliancePower == nil && in.MemberCount == nil && in.Top3 == nil {
 		return false, nil
 	}
 	return writeWarObservationTx(tx, seasonID, in, at, "lastrank", userID)
+}
+
+// lastRankTopTHP sums the alliance's strongest hero power from LastRank's player list. That list
+// comes from the server rankings, so a player it lacks is from the low end: each top N is known
+// once N players are, and unknown below that, each top on its own (owner, 2026-10-29). known is
+// how many players carry a hero power.
+func lastRankTopTHP(a *lastrank.Alliance) (top10, top5, top3 *int64, known int) {
+	var hp []int64
+	for _, m := range a.Members {
+		if m.HeroPower != nil && *m.HeroPower > 0 {
+			hp = append(hp, *m.HeroPower)
+		}
+	}
+	sort.Slice(hp, func(i, j int) bool { return hp[i] > hp[j] })
+	top := func(n int) *int64 {
+		if len(hp) < n {
+			return nil
+		}
+		var sum int64
+		for _, v := range hp[:n] {
+			sum += v
+		}
+		return &sum
+	}
+	return top(10), top(5), top(3), len(hp)
 }
 
 // writeSeasonAllianceTx upserts one row, keeping every field the body leaves out.
