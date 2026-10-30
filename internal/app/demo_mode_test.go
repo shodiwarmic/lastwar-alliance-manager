@@ -22,6 +22,12 @@ import (
 // demoBlocked is the demo's block list, one row per route. Adding a route to the list
 // means adding a row here.
 var demoBlocked = []struct{ method, path string }{
+	{"GET", "/api/mobile/season-hub/war"},
+	{"GET", "/api/mobile/season-hub/land"},
+	{"POST", "/api/mobile/season-hub/land/events"},
+	{"POST", "/api/mobile/season-hub/war/observations"},
+	{"POST", "/api/mobile/season-hub/war/results"},
+	{"POST", "/api/season-hub/seasons/1/archive"},
 	{"POST", "/api/change-password"},
 	{"POST", "/api/force-change-password"},
 	{"POST", "/api/admin/users"},
@@ -86,6 +92,7 @@ var demoBlocked = []struct{ method, path string }{
 	{"GET", "/api/external-alliances/search"},
 	{"POST", "/api/external-alliances/report"},
 	{"GET", "/api/external-alliances/report/player"},
+	{"POST", "/api/season-hub/war/observations/lastrank"},
 	{"POST", "/api/vs-league/opponent-lookup"},
 	{"GET", "/api/vs-league/opponent-roster"},
 	{"GET", "/api/vs-league/our-snapshot"},

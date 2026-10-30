@@ -18,7 +18,7 @@ func TestMobileSeasonContributions(t *testing.T) {
 		{"player_name": "Zed Player", "score": 70}, {"player_name": "Unknown Guy", "score": 50}]}}`, "")
 	setupOCRTestDB(t, OCRBackendCloud, srv.URL)
 	f := seedMobileFixture(t)
-	setRankPerm(t, "R4", "manage_season_hub", true)
+	setRankPerm(t, "R4", "manage_season_contributions", true)
 	setRankPerm(t, "R4", "view_season_hub", true)
 	res, _ := db.Exec(`INSERT INTO seasons (name, season_number, start_date, is_active) VALUES ('S3', 3, '2026-09-01', 1)`)
 	sid, _ := res.LastInsertId()

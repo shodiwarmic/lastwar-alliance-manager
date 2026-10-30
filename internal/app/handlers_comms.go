@@ -181,6 +181,8 @@ func handleCommsTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 		Category     string `json:"category"`
 		Content      string `json:"content"`
 		RequiredVars string `json:"required_vars"`
+		// Absent keeps the season; null clears it. Refused into or out of an archived season.
+		SeasonID optionalInt `json:"season_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -225,10 +227,18 @@ func handleCommsTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	newSeason := old.SeasonID
+	if body.SeasonID.Set && !sameSeason(old.SeasonID, body.SeasonID.Value) {
+		if status, msg := seasonTagCheck(old.SeasonID, body.SeasonID.Value); status != 0 {
+			http.Error(w, msg, status)
+			return
+		}
+		newSeason = body.SeasonID.Value
+	}
 
 	if _, err := db.Exec(
-		`UPDATE comms_templates SET title=?, category=?, content=?, required_vars=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		body.Title, body.Category, body.Content, body.RequiredVars, id,
+		`UPDATE comms_templates SET title=?, category=?, content=?, required_vars=?, season_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		body.Title, body.Category, body.Content, body.RequiredVars, newSeason, id,
 	); err != nil {
 		slog.Error("handleCommsTemplateUpdate: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -247,6 +257,9 @@ func handleCommsTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if old.RequiredVars != body.RequiredVars {
 		changes = append(changes, "required_vars: "+old.RequiredVars+" → "+body.RequiredVars)
+	}
+	if !sameSeason(old.SeasonID, newSeason) {
+		changes = append(changes, "season: "+seasonTagName(old.SeasonID)+" → "+seasonTagName(newSeason))
 	}
 	logActivity(user.ID, user.Username, "updated", "comms_template", body.Title, false, strings.Join(changes, "; "))
 
@@ -311,6 +324,17 @@ func handleCommsTemplateDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// A war's battle mail link is cleared, not the war (private-docs 278).
+	if _, err := db.Exec(`UPDATE season_trade_posts SET strategy_comms_id = NULL WHERE strategy_comms_id = ?`, id); err != nil {
+		slog.Error("handleCommsTemplateDelete: unlink trade post", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := db.Exec(`UPDATE season_wars SET strategy_comms_id = NULL WHERE strategy_comms_id = ?`, id); err != nil {
+		slog.Error("handleCommsTemplateDelete: unlink war", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	if _, err := db.Exec(`DELETE FROM comms_templates WHERE id = ?`, id); err != nil {
 		slog.Error("handleCommsTemplateDelete: delete", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -328,12 +352,22 @@ func handleCommsTemplateDelete(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handleCommsResourceList(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query(`
+	query := `
 		SELECT cr.id, cr.title, cr.url, cr.description,
-		       COALESCE(u.username,'(deleted)'), cr.created_at
+		       COALESCE(u.username,'(deleted)'), cr.created_at, cr.season_id
 		FROM comms_resources cr
-		LEFT JOIN users u ON u.id = cr.created_by
-		ORDER BY cr.created_at ASC`)
+		LEFT JOIN users u ON u.id = cr.created_by`
+	var args []any
+	if v := r.URL.Query().Get("season_id"); v != "" {
+		sid, err := strconv.Atoi(v)
+		if err != nil {
+			http.Error(w, "Invalid season_id", http.StatusBadRequest)
+			return
+		}
+		query += ` WHERE cr.season_id = ?`
+		args = append(args, sid)
+	}
+	rows, err := db.Query(query+` ORDER BY cr.created_at ASC`, args...)
 	if err != nil {
 		slog.Error("handleCommsResourceList: query", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -345,7 +379,7 @@ func handleCommsResourceList(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var res CommsResource
 		if err := rows.Scan(&res.ID, &res.Title, &res.URL, &res.Description,
-			&res.CreatedBy, &res.CreatedAt); err != nil {
+			&res.CreatedBy, &res.CreatedAt, &res.SeasonID); err != nil {
 			continue
 		}
 		items = append(items, res)
@@ -362,6 +396,7 @@ func handleCommsResourceCreate(w http.ResponseWriter, r *http.Request) {
 		Title       string `json:"title"`
 		URL         string `json:"url"`
 		Description string `json:"description"`
+		SeasonID    *int   `json:"season_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -377,10 +412,14 @@ func handleCommsResourceCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "url must start with http:// or https://", http.StatusBadRequest)
 		return
 	}
+	if status, msg := seasonTagCheck(nil, body.SeasonID); status != 0 {
+		http.Error(w, msg, status)
+		return
+	}
 
 	res, err := db.Exec(
-		`INSERT INTO comms_resources (title, url, description, created_by) VALUES (?, ?, ?, ?)`,
-		body.Title, body.URL, body.Description, user.ID,
+		`INSERT INTO comms_resources (title, url, description, season_id, created_by) VALUES (?, ?, ?, ?, ?)`,
+		body.Title, body.URL, body.Description, body.SeasonID, user.ID,
 	)
 	if err != nil {
 		slog.Error("handleCommsResourceCreate: insert", "error", err)
@@ -405,9 +444,10 @@ func handleCommsResourceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title       string `json:"title"`
-		URL         string `json:"url"`
-		Description string `json:"description"`
+		Title       string      `json:"title"`
+		URL         string      `json:"url"`
+		Description string      `json:"description"`
+		SeasonID    optionalInt `json:"season_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -425,8 +465,8 @@ func handleCommsResourceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var old CommsResource
-	err = db.QueryRow(`SELECT title, url, description FROM comms_resources WHERE id = ?`, id).
-		Scan(&old.Title, &old.URL, &old.Description)
+	err = db.QueryRow(`SELECT title, url, description, season_id FROM comms_resources WHERE id = ?`, id).
+		Scan(&old.Title, &old.URL, &old.Description, &old.SeasonID)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -437,9 +477,17 @@ func handleCommsResourceUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	newSeason := old.SeasonID
+	if body.SeasonID.Set && !sameSeason(old.SeasonID, body.SeasonID.Value) {
+		if status, msg := seasonTagCheck(old.SeasonID, body.SeasonID.Value); status != 0 {
+			http.Error(w, msg, status)
+			return
+		}
+		newSeason = body.SeasonID.Value
+	}
 	if _, err := db.Exec(
-		`UPDATE comms_resources SET title=?, url=?, description=? WHERE id=?`,
-		body.Title, body.URL, body.Description, id,
+		`UPDATE comms_resources SET title=?, url=?, description=?, season_id=? WHERE id=?`,
+		body.Title, body.URL, body.Description, newSeason, id,
 	); err != nil {
 		slog.Error("handleCommsResourceUpdate: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -455,6 +503,9 @@ func handleCommsResourceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if old.Description != body.Description {
 		changes = append(changes, "description updated")
+	}
+	if !sameSeason(old.SeasonID, newSeason) {
+		changes = append(changes, "season: "+seasonTagName(old.SeasonID)+" → "+seasonTagName(newSeason))
 	}
 	logActivity(user.ID, user.Username, "updated", "comms_resource", body.Title, false, strings.Join(changes, "; "))
 

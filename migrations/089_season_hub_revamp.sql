@@ -1,0 +1,1060 @@
+-- +goose Up
+
+-- Season Hub revamp (Project 21, private-docs 269). One file for the feature's schema; each
+-- section is one issue's. Tables use CREATE TABLE IF NOT EXISTS and seeds INSERT … WHERE NOT
+-- EXISTS; the column additions cannot be guarded in SQLite's SQL, so a database that applied an
+-- earlier draft of this file is re-created rather than re-migrated.
+--
+-- foreign_keys is off app-wide, so every REFERENCES clause below is documentation: the season
+-- delete, the member delete and the user delete (handleSeasonDelete, deleteMemberTx,
+-- clearUserReferences) list each new table or column explicitly.
+
+-- ── 270: configuration, layout, archive snapshots ───────────────────────────
+-- key_event_total is the number of key events (wars) the season schedules — S4: 8 Copper Wars —
+-- beside key_event_required. resource_name is the season resource (S4: Copper). The poll and war
+-- floors are NULL until set, meaning "the overall floors". schedule_buffer_minutes is the window
+-- conflict detection looks at; land_readiness_buffer_hours how long before an unlock a target
+-- should be connected (S4: 24 h).
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN key_event_total INTEGER NOT NULL DEFAULT 0;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN resource_name TEXT NOT NULL DEFAULT '';
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN poll_active_min_pct INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN poll_at_risk_min_pct INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN war_active_min_pct INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN war_at_risk_min_pct INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN schedule_buffer_minutes INTEGER NOT NULL DEFAULT 60;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN land_readiness_buffer_hours INTEGER NOT NULL DEFAULT 24;
+-- +goose StatementEnd
+
+-- The Hub's tabs and the season dashboard's cards, per season: shown or hidden, renamed,
+-- reordered. Keys are stable (seasonTabKeys / seasonCardKeys in Go); a reader merges in any key a
+-- season lacks, so a later release's new tab needs no write on read.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_tabs (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id INTEGER NOT NULL REFERENCES seasons(id),
+    tab_key   TEXT    NOT NULL,
+    visible   INTEGER NOT NULL DEFAULT 1,
+    label     TEXT    NOT NULL DEFAULT '',
+    position  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(season_id, tab_key)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_dashboard_cards (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id INTEGER NOT NULL REFERENCES seasons(id),
+    card_key  TEXT    NOT NULL,
+    visible   INTEGER NOT NULL DEFAULT 1,
+    label     TEXT    NOT NULL DEFAULT '',
+    position  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(season_id, card_key)
+);
+-- +goose StatementEnd
+
+-- The names and ranks an archived season froze (Pudgey: frozen, with a link to the current
+-- profile). Written by archiveSeason; for seasons archived before this release, once here and
+-- marked as_of_migration — those names are as of the upgrade, not the season's end.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_roster_snapshot (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id       INTEGER NOT NULL REFERENCES seasons(id),
+    member_id       INTEGER NOT NULL,
+    name            TEXT    NOT NULL,
+    rank            TEXT    NOT NULL,
+    snapshot_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    as_of_migration INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(season_id, member_id)
+);
+-- +goose StatementEnd
+
+-- A copy of each file tagged to a season, made when it archives (owner, 2026-10-19). The bytes
+-- live at <storage>/season-<id>/<file_name>; effective_min_rank is the file's view rank with
+-- every tag's folded in, frozen because tags can change after the copy cannot.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_file_snapshots (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id          INTEGER NOT NULL REFERENCES seasons(id),
+    file_id            INTEGER NOT NULL,
+    title              TEXT    NOT NULL,
+    file_name          TEXT    NOT NULL,
+    file_type          TEXT    NOT NULL,
+    effective_min_rank TEXT    NOT NULL DEFAULT 'R1',
+    owner_user_id      INTEGER,
+    snapshot_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(season_id, file_id)
+);
+-- +goose StatementEnd
+
+-- Default layout rows for every existing season (no write on read; the reader still merges).
+-- +goose StatementBegin
+INSERT INTO season_tabs (season_id, tab_key, visible, position)
+SELECT s.id, k.tab_key, 1, k.pos FROM seasons s
+CROSS JOIN (SELECT 'dashboard' AS tab_key, 0 AS pos UNION ALL SELECT 'rankings', 1
+    UNION ALL SELECT 'participation', 2 UNION ALL SELECT 'contributions', 3
+    UNION ALL SELECT 'rewards', 4 UNION ALL SELECT 'land', 5 UNION ALL SELECT 'war', 6
+    UNION ALL SELECT 'schedule', 7 UNION ALL SELECT 'comms', 8 UNION ALL SELECT 'files', 9) k
+WHERE NOT EXISTS (SELECT 1 FROM season_tabs t WHERE t.season_id = s.id AND t.tab_key = k.tab_key);
+-- +goose StatementEnd
+-- +goose StatementBegin
+INSERT INTO season_dashboard_cards (season_id, card_key, visible, position)
+SELECT s.id, k.card_key, 1, k.pos FROM seasons s
+CROSS JOIN (SELECT 'faction_allies' AS card_key, 0 AS pos UNION ALL SELECT 'leadership_flags', 1
+    UNION ALL SELECT 'season_schedule', 2 UNION ALL SELECT 'land_status', 3
+    UNION ALL SELECT 'war_record', 4 UNION ALL SELECT 'reward_tier_status', 5) k
+WHERE NOT EXISTS (SELECT 1 FROM season_dashboard_cards c WHERE c.season_id = s.id AND c.card_key = k.card_key);
+-- +goose StatementEnd
+
+-- Already-archived seasons: their roster is everyone with a row for the season, named as of now.
+-- +goose StatementBegin
+INSERT INTO season_roster_snapshot (season_id, member_id, name, rank, as_of_migration)
+SELECT s.id, m.id, m.name, m.rank, 1 FROM seasons s JOIN members m
+WHERE s.archived_at IS NOT NULL
+  AND (m.id IN (SELECT member_id FROM season_participation WHERE season_id = s.id)
+    OR m.id IN (SELECT member_id FROM season_member_records WHERE season_id = s.id)
+    OR m.id IN (SELECT member_id FROM season_rewards WHERE season_id = s.id))
+  AND NOT EXISTS (SELECT 1 FROM season_roster_snapshot r WHERE r.season_id = s.id AND r.member_id = m.id);
+-- +goose StatementEnd
+
+
+-- ── 304: the Season Hub's permission split ──────────────────────────────────
+-- Three keys become nine (owner, 2026-10-19): manage_season_hub retires into
+-- manage_season_participation and manage_season_contributions; manage_season_config takes the
+-- season's setup from manage_season_rewards, which keeps only the rewards themselves; Land and
+-- War get a view and a manage key each. Each new key is seeded from the key its scope lived
+-- under, so no rank loses access on upgrade. 085's shape: json('true'), never a json_extract
+-- copy (that writes the number 1, which getRankPermissions reads as false), and only where the
+-- key is absent, so an operator's later choice is never overwritten. manage_season_hub is left
+-- in the blob as dead data; nothing reads it.
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_config', json('true'))
+WHERE json_extract(permissions, '$.manage_season_rewards') = 1
+  AND json_type(permissions, '$.manage_season_config') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_participation', json('true'))
+WHERE json_extract(permissions, '$.manage_season_hub') = 1
+  AND json_type(permissions, '$.manage_season_participation') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_contributions', json('true'))
+WHERE json_extract(permissions, '$.manage_season_hub') = 1
+  AND json_type(permissions, '$.manage_season_contributions') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.view_season_land', json('true'))
+WHERE rank IN ('R4', 'R5') AND json_type(permissions, '$.view_season_land') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_land', json('true'))
+WHERE rank IN ('R4', 'R5') AND json_type(permissions, '$.manage_season_land') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.view_season_war', json('true'))
+WHERE rank IN ('R4', 'R5') AND json_type(permissions, '$.view_season_war') IS NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.manage_season_war', json('true'))
+WHERE rank IN ('R4', 'R5') AND json_type(permissions, '$.manage_season_war') IS NULL;
+-- +goose StatementEnd
+
+
+-- ── 271: factions and season alliances ──────────────────────────────────────
+-- A season's factions (S4: Kage no Sato and Koubutai), one flagged ours; entered by an officer,
+-- since they are the install's side and no template knows them.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_factions (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id INTEGER NOT NULL REFERENCES seasons(id),
+    key       TEXT    NOT NULL,
+    label     TEXT    NOT NULL,
+    is_ours   INTEGER NOT NULL DEFAULT 0,
+    position  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(season_id, key)
+);
+-- +goose StatementEnd
+-- One row per (season, registry alliance): the alliance's faction that season, the relationship
+-- (unknown is not enemy), the season's terms and the matchup fields. The Ally modal and the War
+-- tab write the same row, so nothing is entered twice, and an alliance's S5 row never touches its
+-- S4 row. faction_id is a game fact (the mobile store may set it); the rest is judgement.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_alliances (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id            INTEGER NOT NULL REFERENCES seasons(id),
+    external_alliance_id INTEGER NOT NULL REFERENCES external_alliances(id),
+    faction_id           INTEGER REFERENCES season_factions(id),
+    relationship         TEXT    NOT NULL DEFAULT 'unknown'
+                         CHECK(relationship IN ('allied','enemy','neutral','unknown')),
+    terms                TEXT    NOT NULL DEFAULT '',
+    notes                TEXT    NOT NULL DEFAULT '',
+    group_rank           INTEGER,
+    assessment_override  TEXT,
+    assessment_note      TEXT    NOT NULL DEFAULT '',
+    updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(season_id, external_alliance_id)
+);
+-- +goose StatementEnd
+
+
+-- ── 272: season tags on Comms and Files ─────────────────────────────────────
+-- comms_templates already carries season_id (Season Mail). Resources, polls (templates and
+-- launched instances — an instance inherits its template's season at launch) and files gain one.
+-- A season delete clears these tags rather than deleting the records: they belong to their own
+-- features. Tagging anything to an archived season is refused in Go.
+-- +goose StatementBegin
+ALTER TABLE comms_resources ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE poll_templates ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE poll_instances ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE files ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+
+
+-- ── 273: season and planning fields on schedule events; sourced origins ─────
+-- An ordinary calendar row gains a season, a status (tentative / confirmed / completed /
+-- cancelled), leadership_only (hidden from anyone without manage_schedule — every reader,
+-- the announcement included), show_on_main (off: the row shows on the season timeline only)
+-- and a reference link. A cancelled row is history: it leaves the rule, duplicate and
+-- generator checks (and the Desert Storm index below), so it never blocks its replacement.
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'
+    CHECK(status IN ('tentative','confirmed','completed','cancelled'));
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN leadership_only INTEGER NOT NULL DEFAULT 0;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN show_on_main INTEGER NOT NULL DEFAULT 1;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN reference_url TEXT NOT NULL DEFAULT '';
+-- +goose StatementEnd
+-- A row a Land or War record owns (land_capture, land_drop, war, trade_post): one row per
+-- source, created, moved and cancelled only by syncSourcedScheduleEvent. The 078 pattern for a
+-- second kind of origin; a war that adopts a pushed occurrence carries both.
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN source_kind TEXT;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events ADD COLUMN source_id INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_events_source ON schedule_events(source_kind, source_id)
+    WHERE source_kind IS NOT NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_schedule_events_task_force;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE UNIQUE INDEX idx_schedule_events_task_force
+    ON schedule_events(event_date, event_type_id, task_force) WHERE task_force IS NOT NULL AND status != 'cancelled';
+-- +goose StatementEnd
+
+-- The three types Land and Trade Posts write through. System rows, so no officer can delete or
+-- rename them from under the sync (the system-only RULES key on MG/LS/ZS/DS short names, so none
+-- applies); announce off, so planning rows stay out of the nightly announcement unless an
+-- officer opts the type in. An install that already uses one of the short names gets a longer
+-- one; a type already called by the name is adopted.
+-- +goose StatementBegin
+INSERT INTO schedule_event_types (name, short_name, icon, is_system, sort_order, announce)
+SELECT 'Land Capture', CASE WHEN EXISTS (SELECT 1 FROM schedule_event_types WHERE short_name = 'LC') THEN 'LCAP' ELSE 'LC' END,
+       '🏙️', 1, 90, 0
+WHERE NOT EXISTS (SELECT 1 FROM schedule_event_types WHERE name = 'Land Capture');
+-- +goose StatementEnd
+-- +goose StatementBegin
+INSERT INTO schedule_event_types (name, short_name, icon, is_system, sort_order, announce)
+SELECT 'Land Abandonment', CASE WHEN EXISTS (SELECT 1 FROM schedule_event_types WHERE short_name = 'LA') THEN 'LABN' ELSE 'LA' END,
+       '🏳️', 1, 91, 0
+WHERE NOT EXISTS (SELECT 1 FROM schedule_event_types WHERE name = 'Land Abandonment');
+-- +goose StatementEnd
+-- +goose StatementBegin
+INSERT INTO schedule_event_types (name, short_name, icon, is_system, sort_order, announce)
+SELECT 'Trade Post Action', CASE WHEN EXISTS (SELECT 1 FROM schedule_event_types WHERE short_name = 'TPA') THEN 'TPAC' ELSE 'TPA' END,
+       '🏪', 1, 92, 0
+WHERE NOT EXISTS (SELECT 1 FROM schedule_event_types WHERE name = 'Trade Post Action');
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE schedule_event_types SET is_system = 1
+WHERE name IN ('Land Capture', 'Land Abandonment', 'Trade Post Action');
+-- +goose StatementEnd
+
+-- Tag pushed rows with their season, so the season timeline needs no join: by origin (078)
+-- where the row has one, else by the push's own legacy match — a row of a template row's type
+-- on the date that row computes. Seasons pushed before 078 and never re-pushed (S2 and S3 on
+-- most installs) have only the second. This tags; it never claims an origin.
+-- +goose StatementBegin
+UPDATE schedule_events SET season_id = (SELECT se.season_id FROM season_events se WHERE se.id = schedule_events.season_event_id)
+WHERE season_id IS NULL AND season_event_id IS NOT NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+WITH RECURSIVE wk(n) AS (SELECT -2 UNION ALL SELECT n + 1 FROM wk WHERE n < 60),
+cand AS (
+    SELECT s.id AS season_id, se.event_type_id AS type_id,
+           date(s.start_date, printf('%+d days', (wk.n - 1) * 7 + se.day_offset - 1)) AS d
+    FROM season_events se JOIN seasons s ON s.id = se.season_id JOIN wk
+    WHERE se.is_server_event = 0 AND se.day_offset IS NOT NULL AND se.event_type_id IS NOT NULL
+      AND wk.n >= se.week_start
+      AND wk.n <= CASE WHEN se.week_end < se.week_start THEN s.week_count ELSE se.week_end END
+)
+UPDATE schedule_events SET season_id = (SELECT c.season_id FROM cand c
+    WHERE c.d = schedule_events.event_date AND c.type_id = schedule_events.event_type_id LIMIT 1)
+WHERE season_id IS NULL AND season_event_id IS NULL AND EXISTS (SELECT 1 FROM cand c
+    WHERE c.d = schedule_events.event_date AND c.type_id = schedule_events.event_type_id);
+-- +goose StatementEnd
+
+
+-- ── 274: Land configuration, levels, routes and targets ─────────────────────
+-- A season's Land rules (S4's values are Cpt Hedge's and the requester's; entered or copied with
+-- the season, not seeded) and its level table. Instants are UTC (gametime.SQLiteLayout); the app
+-- shows them in server time.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_config (
+    season_id                 INTEGER PRIMARY KEY REFERENCES seasons(id),
+    city_daily_captures       INTEGER NOT NULL DEFAULT 2,
+    stronghold_daily_captures INTEGER NOT NULL DEFAULT 2,
+    city_cap                  INTEGER NOT NULL DEFAULT 6,
+    stronghold_cap            INTEGER NOT NULL DEFAULT 6,
+    capitol_counts_toward_cap INTEGER NOT NULL DEFAULT 0,
+    abandon_minutes           INTEGER NOT NULL DEFAULT 60,
+    unlock_offset_hours       INTEGER NOT NULL DEFAULT 12,
+    redeclare_cooldown_days   INTEGER,
+    source                    TEXT NOT NULL DEFAULT '',
+    grade                     TEXT NOT NULL DEFAULT 'unverified'
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_levels (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id         INTEGER NOT NULL REFERENCES seasons(id),
+    kind              TEXT    NOT NULL CHECK(kind IN ('city','stronghold')),
+    level             INTEGER NOT NULL,
+    name              TEXT    NOT NULL DEFAULT '',
+    resource_per_hour INTEGER,
+    unlock_week       INTEGER,
+    unlock_day        INTEGER,
+    extra             TEXT    NOT NULL DEFAULT '{}',
+    source            TEXT    NOT NULL DEFAULT '',
+    grade             TEXT    NOT NULL DEFAULT 'unverified',
+    UNIQUE(season_id, kind, level)
+);
+-- +goose StatementEnd
+-- Three route slots per season, exactly one active; a route's targets in order; and every save
+-- of a route kept as a revision.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_routes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id  INTEGER NOT NULL REFERENCES seasons(id),
+    slot       TEXT    NOT NULL CHECK(slot IN ('primary','backup_a','backup_b')),
+    name       TEXT    NOT NULL DEFAULT '',
+    is_active  INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME,
+    UNIQUE(season_id, slot)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_targets (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    route_id               INTEGER NOT NULL REFERENCES season_land_routes(id),
+    position               INTEGER NOT NULL DEFAULT 0,
+    area_id                TEXT    NOT NULL DEFAULT '',
+    name                   TEXT    NOT NULL,
+    kind                   TEXT    NOT NULL DEFAULT 'city',
+    level                  INTEGER,
+    unlock_at              TEXT,
+    planned_capture_at     TEXT,
+    actual_capture_at      TEXT,
+    prerequisite_target_id INTEGER REFERENCES season_land_targets(id),
+    buff                   TEXT    NOT NULL DEFAULT '',
+    resource_per_hour      INTEGER,
+    status                 TEXT    NOT NULL DEFAULT 'planned'
+                           CHECK(status IN ('planned','declared','captured','skipped','failed')),
+    connected              TEXT    NOT NULL DEFAULT 'unknown'
+                           CHECK(connected IN ('touching','not_touching','unknown')),
+    coordinator_member_id  INTEGER REFERENCES members(id),
+    notes                  TEXT    NOT NULL DEFAULT ''
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_route_revisions (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    route_id INTEGER NOT NULL REFERENCES season_land_routes(id),
+    saved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    saved_by INTEGER REFERENCES users(id),
+    snapshot TEXT    NOT NULL DEFAULT '[]'
+);
+-- +goose StatementEnd
+
+
+-- ── 275: land events, holdings and drops ────────────────────────────────────
+-- What happened to the season's land, one observation per row: captured, abandoned, lost, at an
+-- instant (UTC), from a source (manual, csv, mobile). Holdings at any instant are derived —
+-- captured and not since abandoned or lost — never stored as state (the participation
+-- framework's rule, applied to land), which makes the mobile route a plain append.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id   INTEGER NOT NULL REFERENCES seasons(id),
+    area_id     TEXT    NOT NULL DEFAULT '',
+    name        TEXT    NOT NULL,
+    kind        TEXT    NOT NULL DEFAULT 'city',
+    level       INTEGER,
+    action      TEXT    NOT NULL CHECK(action IN ('captured','abandoned','lost')),
+    at          TEXT    NOT NULL,
+    source      TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by INTEGER REFERENCES users(id),
+    note        TEXT    NOT NULL DEFAULT '',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_land_events_season ON season_land_events(season_id, at);
+-- +goose StatementEnd
+-- A planned abandonment: which holding goes, to make room for which target, and when it must
+-- start (the replacement's planned capture less the abandoning time). Its calendar row is the
+-- Land Abandonment event the sync keeps in step.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_drops (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id             INTEGER NOT NULL REFERENCES seasons(id),
+    holding_area_id       TEXT    NOT NULL DEFAULT '',
+    holding_name          TEXT    NOT NULL,
+    kind                  TEXT    NOT NULL DEFAULT 'city',
+    level                 INTEGER,
+    replacement_target_id INTEGER REFERENCES season_land_targets(id),
+    replacement_at        TEXT,
+    must_start_by         TEXT,
+    status                TEXT    NOT NULL DEFAULT 'drop_required'
+                          CHECK(status IN ('drop_required','assigned','abandoning','complete','cancelled')),
+    assigned_member_id    INTEGER REFERENCES members(id),
+    notes                 TEXT    NOT NULL DEFAULT '',
+    schedule_event_id     INTEGER REFERENCES schedule_events(id),
+    updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+
+
+
+-- ── 276: Cpt Hedge snapshots ────────────────────────────────────────────────
+-- A map-planner export (a season-tagged .json in Files) and an optional screenshot of it, linked
+-- to a route or none. The file is the record; grid name and export date are read from it once.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_land_snapshots (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id     INTEGER NOT NULL REFERENCES seasons(id),
+    route_id      INTEGER REFERENCES season_land_routes(id),
+    file_id       INTEGER NOT NULL REFERENCES files(id),
+    image_file_id INTEGER REFERENCES files(id),
+    grid_name     TEXT    NOT NULL DEFAULT '',
+    export_date   TEXT    NOT NULL DEFAULT '',
+    note          TEXT    NOT NULL DEFAULT '',
+    uploaded_by   INTEGER REFERENCES users(id),
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+
+
+
+-- ── 277: War settings and opponent observations ─────────────────────────────
+-- The matchup score's weights and bands, the loot steps and the production stop, per season and
+-- copied with it. Observations are appended, never edited: the latest value of each figure per
+-- alliance (and for our own side, where a typed row overrides what the roster computes) is what
+-- the comparison uses, with its instant shown.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_war_config (
+    season_id             INTEGER PRIMARY KEY REFERENCES seasons(id),
+    weight_power          INTEGER NOT NULL DEFAULT 25,
+    weight_top10          INTEGER NOT NULL DEFAULT 35,
+    weight_top5           INTEGER NOT NULL DEFAULT 25,
+    weight_top3           INTEGER NOT NULL DEFAULT 15,
+    band_very_favorable   REAL    NOT NULL DEFAULT 10,
+    band_favorable        REAL    NOT NULL DEFAULT 3,
+    band_unfavorable      REAL    NOT NULL DEFAULT -3,
+    band_very_unfavorable REAL    NOT NULL DEFAULT -10,
+    min_categories        INTEGER NOT NULL DEFAULT 2,
+    loot_step_pct         INTEGER NOT NULL DEFAULT 3,
+    loot_max_pct          INTEGER NOT NULL DEFAULT 15,
+    production_stop_week  INTEGER,
+    production_stop_day   INTEGER,
+    -- The calendar type a war's row uses (S4: Copper War); NULL saves wars unscheduled.
+    war_event_type_id     INTEGER REFERENCES schedule_event_types(id)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_opponent_observations (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id          INTEGER NOT NULL REFERENCES seasons(id),
+    season_alliance_id INTEGER REFERENCES season_alliances(id),
+    is_own             INTEGER NOT NULL DEFAULT 0 CHECK((is_own = 1) = (season_alliance_id IS NULL)),
+    observed_at        TEXT    NOT NULL,
+    alliance_power     INTEGER,
+    member_count       INTEGER,
+    group_rank         INTEGER,
+    top10_thp          INTEGER,
+    top5_thp           INTEGER,
+    top3_thp           INTEGER,
+    source             TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by        INTEGER REFERENCES users(id),
+    note               TEXT    NOT NULL DEFAULT '',
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_opponent_obs ON season_opponent_observations(season_id, season_alliance_id, observed_at);
+-- +goose StatementEnd
+
+
+
+-- ── 278: wars and faction battles ───────────────────────────────────────────
+-- A season war is one row from Considering (or Incoming) to Completed: role, opponent, battle
+-- date, result, strategy and review. Its calendar row is the war-sourced schedule row, which
+-- adopts a pushed Copper War occurrence on the same date. Faction battles are the wider war's
+-- results, one row per battle, entered from the side whose record it is.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_wars (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id                   INTEGER NOT NULL REFERENCES seasons(id),
+    week_number                 INTEGER,
+    role                        TEXT    NOT NULL CHECK(role IN ('attack','defense')),
+    direction                   TEXT    NOT NULL DEFAULT 'outgoing' CHECK(direction IN ('outgoing','incoming')),
+    opponent_season_alliance_id INTEGER REFERENCES season_alliances(id),
+    battle_date                 TEXT,
+    battle_time                 TEXT,
+    status                      TEXT    NOT NULL DEFAULT 'considering'
+                                CHECK(status IN ('considering','planned','declared','incoming','confirmed','completed','cancelled')),
+    declared_by_member_id       INTEGER REFERENCES members(id),
+    planned_declaration_at      TEXT,
+    priority                    TEXT CHECK(priority IN ('high','medium','low')),
+    outcome                     TEXT CHECK(outcome IN ('win','loss','draw','unknown')),
+    participant_count           INTEGER,
+    resource_result             INTEGER,
+    poll_held                   INTEGER NOT NULL DEFAULT 1,
+    strategy_file_id            INTEGER REFERENCES files(id),
+    strategy_comms_id           INTEGER REFERENCES comms_templates(id),
+    map_file_id                 INTEGER REFERENCES files(id),
+    strategy_status             TEXT    NOT NULL DEFAULT 'draft' CHECK(strategy_status IN ('draft','ready','final','archived')),
+    key_objective               TEXT    NOT NULL DEFAULT '',
+    special_instructions        TEXT    NOT NULL DEFAULT '',
+    notes                       TEXT    NOT NULL DEFAULT '',
+    review_worked               TEXT    NOT NULL DEFAULT '',
+    review_improve              TEXT    NOT NULL DEFAULT '',
+    review_adjust               TEXT    NOT NULL DEFAULT '',
+    strategy_updated_at         TEXT,
+    schedule_event_id           INTEGER REFERENCES schedule_events(id),
+    created_by                  INTEGER REFERENCES users(id),
+    created_at                  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_wars_season ON season_wars(season_id, battle_date);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_faction_battles (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id                   INTEGER NOT NULL REFERENCES seasons(id),
+    week_number                 INTEGER,
+    battle_date                 TEXT    NOT NULL,
+    alliance_season_alliance_id INTEGER NOT NULL REFERENCES season_alliances(id),
+    opponent_season_alliance_id INTEGER REFERENCES season_alliances(id),
+    opponent_label              TEXT    NOT NULL DEFAULT '',
+    role                        TEXT    NOT NULL CHECK(role IN ('attack','defense')),
+    outcome                     TEXT    NOT NULL DEFAULT 'unknown' CHECK(outcome IN ('win','loss','draw','unknown')),
+    rank_group_id               INTEGER REFERENCES season_rank_groups(id),
+    notes                       TEXT    NOT NULL DEFAULT '',
+    source                      TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by                 INTEGER REFERENCES users(id),
+    created_at                  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(season_id, battle_date, alliance_season_alliance_id, role)
+);
+-- +goose StatementEnd
+
+
+
+-- ── 279: resource totals, rank groups, cutoffs ──────────────────────────────
+-- Resource totals (ours and opponents') and rank cutoffs are observations, appended; the latest
+-- is authoritative and the projection from our holdings is computed, never written back. Rank
+-- groups are season setup (S4 King #1, Queen #2–3, Rook #4–10), copied with the season.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_resource_observations (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id          INTEGER NOT NULL REFERENCES seasons(id),
+    season_alliance_id INTEGER REFERENCES season_alliances(id),
+    is_own             INTEGER NOT NULL DEFAULT 0 CHECK((is_own = 1) = (season_alliance_id IS NULL)),
+    resource_total     INTEGER NOT NULL,
+    war_rank           INTEGER,
+    observed_at        TEXT    NOT NULL,
+    source             TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by        INTEGER REFERENCES users(id),
+    note               TEXT    NOT NULL DEFAULT '',
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_resource_obs ON season_resource_observations(season_id, season_alliance_id, observed_at);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_rank_groups (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id INTEGER NOT NULL REFERENCES seasons(id),
+    label     TEXT    NOT NULL,
+    rank_from INTEGER NOT NULL,
+    rank_to   INTEGER NOT NULL,
+    position  INTEGER NOT NULL DEFAULT 0
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_rank_cutoffs (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id      INTEGER NOT NULL REFERENCES seasons(id),
+    rank           INTEGER NOT NULL,
+    resource_total INTEGER NOT NULL,
+    observed_at    TEXT    NOT NULL,
+    source         TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by    INTEGER REFERENCES users(id),
+    note           TEXT    NOT NULL DEFAULT '',
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_rank_cutoffs ON season_rank_cutoffs(season_id, rank, observed_at);
+-- +goose StatementEnd
+-- The war rank the season aims for (S4: a reward group's last rank).
+-- +goose StatementBegin
+ALTER TABLE seasons ADD COLUMN target_war_rank INTEGER;
+-- +goose StatementEnd
+
+
+
+-- ── 280: Trade Posts ────────────────────────────────────────────────────────
+-- The season's posts are definitions (copied with the season); the plan for each — priority,
+-- action, when, who — keeps a Trade Post Action calendar row for take / contest / defend with a
+-- time. Who holds a post is observed and appended; the latest observation is the owner.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_trade_posts (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id                   INTEGER NOT NULL REFERENCES seasons(id),
+    post_key                    TEXT    NOT NULL,
+    name                        TEXT    NOT NULL,
+    strategic_priority          TEXT CHECK(strategic_priority IN ('high','medium','low')),
+    planned_action              TEXT CHECK(planned_action IN ('take','contest','defend','hold','ignore')),
+    planned_at                  TEXT,
+    assigned_season_alliance_id INTEGER REFERENCES season_alliances(id),
+    related_war_id              INTEGER REFERENCES season_wars(id),
+    strategy_comms_id           INTEGER REFERENCES comms_templates(id),
+    map_file_id                 INTEGER REFERENCES files(id),
+    notes                       TEXT    NOT NULL DEFAULT '',
+    schedule_event_id           INTEGER REFERENCES schedule_events(id),
+    position                    INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(season_id, post_key)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_trade_post_observations (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id                  INTEGER NOT NULL REFERENCES season_trade_posts(id),
+    owner_season_alliance_id INTEGER REFERENCES season_alliances(id),
+    owner_label              TEXT    NOT NULL DEFAULT '',
+    owner_faction_id         INTEGER REFERENCES season_factions(id),
+    observed_at              TEXT    NOT NULL,
+    source                   TEXT    NOT NULL DEFAULT 'manual',
+    recorded_by              INTEGER REFERENCES users(id),
+    created_at               DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_trade_post_obs ON season_trade_post_observations(post_id, observed_at);
+-- +goose StatementEnd
+
+
+
+-- ── 282: war attendance and tri-state polls ────────────────────────────────
+-- Per member and war: attended (NULL unknown, 0 no, 1 yes) and the in-game poll response the
+-- officers confirmed (yes, no, none). A war with no rows says nothing about anyone. The legacy
+-- weekly key-event count and poll booleans stay as history (decision 8).
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_war_attendance (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    war_id        INTEGER NOT NULL REFERENCES season_wars(id),
+    member_id     INTEGER NOT NULL REFERENCES members(id),
+    attended      INTEGER CHECK(attended IN (0, 1)),
+    poll_response TEXT    NOT NULL DEFAULT 'none' CHECK(poll_response IN ('yes','no','none')),
+    note          TEXT    NOT NULL DEFAULT '',
+    recorded_by   INTEGER REFERENCES users(id),
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(war_id, member_id)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_season_war_attendance_member ON season_war_attendance(member_id);
+-- +goose StatementEnd
+
+
+
+-- ── 281: weekly event detail ────────────────────────────────────────────────
+-- The events of a season week that make up its Core set (label, kind, required for Core), and
+-- each member's result in each. The weekly score stays the one officers assign; the detail
+-- neither sets nor suggests it.
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_participation_events (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id         INTEGER NOT NULL REFERENCES seasons(id),
+    week_number       INTEGER NOT NULL,
+    label             TEXT    NOT NULL,
+    kind              TEXT    NOT NULL DEFAULT '',
+    required_for_core INTEGER NOT NULL DEFAULT 0,
+    position          INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(season_id, week_number, label)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_participation_event_entries (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id  INTEGER NOT NULL REFERENCES season_participation_events(id),
+    member_id INTEGER NOT NULL REFERENCES members(id),
+    result    TEXT    NOT NULL CHECK(result IN ('full','partial','absent','excused','completed','na')),
+    note      TEXT    NOT NULL DEFAULT '',
+    UNIQUE(event_id, member_id)
+);
+-- +goose StatementEnd
+
+
+
+-- ── 283: the Excused score level ────────────────────────────────────────────
+-- A week scored Excused leaves the member's overall denominator (decision 4). It joins the
+-- default score levels and every season that lacks it, as a 0-point level after the others; a
+-- season or default list that already has an "excused" key is left as it is.
+-- +goose StatementBegin
+INSERT INTO season_score_levels (season_id, key, label, points, sort_order)
+SELECT s.id, 'excused', 'EXCUSED', 0,
+       COALESCE((SELECT MAX(sort_order) + 1 FROM season_score_levels l WHERE l.season_id = s.id), 0)
+FROM seasons s
+WHERE NOT EXISTS (SELECT 1 FROM season_score_levels l WHERE l.season_id = s.id AND l.key = 'excused');
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE settings
+SET season_score_levels_default = json_insert(season_score_levels_default, '$[#]',
+        json('{"key":"excused","label":"EXCUSED","points":0}'))
+WHERE CASE WHEN json_valid(season_score_levels_default)
+           THEN json_type(season_score_levels_default) = 'array'
+                AND json_array_length(season_score_levels_default) > 0
+                AND NOT EXISTS (SELECT 1 FROM json_each(season_score_levels_default)
+                                WHERE json_extract(value, '$.key') = 'excused')
+           ELSE 0 END;
+-- +goose StatementEnd
+
+
+
+-- ── 284: eligibility rules, transfers, exemptions ───────────────────────────
+-- A tier may require a number of wars and the Core events; a transferred reward records who held
+-- it, and a recipient below the Elite rule needs a reason. An exemption (granted by an R5) lifts
+-- the Core-event requirement for one member for one season.
+-- +goose StatementBegin
+ALTER TABLE season_reward_tiers ADD COLUMN wars_required INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_reward_tiers ADD COLUMN requires_core_events INTEGER NOT NULL DEFAULT 0;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_rewards ADD COLUMN transferred_from_member_id INTEGER REFERENCES members(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_rewards ADD COLUMN transfer_override_note TEXT NOT NULL DEFAULT '';
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_member_exemptions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id  INTEGER NOT NULL REFERENCES seasons(id),
+    member_id  INTEGER NOT NULL REFERENCES members(id),
+    kind       TEXT    NOT NULL DEFAULT 'core_events' CHECK(kind IN ('core_events')),
+    granted_by INTEGER REFERENCES users(id),
+    note       TEXT    NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(season_id, member_id, kind)
+);
+-- +goose StatementEnd
+
+
+
+-- ── 285: season context on strikes, war poll reviews ────────────────────────
+-- A strike may name the season, week and war it belongs to. A member who voted Yes on a war's
+-- poll and did not attend is put to the officers as a review: applied (a strike) or dismissed,
+-- once per war and member. Strike categories stay one global managed list; this adds one system
+-- category.
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes ADD COLUMN season_id INTEGER REFERENCES seasons(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes ADD COLUMN season_week INTEGER;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes ADD COLUMN season_war_id INTEGER REFERENCES season_wars(id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE INDEX IF NOT EXISTS idx_strikes_season ON accountability_strikes(season_id);
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TABLE IF NOT EXISTS season_poll_reviews (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    war_id     INTEGER NOT NULL REFERENCES season_wars(id),
+    member_id  INTEGER NOT NULL REFERENCES members(id),
+    decision   TEXT    NOT NULL CHECK(decision IN ('applied','dismissed')),
+    strike_id  INTEGER REFERENCES accountability_strikes(id),
+    decided_by INTEGER REFERENCES users(id),
+    decided_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(war_id, member_id)
+);
+-- +goose StatementEnd
+-- +goose StatementBegin
+INSERT INTO strike_types (key, label, is_system, active, sort_order)
+SELECT 'war_poll_yes_no_show', 'War Poll Yes / Did Not Show', 1, 1, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM strike_types)
+WHERE NOT EXISTS (SELECT 1 FROM strike_types WHERE key = 'war_poll_yes_no_show');
+-- +goose StatementEnd
+-- +goose StatementBegin
+UPDATE strike_types SET is_system = 1, active = 1 WHERE key = 'war_poll_yes_no_show';
+-- +goose StatementEnd
+
+
+
+-- ── 286: the Season Participation report's permission ───────────────────────
+-- Seeded true for every rank that can run the Participation grid report, where the key is
+-- absent (085's shape), so an operator's later choice is never overwritten.
+-- +goose StatementBegin
+UPDATE rank_permissions
+SET permissions = json_set(permissions, '$.view_report_season_participation', json('true'))
+WHERE json_extract(permissions, '$.view_report_participation') = 1
+  AND json_type(permissions, '$.view_report_season_participation') IS NULL;
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_poll_reviews;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_strikes_season;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes DROP COLUMN season_war_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes DROP COLUMN season_week;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE accountability_strikes DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_member_exemptions;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_rewards DROP COLUMN transfer_override_note;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_rewards DROP COLUMN transferred_from_member_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_reward_tiers DROP COLUMN requires_core_events;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE season_reward_tiers DROP COLUMN wars_required;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DELETE FROM season_score_levels WHERE key = 'excused' AND points = 0 AND label = 'EXCUSED'
+    AND NOT EXISTS (SELECT 1 FROM season_participation p WHERE p.season_id = season_score_levels.season_id AND p.score = 'excused');
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_participation_event_entries;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_participation_events;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_war_attendance_member;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_war_attendance;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_trade_post_obs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_trade_post_observations;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_trade_posts;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN target_war_rank;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_rank_cutoffs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_rank_cutoffs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_rank_groups;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_resource_obs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_resource_observations;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_faction_battles;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_wars_season;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_wars;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_opponent_obs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_opponent_observations;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_war_config;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_snapshots;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_drops;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_season_land_events_season;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_events;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_route_revisions;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_targets;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_routes;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_levels;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_land_config;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_schedule_events_task_force;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP INDEX IF EXISTS idx_schedule_events_source;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN source_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN source_kind;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN reference_url;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN show_on_main;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN leadership_only;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN status;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE schedule_events DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE UNIQUE INDEX idx_schedule_events_task_force
+    ON schedule_events(event_date, event_type_id, task_force) WHERE task_force IS NOT NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE files DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE poll_instances DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE poll_templates DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE comms_resources DROP COLUMN season_id;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_alliances;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_factions;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_file_snapshots;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_roster_snapshot;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_dashboard_cards;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DROP TABLE IF EXISTS season_tabs;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN land_readiness_buffer_hours;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN schedule_buffer_minutes;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN war_at_risk_min_pct;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN war_active_min_pct;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN poll_at_risk_min_pct;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN poll_active_min_pct;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN resource_name;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE seasons DROP COLUMN key_event_total;
+-- +goose StatementEnd

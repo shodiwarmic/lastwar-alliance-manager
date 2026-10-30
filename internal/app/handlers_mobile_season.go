@@ -44,7 +44,7 @@ type mobileContributionTarget struct {
 	Category   string `json:"category"`
 }
 
-// POST /api/mobile/season-hub/contributions/preview (manage_season_hub)
+// POST /api/mobile/season-hub/contributions/preview (manage_season_contributions)
 // Validates exactly as the web import does, and resolves the rows as it does. Read-only.
 func mobileContributionsPreview(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
@@ -88,7 +88,7 @@ func mobileContributionsPreview(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// POST /api/mobile/season-hub/contributions/commit (manage_season_hub)
+// POST /api/mobile/season-hub/contributions/commit (manage_season_contributions)
 func mobileContributionsCommit(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
 	var req struct {

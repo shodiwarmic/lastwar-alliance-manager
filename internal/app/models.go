@@ -944,18 +944,28 @@ type RankPermissions struct {
 	ViewAccountability   bool   `json:"view_accountability"`
 	ManageAccountability bool   `json:"manage_accountability"`
 	ViewSeasonHub        bool   `json:"view_season_hub"`
-	ManageSeasonHub      bool   `json:"manage_season_hub"`
 	ManageSeasonRewards  bool   `json:"manage_season_rewards"`
-	ViewComms            bool   `json:"view_comms"`
-	ManageComms          bool   `json:"manage_comms"`
-	ViewPolls            bool   `json:"view_polls"`
-	ManagePolls          bool   `json:"manage_polls"`
+	// The Season Hub split (migration 089, private-docs 304). manage_season_hub retired into
+	// participation and contributions; season setup left manage_season_rewards for config.
+	ManageSeasonConfig        bool `json:"manage_season_config"`
+	ManageSeasonParticipation bool `json:"manage_season_participation"`
+	ManageSeasonContributions bool `json:"manage_season_contributions"`
+	ViewSeasonLand            bool `json:"view_season_land"`
+	ManageSeasonLand          bool `json:"manage_season_land"`
+	ViewSeasonWar             bool `json:"view_season_war"`
+	ManageSeasonWar           bool `json:"manage_season_war"`
+	ViewComms                 bool `json:"view_comms"`
+	ManageComms               bool `json:"manage_comms"`
+	ViewPolls                 bool `json:"view_polls"`
+	ManagePolls               bool `json:"manage_polls"`
 
 	// One key per report on the Reports page (reports.go → reportDefs).
 	ViewReportWeekly        bool `json:"view_report_weekly"`
 	ViewReportVSMisses      bool `json:"view_report_vs_misses"`
 	ViewReportDonations     bool `json:"view_report_donations"`
 	ViewReportParticipation bool `json:"view_report_participation"`
+	// The Season Participation report (private-docs 286), seeded from view_report_participation.
+	ViewReportSeasonParticipation bool `json:"view_report_season_participation"`
 }
 
 // ValidSkillKeys is the canonical list of skill keys. Adding a new skill = add here only.
@@ -1044,11 +1054,18 @@ var PermissionGroups = []PermissionGroup{
 		{Key: "view_report_vs_misses", Label: "VS misses"},
 		{Key: "view_report_donations", Label: "Donations"},
 		{Key: "view_report_participation", Label: "Participation grid"},
+		{Key: "view_report_season_participation", Label: "Season participation"},
 	}},
 	{Feature: "Season Hub", Rows: []PermissionRow{
 		{Key: "view_season_hub", Label: "View"},
-		{Key: "manage_season_hub", Label: "Manage"},
+		{Key: "manage_season_config", Label: "Configure seasons"},
 		{Key: "manage_season_rewards", Label: "Rewards"},
+		{Key: "manage_season_participation", Label: "Participation"},
+		{Key: "manage_season_contributions", Label: "Contributions"},
+		{Key: "view_season_land", Label: "View Land"},
+		{Key: "manage_season_land", Label: "Manage Land"},
+		{Key: "view_season_war", Label: "View War"},
+		{Key: "manage_season_war", Label: "Manage War"},
 	}},
 	{Feature: "Comms", Rows: []PermissionRow{
 		{Key: "view_comms", Label: "View"},
@@ -1097,6 +1114,7 @@ type CommsResource struct {
 	Description string `json:"description"`
 	CreatedBy   string `json:"created_by"`
 	CreatedAt   string `json:"created_at"`
+	SeasonID    *int   `json:"season_id"`
 }
 
 type PollTemplate struct {
@@ -1108,6 +1126,7 @@ type PollTemplate struct {
 	MultiSelect bool   `json:"multi_select"`
 	CreatedBy   string `json:"created_by"`
 	CreatedAt   string `json:"created_at"`
+	SeasonID    *int   `json:"season_id"`
 }
 
 type PollInstance struct {
@@ -1123,6 +1142,7 @@ type PollInstance struct {
 	CreatedBy      string  `json:"created_by"`
 	CreatedAt      string  `json:"created_at"`
 	RespondedCount int     `json:"responded_count"` // computed on list queries
+	SeasonID       *int    `json:"season_id"`       // inherited from the template at launch unless set
 }
 
 type PollMemberStatus struct {
@@ -1288,6 +1308,16 @@ type ScheduleEvent struct {
 	OutsideWindow bool   `json:"outside_window,omitempty"`
 	ParentName    string `json:"parent_name,omitempty"`
 
+	// Season Hub planning fields (migration 089, private-docs 273). SourceKind names the
+	// Land or War record that owns the row (syncSourcedScheduleEvent); such a row is moved
+	// and cancelled by its source, not by hand.
+	SeasonID       *int   `json:"season_id"`
+	Status         string `json:"status"`
+	LeadershipOnly bool   `json:"leadership_only"`
+	ShowOnMain     bool   `json:"show_on_main"`
+	ReferenceURL   string `json:"reference_url"`
+	SourceKind     string `json:"source_kind,omitempty"`
+
 	// Participation (#13), derived per read: whether the type tracks participation,
 	// whether this occurrence has a recorded board, and how many rows it holds. The
 	// card offers Record on a tracked past event and a board badge once recorded.
@@ -1374,6 +1404,7 @@ type AllianceFile struct {
 	UpdatedAt     string `json:"updated_at"`
 	UpdatedByName string `json:"updated_by_name"` // username of the last editor ("" if unknown)
 	IsOwner       bool   `json:"is_owner"`
+	SeasonID      *int   `json:"season_id"` // the Season Hub season the file belongs to, if any
 	// Tags is rank-filtered to the requesting viewer, so a card never renders a
 	// badge the viewer isn't cleared for. Always a non-nil slice (empty, not null)
 	// so the frontend can .map() it unconditionally.

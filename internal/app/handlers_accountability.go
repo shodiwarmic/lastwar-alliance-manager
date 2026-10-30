@@ -416,6 +416,27 @@ type AccountabilityStrike struct {
 	ExcusedReason string `json:"excused_reason"`
 	CreatedBy     string `json:"created_by"`
 	CreatedAt     string `json:"created_at"`
+	strikeSeason
+}
+
+// strikeSeason is a strike's season context (private-docs 285), shown as a badge.
+type strikeSeason struct {
+	SeasonID     *int   `json:"season_id"`
+	SeasonNumber *int   `json:"season_number"`
+	SeasonWeek   *int   `json:"season_week"`
+	SeasonWarID  *int   `json:"season_war_id"`
+	SeasonWar    string `json:"season_war"` // "Attack 2026-11-19"
+}
+
+// strikeSeasonColumns / strikeSeasonJoins read strikeSeason (alias s for the strike).
+const strikeSeasonColumns = `, s.season_id, ss.season_number, s.season_week, s.season_war_id,
+	COALESCE(CASE sw.role WHEN 'attack' THEN 'Attack' WHEN 'defense' THEN 'Defense' END || ' ' || COALESCE(sw.battle_date, ''), '')`
+const strikeSeasonJoins = `
+	LEFT JOIN seasons ss ON ss.id = s.season_id
+	LEFT JOIN season_wars sw ON sw.id = s.season_war_id`
+
+func (x *strikeSeason) scanArgs() []any {
+	return []any{&x.SeasonID, &x.SeasonNumber, &x.SeasonWeek, &x.SeasonWarID, &x.SeasonWar}
 }
 
 type TrainLogRecord struct {
@@ -473,10 +494,10 @@ func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
 	strikeRows, err := db.Query(`
 		SELECT s.id, s.strike_type, s.reason, COALESCE(s.ref_date,''), s.status,
 		       COALESCE(eu.username,''), s.excused_reason,
-		       COALESCE(cu.username,''), s.created_at
+		       COALESCE(cu.username,''), s.created_at`+strikeSeasonColumns+`
 		FROM accountability_strikes s
 		LEFT JOIN users eu ON eu.id = s.excused_by
-		LEFT JOIN users cu ON cu.id = s.created_by
+		LEFT JOIN users cu ON cu.id = s.created_by`+strikeSeasonJoins+`
 		WHERE s.member_id = ?
 		ORDER BY s.created_at DESC
 	`, id)
@@ -489,8 +510,8 @@ func handleAccountabilityMemberProfile(w http.ResponseWriter, r *http.Request) {
 	profile.Strikes = []AccountabilityStrike{}
 	for strikeRows.Next() {
 		var s AccountabilityStrike
-		if err := strikeRows.Scan(&s.ID, &s.StrikeType, &s.Reason, &s.RefDate, &s.Status,
-			&s.ExcusedBy, &s.ExcusedReason, &s.CreatedBy, &s.CreatedAt); err != nil {
+		if err := strikeRows.Scan(append([]any{&s.ID, &s.StrikeType, &s.Reason, &s.RefDate, &s.Status,
+			&s.ExcusedBy, &s.ExcusedReason, &s.CreatedBy, &s.CreatedAt}, s.strikeSeason.scanArgs()...)...); err != nil {
 			slog.Error("handleAccountabilityMemberProfile: strike scan failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
@@ -636,6 +657,10 @@ func handleStrikeCreate(w http.ResponseWriter, r *http.Request) {
 		StrikeType string `json:"strike_type"`
 		Reason     string `json:"reason"`
 		RefDate    string `json:"ref_date"`
+		// Optional season context (private-docs 285).
+		SeasonID    *int `json:"season_id"`
+		SeasonWeek  *int `json:"season_week"`
+		SeasonWarID *int `json:"season_war_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -664,6 +689,10 @@ func handleStrikeCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unknown or inactive strike category", http.StatusBadRequest)
 		return
 	}
+	if msg := validateStrikeSeason(body.SeasonID, body.SeasonWeek, body.SeasonWarID); msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
 
 	// One strike per member and week for the per-week categories. The check and the
 	// insert share one transaction — with one connection, that is the serialisation point,
@@ -689,9 +718,9 @@ func handleStrikeCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := tx.Exec(`
-		INSERT INTO accountability_strikes (member_id, strike_type, reason, ref_date, created_by)
-		VALUES (?, ?, ?, NULLIF(?, ''), ?)
-	`, body.MemberID, body.StrikeType, body.Reason, body.RefDate, userID)
+		INSERT INTO accountability_strikes (member_id, strike_type, reason, ref_date, created_by, season_id, season_week, season_war_id)
+		VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?)
+	`, body.MemberID, body.StrikeType, body.Reason, body.RefDate, userID, body.SeasonID, body.SeasonWeek, body.SeasonWarID)
 	if err != nil {
 		slog.Error("handleStrikeCreate: insert failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -789,6 +818,12 @@ func handleStrikeDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A poll review that applied this strike keeps its decision; the link is cleared (285).
+	if _, err := db.Exec("UPDATE season_poll_reviews SET strike_id = NULL WHERE strike_id = ?", strikeID); err != nil {
+		slog.Error("handleStrikeDelete: unlink review", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	if _, err := db.Exec("DELETE FROM accountability_strikes WHERE id = ?", strikeID); err != nil {
 		slog.Error("handleStrikeDelete: delete failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -815,6 +850,7 @@ type StrikeWithMember struct {
 	ExcusedReason string `json:"excused_reason"`
 	CreatedBy     string `json:"created_by"`
 	CreatedAt     string `json:"created_at"`
+	strikeSeason
 }
 
 func handleAllStrikes(w http.ResponseWriter, r *http.Request) {
@@ -830,11 +866,11 @@ func handleAllStrikes(w http.ResponseWriter, r *http.Request) {
 		SELECT s.id, s.member_id, m.name, m.rank,
 		       s.strike_type, s.reason, COALESCE(s.ref_date,''), s.status,
 		       COALESCE(eu.username,''), s.excused_reason,
-		       COALESCE(cu.username,''), s.created_at
+		       COALESCE(cu.username,''), s.created_at` + strikeSeasonColumns + `
 		FROM accountability_strikes s
 		JOIN members m ON m.id = s.member_id
 		LEFT JOIN users eu ON eu.id = s.excused_by
-		LEFT JOIN users cu ON cu.id = s.created_by
+		LEFT JOIN users cu ON cu.id = s.created_by` + strikeSeasonJoins + `
 	`
 	args := []any{}
 	if statusFilter == "active" || statusFilter == "excused" {
@@ -854,9 +890,9 @@ func handleAllStrikes(w http.ResponseWriter, r *http.Request) {
 	strikes := []StrikeWithMember{}
 	for rows.Next() {
 		var s StrikeWithMember
-		if err := rows.Scan(&s.ID, &s.MemberID, &s.MemberName, &s.MemberRank,
+		if err := rows.Scan(append([]any{&s.ID, &s.MemberID, &s.MemberName, &s.MemberRank,
 			&s.StrikeType, &s.Reason, &s.RefDate, &s.Status,
-			&s.ExcusedBy, &s.ExcusedReason, &s.CreatedBy, &s.CreatedAt); err != nil {
+			&s.ExcusedBy, &s.ExcusedReason, &s.CreatedBy, &s.CreatedAt}, s.strikeSeason.scanArgs()...)...); err != nil {
 			slog.Error("handleAllStrikes: scan failed", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return

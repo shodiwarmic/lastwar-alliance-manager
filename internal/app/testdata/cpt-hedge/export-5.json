@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "exportDate": "2026-10-18T03:32:42.338Z",
+  "grids": [
+    {
+      "id": "s4-1792294315994",
+      "name": "Season 4 - Plan",
+      "alliances": [
+        {
+          "id": "1792294322600",
+          "name": "A",
+          "areaIds": [],
+          "color": "#8BC1F7"
+        }
+      ],
+      "pathSteps": [
+        {
+          "areaId": "86",
+          "allianceId": "1792294322600",
+          "step": 1
+        },
+        {
+          "areaId": "100",
+          "allianceId": "1792294322600",
+          "step": 2
+        },
+        {
+          "areaId": "87",
+          "allianceId": "1792294322600",
+          "step": 3
+        },
+        {
+          "areaId": "101",
+          "allianceId": "1792294322600",
+          "step": 4
+        }
+      ],
+      "showStrongholds": false,
+      "showCities": true,
+      "showBuffs": false,
+      "proposedPathMode": true,
+      "selectedAllianceId": "1792294322600",
+      "createdAt": "2026-10-18T03:31:55.994Z",
+      "updatedAt": "2026-10-18T03:32:19.028Z"
+    }
+  ]
+}

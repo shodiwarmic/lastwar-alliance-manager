@@ -232,8 +232,13 @@ is neither a store's nor in `mobileExcludedTables` with a reason, if a registere
 | GET | `/api/mobile/prospects` | `getMobileProspects` | `view_recruiting` | Prospects' game-read fields, for matching a scanned profile |
 | POST | `/api/mobile/prospects` | `postMobileProspect` | `manage_recruiting` | Update by `prospect_id` (fields sent only), or create — 409 with the id on a same-name, same-server duplicate |
 | GET | `/api/mobile/season-hub` | `getMobileSeasonHub` | `view_season_hub` | Active season, trackables, accepted categories |
-| POST | `/api/mobile/season-hub/contributions/preview` | `mobileContributionsPreview` | `manage_season_hub` | Resolve contribution rows (no OCR — the phone read them) |
-| POST | `/api/mobile/season-hub/contributions/commit` | `mobileContributionsCommit` | `manage_season_hub` | Save rows + aliases; the web import's target, resolution and upsert (`contributionTarget`, `resolveContributionRows`, `saveContributionTx`) |
+| POST | `/api/mobile/season-hub/contributions/preview` | `mobileContributionsPreview` | `manage_season_contributions` | Resolve contribution rows (no OCR — the phone read them) |
+| POST | `/api/mobile/season-hub/contributions/commit` | `mobileContributionsCommit` | `manage_season_contributions` | Save rows + aliases; the web import's target, resolution and upsert (`contributionTarget`, `resolveContributionRows`, `saveContributionTx`) |
+| GET | `/api/mobile/season-hub/war` | `getMobileSeasonWar` | `view_season_war` | The active season's factions, alliance rows (tag, server, faction, relationship) wars (date, role, status) and Trade Posts (key, name), to match what the phone reads |
+| POST | `/api/mobile/season-hub/war/observations` | `postMobileSeasonWarObservations` | `manage_season_war` | `{captured_at, alliances: [{tag, server, name?, faction_key?, power?, member_count?, group_rank?, top10_thp?, top5_thp?, top3_thp?, resource_total?, war_rank?}], own?: {resource_total, war_rank?}, cutoffs?: [{rank, resource_total}], trade_posts?: [{post_key, owner_season_alliance_id? \| (owner_tag, owner_server)}]}` → `season_opponent_observations`, `season_resource_observations`, `season_rank_cutoffs`, `season_trade_post_observations` (an owner the season does not list is kept as its label) (source `mobile`) for the active season; tag AND server, an alliance the registry lacks lands in `errors[]` (never minted from a phone); a known one without a season row gets one; a faction key sets its faction |
+| POST | `/api/mobile/season-hub/war/results` | `postMobileSeasonWarResults` | `manage_season_war` | `{captured_at, wars: [{war_id \| (battle_date, role), outcome, participant_count?, resource_result?}], faction_battles: [{battle_date, alliance_tag, alliance_server, opponent_tag?, opponent_server?, role, outcome}]}` — result columns only (the status stays the officers'), faction battles source `mobile`; per item written / unchanged / `errors[]` |
+| GET | `/api/mobile/season-hub/land` | `getMobileSeasonLand` | `view_season_land` | The active season's Land rules, level table and current holdings (derived from its events) |
+| POST | `/api/mobile/season-hub/land/events` | `postMobileSeasonLandEvents` | `manage_season_land` | `{captured_at, events: [{area_id, name, kind, level, action, at}]}` appended (source `mobile`), the web form's validation (`normaliseLandEvent`); per event `written`, `unchanged` (same area, action, instant) or `refused` |
 | GET | `/api/mobile/participation/types` | `getMobileParticipationTypes` | `view_` or `manage_participation` | Tracked types, absence rule, mail category, trackables |
 | POST | `/api/mobile/participation/preview` | `mobileParticipationPreview` | `manage_participation` | Rows the phone read (OCR wire shape, per frame) → the web import's answer |
 | POST | `/api/mobile/participation/import` | `mobileParticipationImport` | `manage_participation` | Frames (multipart, the web import's limits) → the same answer |
@@ -1393,6 +1398,89 @@ never derived figures.
   `mobileExcludedTables`: phones send readings.
 - **Member delete** removes the readings and entries (`deleteMemberTx`); `foreign_keys` is off.
 
+## Season Hub (`handlers_season_*.go`, `season_*.go`)
+
+One season's tracking: participation, contributions, rewards, Land, War, its schedule, comms and
+files, and a dashboard. Project 21 (v3.3.0) rebuilt it; the rules below are the ones a change is
+most likely to break.
+
+- **Nine permission keys** (`models.go`): `view_season_hub` opens it; `manage_season_config`
+  (season setup — tiers and their rules, trackables, layout, factions, Land and War settings,
+  exemptions), `manage_season_rewards`, `manage_season_participation` (scores, war attendance,
+  polls, week events), `manage_season_contributions`, and a view/manage pair each for Land and
+  War. A route that writes **another feature's** data needs that feature's key too, through
+  `requireAlsoPermission(key, why, …)` inside `requirePermission` — season events and Push to
+  Schedule write the calendar, so they also need `manage_schedule`. Never widen a Hub key to
+  cover the calendar.
+- **The status engine is `season_status.go`, and it is pure.** `computeSeasonStanding` is the
+  one place rows become a member's standing; `buildSeasonMembersQ(q, season, now)` feeds it and
+  every surface (Rankings, the grid, the dashboard, eligibility, the Season Participation
+  report) reads its result — none recomputes a percentage. **Only completed weeks count**
+  (`completedSeasonWeeks`: a week's last game day has passed, or the season is archived); the
+  current week counts for nobody. A completed week with no score counts as Absent and the
+  reason names it "not scored". **Excused** (a seeded score level, `excusedScoreKey`) leaves
+  the week out of the denominator, and so does a week in the season's `uncounted_weeks`
+  (migration 090: the reward week, 8, on the shipped templates; `Season.countsWeek`) — the
+  engine skips it, so no reader filters weeks itself. Eligibility's Core events skip it too. Wars count attended over completed wars with known
+  attendance; polls count yes-or-no over completed wars that held one. The final status is the
+  worst applicable category. A season with no war records keeps the legacy weekly key-event
+  count.
+- **Eligibility** (`computeSeasonEligibility`) judges each member against each tier's rules
+  (wars required, the week's Core events) with exemptions. A reward transferred to a member who
+  fails the Elite rule (`eliteRuleTier`, `transferCheck`) is refused unless it carries an
+  override reason, which the report shows.
+- **Hub records own calendar rows** (`schedule_sync.go`). A Land capture, abandonment, a war and
+  a Trade Post action each keep one `schedule_events` row in step through
+  `syncSourcedScheduleEvent(tx, sourcedEvent{…}, actor)`, found by `(source_kind, source_id)`
+  (a unique index), created through the schedule's own validator, moved when the source
+  moves, and **cancelled, never deleted**, when the source is. A validator refusal comes back
+  for the page to show; it never fails the source's own write. `AdoptPushed` lets a war adopt
+  the pushed Copper War already on its date instead of inserting a second. Any new record type
+  that belongs on the calendar goes through this function.
+- **Observations are append-only.** Opponent figures, resource totals, cutoffs and Trade Post
+  owners are rows with an `observed_at` and a `source` (`manual` | `csv` | `mobile` |
+  `lastrank`); the latest counts and nothing edits an old one. A figure nobody has seen is NULL,
+  never 0. `lastrank` rows come from the War tab linking an opponent (`PUT
+  /api/season-hub/alliances` with `lastrank_id`: the add-opponent pick, or Compare players) or
+  from *From LastRank* on a linked one (`POST /api/season-hub/war/observations/lastrank`, demo-blocked) —
+  power, member count and top 10/5/3 THP (`lastRankTopTHP`: LastRank's players come from the server
+  rankings, so each top N is summed once N players' hero power is known, else NULL), dated LastRank's
+  `last_seen_at`, never now. Group rank is the season's; LastRank has none. That link fills an empty
+  registry `lastrank_id` only: a row linked elsewhere is refused, never retargeted.
+- **A war's rating is live until it is completed, then frozen** (`season_war_snapshot.go`,
+  migration 091, private-docs 324). `season_war_snapshots` holds one row per war: both sides'
+  `warSide` (each figure's value, instant and source) and the `matchupResult`, taken in `saveWar`'s
+  transaction when a war becomes declared or confirmed (or changes opponent while it is), re-taken
+  by `POST …/wars/{id}/snapshot` until completed, and taken as of the battle
+  (`ownWarSideAt`, observations at or before it) when a war is completed without one. Faction
+  battles have none. A war or season delete removes it.
+- **One CSV import pair for every kind** (`season_import.go`): `POST
+  /api/season-hub/import/preview|confirm`, kinds registered with `registerSeasonImportKind`
+  from their own file's `init()`. A kind declares its columns (with header aliases), its
+  any-of permissions, `Parse` per row and `Write` in the caller's transaction; the confirm
+  re-parses the same text and refuses if any row errors, so it writes exactly what the preview
+  showed. Members resolve through `resolveMemberAliasWithIndex`, alliances by **tag and
+  server**. A new import is a kind, not a route.
+- **Engines are pure and shared**: Land readiness (`activeRouteReadiness`), holdings
+  (`landHoldingsAt`) and daily capacity (`landDailyCards`); the matchup (`computeMatchup`);
+  the war record (`warRecordsFor`); the resource projection and reward-tier status
+  (`resource_projection.go`, `loadWarResources`). The dashboard (`handleSeasonDashboard`)
+  computes every card server-side from these, filtered by permission; strategy fields never
+  reach it.
+- **Layout** (`season_tabs`, `season_dashboard_cards`): each season orders, renames and hides
+  its tabs and cards. Readers merge the defaults (`seasonTabKeys`, `seasonCardKeys`) in memory
+  — a GET never writes.
+- **Archives never move** (`archiveSeason`): files are copied first, then one transaction
+  freezes the roster (`season_roster_snapshot`) and marks the season archived; a failed copy
+  archives nothing. An archived Hub reads the frozen roster, and every configuration write
+  refuses an archived season. Copying a season copies configuration (`copySeasonConfigTx`),
+  never records.
+- **Templates never rewrite a season** — see "Season templates carry provenance" below.
+- **`foreign_keys` is off**: the season delete, the member delete, the user delete, a file
+  delete and a mail delete each clear or unlink the Hub rows that name them
+  (`season_lifecycle.go` lists every child table). A new table naming one of those gets a line
+  there.
+
 ## Reporting layer (`reports_*.go`)
 
 The Reports page (`/reports`) and every report on it sit on one layer, and that layer is
@@ -1843,6 +1931,27 @@ sticky first table column, capping a drag pool's height) belongs **inside the
 existing `≤768px` block**, not in a new breakpoint. Avoid coupling JS to a width
 via `matchMedia`; prefer CSS. If you must, key it to `768px` so CSS and JS agree.
 
+### Season templates carry provenance, and a corrected template never rewrites a season
+
+Migration 088 gave every template event row a stable `key`, a `source` and a `grade`
+(`validEventGrades`: official, cpt_hedge, guide, owner, requester, conflict, unverified), and
+`season_events` the same three as `template_key` / `source` / `grade`, stamped at season create.
+
+- **A seed correction replaces a template column only while it still reads as shipped** —
+  `json(col) = json('<the old shipped text>')`, column by column, inside a `CASE WHEN
+  json_valid(col)` so a malformed blob is left alone instead of aborting the migration (and
+  blocking boot). An operator's edited column is never overwritten. Copy that shape for any
+  future seed fix.
+- **Seasons are never rewritten.** `GET /api/season-hub/seasons/{id}/template-diff`
+  (`season_template_diff.go`) compares a season's rows with its template's — by
+  `template_key`, else a fallback for pre-088 rows (same label/type/week/day; else same type
+  in the same slot; else same label and type), reporting more than one candidate as
+  *ambiguous* rather than guessing. Edit Season shows it with a per-row Apply through the
+  ordinary season-event endpoints. Pushed calendar rows don't move; the next push reports drift.
+- **The template editors round-trip what they don't show.** `buildEventsEditor.getJSON`
+  starts each row from its parsed original; the template write handlers refuse malformed
+  JSON (`validateTemplateJSON`) and key any row that has none (`ensureTemplateEventKeys`).
+
 ### Season reward tiers are per-season rows, and `reward_tier` has no CHECK
 
 Reward tiers were four fixed columns on `seasons` (`tier_count_leader`/`core`/
@@ -1866,16 +1975,21 @@ Three more rules:
 2. **A tier with rewards assigned cannot be deleted** (409), exactly as a
    trackable with recorded data cannot. Renders of an orphaned key still fall
    back to showing the raw key rather than blanking.
-3. **Tier CRUD is gated on `manage_season_rewards` (R5), not
-   `manage_season_hub`.** Tier counts were previously edited inside the R5-only
-   Edit Season modal; reusing the trackables gate would silently widen access to
-   R4.
+3. **Tier CRUD is gated on `manage_season_config` (R5)** — season setup, seeded
+   from `manage_season_rewards`, which now covers only assigning rewards. Tier
+   counts were always R5-only; a wider gate would silently extend access to R4.
 
-The global default list lives in `settings.season_reward_tiers_default` (mirroring
-`season_score_levels_default`) and is copied into a season at creation.
-**Do not move it into `season_templates.defaults`** — `buildDefaultsEditor`'s
-`getJSON()` (`static/settings.js`) re-emits a fixed three-key object, so anything
-else in that blob is silently destroyed on the next template save.
+**Tiers belong to the template** (migration 088, private-docs 299): the game's counts
+change by season (S1–S2 Leader 1 / Core 10 / Elite 20 / Valued 69; S3+ add Tactician 4
+and take Core 15 / Elite 30 / Valued 50). `season_templates.reward_tiers` is its own
+column, edited in Settings → Season Templates, and a season created from a template
+starts with it (`templateRewardTiers`). The global list in
+`settings.season_reward_tiers_default` is the **fallback** — for a blank season, a
+custom template with none, or a template list that no longer validates. Both lists pass
+`cleanRewardTierList`. The tiers are a column rather than a key inside `defaults` because
+older `buildDefaultsEditor`s re-emitted a fixed three-key object; that editor now starts
+from the parsed original, so `defaults` round-trips keys it doesn't show
+(`key_event_total`, `resource_name`).
 
 Badge colours are palette slots (`purple`/`info`/`success`/`warning`/`danger`/
 `neutral`) validated against `validTierColors` in Go and rendered as

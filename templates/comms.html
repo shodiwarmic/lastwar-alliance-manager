@@ -133,6 +133,11 @@
             <p class="comms-hint">Variables auto-filled by integrations like the Storm page — not prompted at copy time.</p>
         </div>
 
+        <div class="form-group season-tag-group" style="display:none">
+            <label for="template-season-input">Season <span class="comms-hint-inline">(optional — lists it in the Season Hub)</span></label>
+            <select id="template-season-input" class="form-input"></select>
+        </div>
+
         <div class="modal-actions">
             <button id="template-save-btn" class="btn btn-primary">Save</button>
             <button id="template-cancel-btn" class="btn btn-secondary">Cancel</button>
@@ -159,6 +164,11 @@
         <div class="form-group">
             <label for="resource-desc-input">Description <span class="comms-hint-inline">(optional)</span></label>
             <textarea id="resource-desc-input" class="form-input" rows="3" placeholder="Brief description of this resource" style="resize:vertical;"></textarea>
+        </div>
+
+        <div class="form-group season-tag-group" style="display:none">
+            <label for="resource-season-input">Season <span class="comms-hint-inline">(optional — lists it in the Season Hub)</span></label>
+            <select id="resource-season-input" class="form-input"></select>
         </div>
 
         <div class="modal-actions">
@@ -208,6 +218,10 @@
             <button type="button" class="btn btn-secondary btn-sm" id="poll-add-option-btn" style="margin-top:6px;">+ Add Option</button>
         </div>
 
+                <div class="form-group season-tag-group" style="display:none">
+            <label for="poll-template-season-input">Season <span class="comms-hint-inline">(optional — lists it in the Season Hub)</span></label>
+            <select id="poll-template-season-input" class="form-input"></select>
+        </div>
         <div class="modal-actions">
             <button id="poll-template-save-btn" class="btn btn-primary">Save</button>
             <button id="poll-template-cancel-btn" class="btn btn-secondary">Cancel</button>
@@ -252,6 +266,10 @@
             </div>
         </div>
 
+                <div class="form-group season-tag-group" style="display:none">
+            <label for="poll-instance-season-input">Season <span class="comms-hint-inline">(optional — lists it in the Season Hub)</span></label>
+            <select id="poll-instance-season-input" class="form-input"></select>
+        </div>
         <div class="modal-actions">
             <button id="poll-instance-save-btn" class="btn btn-primary">Launch</button>
             <button id="poll-instance-cancel-btn" class="btn btn-secondary">Cancel</button>

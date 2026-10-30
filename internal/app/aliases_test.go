@@ -317,12 +317,12 @@ func TestSeasonHubImportAliasThroughHelper(t *testing.T) {
 		mw.Close()
 		req := httptest.NewRequest("POST", "/api/season-hub/contributions/import", &body)
 		req.Header.Set("Content-Type", mw.FormDataContentType())
-		req.AddCookie(sessionCookie(t, 3, "")) // R3: manage_season_hub granted below, no manage_members
+		req.AddCookie(sessionCookie(t, 3, "")) // R3: manage_season_contributions granted below, no manage_members
 		w := httptest.NewRecorder()
 		buildRouter().ServeHTTP(w, req)
 		return w
 	}
-	db.Exec(`UPDATE rank_permissions SET permissions = json_set(permissions, '$.manage_season_hub', json('true')) WHERE rank = 'R3'`)
+	db.Exec(`UPDATE rank_permissions SET permissions = json_set(permissions, '$.manage_season_contributions', json('true')) WHERE rank = 'R3'`)
 
 	w := post("Unknown Guy")
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "global alias for Member Three") {

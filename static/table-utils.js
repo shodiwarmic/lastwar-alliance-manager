@@ -734,3 +734,108 @@
         handleFor: (table) => (table && table._tableExport) || null,
     };
 })();
+
+// ════════════════════════════════════════════════════════════════════════════
+// TableSort — click-to-sort headers that reorder rows in place.
+//
+//   TableSort.attach(table, { state, onChange, groups, value, types })
+//
+// A <th data-sort="key"> is sortable; data-sort-type is text (default), number or date. Rows
+// are reordered in place — a row with inputs keeps what was typed — and each row's value is,
+// in order: the cell's data-sort-value, its input or select's value, its text. Text folds with
+// foldSearch; blanks sort last either way. `state` ({col, asc}) is the caller's object, so a
+// toolbar Sort select and the header clicks share it; `onChange(state)` runs after each click.
+// `groups: true` sorts the table's <tbody> elements by their first row (a member row and its
+// detail row move together); `value(row, key)` overrides the cell lookup for a column, and
+// `types` ({key: type}) types a key no header carries (a toolbar-only sort).
+// Opt in with `.sortable-table` on the table (styles.css holds the header styles).
+// ════════════════════════════════════════════════════════════════════════════
+(function () {
+    'use strict';
+
+    function cellValue(row, idx) {
+        const cell = row.cells[idx];
+        if (!cell) return '';
+        if (cell.dataset.sortValue !== undefined) return cell.dataset.sortValue;
+        const ctl = cell.querySelector('select, input:not([type=checkbox]), textarea');
+        if (ctl) return ctl.tagName === 'SELECT' && ctl.selectedOptions[0] ? ctl.selectedOptions[0].textContent : ctl.value;
+        const box = cell.querySelector('input[type=checkbox]');
+        if (box) return box.checked ? '1' : '0';
+        return cell.textContent.trim();
+    }
+
+    function parse(v, type) {
+        if (v === '' || v == null || v === '—') return null;
+        if (type === 'number') {
+            const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+            return isNaN(n) ? null : n;
+        }
+        if (type === 'date') {
+            const t = Date.parse(v);
+            return isNaN(t) ? null : t;
+        }
+        return (window.foldSearch ? foldSearch(String(v)) : String(v).toLowerCase());
+    }
+
+    function sortBy(table, opts, key, asc) {
+        const ths = Array.from(table.tHead ? table.tHead.rows[0].cells : []);
+        const th = ths.find(h => h.dataset.sort === key);
+        const idx = th ? ths.indexOf(th) : -1;
+        const type = (th && th.dataset.sortType) || (opts.types && opts.types[key]) || 'text';
+        const units = opts.groups ? Array.from(table.tBodies) : Array.from((table.tBodies[0] || table).rows);
+        const rowOf = u => (opts.groups ? u.rows[0] : u);
+        const keyed = units.map((u, i) => {
+            const row = rowOf(u);
+            let raw = row && opts.value ? opts.value(row, key) : undefined;
+            if (raw === undefined) raw = row && idx >= 0 ? cellValue(row, idx) : '';
+            return { u, i, v: parse(raw, type) };
+        });
+        keyed.sort((a, b) => {
+            if (a.v === null && b.v === null) return a.i - b.i;
+            if (a.v === null) return 1;
+            if (b.v === null) return -1;
+            const c = typeof a.v === 'number' ? a.v - b.v : String(a.v).localeCompare(String(b.v));
+            return (asc ? c : -c) || a.i - b.i;
+        });
+        const parent = opts.groups ? table : (table.tBodies[0] || table);
+        keyed.forEach(k => parent.appendChild(k.u));
+        ths.forEach(h => {
+            h.classList.remove('sort-asc', 'sort-desc');
+            h.removeAttribute('aria-sort');
+        });
+        if (th) {
+            th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+            th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+        }
+    }
+
+    function attach(table, opts) {
+        opts = opts || {};
+        if (!table || !table.tHead) return null;
+        table.classList.add('sortable-table');
+        const state = opts.state || { col: null, asc: true };
+        Array.from(table.tHead.rows[0].cells).forEach(th => {
+            if (!th.dataset.sort || th._tableSort) return;
+            th._tableSort = true;
+            th.tabIndex = 0;
+            const go = () => {
+                state.asc = state.col === th.dataset.sort ? !state.asc : true;
+                state.col = th.dataset.sort;
+                sortBy(table, opts, state.col, state.asc);
+                if (opts.onChange) opts.onChange(state);
+            };
+            th.addEventListener('click', go);
+            th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+        });
+        const handle = {
+            state,
+            // Re-apply the current sort after a render (rows are new; the order is not).
+            apply() { if (state.col) sortBy(table, opts, state.col, state.asc); },
+            sort(col, asc) { state.col = col; state.asc = asc; sortBy(table, opts, col, asc); },
+        };
+        table._tableSort = handle;
+        return handle;
+    }
+
+    window.TableSort = { attach, handleFor: t => (t && t._tableSort) || null };
+})();

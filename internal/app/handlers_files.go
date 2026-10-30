@@ -235,6 +235,29 @@ func shouldLogFileEdit(prev sql.NullString) bool {
 
 func getFilesList(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
+	var seasonID *int
+	if v := r.URL.Query().Get("season_id"); v != "" {
+		id, err := strconv.Atoi(v)
+		if err != nil {
+			http.Error(w, "Invalid season_id", http.StatusBadRequest)
+			return
+		}
+		seasonID = &id
+	}
+	files, err := listFilesForUser(user, seasonID)
+	if err != nil {
+		slog.Error("getFilesList", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(files)
+}
+
+// listFilesForUser returns the files a viewer may see — the Files page and the Season Hub's
+// Files tab both list through it, so the tag-rank rule lives in one place. seasonID narrows
+// the list to one season's files.
+func listFilesForUser(user *AuthUser, seasonID *int) ([]AllianceFile, error) {
 	userID := user.ID
 	userRankVal := rankTier(effectiveUserRank(user))
 
@@ -243,9 +266,7 @@ func getFilesList(w http.ResponseWriter, r *http.Request) {
 	// deadlocks the whole process (see CLAUDE.md).
 	allTags, err := loadAllFileTags()
 	if err != nil {
-		slog.Error("getFilesList: load tags failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("load tags: %w", err)
 	}
 	tagByID := make(map[int]FileTag, len(allTags))
 	for _, t := range allTags {
@@ -254,28 +275,29 @@ func getFilesList(w http.ResponseWriter, r *http.Request) {
 
 	tagIDsByFile, err := loadFileTagAssignments()
 	if err != nil {
-		slog.Error("getFilesList: load tag assignments failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("load tag assignments: %w", err)
 	}
 
 	// strftime normalizes both columns to one format ("YYYY-MM-DD HH:MM:SS"). The driver
 	// otherwise returns created_at (a DEFAULT CURRENT_TIMESTAMP column) as ISO "…T…Z" but
 	// updated_at (set via an explicit CURRENT_TIMESTAMP) as the space form — which would
 	// break client date parsing AND make updated_at != created_at for un-edited files.
-	rows, err := db.Query(`
+	query := `
 		SELECT f.id, f.title, f.file_name, f.file_type, f.min_rank, f.min_edit_rank,
 		       strftime('%Y-%m-%d %H:%M:%S', f.created_at),
 		       strftime('%Y-%m-%d %H:%M:%S', COALESCE(f.updated_at, f.created_at)),
-		       u.username, f.owner_user_id, COALESCE(uu.username, '')
+		       u.username, f.owner_user_id, COALESCE(uu.username, ''), f.season_id
 		FROM files f
 		JOIN users u ON f.owner_user_id = u.id
-		LEFT JOIN users uu ON uu.id = f.updated_by
-		ORDER BY f.created_at DESC`)
+		LEFT JOIN users uu ON uu.id = f.updated_by`
+	var args []any
+	if seasonID != nil {
+		query += ` WHERE f.season_id = ?`
+		args = append(args, *seasonID)
+	}
+	rows, err := db.Query(query+` ORDER BY f.created_at DESC`, args...)
 	if err != nil {
-		slog.Error("getFilesList: query failed", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("query: %w", err)
 	}
 	defer rows.Close()
 
@@ -289,17 +311,13 @@ func getFilesList(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var f AllianceFile
 		if err := rows.Scan(&f.ID, &f.Title, &f.FileName, &f.FileType, &f.MinRank, &f.MinEditRank,
-			&f.CreatedAt, &f.UpdatedAt, &f.OwnerName, &f.OwnerUserID, &f.UpdatedByName); err != nil {
-			slog.Error("getFilesList: scan failed", "error", err)
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
+			&f.CreatedAt, &f.UpdatedAt, &f.OwnerName, &f.OwnerUserID, &f.UpdatedByName, &f.SeasonID); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
 		}
 		raws = append(raws, rawFile{f: f, tagIDs: tagIDsByFile[f.ID]})
 	}
 	if err := rows.Err(); err != nil {
-		slog.Error("getFilesList: rows error", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("rows: %w", err)
 	}
 	rows.Close()
 
@@ -329,9 +347,7 @@ func getFilesList(w http.ResponseWriter, r *http.Request) {
 			files = append(files, f)
 		}
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(files)
+	return files, nil
 }
 
 func uploadFile(w http.ResponseWriter, r *http.Request) {
@@ -348,6 +364,15 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	title := r.FormValue("title")
 	minRank := r.FormValue("min_rank")
 	minEditRank := r.FormValue("min_edit_rank")
+	seasonID, err := parseOptionalSeasonID(r.FormValue("season_id"))
+	if err != nil {
+		http.Error(w, "Invalid season_id", http.StatusBadRequest)
+		return
+	}
+	if status, msg := seasonTagCheck(nil, seasonID); status != 0 {
+		http.Error(w, msg, status)
+		return
+	}
 
 	// Validate tag selection BEFORE writing any bytes, so a bad request never leaves
 	// an orphaned file on disk.
@@ -380,6 +405,9 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		".pdf": true, ".docx": true, ".xlsx": true, ".pptx": true,
 		".jpg": true, ".jpeg": true, ".png": true, ".gif": true,
 		".webp": true, ".txt": true, ".csv": true, ".ods": true,
+		// Data exports kept as files: a Cpt Hedge map snapshot is .json (private-docs 272/276).
+		// Its detected type is text/plain, already allowed below; it has no preview.
+		".json": true,
 	}
 	if !allowedExtensions[ext] {
 		http.Error(w, "file extension not allowed", http.StatusUnsupportedMediaType)
@@ -409,6 +437,8 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		fileType = "image"
 	} else if ext == ".xlsx" || ext == ".csv" || ext == ".ods" {
 		fileType = "spreadsheet"
+	} else if ext == ".json" {
+		fileType = "data"
 	}
 
 	internalName := fmt.Sprintf("%d_%d%s", time.Now().Unix(), userID, ext)
@@ -439,9 +469,9 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// No column default for updated_at (see migration 060) — set it explicitly.
-	res, err := tx.Exec(`INSERT INTO files (title, file_name, file_type, min_rank, min_edit_rank, owner_user_id, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		title, internalName, fileType, minRank, minEditRank, userID)
+	res, err := tx.Exec(`INSERT INTO files (title, file_name, file_type, min_rank, min_edit_rank, owner_user_id, season_id, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		title, internalName, fileType, minRank, minEditRank, userID, seasonID)
 	if err != nil {
 		tx.Rollback()
 		slog.Error("uploadFile: insert failed", "error", err)
@@ -466,7 +496,8 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	logActivity(userID, user.Username, "created", "file", title, false)
 
-	w.WriteHeader(http.StatusOK)
+	// The new file's id, for a caller that links it (a Land snapshot); the Files page ignores it.
+	writeJSON(w, map[string]any{"id": fileID})
 }
 
 // createBlankFile generates an empty .docx/.xlsx on disk and registers it like an
@@ -480,6 +511,7 @@ func createBlankFile(w http.ResponseWriter, r *http.Request) {
 		MinRank     string `json:"min_rank"`
 		MinEditRank string `json:"min_edit_rank"`
 		TagIDs      []int  `json:"tag_ids"`
+		SeasonID    *int   `json:"season_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -504,6 +536,10 @@ func createBlankFile(w http.ResponseWriter, r *http.Request) {
 		req.MinEditRank = "R4"
 	}
 
+	if status, msg := seasonTagCheck(nil, req.SeasonID); status != 0 {
+		http.Error(w, msg, status)
+		return
+	}
 	// Validate tag selection before touching disk (single-connection rule: this reads
 	// the tag tables, so it must complete before db.Begin()).
 	tagIDs, _, _, ok, err := resolveSubmittedTags(req.TagIDs, effectiveUserRank(user))
@@ -538,9 +574,9 @@ func createBlankFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	res, err := tx.Exec(`INSERT INTO files (title, file_name, file_type, min_rank, min_edit_rank, owner_user_id, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		req.Title, internalName, req.Kind, req.MinRank, req.MinEditRank, user.ID)
+	res, err := tx.Exec(`INSERT INTO files (title, file_name, file_type, min_rank, min_edit_rank, owner_user_id, season_id, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		req.Title, internalName, req.Kind, req.MinRank, req.MinEditRank, user.ID, req.SeasonID)
 	if err != nil {
 		tx.Rollback()
 		slog.Error("createBlankFile: insert failed", "error", err)
@@ -586,8 +622,9 @@ func updateFile(w http.ResponseWriter, r *http.Request) {
 	// Read old values (for the manage check and the change diff) before any write.
 	var oldTitle, oldMinRank, oldMinEditRank string
 	var ownerID int
-	err = db.QueryRow("SELECT title, min_rank, min_edit_rank, owner_user_id FROM files WHERE id = ?", fileID).
-		Scan(&oldTitle, &oldMinRank, &oldMinEditRank, &ownerID)
+	var oldSeason *int
+	err = db.QueryRow("SELECT title, min_rank, min_edit_rank, owner_user_id, season_id FROM files WHERE id = ?", fileID).
+		Scan(&oldTitle, &oldMinRank, &oldMinEditRank, &ownerID, &oldSeason)
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
@@ -609,10 +646,22 @@ func updateFile(w http.ResponseWriter, r *http.Request) {
 		MinRank     string `json:"min_rank"`
 		MinEditRank string `json:"min_edit_rank"`
 		TagIDs      *[]int `json:"tag_ids"` // nil = leave tags unchanged
+		// Absent keeps the season tag; null clears it.
+		SeasonID optionalInt `json:"season_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+	newSeason := oldSeason
+	if req.SeasonID.Set {
+		newSeason = req.SeasonID.Value
+		if !sameSeason(oldSeason, newSeason) {
+			if status, msg := seasonTagCheck(oldSeason, newSeason); status != 0 {
+				http.Error(w, msg, status)
+				return
+			}
+		}
 	}
 
 	// Validate + resolve tags (only when the client submitted a tag set). All work
@@ -657,8 +706,8 @@ func updateFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	if _, err := tx.Exec("UPDATE files SET title = ?, min_rank = ?, min_edit_rank = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?",
-		req.Title, req.MinRank, req.MinEditRank, user.ID, fileID); err != nil {
+	if _, err := tx.Exec("UPDATE files SET title = ?, min_rank = ?, min_edit_rank = ?, season_id = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?",
+		req.Title, req.MinRank, req.MinEditRank, newSeason, user.ID, fileID); err != nil {
 		tx.Rollback()
 		slog.Error("updateFile: update failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -688,6 +737,9 @@ func updateFile(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.MinEditRank != oldMinEditRank {
 		changes = append(changes, "edit rank: "+oldMinEditRank+" → "+req.MinEditRank)
+	}
+	if !sameSeason(oldSeason, newSeason) {
+		changes = append(changes, "season: "+seasonTagName(oldSeason)+" → "+seasonTagName(newSeason))
 	}
 	if req.TagIDs != nil {
 		var newTagNames []string
@@ -741,6 +793,38 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 	if _, err := tx.Exec("DELETE FROM file_tag_map WHERE file_id = ?", fileID); err != nil {
 		tx.Rollback()
 		slog.Error("deleteFile: tag map delete failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	// A Land snapshot is the link between a season and its export file: deleting the export
+	// removes the snapshot; deleting its screenshot only unlinks it (private-docs 276).
+	if _, err := tx.Exec("DELETE FROM season_land_snapshots WHERE file_id = ?", fileID); err != nil {
+		tx.Rollback()
+		slog.Error("deleteFile: snapshot delete failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec("UPDATE season_wars SET strategy_file_id = NULL WHERE strategy_file_id = ?", fileID); err != nil {
+		tx.Rollback()
+		slog.Error("deleteFile: war strategy unlink failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec("UPDATE season_trade_posts SET map_file_id = NULL WHERE map_file_id = ?", fileID); err != nil {
+		tx.Rollback()
+		slog.Error("deleteFile: trade post map unlink failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec("UPDATE season_wars SET map_file_id = NULL WHERE map_file_id = ?", fileID); err != nil {
+		tx.Rollback()
+		slog.Error("deleteFile: war map unlink failed", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec("UPDATE season_land_snapshots SET image_file_id = NULL WHERE image_file_id = ?", fileID); err != nil {
+		tx.Rollback()
+		slog.Error("deleteFile: snapshot unlink failed", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
