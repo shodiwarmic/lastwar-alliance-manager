@@ -17,8 +17,8 @@ weekly grid, a status that counts only finished weeks, reward rules with transfe
 exemptions, season tags across the schedule, Comms and Files, and a Season Participation report.
 ([#133](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/133))
 
-**Minor** — an image pull; nothing on the host changes and no `.env` needs editing. Three database
-migrations (088–090) add the Hub's tables and columns, correct the shipped season templates, and
+**Minor** — an image pull; nothing on the host changes and no `.env` needs editing. Four database
+migrations (088–091) add the Hub's tables and columns, correct the shipped season templates, and
 seed the new permission keys from the ones they replace, so no rank loses access. The mobile API
 reports `api_version` 4.
 
@@ -51,6 +51,9 @@ reports `api_version` 4.
   owners and planned actions. Figures are observations — typed, imported from CSV, sent from
   a phone, or brought in from LastRank when an opponent is added, when its players are loaded,
   or on request — and the latest counts.
+- **A war keeps the matchup it was judged on.** Declaring a war (or confirming one declared on
+  us) freezes both sides' figures and the rating, re-takeable until the war is completed; a
+  completed war shows that rating instead of one drifting with later figures.
 - **Wars and polls on the weekly grid.** Each war gets attended (yes, no, unknown) and the poll
   answer (yes, no, no response) per member; a Yes with no show waits as a poll review that can
   become a strike or be dismissed. The grid lists R5 to R1 then by name, sorts and filters, and

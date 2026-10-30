@@ -158,12 +158,23 @@ type ownTopMember struct {
 // ownWarSide computes our side from the roster: power from our latest own alliance-ranking row,
 // else the sum of active members' latest power; THP from their latest hero power. Each figure's
 // instant is the newest reading it used.
-func ownWarSide(q rowQueryer) (warSide, []ownTopMember, error) {
+func ownWarSide(q rowQueryer) (warSide, []ownTopMember, error) { return ownWarSideAt(q, nil) }
+
+// ownWarSideAt is ownWarSide as of an instant (nil: now): only readings recorded at or before it,
+// compared through datetime() because stored instants come in more than one shape. The roster is
+// today's — who was in the alliance then isn't recorded.
+func ownWarSideAt(q rowQueryer, asOf *time.Time) (warSide, []ownTopMember, error) {
 	var side warSide
 	var power, members sql.NullInt64
 	var at string
-	err := q.QueryRow(`SELECT power, member_count, recorded_at FROM alliance_stats_history WHERE is_own = 1 AND power IS NOT NULL
-		ORDER BY recorded_at DESC LIMIT 1`).Scan(&power, &members, &at)
+	cut, now := "", time.Now()
+	var cutArgs []any
+	if asOf != nil {
+		cut, now = ` AND datetime(recorded_at) <= datetime(?)`, *asOf
+		cutArgs = []any{landUTC(*asOf)}
+	}
+	err := q.QueryRow(`SELECT power, member_count, recorded_at FROM alliance_stats_history WHERE is_own = 1 AND power IS NOT NULL`+cut+`
+		ORDER BY recorded_at DESC LIMIT 1`, cutArgs...).Scan(&power, &members, &at)
 	if err != nil && err != sql.ErrNoRows {
 		return side, nil, err
 	}
@@ -171,12 +182,16 @@ func ownWarSide(q rowQueryer) (warSide, []ownTopMember, error) {
 		v := power.Int64
 		side.Power = warFigure{Value: &v, At: storedUTC(at), Source: "alliance ranking"}
 	}
+	var memberArgs []any
+	for range 4 {
+		memberArgs = append(memberArgs, cutArgs...)
+	}
 	rows, err := q.Query(`SELECT m.id, m.name,
-		(SELECT power FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1),
-		(SELECT recorded_at FROM power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1),
-		(SELECT power FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1),
-		(SELECT recorded_at FROM hero_power_history WHERE member_id = m.id ORDER BY recorded_at DESC LIMIT 1)
-		FROM members m WHERE m.rank != 'EX'`)
+		(SELECT power FROM power_history WHERE member_id = m.id`+cut+` ORDER BY recorded_at DESC LIMIT 1),
+		(SELECT recorded_at FROM power_history WHERE member_id = m.id`+cut+` ORDER BY recorded_at DESC LIMIT 1),
+		(SELECT power FROM hero_power_history WHERE member_id = m.id`+cut+` ORDER BY recorded_at DESC LIMIT 1),
+		(SELECT recorded_at FROM hero_power_history WHERE member_id = m.id`+cut+` ORDER BY recorded_at DESC LIMIT 1)
+		FROM members m WHERE m.rank != 'EX'`, memberArgs...)
 	if err != nil {
 		return side, nil, err
 	}
@@ -211,7 +226,7 @@ func ownWarSide(q rowQueryer) (warSide, []ownTopMember, error) {
 	if side.Power.Value == nil && sumPower > 0 {
 		side.Power = warFigure{Value: &sumPower, At: powerAt, Source: "sum of members' power"}
 	}
-	side.MemberCount = warFigure{Value: &active, At: landUTC(time.Now()), Source: "roster"}
+	side.MemberCount = warFigure{Value: &active, At: landUTC(now), Source: "roster"}
 	sort.Slice(thp, func(i, j int) bool { return thp[i].HeroPower > thp[j].HeroPower })
 	values := make([]int64, len(thp))
 	for i, m := range thp {
@@ -329,6 +344,14 @@ func handleSeasonWarGet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail("wars", err)
 		return
+	}
+	snaps, err := loadWarSnapshots(db, sid)
+	if err != nil {
+		fail("war snapshots", err)
+		return
+	}
+	for i := range wars {
+		wars[i].Snapshot = snaps[wars[i].ID]
 	}
 	battles, err := loadFactionBattles(db, sid)
 	if err != nil {

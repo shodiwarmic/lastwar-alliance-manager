@@ -525,6 +525,7 @@ func buildRouter() *mux.Router {
 	router.HandleFunc("/api/season-hub/war/wars/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_war", handleSeasonWarUpdate))).Methods("PUT")
 	router.HandleFunc("/api/season-hub/war/wars/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_war", handleSeasonWarDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/war/wars/{id:[0-9]+}/review", authMiddleware(requirePermission("manage_season_war", handleSeasonWarReview))).Methods("PUT")
+	router.HandleFunc("/api/season-hub/war/wars/{id:[0-9]+}/snapshot", authMiddleware(requirePermission("manage_season_war", handleSeasonWarSnapshot))).Methods("POST")
 	router.HandleFunc("/api/season-hub/war/resources", authMiddleware(requirePermission("manage_season_war", handleSeasonWarResourceCreate))).Methods("POST")
 	router.HandleFunc("/api/season-hub/war/resources/{id:[0-9]+}", authMiddleware(requirePermission("manage_season_war", handleSeasonWarResourceDelete))).Methods("DELETE")
 	router.HandleFunc("/api/season-hub/war/cutoffs", authMiddleware(requirePermission("manage_season_war", handleSeasonWarCutoffCreate))).Methods("POST")

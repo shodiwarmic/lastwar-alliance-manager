@@ -786,6 +786,9 @@
 /* War: opponents, figures, matchup breakdown, player pairing (private-docs 277) */
 .war-toolbar { flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .war-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 12px; margin: 6px 0; }
+/* A war's snapshot (private-docs 324): the summary carries its badge; with none, a note and the take button. */
+.war-snapshot summary .land-status { margin-left: 4px; }
+div.war-snapshot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
 .war-figure { display: flex; flex-direction: column; font-size: 0.85rem; min-width: 0; }
 .war-figure-label { color: var(--text-secondary); font-size: 0.78rem; }
 .war-figure-asof { color: var(--text-muted); font-size: 0.75rem; overflow-wrap: anywhere; }

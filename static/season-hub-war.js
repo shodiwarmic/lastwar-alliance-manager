@@ -131,6 +131,14 @@
         return el('span', { className: 'land-status tone-' + tone, textContent: label + (score != null ? ' · ' + (score > 0 ? '+' : '') + score.toFixed(2) + '%' : '') });
     }
 
+    // The matchup's categories: our advantage in each, its weight and what it added.
+    function matchupBreakdown(m) {
+        return el('div', { className: 'war-breakdown' }, m.categories.map(c => el('div', { className: 'war-cat' + (c.pct == null ? ' war-cat-dropped' : '') },
+            el('span', { textContent: c.label }),
+            el('strong', { textContent: c.pct == null ? 'unknown' : (c.pct > 0 ? '+' : '') + c.pct.toFixed(1) + '%' }),
+            el('span', { className: 'war-figure-asof', textContent: c.pct == null ? 'not counted' : 'weight ' + c.effective.toFixed(1) + '% → ' + (c.contribution > 0 ? '+' : '') + c.contribution.toFixed(2) }))));
+    }
+
     function figureLine(label, f) {
         return el('div', { className: 'war-figure' }, el('span', { className: 'war-figure-label', textContent: label }),
             el('strong', { textContent: compact(f && f.value) }),
@@ -302,10 +310,12 @@
     function buildWarCard(w) {
         const ro = !editable();
         const opp = data.opponents.find(o => o.id === w.opponent_season_alliance_id);
+        // Live until the war is completed; then the snapshot it was judged on (private-docs 324).
+        const frozen = w.status === 'completed' && w.snapshot && w.snapshot.opponent_season_alliance_id === w.opponent_season_alliance_id ? w.snapshot : null;
         const head = el('div', { className: 'land-target-head' },
             el('strong', { translate: 'no', textContent: (w.role === 'attack' ? 'Attack' : 'Defense') + (w.opponent_tag ? ' vs [' + w.opponent_tag + '] ' + w.opponent_name : '') }),
             el('span', { className: 'land-status tone-' + (STATUS_TONES[w.status] || 'neutral'), textContent: STATUS_LABELS[w.status] || w.status }),
-            opp ? ratingBadge(opp.matchup.rating, opp.matchup.score) : null,
+            frozen ? ratingBadge(w.snapshot.matchup.rating, w.snapshot.matchup.score) : opp ? ratingBadge(opp.matchup.rating, opp.matchup.score) : null,
             opp && opp.assessment_override ? el('span', { className: 'war-override' }, 'Leadership: ', ratingBadge(opp.assessment_override)) : null,
             w.outcome ? el('span', { className: 'land-status tone-' + (w.outcome === 'win' ? 'success' : w.outcome === 'loss' ? 'danger' : 'neutral'), textContent: w.outcome }) : null);
         const meta = el('div', { className: 'land-drop-when' }, [w.battle_date ? w.battle_date + (w.battle_time ? ' ' + w.battle_time + ' ST' : '') : 'No date yet',
@@ -356,7 +366,44 @@
                 field('Result', outcome), field('Took part', participants), field('Resources won/lost', resources),
                 field('Attendance poll held', pollHeld), field('Notes', notes, 'land-field-wide')),
             el('div', { className: 'tab-toolbar' }, save, del));
-        return el('div', { className: 'land-drop card war-card' }, head, meta, details, buildStrategy(w, ro), buildReview(w, ro));
+        return el('div', { className: 'land-drop card war-card' }, head, meta, buildWarSnapshot(w, opp, frozen, ro), details, buildStrategy(w, ro), buildReview(w, ro));
+    }
+
+    // The war's snapshot: both sides' figures and the matchup when it was declared or confirmed,
+    // re-taken until the war is completed; a completed war without one takes it from its battle time.
+    const SNAPSHOT_WHEN = { declared: 'taken at declaration', confirmed: 'taken at confirmation', retake: 're-taken by an officer', completed: 'taken from the battle time' };
+    function buildWarSnapshot(w, opp, frozen, ro) {
+        const snap = w.snapshot && w.snapshot.opponent_season_alliance_id === w.opponent_season_alliance_id ? w.snapshot : null;
+        const take = (label, title) => el('button', { type: 'button', className: 'btn btn-secondary btn-sm', title, onclick: e => {
+            e.target.disabled = true;
+            send('POST', '/api/season-hub/war/wars/' + w.id + '/snapshot', {})
+                .then(d => { showToast('Snapshot taken: ' + ratingText(d.snapshot.matchup) + '.'); load(true); })
+                .catch(err => { showToast(err.message, 'error'); e.target.disabled = false; });
+        } }, label);
+        const canTake = !ro && opp && w.status !== 'cancelled';
+        if (!snap) {
+            if (!canTake || !['declared', 'confirmed', 'completed'].includes(w.status)) return null;
+            return el('div', { className: 'war-snapshot' }, el('span', { className: 'war-figure-asof',
+                textContent: w.status === 'completed' ? 'No snapshot: rated live.' : 'No snapshot yet.' }),
+                take(w.status === 'completed' ? 'Take it from the battle time' : 'Take snapshot',
+                    w.status === 'completed' ? 'Freeze the figures known at the battle' : 'Freeze the figures now'));
+        }
+        const when = SNAPSHOT_WHEN[snap.trigger] || snap.trigger;
+        const sides = el('div', { className: 'war-figures' },
+            ['power', 'top10_thp', 'top5_thp', 'top3_thp', 'member_count'].map(k => el('div', { className: 'war-figure' },
+                el('span', { className: 'war-figure-label', textContent: { power: 'Power', top10_thp: 'Top 10 THP', top5_thp: 'Top 5 THP', top3_thp: 'Top 3 THP', member_count: 'Members' }[k] }),
+                el('strong', { textContent: compact(snap.ours[k].value) + ' vs ' + compact(snap.theirs[k].value) }))));
+        return el('details', { className: 'war-obs-form war-snapshot' },
+            el('summary', null, (frozen ? 'Rated on the snapshot ' : 'Snapshot ') + when + ': ', ratingBadge(snap.matchup.rating, snap.matchup.score)),
+            el('p', { className: 'hub-section-note', textContent: 'Figures as of ' + utcToST(snap.as_of) + ' ST, ours vs theirs' +
+                (frozen ? '. The war is completed, so this is the rating it keeps.' : '. The badge above stays live until the war is completed.') }),
+            sides, matchupBreakdown(snap.matchup),
+            canTake && w.status !== 'completed' ? el('div', { className: 'tab-toolbar' }, take('Re-take snapshot', 'Freeze the figures now, replacing this snapshot')) : null);
+    }
+
+    function ratingText(m) {
+        const [label] = RATINGS[m.rating] || [m.rating];
+        return label + (m.score != null ? ' ' + (m.score > 0 ? '+' : '') + m.score.toFixed(2) + '%' : '');
     }
 
     // Prose shown read-only gets the per-block Translate control; editors get the fields.
@@ -656,10 +703,7 @@
                 o.ally_name ? 'Ally' : null].filter(Boolean).join(' · '));
         const figures = el('div', { className: 'war-figures' }, figureLine('Power', o.figures.power), figureLine('Members', o.figures.member_count),
             figureLine('Top 10 THP', o.figures.top10_thp), figureLine('Top 5 THP', o.figures.top5_thp), figureLine('Top 3 THP', o.figures.top3_thp));
-        const breakdown = el('div', { className: 'war-breakdown' }, m.categories.map(c => el('div', { className: 'war-cat' + (c.pct == null ? ' war-cat-dropped' : '') },
-            el('span', { textContent: c.label }),
-            el('strong', { textContent: c.pct == null ? 'unknown' : (c.pct > 0 ? '+' : '') + c.pct.toFixed(1) + '%' }),
-            el('span', { className: 'war-figure-asof', textContent: c.pct == null ? 'not counted' : 'weight ' + c.effective.toFixed(1) + '% → ' + (c.contribution > 0 ? '+' : '') + c.contribution.toFixed(2) }))));
+        const breakdown = matchupBreakdown(m);
         const note = m.rating === 'insufficient_data'
             ? el('p', { className: 'hub-section-note', textContent: 'Rated once at least ' + data.config.min_categories + ' categories are known on both sides.' }) : null;
 

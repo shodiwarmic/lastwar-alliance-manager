@@ -1447,6 +1447,13 @@ most likely to break.
   rankings, so each top N is summed once N players' hero power is known, else NULL), dated LastRank's
   `last_seen_at`, never now. Group rank is the season's; LastRank has none. That link fills an empty
   registry `lastrank_id` only: a row linked elsewhere is refused, never retargeted.
+- **A war's rating is live until it is completed, then frozen** (`season_war_snapshot.go`,
+  migration 091, private-docs 324). `season_war_snapshots` holds one row per war: both sides'
+  `warSide` (each figure's value, instant and source) and the `matchupResult`, taken in `saveWar`'s
+  transaction when a war becomes declared or confirmed (or changes opponent while it is), re-taken
+  by `POST …/wars/{id}/snapshot` until completed, and taken as of the battle
+  (`ownWarSideAt`, observations at or before it) when a war is completed without one. Faction
+  battles have none. A war or season delete removes it.
 - **One CSV import pair for every kind** (`season_import.go`): `POST
   /api/season-hub/import/preview|confirm`, kinds registered with `registerSeasonImportKind`
   from their own file's `init()`. A kind declares its columns (with header aliases), its

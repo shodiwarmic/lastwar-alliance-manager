@@ -220,6 +220,7 @@ var mobileExcludedTables = map[string]string{
 	"season_rank_groups":                 "configuration: the season's war-rank reward groups",
 	"season_trade_posts":                 "configuration and the plan: Trade Post definitions and their planned actions",
 	"season_war_attendance":              "officer judgement: who attended a war and how they answered its in-game poll",
+	"season_war_snapshots":               "derived: a war's figures and matchup, frozen from observations already stored",
 	"season_member_exemptions":           "officer judgement: a member's exemption from the Core-event rule",
 	"season_poll_reviews":                "officer judgement: a decision on a war poll review",
 	"season_participation_events":        "configuration: a season week's Core events",

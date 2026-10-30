@@ -215,3 +215,111 @@ func TestFactionBattlesAndMobileResults(t *testing.T) {
 		t.Errorf("war 9: %s %s %d (the status stays the officers')", outcome, status, n)
 	}
 }
+
+// A war keeps the figures it was judged on (private-docs 324; owner, 2026-10-30): taken when it
+// is declared or confirmed, re-taken until it is completed, frozen after; a war completed without
+// one takes the figures known at its battle.
+func TestWarSnapshot(t *testing.T) {
+	seedWarSeason(t)
+	obs := func(own bool, at string, v int64) {
+		t.Helper()
+		var sa any = 1
+		if own {
+			sa = nil
+		}
+		mustExecT(t, `INSERT INTO season_opponent_observations (season_id, season_alliance_id, is_own, observed_at, alliance_power,
+			top10_thp, top5_thp, top3_thp, source) VALUES (1, ?, ?, ?, ?, ?, ?, ?, 'manual')`, sa, boolToInt(own), at, v, v, v, v)
+	}
+	obs(true, "2026-10-01 10:00:00", 1100)
+	obs(false, "2026-10-01 10:00:00", 1000)
+	snapOf := func(war int) (trigger string, score float64, n int) {
+		t.Helper()
+		snaps, err := loadWarSnapshots(db, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := snaps[war]
+		if s == nil {
+			return "", 0, len(snaps)
+		}
+		if s.Matchup.Score != nil {
+			score = *s.Matchup.Score
+		}
+		return s.Trigger, score, len(snaps)
+	}
+	retake := func(war int) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		handleSeasonWarSnapshot(rr, shReq(http.MethodPost, `{}`, map[string]string{"id": strconv.Itoa(war)}, nil))
+		return rr
+	}
+	created := func(rr *httptest.ResponseRecorder) int {
+		t.Helper()
+		if rr.Code != http.StatusOK {
+			t.Fatalf("create: %d %s", rr.Code, rr.Body.String())
+		}
+		var made struct {
+			ID int `json:"id"`
+		}
+		json.Unmarshal(rr.Body.Bytes(), &made)
+		return made.ID
+	}
+
+	// Considering and planned keep no snapshot; declaring takes one (ours +10 % on every figure).
+	war := created(warReq(t, http.MethodPost, 0, `{"season_id":1,"role":"attack","opponent_season_alliance_id":1,"battle_date":"2026-10-02","battle_time":"14:00"}`))
+	warReq(t, http.MethodPut, war, `{"status":"planned"}`)
+	if tr, _, _ := snapOf(war); tr != "" {
+		t.Errorf("a planned war has a snapshot (%s)", tr)
+	}
+	warReq(t, http.MethodPut, war, `{"status":"declared"}`)
+	if tr, sc, _ := snapOf(war); tr != "declared" || sc < 9.99 || sc > 10.01 {
+		t.Errorf("declared: %q %.2f, want declared +10", tr, sc)
+	}
+	// A figure seen afterwards moves the live matchup, never the snapshot; a re-take takes it in.
+	obs(false, "2026-10-03 10:00:00", 2000)
+	warReq(t, http.MethodPut, war, `{"notes":"rally at 13:50"}`)
+	if tr, sc, _ := snapOf(war); tr != "declared" || sc < 9.99 {
+		t.Errorf("after a later observation: %q %.2f, want the declaration's +10", tr, sc)
+	}
+	if rr := retake(war); rr.Code != http.StatusOK {
+		t.Fatalf("re-take: %d %s", rr.Code, rr.Body.String())
+	}
+	if tr, sc, _ := snapOf(war); tr != "retake" || sc > -44.9 || sc < -45.1 {
+		t.Errorf("re-taken: %q %.2f, want retake -45", tr, sc)
+	}
+	// Completing keeps it; a completed war's snapshot is frozen.
+	if rr := warReq(t, http.MethodPut, war, `{"status":"completed","outcome":"win"}`); rr.Code != http.StatusOK {
+		t.Fatalf("complete: %d %s", rr.Code, rr.Body.String())
+	}
+	if tr, _, _ := snapOf(war); tr != "retake" {
+		t.Errorf("completing replaced the snapshot: %q", tr)
+	}
+	if rr := retake(war); rr.Code != http.StatusConflict {
+		t.Errorf("re-taking a completed war: %d", rr.Code)
+	}
+
+	// Confirmed at creation (declared on us) takes one; completed without one takes the figures
+	// known at its battle (14:00 ST on the 2nd: before the 3rd's observation), not today's.
+	war2 := created(warReq(t, http.MethodPost, 0, `{"season_id":1,"role":"defense","direction":"incoming","opponent_season_alliance_id":1,"battle_date":"2026-10-02","battle_time":"14:00","status":"confirmed"}`))
+	if tr, _, _ := snapOf(war2); tr != "confirmed" {
+		t.Errorf("confirmed at creation: %q", tr)
+	}
+	mustExecT(t, `DELETE FROM season_war_snapshots WHERE war_id = ?`, war2)
+	if rr := warReq(t, http.MethodPut, war2, `{"status":"completed","outcome":"loss"}`); rr.Code != http.StatusOK {
+		t.Fatalf("complete war 2: %d %s", rr.Code, rr.Body.String())
+	}
+	var asOf string
+	db.QueryRow(`SELECT as_of FROM season_war_snapshots WHERE war_id = ?`, war2).Scan(&asOf)
+	if tr, sc, _ := snapOf(war2); tr != "completed" || sc < 9.99 || sc > 10.01 || storedUTC(asOf) != "2026-10-02 16:00:00" {
+		t.Errorf("completed without one: %q %.2f as of %s, want completed +10 as of 2026-10-02 16:00:00 UTC", tr, sc, asOf)
+	}
+
+	// A cancelled war's delete takes its snapshot with it.
+	war3 := created(warReq(t, http.MethodPost, 0, `{"season_id":1,"role":"defense","direction":"incoming","opponent_season_alliance_id":1,"battle_date":"2026-10-09","status":"confirmed"}`))
+	warReq(t, http.MethodPut, war3, `{"status":"cancelled"}`)
+	if rr := warReq(t, http.MethodDelete, war3, ""); rr.Code != http.StatusOK {
+		t.Fatalf("delete: %d %s", rr.Code, rr.Body.String())
+	}
+	if n := countT(t, `SELECT COUNT(*) FROM season_war_snapshots WHERE war_id = ?`, war3); n != 0 {
+		t.Errorf("the deleted war's snapshot stayed")
+	}
+}

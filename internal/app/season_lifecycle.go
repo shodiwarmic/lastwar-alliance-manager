@@ -474,7 +474,7 @@ var seasonChildTables = []string{
 	"season_alliances", "season_factions",
 	"season_land_config", "season_land_levels", "season_land_routes", "season_land_events", "season_land_drops",
 	"season_land_snapshots", "season_war_config", "season_opponent_observations",
-	"season_wars", "season_faction_battles", "season_resource_observations", "season_rank_groups", "season_rank_cutoffs",
+	"season_war_snapshots", "season_wars", "season_faction_battles", "season_resource_observations", "season_rank_groups", "season_rank_cutoffs",
 	"season_trade_posts", "season_participation_events", "season_member_exemptions",
 }
 
@@ -499,6 +499,7 @@ var seasonUserColumns = []struct{ table, column string }{
 	{"season_rank_cutoffs", "recorded_by"},
 	{"season_trade_post_observations", "recorded_by"},
 	{"season_war_attendance", "recorded_by"},
+	{"season_war_snapshots", "taken_by"},
 	{"season_member_exemptions", "granted_by"},
 	{"season_poll_reviews", "decided_by"},
 }

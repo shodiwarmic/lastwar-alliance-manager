@@ -71,6 +71,8 @@ type seasonWar struct {
 	ReviewAdjust             string  `json:"review_adjust"`
 	StrategyUpdatedAt        string  `json:"strategy_updated_at"`
 	ScheduleEventID          *int    `json:"schedule_event_id"`
+	// Snapshot is the frozen figures and matchup (season_war_snapshot.go); the War tab's read fills it.
+	Snapshot *warSnapshot `json:"snapshot,omitempty"`
 }
 
 const seasonWarSelect = `SELECT w.id, w.season_id, w.week_number, w.role, w.direction, w.opponent_season_alliance_id,
@@ -479,6 +481,12 @@ func saveWar(w http.ResponseWriter, r *http.Request, existing *seasonWar, body w
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	snapped, err := snapshotWarTx(tx, existing, fresh, user.ID)
+	if err != nil {
+		slog.Error("saveWar: snapshot", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	if err := tx.Commit(); err != nil {
 		slog.Error("saveWar: commit", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -486,13 +494,13 @@ func saveWar(w http.ResponseWriter, r *http.Request, existing *seasonWar, body w
 	}
 	label := warLabel(fresh)
 	if creating {
-		logActivity(user.ID, user.Username, "created", "season_war", label, false, "status "+war.Status)
+		logActivity(user.ID, user.Username, "created", "season_war", label, false, joinDetails("status "+war.Status, snapped))
 	} else {
 		detail := ""
 		if oldStatus != war.Status {
 			detail = "status: " + oldStatus + " → " + war.Status
 		}
-		logActivity(user.ID, user.Username, "updated", "season_war", label, false, detail)
+		logActivity(user.ID, user.Username, "updated", "season_war", label, false, joinDetails(detail, snapped))
 	}
 	writeJSON(w, map[string]any{"id": war.ID, "calendar": cal})
 }
@@ -636,6 +644,11 @@ func handleSeasonWarDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := tx.Exec(`UPDATE season_trade_posts SET related_war_id = NULL WHERE related_war_id = ?`, war.ID); err != nil {
 		slog.Error("handleSeasonWarDelete: unlink posts", "error", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM season_war_snapshots WHERE war_id = ?`, war.ID); err != nil {
+		slog.Error("handleSeasonWarDelete: snapshot", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
