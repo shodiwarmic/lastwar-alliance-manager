@@ -18,6 +18,13 @@ let currentWeekStart = '';   // "YYYY-MM-DD" of the Monday being shown
 let eventTypes   = [];
 let serverEvents = [];
 let weekEvents   = [];
+
+// What the week's text, image and day card may carry: they are posted to members, so like the
+// announcement they leave out cancelled rows (shown to managers on the grid only) and
+// leadership-only plans, whoever generates them.
+function shareableEvents() {
+    return weekEvents.filter(e => e.status !== 'cancelled' && !e.leadership_only);
+}
 let settings     = {};
 
 // Tracks the last canvas draw call so themechange can redraw it.
@@ -484,6 +491,22 @@ function buildEventCard(evt, dateStr) {
         lvl.textContent = 'Lv.' + evt.level;
         row.appendChild(lvl);
     }
+    // Planning status: a confirmed event needs no badge. Cancelled rows reach schedule
+    // managers only, struck through, so a cancellation can be seen and undone.
+    if (evt.status && evt.status !== 'confirmed') {
+        const st = document.createElement('span');
+        st.className = 'event-card-status status-' + evt.status;
+        st.textContent = evt.status.charAt(0).toUpperCase() + evt.status.slice(1);
+        row.appendChild(st);
+        if (evt.status === 'cancelled') card.classList.add('event-cancelled');
+    }
+    if (evt.leadership_only) {
+        const lo = document.createElement('span');
+        lo.className = 'event-card-status status-leadership';
+        lo.title = 'Leadership only: hidden from members who cannot manage the schedule';
+        lo.append(svgIcon('lock', 11), document.createTextNode(' Leadership'));
+        row.appendChild(lo);
+    }
 
     // An encounter left outside its parent window — usually because the window's
     // anchor moved after the event was saved. Flagged, never moved: the app does
@@ -506,6 +529,15 @@ function buildEventCard(evt, dateStr) {
         notes.textContent = evt.notes;
         TranslateBlock.attach(notes, evt.notes);
         card.appendChild(notes);
+    }
+    if (evt.reference_url) {
+        const link = document.createElement('a');
+        link.className = 'event-card-link';
+        link.href = evt.reference_url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.append(svgIcon('external-link', 11), document.createTextNode(' Reference'));
+        card.appendChild(link);
     }
 
     const participation = buildParticipationLink(evt);
@@ -607,6 +639,7 @@ function openAddEventModal(defaultDate) {
     document.getElementById('event-tf-select').value = '';
     document.getElementById('event-notes-input').value = '';
     document.getElementById('event-form-error').textContent = '';
+    setPlanningFields(null);
     setAllDayUI(false);
     populateEventTypeSelect(null);
     document.getElementById('event-modal').style.display = 'flex';
@@ -622,9 +655,28 @@ function openEditEventModal(evt) {
     document.getElementById('event-tf-select').value = evt.task_force || '';
     document.getElementById('event-notes-input').value = evt.notes || '';
     document.getElementById('event-form-error').textContent = '';
+    setPlanningFields(evt);
     setAllDayUI(evt.all_day === true);
     populateEventTypeSelect(evt.event_type_id);
     document.getElementById('event-modal').style.display = 'flex';
+}
+
+// The Season Hub planning fields (private-docs 273). A row a Land or War record owns is
+// moved and cancelled from the Season Hub; here its date, time and status are locked.
+function setPlanningFields(evt) {
+    fillSeasonSelect(document.getElementById('event-season-input'), evt ? evt.season_id : null);
+    document.getElementById('event-status-input').value = evt ? (evt.status || 'confirmed') : 'confirmed';
+    document.getElementById('event-leadership-input').checked = !!(evt && evt.leadership_only);
+    document.getElementById('event-showmain-input').checked = evt ? evt.show_on_main !== false : true;
+    document.getElementById('event-url-input').value = evt ? (evt.reference_url || '') : '';
+    const sourced = !!(evt && evt.source_kind);
+    ['event-date-input', 'event-time-input', 'event-status-input', 'event-allday-input'].forEach(id => {
+        document.getElementById(id).disabled = sourced;
+    });
+    const note = document.getElementById('event-source-note');
+    note.textContent = sourced ? 'This event follows its ' + evt.source_kind.replace('_', ' ')
+        + ' in the Season Hub: move or cancel it there.' : '';
+    note.style.display = sourced ? '' : 'none';
 }
 
 function populateEventTypeSelect(selectedId) {
@@ -790,7 +842,13 @@ async function saveEvent(e) {
         event_time:    allDay ? '00:00' : document.getElementById('event-time-input').value,
         all_day:       allDay,
         notes:         document.getElementById('event-notes-input').value,
+        status:          document.getElementById('event-status-input').value,
+        leadership_only: document.getElementById('event-leadership-input').checked,
+        show_on_main:    document.getElementById('event-showmain-input').checked,
+        reference_url:   document.getElementById('event-url-input').value.trim(),
     };
+    const seasonId = seasonSelectValue(document.getElementById('event-season-input'));
+    if (seasonId !== undefined) body.season_id = seasonId;
 
     const lvlVal = document.getElementById('event-level-input').value;
     if (lvlVal !== '') body.level = parseInt(lvlVal, 10);
@@ -1512,7 +1570,7 @@ function buildTextOutput() {
         }
         lines.push(header);
 
-        weekEvents.filter(e => e.event_date === d).forEach(entry => {
+        shareableEvents().filter(e => e.event_date === d).forEach(entry => {
             let line = '  ' + eventExportNames(entry).full + (entry.all_day ? ' — All Day' : ' @ ' + formatTime(entry.event_time) + ' ST');
             if (entry.level != null) line += '  Lv.' + entry.level;
             if (entry.notes) line += '  — ' + entry.notes;
@@ -1578,7 +1636,7 @@ function drawWeekImage() {
     let maxEvts = 0;
     dates.forEach(d => {
         // Desert Storm battles are ordinary events now, so they are counted here.
-        const n = weekEvents.filter(e => e.event_date === d).length;
+        const n = shareableEvents().filter(e => e.event_date === d).length;
         if (n > maxEvts) maxEvts = n;
     });
 
@@ -1757,7 +1815,7 @@ function drawWeekImage() {
         ctx.stroke();
 
         // The day's events, Desert Storm battles among them (server order).
-        const allImgEntries = weekEvents.filter(e => e.event_date === d);
+        const allImgEntries = shareableEvents().filter(e => e.event_date === d);
 
         ctx.font = '12px ' + font;
         const timeW      = Math.ceil(ctx.measureText('00:00').width) + 4;
@@ -1850,7 +1908,7 @@ function drawDayCard(dateStr) {
     const seDay = dayOfSeason(dateStr);
     const dates     = weekDates(currentWeekStart);
     const seBanners = serverEvents.filter(e => getServerEventOccurrencesInWeek(e, dates).has(dateStr));
-    const dayEvts = weekEvents.filter(e => e.event_date === dateStr);
+    const dayEvts = shareableEvents().filter(e => e.event_date === dateStr);
 
     // ── Dynamic height ─────────────────────────────────────────────────────
     const hdrH    = 80;

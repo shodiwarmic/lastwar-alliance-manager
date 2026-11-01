@@ -197,6 +197,38 @@ window.desertStormDayError = (dateStr) => {
         + ' (next eligible date ' + next.toISOString().slice(0, 10) + ')';
 };
 
+// A "Season" field for a record a Season Hub season can claim (Comms templates, resources and
+// polls; Files) — two pages use it. Lists open seasons; a record already in an ARCHIVED season
+// shows it, disabled, since nothing moves out of an archived season. The field's
+// .season-tag-group wrapper stays hidden for a viewer who cannot read the season list.
+// seasonSelectValue reads it back: undefined (leave the tag alone), null (none) or an id.
+let seasonListPromise = null;
+window.fillSeasonSelect = async (sel, currentId) => {
+    if (!sel) return;
+    const group = sel.closest('.season-tag-group');
+    if (!seasonListPromise) {
+        seasonListPromise = fetch('/api/season-hub/seasons')
+            .then(r => (r.ok ? r.json() : { seasons: null }))
+            .then(d => d.seasons)
+            .catch(() => null);
+    }
+    const seasons = await seasonListPromise;
+    if (!seasons) { if (group) group.style.display = 'none'; return; }
+    const opt = (value, text) => { const o = document.createElement('option'); o.value = value; o.textContent = text; return o; };
+    const label = s => 'S' + s.season_number + ' — ' + s.name;
+    sel.replaceChildren(opt('', '— no season —'));
+    const current = seasons.find(s => s.id === currentId);
+    seasons.filter(s => !s.archived_at).forEach(s => sel.appendChild(opt(s.id, label(s))));
+    if (current && current.archived_at) sel.appendChild(opt(current.id, label(current) + ' (archived)'));
+    noTranslate(sel);
+    sel.value = currentId ? String(currentId) : '';
+    sel.disabled = !!(current && current.archived_at);
+    if (group) group.style.display = '';
+};
+window.seasonSelectValue = (sel) => {
+    if (!sel || sel.disabled || (sel.closest('.season-tag-group') || sel).style.display === 'none') return undefined;
+    return sel.value ? parseInt(sel.value, 10) : null;
+};
 
 // ---- Per-user UI preferences ----
 // Currently localStorage-backed (persists per browser). The storage layer is isolated

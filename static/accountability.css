@@ -199,3 +199,9 @@ tr.acc-row--below-donation {
 .acc-types-add .form-input {
     flex: 1 1 14rem;
 }
+
+/* A strike's season context (private-docs 285) */
+.strike-season-badge { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 8px; font-size: 0.72rem;
+    background: var(--color-purple-bg); color: var(--color-purple); white-space: nowrap; }
+.strike-season-sub { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.strike-season-sub label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 140px; font-size: 0.85rem; min-width: 0; }

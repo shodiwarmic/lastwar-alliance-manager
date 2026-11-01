@@ -316,6 +316,32 @@
                 <textarea id="event-notes-input" class="form-input" maxlength="500" rows="3"></textarea>
             </div>
 
+            <!-- Season Hub planning fields (private-docs 273) -->
+            <div class="form-row event-planning-row">
+                <div class="form-group season-tag-group" style="display:none">
+                    <label for="event-season-input">Season</label>
+                    <select id="event-season-input" class="form-input"></select>
+                </div>
+                <div class="form-group">
+                    <label for="event-status-input">Status</label>
+                    <select id="event-status-input" class="form-input">
+                        <option value="tentative">Tentative</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group event-planning-checks">
+                <label><input type="checkbox" id="event-leadership-input"> Leadership only <span class="help-text">(hidden from anyone who cannot manage the schedule, and never in the announcement)</span></label>
+                <label><input type="checkbox" id="event-showmain-input" checked> Show on the main schedule <span class="help-text">(off: only on the season's timeline)</span></label>
+            </div>
+            <div class="form-group">
+                <label for="event-url-input">Reference link <span class="help-text">(optional)</span></label>
+                <input type="url" id="event-url-input" class="form-input" maxlength="500" placeholder="https://…">
+            </div>
+            <p id="event-source-note" class="help-text" style="display:none"></p>
+
             <div class="modal-actions">
                 <button type="submit" class="btn btn-primary">Save</button>
                 <button type="button" class="btn btn-secondary" id="btn-close-event-modal">Cancel</button>

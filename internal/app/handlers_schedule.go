@@ -197,7 +197,8 @@ func validateDesertStorm(q rowQuerier, c eventCandidate, excludeID int) (string,
 	var n int
 	if err := q.QueryRow(`SELECT COUNT(*) FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
-		WHERE t.short_name = 'DS' AND se.event_date = ? AND se.task_force = ? AND se.id != ?`,
+		WHERE t.short_name = 'DS' AND se.event_date = ? AND se.task_force = ? AND se.id != ?
+		  AND se.status != 'cancelled'`,
 		c.Date, tf, excludeID).Scan(&n); err != nil {
 		return "", err
 	}
@@ -377,7 +378,7 @@ func nearestSystemEventWithin(q rowQuerier, shorts []string, excludeID int, date
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
 		WHERE t.short_name IN (` + strings.TrimSuffix(strings.Repeat("?,", len(shorts)), ",") + `) AND se.id != ?
-		  AND se.event_date >= ? AND se.event_date <= ?
+		  AND se.event_date >= ? AND se.event_date <= ? AND se.status != 'cancelled'
 		ORDER BY abs(julianday(se.event_date) - julianday(?)) ASC
 		LIMIT 1`
 
@@ -973,23 +974,68 @@ func deleteScheduleEventType(w http.ResponseWriter, r *http.Request) {
 
 // --- Calendar Event Handlers ---
 
+// scheduleVisibility is the one visibility policy for every reader of schedule_events
+// (private-docs 273): a leadership-only row is hidden from anyone without manage_schedule.
+// alias is the schedule_events alias in the caller's query.
+func scheduleVisibility(user *AuthUser, alias string) string {
+	if user != nil && userHasPermission(user, "manage_schedule") {
+		return ""
+	}
+	return " AND " + alias + ".leadership_only = 0"
+}
+
+// getScheduleEvents serves the calendar: a date range (at most 42 days), or with season_id a
+// season's timeline — the rows tagged to it, bounded by the season's own weeks (its template
+// rows' first and last weeks, at least week_count), so S2's post-season weeks are included.
+// scope=all with season_id adds every calendar row in those weeks. The range query leaves out
+// show_on_main = 0 rows; cancelled rows are shown only to schedule managers.
 func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
+	user := getAuthUser(r)
+	canManage := userHasPermission(user, "manage_schedule")
 	from := r.URL.Query().Get("from")
 	to := r.URL.Query().Get("to")
-	if from == "" || to == "" {
-		http.Error(w, "from and to are required", http.StatusBadRequest)
-		return
+	where := "se.event_date >= ? AND se.event_date <= ?"
+	var args []any
+	seasonID, _ := strconv.Atoi(r.URL.Query().Get("season_id"))
+	if seasonID > 0 {
+		lo, hi, err := seasonTimelineBounds(db, seasonID)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Season not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			slog.Error("getScheduleEvents season bounds", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		from, to = lo, hi
+		args = append(args, from, to)
+		if r.URL.Query().Get("scope") != "all" {
+			where += " AND se.season_id = ?"
+			args = append(args, seasonID)
+		}
+	} else {
+		if from == "" || to == "" {
+			http.Error(w, "from and to are required", http.StatusBadRequest)
+			return
+		}
+		fromT, err1 := time.Parse("2006-01-02", from)
+		toT, err2 := time.Parse("2006-01-02", to)
+		if err1 != nil || err2 != nil {
+			http.Error(w, "from and to must be YYYY-MM-DD", http.StatusBadRequest)
+			return
+		}
+		if toT.Sub(fromT) > 42*24*time.Hour {
+			http.Error(w, "Date range cannot exceed 42 days", http.StatusBadRequest)
+			return
+		}
+		args = append(args, from, to)
+		where += " AND se.show_on_main = 1"
 	}
-	fromT, err1 := time.Parse("2006-01-02", from)
-	toT, err2 := time.Parse("2006-01-02", to)
-	if err1 != nil || err2 != nil {
-		http.Error(w, "from and to must be YYYY-MM-DD", http.StatusBadRequest)
-		return
+	if !canManage {
+		where += " AND se.status != 'cancelled'"
 	}
-	if toT.Sub(fromT) > 42*24*time.Hour {
-		http.Error(w, "Date range cannot exceed 42 days", http.StatusBadRequest)
-		return
-	}
+	where += scheduleVisibility(user, "se")
 
 	rows, err := db.Query(`
 		SELECT se.id, se.event_date, se.event_type_id,
@@ -998,13 +1044,15 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		       se.created_by, se.created_at, se.updated_at, se.task_force,
 		       pt.event_type_id IS NOT NULL, b.id IS NOT NULL,
 		       CASE WHEN b.id IS NULL THEN 0 ELSE
-		         (SELECT COUNT(*) FROM participation_entries e WHERE e.board_id = b.id) END
+		         (SELECT COUNT(*) FROM participation_entries e WHERE e.board_id = b.id) END,
+		       se.season_id, se.status, se.leadership_only, se.show_on_main, se.reference_url,
+		       COALESCE(se.source_kind, '')
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
 		LEFT JOIN participation_types pt ON pt.event_type_id = se.event_type_id
 		LEFT JOIN participation_boards b ON b.schedule_event_id = se.id
-		WHERE se.event_date >= ? AND se.event_date <= ?
-		ORDER BY se.event_date, se.all_day DESC, se.event_time, se.task_force`, from, to)
+		WHERE `+where+`
+		ORDER BY se.event_date, se.all_day DESC, se.event_time, se.task_force`, args...)
 	if err != nil {
 		slog.Error("getScheduleEvents query", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1015,7 +1063,7 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	parentIDs := map[int][]int{} // server_event_id -> indices into events
 	for rows.Next() {
 		var ev ScheduleEvent
-		var isSystem, allDay int
+		var isSystem, allDay, leaderOnly, showMain int
 		var parentID *int
 		if err := rows.Scan(
 			&ev.ID, &ev.EventDate, &ev.EventTypeID,
@@ -1023,6 +1071,7 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 			&ev.EventTime, &allDay, &ev.Level, &ev.Notes,
 			&ev.CreatedBy, &ev.CreatedAt, &ev.UpdatedAt, &ev.TaskForce,
 			&ev.TracksParticipation, &ev.HasBoard, &ev.BoardRows,
+			&ev.SeasonID, &ev.Status, &leaderOnly, &showMain, &ev.ReferenceURL, &ev.SourceKind,
 		); err != nil {
 			rows.Close()
 			slog.Error("getScheduleEvents scan", "error", err)
@@ -1031,6 +1080,8 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		ev.IsSystem = isSystem == 1
 		ev.AllDay = allDay == 1
+		ev.LeadershipOnly = leaderOnly == 1
+		ev.ShowOnMain = showMain == 1
 		events = append(events, ev)
 		if parentID != nil {
 			parentIDs[*parentID] = append(parentIDs[*parentID], len(events)-1)
@@ -1046,7 +1097,7 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Flag encounters sitting outside their parent's windows, so the calendar can
-	// say so on the card. Bounded work: at most 42 days of events and a handful of
+	// say so on the card. Bounded work: a range or a season of events and a handful of
 	// encounter types, one window read each.
 	for parentID, idxs := range parentIDs {
 		parent, err := loadServerEvent(db, parentID)
@@ -1059,8 +1110,38 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if seasonID > 0 {
+		writeJSON(w, map[string]any{"from": from, "to": to, "events": events})
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(events)
+}
+
+// seasonTimelineBounds is a season's first and last calendar day: from the earliest template
+// week (a pre-season week 0 included) to the later of week_count and the last template week.
+func seasonTimelineBounds(q rowQuerier, seasonID int) (string, string, error) {
+	var start string
+	var weeks, minWs, maxWe int
+	err := q.QueryRow(`SELECT s.start_date, s.week_count,
+		COALESCE((SELECT MIN(week_start) FROM season_events WHERE season_id = s.id), 1),
+		COALESCE((SELECT MAX(CASE WHEN week_end < week_start THEN week_start ELSE week_end END)
+		          FROM season_events WHERE season_id = s.id), 0)
+		FROM seasons s WHERE s.id = ?`, seasonID).Scan(&start, &weeks, &minWs, &maxWe)
+	if err != nil {
+		return "", "", err
+	}
+	st, err := time.Parse("2006-01-02", start)
+	if err != nil {
+		return "", "", err
+	}
+	if minWs > 1 {
+		minWs = 1
+	}
+	if maxWe < weeks {
+		maxWe = weeks
+	}
+	return st.AddDate(0, 0, (minWs-1)*7).Format("2006-01-02"), st.AddDate(0, 0, maxWe*7-1).Format("2006-01-02"), nil
 }
 
 // scheduleEventCreate is the body of a manual create, from either the Schedule
@@ -1073,6 +1154,28 @@ type scheduleEventCreate struct {
 	Level       *int    `json:"level"`
 	Notes       string  `json:"notes"`
 	TaskForce   *string `json:"task_force"`
+	// Season Hub planning fields (private-docs 273); a nil pointer takes the default.
+	SeasonID       *int   `json:"season_id"`
+	Status         string `json:"status"`
+	LeadershipOnly bool   `json:"leadership_only"`
+	ShowOnMain     *bool  `json:"show_on_main"`
+	ReferenceURL   string `json:"reference_url"`
+}
+
+var validScheduleStatuses = map[string]bool{"tentative": true, "confirmed": true, "completed": true, "cancelled": true}
+
+// checkSchedulePlanning validates the planning fields every schedule write accepts.
+func checkSchedulePlanning(status, url string) string {
+	if status != "" && !validScheduleStatuses[status] {
+		return "status must be tentative, confirmed, completed or cancelled"
+	}
+	if url != "" && !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
+		return "reference_url must start with http:// or https://"
+	}
+	if len(url) > 500 {
+		return "reference_url is limited to 500 characters"
+	}
+	return ""
 }
 
 // normTaskForce treats an empty task force as none, so a form's blank select and
@@ -1102,6 +1205,17 @@ func insertScheduleEvent(actor *AuthUser, req scheduleEventCreate) (id int64, us
 	}
 	if req.EventTypeID == 0 {
 		return 0, "event_type_id is required", http.StatusBadRequest, nil
+	}
+	req.ReferenceURL = strings.TrimSpace(req.ReferenceURL)
+	if msg := checkSchedulePlanning(req.Status, req.ReferenceURL); msg != "" {
+		return 0, msg, http.StatusBadRequest, nil
+	}
+	if req.Status == "" {
+		req.Status = "confirmed"
+	}
+	showOnMain := req.ShowOnMain == nil || *req.ShowOnMain
+	if status, msg := seasonTagCheck(nil, req.SeasonID); status != 0 {
+		return 0, msg, status, nil
 	}
 
 	tr, err := loadScheduleTypeRules(db, req.EventTypeID)
@@ -1144,9 +1258,11 @@ func insertScheduleEvent(actor *AuthUser, req scheduleEventCreate) (id int64, us
 		allDayInt = 1
 	}
 	res, err := db.Exec(`
-		INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by, created_at, updated_at, task_force)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		req.EventDate, req.EventTypeID, req.EventTime, allDayInt, req.Level, req.Notes, actor.ID, now, now, req.TaskForce)
+		INSERT INTO schedule_events (event_date, event_type_id, event_time, all_day, level, notes, created_by, created_at, updated_at, task_force,
+		                             season_id, status, leadership_only, show_on_main, reference_url)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.EventDate, req.EventTypeID, req.EventTime, allDayInt, req.Level, req.Notes, actor.ID, now, now, req.TaskForce,
+		req.SeasonID, req.Status, boolToInt(req.LeadershipOnly), boolToInt(showOnMain), req.ReferenceURL)
 	if isUniqueViolation(err) && req.TaskForce != nil {
 		// Lost a race with an identical create; the index is the backstop.
 		return 0, "Desert Storm Task Force " + *req.TaskForce + " is already scheduled on " + req.EventDate, http.StatusBadRequest, nil
@@ -1195,6 +1311,12 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 		Level       *int    `json:"level"`
 		Notes       string  `json:"notes"`
 		TaskForce   *string `json:"task_force"`
+		// Planning fields: absent keeps the stored value (an older client sends none).
+		SeasonID       optionalInt `json:"season_id"`
+		Status         *string     `json:"status"`
+		LeadershipOnly *bool       `json:"leadership_only"`
+		ShowOnMain     *bool       `json:"show_on_main"`
+		ReferenceURL   *string     `json:"reference_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -1203,15 +1325,18 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	req.TaskForce = normTaskForce(req.TaskForce)
 
 	var old ScheduleEvent
-	var isSystem, oldAllDay int
+	var isSystem, oldAllDay, oldLeader, oldShow int
 	err := db.QueryRow(`
 		SELECT se.event_date, se.event_type_id, t.short_name, t.is_system,
-		       se.event_time, se.all_day, se.level, COALESCE(se.notes,''), se.task_force
+		       se.event_time, se.all_day, se.level, COALESCE(se.notes,''), se.task_force,
+		       se.season_id, se.status, se.leadership_only, se.show_on_main, se.reference_url,
+		       COALESCE(se.source_kind, '')
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
 		WHERE se.id=?`, id).
 		Scan(&old.EventDate, &old.EventTypeID, &old.TypeShort, &isSystem,
-			&old.EventTime, &oldAllDay, &old.Level, &old.Notes, &old.TaskForce)
+			&old.EventTime, &oldAllDay, &old.Level, &old.Notes, &old.TaskForce,
+			&old.SeasonID, &old.Status, &oldLeader, &oldShow, &old.ReferenceURL, &old.SourceKind)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -1223,6 +1348,40 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	old.IsSystem = isSystem == 1
 	old.AllDay = oldAllDay == 1
+	old.LeadershipOnly, old.ShowOnMain = oldLeader == 1, oldShow == 1
+
+	// A row a Land or War record owns follows its source: the date, time and status are the
+	// source's to move. Notes, the planning flags and the link stay editable.
+	newSeason, newStatus := old.SeasonID, old.Status
+	newLeader, newShow, newURL := old.LeadershipOnly, old.ShowOnMain, old.ReferenceURL
+	if req.SeasonID.Set && !sameSeason(old.SeasonID, req.SeasonID.Value) {
+		if status, msg := seasonTagCheck(old.SeasonID, req.SeasonID.Value); status != 0 {
+			http.Error(w, msg, status)
+			return
+		}
+		newSeason = req.SeasonID.Value
+	}
+	if req.Status != nil {
+		newStatus = *req.Status
+	}
+	if req.LeadershipOnly != nil {
+		newLeader = *req.LeadershipOnly
+	}
+	if req.ShowOnMain != nil {
+		newShow = *req.ShowOnMain
+	}
+	if req.ReferenceURL != nil {
+		newURL = strings.TrimSpace(*req.ReferenceURL)
+	}
+	if msg := checkSchedulePlanning(newStatus, newURL); msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+	if old.SourceKind != "" && ((req.EventDate != "" && req.EventDate != old.EventDate) ||
+		(req.EventTime != "" && req.EventTime != old.EventTime) || newStatus != old.Status) {
+		http.Error(w, "This event follows its "+strings.ReplaceAll(old.SourceKind, "_", " ")+" in the Season Hub — change it there", http.StatusConflict)
+		return
+	}
 
 	if req.EventDate == "" {
 		req.EventDate = old.EventDate
@@ -1288,13 +1447,17 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	// No is_system gate — see validateEventRules.
 	cand := eventCandidate{Date: req.EventDate, Time: req.EventTime, TaskForce: req.TaskForce,
 		KeepMissingTaskForce: keepMissingTF, DateUnchanged: req.EventDate == old.EventDate && req.EventTypeID == old.EventTypeID}
-	if msg, err := validateEventRules(db, tr, cand, id); err != nil {
-		slog.Error("updateScheduleEvent validateEventRules", "error", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	} else if msg != "" {
-		http.Error(w, msg, http.StatusBadRequest)
-		return
+	// A cancelled row is history, not a booking: it is not checked against the rules (and
+	// leaves every other row's checks), so cancelling never fails on a rule.
+	if newStatus != "cancelled" {
+		if msg, err := validateEventRules(db, tr, cand, id); err != nil {
+			slog.Error("updateScheduleEvent validateEventRules", "error", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		} else if msg != "" {
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
 	}
 
 	tl, err := loadTypeLevels(db, req.EventTypeID)
@@ -1360,8 +1523,10 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err = db.Exec(`
-		UPDATE schedule_events SET event_date=?, event_type_id=?, event_time=?, all_day=?, level=?, notes=?, task_force=?, updated_at=? WHERE id=?`,
-		req.EventDate, req.EventTypeID, req.EventTime, newAllDayInt, req.Level, req.Notes, req.TaskForce, now, id); isUniqueViolation(err) && req.TaskForce != nil {
+		UPDATE schedule_events SET event_date=?, event_type_id=?, event_time=?, all_day=?, level=?, notes=?, task_force=?, updated_at=?,
+		    season_id=?, status=?, leadership_only=?, show_on_main=?, reference_url=? WHERE id=?`,
+		req.EventDate, req.EventTypeID, req.EventTime, newAllDayInt, req.Level, req.Notes, req.TaskForce, now,
+		newSeason, newStatus, boolToInt(newLeader), boolToInt(newShow), newURL, id); isUniqueViolation(err) && req.TaskForce != nil {
 		http.Error(w, "Desert Storm Task Force "+*req.TaskForce+" is already scheduled on "+req.EventDate, http.StatusBadRequest)
 		return
 	} else if err != nil {
@@ -1382,6 +1547,18 @@ func updateScheduleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	if old.Notes != req.Notes {
 		changes = append(changes, "notes updated")
+	}
+	if old.Status != newStatus {
+		changes = append(changes, "status: "+old.Status+" → "+newStatus)
+	}
+	if !sameSeason(old.SeasonID, newSeason) {
+		changes = append(changes, "season: "+seasonTagName(old.SeasonID)+" → "+seasonTagName(newSeason))
+	}
+	if old.LeadershipOnly != newLeader {
+		changes = append(changes, "leadership only: "+yesNo(old.LeadershipOnly)+" → "+yesNo(newLeader))
+	}
+	if old.ShowOnMain != newShow {
+		changes = append(changes, "on main schedule: "+yesNo(old.ShowOnMain)+" → "+yesNo(newShow))
 	}
 	if tfChanged {
 		from, to := "none", "none"
@@ -1608,7 +1785,8 @@ func generateScheduleEvents(w http.ResponseWriter, r *http.Request) {
 		// task_force IS ?, not = ?: every MG/LS/ZS candidate binds NULL there, and
 		// = NULL is never true — the check would find nothing and re-insert.
 		var exists int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id=? AND event_date=? AND task_force IS ?`,
+		if err := db.QueryRow(`SELECT COUNT(*) FROM schedule_events WHERE event_type_id=? AND event_date=? AND task_force IS ?
+			AND status != 'cancelled'`,
 			typeID, dateStr, tf).Scan(&exists); err != nil {
 			// Unknown is not "absent": count it and move on rather than insert blind.
 			slog.Error("generateScheduleEvents exists check", "error", err, "date", dateStr, "type", short)

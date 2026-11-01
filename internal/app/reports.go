@@ -33,6 +33,7 @@ var reportDefs = []reportDef{
 	{Key: "vs-misses", Title: "VS misses", Permission: "view_report_vs_misses"},
 	{Key: "donations", Title: "Donations", Permission: "view_report_donations"},
 	{Key: "participation", Title: "Participation grid", Permission: "view_report_participation"},
+	{Key: "season-participation", Title: "Season participation", Permission: "view_report_season_participation"},
 }
 
 // reportDefFor returns the registry entry for key.

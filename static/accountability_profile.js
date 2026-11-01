@@ -27,6 +27,7 @@ function openStrikeModal(preType) {
     document.getElementById('strike-type').value = preType || '';
     document.getElementById('strike-reason').value = '';
     strikeRefDateFP.clear(false);
+    StrikeSeason.fill();
     document.getElementById('strike-modal-status').textContent = '';
     const strikeModal = document.getElementById('add-strike-modal');
     strikeModal.style.display = 'flex';
@@ -50,7 +51,7 @@ async function saveStrike() {
     const res = await fetch('/api/accountability/strikes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member_id: MEMBER_ID, strike_type: strikeType, reason, ref_date: refDate }),
+        body: JSON.stringify(Object.assign({ member_id: MEMBER_ID, strike_type: strikeType, reason, ref_date: refDate }, StrikeSeason.read())),
     });
     if (!res.ok) {
         status.textContent = res.status === 400 ? (await res.text()).trim() : 'Failed to save.';
@@ -142,6 +143,8 @@ function renderStrikes(strikes) {
 
         const tdDate = document.createElement('td');
         tdDate.textContent = s.ref_date || s.created_at.slice(0, 10);
+        const seasonBadge = StrikeSeason.badge(s);
+        if (seasonBadge) tdDate.append(' ', seasonBadge);
 
         const tdStatus = document.createElement('td');
         const statusSpan = document.createElement('span');

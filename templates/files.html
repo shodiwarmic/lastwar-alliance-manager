@@ -59,6 +59,11 @@
                     <button class="filter-chip type-chip" data-type="document"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-file-text"/></svg> Document</button>
                     <button class="filter-chip type-chip" data-type="spreadsheet"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-chart-line"/></svg> Spreadsheet</button>
                     <button class="filter-chip type-chip" data-type="image"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-photo"/></svg> Image</button>
+                    <button class="filter-chip type-chip" data-type="data"><svg width="13" height="13" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-braces"/></svg> Data</button>
+                </div>
+                <div class="filter-row filter-row-full" id="season-chips-row" style="display:none">
+                    <span class="filter-chip-label">Season:</span>
+                    <!-- All / per-season chips injected by files.js -->
                 </div>
                 <div class="filter-row filter-row-full" id="tag-chips-row">
                     <span class="filter-chip-label">Tags:</span>
@@ -109,6 +114,10 @@
                         <option value="R5">R5 Only</option>
                     </select>
                 </div>
+                <div class="form-group season-tag-group" style="display:none">
+                    <label for="edit-file-season">Season (optional — lists it in the Season Hub):</label>
+                    <select id="edit-file-season" class="form-input"></select>
+                </div>
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary" id="edit-submit-btn">Save Changes</button>
                     <button type="button" class="btn btn-secondary" id="edit-cancel-btn">Cancel</button>
@@ -155,6 +164,10 @@
                         <option value="R4" selected>R4 & R5 Only</option>
                         <option value="R5">R5 Only</option>
                     </select>
+                </div>
+                <div class="form-group season-tag-group" style="display:none">
+                    <label for="file-season">Season (optional — lists it in the Season Hub):</label>
+                    <select id="file-season" class="form-input"></select>
                 </div>
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary" id="upload-submit-btn">Upload</button>
@@ -205,6 +218,10 @@
                         <option value="R4" selected>R4 & R5 Only</option>
                         <option value="R5">R5 Only</option>
                     </select>
+                </div>
+                <div class="form-group season-tag-group" style="display:none">
+                    <label for="create-file-season">Season (optional — lists it in the Season Hub):</label>
+                    <select id="create-file-season" class="form-input"></select>
                 </div>
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary" id="create-submit-btn">Create &amp; Open</button>

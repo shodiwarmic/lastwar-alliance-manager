@@ -553,6 +553,7 @@ func loadImportCandidates(typeID int, mailDate string) ([]ptOccurrence, error) {
 		FROM schedule_events se
 		LEFT JOIN participation_boards b ON b.schedule_event_id = se.id
 		WHERE se.event_type_id = ? AND se.event_date <= ? AND se.event_date >= date(?, '-4 days')
+		  AND (se.status != 'cancelled' OR b.id IS NOT NULL)
 		ORDER BY se.event_date DESC, se.event_time DESC, se.task_force`, typeID, from, from)
 	if err != nil {
 		return nil, err

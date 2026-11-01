@@ -134,6 +134,19 @@ func handleDonationsReport(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleSeasonParticipationReport is GET /api/reports/season-participation?season_id=
+// (view_report_season_participation); no season_id is the active season, else the newest.
+func handleSeasonParticipationReport(w http.ResponseWriter, r *http.Request) {
+	p, err := seasonReportParamsFromQuery(r.URL.Query().Get("season_id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	serveReport(w, "season-participation", func(q rowQueryer) (any, error) {
+		return runSeasonParticipationReport(q, p, time.Now())
+	})
+}
+
 // handleParticipationGridReport is GET /api/reports/participation?from=&to=&weeks=&current=
 // (view_report_participation).
 func handleParticipationGridReport(w http.ResponseWriter, r *http.Request) {

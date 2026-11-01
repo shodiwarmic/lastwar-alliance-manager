@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "exportDate": "2026-10-18T01:35:17.049Z",
+  "grids": [
+    {
+      "id": "s4-1792287305543",
+      "name": "Season 4 - Main Server",
+      "alliances": [],
+      "pathSteps": [],
+      "showStrongholds": false,
+      "showCities": true,
+      "showBuffs": false,
+      "proposedPathMode": false,
+      "selectedAllianceId": null,
+      "createdAt": "2026-10-18T01:35:05.543Z",
+      "updatedAt": "2026-10-18T01:35:05.543Z"
+    }
+  ]
+}

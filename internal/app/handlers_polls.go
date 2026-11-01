@@ -48,13 +48,13 @@ func loadPollInstance(id int) (*PollInstance, error) {
 	err := db.QueryRow(`
 		SELECT i.id, i.template_id, i.label, i.question, i.options, i.poll_type,
 		       i.multi_select, i.rank_filter, i.total_eligible,
-		       COALESCE(u.username,'(deleted)'), i.created_at
+		       COALESCE(u.username,'(deleted)'), i.created_at, i.season_id
 		FROM poll_instances i
 		LEFT JOIN users u ON u.id = i.created_by
 		WHERE i.id = ?`, id).
 		Scan(&pi.ID, &pi.TemplateID, &pi.Label, &pi.Question, &pi.Options,
 			&pi.PollType, &pi.MultiSelect, &pi.RankFilter, &pi.TotalEligible,
-			&pi.CreatedBy, &pi.CreatedAt)
+			&pi.CreatedBy, &pi.CreatedAt, &pi.SeasonID)
 	if err != nil {
 		return nil, err
 	}
@@ -65,13 +65,31 @@ func loadPollInstance(id int) (*PollInstance, error) {
 // Poll Templates
 // ---------------------------------------------------------------------------
 
+// seasonFilter reads an optional ?season_id= into a WHERE fragment for column col.
+func seasonFilter(r *http.Request, col string) (string, []any, bool) {
+	v := r.URL.Query().Get("season_id")
+	if v == "" {
+		return "", nil, true
+	}
+	sid, err := strconv.Atoi(v)
+	if err != nil {
+		return "", nil, false
+	}
+	return " WHERE " + col + " = ?", []any{sid}, true
+}
+
 func handlePollTemplateList(w http.ResponseWriter, r *http.Request) {
+	where, args, ok := seasonFilter(r, "t.season_id")
+	if !ok {
+		http.Error(w, "Invalid season_id", http.StatusBadRequest)
+		return
+	}
 	rows, err := db.Query(`
 		SELECT t.id, t.title, t.question, t.options, t.poll_type, t.multi_select,
-		       COALESCE(u.username,'(deleted)'), t.created_at
+		       COALESCE(u.username,'(deleted)'), t.created_at, t.season_id
 		FROM poll_templates t
-		LEFT JOIN users u ON u.id = t.created_by
-		ORDER BY t.created_at ASC`)
+		LEFT JOIN users u ON u.id = t.created_by`+where+`
+		ORDER BY t.created_at ASC`, args...)
 	if err != nil {
 		slog.Error("handlePollTemplateList: query", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -83,7 +101,7 @@ func handlePollTemplateList(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var t PollTemplate
 		if err := rows.Scan(&t.ID, &t.Title, &t.Question, &t.Options, &t.PollType,
-			&t.MultiSelect, &t.CreatedBy, &t.CreatedAt); err != nil {
+			&t.MultiSelect, &t.CreatedBy, &t.CreatedAt, &t.SeasonID); err != nil {
 			continue
 		}
 		items = append(items, t)
@@ -101,6 +119,7 @@ func handlePollTemplateCreate(w http.ResponseWriter, r *http.Request) {
 		Options     []string `json:"options"`
 		PollType    string   `json:"poll_type"`
 		MultiSelect bool     `json:"multi_select"`
+		SeasonID    *int     `json:"season_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -124,6 +143,10 @@ func handlePollTemplateCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
+	if status, msg := seasonTagCheck(nil, body.SeasonID); status != 0 {
+		http.Error(w, msg, status)
+		return
+	}
 	optsJSON, _ := json.Marshal(body.Options)
 	multiInt := 0
 	if body.MultiSelect {
@@ -131,9 +154,9 @@ func handlePollTemplateCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := db.Exec(
-		`INSERT INTO poll_templates (title, question, options, poll_type, multi_select, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		body.Title, body.Question, string(optsJSON), body.PollType, multiInt, user.ID,
+		`INSERT INTO poll_templates (title, question, options, poll_type, multi_select, season_id, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		body.Title, body.Question, string(optsJSON), body.PollType, multiInt, body.SeasonID, user.ID,
 	)
 	if err != nil {
 		slog.Error("handlePollTemplateCreate: insert", "error", err)
@@ -156,11 +179,12 @@ func handlePollTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title       string   `json:"title"`
-		Question    string   `json:"question"`
-		Options     []string `json:"options"`
-		PollType    string   `json:"poll_type"`
-		MultiSelect bool     `json:"multi_select"`
+		Title       string      `json:"title"`
+		Question    string      `json:"question"`
+		Options     []string    `json:"options"`
+		PollType    string      `json:"poll_type"`
+		MultiSelect bool        `json:"multi_select"`
+		SeasonID    optionalInt `json:"season_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -191,8 +215,8 @@ func handlePollTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var old PollTemplate
-	err = db.QueryRow(`SELECT title, question, options, poll_type, multi_select FROM poll_templates WHERE id = ?`, id).
-		Scan(&old.Title, &old.Question, &old.Options, &old.PollType, &old.MultiSelect)
+	err = db.QueryRow(`SELECT title, question, options, poll_type, multi_select, season_id FROM poll_templates WHERE id = ?`, id).
+		Scan(&old.Title, &old.Question, &old.Options, &old.PollType, &old.MultiSelect, &old.SeasonID)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -203,9 +227,17 @@ func handlePollTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	newSeason := old.SeasonID
+	if body.SeasonID.Set && !sameSeason(old.SeasonID, body.SeasonID.Value) {
+		if status, msg := seasonTagCheck(old.SeasonID, body.SeasonID.Value); status != 0 {
+			http.Error(w, msg, status)
+			return
+		}
+		newSeason = body.SeasonID.Value
+	}
 	if _, err := db.Exec(
-		`UPDATE poll_templates SET title=?, question=?, options=?, poll_type=?, multi_select=? WHERE id=?`,
-		body.Title, body.Question, string(optsJSON), body.PollType, multiInt, id,
+		`UPDATE poll_templates SET title=?, question=?, options=?, poll_type=?, multi_select=?, season_id=? WHERE id=?`,
+		body.Title, body.Question, string(optsJSON), body.PollType, multiInt, newSeason, id,
 	); err != nil {
 		slog.Error("handlePollTemplateUpdate: update", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -224,6 +256,9 @@ func handlePollTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if old.PollType != body.PollType {
 		changes = append(changes, "poll_type: "+old.PollType+" → "+body.PollType)
+	}
+	if !sameSeason(old.SeasonID, newSeason) {
+		changes = append(changes, "season: "+seasonTagName(old.SeasonID)+" → "+seasonTagName(newSeason))
 	}
 	logActivity(user.ID, user.Username, "updated", "poll_template", body.Title, false, strings.Join(changes, "; "))
 
@@ -285,13 +320,18 @@ func handlePollTemplateDelete(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func handlePollInstanceList(w http.ResponseWriter, r *http.Request) {
+	where, args, ok := seasonFilter(r, "i.season_id")
+	if !ok {
+		http.Error(w, "Invalid season_id", http.StatusBadRequest)
+		return
+	}
 	rows, err := db.Query(`
 		SELECT i.id, i.template_id, i.label, i.question, i.options, i.poll_type,
 		       i.multi_select, i.rank_filter, i.total_eligible,
-		       COALESCE(u.username,'(deleted)'), i.created_at
+		       COALESCE(u.username,'(deleted)'), i.created_at, i.season_id
 		FROM poll_instances i
-		LEFT JOIN users u ON u.id = i.created_by
-		ORDER BY i.created_at DESC`)
+		LEFT JOIN users u ON u.id = i.created_by`+where+`
+		ORDER BY i.created_at DESC`, args...)
 	if err != nil {
 		slog.Error("handlePollInstanceList: query", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -304,7 +344,7 @@ func handlePollInstanceList(w http.ResponseWriter, r *http.Request) {
 		var pi PollInstance
 		if err := rows.Scan(&pi.ID, &pi.TemplateID, &pi.Label, &pi.Question, &pi.Options,
 			&pi.PollType, &pi.MultiSelect, &pi.RankFilter, &pi.TotalEligible,
-			&pi.CreatedBy, &pi.CreatedAt); err != nil {
+			&pi.CreatedBy, &pi.CreatedAt, &pi.SeasonID); err != nil {
 			continue
 		}
 		items = append(items, pi)
@@ -370,6 +410,8 @@ func handlePollInstanceCreate(w http.ResponseWriter, r *http.Request) {
 		TemplateID int      `json:"template_id"`
 		Label      string   `json:"label"`
 		RankFilter []string `json:"rank_filter"` // nil/empty = all active
+		// Absent inherits the template's season; null launches with none.
+		SeasonID optionalInt `json:"season_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -391,8 +433,8 @@ func handlePollInstanceCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Load template
 	var tmpl PollTemplate
-	err := db.QueryRow(`SELECT id, title, question, options, poll_type, multi_select FROM poll_templates WHERE id = ?`, body.TemplateID).
-		Scan(&tmpl.ID, &tmpl.Title, &tmpl.Question, &tmpl.Options, &tmpl.PollType, &tmpl.MultiSelect)
+	err := db.QueryRow(`SELECT id, title, question, options, poll_type, multi_select, season_id FROM poll_templates WHERE id = ?`, body.TemplateID).
+		Scan(&tmpl.ID, &tmpl.Title, &tmpl.Question, &tmpl.Options, &tmpl.PollType, &tmpl.MultiSelect, &tmpl.SeasonID)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Template not found", http.StatusNotFound)
 		return
@@ -406,6 +448,14 @@ func handlePollInstanceCreate(w http.ResponseWriter, r *http.Request) {
 	multiInt := 0
 	if tmpl.MultiSelect {
 		multiInt = 1
+	}
+	seasonID := tmpl.SeasonID
+	if body.SeasonID.Set {
+		seasonID = body.SeasonID.Value
+	}
+	if status, msg := seasonTagCheck(nil, seasonID); status != 0 {
+		http.Error(w, msg, status)
+		return
 	}
 
 	// Snapshot rank_filter
@@ -429,9 +479,9 @@ func handlePollInstanceCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := db.Exec(
-		`INSERT INTO poll_instances (template_id, label, question, options, poll_type, multi_select, rank_filter, total_eligible, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		body.TemplateID, body.Label, tmpl.Question, tmpl.Options, tmpl.PollType, multiInt, rankFilterStr, totalEligible, user.ID,
+		`INSERT INTO poll_instances (template_id, label, question, options, poll_type, multi_select, rank_filter, total_eligible, season_id, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		body.TemplateID, body.Label, tmpl.Question, tmpl.Options, tmpl.PollType, multiInt, rankFilterStr, totalEligible, seasonID, user.ID,
 	)
 	if err != nil {
 		slog.Error("handlePollInstanceCreate: insert", "error", err)

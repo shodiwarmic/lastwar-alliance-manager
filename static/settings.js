@@ -769,19 +769,141 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const wcInp  = addField('Week Count', 'number', '8', defs.week_count ?? 8, 1, 52);
         const kenInp = addField('Key Event Name', 'text', 'e.g. Rare Soil War', defs.key_event_name || '');
-        const kerInp = addField('Key Event Required (weeks)', 'number', '4', defs.key_event_required ?? 0, 0, 52);
+        const kerInp = addField('Key Event Required', 'number', '4', defs.key_event_required ?? 0, 0, 99);
+        const ketInp = addField('Key Event Total (scheduled)', 'number', '8', defs.key_event_total ?? 0, 0, 99);
+        const resInp = addField('Resource name', 'text', 'e.g. Copper', defs.resource_name || '');
+        const uwInp  = addField("Weeks that don't count", 'text', 'e.g. 8', (defs.uncounted_weeks || []).join(', '));
 
         wrap.appendChild(grid);
 
+        // Starts from the parsed original: a key this editor doesn't show survives a save.
+        // (It once re-emitted a fixed three-key object, silently dropping anything else.)
         function getJSON() {
-            return JSON.stringify({
+            return JSON.stringify(Object.assign({}, defs, {
                 week_count: parseInt(wcInp.value, 10) || 8,
                 key_event_name: kenInp.value.trim(),
                 key_event_required: parseInt(kerInp.value, 10) || 0,
-            });
+                key_event_total: parseInt(ketInp.value, 10) || 0,
+                resource_name: resInp.value.trim(),
+                // A season made from the template leaves these weeks out of its standings.
+                uncounted_weeks: uwInp.value.split(/[\s,]+/).map(Number).filter(n => Number.isInteger(n) && n > 0),
+            }));
         }
 
         return { el: wrap, getJSON };
+    }
+
+    // The provenance grades a template row may carry (validEventGrades in Go).
+    const GRADE_OPTS = [
+        { value: 'official', label: 'Official' }, { value: 'cpt_hedge', label: 'Cpt Hedge' },
+        { value: 'guide', label: 'Guide' }, { value: 'owner', label: 'Owner' },
+        { value: 'requester', label: 'Requester' }, { value: 'conflict', label: 'Conflict' },
+        { value: 'unverified', label: 'Unverified' },
+    ];
+
+    // The template's reward tiers (migration 088): the tiers a season created from it starts
+    // with. Empty means the global default above. Same shape and rules as that list.
+    function buildTiersEditor(json) {
+        let items = [];
+        try { items = JSON.parse(json) || []; } catch (e) {}
+
+        const wrap = document.createElement('div');
+        wrap.style.marginBottom = '10px';
+        const hdr = document.createElement('div');
+        hdr.style.cssText = 'font-size:0.85rem;font-weight:600;margin-bottom:6px;';
+        hdr.textContent = 'Reward Tiers';
+        const hint = document.createElement('div');
+        hint.style.cssText = 'font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;';
+        hint.textContent = 'The tiers a season created from this template starts with. Leave empty to use the default list above.';
+        wrap.append(hdr, hint);
+
+        const tableWrap = document.createElement('div');
+        tableWrap.style.cssText = 'overflow-x:auto;border:1px solid var(--color-border);border-radius:6px;';
+        const tbl = document.createElement('table');
+        tbl.className = 'data-table';
+        tbl.style.cssText = 'width:100%;font-size:0.85rem;';
+        const thead = document.createElement('thead');
+        const hrow = document.createElement('tr');
+        ['Key', 'Label', 'Slots', 'Colour', ''].forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            th.style.padding = '6px 8px';
+            hrow.appendChild(th);
+        });
+        thead.appendChild(hrow);
+        const tbody = document.createElement('tbody');
+        tbl.append(thead, tbody);
+        tableWrap.appendChild(tbl);
+        wrap.appendChild(tableWrap);
+
+        function refresh() {
+            ColorPicker.upgradeAll(tbody, '.rt-color', 'tier-color-choices');
+            refreshOrderButtons(tbody);
+        }
+
+        function addRow(t) {
+            t = t || {};
+            const tr = document.createElement('tr');
+            function cell(child) {
+                const td = document.createElement('td');
+                td.style.padding = '4px 6px';
+                td.appendChild(child);
+                tr.appendChild(td);
+            }
+            function inp(cls, type, val, width, placeholder) {
+                const el = document.createElement('input');
+                el.type = type;
+                el.className = 'form-input ' + cls;
+                el.style.cssText = `width:${width};font-size:0.8rem;padding:4px 6px;`;
+                el.value = val;
+                if (placeholder) el.placeholder = placeholder;
+                return el;
+            }
+            cell(inp('rt-key', 'text', t.key || '', '120px', 'e.g. tactician'));
+            cell(inp('rt-label', 'text', t.label || '', '140px', 'Label'));
+            const slots = inp('rt-slots', 'number', t.slot_count != null ? t.slot_count : 0, '70px');
+            slots.min = '0';
+            cell(slots);
+            cell(ColorPicker.buildSelect(t.color || 'neutral', 'form-input rt-color'));
+            const tdAct = document.createElement('td');
+            tdAct.style.cssText = 'white-space:nowrap;padding:4px 6px;';
+            tdAct.appendChild(buildOrderButtons(tr, () => refreshOrderButtons(tbody)));
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'btn btn-danger btn-sm';
+            del.style.marginLeft = '4px';
+            del.setAttribute('aria-label', 'Delete');
+            del.appendChild(svgIcon('x'));
+            del.addEventListener('click', () => {
+                ColorPicker.destroyIn(tr, '.rt-color');
+                tr.remove();
+                refreshOrderButtons(tbody);
+            });
+            tdAct.appendChild(del);
+            tr.appendChild(tdAct);
+            tbody.appendChild(tr);
+        }
+
+        items.forEach(addRow);
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'btn btn-secondary btn-sm';
+        addBtn.textContent = '+ Add Tier';
+        addBtn.style.marginTop = '6px';
+        addBtn.addEventListener('click', () => { addRow({}); refresh(); });
+        wrap.appendChild(addBtn);
+
+        function getJSON() {
+            const tiers = Array.from(tbody.querySelectorAll('tr')).map(row => ({
+                key: row.querySelector('.rt-key').value.trim(),
+                label: row.querySelector('.rt-label').value.trim(),
+                slot_count: parseInt(row.querySelector('.rt-slots').value, 10) || 0,
+                color: row.querySelector('.rt-color').value,
+            })).filter(t => t.key && t.label);
+            return JSON.stringify(tiers);
+        }
+
+        return { el: wrap, getJSON, refresh };
     }
 
     const DAY_OPTS = [
@@ -826,6 +948,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             { text: 'Notes',   title: 'Optional notes pushed to schedule' },
             { text: 'Svr', icon: 'world', title: 'Server event — pushed to Server Events section of schedule instead of alliance schedule' },
             { text: 'Days',    title: 'Duration in days (server events only)' },
+            { text: 'Source',  title: 'Where this fact came from (calendar, guide, observation)' },
+            { text: 'Grade',   title: 'How sure the source is. In-game observation outranks every grade.' },
             { text: '',        title: 'Remove row' },
         ];
         COLS.forEach(c => {
@@ -911,6 +1035,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             durInp.min = 1;
             cell(durInp);
 
+            cell(mkInp('text', 'e.g. Official S4 calendar', ev.source || '', '160px'));
+            const gradeSel = document.createElement('select');
+            gradeSel.className = 'form-input';
+            gradeSel.style.cssText = 'width:105px;font-size:0.78rem;padding:3px 4px;';
+            GRADE_OPTS.forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = o.value;
+                opt.textContent = o.label;
+                gradeSel.appendChild(opt);
+            });
+            gradeSel.value = GRADE_OPTS.some(o => o.value === ev.grade) ? ev.grade : 'unverified';
+            cell(gradeSel);
+
+            // The row's parsed original: getJSON starts from it, so a key this editor
+            // doesn't show (the stable "key", or anything a later release adds) survives
+            // a save instead of being silently dropped.
+            tr._orig = ev;
+
             const delBtn = document.createElement('button');
             delBtn.type = 'button';
             delBtn.className = 'btn btn-danger btn-sm';
@@ -943,7 +1085,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const wkSVal = parseInt(tds[6].querySelector('input').value, 10);
                 const wkEVal = parseInt(tds[7].querySelector('input').value, 10);
                 const lvlVal = tds[8].querySelector('input').value.trim();
-                const ev = {
+                const ev = Object.assign({}, tr._orig || {}, {
                     label,
                     type_name:       tds[1].querySelector('input').value.trim(),
                     type_short:      tds[2].querySelector('input').value.trim(),
@@ -956,8 +1098,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     notes:           tds[9].querySelector('input').value.trim(),
                     is_server_event: tds[10].querySelector('input[type=checkbox]').checked,
                     duration_days:   parseInt(tds[11].querySelector('input').value, 10) || 1,
-                };
+                    source:          tds[12].querySelector('input').value.trim(),
+                    grade:           tds[13].querySelector('select').value,
+                });
                 if (lvlVal !== '') ev.level = parseInt(lvlVal, 10);
+                else delete ev.level;
                 result.push(ev);
             });
             return JSON.stringify(result);
@@ -1021,8 +1166,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnStmSave  = document.getElementById('btn-stm-save');
     const btnStmCancel = document.getElementById('btn-stm-cancel');
 
+    const tiersWrap       = document.getElementById('stm-tiers-wrap');
     let activeTemplate = null;
-    let defaultsEd, trackablesEd, eventsEd;
+    let defaultsEd, trackablesEd, eventsEd, tiersEd;
 
     function openTemplateModal(t) {
         activeTemplate = t || {};
@@ -1035,10 +1181,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         defaultsEd   = buildDefaultsEditor(activeTemplate.defaults    || '{}');
         trackablesEd = buildTrackablesEditor(activeTemplate.trackables || '[]');
         eventsEd     = buildEventsEditor(activeTemplate.events         || '[]');
+        tiersEd      = buildTiersEditor(activeTemplate.reward_tiers     || '[]');
 
         defaultsWrap.replaceChildren(defaultsEd.el);
         trackablesWrap.replaceChildren(trackablesEd.el);
         eventsWrap.replaceChildren(eventsEd.el);
+        if (tiersWrap) { tiersWrap.replaceChildren(tiersEd.el); tiersEd.refresh(); }
 
         modal.style.display = 'flex';
         stmName.focus();
@@ -1060,6 +1208,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 defaults:      defaultsEd.getJSON(),
                 trackables:    trackablesEd.getJSON(),
                 events:        eventsEd.getJSON(),
+                reward_tiers:  tiersEd.getJSON(),
             };
             if (!body.template_name) { showToast('Template name is required.', 'error'); return; }
 

@@ -146,6 +146,7 @@ func Seed(db *sql.DB, o Options) (Result, error) {
 		{"dyno", (*seeder).dyno},
 		{"officer command", (*seeder).officerCommand},
 		{"files", (*seeder).files},
+		{"season hub", (*seeder).seasonHub},
 		{"lastrank queue", (*seeder).lastRankQueue},
 		{"activity", (*seeder).activity},
 	} {

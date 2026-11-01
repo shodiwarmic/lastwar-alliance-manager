@@ -54,6 +54,13 @@ var seededTables = []string{
 	"poll_templates", "poll_instances", "poll_responses", "poll_anonymous_counts",
 	"dyno_recommendations", "oc_categories", "oc_responsibilities", "oc_assignees",
 	"files", "file_tags", "file_tag_map", "lastrank_pending_changes", "activity_log",
+	// The Season Hub (private-docs 269–287).
+	"season_tabs", "season_dashboard_cards", "season_factions", "season_alliances", "season_opponent_observations",
+	"season_war_config", "season_rank_groups", "season_land_config", "season_land_levels", "season_land_routes",
+	"season_land_targets", "season_land_route_revisions", "season_land_events", "season_land_drops", "season_wars",
+	"season_war_attendance", "season_faction_battles", "season_resource_observations", "season_rank_cutoffs",
+	"season_trade_posts", "season_trade_post_observations", "season_participation_events",
+	"season_participation_event_entries", "season_member_exemptions",
 }
 
 func TestSeedCoversEveryArea(t *testing.T) {

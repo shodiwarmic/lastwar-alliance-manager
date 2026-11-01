@@ -302,9 +302,118 @@ function openAllyModal(ally, prefill) {
         checkboxContainer.appendChild(label);
     });
 
+    loadAllySeasons(ally);
+
     const allyModal = document.getElementById('ally-modal');
     allyModal.style.display = 'flex';
     trapFocus(allyModal);
+}
+
+// ── Seasons section (Season Hub, private-docs 271) ───────────────────────────
+// One row per open season: this ally's faction, relationship and terms, kept in the Season
+// Hub's season_alliances table — the same row the War tab edits, so nothing is entered twice.
+const SEASON_RELATIONSHIPS = [['allied', 'Allied'], ['neutral', 'Neutral'], ['enemy', 'Enemy'], ['unknown', 'Unknown']];
+
+async function loadAllySeasons(ally) {
+    const group = document.getElementById('ally-seasons-group');
+    const box = document.getElementById('ally-seasons');
+    group.style.display = 'none';
+    box.replaceChildren();
+    if (!ally) return;
+    let data;
+    try {
+        const res = await fetch('/api/season-hub/ally-seasons?ally_id=' + ally.id);
+        if (!res.ok) return;
+        data = await res.json();
+    } catch (_) { return; }
+    // Our own alliance has no season row, and a season list may simply be empty.
+    if (data.own || !data.seasons || data.seasons.length === 0) return;
+    if (!data.server_known) {
+        const p = document.createElement('p');
+        p.className = 'ally-seasons-hint';
+        p.textContent = 'Set a numeric server to record this ally\'s seasons.';
+        box.appendChild(p);
+        group.style.display = 'block';
+        return;
+    }
+    data.seasons.forEach(s => box.appendChild(buildAllySeasonRow(s)));
+    group.style.display = 'block';
+}
+
+function buildAllySeasonRow(s) {
+    const row = s.row || {};
+    const wrap = document.createElement('fieldset');
+    wrap.className = 'ally-season';
+    wrap.dataset.seasonId = s.season_id;
+    const legend = document.createElement('legend');
+    legend.textContent = 'S' + s.season_number + ' — ';
+    const nm = noTranslate(document.createElement('span'));
+    nm.textContent = s.name;
+    legend.appendChild(nm);
+    wrap.appendChild(legend);
+
+    const faction = document.createElement('select');
+    faction.className = 'form-input ally-season-faction';
+    faction.setAttribute('aria-label', 'Faction');
+    noTranslate(faction);
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '— faction not set —';
+    faction.appendChild(none);
+    (s.factions || []).forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = f.label + (f.is_ours ? ' (ours)' : '');
+        faction.appendChild(opt);
+    });
+    faction.value = row.faction_id ? String(row.faction_id) : '';
+
+    const rel = document.createElement('select');
+    rel.className = 'form-input ally-season-rel';
+    rel.setAttribute('aria-label', 'Relationship');
+    SEASON_RELATIONSHIPS.forEach(([v, l]) => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = l;
+        rel.appendChild(opt);
+    });
+    rel.value = row.relationship || 'allied';
+
+    const terms = document.createElement('textarea');
+    terms.className = 'form-input ally-season-terms';
+    terms.rows = 2;
+    terms.placeholder = 'Terms this season (e.g. no hits on our cities, share Copper War timing)';
+    terms.value = row.terms || '';
+
+    const line = document.createElement('div');
+    line.className = 'ally-season-line';
+    line.append(faction, rel);
+    wrap.append(line, terms);
+    // What the form showed, so a save only writes a season the officer changed.
+    wrap._initial = JSON.stringify([faction.value, rel.value, terms.value]);
+    wrap._hadRow = !!s.row;
+    return wrap;
+}
+
+async function saveAllySeasons(allyId) {
+    const rows = Array.from(document.querySelectorAll('#ally-seasons .ally-season'));
+    const failures = [];
+    for (const wrap of rows) {
+        const faction = wrap.querySelector('.ally-season-faction').value;
+        const rel = wrap.querySelector('.ally-season-rel').value;
+        const terms = wrap.querySelector('.ally-season-terms').value;
+        if (JSON.stringify([faction, rel, terms]) === wrap._initial) continue;
+        const res = await fetch('/api/season-hub/alliances', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                season_id: parseInt(wrap.dataset.seasonId, 10), ally_id: allyId,
+                faction_id: faction ? parseInt(faction, 10) : null, relationship: rel, terms,
+            }),
+        });
+        if (!res.ok) failures.push((await res.text()) || 'Season save failed.');
+    }
+    return failures;
 }
 
 function closeAllyModal() {
@@ -342,6 +451,13 @@ async function saveAlly() {
         const text = await res.text();
         statusEl.textContent = text || 'Save failed.';
         return;
+    }
+    if (editingAllyId) {
+        const failures = await saveAllySeasons(editingAllyId);
+        if (failures.length) {
+            statusEl.textContent = 'Ally saved, but a season was not: ' + failures.join('; ');
+            return;
+        }
     }
 
     closeAllyModal();

@@ -448,6 +448,7 @@ function openPollTemplateModal(template) {
     document.getElementById('poll-template-title-input').value = template?.title ?? '';
     document.getElementById('poll-template-question-input').value = template?.question ?? '';
     document.getElementById('poll-template-multiselect').checked = template?.multi_select ?? false;
+    fillSeasonSelect(document.getElementById('poll-template-season-input'), template?.season_id ?? null);
     document.getElementById('poll-template-status').textContent = '';
 
     const pollType = template?.poll_type ?? 'named';
@@ -519,7 +520,8 @@ async function savePollTemplate() {
         const res = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, question, options, poll_type: pollType, multi_select: multiSelect }),
+            body: JSON.stringify(withSeason({ title, question, options, poll_type: pollType, multi_select: multiSelect },
+                'poll-template-season-input')),
         });
         if (!res.ok) {
             statusEl.textContent = await res.text() || 'Save failed.';
@@ -536,6 +538,13 @@ async function savePollTemplate() {
 
 // ── Poll Instance Modal ───────────────────────────────────────────────────────
 
+// withSeason adds season_id to a body when the form's Season field is in play.
+function withSeason(body, selectId) {
+    const v = seasonSelectValue(document.getElementById(selectId));
+    if (v !== undefined) body.season_id = v;
+    return body;
+}
+
 function openPollInstanceModal(instance, template) {
     const modal = document.getElementById('modal-poll-instance');
     const isEdit = !!instance;
@@ -544,6 +553,11 @@ function openPollInstanceModal(instance, template) {
     document.getElementById('poll-instance-id').value = instance?.id ?? '';
     document.getElementById('poll-instance-template-id').value = template?.id ?? '';
     document.getElementById('poll-instance-label-input').value = instance?.label ?? '';
+    // A launch inherits the template's season; it can be changed or cleared here. A launched
+    // poll keeps the season it was launched with.
+    const seasonSel = document.getElementById('poll-instance-season-input');
+    if (instance) seasonSel.closest('.season-tag-group').style.display = 'none';
+    else fillSeasonSelect(seasonSel, template?.season_id ?? null);
     document.getElementById('poll-instance-status').textContent = '';
 
     const preview = document.getElementById('poll-instance-question-preview');
@@ -627,7 +641,8 @@ async function savePollInstance() {
             res = await fetch('/api/comms/poll-instances', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ template_id: parseInt(templateId), label, rank_filter: rankFilter }),
+                body: JSON.stringify(withSeason({ template_id: parseInt(templateId), label, rank_filter: rankFilter },
+                    'poll-instance-season-input')),
             });
         }
         if (!res.ok) {

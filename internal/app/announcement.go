@@ -168,6 +168,9 @@ func loadAnnounceEvents(date string) ([]announceEvent, error) {
 		FROM schedule_events se
 		JOIN schedule_event_types t ON t.id = se.event_type_id
 		WHERE se.event_date = ?
+		  -- Never in the text, whoever generates it: a leadership-only plan, a cancelled
+		  -- row, or one kept off the main schedule (private-docs 273).
+		  AND se.leadership_only = 0 AND se.status != 'cancelled' AND se.show_on_main = 1
 		ORDER BY se.all_day DESC, se.event_time, se.task_force`, date)
 	if err != nil {
 		return nil, err

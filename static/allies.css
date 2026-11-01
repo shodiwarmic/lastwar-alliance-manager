@@ -293,3 +293,16 @@
 
 /* Progress list: now the shared .job-progress / .job-prog-* component in
    job-progress.css — see job-progress.js. */
+
+/* ── Ally modal: Seasons section (Season Hub season rows) ───────────────── */
+.ally-seasons-hint { font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 6px; }
+.ally-season {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 10px 10px;
+    margin: 0 0 8px;
+}
+.ally-season legend { font-size: 0.85rem; font-weight: 600; padding: 0 4px; }
+.ally-season-line { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.ally-season-line select { flex: 1 1 140px; min-width: 0; }
+.ally-season-terms { width: 100%; box-sizing: border-box; resize: vertical; }

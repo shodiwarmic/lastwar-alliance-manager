@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "exportDate": "2026-10-18T01:36:04.640Z",
+  "grids": [
+    {
+      "id": "s4-1792287305543",
+      "name": "Season 4 - Main Server",
+      "alliances": [
+        {
+          "id": "1792287340032",
+          "name": "Test1",
+          "areaIds": [
+            "99"
+          ],
+          "color": "#8BC1F7"
+        },
+        {
+          "id": "1792287349561",
+          "name": "Test2",
+          "areaIds": [
+            "85"
+          ],
+          "color": "#5752D1"
+        }
+      ],
+      "pathSteps": [],
+      "showStrongholds": false,
+      "showCities": true,
+      "showBuffs": false,
+      "proposedPathMode": false,
+      "selectedAllianceId": "1792287349561",
+      "createdAt": "2026-10-18T01:35:05.543Z",
+      "updatedAt": "2026-10-18T01:35:59.103Z"
+    }
+  ]
+}

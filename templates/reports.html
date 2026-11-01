@@ -219,6 +219,30 @@
         </div>
     </div>
     {{end}}
+
+    {{if .Permissions.ViewReportSeasonParticipation}}
+    <div id="tab-season-participation" class="tab-content">
+        <div class="report-print-header"><h2>Season participation</h2><p class="report-print-meta"></p></div>
+        <div class="report-controls">
+            <label class="report-field">Season
+                <select id="season-report-season" class="form-input" translate="no"></select>
+            </label>
+            <button type="button" class="btn btn-secondary report-print"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-printer"/></svg> Print</button>
+        </div>
+        <p class="report-range-line"></p>
+        <p class="status-msg report-status">Loading…</p>
+        <div class="report-body" style="display:none">
+            <div class="report-summary" id="season-report-summary"></div>
+            <div class="tab-toolbar" id="season-report-export"></div>
+            <div class="table-scroll">
+                <table class="data-table report-table" id="season-report-table" translate="no">
+                    <thead><tr><th>Member</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {{end}}
 </div>
 {{end}}
 

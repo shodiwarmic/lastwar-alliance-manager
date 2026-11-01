@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // in buildTagChips() because they're rebuilt after tag CRUD.
     FilterPanel.setupChipGroup('.type-chip', 'type', applyFilters);
 
-    loadTags().then(loadFiles);
+    loadTags().then(loadFiles).then(buildSeasonChips).then(openLinkedFile);
 });
 
 // ── Tags: chips + Choices ──────────────────────────────────────────
@@ -163,10 +163,13 @@ function applyFilters() {
     const typeFilterOn = activeTypes.length > 0 && !activeTypes.includes('all');
     const activeTags = Array.from(document.querySelectorAll('.tag-chip.active')).map(c => c.dataset.tag);
     const tagFilterOn = activeTags.length > 0 && !activeTags.includes('all');
+    const activeSeasons = Array.from(document.querySelectorAll('.season-chip.active')).map(c => c.dataset.season);
+    const seasonFilterOn = activeSeasons.length > 0 && !activeSeasons.includes('all');
 
     let list = allFilesData.filter(f => {
         if (q && !searchOk((f.title || '') + ' ' + (f.owner_name || ''))) return false;
         if (typeFilterOn && !activeTypes.includes(f.file_type)) return false;
+        if (seasonFilterOn && !activeSeasons.includes(String(f.season_id || 'none'))) return false;
         if (tagFilterOn) {
             const ids = (f.tags || []).map(t => String(t.id));
             // OR semantics across selected chips; "Untagged" matches files whose
@@ -188,11 +191,11 @@ function applyFilters() {
         grid.replaceChildren(...list.map(buildFileCard));
     }
 
-    FilterPanel.updateActiveBadge([['.type-chip', 'type'], ['.tag-chip', 'tag']], { extra: q ? 1 : 0 });
+    FilterPanel.updateActiveBadge([['.type-chip', 'type'], ['.tag-chip', 'tag'], ['.season-chip', 'season']], { extra: q ? 1 : 0 });
 }
 
 function clearFilters() {
-    FilterPanel.clearChipGroups([['.type-chip', 'type'], ['.tag-chip', 'tag']]);
+    FilterPanel.clearChipGroups([['.type-chip', 'type'], ['.tag-chip', 'tag'], ['.season-chip', 'season']]);
     const search = document.getElementById('file-search');
     search.value = '';
     document.getElementById('clear-file-search').style.display = 'none';
@@ -200,6 +203,53 @@ function clearFilters() {
     sortState.dir = 'asc';
     if (renderSortChips) renderSortChips();
     applyFilters();
+}
+
+// ?open=<id> (the Season Hub's Files tab) opens that file once the list is loaded — the
+// preview and Collabora live here, so the Hub links rather than duplicating them.
+function openLinkedFile() {
+    const id = parseInt(new URLSearchParams(location.search).get('open'), 10);
+    const file = id && allFilesData.find(f => f.id === id);
+    if (!file) return;
+    openFile(file.id, file.file_type, file.title, file.file_name.substring(file.file_name.lastIndexOf('.')));
+}
+
+// ── Season chips (Season Hub, private-docs 272) ────────────────────
+// One chip per season (plus "No season"), for a viewer who can read the season list. The
+// Hub's Files tab links here with ?season_id=, which preselects that season's chip and the
+// Season field of a new upload or document.
+const linkedSeasonId = parseInt(new URLSearchParams(location.search).get('season_id'), 10) || null;
+
+async function buildSeasonChips() {
+    const row = document.getElementById('season-chips-row');
+    if (!row) return;
+    let seasons;
+    try {
+        const res = await fetch('/api/season-hub/seasons');
+        if (!res.ok) return;
+        seasons = (await res.json()).seasons || [];
+    } catch (_) { return; }
+    if (seasons.length === 0) return;
+    const chip = (value, text) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'filter-chip season-chip';
+        b.dataset.season = value;
+        b.textContent = text;
+        return b;
+    };
+    const all = chip('all', 'All');
+    const chips = [all, ...seasons.map(s => {
+        const c = chip(String(s.id), 'S' + s.season_number + (s.archived_at ? ' (archived)' : ''));
+        c.title = s.name;
+        return c;
+    }), chip('none', 'No season')];
+    row.replaceChildren(row.querySelector('.filter-chip-label'), ...chips);
+    const pick = linkedSeasonId && chips.find(c => c.dataset.season === String(linkedSeasonId));
+    (pick || all).classList.add('active');
+    FilterPanel.setupChipGroup('.season-chip', 'season', applyFilters);
+    row.style.display = '';
+    if (pick) applyFilters();
 }
 
 // ── File cards ─────────────────────────────────────────────────────
@@ -259,6 +309,7 @@ function buildFileCard(file) {
     let iconName = 'file-text';
     if (file.file_type === 'image') iconName = 'photo';
     if (file.file_type === 'spreadsheet') iconName = 'chart-line';
+    if (file.file_type === 'data') iconName = 'braces';
 
     const card = document.createElement('div');
     card.className = 'card file-card';
@@ -432,6 +483,7 @@ function showUploadModal() {
     document.getElementById('file-min-rank').value = 'R1';
     document.getElementById('file-min-edit-rank').value = 'R4';
     if (uploadTagChoices) uploadTagChoices.removeActiveItems();
+    fillSeasonSelect(document.getElementById('file-season'), linkedSeasonId);
 
     const uploadModal = document.getElementById('upload-modal');
     uploadModal.style.display = 'flex';
@@ -455,12 +507,14 @@ async function handleUpload(e) {
     formData.append('min_rank', document.getElementById('file-min-rank').value);
     formData.append('min_edit_rank', document.getElementById('file-min-edit-rank').value);
     formData.append('file', document.getElementById('file-input').files[0]);
+    const uploadSeason = seasonSelectValue(document.getElementById('file-season'));
+    if (uploadSeason) formData.append('season_id', uploadSeason);
     const tagVals = uploadTagChoices ? uploadTagChoices.getValue(true) : [];
     tagVals.forEach(v => formData.append('tag_ids', v));
 
     try {
         const res = await fetch('/api/files/upload', { method: 'POST', body: formData });
-        if (!res.ok) throw new Error("Upload failed");
+        if (!res.ok) throw new Error((await res.text()) || 'Upload failed');
 
         closeUploadModal();
         loadFiles();
@@ -480,6 +534,7 @@ function showCreateModal() {
     document.getElementById('create-file-min-rank').value = 'R1';
     document.getElementById('create-file-min-edit-rank').value = 'R4';
     if (createTagChoices) createTagChoices.removeActiveItems();
+    fillSeasonSelect(document.getElementById('create-file-season'), linkedSeasonId);
 
     const m = document.getElementById('create-modal');
     m.style.display = 'flex';
@@ -506,6 +561,8 @@ async function handleCreate(e) {
         min_edit_rank: document.getElementById('create-file-min-edit-rank').value,
         tag_ids: createTagChoices ? createTagChoices.getValue(true).map(Number) : [],
     };
+    const createSeason = seasonSelectValue(document.getElementById('create-file-season'));
+    if (createSeason) payload.season_id = createSeason;
 
     try {
         const res = await fetch('/api/files/create', {
@@ -551,6 +608,7 @@ function showEditModal(id) {
         const ids = (file.tags || []).map(t => String(t.id));
         if (ids.length) editTagChoices.setChoiceByValue(ids);
     }
+    fillSeasonSelect(document.getElementById('edit-file-season'), file.season_id || null);
 
     const editModal = document.getElementById('edit-modal');
     editModal.style.display = 'flex';
@@ -576,6 +634,8 @@ async function handleEdit(e) {
         min_edit_rank: document.getElementById('edit-file-min-edit-rank').value,
         tag_ids: editTagChoices ? editTagChoices.getValue(true).map(Number) : [],
     };
+    const editSeason = seasonSelectValue(document.getElementById('edit-file-season'));
+    if (editSeason !== undefined) payload.season_id = editSeason;
 
     try {
         const res = await fetch(`/api/files/${currentEditFileId}`, {
@@ -584,7 +644,7 @@ async function handleEdit(e) {
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) throw new Error("Update failed");
+        if (!res.ok) throw new Error((await res.text()) || 'Update failed');
 
         closeEditModal();
         loadFiles();

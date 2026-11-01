@@ -452,7 +452,18 @@ the only one for new work.
 
 - Pin the actions column with `width:1%; white-space:nowrap`.
 - Use `overflow-x:auto` on a wrapper div, not on the table.
-- For sortable columns, add `data-sort="column_key"` and `cursor:pointer` on `<th>`.
+- Data tables sort by clicking their headers. New tables use **`TableSort`** (`table-utils.js`, the
+  opt-in module most pages already load): put `data-sort="key"` on each sortable `<th>`, with
+  `data-sort-type="number"` or `"date"` where the column is not text, and call
+  `TableSort.attach(table, { state })` once the table is built (`.apply()` after a re-render keeps the
+  order). It toggles `.sort-asc` / `.sort-desc` and `aria-sort`, folds text with `foldSearch`, sorts
+  blanks last, and **reorders rows in place**, so a row's inputs keep what was typed. A cell whose
+  text is not its value (a compact number, a badge) carries `data-sort-value`. Options: `state`
+  (`{col, asc}`, the page's object — share it with a toolbar Sort select), `groups: true` (sort a
+  table's `<tbody>` elements by their first row, when a row has a detail row beneath it), `value(row,
+  key)` and `types` for keys no header carries, `onChange`. `.sortable-table` (added by `attach`)
+  holds the header styles in `styles.css`. Older tables keep their own sort code until retrofitted.
+- A list the officers order themselves uses order buttons (`order-buttons.js`), not a sort.
 
 ### Chips and Badges
 
