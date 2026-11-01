@@ -9,7 +9,7 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
-## v3.3.0 — 2026-10-22
+## v3.3.0 — 2026-11-01
 
 **The Season Hub rebuilt**: a season dashboard, a Land tab that plans and records the season's
 land, a War tab for opponents, wars, resources and Trade Posts, war attendance and polls on the
