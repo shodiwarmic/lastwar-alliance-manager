@@ -21,7 +21,7 @@ A bug fix: you can edit an event again after taking it off the main schedule.
   back. Schedule managers now see these events on the week grid with a dashed **Not on main**
   badge and can open them like any other event. Members still don't see them there, and the
   week's text, image, day card and announcement still leave them out.
-  ([#PR](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/PR))
+  ([#139](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/139))
 
 ## v3.3.0 — 2026-11-01
 
