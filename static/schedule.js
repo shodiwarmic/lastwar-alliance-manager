@@ -20,10 +20,10 @@ let serverEvents = [];
 let weekEvents   = [];
 
 // What the week's text, image and day card may carry: they are posted to members, so like the
-// announcement they leave out cancelled rows (shown to managers on the grid only) and
-// leadership-only plans, whoever generates them.
+// announcement they leave out cancelled rows and rows taken off the main schedule (both shown
+// to managers on the grid only) and leadership-only plans, whoever generates them.
 function shareableEvents() {
-    return weekEvents.filter(e => e.status !== 'cancelled' && !e.leadership_only);
+    return weekEvents.filter(e => e.status !== 'cancelled' && !e.leadership_only && e.show_on_main !== false);
 }
 let settings     = {};
 
@@ -242,7 +242,9 @@ async function loadWeek() {
     });
 
     try {
-        const res = await fetch('/api/schedule/events?from=' + from + '&to=' + to);
+        // A manager also gets the rows taken off the main schedule, badged, so one can be
+        // reopened and put back (private-docs 331); the server ignores hidden=1 for anyone else.
+        const res = await fetch('/api/schedule/events?from=' + from + '&to=' + to + (CAN_MANAGE ? '&hidden=1' : ''));
         if (!res.ok) throw new Error('fetch failed');
         weekEvents = await res.json();
     } catch (err) {
@@ -506,6 +508,14 @@ function buildEventCard(evt, dateStr) {
         lo.title = 'Leadership only: hidden from members who cannot manage the schedule';
         lo.append(svgIcon('lock', 11), document.createTextNode(' Leadership'));
         row.appendChild(lo);
+    }
+    if (evt.show_on_main === false) {
+        const off = document.createElement('span');
+        off.className = 'event-card-status status-off-main';
+        off.title = 'Not on the main schedule: only managers see it here; members see it on the season timeline';
+        off.textContent = 'Not on main';
+        row.appendChild(off);
+        card.classList.add('event-off-main');
     }
 
     // An encounter left outside its parent window — usually because the window's

@@ -9,6 +9,20 @@ needs only a new image, while a **major** changes something outside the image. F
 `./scripts/manage.sh update` takes either kind; before it, a major needed a terminal run of
 `scripts/update.sh`.
 
+## v3.3.1 — 2026-11-08
+
+A bug fix: you can edit an event again after taking it off the main schedule.
+
+**Patch**: an image pull. Nothing on the host changes and no `.env` needs editing.
+
+- **Events taken off the main schedule can be edited again.** Unticking **Show on the main
+  schedule** removed the event from the Schedule page for everyone, including schedule managers.
+  The Season Hub's timeline still listed it but couldn't open it, so the tick could never be put
+  back. Schedule managers now see these events on the week grid with a dashed **Not on main**
+  badge and can open them like any other event. Members still don't see them there, and the
+  week's text, image, day card and announcement still leave them out.
+  ([#PR](https://github.com/shodiwarmic/lastwar-alliance-manager/pull/PR))
+
 ## v3.3.0 — 2026-11-01
 
 **The Season Hub rebuilt**: a season dashboard, a Land tab that plans and records the season's
