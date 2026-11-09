@@ -590,6 +590,8 @@ span.flatpickr-weekday {
 .event-card-status.status-completed { background: var(--color-success-bg); color: var(--color-success); }
 .event-card-status.status-cancelled { background: var(--color-danger-bg); color: var(--color-danger); }
 .event-card-status.status-leadership { background: var(--color-purple-bg); color: var(--color-purple); }
+.event-card-status.status-off-main { color: var(--text-muted); border: 1px dashed var(--color-border); }
+.event-card.event-off-main { opacity: 0.75; border-style: dashed; }
 .event-card.event-cancelled .event-card-name,
 .event-card.event-cancelled .event-card-time { text-decoration: line-through; opacity: 0.7; }
 .event-card-link { display: inline-flex; align-items: center; gap: 3px; font-size: 0.75rem; margin-top: 3px; }

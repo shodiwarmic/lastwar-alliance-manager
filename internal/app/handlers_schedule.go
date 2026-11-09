@@ -988,7 +988,9 @@ func scheduleVisibility(user *AuthUser, alias string) string {
 // season's timeline — the rows tagged to it, bounded by the season's own weeks (its template
 // rows' first and last weeks, at least week_count), so S2's post-season weeks are included.
 // scope=all with season_id adds every calendar row in those weeks. The range query leaves out
-// show_on_main = 0 rows; cancelled rows are shown only to schedule managers.
+// show_on_main = 0 rows unless a schedule manager asks for them with hidden=1 (the Schedule
+// page does, so a hidden row can be reopened and re-ticked); cancelled rows are shown only to
+// schedule managers.
 func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 	user := getAuthUser(r)
 	canManage := userHasPermission(user, "manage_schedule")
@@ -1030,7 +1032,9 @@ func getScheduleEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		args = append(args, from, to)
-		where += " AND se.show_on_main = 1"
+		if !(canManage && r.URL.Query().Get("hidden") == "1") {
+			where += " AND se.show_on_main = 1"
+		}
 	}
 	if !canManage {
 		where += " AND se.status != 'cancelled'"

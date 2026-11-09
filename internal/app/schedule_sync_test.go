@@ -91,6 +91,51 @@ func TestSeasonTimelineQueryAndVisibility(t *testing.T) {
 	}
 }
 
+// A row taken off the main schedule must stay reachable by the people who can put it back
+// (private-docs 331): the Schedule page asks with hidden=1, and only a schedule manager is
+// answered. Without it, unticking the box left the row on no screen that could edit it.
+func TestHiddenRowsReachManagersOnRequest(t *testing.T) {
+	setupSettingsTestDB(t)
+	mustExecT(t, `INSERT INTO users (id, username, password, is_admin, is_active) VALUES (1, 'admin', 'x', 1, 1)`)
+	mustExecT(t, `INSERT INTO schedule_event_types (name, short_name, icon) VALUES ('Champion Duel', 'CD', 'x')`)
+	shown := insertCalendarRow(t, "2026-03-18", "CD", "12:00", "")
+	hidden := insertCalendarRow(t, "2026-03-19", "CD", "12:00", "show_on_main", 0)
+
+	list := func(actor *AuthUser, query string) map[int]bool {
+		req := shReq(http.MethodGet, "", nil, actor)
+		req.URL.RawQuery = query
+		rr := httptest.NewRecorder()
+		getScheduleEvents(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", query, rr.Code, rr.Body.String())
+		}
+		var evs []ScheduleEvent
+		if err := json.Unmarshal(rr.Body.Bytes(), &evs); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		m := map[int]bool{}
+		for _, e := range evs {
+			m[e.ID] = true
+		}
+		return m
+	}
+	const week = "from=2026-03-16&to=2026-03-22"
+
+	if got := list(nil, week); !got[shown] || got[hidden] {
+		t.Errorf("default range (manager) = %v, want %d only — the dashboard reads this", got, shown)
+	}
+	if got := list(nil, week+"&hidden=1"); !got[shown] || !got[hidden] {
+		t.Errorf("hidden=1 (manager) = %v, want both %d and %d", got, shown, hidden)
+	}
+
+	r3 := seedMember(t, "Member", "R3")
+	mustExecT(t, `UPDATE rank_permissions SET permissions = json_set(permissions, '$.view_schedule', json('true'), '$.manage_schedule', json('false')) WHERE rank = 'R3'`)
+	member := &AuthUser{ID: 3, Username: "m", Rank: "R3", MemberID: &r3}
+	if got := list(member, week+"&hidden=1"); got[hidden] {
+		t.Error("hidden=1 reached a member without manage_schedule")
+	}
+}
+
 func TestCancelledRowsLeaveTheRuleChecks(t *testing.T) {
 	setupSettingsTestDB(t)
 	mustExecT(t, `INSERT INTO users (id, username, password, is_admin, is_active) VALUES (1, 'admin', 'x', 1, 1)`)
