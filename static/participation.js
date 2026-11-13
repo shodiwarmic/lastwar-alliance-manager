@@ -15,7 +15,7 @@ const PP = window.ParticipationParse;
 const pathMatch = location.pathname.match(/^\/participation\/(\d+)$/);
 const EVENT_ID = pathMatch ? parseInt(pathMatch[1], 10) : 0;
 
-const STATUS_LABEL = { present: 'Present', zero: 'Zero', missed: 'Missed', excused: 'Excused' };
+const STATUS_LABEL = { present: 'Present', late: 'Late arrival', zero: 'Zero', missed: 'Missed', excused: 'Excused' };
 
 let detail = null;   // GET /api/participation/boards/{id}
 let rows = [];       // working entries in board order: {name, member_id, member_name, member_rank, values:{key:number|null},
@@ -69,6 +69,33 @@ function primaryKey() {
 
 function isRoleType() {
     return detail && detail.type && detail.type.absence_rule === 'role';
+}
+
+function canMarkAttendance() {
+    return CAN_MANAGE && detail?.board && detail.board.source !== 'legacy'
+        && detail.type?.short_name === 'DS' && isRoleType();
+}
+
+async function markAttendance(s, kind) {
+    if (await post(`/api/participation/boards/${EVENT_ID}/exceptions`, { member_id: s.member_id, kind },
+        `${s.name} marked ${kind === 'late' ? 'Late arrival' : 'Missed'}.`)) loadBoard();
+}
+
+function renderAbsentSubs() {
+    const box = document.getElementById('pt-absent-subs');
+    box.replaceChildren();
+    box.hidden = true;
+    if (!canMarkAttendance()) return;
+    const subs = detail.roles.filter(r => r.role === 'sub'
+        && !detail.entries.some(e => e.member_id === r.member_id)
+        && !detail.statuses.some(s => s.member_id === r.member_id));
+    if (!subs.length) return;
+    box.hidden = false;
+    box.append(el('p', { className: 'pt-step-hint' }, 'Absent substitutes are normally ignored. Mark missed only if they were required to attend.'),
+        el('ul', { className: 'pt-recent-list' }, ...subs.map(r => el('li', null,
+            nameSpan(r.member_name), el('span', null, 'Sub' + (r.task_force ? ' · TF ' + r.task_force : '')),
+            rowActionBtn('btn btn-secondary btn-sm', 'flag', 'Mark missed',
+                () => markAttendance({ member_id: r.member_id, name: r.member_name }, 'missed'))))));
 }
 
 function fmtValue(v) {
@@ -885,11 +912,13 @@ function renderBoard() {
         return;
     }
     section.hidden = false;
+    renderAbsentSubs();
     const st = detail.statuses;
     const n = s => st.filter(x => s.includes(x.status)).length;
     const unmatched = detail.entries.filter(e => !e.member_id).length;
     const counts = [
         el('span', { className: 'pt-badge pt-badge--present' }, `${n(['present'])} present`),
+        n(['late']) ? el('span', { className: 'pt-badge pt-badge--late' }, `${n(['late'])} late`) : null,
         n(['zero']) ? el('span', { className: 'pt-badge pt-badge--zero' }, `${n(['zero'])} at zero`) : null,
         el('span', { className: 'pt-badge pt-badge--missed' }, `${n(['missed'])} missed`),
         el('span', { className: 'pt-badge pt-badge--excused' }, `${n(['excused'])} excused`),
@@ -930,6 +959,12 @@ function renderBoard() {
             if (CAN_MANAGE) {
                 const x = detail.exceptions.find(e => e.member_id === s.member_id);
                 const td = el('td');
+                if (canMarkAttendance() && s.status === 'present') {
+                    td.appendChild(rowActionBtn('btn btn-secondary btn-sm', 'clock', 'Mark late', () => markAttendance(s, 'late')));
+                }
+                if (x && (x.kind === 'late' || (x.kind === 'missed' && detail.board.source !== 'legacy'))) {
+                    td.appendChild(rowActionBtn('btn btn-secondary btn-sm', 'arrow-back-up', x.kind === 'late' ? 'Undo late' : 'Undo missed', () => undoException(s)));
+                }
                 if (x && (x.kind === 'excused' || x.kind === 'dismissed')) {
                     td.appendChild(rowActionBtn('btn btn-secondary btn-sm', 'arrow-back-up', x.kind === 'excused' ? 'Undo excuse' : 'Undo dismiss',
                         () => undoException(s)));

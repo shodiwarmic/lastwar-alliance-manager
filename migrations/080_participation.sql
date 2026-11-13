@@ -120,8 +120,8 @@ CREATE TABLE participation_roles (
 --   excused   — a reason and its author; overrides a derived miss
 --   dismissed — "do not suggest a strike"; keeps the derived status, so a re-save
 --               does not resurface a suggestion someone already declined
---   missed    — written by migration 081 ONLY, for legacy storm_attendance no_show
---               rows, which have no role to derive a miss from
+--   missed    — legacy storm_attendance no-shows (081), or explicit DS sub misses
+--               (085), which have no starter role to derive a miss from
 -- +goose StatementBegin
 CREATE TABLE participation_exceptions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
