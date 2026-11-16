@@ -7,7 +7,7 @@
 'use strict';
 
 const ParticipationHistory = (() => {
-    const LABEL = { present: 'Present', zero: 'Zero', missed: 'Missed', excused: 'Excused' };
+    const LABEL = { present: 'Present', late: 'Late arrival', zero: 'Zero', missed: 'Missed', excused: 'Excused' };
 
     function fmt(v) {
         return v == null ? '—' : Number(v).toLocaleString('en-US');
