@@ -89,6 +89,55 @@ func getTrainLogs(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(logs)
 }
 
+// getTrainAllocation is an officer-only, read-only overview. Aggregate the two
+// roles independently before joining to the roster: joining raw conductor and VIP
+// logs would multiply counts. Eligibility is unrelated to historical allocation.
+// VIP records count even when the conductor did not show: guest attendance is not stored.
+func getTrainAllocation(w http.ResponseWriter, r *http.Request) {
+	today := gameDate()
+	rows, err := db.Query(`
+        WITH conducted AS (
+            SELECT conductor_id, MAX(date) AS last_train, COUNT(*) AS trains,
+                   SUM(CASE WHEN train_type = 'FREE' THEN 1 ELSE 0 END) AS free_trains
+            FROM train_logs
+            WHERE showed_up = 1 AND date <= ?
+            GROUP BY conductor_id
+        ), guests AS (
+            SELECT vip_id, MAX(date) AS last_guest, COUNT(*) AS guest_spots
+            FROM train_logs
+            WHERE vip_id IS NOT NULL AND date <= ?
+            GROUP BY vip_id
+        )
+        SELECT m.id, m.name, m.rank, c.last_train,
+               COALESCE(c.trains, 0), COALESCE(c.free_trains, 0),
+               g.last_guest, COALESCE(g.guest_spots, 0)
+        FROM members m
+        LEFT JOIN conducted c ON c.conductor_id = m.id
+        LEFT JOIN guests g ON g.vip_id = m.id
+        WHERE m.rank != 'EX'
+        ORDER BY m.name COLLATE NOCASE, m.id`, today, today)
+	if err != nil {
+		dbError(w, "getTrainAllocation query", err)
+		return
+	}
+	defer rows.Close()
+	allocation := []TrainAllocation{}
+	for rows.Next() {
+		var a TrainAllocation
+		if err := rows.Scan(&a.MemberID, &a.Name, &a.Rank, &a.LastTrain,
+			&a.Trains, &a.FreeTrains, &a.LastGuest, &a.GuestSpots); err != nil {
+			dbError(w, "getTrainAllocation scan", err)
+			return
+		}
+		allocation = append(allocation, a)
+	}
+	if err := rows.Err(); err != nil {
+		dbError(w, "getTrainAllocation rows", err)
+		return
+	}
+	writeJSON(w, allocation)
+}
+
 // trainLogRequest is a train log as the web and mobile routes send it.
 type trainLogRequest struct {
 	Date        string  `json:"date"`

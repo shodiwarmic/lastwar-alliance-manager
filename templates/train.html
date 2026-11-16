@@ -25,6 +25,7 @@
     <div class="tab-bar">
         <button class="tab-btn active" data-tab="logs">Trains</button>
         {{if .Permissions.ManageTrain}}
+        <button class="tab-btn" data-tab="allocation">Allocation</button>
         <button class="tab-btn" data-tab="selection">Selection</button>
         <button class="tab-btn" data-tab="rules">Rules</button>
         {{end}}
@@ -80,8 +81,43 @@
         </div>
     </div>
 
-    <!-- ── Tab: Selection ───────────────────────────────────────────────── -->
     {{if .Permissions.ManageTrain}}
+    <!-- ── Tab: Allocation ──────────────────────────────────────────────── -->
+    <div id="tab-allocation" class="tab-content">
+        <div class="panel-header">
+            <h3>Train Allocation</h3>
+            <button type="button" id="btn-allocation-refresh" class="btn btn-secondary btn-sm">Refresh</button>
+        </div>
+        <p class="field-hint">All logged history through today (game time) for the current roster. Conductor no-shows do not count as trains. Guest spots count the recorded VIP, including Special Guests and Guardian Defenders.</p>
+        <p class="field-hint">Oldest train dates first; Never means no recorded history. Select a column to sort.</p>
+        <div class="tab-toolbar">
+            <div class="filter-search-wrap quick-search">
+                <input type="text" id="allocation-search" class="form-input" placeholder="Search members…" aria-label="Search allocation members" autocomplete="off">
+                <button type="button" style="display:none;" aria-label="Clear search"><svg width="14" height="14" aria-hidden="true" class="svg-icon"><use href="/icons.svg#icon-x"/></svg></button>
+            </div>
+            <span id="allocation-count" class="tab-count" aria-live="polite"></span>
+        </div>
+        <div class="table-scroll">
+            <table id="allocation-table" class="data-table sortable-table train-allocation-table">
+                <thead>
+                    <tr>
+                        <th scope="col" data-sort="name" tabindex="0" aria-sort="none">Member</th>
+                        <th scope="col" data-sort="rank" tabindex="0" aria-sort="none">Rank</th>
+                        <th scope="col" data-sort="last_train" tabindex="0" aria-sort="ascending" class="sort-asc">Last Train</th>
+                        <th scope="col" data-sort="trains" tabindex="0" aria-sort="none">Trains</th>
+                        <th scope="col" data-sort="free_trains" tabindex="0" aria-sort="none">Free Trains</th>
+                        <th scope="col" data-sort="last_guest" tabindex="0" aria-sort="none">Last Guest</th>
+                        <th scope="col" data-sort="guest_spots" tabindex="0" aria-sort="none">Guest Spots</th>
+                    </tr>
+                </thead>
+                <tbody id="allocation-body">
+                    <tr><td colspan="7" class="loading-msg">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── Tab: Selection ───────────────────────────────────────────────── -->
     <div id="tab-selection" class="tab-content">
         <div class="panel-header">
             <h3>Run Eligibility Check</h3>
