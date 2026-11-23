@@ -14,7 +14,7 @@ require (
 	golang.org/x/crypto v0.59.0
 	golang.org/x/text v0.44.0
 	golang.org/x/time v0.16.0
-	google.golang.org/api v0.314.0
+	google.golang.org/api v0.316.0
 	modernc.org/sqlite v1.62.0
 )
 
